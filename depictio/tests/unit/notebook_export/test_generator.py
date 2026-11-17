@@ -321,7 +321,10 @@ def test_card_row_reads_the_real_display_not_the_iframe_tile():
 
     body = NotebookBuilder._metric_card_cell(None).body
     ns: dict = {}
-    exec(compile(body, "<metric_card_cell>", "exec"), {"HTML": HTML}, ns)
+    from depictio.notebook import html_text, static_figures
+
+    glb = {"HTML": HTML, "static_figures": static_figures, "html_text": html_text}
+    exec(compile(body, "<metric_card_cell>", "exec"), glb, ns)
     card_row, metric_card = ns["card_row"], ns["metric_card"]
 
     class FakeApiCard:
@@ -612,7 +615,7 @@ def test_the_report_is_in_paper_by_default(penguins_tabs):
     plan = penguins_plan(penguins_tabs)
     plan.brand = {"app_name": "Depictio", "primary": "violet", "font_family": "Lato, sans-serif"}
     src = generate_qmd(plan)
-    brand = _front(src)["brand"]
+    brand = _front(src)["brand"]["light"]
     # The page's Bootstrap theme, from the instance brand, inline (one file).
     assert brand["color"] == {
         "primary": "#7950f2",
@@ -650,7 +653,7 @@ def test_classic_keeps_quartos_stock_look(penguins_tabs):
 
 def test_unbranded_paper_falls_back_to_mantine_blue_and_inter(penguins_tabs):
     src = generate_qmd(penguins_plan(penguins_tabs))
-    boot = _front(src)["brand"]["defaults"]["bootstrap"]["defaults"]
+    boot = _front(src)["brand"]["light"]["defaults"]["bootstrap"]["defaults"]
     assert boot["font-family-sans-serif"].startswith("'Inter Variable', Inter,")
     assert "print(use_theme(\"paper\", primary='#228be6'))" in src
 

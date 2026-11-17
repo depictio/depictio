@@ -14,6 +14,7 @@ from depictio.api.v1.s3 import s3_client
 
 HTML_MEDIA_TYPE = "text/html; charset=utf-8"
 QMD_MEDIA_TYPE = "text/markdown; charset=utf-8"
+PDF_MEDIA_TYPE = "application/pdf"
 
 
 def job_key(user_id: str, job_id: str, name: str) -> str:

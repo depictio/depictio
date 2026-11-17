@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Center,
+  Checkbox,
   Group,
   Loader,
   Modal,
@@ -115,6 +116,8 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   const [format, setFormat] = useState<ExportChoice>(initialOutput);
   const [defaultView, setDefaultView] = useState<CombinedDefaultView>('report');
   const [theme, setTheme] = useState<NotebookTheme>('paper');
+  // Advanced: a PDF beside the HTML report (off by default).
+  const [pdf, setPdf] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState<string | null>(null);
   const [job, setJob] = useState<NotebookRenderStatus | null>(null);
@@ -179,7 +182,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setDownloading(true);
     setError(null);
     try {
-      const filename = await exportNotebook(dashboardId, state, theme);
+      const filename = await exportNotebook(dashboardId, state, theme, pdf);
       setDownloaded(filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -197,6 +200,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
       const started = await startNotebookRender(dashboardId, state, theme, {
         output: format === 'combined' ? 'combined' : 'report',
         defaultView,
+        pdf,
       });
       setStartedAt(Date.now());
       setElapsed(0);
@@ -208,12 +212,12 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     }
   };
 
-  const handleDownloadReport = async () => {
+  const handleDownloadReport = async (which: 'html' | 'pdf' = 'html') => {
     if (!job) return;
     setDownloading(true);
     setError(null);
     try {
-      setDownloaded(await downloadNotebookRender(job.job_id));
+      setDownloaded(await downloadNotebookRender(job.job_id, which));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -486,6 +490,28 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           </Text>
         </Stack>
 
+        <Accordion variant="contained" radius="md" data-testid="notebook-export-advanced">
+          <Accordion.Item value="advanced">
+            <Accordion.Control>
+              <Text size="sm" fw={500}>
+                Advanced
+              </Text>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Checkbox
+                checked={pdf}
+                onChange={(e) => setPdf(e.currentTarget.checked)}
+                label="Also a PDF"
+                description={
+                  'Rendered beside the HTML report with Quarto (typst, no TeX): figures as ' +
+                  'images, tables as their first rows, filters and other interactive parts left out.'
+                }
+                data-testid="notebook-export-pdf"
+              />
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
+
         {isReport && !job && renderAvailable && !combinedFallback && (
           <Alert color="blue" variant="light" data-testid="notebook-export-render-hint">
             The Quarto document, executed on the server: every tile is recomputed and every
@@ -516,6 +542,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
             <code>{job.filename}</code> is ready
             {job.size ? ` (${(job.size / 1e6).toFixed(1)} MB)` : ''}, built in{' '}
             {elapsedLabel(elapsed)}.
+            {job.pdf_error && ` The PDF could not be made: ${job.pdf_error}`}
           </Alert>
         )}
 
@@ -562,15 +589,28 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                   : 'Render report'}
             </Button>
           ) : (
+            <>
+            {isReport && job?.pdf_filename && (
+              <Button
+                variant="default"
+                leftSection={<Icon icon="mdi:file-pdf-box" width={16} />}
+                onClick={() => handleDownloadReport('pdf')}
+                loading={downloading}
+                data-testid="notebook-export-download-pdf"
+              >
+                Download PDF
+              </Button>
+            )}
             <Button
               leftSection={<Icon icon="mdi:download" width={16} />}
-              onClick={isReport ? handleDownloadReport : handleDownload}
+              onClick={isReport ? () => handleDownloadReport('html') : handleDownload}
               loading={downloading}
               disabled={!state || !preflight}
               data-testid="notebook-export-download"
             >
               {isCombined ? 'Download file' : isReport ? 'Download report' : 'Download'}
             </Button>
+            </>
           )}
         </Group>
       </Stack>

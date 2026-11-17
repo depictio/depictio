@@ -211,6 +211,9 @@ class NotebookExportRequest(BaseModel):
     output: Literal["report", "combined"] = "report"
     # The view a combined file opens on when its link names none.
     default_view: Literal["report", "dashboard"] = "report"
+    # Also a PDF (Quarto's typst, static figures) beside the HTML report; the
+    # document then carries a `typst` format too. Off by default.
+    pdf: bool = False
 
 
 class NotebookPreflightComponent(BaseModel):
@@ -266,6 +269,10 @@ class NotebookRenderStatus(BaseModel):
     filename: str | None = None
     size: int | None = None
     reason: str | None = None
+    # The PDF beside the report, when one was asked for and rendered; why not,
+    # when it was asked for and failed (the HTML report stands on its own).
+    pdf_filename: str | None = None
+    pdf_error: str | None = None
 
 
 # ---------------------------------------------------------------------------

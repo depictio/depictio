@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 import html as _html
 import json
+import os
 import re
 import time
 from typing import TYPE_CHECKING, Any
@@ -39,6 +40,68 @@ HTML_MIME = "text/html"
 MARKDOWN_MIME = "text/markdown"
 PLAIN_MIME = "text/plain"
 PLOTLY_MIME = "application/vnd.plotly.v1+json"
+PNG_MIME = "image/png"
+
+#: Set when the document is rendered to a page with no browser behind it (the
+#: PDF, Quarto's typst): every figure then also carries a PNG and every table
+#: a markdown copy, which is what such a page can hold.
+STATIC_FIGURES_ENV = "DEPICTIO_STATIC_FIGURES"
+#: Rows a table keeps on a static page; the HTML report has them all.
+STATIC_TABLE_ROWS = 30
+
+
+def static_figures() -> bool:
+    """Whether this render wants static figures (``STATIC_FIGURES_ENV``)."""
+    return os.environ.get(STATIC_FIGURES_ENV, "") not in ("", "0", "false")
+
+
+def figure_png(fig) -> str | None:
+    """The figure as a base64 PNG (kaleido), or ``None`` when it cannot be drawn."""
+    try:
+        height = getattr(fig.layout, "height", None) or 460
+        data = fig.to_image(format="png", width=1000, height=int(height), scale=2)
+    except Exception:  # noqa: BLE001 - no kaleido, no browser: the figure is left out
+        return None
+    return base64.b64encode(data).decode("ascii")
+
+
+#: Columns a table keeps on a static page (a portrait page holds about this many).
+STATIC_TABLE_COLS = 8
+_TAG_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.S | re.I)
+
+
+def html_text(markup: str) -> str:
+    """Markup as one line of its text: what a static page keeps of an HTML-only tile."""
+    text = _html.unescape(_TAG_RE.sub(" ", markup or ""))
+    return " ".join(text.split())
+
+
+def table_markdown(df: pl.DataFrame, limit: int = STATIC_TABLE_ROWS) -> str:
+    """A pipe table of the first ``limit`` rows, for a static page."""
+
+    def cell(v: Any) -> str:
+        text = "" if v is None else str(v)
+        return text.replace("|", "\\|").replace("\n", " ")[:60]
+
+    dropped = max(0, df.width - STATIC_TABLE_COLS)
+    df = df.select(df.columns[:STATIC_TABLE_COLS]) if dropped else df
+    cols = df.columns
+    lines = [
+        "| " + " | ".join(cell(c) for c in cols) + " |",
+        "| " + " | ".join("---" for _ in cols) + " |",
+    ]
+    for row in df.head(limit).iter_rows():
+        lines.append("| " + " | ".join(cell(v) for v in row) + " |")
+    notes = []
+    if df.height > limit:
+        notes.append(f"first {limit} of {df.height:,} rows")
+    if dropped:
+        notes.append(f"first {STATIC_TABLE_COLS} of {STATIC_TABLE_COLS + dropped} columns")
+    if notes:
+        lines.append("")
+        lines.append(f"*{'; '.join(notes).capitalize()}; the HTML report has the whole table.*")
+    return "\n".join(lines)
+
 
 # Advanced-viz kinds whose figure a Celery compute builds. Informational only:
 # the ``component_figure`` endpoint decides per tile, building on the server
@@ -144,6 +207,23 @@ def use_document_renderer() -> bool:
     """
     import plotly.io as pio
 
+    if static_figures():
+        # A page with no browser (the PDF): every bare figure is a PNG, in the
+        # document's look, and no plotly.js is emitted for it to ignore.
+        try:
+            png = pio.renderers["png"]
+            if not getattr(png, "_dpx_theme", False):
+                png.width, png.scale = 1000, 2
+                inner_png = png.to_mimebundle
+                png.to_mimebundle = lambda fig_dict, _inner=inner_png: _inner(
+                    _theme.apply_theme(fig_dict)
+                )
+                png._dpx_theme = True
+            pio.renderers.default = "png"
+        except (KeyError, ValueError, ImportError):
+            return False
+        return True
+
     try:
         renderer = pio.renderers["notebook"]
     except (KeyError, ValueError):
@@ -155,10 +235,17 @@ def use_document_renderer() -> bool:
         def to_mimebundle(fig_dict, _inner=inner):
             # The document's look (Paper by default), applied where every
             # figure displayed bare passes: code-mode figures, the funnel.
-            bundle = _inner(_theme.apply_theme(fig_dict))
+            themed = _theme.apply_theme(fig_dict)
+            bundle = _inner(themed)
             html = bundle.get(HTML_MIME)
             if isinstance(html, str):
                 bundle[HTML_MIME] = _MATHJAX_TAG_RE.sub("", html)
+            if static_figures():
+                import plotly.graph_objects as go
+
+                png = figure_png(go.Figure(themed))
+                if png:
+                    bundle[PNG_MIME] = png
             return bundle
 
         renderer.to_mimebundle = to_mimebundle
@@ -199,6 +286,8 @@ def init_tables() -> bool:
     with no network. Needs a running kernel and ``itables`` installed; returns
     whether it is on. Without it, tables are plain HTML with every row.
     """
+    if static_figures():
+        return False  # a static page gets markdown tables (``table_markdown``)
     try:
         from IPython import get_ipython
 
@@ -273,7 +362,10 @@ class TableView:
         return data_html(self.df)
 
     def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
-        return {HTML_MIME: self._repr_html_(), PLAIN_MIME: repr(self.df)}
+        bundle = {HTML_MIME: self._repr_html_(), PLAIN_MIME: repr(self.df)}
+        if static_figures():
+            bundle[MARKDOWN_MIME] = table_markdown(self.df)
+        return bundle
 
     def __repr__(self) -> str:
         return repr(self.df)
@@ -295,11 +387,16 @@ def figure_bundle(fig) -> dict[str, Any]:
     every figure it draws.
     """
     fig = _theme.apply_to_figure(fig)
-    return {
+    bundle: dict[str, Any] = {
         PLOTLY_MIME: json.loads(fig.to_json()),
         HTML_MIME: fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS),
         PLAIN_MIME: "Plotly figure",
     }
+    if static_figures():
+        png = figure_png(fig)
+        if png:
+            bundle[PNG_MIME] = png
+    return bundle
 
 
 def _decode_data_uri(uri: str) -> bytes:
@@ -613,7 +710,10 @@ class DepictioComponent:
         if mode == "data":
             df = self.data
             if isinstance(df, pl.DataFrame):
-                return {HTML_MIME: data_html(df), PLAIN_MIME: repr(df)}
+                out = {HTML_MIME: data_html(df), PLAIN_MIME: repr(df)}
+                if static_figures():
+                    out[MARKDOWN_MIME] = table_markdown(df)
+                return out
             return {PLAIN_MIME: repr(df)}
         if mode == "markdown":
             return {MARKDOWN_MIME: self._display_markdown() or "", PLAIN_MIME: self.title}
@@ -626,7 +726,13 @@ class DepictioComponent:
         reason. Asking for ``.figure`` / ``.data`` explicitly still raises.
         """
         try:
-            return self._bundle()
+            bundle = self._bundle()
+            if static_figures() and set(bundle) <= {HTML_MIME, PLAIN_MIME}:
+                # A card, a placeholder: what a static page keeps is its text.
+                text = html_text(str(bundle.get(HTML_MIME) or ""))
+                if text:
+                    bundle = {**bundle, MARKDOWN_MIME: text}
+            return bundle
         except Exception as exc:  # noqa: BLE001 - a tile must never break the document
             reason = self._reason(exc)
             return {

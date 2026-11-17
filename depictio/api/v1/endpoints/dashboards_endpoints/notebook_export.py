@@ -15,7 +15,7 @@ import mimetypes
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -559,6 +559,7 @@ def build_export_plan(
     access_token: str | None,
     theme: str = "paper",
     embed_runtime: bool = False,
+    pdf: bool = False,
 ) -> ExportPlan:
     family_id, raw_tabs = routes._resolve_tab_family(dashboard_id, current_user, TAB_PROJECTION)
     tabs = [convert_objectid_to_str(t) for t in raw_tabs]
@@ -716,6 +717,7 @@ def build_export_plan(
         ),
         theme=theme,
         embed_runtime=embed_runtime,
+        pdf=pdf,
     )
 
 
@@ -801,7 +803,12 @@ def notebook_export_preflight(
     """What the export will contain: one verdict per tile, stage counts, warnings."""
     _require_enabled()
     plan = build_export_plan(
-        dashboard_id, request.state, current_user, access_token, theme=request.theme
+        dashboard_id,
+        request.state,
+        current_user,
+        access_token,
+        theme=request.theme,
+        pdf=request.pdf,
     )
     # Whether the *worker* can render is not something the API can see (Quarto
     # lives in the worker image), so this is the operator's switch, not a probe.
@@ -839,6 +846,7 @@ def notebook_export(
         # Off unless asked: the reader's own render fetches the manifest and the
         # runtime from this API, which only works for an owner with access.
         embed_runtime=_embed_runtime(request, dashboard_id, current_user, default=False),
+        pdf=request.pdf,
     )
     source = NotebookBuilder(plan).build()
     return Response(
@@ -966,6 +974,7 @@ async def notebook_export_render(
         access_token,
         theme=request.theme,
         embed_runtime=embed_runtime,
+        pdf=request.pdf,
     )
     builder = NotebookBuilder(plan)
     _require_owner_for_authored_code(dashboard_id, current_user, builder)
@@ -1018,6 +1027,7 @@ async def notebook_export_render(
             # block swapped for the App runtime the dashboard view shares.
             "combined": {"default_view": request.default_view} if combined else None,
             "filename": filename,
+            "pdf": bool(request.pdf),
         },
         task_id=job_id,
     )
@@ -1044,6 +1054,8 @@ def notebook_export_render_status(
             status="ready",
             filename=payload.get("filename"),
             size=payload.get("size"),
+            pdf_filename=payload.get("pdf_filename"),
+            pdf_error=payload.get("pdf_error"),
         )
     if result.failed():
         return NotebookRenderStatus(job_id=job_id, status="error", reason=str(result.result))
@@ -1057,15 +1069,37 @@ def notebook_export_render_status(
 @dashboards_endpoint_router.get("/notebook_export/render/{job_id}/download")
 def notebook_export_render_download(
     job_id: str,
+    format: Literal["html", "pdf"] = "html",
     current_user: User = Depends(get_user_or_anonymous),
 ) -> Response:
-    """The rendered report, as a file."""
+    """The rendered report, as a file: the HTML report, or its PDF (``?format=pdf``)."""
     _require_render_enabled()
     from depictio.api.v1.services.notebook_export import store
 
     result, payload = _render_job(job_id, current_user)
     if not result.successful():
         raise HTTPException(status_code=409, detail=f"Render job '{job_id}' is not ready.")
+    if format == "pdf":
+        if not payload.get("pdf_key"):
+            raise HTTPException(
+                status_code=404,
+                detail=str(payload.get("pdf_error") or f"Render job '{job_id}' made no PDF."),
+            )
+        try:
+            pdf = store.get(str(payload["pdf_key"]))
+        except Exception as exc:  # noqa: BLE001 — a missing object is a gone report
+            raise HTTPException(
+                status_code=404, detail=f"Report '{job_id}' is no longer stored."
+            ) from exc
+        return Response(
+            content=pdf,
+            media_type=store.PDF_MEDIA_TYPE,
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{payload.get("pdf_filename") or "report.pdf"}"'
+                )
+            },
+        )
     filename = str(payload.get("filename") or "report.html")
     try:
         html = store.get(str(payload["key"]))

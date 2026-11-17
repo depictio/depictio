@@ -44,7 +44,7 @@ from .provenance import (
     RUN_ICON,
     header_markdown,
 )
-from .quarto import QuartoFrontMatter, paper_brand
+from .quarto import QuartoFrontMatter, paper_brand, paper_brand_dark
 from .reading_order import (
     ComponentUnit,
     MarkdownUnit,
@@ -55,6 +55,7 @@ from .reading_order import (
     tab_link_key,
 )
 from .report_chrome import (
+    DARK_CSS,
     DIV_CLOSE,
     REPORT_CSS,
     TOC_SCOPE_JS,
@@ -966,6 +967,8 @@ class ExportPlan:
     # Whether a reader of the file can open the live dashboard: the footer
     # links it only then (a private dashboard's URL is a login page).
     dashboard_public: bool = False
+    # Also a PDF: the document carries a typst format beside the HTML one.
+    pdf: bool = False
 
     @property
     def dashboard_id(self) -> str:
@@ -1425,9 +1428,20 @@ class NotebookBuilder:
             favicon_data_uri=plan.dashboard_logo or plan.favicon_data_uri,
             before_body=self._appbar(),
             after_body=self._footer(),
+            pdf=self.plan.pdf,
             extra={"references": refs} if (refs := self._methods()[1]) else {},
             brand=(
                 paper_brand(
+                    primary=self._primary()[0],
+                    font_family=brand.get("font_family"),
+                    headings_font_family=brand.get("headings_font_family"),
+                )
+                if self.paper
+                else None
+            ),
+            # The reader's scheme: Paper's dark page when they prefer it.
+            brand_dark=(
+                paper_brand_dark(
                     primary=self._primary()[0],
                     font_family=brand.get("font_family"),
                     headings_font_family=brand.get("headings_font_family"),
@@ -1452,8 +1466,10 @@ class NotebookBuilder:
             "    fill_text,\n"
             "    funnel_rest,\n"
             "    funnel_stage,\n"
+            "    html_text,\n"
             "    init_tables,\n"
             "    show_table,\n"
+            "    static_figures,\n"
             "    use_document_renderer,\n"
             "    use_theme,\n"
             ")\n"
@@ -1533,6 +1549,11 @@ class NotebookBuilder:
         text = f"{value:,}"
     else:
         text = str(value)
+    if static_figures():
+        # A page with no browser (the PDF): the card as a line of text.
+        from IPython.display import Markdown
+
+        return Markdown(f"**{title}** {text}")
     return HTML(
         f'<div class="dpx-card" style="display:inline-block;min-width:11rem;margin:0 0.5rem 0.5rem 0;'
         f'padding:0.85rem 1.1rem;border:1px solid #e3e3e8;border-radius:12px;'
@@ -1556,6 +1577,14 @@ def card_row(cards):
     card look, the same HTML each object would show if displayed bare —
     `.html` on a Depictio component is a different thing, an embeddable tile.
     """
+    if static_figures():
+        from IPython.display import Markdown
+
+        def line(c):
+            md = getattr(c, "_repr_markdown_", None)
+            return md() if md else html_text(c._repr_html_() or "")
+
+        return Markdown("\\n".join(f"- {line(c)}" for c in cards))
     n = len(cards)
     cols = n if n <= 4 else (4 if n % 4 == 0 else 3)
     items = "".join(c._repr_html_() for c in cards)
@@ -1586,6 +1615,7 @@ def card_row(cards):
             + chrome
             + "\n"
             + REPORT_CSS
+            + (DARK_CSS if self.paper else "")
             + TOC_SCOPE_JS
             + mark_css(self.plan.depictio_mark)
             + "\n\n"
@@ -2484,7 +2514,9 @@ fig_funnel"""
         if label is None:
             out.extend(tiles)
         else:
-            title = str(meta.get("title") or "").strip()
+            title = str(
+                meta.get("title") or meta.get("selected_plot") or meta.get("selected_module") or ""
+            ).strip()
             caption_bits = []
             if title:
                 caption_bits.append(f"**{_esc(title)}**.")
@@ -2666,7 +2698,11 @@ fig_funnel"""
                 + self._icon_html(filter_icon_id(m), color)
                 + f"<b>{_esc(label)}</b> <i>{_esc(value)}</i></span>"
             )
-        return '<div class="dpx-filterbar">' + "".join(chips) + "</div>"
+        return (
+            '::: {.content-visible when-format="html"}\n<div class="dpx-filterbar">'
+            + "".join(chips)
+            + "</div>\n:::"
+        )
 
     def _section_header_html(self, unit: MarkdownUnit, *, tab: dict[str, Any] | None = None) -> str:
         # The live grid's own section chrome (SectionAccordion / SectionIcon):

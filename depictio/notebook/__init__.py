@@ -27,7 +27,14 @@ In a ``.qmd``::
 """
 
 from .client import DepictioClient, DepictioClientError
-from .components import DepictioComponent, init_tables, show_table, use_document_renderer
+from .components import (
+    DepictioComponent,
+    html_text,
+    init_tables,
+    show_table,
+    static_figures,
+    use_document_renderer,
+)
 from .funnel import funnel_rest, funnel_stage
 from .native import use_native
 from .text import fill_text
@@ -39,9 +46,11 @@ __all__ = [
     "DepictioComponent",
     "fill_text",
     "funnel_rest",
+    "html_text",
     "funnel_stage",
     "init_tables",
     "show_table",
+    "static_figures",
     "use_document_renderer",
     "use_native",
     "use_theme",

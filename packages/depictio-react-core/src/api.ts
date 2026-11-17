@@ -1295,6 +1295,10 @@ export interface NotebookRenderStatus {
   filename?: string | null;
   size?: number | null;
   reason?: string | null;
+  /** The PDF beside the report, when one was asked for and rendered. */
+  pdf_filename?: string | null;
+  /** Why the PDF is missing, when it was asked for and failed. */
+  pdf_error?: string | null;
 }
 
 /** What an export will contain, before anything is generated. `state` is an
@@ -1328,10 +1332,11 @@ export async function exportNotebook(
   dashboardId: string,
   state: unknown,
   theme: NotebookTheme = 'paper',
+  pdf = false,
 ): Promise<string> {
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}`, {
     method: 'POST',
-    body: JSON.stringify({ state, theme }),
+    body: JSON.stringify({ state, theme, pdf }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to export the notebook');
   const blob = await res.blob();
@@ -1360,11 +1365,16 @@ export async function startNotebookRender(
   dashboardId: string,
   state: unknown,
   theme: NotebookTheme = 'paper',
-  options: { output?: NotebookRenderOutput; defaultView?: CombinedDefaultView } = {},
+  options: {
+    output?: NotebookRenderOutput;
+    defaultView?: CombinedDefaultView;
+    pdf?: boolean;
+  } = {},
 ): Promise<NotebookRenderStatus> {
   const body: Record<string, unknown> = { state, theme };
   if (options.output) body.output = options.output;
   if (options.defaultView) body.default_view = options.defaultView;
+  if (options.pdf) body.pdf = true;
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -1383,16 +1393,19 @@ export async function fetchNotebookRenderStatus(
   return res.json();
 }
 
-/** Download a finished report. */
-export async function downloadNotebookRender(jobId: string): Promise<string> {
+/** Download a finished report: the HTML, or the PDF rendered beside it. */
+export async function downloadNotebookRender(
+  jobId: string,
+  format: 'html' | 'pdf' = 'html',
+): Promise<string> {
   const res = await authFetch(
-    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download`,
+    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download?format=${format}`,
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to download the report');
   const blob = await res.blob();
   const filename = filenameFromDisposition(
     res.headers.get('Content-Disposition'),
-    `report_${jobId}.html`,
+    `report_${jobId}.${format}`,
   );
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
