@@ -564,8 +564,8 @@
       }
     },
     "nf-core/rnaseq/3.26.0": {
-      "version": "2.3.0",
-      "content_hash": "67d45c6d9ee80d57cc46aea40153490810b439601c4d0dbaaac2bbc39a28e86b",
+      "version": "2.4.0",
+      "content_hash": "00bc7c97b3f6ec327a040f6bc9e1960fc07e46ff97e16a9adcfaa5b091cabb18",
       "catalog": {
         "deseq2": "1.0.0",
         "multiqc": "1.0.0",
@@ -574,8 +574,8 @@
       }
     },
     "nf-core/rnaseq/3.28.0": {
-      "version": "2.3.0",
-      "content_hash": "f39809f61c28a59154d0415ac7e48db03a244b6930a7c4080e00e5e06a1f84a1",
+      "version": "2.4.0",
+      "content_hash": "88683df7ca86d757dd3030e5f34d265e2df870445d79ba7bd52485c22348c512",
       "catalog": {
         "deseq2": "1.0.0",
         "multiqc": "1.0.0",

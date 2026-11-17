@@ -17,12 +17,21 @@ Two things stand between the file and that shape:
   (``--skip_qualimap``, ``--skip_dupradar``, the pseudo-aligner route without
   STAR) stays a null column rather than failing the recipe.
 
+* ``pct_trimmed`` is Cutadapt's share of bases trimmed, ``100 * (1 - bp
+  written / bp processed)``. MultiQC's own ``trim_galore`` module (the reports
+  of rnaseq 3.28) replaced the Cutadapt columns with ``trim_galore-tg_*`` ones,
+  none of which is that share (``tg_pct_quality_trimmed`` leaves the adapter
+  bases out). Its data file still holds both base counts, per read file: the
+  share is computed from them, read files averaged as MultiQC does.
+
 Sources:
     stats  every ``multiqc_general_stats.txt`` under ``multiqc/``. MultiQC
            names its data dir ``multiqc_data`` or ``<report>_data``, and the
            pipeline nests it under the aligner, so the glob spans all of them.
            A run that wrote several reports (two aligner routes under one
            DATA_ROOT) keeps the first row per library.
+    trim_galore  ``multiqc_trim_galore.txt`` (optional): reports made by
+           MultiQC's trim_galore module, where ``pct_trimmed`` comes from.
 
 Output: ``sample``, ``condition`` (read off the ``<condition>_REP<n>`` sample
 name nf-core RNA-seq uses, the sample name itself otherwise), then the metrics,
@@ -47,6 +56,13 @@ SOURCES: list[RecipeSource] = [
         # Every column as text: a module that wrote nothing for a library leaves
         # an empty cell, and `salmon-library_types` is a string among numbers.
         read_kwargs={"infer_schema_length": 0},
+    ),
+    RecipeSource(
+        ref="trim_galore",
+        glob_pattern="multiqc/**/multiqc_trim_galore.txt",
+        format="tsv",
+        read_kwargs={"infer_schema_length": 0},
+        optional=True,
     ),
 ]
 
@@ -97,6 +113,41 @@ def _numeric(df: pl.DataFrame, column: str) -> pl.Expr:
     if column not in df.columns:
         return pl.lit(None, dtype=pl.Float64)
     return pl.col(column).cast(pl.Float64, strict=False)
+
+
+def _trim_galore_pct_trimmed(tg: pl.DataFrame | None, samples: set[str]) -> pl.DataFrame | None:
+    """``sample`` → share of bases trimmed, from MultiQC's trim_galore data file:
+    per read file ``100 * (1 - total_bp_written / total_bp_processed)``, read
+    files of one library averaged (MultiQC's own rule for its sample row)."""
+    needed = {"total_bp_processed", "total_bp_written"}
+    if tg is None or tg.is_empty() or not needed <= set(tg.columns):
+        return None
+    name_col = "Sample" if "Sample" in tg.columns else tg.columns[0]
+
+    def library(name: str) -> str | None:
+        name = name.strip()
+        if name in samples:
+            return name
+        bare = _READ_SUFFIX.sub("", name)
+        return bare if bare != name and bare in samples else None
+
+    per_file = tg.select(
+        pl.col(name_col).cast(pl.Utf8).map_elements(library, return_dtype=pl.Utf8).alias("sample"),
+        (
+            100.0
+            * (
+                1.0
+                - pl.col("total_bp_written").cast(pl.Float64, strict=False)
+                / pl.col("total_bp_processed").cast(pl.Float64, strict=False)
+            )
+        ).alias("_tg_pct_trimmed"),
+    )
+    return (
+        per_file.drop_nulls("sample")
+        .filter(pl.col("_tg_pct_trimmed").is_finite())
+        .group_by("sample", maintain_order=True)
+        .agg(pl.col("_tg_pct_trimmed").mean())
+    )
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -162,6 +213,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
 
     out = merged.select(pl.col("sample"), *exprs)
+    trimmed = _trim_galore_pct_trimmed(sources.get("trim_galore"), set(out["sample"].to_list()))
+    if trimmed is not None:
+        out = (
+            out.join(trimmed, on="sample", how="left")
+            .with_columns(pl.coalesce("pct_trimmed", "_tg_pct_trimmed").alias("pct_trimmed"))
+            .drop("_tg_pct_trimmed")
+        )
     out = out.with_columns(
         pl.Series("condition", [_condition(s) for s in out["sample"].to_list()], dtype=pl.Utf8)
     )

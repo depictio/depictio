@@ -29,7 +29,7 @@
 template:
   template_id: "nf-core/rnaseq/3.28.0"
   description: "nf-core/rnaseq template for bulk RNA-seq: MultiQC funnel, Salmon expression overview, gene explorer"
-  version: "2.3.0"
+  version: "2.4.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing rnaseq pipeline output for one aligner route (multiqc/, star_salmon/, salmon/, trimgalore/)"
@@ -539,7 +539,7 @@ workflows:
               "sample": "Library identifier, as the samplesheet names it"
               "condition": "Biological group, read off the sample name"
               "total_reads_m": "Reads STAR received after trimming, in millions"
-              "pct_trimmed": "Share of bases Cutadapt trimmed, in percent"
+              "pct_trimmed": "Share of bases trimmed, in percent (Cutadapt, or computed from MultiQC's trim_galore data)"
               "pct_gc": "GC content of the trimmed reads, in percent"
               "pct_uniquely_mapped": "Reads STAR mapped to one locus, in percent"
               "pct_salmon_mapped": "Fragments Salmon assigned to a transcript, in percent"
