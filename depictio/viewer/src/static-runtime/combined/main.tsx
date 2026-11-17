@@ -44,6 +44,7 @@ import { bootApp } from '../appHost';
 import { bootReport } from '../report/boot';
 import { RUNTIME_ATTR, installCombinedHost, readCombinedConfig } from './host';
 import { adoptScopedStyles } from './scopeStyles';
+import { withReachableBasemap } from '../mapBasemap';
 
 declare global {
   interface Window {
@@ -54,7 +55,26 @@ declare global {
 /** The class every root of the report host carries (report/boot.tsx). */
 const REPORT_ROOT = '.depictio-report-root';
 
-if (!window.Plotly) window.Plotly = Plotly;
+/**
+ * The report's static figures call `window.Plotly.newPlot` while the page
+ * parses. A map among them (Quarto's own drawing of a map tile, kept as the
+ * tile's fallback) asks MapLibre for its network basemap, and offline that
+ * throws `Map error.` as an uncaught page error. They go through the same
+ * reachability check the runtime's own maps do: the basemap when it loads, a
+ * blank style otherwise.
+ */
+function offlineSafePlotly(lib: typeof Plotly): typeof Plotly {
+  const newPlot = lib.newPlot.bind(lib) as (...args: unknown[]) => Promise<unknown>;
+  const wrapped = (gd: unknown, data?: unknown, layout?: unknown, config?: unknown) => {
+    const figure = { data: data as unknown[], layout: layout as Record<string, unknown> };
+    return withReachableBasemap({ figure }, 'light', { retheme: false }).then((safe) =>
+      newPlot(gd, safe.figure?.data, safe.figure?.layout, config),
+    );
+  };
+  return Object.assign(Object.create(lib) as typeof Plotly, { newPlot: wrapped });
+}
+
+if (!window.Plotly) window.Plotly = offlineSafePlotly(Plotly);
 
 function bootDashboardView(): void {
   const host = findCombinedHost(window);
