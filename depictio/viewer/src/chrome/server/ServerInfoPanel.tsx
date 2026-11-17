@@ -29,6 +29,9 @@ const EXTERNAL = { target: '_blank', rel: 'noopener noreferrer' } as const;
 /** The admin tab that holds the version check switch. */
 const ADMIN_SETTINGS_HREF = '/admin/settings';
 
+/** How each storage backend is named to a reader. */
+const STORAGE_LABEL: Record<string, string> = { s3: 'S3', gcs: 'Google Cloud Storage' };
+
 const DOT_COLOR = { online: 'green.6', offline: 'red.6', unknown: 'gray.5' } as const;
 
 const Dot: React.FC<{ state: keyof typeof DOT_COLOR }> = ({ state }) => (
@@ -211,6 +214,12 @@ const ServerInfoPanel: React.FC<ServerInfoPanelProps> = ({ variant = 'popover' }
         </Row>
         <Row label="API">{info?.api_version ?? '-'}</Row>
         <Row label="Mode">{mode}</Row>
+        {info?.features?.storage && (
+          <Row label="Storage" testId="server-info-storage">
+            {STORAGE_LABEL[info.features.storage.backend] ?? info.features.storage.backend} (
+            {info.features.storage.scheme}://)
+          </Row>
+        )}
       </Stack>
 
       {info && repo ? (

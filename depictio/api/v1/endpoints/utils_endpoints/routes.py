@@ -163,6 +163,9 @@ async def server_info(
         "features": {
             "migration": settings.migration.ui_enabled,
             "changes_since": settings.dashboard_versions.changes_since_enabled,
+            # Where the instance keeps its data (#1358): the backend's name and
+            # the scheme its stored locations carry. No bucket name.
+            "storage": {"backend": instance_backend.name, "scheme": instance_backend.scheme},
         },
     }
 

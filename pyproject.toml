@@ -307,6 +307,9 @@ markers = [
   "integration: mark test as an integration test.",
   "playwright: mark test as a playwright test.",
   "docker: mark test as requiring docker.",
+  "gcs: storage backend tests against a GCS emulator (depictio/tests/storage).",
+  "gcs_public: anonymous reads of a public GCS bucket (network).",
+  "gcs_live: storage backend tests against a real private GCS bucket.",
 ]
 addopts = "-s"
 filterwarnings = [

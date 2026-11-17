@@ -12,7 +12,7 @@ import threading
 from collections.abc import Iterable, Iterator
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from depictio.models.storage.base import ObjectInfo, StorageError, StorageNotFound
 from depictio.models.storage.uri import object_url, split_object_url
@@ -162,11 +162,11 @@ class ObstoreBackend:
     ) -> Iterator[bytes]:
         import obstore
 
-        options: Any = None
+        options = None
         if start is not None or end is not None:
             options = {"range": {"offset": start or 0} if end is None else (start or 0, end)}
         try:
-            result = obstore.get(self.store, key, options=options)
+            result = obstore.get(self.store, key, options=cast(Any, options))
         except Exception as exc:
             raise _wrap(exc, f"reading {self.url(key)}") from exc
         return (bytes(chunk) for chunk in result.stream(min_chunk_size=chunk_size))

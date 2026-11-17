@@ -318,6 +318,9 @@ spec:
         checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
       enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
+      {{- with (include "depictio.serviceAccountName" .) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       {{- if gt (.Values.backend.replicas | int) 1 }}
       affinity:
         podAntiAffinity:
@@ -811,6 +814,9 @@ spec:
         checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
       enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
+      {{- with (include "depictio.serviceAccountName" .) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.celery.podSecurityContext | nindent 8 }}
       initContainers:

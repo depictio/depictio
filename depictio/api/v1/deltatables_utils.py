@@ -15,6 +15,7 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.models.components.constants import TEXT_MATCH_MODES
+from depictio.models.storage import is_object_url
 
 # FEATURE FLAGS
 ENABLE_CACHING = True  # Global toggle for caching system
@@ -46,8 +47,8 @@ def get_local_cache_path(s3_path: str) -> str:
         s3://depictio-bucket/646b0f3c1e4a2d7f8e5b8c9c
         → /app/cache/delta_cache/646b0f3c1e4a2d7f8e5b8c9c
     """
-    if s3_path.startswith("s3://"):
-        # Extract data collection ID from S3 path
+    if is_object_url(s3_path):
+        # Extract data collection ID from the stored location
         dc_id = s3_path.split("/")[-1]
         return os.path.join(DELTA_CACHE_DIR, dc_id)
     return s3_path

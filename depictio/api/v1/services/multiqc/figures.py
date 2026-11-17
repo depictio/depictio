@@ -26,7 +26,7 @@ from depictio.cli.cli.utils.multiqc_figures import (
     multiqc_figure_cache_key,
 )
 from depictio.cli.cli.utils.multiqc_state import MULTIQC_STATE_LOCK
-from depictio.models.storage import instance_storage
+from depictio.models.storage import is_object_url, split_object_url
 
 # MultiQC's state is the module's: the one lock every reader in the process
 # takes (ingestion, prerender and the run-folder checks too).
@@ -49,32 +49,36 @@ _resident_report_key: str | None = None
 MULTIQC_CACHE_TTL_SECONDS = 30 * 24 * 3600
 
 
-# Module-level cached filesystem (reused across calls within the same process)
-_cached_s3_fs = None
+def _storage():
+    """The instance bucket MultiQC reports are stored in."""
+    from depictio.api.v1.s3 import instance_backend
+
+    return instance_backend
 
 
-def _get_s3_filesystem():
-    """The instance store as a cached fsspec filesystem (avoids re-creating per call)."""
-    global _cached_s3_fs
-    if _cached_s3_fs is None:
-        _cached_s3_fs = instance_storage(settings).filesystem()
-    return _cached_s3_fs
+def _download_to(s3_location: str, local_path: str) -> None:
+    """Write the stored report at ``s3_location`` to ``local_path``."""
+    storage = _storage()
+    key = storage.key_of(s3_location)
+    if not key:
+        raise FileNotFoundError(f"Not a report of the instance bucket: {s3_location}")
+    data = storage.read_bytes(key)  # StorageNotFound is a FileNotFoundError
+    with open(local_path, "wb") as fh:
+        fh.write(data)
 
 
 def _resolve_local_cache_path(s3_location: str) -> Optional[str]:
-    """Compute the local cache path for an S3 location without any S3 calls."""
-    if not s3_location.startswith("s3://"):
+    """Compute the local cache path for a stored location without any storage calls."""
+    if not is_object_url(s3_location):
         return None
     cache_base = os.path.expanduser(settings.s3_cache.cache_dir)
-    path_parts = s3_location.replace("s3://", "").split("/", 1)
-    bucket = path_parts[0]
-    key = path_parts[1] if len(path_parts) > 1 else ""
-    return os.path.join(cache_base, bucket, key)
+    parts = split_object_url(s3_location)
+    return os.path.join(cache_base, parts.bucket, parts.key)
 
 
 def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
-    """Get a local path for an S3 file, using local cache to avoid S3 round-trips."""
-    if not s3_location.startswith("s3://"):
+    """Get a local path for a stored file, using local cache to avoid storage round-trips."""
+    if not is_object_url(s3_location):
         return s3_location
 
     if not use_cache:
@@ -85,15 +89,11 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
         return cache_path
 
     try:
-        fs = _get_s3_filesystem()
-        if not fs.exists(s3_location):
-            raise FileNotFoundError(f"S3 file does not exist: {s3_location}")
-
         if cache_path is None:
             return _download_s3_file_direct(s3_location)
 
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-        fs.get(s3_location, cache_path)
+        _download_to(s3_location, cache_path)
         return cache_path
 
     except Exception as e:
@@ -104,9 +104,8 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
 
 
 def _download_s3_file_direct(s3_location: str) -> str:
-    """Direct download of S3 file to temporary location (fallback method)."""
-    path_parts = s3_location.replace("s3://", "").split("/", 1)
-    key = path_parts[1] if len(path_parts) > 1 else ""
+    """Direct download of a stored file to a temporary location (fallback method)."""
+    key = split_object_url(s3_location).key if is_object_url(s3_location) else ""
 
     file_extension = Path(key).suffix or ".tmp"
     temp_file = tempfile.NamedTemporaryFile(suffix=file_extension, delete=False)
@@ -114,10 +113,7 @@ def _download_s3_file_direct(s3_location: str) -> str:
     temp_file.close()
 
     try:
-        fs = _get_s3_filesystem()
-        if not fs.exists(s3_location):
-            raise FileNotFoundError(f"S3 file does not exist: {s3_location}")
-        fs.get(s3_location, local_path)
+        _download_to(s3_location, local_path)
         return local_path
     except Exception as e:
         try:

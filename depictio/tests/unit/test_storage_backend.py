@@ -374,3 +374,142 @@ def test_no_code_outside_the_storage_package_names_a_backend_class():
         if pattern.search(line)
     ]
     assert offenders == []
+
+
+# --------------------------------------------------------------------------
+# GCS backend (no store reached; the emulator and live suites are in tests/storage)
+# --------------------------------------------------------------------------
+
+
+class TestGCSBackend:
+    def _gcs(self, **cfg):
+        from depictio.api.v1.configs.settings_models import GCSConfig
+        from depictio.models.storage import GCSBackend
+
+        return GCSBackend(GCSConfig(bucket="instance-bucket", **cfg))
+
+    def test_it_is_registered_with_its_scheme(self):
+        from depictio.models.storage import GCSBackend
+
+        assert backend_class("gcs") is GCSBackend
+        assert "gs" in object_schemes()
+        assert split_object_url("gs://b/k/x") == ("gs", "b", "k/x")
+        assert isinstance(self._gcs(), StorageBackend)
+
+    def test_locations_are_gs_urls(self):
+        backend = self._gcs()
+        assert backend.url("dc1") == "gs://instance-bucket/dc1"
+        assert backend.key_of("gs://instance-bucket/dc1/x") == "dc1/x"
+        assert backend.key_of("s3://instance-bucket/dc1") is None
+
+    def test_under_adc_polars_and_deltars_read_the_environment(self):
+        """Workload Identity / gcloud ADC: no option at all, and nothing AWS."""
+        assert self._gcs().storage_options() == {}
+
+    def test_a_key_file(self):
+        options = self._gcs(service_account_path="/var/run/sa.json").storage_options()
+        assert options == {"google_service_account": "/var/run/sa.json"}
+
+    def test_anonymous(self):
+        assert self._gcs(anonymous=True).storage_options() == {"google_skip_signature": "true"}
+
+    def test_an_emulator_gets_a_no_oauth_key_and_plain_http(self):
+        import json
+
+        options = self._gcs(endpoint_url="http://localhost:4443/").storage_options()
+        assert options["allow_http"] == "true"
+        key = json.loads(options["google_service_account_key"])
+        assert key["gcs_base_url"] == "http://localhost:4443"
+        assert key["disable_oauth"] is True
+
+    def test_buckets_are_not_created(self, monkeypatch):
+        """A GCS bucket needs a project and a location: the operator's choice."""
+        backend = self._gcs()
+        monkeypatch.setattr(backend, "bucket_exists", lambda: False)
+        with pytest.raises(StorageNotFound, match="create it before starting"):
+            backend.ensure_bucket()
+
+    def test_check_names_what_failed(self, monkeypatch):
+        backend = self._gcs()
+        monkeypatch.setattr(backend, "bucket_exists", lambda: False)
+        with pytest.raises(StorageError, match="does not exist"):
+            backend.check(["bucket"])
+
+
+class TestInstanceSelection:
+    def _settings(self, backend: str, **gcs):
+        from depictio.api.v1.configs.settings_models import GCSConfig, StorageConfig
+
+        return SimpleNamespace(
+            storage=StorageConfig(backend=backend),
+            s3=_cfg(bucket="s3-bucket"),
+            gcs=GCSConfig(**gcs),
+        )
+
+    def test_the_server_picks_gcs_from_its_settings(self):
+        from depictio.models.storage import GCSBackend
+
+        backend = instance_storage(self._settings("gcs", bucket="g"))
+        assert isinstance(backend, GCSBackend) and backend.bucket == "g"
+
+    def test_cli_configs_built_by_the_server_carry_the_backend(self):
+        from depictio.models.storage import cli_storage_fields
+
+        assert cli_storage_fields(self._settings("s3")) == {"storage_backend": "s3"}
+        fields = cli_storage_fields(self._settings("gcs", bucket="g"), dump=True)
+        assert fields["storage_backend"] == "gcs"
+        assert fields["gcs_storage"]["bucket"] == "g"
+
+    def test_a_cli_config_with_gcs_storage(self):
+        from depictio.api.v1.configs.settings_models import GCSConfig
+        from depictio.models.storage import GCSBackend
+
+        cli = SimpleNamespace(
+            storage_backend="gcs", gcs_storage=GCSConfig(bucket="g"), s3_storage=_cfg()
+        )
+        assert isinstance(instance_storage(cli), GCSBackend)
+
+    def test_cli_delta_options_follow_the_backend(self):
+        from depictio.models.storage import BackendStorageOptions, instance_polars_options
+
+        s3_options = instance_polars_options(SimpleNamespace(s3_storage=_cfg()))
+        assert s3_options.model_dump()["AWS_S3_ALLOW_UNSAFE_RENAME"] == "true"
+        gcs_options = instance_polars_options(
+            SimpleNamespace(storage_backend="gcs", gcs_storage=self._settings("gcs").gcs)
+        )
+        assert isinstance(gcs_options, BackendStorageOptions)
+        assert gcs_options.aws_access_key_id is None
+        assert gcs_options.model_dump() == {}
+
+    def test_s3_only_features_refuse_another_backend(self):
+        from depictio.models.storage import require_s3_instance
+
+        require_s3_instance(self._settings("s3"), "Project migration")
+        with pytest.raises(StorageError, match="Project migration needs the instance bucket on S3"):
+            require_s3_instance(self._settings("gcs", bucket="g"), "Project migration")
+
+
+class TestServerSettings:
+    def _settings(self, monkeypatch, **env):
+        from depictio.api.v1.configs.settings_models import Settings
+
+        for name in ("DEPICTIO_S3_ROOT_PASSWORD", "DEPICTIO_MINIO_ROOT_PASSWORD"):
+            monkeypatch.delenv(name, raising=False)
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
+        return Settings()
+
+    def test_an_instance_on_gcs_needs_no_s3_secret(self, monkeypatch):
+        settings = self._settings(
+            monkeypatch, DEPICTIO_STORAGE_BACKEND="gcs", DEPICTIO_GCS_BUCKET="g"
+        )
+        assert settings.storage.backend == "gcs"
+        assert settings.gcs.bucket == "g"
+
+    def test_an_instance_on_gcs_names_its_bucket(self, monkeypatch):
+        with pytest.raises(ValueError, match="DEPICTIO_GCS_BUCKET"):
+            self._settings(monkeypatch, DEPICTIO_STORAGE_BACKEND="gcs")
+
+    def test_an_instance_on_s3_still_needs_its_secret(self, monkeypatch):
+        with pytest.raises(ValueError, match="DEPICTIO_S3_ROOT_PASSWORD"):
+            self._settings(monkeypatch)

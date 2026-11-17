@@ -7,6 +7,7 @@ before reading parquet inputs.
 import os
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.storage import is_object_url
 
 
 def normalize_multiqc_paths(locations: list[str]) -> list[str]:
@@ -18,7 +19,7 @@ def normalize_multiqc_paths(locations: list[str]) -> list[str]:
     for location in locations:
         if not location:
             continue
-        if location.startswith("s3://"):
+        if is_object_url(location):
             normalized.append(location)
         elif location.startswith("/"):
             if not os.path.exists(location):
