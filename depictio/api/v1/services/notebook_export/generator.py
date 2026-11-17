@@ -38,7 +38,7 @@ from .provenance import (
     RUN_ICON,
     header_markdown,
 )
-from .quarto import QuartoFrontMatter, paper_brand
+from .quarto import QuartoFrontMatter, paper_brand, paper_brand_dark
 from .reading_order import (
     ComponentUnit,
     MarkdownUnit,
@@ -49,6 +49,7 @@ from .reading_order import (
     tab_link_key,
 )
 from .report_chrome import (
+    DARK_CSS,
     DIV_CLOSE,
     REPORT_CSS,
     TOC_SCOPE_JS,
@@ -1423,6 +1424,16 @@ class NotebookBuilder:
                 if self.paper
                 else None
             ),
+            # The reader's scheme: Paper's dark page when they prefer it.
+            brand_dark=(
+                paper_brand_dark(
+                    primary=self._primary()[0],
+                    font_family=brand.get("font_family"),
+                    headings_font_family=brand.get("headings_font_family"),
+                )
+                if self.paper
+                else None
+            ),
         )
 
     def _imports_cell(self) -> Cell:
@@ -1589,6 +1600,7 @@ def card_row(cards):
             + chrome
             + "\n"
             + REPORT_CSS
+            + (DARK_CSS if self.paper else "")
             + TOC_SCOPE_JS
             + mark_css(self.plan.depictio_mark)
             + "\n\n"

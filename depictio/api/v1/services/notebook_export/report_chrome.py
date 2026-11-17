@@ -716,3 +716,38 @@ TOC_SCOPE_JS = """<script>
 #TOC li.dpx-toc-current > a { color: var(--gl-fg, #212529); font-weight: 600; }
 @media print { #quarto-margin-sidebar, #TOC { display: none !important; } }
 </style>"""
+
+
+# The dark scheme (``body.quarto-dark``: the reader prefers it, or toggled it):
+# Paper's tokens for Mantine's dark palette, and the few colours the classic
+# chrome wrote out. Plotly figures drawn by the document are transparent with
+# ink-coloured text: their text and grid follow the page here. Tiles drawn by
+# the report runtime follow the same class on their own.
+DARK_CSS = """<style>
+html:has(body.quarto-dark) { background: #1f1f1f; }
+body.quarto-dark {
+  --gl-fg: #c9c9c9; --gl-muted: #828282; --gl-faint: #696969; --gl-paper: #1f1f1f;
+  --gl-hair: rgba(255, 255, 255, 0.1); --gl-well: rgba(255, 255, 255, 0.06);
+  --gl-shade-a: rgba(0, 0, 0, 0.3); --gl-shade-b: rgba(0, 0, 0, 0.5);
+  --gl-accent-fg: color-mix(in srgb, var(--gl-accent) 75%, #fff);
+  --gl-tile-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a);
+  color: var(--gl-fg);
+}
+body.quarto-dark :not(pre) > code, body.quarto-dark pre { background: var(--gl-well); color: var(--gl-fg); }
+body.quarto-dark table:not(.dpx-plain) th, body.quarto-dark table:not(.dpx-plain) td {
+  border-color: var(--gl-hair);
+}
+body.quarto-dark .dpx-select, body.quarto-dark .dpx-zoom, body.quarto-dark .dpx-full,
+body.quarto-dark .dpx-full thead th { background-color: var(--gl-paper); color: var(--gl-fg); }
+body.quarto-dark .dpx-card-title { color: var(--gl-muted) !important; }
+body.quarto-dark .js-plotly-plot .main-svg .xtick text, body.quarto-dark .js-plotly-plot .main-svg .ytick text,
+body.quarto-dark .js-plotly-plot .main-svg .g-xtitle text, body.quarto-dark .js-plotly-plot .main-svg .g-ytitle text,
+body.quarto-dark .js-plotly-plot .main-svg .gtitle, body.quarto-dark .js-plotly-plot .main-svg .legendtext,
+body.quarto-dark .js-plotly-plot .main-svg .legendtitletext, body.quarto-dark .js-plotly-plot .main-svg .annotation-text {
+  fill: var(--gl-fg) !important;
+}
+body.quarto-dark .js-plotly-plot .main-svg .gridlayer path,
+body.quarto-dark .js-plotly-plot .main-svg .zerolinelayer path { stroke: rgba(255, 255, 255, 0.08) !important; }
+body.quarto-dark .dataTables_wrapper, body.quarto-dark .dt-container { color: var(--gl-fg); }
+body.quarto-dark .callout.dpx-about { background: none; }
+</style>"""

@@ -42,6 +42,9 @@ class QuartoFrontMatter:
     # front matter so the export stays one file; ``None`` keeps Quarto's
     # stock Bootstrap (the classic look).
     brand: dict[str, Any] | None = None
+    # The same brand for a reader who prefers dark: with it the report follows
+    # the reader's colour scheme (and offers Quarto's toggle).
+    brand_dark: dict[str, Any] | None = None
     # Markup placed at the very top of the page, above Quarto's layout: the
     # report's header bar (``report_chrome.appbar_html``).
     before_body: str | None = None
@@ -105,7 +108,10 @@ class QuartoFrontMatter:
                 # typst's own bibliography cannot read: pandoc resolves them.
                 "citeproc": True,
             }
-        if self.brand:
+        if self.brand and self.brand_dark:
+            doc["brand"] = {"light": self.brand, "dark": self.brand_dark}
+            doc["format"]["html"]["respect-user-color-scheme"] = True
+        elif self.brand:
             doc["brand"] = self.brand
         doc["jupyter"] = "python3"
         doc["execute"] = {"warning": False, "echo": self.echo}
@@ -161,3 +167,36 @@ def paper_brand(
         "color": {"primary": primary, "background": "#ffffff", "foreground": _INK},
         "defaults": {"bootstrap": {"defaults": defaults}},
     }
+
+
+# Mantine's dark scheme as the app's Paper draws it: dark 7 page, dark 0 ink,
+# dark 2 dimmed, white hairlines.
+_DARK_BG = "#1f1f1f"
+_DARK_INK = "#c9c9c9"
+_DARK_MUTED = "#828282"
+_DARK_HAIR = "rgba(255, 255, 255, 0.1)"
+
+
+def paper_brand_dark(
+    *,
+    primary: str,
+    font_family: str | None = None,
+    headings_font_family: str | None = None,
+) -> dict[str, Any]:
+    """``paper_brand`` for the dark scheme: the same type and radii, Mantine's
+    dark page and ink, the same primary."""
+    brand = paper_brand(
+        primary=primary, font_family=font_family, headings_font_family=headings_font_family
+    )
+    brand["color"] = {"primary": primary, "background": _DARK_BG, "foreground": _DARK_INK}
+    boot = brand["defaults"]["bootstrap"]["defaults"]
+    boot.update(
+        {
+            "body-color": _DARK_INK,
+            "body-bg": _DARK_BG,
+            "text-muted": _DARK_MUTED,
+            "border-color": _DARK_HAIR,
+            "code-color": _DARK_INK,
+        }
+    )
+    return brand

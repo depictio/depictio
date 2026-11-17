@@ -253,3 +253,19 @@ def test_no_methods_without_anything_to_cite(penguins_tabs):
     tabs = [{**t, "stored_metadata": []} for t in penguins_tabs]
     src = generate_qmd(_plan(tabs, project=None))
     assert "{#methods}" not in src and "references" not in _front(src)
+
+
+def test_the_report_follows_the_readers_colour_scheme(ampliseq_tabs):
+    front = _front(generate_qmd(_plan(ampliseq_tabs)))
+    assert front["format"]["html"]["respect-user-color-scheme"] is True
+    assert front["brand"]["dark"]["color"]["background"] == "#1f1f1f"
+    assert front["brand"]["light"]["color"]["background"] == "#ffffff"
+    assert "body.quarto-dark" in _body(generate_qmd(_plan(ampliseq_tabs)))
+    classic = _front(generate_qmd(_plan(ampliseq_tabs, theme="classic")))
+    assert "brand" not in classic and "respect-user-color-scheme" not in classic["format"]["html"]
+
+
+def test_pdf_adds_a_typst_format(ampliseq_tabs):
+    front = _front(generate_qmd(_plan(ampliseq_tabs, pdf=True)))
+    assert front["format"]["typst"]["citeproc"] is True
+    assert "typst" not in _front(generate_qmd(_plan(ampliseq_tabs)))["format"]
