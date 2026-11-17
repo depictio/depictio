@@ -31,7 +31,7 @@ from depictio.cli.cli.utils.record_sheets import (
 from depictio.cli.cli.utils.templates import _pick_input_samplesheet
 from depictio.cli.depictio_cli import app
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes import RecipeError, resolve_sources
+from depictio.recipes import RecipeError, resolve_sources, validate_sources
 
 from ..s3_stubs import S3_ROOT, install_s3_listing, s3_cli_config, s3_data_root
 
@@ -181,6 +181,35 @@ def test_a_recipe_refuses_a_malformed_record_sheet(run, cli_context):
         resolve_sources(
             _module(path="input/samplesheet.csv"), str(run), {"samplesheet": "input/bad.yaml"}
         )
+
+
+SCHEMA = {"sample": pl.Utf8, "fastq_1": pl.Utf8, "strandedness": pl.Utf8}
+
+
+@pytest.mark.parametrize("name", RECORD_SHEETS)
+def test_a_record_sheet_missing_a_key_names_it_a_key(tmp_path, cli_context, name):
+    """A YAML/JSON sheet has keys, not columns: the error says so."""
+    records = json.loads((FIXTURES / "samplesheet.json").read_text())
+    for record in records:
+        del record["strandedness"]
+    sheet = tmp_path / name
+    sheet.write_text(json.dumps(records))  # JSON is valid YAML too
+    module = _module(path="input/samplesheet.csv", input_schema=SCHEMA)
+    sources = resolve_sources(module, str(tmp_path), {"samplesheet": str(sheet)})
+    with pytest.raises(RecipeError) as exc:
+        validate_sources(module, sources, "demo")
+    message = str(exc.value)
+    assert "lacks input key(s) ['strandedness']" in message
+    assert "Got keys: ['sample', 'fastq_1', 'fastq_2']" in message
+    assert "column" not in message
+
+
+def test_a_csv_sheet_missing_a_column_still_names_it_a_column(tmp_path, cli_context):
+    (tmp_path / "sheet.csv").write_text("sample,fastq_1\ntest,r1.fq.gz\n")
+    module = _module(path="sheet.csv", input_schema=SCHEMA)
+    sources = resolve_sources(module, str(tmp_path))
+    with pytest.raises(RecipeError, match=r"lacks input column\(s\) \['strandedness'\]"):
+        validate_sources(module, sources, "demo")
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import re
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -229,8 +230,10 @@ def _read_source_file(
     records (``record_sheets``), through ``root`` when the file is under it.
     """
     if _repointed_at_record_sheet(source, rel_path or location):
-        return _with_source_path(
-            _read_record_source(location, source, root, rel_path), source, location, rel_path
+        return _mark_record_sheet(
+            _with_source_path(
+                _read_record_source(location, source, root, rel_path), source, location, rel_path
+            )
         )
 
     kwargs = dict(source.read_kwargs or {})
@@ -244,6 +247,20 @@ def _read_source_file(
     else:
         df = read(location, **format_kwargs, **kwargs)
     return _with_source_path(df, source, location, rel_path)
+
+
+# Frames read from a YAML/JSON samplesheet, by id: such a sheet has keys, not
+# columns, and ``validate_sources`` says so. Weak, so a frame's entry goes with it.
+_RECORD_SHEET_FRAMES: weakref.WeakValueDictionary[int, pl.DataFrame] = weakref.WeakValueDictionary()
+
+
+def _mark_record_sheet(df: pl.DataFrame) -> pl.DataFrame:
+    _RECORD_SHEET_FRAMES[id(df)] = df
+    return df
+
+
+def _from_record_sheet(df: pl.DataFrame) -> bool:
+    return _RECORD_SHEET_FRAMES.get(id(df)) is df
 
 
 def _repointed_at_record_sheet(source: RecipeSource, location: str | Path) -> bool:
@@ -346,7 +363,8 @@ def _read_source_outside_root(
             frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
         except RecordSheetError as exc:
             raise RecipeError(f"Source '{source.ref}': {exc}") from exc
-        return _with_source_path(frame.collect(), source, location, None)
+        df = _with_source_path(frame.collect(), source, location, None)
+        return _mark_record_sheet(df) if _repointed_at_record_sheet(source, location) else df
 
     from depictio.cli.cli.utils.templates import _local_fallback_allowed
 
@@ -537,17 +555,19 @@ def validate_sources(
         df = sources.get(source.ref)
         if not source.input_schema or df is None or df.is_empty():
             continue
+        # A YAML/JSON samplesheet names its fields keys, a table columns.
+        field = "key" if _from_record_sheet(df) else "column"
         missing = [c for c in source.input_schema if c not in df.columns]
         if missing:
             raise RecipeError(
-                f"Recipe {recipe_name}: source '{source.ref}' lacks input column(s) "
-                f"{missing}. Got columns: {df.columns}"
+                f"Recipe {recipe_name}: source '{source.ref}' lacks input {field}(s) "
+                f"{missing}. Got {field}s: {df.columns}"
             )
         for col_name, declared in source.input_schema.items():
             actual = df[col_name].dtype
             if not _dtype_compatible(actual, declared):
                 raise RecipeError(
-                    f"Recipe {recipe_name}: source '{source.ref}' input column "
+                    f"Recipe {recipe_name}: source '{source.ref}' input {field} "
                     f"'{col_name}' expected {declared}, got {actual}"
                 )
         checked.append(source.ref)
