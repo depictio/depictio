@@ -222,6 +222,7 @@ data:
   DEPICTIO_S3_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
   DEPICTIO_S3_SERVICE_PORT: {{ $s3ServicePort | quote }}
   {{- end }}
+  DEPICTIO_S3_BROWSER_ACCESS: {{ include "depictio.s3BrowserAccess" . | quote }}
   {{- /* Legacy DEPICTIO_MINIO_* names, same values: keeps an older image
          pinned via backend/celery image tags working. Remove in a later
          release once all supported images read DEPICTIO_S3_*. */}}
@@ -343,6 +344,7 @@ data:
   DEPICTIO_S3_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
   DEPICTIO_S3_SERVICE_PORT: {{ $s3ServicePort | quote }}
   {{- end }}
+  DEPICTIO_S3_BROWSER_ACCESS: {{ include "depictio.s3BrowserAccess" . | quote }}
   {{- /* Legacy DEPICTIO_MINIO_* names, same values: keeps an older image
          pinned via backend/celery image tags working. Remove in a later
          release once all supported images read DEPICTIO_S3_*. */}}

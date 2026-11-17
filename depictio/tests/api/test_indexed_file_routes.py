@@ -218,3 +218,127 @@ class TestFileUrlRoute:
                 DC_ID, "NA12878", "NA12878.vcf.gz", current_user=SimpleNamespace(id=1)
             )
         assert getattr(exc.value, "status_code", None) == 404
+
+
+# ---------------------------------------------------------------------------
+# DEPICTIO_S3_BROWSER_ACCESS=proxy: the API streams the object (#1420)
+# ---------------------------------------------------------------------------
+
+PDB = b"HEADER    TEST PROTEIN\nATOM      1  N   MET A   1\nEND\n"
+READER_ID = ObjectId()
+
+
+class _FakeUsers:
+    def __init__(self, docs):
+        self.docs = {d["_id"]: d for d in docs}
+
+    def find_one(self, query, projection=None):
+        return self.docs.get(query.get("_id"))
+
+
+@pytest.fixture
+def proxy(monkeypatch):
+    """Proxy mode, one registered structure, its bytes served from memory."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    import depictio.api.v1.db as db_module
+    import depictio.api.v1.endpoints.advanced_viz_endpoints.routes as av
+    from depictio.api.v1.configs.config import settings
+    from depictio.api.v1.services import remote_read
+
+    monkeypatch.setattr(settings.s3, "browser_access", "proxy")
+    pdb = _doc("P1", "P1.pdb", size=len(PDB))
+    pdb["index_s3_key"] = None
+    monkeypatch.setattr(routes, "files_collection", _FakeFiles([pdb]))
+    monkeypatch.setattr(
+        db_module,
+        "users_collection",
+        _FakeUsers([{"_id": READER_ID, "is_admin": False}]),
+        raising=False,
+    )
+    readers: set[str] = {str(READER_ID)}
+
+    def access(dc_oid, user):
+        if str(user.id) not in readers:
+            raise routes.HTTPException(status_code=404, detail="no access")
+
+    monkeypatch.setattr(av, "_assert_dc_access", access)
+    keys: list[str] = []
+    monkeypatch.setattr(remote_read, "source_size", lambda src: keys.append(src.key) or len(PDB))
+    monkeypatch.setattr(
+        remote_read, "open_range", lambda src, rng: iter([PDB[rng.start : rng.end + 1]])
+    )
+    app = FastAPI()
+    app.include_router(routes.files_endpoint_router, prefix="/depictio/api/v1/files")
+    return SimpleNamespace(client=TestClient(app), readers=readers, keys=keys, doc=pdb)
+
+
+def _manifest_url(proxy_env) -> str:
+    import asyncio
+
+    payload = asyncio.run(
+        routes.list_indexed_files(DC_ID, current_user=SimpleNamespace(id=READER_ID))
+    )
+    return payload["files"][0]["url"]
+
+
+class TestProxyMode:
+    def test_the_manifest_hands_out_signed_api_urls(self, proxy, monkeypatch):
+        monkeypatch.setattr(routes, "_indexed_file_dc_properties", lambda oid: {"format": "pdb"})
+        url = _manifest_url(proxy)
+        path, _, query = url.partition("?")
+        assert path == f"/depictio/api/v1/files/indexed/{DC_ID}/object/P1/P1.pdb"
+        assert f"uid={READER_ID}" in query and "sig=" in query and "exp=" in query
+        assert "X-Amz" not in url
+
+    def test_the_presigned_mode_is_unchanged(self, proxy, monkeypatch):
+        from depictio.api.v1.configs.config import settings
+
+        monkeypatch.setattr(settings.s3, "browser_access", "presigned")
+        monkeypatch.setattr(routes, "_indexed_file_dc_properties", lambda oid: {"format": "pdb"})
+        assert "X-Amz-Signature=" in _manifest_url(proxy)
+
+    def test_a_signed_url_serves_the_object_and_its_byte_ranges(self, proxy, monkeypatch):
+        monkeypatch.setattr(routes, "_indexed_file_dc_properties", lambda oid: {"format": "pdb"})
+        url = _manifest_url(proxy)
+
+        whole = proxy.client.get(url)
+        assert (whole.status_code, whole.content) == (200, PDB)
+        assert whole.headers["accept-ranges"] == "bytes"
+
+        part = proxy.client.get(url, headers={"Range": "bytes=10-16"})
+        assert (part.status_code, part.content) == (206, PDB[10:17])
+        assert part.headers["content-range"] == f"bytes 10-16/{len(PDB)}"
+
+        head = proxy.client.head(url)
+        assert (head.status_code, head.headers["content-length"]) == (200, str(len(PDB)))
+        # The object read is the one the DC registered, rebuilt server side.
+        assert set(proxy.keys) == {proxy.doc["s3_key"]}
+
+    def test_a_signature_grants_one_object_only(self, proxy, monkeypatch):
+        monkeypatch.setattr(routes, "_indexed_file_dc_properties", lambda oid: {"format": "pdb"})
+        url = _manifest_url(proxy)
+        other = url.replace("/P1/P1.pdb?", "/P1/P2.pdb?")
+        assert proxy.client.get(other).status_code == 401
+        tampered = url.replace(f"uid={READER_ID}", f"uid={ObjectId()}")
+        assert proxy.client.get(tampered).status_code == 401
+        assert proxy.client.get(url.partition("?")[0]).status_code == 401
+
+    def test_a_reader_who_lost_access_is_refused(self, proxy, monkeypatch):
+        monkeypatch.setattr(routes, "_indexed_file_dc_properties", lambda oid: {"format": "pdb"})
+        url = _manifest_url(proxy)
+        proxy.readers.clear()
+        assert proxy.client.get(url).status_code == 404
+
+    def test_an_unregistered_object_is_404(self, proxy, monkeypatch):
+        from depictio.api.v1.services.jbrowse import signing
+
+        key = indexed_file_s3_key(DC_ID, "P1", "secret.pdb")
+        exp = 2_000_000_000
+        sig = signing.sign("indexed", DC_ID, key, "object", str(READER_ID), exp)
+        url = (
+            f"/depictio/api/v1/files/indexed/{DC_ID}/object/P1/secret.pdb"
+            f"?uid={READER_ID}&exp={exp}&sig={sig}"
+        )
+        assert proxy.client.get(url).status_code == 404
