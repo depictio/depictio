@@ -1,0 +1,217 @@
+# nf-core/variantbenchmarking 1.6.1: Depictio dashboards
+
+One dashboard: an **Overview**, then one child tab per variant type, in two groups.
+[nf-core/variantbenchmarking](https://nf-co.re/variantbenchmarking) compares the calls of one
+or more callers with a truth set and scores each callset on precision, recall and F1. A run
+benchmarks one variant type, so a run shows the Overview and the tab of its type. The family
+rules are in `depictio/projects/nf-core/RULES.md`.
+
+| Group | Tab | The question it answers |
+|---|---|---|
+| Small variants | Germline | How well does each germline callset recover the truth set? |
+| Small variants | Somatic | How well does each somatic caller recover the truth set? |
+| Structural | Structural & CNV | How well do the structural callsets match the truth set? |
+
+The pipeline writes no MultiQC report into the collections this template reads, and it has no
+sample sheet, so there is no MultiQC tab, no `Data & QC` group, no persistent sample filters
+and no Sample sheet section. Every benchmark collection shares one vocabulary: `label` is the
+callset id the pipeline benchmarked, `caller` the tool behind it, `truth_set` the truth set it
+was scored against (read from the benchmark file name) and, for Wittyer, `stats_type` the
+scoring level (`Event` or `Base`).
+
+## Overview
+
+The landing page, at compact width with the filter panel collapsed:
+
+- **Hero**: what the run is, and a link to the run parameters.
+- **About this dashboard** and **The run**: two cards side by side. The second lists the
+  analysis and variant type, the truth set, the benchmarking methods and the genome from the
+  run parameters, and the number of callsets of the run's route.
+- **Pipeline**: the calls are prepared (normalised, deduplicated), scored against the truth set
+  on the route of the run's variant type, then summarised per tool. The template writes one
+  step per route, each citing the callset count of its route's collection and opening its tab;
+  the import drops the steps of the routes the run did not take, so a run shows four steps.
+- **Key figures**: per route, four headline cards opening its tab: the true positives (split by
+  caller), the median F1 (with its spread), the median recall and the median precision. The
+  germline recall passes at 0.9 (warns below 0.8), the somatic precision at 0.5 (warns below
+  0.25), the structural recall at 0.8 (warns below 0.6). The cards print as many digits as a
+  value needs, so a near-empty benchmark (a test profile scoring a few calls against a whole
+  truth set) reads 3.39e-4 rather than 0.000. A caller and a callset filter above them narrow
+  these four only.
+- **Findings**: three or four result rows per route, computed under the filters, each linking
+  its tab. Germline: the best vcfeval F1 and its caller, the hap.py SNP and indel F1 of the PASS
+  calls, and the caller with most false positives. Somatic: the most true positives any callset
+  reaches out of the truth variants (the scale of the benchmark), the best som.py F1 and its
+  caller, the caller with most false positives, and the best rtg-tools vcfeval F1. Structural: the
+  best Truvari F1 and its caller, the best SVanalyzer F1, and the Wittyer F1 per event against
+  per base. Below them, four figures per route in two rows: germline, the precision-recall
+  scatter and hap.py F1 of the PASS calls by variant type, then the quality-threshold sweep and the errors (false positives and missed calls);
+  somatic, the precision-recall scatter and the recall intervals, then the errors and the
+  precision intervals (the allele-fraction strata stay on the tab, since a run can write them
+  for some callers only); structural, the Truvari precision-recall scatter and the SVanalyzer
+  F1, then the Truvari errors and the Wittyer F1. The bar of this section filters by
+  caller and callset.
+- **How to read this dashboard**: one tile per tab, by group, each showing its question.
+- **Callsets** (collapsed): the run has no sample sheet, so its callsets are its samples. One
+  table per route (rtg-tools vcfeval, som.py, Truvari) lists each callset with its caller,
+  truth set and score; the tables of the routes the run did not take are dropped at import.
+
+The Overview stays within the 24-row budget of a one-route run: the highlights use the stored
+height of the family rules (4 rows), and the callset tables sit in the collapsed section. A
+data root holding several routes stacks their blocks and is taller, by design.
+
+## Child tabs
+
+Each tab opens with a short intro (the method, with a link to its tool, and how to read the
+tab), then a strip of four key numbers, each card with its own colour and a secondary that
+reads it, then at most three open sections; tables and the cross-check follow, collapsed. The
+precision-recall scatters colour each callset by its caller, label each point with its callset and
+draw the iso-F1 contours, so F1 reads off the plane (all points share one size, since a handful of
+callsets gains nothing from a size encoding); a run with many callsets can switch the labels off in
+the tile's controls.
+
+**Germline.** Strip: F1 (box plot), recall against a 0.9 floor, false positives (the callers
+with most) and true positives (split by caller). Then the vcfeval precision-recall scatter
+beside the errors per callset (a stacked bar of false positives and missed calls, true
+positives left out because they dwarf both), hap.py's F1 by variant type (the PASS calls; the
+ALL calls are drawn beside them only where hard-filtered calls change the score, since two
+identical bars say nothing) beside the quality-threshold sweep (one point per cut-off the run
+swept, so a run that swept two draws two operating points), and a genome browser (Errors on
+the genome) with the false positive, missed call and true positive VCFs of the callsets picked
+in the left panel, the best callset first, under UCSC's common dbSNP and ClinVar tracks
+(human data). Collapsed: the vcfeval, hap.py and sweep tables. Filters: caller, callset, hap.py
+variant type and hap.py calls (ALL or PASS). The intro says what a callset's `caller` is: the
+name its samplesheet row gives it, a tool or a version of the calls being compared (a test
+profile compares versions of one truth set).
+
+**Somatic.** Strip: F1 (box plot), precision against a 0.5 floor, false positives (the callers
+with most) and true positives (split by caller). Then the som.py precision-recall
+scatter beside the errors per caller and variant type (the same stacked bar), and the precision
+and recall with their binomial 95% intervals. The intro notes that recall counts every truth
+variant, also those outside the regions the run called, so a partial run scores low by design.
+Collapsed: the false positives per allele-fraction bin (one bar per caller and bin; a run whose
+strata hold a single populated bin draws one bar, which is why the section is a detail), the
+rtg-tools vcfeval cross-check (scatter and table) and the som.py summary and strata tables.
+som.py bins a false positive by the caller's allele fraction but a true positive or a miss by
+the truth set's, so with a truth set that carries none, recall and F1 per bin stay empty and
+only the false positives are defined per bin. The cross-check is labelled with its scope:
+vcfeval scores every variant of a callset while som.py scores one variant type, so the counts
+and the precision differ, and the reader compares how the callers rank. Filters: caller and
+allele-fraction bin; the caller reaches the strata and the cross-check through the links.
+
+**Structural & CNV.** Strip: true positives (split by caller), F1 (box plot), recall against a
+0.8 floor and precision (distribution), all from Truvari. Then the Truvari precision-recall
+scatter beside its errors per callset (the same stacked bar), the SVanalyzer F1 per callset
+beside the Wittyer F1 per event and per base, and a genome browser (Errors on the genome) with
+the Truvari false positive, missed call and true positive VCFs of the picked callsets, the best
+callset first. Collapsed: the Truvari, SVanalyzer and Wittyer tables. The open sections of
+each tab stay within the 20-row budget (browser at 7 rows). Filters: callset, caller and Wittyer level; the callset reaches
+SVanalyzer and Wittyer through the links.
+
+## Genome tracks
+
+The `tracks` collection lists the files the genome browser reads: per benchmarked callset, the
+false positives, the missed calls (false negatives) and the true positives,
+as small VCFs the pipeline publishes next to its summary tables (the callsets are listed best
+first, by F1 then fewest errors, so the browser opens on the three files of the best one).
+`recipes/tracks.py` spells
+them out from the rtg-tools summary (germline, `small/<id>/benchmarks/rtgtools/`) and the
+Truvari summary (structural, `structural/<id>/benchmarks/truvari/`); the file names carry the
+callset id, the truth set and the caller. Picking a callset in the filter panel or in a table
+opens its tracks, and clicking a track filters the tables back. The collection is optional, and
+so are its two sources: a run holding neither summary, such as the somatic route, leaves it out,
+and the import drops the browser with it.
+
+The build is the `GENOME` variable (UCSC name, default hg38): pass `--var GENOME=hg19` for a
+GRCh37 run. With `--var TRACKS_URI=<results folder>` the VCFs are read in place; without it the
+VCFs, with their `.tbi`, that DATA_ROOT holds are uploaded. The browser has no `locus_from`, hence no
+`sort_by` or call stepper: no collection of this template carries per-call coordinates (the
+errors are VCF records read by the browser itself), so the view opens on its default window
+and the reader moves along the chromosome. The manifest holds no colour: the browser colours
+the files by `error_type` (False positives, Missed calls, True positives), the column
+`category_colors` also keys for the error bars, so one hue stands for one kind of error in the
+bars and the tracks. The germline browser adds UCSC's common dbSNP and ClinVar tracks
+(`ucsc_tracks`); both browsers keep the assembly's gene track. The use cases are in
+`docs/design/jbrowse/variantbenchmarking.md`.
+
+## Undefined metrics
+
+A ratio with nothing to divide is left empty, not printed as 0: the precision of a callset that
+made no calls (som.py and Truvari write 0.0, rtg-tools leaves it blank), the recall of a
+stratum without truth variants, and the F1 of either. Such a callset drops out of the medians
+and maxima instead of pinning them to 0, and its recall stays a measured 0 of the truth set.
+
+## Routes and pruning
+
+Every collection is optional: a run writes one family of tables, and whichever collection was
+required would fail every other route. The Overview gives each route its own row of Key
+figures, its own pair of bar filters and its own four highlights, on slots of their own. A run
+on one route drops the other two blocks and the import re-packs the sections, so the Overview
+reads as one row of cards and two rows of highlights. A data root holding two routes keeps
+both blocks, stacked.
+
+| Route (`--variant_type`) | What remains |
+|---|---|
+| `small` (germline) | The Germline tab, the germline cards, rows and highlights, the genome browser on rtg-tools files. |
+| `snv` or `indel` (somatic) | The Somatic tab, the somatic cards, rows and highlights; no genome browser. |
+| `structural` | The Structural & CNV tab, the structural cards, rows and highlights, the genome browser on Truvari files. |
+| `copynumber` | Only the Wittyer tiles of the Structural & CNV tab and the Wittyer row. |
+
+## Colours
+
+`category_colors` is declared once, on the Overview, and read by every tab: callers take `auto`
+(a colour-blind-safe colour each at import), hap.py's SNP and INDEL and its ALL and PASS calls
+are written out, and Wittyer's Event and Base levels too. The error types of the stacked bars
+and of the genome-browser tracks (False positives, Missed calls, True positives) are written
+out once, so the bars and the tracks share their hues.
+
+## Cross-selection
+
+The callset tables select rows on their identifier: `label` for the vcfeval, Truvari,
+SVanalyzer and Wittyer tables, `caller` for the som.py tables and the somatic vcfeval table. A
+pick narrows the tiles that read the same table; a som.py pick also reaches its
+allele-fraction strata and the cross-check, and a Truvari pick reaches the SVanalyzer and
+Wittyer tiles, through the links. The hap.py pooled summary and threshold sweep have no
+callset column and do not select.
+
+## Controls
+
+Advanced visualisation controls dock by width: to the right of a full-width tile, on top of a
+narrower one. Nothing is set per tab or per tile.
+
+## Per-variant-type projects
+
+`categories/{small,indel,structural}/` are separate templates, one project per variant type,
+each with a Benchmark tab and the pipeline's MultiQC report. They keep their own layout and
+are not part of this dashboard.
+
+## Benchmarking visualisation kinds
+
+The tabs are built from reusable benchmarking kinds, each demonstrated in the Advanced
+Visualisations showcase dashboard.
+
+- **Precision-recall benchmark** (`pr_benchmark`): each callset at its (recall, precision),
+  dotted equal-F1 contours, the diagonal where recall equals precision. Top right is best.
+- **ROC / PR curve** (`roc_pr_curve`): threshold-sweep curves with their AUC; the view switch
+  draws the PR curve, the ROC or precision and recall against the threshold.
+- **Confusion matrix** (`confusion_matrix`): TP, FP and FN per callset, the shade normalised
+  per callset, the label the raw count. Not used on the tabs of this dashboard: it normalises by
+  TP + FP + FN, so true positives dominate every row and the error counts that matter fade out.
+  The tabs draw a stacked bar of false positives and missed calls instead.
+- **Metric with its interval** (`metric_ci_bars`): a point estimate and its 95% interval per
+  caller, the axis zoomed so tight intervals stay readable.
+
+![Precision-recall benchmark](screenshots/advviz-pr-benchmark.png)
+
+## Catalog modules
+
+`rtgtools` (vcfeval_summary) · `happy` (summary, roc) · `sompy` (summary, regions) ·
+`truvari` (summary) · `svanalyzer` (svbenchmark) · `wittyer` (summary), under
+`depictio/catalog/<tool>/`; `renders_as` declares the plots the dashboards reference by `use:`.
+
+## Reproducing
+
+```bash
+python scripts/nfcore_megatest.py fetch --pipeline variantbenchmarking --version 1.6.1 --dest <DATA_ROOT>
+depictio-cli ingest --template nf-core/variantbenchmarking/1.6.1 --data-root <DATA_ROOT>
+```

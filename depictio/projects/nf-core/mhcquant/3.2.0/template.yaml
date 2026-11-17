@@ -27,7 +27,7 @@
 template:
   template_id: "nf-core/mhcquant/3.2.0"
   description: "nf-core/mhcquant immunopeptidomics template: identification yield and FDR, the MHC length and anchor-motif signature, replicate reproducibility, peptides shared between conditions with their source proteins, and retention-time and mass checks."
-  version: "1.1.1"
+  version: "1.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "mhcquant output directory (the per-sample <sample>.tsv tables, intermediate_results/, multiqc/, pipeline_info/)."
@@ -51,9 +51,11 @@ template:
     - name: "NO_QUANTIFICATION"
       description: "Set (--var NO_QUANTIFICATION=true) for a run without --quantify: the peptide tables carry no replicate intensities, so the replicate collections and the Reproducibility tab are removed."
       required: false
+      from_params: {param: quantify, is: false}
     - name: "NO_ION_ANNOTATION"
       description: "Set (--var NO_ION_ANNOTATION=true) for a run without --annotate_ions: intermediate_results/ion_annotations/ is absent, so the fragment-ion collection is removed."
       required: false
+      from_params: {param: annotate_ions, is: false}
   # Variables used when materialising the bundled reference dataset.
   reference:
     vars:

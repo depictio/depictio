@@ -29,7 +29,8 @@ HUB_DC_TAG = "samples"
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="spectra",
-        glob_pattern="mzmlstatistics/*_mzml_info.tsv",
+        # quantms <= 1.1: <run>_mzml_info.tsv; 1.2: <run>_ms_info.tsv (mzML or .d).
+        glob_pattern="mzmlstatistics/*_info.tsv",
         format="tsv",
         source_path="source_path",
         read_kwargs={"infer_schema_length": 20000, "null_values": ["NA"]},
@@ -55,7 +56,7 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 NO_GROUP_COL = "__no_group__"
 NO_GROUP_VALUE = "All runs"
-_SUFFIX = "_mzml_info.tsv"
+_SUFFIX = r"_(?:mzml|ms)_info\.tsv$"
 
 
 def group_lookup(hub: pl.DataFrame | None, params: dict | None) -> tuple[str, pl.DataFrame]:
@@ -77,11 +78,7 @@ def group_lookup(hub: pl.DataFrame | None, params: dict | None) -> tuple[str, pl
 
 def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = None) -> pl.DataFrame:
     spectra = sources["spectra"].with_columns(
-        pl.col("source_path")
-        .str.split("/")
-        .list.last()
-        .str.replace(_SUFFIX, "", literal=True)
-        .alias("run_id"),
+        pl.col("source_path").str.split("/").list.last().str.replace(_SUFFIX, "").alias("run_id"),
         (pl.col("Retention_Time") / 60.0).floor().alias("rt_min"),
     )
     ms2 = pl.col("MSLevel") == 2

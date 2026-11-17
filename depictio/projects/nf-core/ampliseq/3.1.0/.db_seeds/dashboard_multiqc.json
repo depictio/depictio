@@ -1,0 +1,944 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc6"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc6"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "mqc-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "[MultiQC](https://multiqc.info) gathers the per-sample [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and [Cutadapt](https://cutadapt.readthedocs.io) reports. Read how many reads survived primer trimming, how evenly they spread across samples, and whether base quality holds to the end of the read.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "mqc-sample-filter",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "MultiQC report",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "teal",
+      "icon_name": "mdi:flask-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "1bba76a2-2824-46b9-bad2-0add3f6fc001",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/general_stats",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_general_stats",
+        "use": "multiqc/general_stats",
+        "description": "The one table every MultiQC report has: one row per sample, one column per headline metric each module contributed. Not a module's own output, which is why it names no producing tool \u2014 MultiQC assembles it from all of them."
+      },
+      "section": "QC overview",
+      "selected_module": "general_stats",
+      "selected_plot": "general_stats",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "af0f58f4-221d-46a3-90c2-0cfa254324ee",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/cutadapt",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_cutadapt",
+        "use": "multiqc/cutadapt",
+        "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC."
+      },
+      "section": "QC overview",
+      "selected_module": "cutadapt",
+      "selected_plot": "Filtered Reads",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "f52d9b80-0052-4eee-97a7-47941169dbcb",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC overview",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Counts",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "1418b6f2-5b6f-4795-98a1-1b7d468791b2",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC overview",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Quality Histograms",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "6d8586f7-3e71-4ad7-a5e9-d96f6c708f12",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Adapter Content",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "8b70142a-7652-4abb-b9a5-38b477bfcdb1",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/cutadapt",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_cutadapt",
+        "use": "multiqc/cutadapt",
+        "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "cutadapt",
+      "selected_plot": "Trimmed Sequence Lengths (5')",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "c342a038-5db7-4df3-8ec2-52d11d8a0ae4",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Per Sequence Quality Scores",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ff3633c4-b4ff-4caa-9146-cea9ee5b1d95",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Duplication Levels",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "bb5e3ae9-7937-4652-9200-04018de20139",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Length Distribution",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "b7e84c41-21cf-4fcd-a5f5-2e313be4a1cb",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Per Base N Content",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "7b49f0d5-6370-40c9-b77e-0e04957f26a6",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Top overrepresented sequences",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "5cc209a9-2719-4542-be82-503782f647fa",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Overrepresented sequences by sample",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "9e128a7e-ae71-4f9b-8dc4-fefee8023b68",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Status Checks",
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-mqc-sample-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-mqc-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-1bba76a2-2824-46b9-bad2-0add3f6fc001",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-af0f58f4-221d-46a3-90c2-0cfa254324ee",
+      "x": 0,
+      "y": 4,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-f52d9b80-0052-4eee-97a7-47941169dbcb",
+      "x": 0,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-1418b6f2-5b6f-4795-98a1-1b7d468791b2",
+      "x": 4,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-6d8586f7-3e71-4ad7-a5e9-d96f6c708f12",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-8b70142a-7652-4abb-b9a5-38b477bfcdb1",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-c342a038-5db7-4df3-8ec2-52d11d8a0ae4",
+      "x": 0,
+      "y": 4,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ff3633c4-b4ff-4caa-9146-cea9ee5b1d95",
+      "x": 4,
+      "y": 4,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-bb5e3ae9-7937-4652-9200-04018de20139",
+      "x": 0,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-b7e84c41-21cf-4fcd-a5f5-2e313be4a1cb",
+      "x": 4,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-7b49f0d5-6370-40c9-b77e-0e04957f26a6",
+      "x": 0,
+      "y": 12,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-5cc209a9-2719-4542-be82-503782f647fa",
+      "x": 4,
+      "y": 12,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-9e128a7e-ae71-4f9b-8dc4-fefee8023b68",
+      "x": 0,
+      "y": 16,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [
+    {
+      "name": "MultiQC report",
+      "icon": "mdi:file-document-outline",
+      "color": "orange",
+      "description": "Samples as the MultiQC report names them",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "QC overview",
+      "icon": "mdi:chart-box-outline",
+      "color": "orange",
+      "description": "Read counts kept through trimming, and base quality along the read",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "QC details",
+      "icon": "mdi:file-document-outline",
+      "color": "gray",
+      "description": "The remaining FastQC and Cutadapt panels",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "MultiQC",
+  "subtitle": "Did sequencing and primer trimming work for every sample?",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-08 12:18:23",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 1,
+  "main_tab_name": null,
+  "tab_icon": "/assets/images/logos/multiqc_icon_color.svg",
+  "tab_icon_color": "orange",
+  "tab_group": "Data & QC",
+  "parent_dashboard_title": null,
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#MultiQC"
+}

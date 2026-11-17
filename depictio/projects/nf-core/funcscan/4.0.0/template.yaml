@@ -21,7 +21,7 @@
 template:
   template_id: "nf-core/funcscan/4.0.0"
   description: "nf-core/funcscan template for screening assemblies for AMR genes, antimicrobial peptides, biosynthetic gene clusters and CAZymes"
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing funcscan pipeline output (reports/, cazyme/, multiqc/)"
@@ -32,15 +32,19 @@ template:
     - name: "SKIP_ARG"
       description: "Set (--var SKIP_ARG=true) for a run without --run_arg_screening. Prunes the hAMRonization data collections and the Resistome tab."
       required: false
+      from_params: {param: run_arg_screening, is: false}
     - name: "SKIP_AMP"
       description: "Set (--var SKIP_AMP=true) for a run without --run_amp_screening. Prunes the AMPcombi data collections and the AMPs tab."
       required: false
+      from_params: {param: run_amp_screening, is: false}
     - name: "SKIP_BGC"
       description: "Set (--var SKIP_BGC=true) for a run without --run_bgc_screening. Prunes the comBGC data collections and the BGCs tab."
       required: false
+      from_params: {param: run_bgc_screening, is: false}
     - name: "SKIP_CAZYME"
       description: "Set (--var SKIP_CAZYME=true) for a run without --run_cazyme_screening. Prunes the run_dbCAN data collections and the CAZymes tab."
       required: false
+      from_params: {param: run_cazyme_screening, is: false}
   # Variables supplied when materialising the BUNDLED reference/demo dataset.
   # The reference run is the AWS megatest: all four arms on, samplesheet curled
   # into input/ next to the data.

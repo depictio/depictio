@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/ampliseq/2.18.0"
   description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
-  version: "1.3.3"
+  version: "1.4.1"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing ampliseq pipeline output (multiqc/, qiime2/)"
@@ -48,15 +48,23 @@ template:
     - name: "IS_MULTIREGION"
       description: "Auto-set from params.json (multiregion + sidle_ref_taxonomy). Prunes the QIIME2 diversity/phylogeny/ANCOM-BC DCs absent on the SIDLE route; the sidle_* DCs supply the reconstructed-community view."
       required: false
+      from_params: {all: [{param: multiregion}, {param: sidle_ref_taxonomy}]}
     - name: "SKIP_TAXONOMY"
       description: "Auto-set from params.json (skip_taxonomy). Prunes the taxonomy/ordination/differential DCs (qiime2/{barplot,rel_abundance_tables,taxonomy}/ are absent)."
       required: false
+      from_params: {param: skip_taxonomy}
     - name: "SKIP_ALPHA_RAREFACTION"
       description: "Auto-set from params.json (skip_alpha_rarefaction). Prunes the alpha-rarefaction DCs (qiime2/alpha-rarefaction/ is absent)."
       required: false
+      from_params: {param: skip_alpha_rarefaction}
     - name: "SKIP_ANCOM"
-      description: "Auto-set from params.json (skip_ancom). Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
+      description: "Auto-set from params.json: ANCOM-BC off (--ancombc not given) or no --metadata to test against. Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
       required: false
+      from_params: {any: [{param: ancombc, is: false}, {param: metadata, is: false}]}
+    - name: "SKIP_QIIME"
+      description: "Auto-set from params.json (skip_qiime). Prunes the QIIME2 data collections: an ITS/sintax or --skip_qiime run writes no qiime2/."
+      required: false
+      from_params: {param: skip_qiime}
     - name: "PHYLUM_LEVEL"
       description: "Auto-set: the QIIME2 collapse depth of the Phylum (barplot level-N.csv, rel-table-N.tsv, ANCOM-BC level-N slices), read from the run's outputs (rank-prefixed lineages, the DADA2 taxonomy header) or params.json (the DADA2 database's taxlevels, capped at tax_agglom_max). Defaults to 3, the Phylum depth of the default sbdi-gtdb database (Domain,Kingdom,Phylum,...); 7-rank databases (gtdb, silva, rdp, unite) put it at 2."
       required: false

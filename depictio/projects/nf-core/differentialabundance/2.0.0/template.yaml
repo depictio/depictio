@@ -26,7 +26,7 @@
 template:
   template_id: "nf-core/differentialabundance/2.0.0"
   description: "nf-core/differentialabundance template: DESeq2 differential expression: per-contrast statistics, gene annotation and the variance-stabilised sample space."
-  version: "1.1.1"
+  version: "1.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing differentialabundance output (tables/, other/, pipeline_info/)."
@@ -37,6 +37,7 @@ template:
     - name: "NO_GSEA"
       description: "Set (--var NO_GSEA=true) for a run that did not run GSEA (no --gsea_run, or no gene-set file). Prunes the two enrichment collections, so the Enrichment tab drops out instead of scanning for tables that were never written."
       required: false
+      from_params: {param: functional_method, not_equals: gsea}
   # Variables supplied when materialising the bundled reference/demo dataset.
   # The sheet is the run's own --input file, mirrored under input/ by the
   # megatest fetch (see megatest.yaml post_fetch_help).

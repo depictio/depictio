@@ -10,6 +10,9 @@ gene changes between the conditions. Per contrast it writes:
   ``log2fold_<A>_<B>`` column named after the two conditions;
 * ``perGeneQValue.<contrast>.tsv``: the gene-level q-value.
 
+nf-core/rnasplice 2.0 names them ``<contrast>.dexseq.results.tsv`` and
+``<contrast>.dexseq.gene_qvalues.tsv`` (the template repoints the globs).
+
 The exon route writes the same names as ``.csv``, which is how the two are told
 apart. The fold is oriented treatment over control like
 ``dexseq/exon_genes.py`` (flipped when the contrast reads ``<B>-<A>``).
@@ -80,7 +83,18 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 PADJ_ZERO_NEG_LOG10 = 300.0
-_CONTRAST = r"(?:DEXSeqResults|perGeneQValue)\.(.+)\.[ct]sv$"
+# rnasplice < 2.0: DEXSeqResults.<contrast>.tsv; >= 2.0: <contrast>.dexseq.results.tsv.
+_CONTRAST = (
+    r"(?:(?:DEXSeqResults|perGeneQValue)\.(.+)|/([^/]+)\.dexseq\.(?:results|gene_qvalues))\.[ct]sv$"
+)
+
+
+def contrast_of(path: pl.Expr) -> pl.Expr:
+    """The contrast a DEXSeq table belongs to, from its file name (either layout)."""
+    parts = path.str.extract_groups(_CONTRAST)
+    return pl.coalesce(parts.struct.field("1"), parts.struct.field("2"))
+
+
 _FOLD = re.compile(r"^log2fold_(.+)_(.+)$")
 
 
@@ -104,9 +118,7 @@ def transform(
 ) -> pl.DataFrame:
     """Transcript rows with the gene q-value and the significance calls."""
     fdr = fdr_cutoff(params)
-    tx = sources["transcripts"].with_columns(
-        pl.col("source_path").str.extract(_CONTRAST, 1).alias("contrast")
-    )
+    tx = sources["transcripts"].with_columns(contrast_of(pl.col("source_path")).alias("contrast"))
     tx = tx.select(
         pl.col("contrast"),
         pl.col("groupID").cast(pl.Utf8).alias("gene_id"),
@@ -118,7 +130,7 @@ def transform(
     ).filter(pl.col("padj").is_not_null() & pl.col("log2fc").is_not_null())
 
     genes = sources["genes"].select(
-        pl.col("source_path").str.extract(_CONTRAST, 1).alias("contrast"),
+        contrast_of(pl.col("source_path")).alias("contrast"),
         pl.col("groupID").cast(pl.Utf8).alias("gene_id"),
         pl.col("padj").cast(pl.Float64, strict=False).alias("gene_padj"),
     )
