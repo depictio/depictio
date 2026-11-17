@@ -268,4 +268,5 @@ def test_the_report_follows_the_readers_colour_scheme(ampliseq_tabs):
 def test_pdf_adds_a_typst_format(ampliseq_tabs):
     front = _front(generate_qmd(_plan(ampliseq_tabs, pdf=True)))
     assert front["format"]["typst"]["citeproc"] is True
+    assert front["format"]["html"]["format-links"] is False
     assert "typst" not in _front(generate_qmd(_plan(ampliseq_tabs)))["format"]
