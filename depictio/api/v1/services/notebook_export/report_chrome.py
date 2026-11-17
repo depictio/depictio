@@ -246,34 +246,50 @@ def powered_by_html(has_mark: bool) -> str:
 
 def appbar_html(
     *,
-    title: str,
+    title: str | None,
     logo: str | None,
     logo_dark: str | None,
     accent: str,
     has_mark: bool,
-    crumb: str | None = None,
 ) -> str:
-    """The app header, as a report's top bar: the dashboard's mark and name on
-    the left, "Powered by Depictio" on the right."""
+    """The app header, as a report's top bar: the dashboard's mark on the left,
+    "Powered by Depictio" on the right.
+
+    ``title`` is the dashboard's name beside the mark, or ``None`` when the
+    title block right under the bar already says it (it always does in a
+    report: the bar is not a second place for the same name).
+    """
     marks = ""
     if logo:
         cls = "dpx-appbar-logo dpx-light-only" if logo_dark else "dpx-appbar-logo"
         marks += f'<img class="{cls}" src="{logo}" alt="" />'
     if logo_dark:
         marks += f'<img class="dpx-appbar-logo dpx-dark-only" src="{logo_dark}" alt="" />'
-    if not marks:
+    if not marks and title:
         marks = f'<span class="dpx-appbar-dot" style="background:{_esc(accent)}"></span>'
-    crumb_html = (
-        f'<span class="dpx-appbar-sep" aria-hidden="true">›</span>'
-        f'<span class="dpx-appbar-crumb">{_esc(crumb)}</span>'
-        if crumb
-        else ""
-    )
+    name = f'<span class="dpx-appbar-title">{_esc(title)}</span>' if title else ""
     return (
         '<header class="dpx-appbar" role="banner"><div class="dpx-appbar-inner">'
-        f'<span class="dpx-appbar-brand">{marks}'
-        f'<span class="dpx-appbar-title">{_esc(title)}</span>{crumb_html}</span>'
+        f'<span class="dpx-appbar-brand">{marks}{name}</span>'
         f"{powered_by_html(has_mark)}</div></header>"
+    )
+
+
+def title_logo_css(light: str, dark: str | None = None) -> str:
+    """The dashboard's own logo as the document title: the H1 keeps its text
+    (the contents, the page title, a screen reader read it) and shows the logo
+    in its place, so the name is not printed twice, once in each form. Printed
+    and in the reader's dark scheme too; a page without the stylesheet (the
+    PDF) prints the title as text."""
+    dark_rule = f"body.quarto-dark h1.title {{ background-image: url('{dark}'); }}" if dark else ""
+    return (
+        "<style>"
+        "h1.title { flex: 1 1 auto; min-width: 0; height: 84px; margin: 0.25rem 0 0.75rem;"
+        " overflow: hidden; white-space: nowrap; text-indent: -10000px;"
+        f" background: url('{light}') left center / contain no-repeat;"
+        " -webkit-print-color-adjust: exact; print-color-adjust: exact; }"
+        f"{dark_rule}"
+        "</style>"
     )
 
 
@@ -375,8 +391,6 @@ REPORT_CSS = """<style>
   font-weight: 700; font-size: 1.05rem; color: var(--gl-fg, #212529);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dpx-appbar-sep { color: var(--gl-faint, #adb5bd); }
-.dpx-appbar-crumb { color: var(--gl-muted, #868e96); white-space: nowrap; }
 .dpx-powered {
   display: inline-flex; align-items: center; gap: 6px; text-decoration: none !important;
   color: inherit !important; white-space: nowrap;
@@ -387,7 +401,7 @@ body.quarto-dark .dpx-dark-only { display: inline-block !important; }
 body.quarto-dark .dpx-light-only { display: none !important; }
 @media (max-width: 640px) {
   .dpx-appbar-inner { padding: 8px 16px; }
-  .dpx-appbar-crumb, .dpx-appbar-sep, .dpx-powered-label { display: none; }
+  .dpx-powered-label { display: none; }
 }
 /* The dashboard's grid rows: tiles side by side, as wide as their columns. */
 .dpx-grid {

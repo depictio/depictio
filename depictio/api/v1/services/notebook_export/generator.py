@@ -62,6 +62,7 @@ from .report_chrome import (
     mark_css,
     methods,
     stepper_markdown,
+    title_logo_css,
 )
 
 # What a highlight can show (``highlightTile.ts``: ``HIGHLIGHTABLE_TYPES``).
@@ -1063,6 +1064,7 @@ class NotebookBuilder:
         self._section_i = 0
         self.section_anchors = self._section_anchors()
         self._float_labels: set[str] = set()
+        self._hero_cache: tuple[str, str, str | None] | None | bool = False
 
     def _section_anchors(self) -> dict[str, str]:
         """Each section heading's id, by name: what ``](section:Name)`` lands on.
@@ -1364,23 +1366,54 @@ class NotebookBuilder:
         return _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
 
     def _appbar(self) -> str:
-        """The header bar: the dashboard's mark and name, "Powered by" Depictio."""
+        """The header bar: the dashboard's mark and "Powered by" Depictio.
+
+        The name stays off the bar whenever the title block under it says it
+        already (as text, or as the dashboard's logo): one place per name. No
+        tab breadcrumb either: the first part's own heading follows."""
         plan = self.plan
         main = plan.tabs[0] if plan.tabs else {}
-        crumb = None
-        units = [u for u in ordered_units(plan.tabs) if isinstance(u, MarkdownUnit)]
-        first_tab = next((u for u in units if u.kind == "tab"), None)
-        if first_tab is not None and first_tab.text != plan.title:
-            crumb = first_tab.text
         accent = _resolve_accent_hex(str(main.get("icon_color") or "") or None, self._accent())
+        h1 = plan.title
+        bar_name = None if self.hero is not None or h1.strip() == plan.title.strip() else h1
         return appbar_html(
-            title=plan.title,
+            title=bar_name,
             logo=plan.dashboard_logo,
             logo_dark=None,
             accent=accent,
             has_mark=bool(plan.depictio_mark),
-            crumb=crumb,
         )
+
+    @property
+    def hero(self) -> tuple[str, str, str | None] | None:
+        """The first tab's header tile when it carries a logo: ``(index, light, dark)``.
+
+        That logo names the dashboard (the app draws it in place of the tile's
+        title, at the top of the first tab), so in the report it is the title
+        block: the H1 shows it, and the tile does not draw it again."""
+        if self._hero_cache is not False:
+            return self._hero_cache  # type: ignore[return-value]
+        found: tuple[str, str, str | None] | None = None
+        seen_tab = False
+        for unit in ordered_units(self.plan.tabs):
+            if isinstance(unit, MarkdownUnit):
+                if unit.kind == "tab" and seen_tab:
+                    break
+                if unit.kind == "section":
+                    break
+                seen_tab = seen_tab or unit.kind == "tab"
+                continue
+            meta = unit.meta
+            if meta.get("component_type") != "text" or unit.section:
+                break
+            # Only the tab's first tile is its header: a logo further down
+            # illustrates something else.
+            light, dark = self._text_logo_uris(meta)
+            if light:
+                found = (str(meta.get("index") or ""), light, dark)
+            break
+        self._hero_cache = found
+        return found
 
     def _footer(self) -> str:
         """The report's foot: provenance, the way back to the source."""
@@ -1618,6 +1651,7 @@ def card_row(cards):
             + (DARK_CSS if self.paper else "")
             + TOC_SCOPE_JS
             + mark_css(self.plan.depictio_mark)
+            + (title_logo_css(self.hero[1], self.hero[2]) if self.hero else "")
             + "\n\n"
             + self._state_line()
             + header_markdown(
@@ -2692,7 +2726,9 @@ fig_funnel"""
             )
             + (f" {{#{anchor}}}" if anchor else "")
         ]
-        if unit.description:
+        # A tab's description that is the document's subtitle (the main tab's,
+        # as a rule) is already printed under the title.
+        if unit.description and unit.description.strip() != (self.plan.subtitle or "").strip():
             parts.append(f"*{self._rewrite_tab_links(_esc(unit.description))}*")
         # Only a tab that actually overrides the instance brand shows a mark of
         # its own. A tab without an override resolves to the same brand as the
@@ -2825,7 +2861,13 @@ fig_funnel"""
         # level with the tabs in the table of contents.
         level = max(SECTION_LEVEL + 1, min(6, level))
         parts = []
-        logo = self._text_logo(meta)
+        hero = self.hero
+        is_hero = hero is not None and str(meta.get("index") or "") == hero[0]
+        # The first tab's header tile: its logo is the document's title now,
+        # so the tile keeps only its prose.
+        logo = "" if is_hero else self._text_logo(meta)
+        if is_hero:
+            title = ""
         if logo:
             # The tile's header logo stands in for its title, as on the
             # dashboard (the title is its alt text).
@@ -2883,13 +2925,18 @@ fig_funnel"""
         ]
         return Cell("\n".join(lines))
 
-    def _text_logo(self, meta: dict[str, Any]) -> str:
-        """A text tile's header logo, light and dark, as inline images."""
+    def _text_logo_uris(self, meta: dict[str, Any]) -> tuple[str | None, str | None]:
+        """A text tile's header logo, light and dark, as data URIs (inlined)."""
         given = self.plan.logos.get(str(meta.get("index") or "")) or {}
         light = given.get("light") or meta.get("logo")
         dark = given.get("dark") or meta.get("logo_dark")
         light = light if isinstance(light, str) and light.startswith("data:image/") else None
         dark = dark if isinstance(dark, str) and dark.startswith("data:image/") else None
+        return light, dark
+
+    def _text_logo(self, meta: dict[str, Any]) -> str:
+        """A text tile's header logo, light and dark, as inline images."""
+        light, dark = self._text_logo_uris(meta)
         if not light:
             return ""
         alt = _esc(str(meta.get("title") or ""), quote=True)
