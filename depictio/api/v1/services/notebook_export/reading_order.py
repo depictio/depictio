@@ -186,7 +186,10 @@ def tile_sort_key(position: int, meta: dict[str, Any]) -> tuple[float, float, in
 
 
 def _layout_positions(tab: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """``{index: {"x", "y"}}`` from the tab's grid layout (``box-<index>``)."""
+    """``{index: {"x", "y", "w", "h"}}`` from the tab's grid layout (``box-<index>``).
+
+    The width is what lets the document draw a row of tiles side by side, as
+    wide as the columns each takes on the dashboard's grid."""
     out: dict[str, dict[str, Any]] = {}
     for item in tab.get("right_panel_layout_data") or []:
         if not isinstance(item, dict):
@@ -195,7 +198,7 @@ def _layout_positions(tab: dict[str, Any]) -> dict[str, dict[str, Any]]:
         if key.startswith("box-"):
             key = key[4:]
         if key and key not in out:
-            out[key] = {"x": item.get("x"), "y": item.get("y")}
+            out[key] = {k: item.get(k) for k in ("x", "y", "w", "h") if item.get(k) is not None}
     return out
 
 
@@ -212,6 +215,23 @@ def _tiles(tab: dict[str, Any]) -> list[dict[str, Any]]:
             m = {**m, "layout": pos}
         out.append(m)
     return out
+
+
+def grid_columns(tab: dict[str, Any]) -> int:
+    """How many columns the tab's grid has: the right edge of its widest row.
+
+    The dashboards are laid out on an 8-column grid (12 for the older ones);
+    the layout itself says which, so nothing assumes either."""
+    edge = 0
+    items = [m.get("layout") for m in tab.get("stored_metadata") or [] if isinstance(m, dict)]
+    items += list(tab.get("right_panel_layout_data") or [])
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        x, w = item.get("x"), item.get("w")
+        if isinstance(x, (int, float)) and isinstance(w, (int, float)):
+            edge = max(edge, int(x + w))
+    return edge
 
 
 def tab_link_key(name: str) -> str:

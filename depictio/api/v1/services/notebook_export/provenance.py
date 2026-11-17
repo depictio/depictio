@@ -7,8 +7,6 @@ from html import escape as _esc
 from typing import Any
 
 HOW_TO_RUN = """\
-**How to run**
-
 ```bash
 pip install depictio-cli jupyter itables py3Dmol   # the client, its kernel, tables, structures
 export DEPICTIO_API_URL={api_url}
@@ -39,38 +37,12 @@ PROVENANCE_ICON = "mdi:tune-variant"
 # dashboard. A reader who wants to go back to the source needs the ids, not
 # just the titles, and a reader debugging a stale export needs the versions.
 EXPORT_DETAILS_ICON = "mdi:server-outline"
+# "How to run": the commands that re-execute this document.
+RUN_ICON = "mdi:console-line"
 
 
 def _md_escape(text: object) -> str:
     return str(text).replace("|", "\\|").replace("\n", " ")
-
-
-def _brand_header_html(brand: dict[str, Any] | None) -> str:
-    """A small brand byline: the instance's own mark, not the dashboard's.
-
-    ``brand`` carries the *resolved* instance theme (env defaults, admin
-    overrides, whichever preset an operator picked) — the same identity the
-    live app's chrome shows, so an exported report doesn't read as a
-    generic file once it has left the dashboard around it. Raw HTML passes
-    through Quarto's markdown untouched.
-    """
-    if not brand:
-        return ""
-    app_name = _md_escape(brand.get("app_name") or "Depictio")
-    logo = brand.get("logo_data_uri")
-    logo_html = (
-        f'<div style="margin-bottom:0.25rem">'
-        f'<img src="{logo}" alt="{app_name}" style="height:44px;width:auto" />'
-        "</div>"
-        if logo
-        else ""
-    )
-    primary = brand.get("primary") or "#1c7ed6"
-    return (
-        f'<div style="height:3px;background:{primary};border-radius:2px;margin:0 0 0.75rem">'
-        "</div>\n"
-        f"{logo_html}"
-    )
 
 
 def provenance_table(entries: list[dict[str, Any]], *, limit: int = 40) -> str:
@@ -134,7 +106,14 @@ def details_table(rows: list[tuple[str, str]]) -> str:
     )
 
 
-def _details_block(title: str, icon: str, body: str, count: str = "") -> str:
+# The parameters block's anchor: a text tile's ``[Settings](params:key)`` link
+# (the app opens its run-parameters dialog) lands here in the document.
+PARAMS_ANCHOR = "export-parameters"
+
+
+def _details_block(
+    title: str, icon: str, body: str, count: str = "", anchor: str | None = None
+) -> str:
     """One collapsed block of the header, with its icon and optional count."""
     icon_html = (
         f'<span style="display:inline-block;vertical-align:-0.125em;font-size:0.9em;'
@@ -143,8 +122,9 @@ def _details_block(title: str, icon: str, body: str, count: str = "") -> str:
         else ""
     )
     count_html = f'<span style="color:#868e96;font-weight:normal">({count})</span>' if count else ""
+    id_attr = f' id="{anchor}"' if anchor else ""
     return (
-        f"<details>\n<summary>{icon_html}<strong>{_esc(title)}</strong> "
+        f"<details{id_attr}>\n<summary>{icon_html}<strong>{_esc(title)}</strong> "
         f"{count_html}</summary>\n\n{body}\n\n</details>"
     )
 
@@ -162,15 +142,12 @@ def header_markdown(
     stem: str,
     state_version: int,
     warnings: list[str],
-    brand: dict[str, Any] | None = None,
     params_icon: str = "",
     details_rows: list[tuple[str, str]] | None = None,
     details_icon: str = "",
+    run_icon: str = "",
 ) -> str:
     parts = []
-    brand_html = _brand_header_html(brand)
-    if brand_html:
-        parts.append(brand_html)
     # No ``# title`` / subtitle here: the front matter carries both and Quarto
     # draws them in its title block, so repeating them printed the dashboard
     # name twice at the top of every report.
@@ -237,11 +214,18 @@ def header_markdown(
                 params_icon,
                 provenance_table(list(entries)) + files_html,
                 count=str(len(entries)),
+                anchor=PARAMS_ANCHOR,
             )
         )
     if details_rows:
         parts.append(_details_block("Export details", details_icon, details_table(details_rows)))
-    parts.append(HOW_TO_RUN.format(api_url=api_url, stem=stem))
+    # Folded like the rest of the header: a reader opens a report for its
+    # results, and re-running it is a step for the few who will.
+    parts.append(
+        _details_block(
+            "How to run", run_icon, HOW_TO_RUN.format(api_url=api_url, stem=stem).strip()
+        )
+    )
     if warnings:
         parts.append("**Notes from the export**\n\n" + "\n".join(f"- {w}" for w in warnings))
     return "\n\n".join(parts)
