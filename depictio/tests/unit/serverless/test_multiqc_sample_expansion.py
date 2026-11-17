@@ -76,3 +76,29 @@ def test_twenty_thousand_ids_take_seconds_not_minutes() -> None:
     elapsed = time.monotonic() - started
     assert out["SRR1000000"] == ["SRR1000000_1", "SRR1000000_2"]
     assert elapsed < 30, f"{elapsed:.1f}s for 21k ids"
+
+
+def test_every_tile_of_a_collection_shares_one_expansion(monkeypatch) -> None:
+    """viralrecon's 16 MultiQC tiles each recomputed the same ~45 s expansion,
+    which ran the export past its time limit: one per collection and mappings."""
+    from depictio.serverless import producer_a
+
+    producer_a._EXPANSION_CACHE.clear()
+    calls: list[int] = []
+    real = producer_a.expansion_from_mappings
+
+    def counted(mappings):
+        calls.append(1)
+        return real(mappings)
+
+    monkeypatch.setattr(producer_a, "expansion_from_mappings", counted)
+    mappings = {"S1": ["S1_1", "S1_2"]}
+    for _ in range(16):
+        assert producer_a._cached_expansion("dc-a", mappings) == {"S1": ["S1_1", "S1_2"]}
+    assert len(calls) == 1
+
+    # A re-ingested collection (new mappings) and another collection recompute.
+    assert producer_a._cached_expansion("dc-a", {"S1": ["S1_1"]}) == {"S1": ["S1_1"]}
+    producer_a._cached_expansion("dc-b", mappings)
+    assert len(calls) == 3
+    producer_a._EXPANSION_CACHE.clear()
