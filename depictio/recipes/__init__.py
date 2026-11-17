@@ -506,12 +506,19 @@ def validate_schema(
 ) -> None:
     """Validate that the result DataFrame matches the recipe's output schema.
 
+    The schemas describe the stored table: a ``pl.Utf8`` column may be held as
+    Categorical or Enum to save memory, it is written as String (#1418).
+
     Args:
         result: Output DataFrame from transform().
         output_schema: Dict of column_name → polars dtype. All must be present.
         recipe_name: Recipe name used in error messages.
         optional_output_schema: Dict of column_name → polars dtype. Validated only if present.
     """
+
+    def stored(dtype: pl.DataType) -> pl.DataType:
+        return pl.String() if isinstance(dtype, pl.Categorical | pl.Enum) else dtype
+
     for col_name, expected_type in output_schema.items():
         if col_name not in result.columns:
             raise RecipeError(
@@ -519,7 +526,7 @@ def validate_schema(
                 f"Got columns: {result.columns}"
             )
         actual_type = result[col_name].dtype
-        if actual_type != expected_type:
+        if stored(actual_type) != expected_type:
             raise RecipeError(
                 f"Recipe {recipe_name}: column '{col_name}' expected {expected_type}, "
                 f"got {actual_type}"
@@ -528,7 +535,7 @@ def validate_schema(
         for col_name, expected_type in optional_output_schema.items():
             if col_name in result.columns:
                 actual_type = result[col_name].dtype
-                if actual_type != expected_type:
+                if stored(actual_type) != expected_type:
                     raise RecipeError(
                         f"Recipe {recipe_name}: optional column '{col_name}' expected "
                         f"{expected_type}, got {actual_type}"

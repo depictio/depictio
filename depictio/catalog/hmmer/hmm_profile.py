@@ -97,6 +97,12 @@ SOURCES: list[RecipeSource] = [
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {**PROFILE_SCHEMA, "sample": pl.Utf8}
+#: The text columns repeat on every letter row of every state (25M rows on a
+#: mid-size run): held as Categorical, half the table's memory. They are
+#: written and read back as String (``delta_versioning.as_stored``, #1418).
+_IN_MEMORY_SCHEMA = {
+    name: pl.Categorical if dtype == pl.Utf8 else dtype for name, dtype in OUTPUT_SCHEMA.items()
+}
 
 
 def _is_raw_model(path: str) -> bool:
@@ -148,10 +154,11 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
             if positions is not None and len(positions) != model.length:
                 positions = None  # the states and the RF columns disagree
             frames.append(
-                profile_frame(model, entity=model.name, positions=positions).with_columns(
-                    pl.lit(sample, dtype=pl.Utf8).alias("sample")
-                )
+                profile_frame(model, entity=model.name, positions=positions)
+                .with_columns(pl.lit(sample, dtype=pl.Utf8).alias("sample"))
+                .select(list(OUTPUT_SCHEMA))
+                .cast(_IN_MEMORY_SCHEMA)  # type: ignore[arg-type]
             )
     if not frames:
-        return pl.DataFrame(schema=OUTPUT_SCHEMA)
-    return pl.concat(frames).select(list(OUTPUT_SCHEMA)).cast(OUTPUT_SCHEMA)  # type: ignore[arg-type]
+        return pl.DataFrame(schema=_IN_MEMORY_SCHEMA)
+    return pl.concat(frames)

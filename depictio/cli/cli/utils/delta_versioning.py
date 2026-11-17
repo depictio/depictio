@@ -395,6 +395,19 @@ class ScopedWritePlan:
     declined: str | None = None
 
 
+def stored_dtype(dtype: pl.DataType) -> pl.DataType:
+    """The type a column is stored as. A frame may hold a String column as
+    Categorical or Enum to save memory (#1418): it is written, hashed and
+    compared as String, so the table and its readers never see the difference."""
+    return pl.String() if isinstance(dtype, pl.Categorical | pl.Enum) else dtype
+
+
+def as_stored(df: pl.DataFrame) -> pl.DataFrame:
+    """``df`` with its Categorical and Enum columns as String (see ``stored_dtype``)."""
+    encoded = [c for c, t in df.schema.items() if isinstance(t, pl.Categorical | pl.Enum)]
+    return df.with_columns(pl.col(encoded).cast(pl.String)) if encoded else df
+
+
 def scoped_frame_conflicts(
     frame_schema: dict[str, pl.DataType], table_schema: dict[str, pl.DataType]
 ) -> list[str]:
@@ -402,12 +415,13 @@ def scoped_frame_conflicts(
 
     A scoped write merges into the table's schema, and delta-rs casts into it
     silently: a Float64 written into an Int64 column reads back truncated. A
-    column new to the table, or null in every row here, is no conflict.
+    column new to the table, or null in every row here, is no conflict, and
+    neither is a String column the frame holds as Categorical.
     """
     return [
         f"{col} is {dtype} here but {table_schema[col]} in the table"
         for col, dtype in frame_schema.items()
-        if col in table_schema and dtype != pl.Null and dtype != table_schema[col]
+        if col in table_schema and dtype != pl.Null and stored_dtype(dtype) != table_schema[col]
     ]
 
 
@@ -604,14 +618,16 @@ def frame_stream(df: pl.DataFrame, rows: int = WRITE_SLICE_ROWS):
     Each slice goes through ``to_arrow()``, which shares the frame's buffers.
     The frame's own Arrow C stream (what ``write_delta`` hands deltalake) costs
     about as much memory again as the frame, even a slice at a time (#1418).
+    Categorical and Enum columns are written as String (``as_stored``), one
+    slice at a time, so the table holds plain strings and no polars metadata.
     """
     import pyarrow as pa
 
-    schema = df.head(0).to_arrow().schema
+    schema = as_stored(df.head(0)).to_arrow().schema
 
     def batches():
         for part in df.iter_slices(rows):
-            yield from part.to_arrow().cast(schema).to_batches()
+            yield from as_stored(part).to_arrow().cast(schema).to_batches()
 
     return pa.RecordBatchReader.from_batches(schema, batches())
 
@@ -662,8 +678,15 @@ def content_digest(df: pl.DataFrame) -> str | None:
     """
     try:
         cols = sorted(c for c in df.columns if c not in DIGEST_VOLATILE_COLUMNS)
+        stored = {c: stored_dtype(df.schema[c]) for c in cols}
+        # Hashed as stored: a String column held as Categorical hashes as the
+        # String column it is written as.
         exprs = [
-            pl.col(c).round_sig_figs(DIGEST_SIG_FIGS) if df.schema[c].is_float() else pl.col(c)
+            pl.col(c).round_sig_figs(DIGEST_SIG_FIGS)
+            if df.schema[c].is_float()
+            else pl.col(c).cast(pl.String)
+            if stored[c] != df.schema[c]
+            else pl.col(c)
             for c in cols
         ]
         # Hashed a slice at a time: a row's hash does not depend on its
@@ -677,7 +700,7 @@ def content_digest(df: pl.DataFrame) -> str | None:
     except Exception as exc:  # unhashable dtype (Object, ...)
         logger.debug(f"content digest skipped: {exc}")
         return None
-    schema = "|".join(f"{c}:{df.schema[c]}" for c in cols)
+    schema = "|".join(f"{c}:{stored[c]}" for c in cols)
     return hashlib.sha256(schema.encode() + rows.tobytes()).hexdigest()
 
 

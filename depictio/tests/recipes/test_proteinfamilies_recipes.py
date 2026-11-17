@@ -14,7 +14,7 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from depictio.recipes import load_recipe, validate_schema, validate_sources
+from depictio.recipes import RecipeError, load_recipe, validate_schema, validate_sources
 from depictio.recipes.lib.hmm import HmmModel, format_hmm
 from depictio.recipes.lib.protein_families import (
     parse_hmm,
@@ -378,6 +378,26 @@ def test_family_metadata_folds_in_the_model_and_the_alignment(meta, hmms, aligne
         {"family_meta": meta, "hmms": None, "alignments": None},
     )
     assert bare["seed_size"].null_count() == 1 and bare["aligned_members"].null_count() == 1
+
+
+def test_profile_holds_its_text_columns_as_categorical(hmms, stockholm, meta) -> None:
+    """The text columns repeat on every row: held as Categorical, written as String (#1418)."""
+    from depictio.cli.cli.utils.delta_versioning import as_stored
+
+    out = run("hmmer/hmm_profile.py", {"hmms": hmms, "alignments": stockholm, "family_meta": meta})
+    text = [c for c, t in load_recipe("hmmer/hmm_profile.py").OUTPUT_SCHEMA.items() if t == pl.Utf8]
+    assert {out.schema[c] for c in text} == {pl.Categorical()}
+    assert dict(as_stored(out).schema) == dict(load_recipe("hmmer/hmm_profile.py").OUTPUT_SCHEMA)
+
+
+def test_a_utf8_column_may_be_held_as_categorical_but_not_as_another_type() -> None:
+    schema = {"name": pl.Utf8, "n": pl.Int64}
+    held = pl.DataFrame({"name": ["a"], "n": [1]}).with_columns(pl.col("name").cast(pl.Categorical))
+    validate_schema(held, schema, "test")
+    with pytest.raises(RecipeError, match="expected Int64"):
+        validate_schema(held.with_columns(pl.col("n").cast(pl.Utf8)), schema, "test")
+    with pytest.raises(RecipeError, match="expected String"):
+        validate_schema(held.with_columns(pl.lit(1).alias("name")), schema, "test")
 
 
 def test_texts_are_read_one_file_at_a_time_as_texts_by_file_reads_them() -> None:

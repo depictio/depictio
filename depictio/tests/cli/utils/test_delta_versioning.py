@@ -29,6 +29,7 @@ from depictio.cli.cli.utils.delta_versioning import (
     plan_scoped_write,
     probe_delta_table,
     read_delta_commit_info,
+    scoped_frame_conflicts,
     table_run_tags,
     write_delta_table_versioned,
 )
@@ -762,6 +763,54 @@ class TestSlicedWrite:
         assert content_digest(df) == before
         monkeypatch.setattr(delta_versioning, "WRITE_SLICE_ROWS", 333)
         assert content_digest(df) == before
+
+
+class TestStringHeldAsCategorical:
+    """A frame may hold a String column as Categorical to save memory (#1418):
+    the table, its digest and the scoped-write checks see a String column."""
+
+    def _frames(self):
+        plain = pl.DataFrame(
+            {
+                RUN_ID_COLUMN: [f"run_{i % 3}" for i in range(300)],
+                "family": [f"fam{i % 7}" for i in range(300)],
+                "v": list(range(300)),
+            }
+        )
+        return plain, plain.with_columns(pl.col("family").cast(pl.Categorical))
+
+    def test_it_is_stored_as_a_plain_string(self, destination, storage):
+        plain, held = self._frames()
+        write_delta_table_versioned(held, destination, storage)
+        (field,) = [f for f in DeltaTable(destination).schema().fields if f.name == "family"]
+        assert (str(field.type), field.metadata) == ('PrimitiveType("string")', {})
+        back = pl.read_delta(destination)
+        assert back.schema == plain.schema
+        assert back.sort("v").equals(plain)
+
+    def test_its_digest_is_the_string_columns(self):
+        plain, held = self._frames()
+        assert content_digest(held) == content_digest(plain)
+
+    def test_it_is_no_conflict_with_a_string_table_column(self, destination, storage):
+        plain, held = self._frames()
+        write_delta_table_versioned(plain, destination, storage, partition=True)
+        table = dict(pl.read_delta(destination).schema)
+        assert scoped_frame_conflicts(dict(held.schema), table) == []
+        write_delta_table_versioned(
+            held.filter(pl.col(RUN_ID_COLUMN) == "run_1"),
+            destination,
+            storage,
+            write_mode="replace-runs",
+            replace_run_tags=["run_1"],
+            scoped=True,
+            partition=True,
+        )
+        assert pl.read_delta(destination).sort("v").equals(plain)
+        # A real type change still is.
+        assert scoped_frame_conflicts({"v": pl.Float64}, table) == [
+            "v is Float64 here but Int64 in the table"
+        ]
 
 
 class TestPlanAttachWrite:
