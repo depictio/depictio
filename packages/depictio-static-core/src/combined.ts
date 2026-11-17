@@ -87,6 +87,9 @@ export interface CombinedHostApi {
   showInReport(tabId: string, index?: string | null): boolean;
   /** Whether the report holds a tile for this component (or any, for a tab). */
   reportHas(tabId: string, index?: string | null): boolean;
+  /** Report view: the dashboard's current tab in the report when it holds it,
+   *  else the report's top (the "Report" row of the dashboard's rail). */
+  showReport?(): void;
   /** The tab the dashboard view should open on (read once, at its boot). */
   requestedTab?(): string | null;
   /** The dashboard view hands its controller over once it has booted. */

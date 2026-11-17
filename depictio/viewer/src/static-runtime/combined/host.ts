@@ -91,35 +91,20 @@ function storageSet(key: string, value: string): void {
 }
 
 const HOST_CSS = `
-.dpx-switch{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2147483001;
-  display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;
-  font:500 13px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  background:var(--dpx-sw-bg);color:var(--dpx-sw-fg);border:1px solid var(--dpx-sw-border);
-  box-shadow:0 2px 10px rgba(0,0,0,.12);
-  --dpx-sw-bg:rgba(255,255,255,.92);--dpx-sw-fg:#495057;--dpx-sw-border:rgba(0,0,0,.12);
-  --dpx-sw-active-bg:#228be6;--dpx-sw-active-fg:#fff;--dpx-sw-hover:rgba(0,0,0,.06)}
-.dpx-switch[data-theme="dark"]{--dpx-sw-bg:rgba(37,38,43,.92);--dpx-sw-fg:#c1c2c5;
-  --dpx-sw-border:rgba(255,255,255,.14);--dpx-sw-hover:rgba(255,255,255,.08)}
-.dpx-switch button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;white-space:nowrap}
-.dpx-switch button:hover{background:var(--dpx-sw-hover)}
-.dpx-switch button:focus-visible{outline:2px solid var(--dpx-sw-active-bg);outline-offset:1px}
-.dpx-switch button[aria-selected="true"]{background:var(--dpx-sw-active-bg);color:var(--dpx-sw-active-fg)}
-.dpx-switch .dpx-switch-aside{font-weight:400;font-size:12px;opacity:.85;
-  border-left:1px solid var(--dpx-sw-border);border-radius:0 999px 999px 0;margin-left:2px}
-.dpx-switch .dpx-switch-aside[hidden]{display:none}
 .dpx-dashboard-frame{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483000;
   background:#fff;visibility:hidden}
 html.dpx-view-dashboard{overflow:hidden}
-html:not(.dpx-view-dashboard) body{padding-top:36px}
 html.dpx-view-dashboard .dpx-dashboard-frame{visibility:visible}
+.dpx-open-dashboard{display:inline-flex;align-items:center;gap:.35em;margin-inline-end:.4em}
+.dpx-open-dashboard svg{width:1em;height:1em}
 .dpx-tile-links{display:flex;justify-content:flex-end;margin:0 0 -0.25rem}
 .dpx-tile-links button{all:unset;cursor:pointer;font:500 12px/1.4 system-ui,-apple-system,sans-serif;
   color:#1c7ed6;padding:2px 6px;border-radius:4px;opacity:.75}
 .dpx-tile-links button:hover,.dpx-tile-links button:focus-visible{opacity:1;background:rgba(28,126,214,.08)}
 .dpx-flash{animation:dpx-flash 1.6s ease-out 1}
 @keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px rgba(34,139,230,.55)}100%{box-shadow:0 0 0 3px rgba(34,139,230,0)}}
-@media print{.dpx-switch,.dpx-dashboard-frame,.dpx-tile-links{display:none!important}
-  html.dpx-view-dashboard{overflow:visible}html body{padding-top:0!important}}
+@media print{.dpx-open-dashboard,.dpx-dashboard-frame,.dpx-tile-links{display:none!important}
+  html.dpx-view-dashboard{overflow:visible}}
 `;
 
 /** Styles the host writes into the dashboard's document. */
@@ -253,33 +238,26 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
   let pendingTile: string | null = null;
   const whenAttached: Array<(c: DashboardController) => void> = [];
 
-  // ── The switch ──────────────────────────────────────────────────────────
-  const bar = document.createElement('div');
-  bar.className = 'dpx-switch';
-  bar.setAttribute('role', 'tablist');
-  bar.setAttribute('aria-label', 'View');
-  bar.setAttribute(RUNTIME_ATTR, 'switch');
-  const button = (label: string, v: CombinedView) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.setAttribute('role', 'tab');
-    b.dataset.view = v;
-    b.addEventListener('click', () => show(v, undefined, true));
-    return b;
-  };
-  const reportBtn = button('Report', 'report');
-  const dashBtn = button('Dashboard', 'dashboard');
-  const aside = document.createElement('button');
-  aside.type = 'button';
-  aside.className = 'dpx-switch-aside';
-  aside.textContent = 'Show this tab in the report';
-  aside.hidden = true;
-  aside.addEventListener('click', () => {
-    if (controller) api.showInReport(controller.currentTab(), null);
-  });
-  bar.append(reportBtn, dashBtn, aside);
-  document.body.appendChild(bar);
+  // ── The way in ──────────────────────────────────────────────────────────
+  // No floating control: the report gets a "Dashboard" button where Quarto
+  // already puts its own ("</> Code", top right of the title), and the
+  // dashboard gets a "Report" row in its rail (chrome/variants/glass,
+  // `ReportRow`, through `showReport`).
+  const GRID_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>';
+  const openButton = document.createElement('button');
+  openButton.type = 'button';
+  openButton.className = 'btn code-tools-button dpx-open-dashboard';
+  openButton.setAttribute(RUNTIME_ATTR, 'open-dashboard');
+  openButton.title = 'Open the interactive dashboard: every tab, live filters, offline';
+  openButton.innerHTML = GRID_ICON;
+  openButton.append(document.createTextNode('Dashboard'));
+  openButton.addEventListener('click', () => show('dashboard', undefined, true));
+  const codeTools = document.getElementById('quarto-code-tools-source');
+  const title = document.querySelector('#title-block-header h1.title, h1.title');
+  if (codeTools?.parentElement) codeTools.parentElement.insertBefore(openButton, codeTools);
+  else if (title) title.insertAdjacentElement('afterend', openButton);
+  else document.body.prepend(openButton);
 
   const reportScheme = (): 'light' | 'dark' =>
     document.body.classList.contains('quarto-dark') ? 'dark' : 'light';
@@ -289,10 +267,6 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
       : 'light';
 
   function syncChrome(): void {
-    reportBtn.setAttribute('aria-selected', String(view === 'report'));
-    dashBtn.setAttribute('aria-selected', String(view === 'dashboard'));
-    bar.dataset.theme = view === 'dashboard' ? frameScheme() : reportScheme();
-    aside.hidden = !(view === 'dashboard' && controller && api.reportHas(controller.currentTab()));
     document.documentElement.classList.toggle('dpx-view-dashboard', view === 'dashboard');
     if (frame) {
       frame.toggleAttribute('inert', view !== 'dashboard');
@@ -516,6 +490,12 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
       });
       return true;
     },
+    showReport() {
+      // The tab on screen when the report holds it, else the report's top.
+      const tab = controller?.currentTab();
+      if (tab && api.showInReport(tab, null)) return;
+      show('report', undefined, true);
+    },
     requestedTab: () => pendingTab,
     attachDashboard: onController,
   };
@@ -527,6 +507,7 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
   if (first === 'dashboard') show('dashboard', route ?? { view: 'dashboard' });
   else if (route?.anchor) show('report', route);
   else syncChrome();
+
 
   const onLocation = () => {
     const next = parseCombinedHash(location.hash, tabs);

@@ -44,6 +44,16 @@ async function dashboardFrame(page: Page): Promise<Frame> {
   return frame;
 }
 
+/** Which view is on screen: the host flags the dashboard on <html>. */
+const viewOf = (page: Page) =>
+  page.evaluate(() =>
+    document.documentElement.classList.contains("dpx-view-dashboard") ? "dashboard" : "report",
+  );
+/** The report's way in: a "Dashboard" button beside Quarto's own "Code". */
+const openDashboard = (page: Page) => page.locator(".dpx-open-dashboard").click();
+/** The dashboard's way back: the "Report" row at its rail's foot. */
+const backToReport = (frame: Frame) => frame.locator("[data-testid='glass-report']").click();
+
 const dashboardCard = (frame: Frame) => frame.locator('[data-component-index="card-body-mass"]');
 
 test.describe("combined file — report + dashboard", () => {
@@ -54,16 +64,15 @@ test.describe("combined file — report + dashboard", () => {
     await page.goto(combinedUrl(ADELIE));
 
     // The report view: tiles mounted in place, on the exported state.
-    const sw = page.locator(".dpx-switch");
-    await expect(sw).toBeVisible({ timeout: 30_000 });
-    await expect(sw.locator("button[data-view=report]")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".dpx-open-dashboard")).toBeVisible({ timeout: 30_000 });
+    expect(await viewOf(page)).toBe("report");
     await expect(reportCard(page).getByText("3,700.6623")).toBeVisible({ timeout: 30_000 });
     // One runtime in the page: the dashboard is not a second copy.
     expect(await page.locator("script[data-depictio-runtime='js']").count()).toBe(1);
     expect(await page.locator("iframe").count()).toBe(0);
 
     // The dashboard view: the App, on the report's filters.
-    await sw.locator("button[data-view=dashboard]").click();
+    await openDashboard(page);
     await expect(page).toHaveURL(new RegExp(`#dashboard/${TAB}$`));
     const frame = await dashboardFrame(page);
     await expect(dashboardCard(frame).getByText("3,700.6623")).toBeVisible({ timeout: 30_000 });
@@ -75,13 +84,14 @@ test.describe("combined file — report + dashboard", () => {
     // Drop the species pick in the dashboard: the report follows.
     await frame.locator(".mantine-MultiSelect-root .mantine-Pill-remove").first().click();
     await expect(dashboardCard(frame).getByText("4,201.7544")).toBeVisible({ timeout: 30_000 });
-    await sw.locator("button[data-view=report]").click();
+    await backToReport(frame);
+    await expect.poll(() => viewOf(page)).toBe("report");
     await expect(reportCard(page).getByText("4,201.7544")).toBeVisible({ timeout: 30_000 });
 
     // "Back to the exported state" in the report: the dashboard follows.
     await page.locator("[data-testid='depictio-report-reset']").click();
     await expect(reportCard(page).getByText("3,700.6623")).toBeVisible({ timeout: 30_000 });
-    await sw.locator("button[data-view=dashboard]").click();
+    await openDashboard(page);
     await expect(dashboardCard(frame).getByText("3,700.6623")).toBeVisible({ timeout: 30_000 });
 
     expect(attempts).toEqual([]);
@@ -101,10 +111,7 @@ test.describe("combined file — report + dashboard", () => {
     const chip = frame.locator(".dpx-show-in-report");
     await expect(chip).toBeVisible();
     await chip.click();
-    await expect(page.locator(".dpx-switch button[data-view=report]")).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect.poll(() => viewOf(page)).toBe("report");
     await expect(tile).toBeInViewport();
     await expect(page).toHaveURL(/#report\/tile-scatter-mass-flipper$/);
     expect(attempts).toEqual([]);
@@ -115,25 +122,18 @@ test.describe("combined file — report + dashboard", () => {
     // Opens on the dashboard when the export says so.
     await page.goto(combinedUrl([], "dashboard"));
     await dashboardFrame(page);
-    await expect(page.locator(".dpx-switch button[data-view=dashboard]")).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect.poll(() => viewOf(page)).toBe("dashboard");
 
     // Printing from the dashboard view prints the report.
     await page.emulateMedia({ media: "print" });
     await expect(page.locator(".dpx-dashboard-frame")).toBeHidden();
-    await expect(page.locator(".dpx-switch")).toBeHidden();
+    await expect(page.locator(".dpx-open-dashboard")).toBeHidden();
     await expect(page.locator("h1").first()).toBeVisible();
     await page.emulateMedia({ media: "screen" });
 
     // `#report` wins over the export's default.
     await page.goto(combinedUrl([], "dashboard") + "#report");
-    await expect(page.locator(".dpx-switch button[data-view=report]")).toHaveAttribute(
-      "aria-selected",
-      "true",
-      { timeout: 30_000 },
-    );
+    await expect.poll(() => viewOf(page), { timeout: 30_000 }).toBe("report");
     expect(await page.locator("iframe").count()).toBe(0);
     expect(attempts).toEqual([]);
   });

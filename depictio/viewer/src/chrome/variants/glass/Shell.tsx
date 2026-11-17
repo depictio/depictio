@@ -58,6 +58,7 @@ import {
   ProfileRows,
   ProfileTile,
   ProjectRow,
+  ReportRow,
   RailTabs,
   ServerSheetRow,
   SideRow,
@@ -596,6 +597,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
               <>
                 <SnapshotStatus open={sideOpen} />
                 {nav.model.project && <ProjectRow project={nav.model.project} open={sideOpen} />}
+                <ReportRow open={sideOpen} />
               </>
             ) : (
               <>

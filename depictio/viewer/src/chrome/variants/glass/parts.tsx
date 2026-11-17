@@ -7,6 +7,7 @@ import {
   BookOpenText,
   ChevronRight,
   Compass,
+  FileText,
   FolderKanban,
   Globe,
   LogIn,
@@ -33,6 +34,7 @@ import { AvatarPicture, useAccountIdentity } from '../../account';
 import { ServerInfoPanel, ServerInfoPopover, UpdateDot } from '../../server';
 import type { HeaderModel } from '../../Header';
 import type { TabNavModel } from '../../Sidebar';
+import { findCombinedHost } from 'depictio-static-core';
 import { SIGN_IN_PATH, rememberHere } from '../../../auth/guestSignIn';
 import { StaticSnapshotDetails, exportedDay, useStaticManifest } from '../../StaticProvenance';
 import { cn } from './cn';
@@ -746,6 +748,33 @@ export const ProjectRow: React.FC<{
     </button>
   </Tooltip>
 );
+
+/**
+ * The way back to the report, in a combined report + dashboard file: a row
+ * under the project's, at the rail's foot. Nothing anywhere else (a plain
+ * bundle, the server app): `findCombinedHost` only answers inside a combined
+ * file's dashboard view.
+ */
+export const ReportRow: React.FC<{ open: boolean }> = ({ open }) => {
+  const host = findCombinedHost(window);
+  if (!host?.showReport) return null;
+  return (
+    <Tooltip label="Back to the report" withArrow openDelay={200} disabled={open}>
+      <button
+        type="button"
+        className="hy-row hy-row--project"
+        onClick={() => host.showReport?.()}
+        aria-label="Back to the report"
+        data-testid="glass-report"
+      >
+        <span className="hy-row-icon">
+          <FileText size={20} strokeWidth={STROKE} aria-hidden />
+        </span>
+        <span className="hy-row-label hy-row-name">Report</span>
+      </button>
+    </Tooltip>
+  );
+};
 
 /** "All dashboards" in the phone sheet; a static bundle has no such page. */
 const BackToDashboards: React.FC<{ href: string }> = ({ href }) =>
