@@ -558,6 +558,21 @@ nav[role="doc-toc"] a.active {
     var open = document.querySelector('.dpx-full > .dpx-zoom');
     if (open) open.click();
   });
+  // Printing prints the whole report: every fold opens for the page (a folded
+  // tab would print as its title alone) and closes again after. The print
+  // stylesheet hides the fold controls and starts each tab on a new page.
+  var printFolds = null;
+  window.addEventListener('beforeprint', function () {
+    printFolds = pairs.map(function (p) { return p[0].classList.contains('dpx-folded'); });
+    for (var i = 0; i < pairs.length; i++) setFold(pairs[i][0], pairs[i][1], false);
+    refit();
+  });
+  window.addEventListener('afterprint', function () {
+    if (!printFolds) return;
+    for (var i = 0; i < pairs.length; i++) setFold(pairs[i][0], pairs[i][1], printFolds[i]);
+    printFolds = null;
+    syncTabButtons();
+  });
   function setAll(folded) {
     for (var i = 0; i < pairs.length; i++) setFold(pairs[i][0], pairs[i][1], folded);
     // A figure unfolded back into view was never measured while hidden.

@@ -131,3 +131,36 @@ def test_a_link_into_a_folded_tab_opens_it(page):
     assert not _shown(page, "tab-phylogeny")
     page.locator("#TOC a[href='#tab-phylogeny']").first.click()
     assert _shown(page, "tab-phylogeny")
+
+
+def test_printing_unfolds_every_tab_and_hides_the_fold_controls(page):
+    assert not _shown(page, "tab-environment-ctd")
+    page.evaluate("() => window.dispatchEvent(new Event('beforeprint'))")
+    page.emulate_media(media="print")
+    try:
+        for anchor in ("tab-multiqc", "tab-phylogeny", "tab-environment-ctd"):
+            assert _shown(page, anchor), anchor
+        hidden = page.evaluate(
+            "() => [...document.querySelectorAll('.dpx-all, .dpx-tab-all, .dpx-chev')]"
+            ".every((el) => getComputedStyle(el).display === 'none')"
+        )
+        assert hidden
+        # A tab after the first starts a new page.
+        brk = page.evaluate(
+            "() => getComputedStyle(document.querySelector('section#tab-multiqc')).breakBefore"
+        )
+        assert brk == "page"
+    finally:
+        page.emulate_media(media="screen")
+        page.evaluate("() => window.dispatchEvent(new Event('afterprint'))")
+    # The reader's folds come back after the print.
+    assert not _shown(page, "tab-environment-ctd")
+
+
+def test_the_contents_follow_the_tab_in_view(page):
+    page.evaluate("() => document.querySelector('section#tab-overview > h3').scrollIntoView()")
+    page.wait_for_timeout(300)
+    current = page.locator("#TOC li.dpx-toc-current > a").first
+    assert current.get_attribute("href") == "#tab-overview"
+    multiqc = page.locator("#TOC a[href='#tab-multiqc']").first.locator("xpath=..")
+    assert not multiqc.locator(":scope > ul").is_visible()
