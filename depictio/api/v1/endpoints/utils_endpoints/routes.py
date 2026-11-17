@@ -38,10 +38,9 @@ from depictio.api.v1.endpoints.utils_endpoints.infrastructure_diagnostics import
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_initial_data_collections,
 )
-from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.s3 import instance_backend
 from depictio.models.models.branding import BrandTheme, InstanceLook, resolve_brand_theme
 from depictio.models.models.users import UserBeanie
-from depictio.models.s3_utils import delete_keys
 from depictio.version import get_api_version, get_version
 
 # Define the router
@@ -65,14 +64,9 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
         )
         raise HTTPException(status_code=403, detail="User is not an admin.")
 
-    bucket_name = settings.s3.bucket
-
     # List and delete all objects in the bucket
-    objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
-    while objects_to_delete.get("Contents"):
-        logger.info(f"Deleting {len(objects_to_delete['Contents'])} objects...")
-        delete_keys(s3_client, bucket_name, (obj["Key"] for obj in objects_to_delete["Contents"]))
-        objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
+    deleted = instance_backend.delete_prefix("")
+    logger.info(f"Deleted {deleted} objects...")
 
     logger.info("All objects deleted from the bucket.")
 
@@ -169,6 +163,9 @@ async def server_info(
         "features": {
             "migration": settings.migration.ui_enabled,
             "changes_since": settings.dashboard_versions.changes_since_enabled,
+            # Where the instance keeps its data (#1358): the backend's name and
+            # the scheme its stored locations carry. No bucket name.
+            "storage": {"backend": instance_backend.name, "scheme": instance_backend.scheme},
         },
     }
 

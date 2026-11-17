@@ -19,7 +19,9 @@ class AnalyticsDataService:
     """Convert MongoDB analytics data to Depictio-readable Delta format."""
 
     def __init__(self):
-        self.s3_base_path = f"s3://{settings.s3.bucket}/analytics"
+        from depictio.models.storage import instance_storage
+
+        self.s3_base_path = instance_storage(settings).url("analytics")
 
     @staticmethod
     def is_valid_objectid(user_id: str) -> bool:

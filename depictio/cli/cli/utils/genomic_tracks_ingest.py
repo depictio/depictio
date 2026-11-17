@@ -36,6 +36,7 @@ from depictio.models.models.data_collections_types.genomic_tracks import (
     infer_track_format,
     is_bgzipped,
 )
+from depictio.models.storage import instance_storage
 
 # Formats whose track cannot be read without its index.
 _INDEX_REQUIRED = frozenset({"bam", "cram"})
@@ -81,7 +82,7 @@ def bucket_relative(path: str) -> str:
 
 
 def _split_s3(folder: str) -> tuple[str, str]:
-    bucket, _, prefix = folder[len("s3://") :].partition("/")
+    bucket, _, prefix = folder.partition("://")[2].partition("/")
     prefix = prefix.strip("/")
     return bucket, f"{prefix}/" if prefix else ""
 
@@ -303,10 +304,10 @@ def probe_https(uris: list[str], timeout: float = 5.0) -> list[str]:
     return warnings
 
 
-def _list_existing_keys(s3_client, bucket: str, prefix: str) -> set[str]:
+def _list_existing_keys(storage, prefix: str) -> set[str]:
     from depictio.cli.cli.utils.image_upload import list_existing_keys as list_keys
 
-    return list_keys(s3_client, bucket, prefix)
+    return list_keys(storage, prefix)
 
 
 def manifests_from_frame(
@@ -372,13 +373,14 @@ def upload_genomic_track_files(
     """
     dc_id = str(data_collection.id)
     props = _props_of(data_collection)
-    default_folder = f"s3://{CLI_config.s3_storage.bucket}/{genomic_tracks_s3_prefix(dc_id)}"
+    storage = instance_storage(CLI_config)
+    default_folder = storage.url(genomic_tracks_s3_prefix(dc_id))
     base_folder = props.s3_base_folder or default_folder
     bucket, prefix = _split_s3(base_folder)
     # The API only serves a custom folder of Depictio's bucket inside the DC's own.
     if (
         not props.remote_base_uri
-        and bucket == CLI_config.s3_storage.bucket
+        and storage.key_of(base_folder) is not None
         and not base_folder.startswith(default_folder)
     ):
         return {
@@ -451,20 +453,26 @@ def upload_genomic_track_files(
     uploads = [u for u in plan.uploads.values() if u.local.is_file()]
     counts = {"uploaded": 0, "skipped": 0, "error": 0}
     if uploads:
-        s3_client = deltatables._s3_client(CLI_config)
-        existing = set() if overwrite else _list_existing_keys(s3_client, bucket, prefix)
+        if storage.key_of(base_folder) is None:
+            message = (
+                f"Genomic tracks: local files are uploaded to the server's bucket; "
+                f"s3_base_folder {base_folder} is not in {storage.url()}"
+            )
+            rich_print_checked_statement(message, "error")
+            return {"result": "error", "message": message}
+        existing = set() if overwrite else _list_existing_keys(storage, prefix)
 
         def _upload_one(item: TrackUpload) -> str:
             if item.key in existing:
                 return "skipped"
             try:
-                s3_client.upload_file(str(item.local), bucket, item.key)
-            except Exception as e:  # noqa: BLE001 - boto raises many types
-                logger.error(f"Failed to upload {item.local} to s3://{bucket}/{item.key}: {e}")
+                storage.upload_file(item.key, item.local)
+            except Exception as e:  # noqa: BLE001 - any storage failure
+                logger.error(f"Failed to upload {item.local} to {storage.url(item.key)}: {e}")
                 return "error"
             return "uploaded"
 
-        # boto3 low-level clients are thread-safe, so one client is shared.
+        # The backend's clients are thread-safe, so one backend is shared.
         with ThreadPoolExecutor(max_workers=_UPLOAD_WORKERS) as executor:
             futures = [executor.submit(_upload_one, u) for u in uploads]
             for future in as_completed(futures):
@@ -473,13 +481,13 @@ def upload_genomic_track_files(
     if counts["error"]:
         return {
             "result": "error",
-            "message": f"Failed to upload {counts['error']} track file(s) to s3://{bucket}/{prefix}",
+            "message": f"Failed to upload {counts['error']} track file(s) to {storage.url(prefix)}",
             **counts,
         }
     if uploads:
         rich_print_checked_statement(
             f"Track files: {counts['uploaded']} uploaded, {counts['skipped']} already present "
-            f"(s3://{bucket}/{prefix})",
+            f"({storage.url(prefix)})",
             "success",
         )
     return {

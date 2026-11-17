@@ -41,7 +41,7 @@ from depictio.models.models.joins import (
     JoinValidationResult,
 )
 from depictio.models.models.projects import Project
-from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
+from depictio.models.storage import instance_polars_options, instance_storage
 
 #: When the join ran, stamped on every row of a persisted join. Bookkeeping, not
 #: data: two runs over the same inputs differ in this column and in nothing else.
@@ -138,7 +138,7 @@ def validate_join_definition(
         JoinValidationResult with validation status and details
     """
     result = JoinValidationResult(is_valid=True)
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    storage_options = instance_polars_options(CLI_config)
 
     # Find left data collection
     left_dc, left_workflow_id = find_data_collection_by_tag(
@@ -162,7 +162,7 @@ def validate_join_definition(
 
     # Check if Delta tables exist
     if result.left_dc_exists and left_dc and left_dc.id:
-        left_delta_path = f"s3://{CLI_config.s3_storage.bucket}/{str(left_dc.id)}"
+        left_delta_path = instance_storage(CLI_config).url(str(left_dc.id))
         left_read_result = read_delta_table(left_delta_path, storage_options)
         if left_read_result["result"] == "success":
             result.left_dc_processed = True
@@ -180,7 +180,7 @@ def validate_join_definition(
             )
 
     if result.right_dc_exists and right_dc and right_dc.id:
-        right_delta_path = f"s3://{CLI_config.s3_storage.bucket}/{str(right_dc.id)}"
+        right_delta_path = instance_storage(CLI_config).url(str(right_dc.id))
         right_read_result = read_delta_table(right_delta_path, storage_options)
         if right_read_result["result"] == "success":
             result.right_dc_processed = True
@@ -343,7 +343,7 @@ def execute_join(
     Returns:
         Tuple of (joined DataFrame, metadata dict)
     """
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    storage_options = instance_polars_options(CLI_config)
 
     # Find data collections
     left_dc, _ = find_data_collection_by_tag(project, join_def.left_dc, join_def.workflow_name)
@@ -355,8 +355,8 @@ def execute_join(
         raise ValueError(f"Right data collection '{join_def.right_dc}' not found or has no ID")
 
     # Load DataFrames
-    left_delta_path = f"s3://{CLI_config.s3_storage.bucket}/{str(left_dc.id)}"
-    right_delta_path = f"s3://{CLI_config.s3_storage.bucket}/{str(right_dc.id)}"
+    left_delta_path = instance_storage(CLI_config).url(str(left_dc.id))
+    right_delta_path = instance_storage(CLI_config).url(str(right_dc.id))
 
     logger.info(f"Loading left DataFrame from: {left_delta_path}")
     left_result = read_delta_table(left_delta_path, storage_options)
@@ -510,7 +510,7 @@ def preview_join(
     Returns:
         JoinPreviewResult with statistics and sample data
     """
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    storage_options = instance_polars_options(CLI_config)
 
     # Find data collections
     left_dc, _ = find_data_collection_by_tag(project, join_def.left_dc, join_def.workflow_name)
@@ -522,8 +522,8 @@ def preview_join(
         raise ValueError(f"Right data collection '{join_def.right_dc}' not found")
 
     # Load DataFrames
-    left_delta_path = f"s3://{CLI_config.s3_storage.bucket}/{str(left_dc.id)}"
-    right_delta_path = f"s3://{CLI_config.s3_storage.bucket}/{str(right_dc.id)}"
+    left_delta_path = instance_storage(CLI_config).url(str(left_dc.id))
+    right_delta_path = instance_storage(CLI_config).url(str(right_dc.id))
 
     left_result = read_delta_table(left_delta_path, storage_options)
     right_result = read_delta_table(right_delta_path, storage_options)
@@ -664,7 +664,7 @@ def persist_joined_table(
     from depictio.models.models.base import PyObjectId
     from depictio.models.utils import convert_model_to_dict
 
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    storage_options = instance_polars_options(CLI_config)
 
     # Step 1: Determine DC ID - prioritize YAML id, then result_dc_id, then generate new
     if join_def.id:
@@ -687,7 +687,7 @@ def persist_joined_table(
         )
 
     dc_tag = f"joined_{join_def.name}"
-    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(dc_id)}"
+    destination_prefix = instance_storage(CLI_config).url(str(dc_id))
 
     logger.info(f"Persisting joined table to: {destination_prefix}")
 

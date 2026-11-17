@@ -457,19 +457,11 @@ def _sequence_from_pdb(text: str) -> str:
 
 
 @cache
-def _s3_client():
-    """boto3 client on the backend's own endpoint (reads and writes)."""
-    import boto3
-    from botocore.config import Config
+def _storage():
+    """The instance bucket (reads and writes), fail-fast."""
+    from depictio.models.storage import instance_storage
 
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.s3.endpoint_url,
-        aws_access_key_id=settings.s3.aws_access_key_id,
-        aws_secret_access_key=settings.s3.aws_secret_access_key,
-        verify=settings.s3.verify_tls,
-        config=Config(connect_timeout=3, retries={"total_max_attempts": 2}),
-    )
+    return instance_storage(settings, fail_fast=True)
 
 
 def _presign(key: str) -> str:
@@ -487,14 +479,14 @@ def _keys(cfg: StructureResolverSettings, digest: str) -> tuple[str, str]:
 def _cache_lookup(cfg: StructureResolverSettings, digest: str) -> dict | None:
     """Sidecar of a cached structure, or None on any miss (the sidecar is written last)."""
     _, sidecar_key = _keys(cfg, digest)
+    from depictio.models.storage import StorageNotFound
+
     try:
-        obj = _s3_client().get_object(Bucket=settings.s3.bucket, Key=sidecar_key)
-        sidecar = json.loads(obj["Body"].read())
+        sidecar = json.loads(_storage().read_bytes(sidecar_key))
+    except StorageNotFound:
+        return None
     except Exception as exc:
-        response = getattr(exc, "response", None)
-        code = response.get("Error", {}).get("Code") if isinstance(response, dict) else None
-        if code not in ("NoSuchKey", "404"):
-            logger.warning("structure cache lookup failed for %s: %s", sidecar_key, exc)
+        logger.warning("structure cache lookup failed for %s: %s", sidecar_key, exc)
         return None
     return sidecar if isinstance(sidecar, dict) else None
 
@@ -516,18 +508,11 @@ def _cache_store(
         "resolved_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        s3 = _s3_client()
-        s3.put_object(
-            Bucket=settings.s3.bucket,
-            Key=pdb_key,
-            Body=resolved.pdb,
-            ContentType="text/plain; charset=utf-8",
-        )
-        s3.put_object(
-            Bucket=settings.s3.bucket,
-            Key=sidecar_key,
-            Body=json.dumps(sidecar).encode(),
-            ContentType="application/json",
+        storage = _storage()
+
+        storage.put_bytes(pdb_key, resolved.pdb, content_type="text/plain; charset=utf-8")
+        storage.put_bytes(
+            sidecar_key, json.dumps(sidecar).encode(), content_type="application/json"
         )
     except Exception as exc:
         logger.error("structure cache write failed for %s: %s", pdb_key, exc)

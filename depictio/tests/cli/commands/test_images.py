@@ -13,6 +13,7 @@ from depictio.cli.cli.utils.image_upload import (
     is_image_file,
     scan_directory_for_images,
 )
+from depictio.tests.storage_fakes import s3_backend_on
 
 
 class TestImageUtilityFunctions:
@@ -210,8 +211,14 @@ class TestListBucketCommand:
         with patch("depictio.cli.cli.utils.common.load_depictio_config") as mock_config:
             mock_config.return_value = MagicMock()
 
-            # Mock boto3 client to avoid actual S3 calls
-            with patch("boto3.client") as mock_boto:
+            # Mock the storage backend to avoid actual S3 calls
+            with (
+                patch("boto3.client") as mock_boto,
+                patch(
+                    "depictio.cli.cli.commands.images.image_storage",
+                    side_effect=lambda cfg: s3_backend_on(mock_boto.return_value, "bucket"),
+                ),
+            ):
                 mock_s3 = MagicMock()
                 mock_boto.return_value = mock_s3
 
@@ -257,7 +264,10 @@ class TestPushImages:
         load = MagicMock()
         with (
             patch("depictio.cli.cli.utils.common.load_depictio_config", load),
-            patch("depictio.cli.cli.utils.image_upload.s3_client", return_value=client),
+            patch(
+                "depictio.cli.cli.utils.image_upload.image_storage",
+                return_value=s3_backend_on(client, "bucket"),
+            ),
         ):
             result = runner.invoke(cli_app, args)
         return result, client, load

@@ -6,7 +6,7 @@ has no multi-object delete (``DeleteObjects``) and rejects the CRC checksums bot
 """
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
@@ -125,30 +125,23 @@ class TestChecksumDefault:
 
 class TestPrerenderPrefixDelete:
     def test_falls_back_to_per_file_delete(self):
+        """The prerender cleanup goes through the backend, whose bulk delete
+        falls back to one delete per object on GCS's XML API."""
         from depictio.api.v1.services import multiqc_s3_prerender
+        from depictio.tests.storage_fakes import s3_backend_on
 
-        removed: list[str] = []
-
-        class _FakeFS:
-            def exists(self, path):
-                return True
-
-            def find(self, path):
-                return ["b/dc/prerender/a.json", "b/dc/prerender/b.json"]
-
-            def rm(self, paths):
-                raise OSError("NotImplemented: DeleteObjects")
-
-            def rm_file(self, path):
-                removed.append(path)
+        s3 = _FakeS3(bulk_error="NotImplemented")
+        listing = MagicMock()
+        listing.paginate.return_value = [
+            {"Contents": [{"Key": "dc/prerender/a.json"}, {"Key": "dc/prerender/b.json"}]}
+        ]
+        s3.get_paginator = lambda name: listing  # type: ignore[attr-defined]
 
         with (
-            patch(
-                "depictio.api.v1.services.multiqc.figures._get_s3_filesystem",
-                return_value=_FakeFS(),
-            ),
+            patch("depictio.api.v1.s3.instance_backend", s3_backend_on(s3, "b")),
             patch("depictio.api.cache.get_cache"),
         ):
             assert multiqc_s3_prerender.delete_dc_prefix("dc") == 2
 
-        assert removed == ["b/dc/prerender/a.json", "b/dc/prerender/b.json"]
+        assert s3.single_calls == ["dc/prerender/a.json", "dc/prerender/b.json"]
+        listing.paginate.assert_called_once_with(Bucket="b", Prefix="dc/prerender/")

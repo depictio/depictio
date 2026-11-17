@@ -258,14 +258,13 @@ function readTracksProps(props: Record<string, unknown> | undefined): {
 
 /** Pick the right "where is this data stored" string for a DC. */
 function getDcStorageLocation(dc: DataCollectionShape): string {
-  const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined)?.toLowerCase();
   const flex = dc.flexible_metadata || {};
   if (type === 'multiqc') {
     return (
       (flex.s3_location as string | undefined) ||
       (flex.primary_s3_location as string | undefined) ||
-      `s3://depictio-bucket/${dcId}/`
+      'Not ingested yet'
     );
   }
   return dc.delta_location || 'Not aggregated yet';

@@ -26,8 +26,14 @@ TRACK_ROLES = ("data", "index")
 ASSEMBLY_ROLES = ("fasta", "fai", "gzi", "twobit", "chrom_sizes", "aliases")
 
 
+def _own():
+    from depictio.models.storage import instance_storage
+
+    return instance_storage(settings)
+
+
 def default_s3_base_folder(dc_id: str) -> str:
-    return f"s3://{settings.s3.bucket}/{genomic_tracks_s3_prefix(dc_id)}"
+    return _own().url(genomic_tracks_s3_prefix(dc_id))
 
 
 def s3_base_folder(dc_id: str, props: DCGenomicTracksConfig) -> str:
@@ -42,15 +48,14 @@ def s3_base_folder(dc_id: str, props: DCGenomicTracksConfig) -> str:
     if props.remote_base_uri:
         # Read-in-place folders are someone else's storage: never Depictio's own
         # bucket, which would let a DC owner read any key with the server's keys.
-        if props.remote_base_uri.startswith(f"s3://{settings.s3.bucket}/"):
+        if _own().key_of(props.remote_base_uri) is not None:
             raise RemoteReadError(403, "remote_base_uri cannot point into Depictio's bucket")
         return props.remote_base_uri
     default = default_s3_base_folder(dc_id)
     custom = props.s3_base_folder
     if not custom:
         return default
-    bucket = custom[len("s3://") :].split("/", 1)[0]
-    if bucket == settings.s3.bucket and not custom.startswith(default):
+    if _own().key_of(custom) is not None and not custom.startswith(default):
         raise RemoteReadError(403, f"s3_base_folder in Depictio's bucket must be inside {default}")
     return custom
 

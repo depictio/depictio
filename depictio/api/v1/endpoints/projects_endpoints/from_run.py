@@ -85,6 +85,7 @@ from depictio.cli.cli.utils.template_preview import report_rows as _report_rows
 from depictio.models.local_access import LocalPathRefused
 from depictio.models.logging import logger
 from depictio.models.s3_access import ProjectS3Config, S3AccessError, is_s3_url
+from depictio.models.storage import instance_storage
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.from_template import locate_shipped_template as _locate_shipped
 from depictio.project_builder.overlay import TemplateEdits, compose, renamed_workflows
@@ -1685,8 +1686,8 @@ def _default_image_folders(config: dict[str, Any]) -> None:
             properties = dc_config.setdefault("dc_specific_properties", {})
             if not properties.get("s3_base_folder"):
                 tag = dc.get("data_collection_tag") or "images"
-                properties["s3_base_folder"] = (
-                    f"s3://{settings.s3.bucket}/images/{uuid4().hex[:12]}/{tag}"
+                properties["s3_base_folder"] = instance_storage(settings).url(
+                    f"images/{uuid4().hex[:12]}/{tag}"
                 )
 
 

@@ -313,6 +313,16 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 
 `metatype` is a free-form unvalidated string — never key behaviour on it.
 
+The instance's own bucket is a `StorageBackend` (`depictio/models/storage/`, #1358): get it with
+`instance_storage(settings | CLI_config)` and build locations with `backend.url(key)`, never an
+`f"s3://{bucket}/…"`. Backends register by name and scheme; code outside that package never names a
+backend class (guard test in `tests/unit/test_storage_backend.py`). Backends: `s3` (boto3,
+`DEPICTIO_S3_*`) and `gcs` (`obstore`, `gs://`, ADC / Workload Identity, `DEPICTIO_GCS_*`), picked
+by `DEPICTIO_STORAGE_BACKEND`. A server-built `CLIConfig` takes `**cli_storage_fields(settings)`; CLI
+Delta options come from `instance_polars_options(CLI_config)`. Migration bundles and S3-to-S3
+backups stay S3-only (`require_s3_instance`). Real-store suites: `depictio/tests/storage`
+(emulator `tustvold/fake-gcs-server`, CI job `storage-gcs`). **Detail**: `docs/google-cloud-storage.md`
+
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
   `DEPICTIO_AUTH_SINGLE_USER_MODE`

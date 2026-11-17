@@ -98,8 +98,15 @@ class DCImageConfig(BaseModel):
         """Validate S3 path format and ensure trailing slash."""
         if not v or not v.strip():
             return v
-        if not v.startswith("s3://"):
-            raise ValueError("s3_base_folder must start with 's3://'")
+        # A folder of the instance bucket: s3://, or the scheme of another
+        # storage backend (gs://).
+        from depictio.models.storage import is_object_url, object_schemes
+
+        if not is_object_url(v):
+            # S3 first: the scheme most configurations use.
+            ordered = sorted(object_schemes(), key=lambda s: (s != "s3", s))
+            schemes = " or ".join(f"'{s}://'" for s in ordered)
+            raise ValueError(f"s3_base_folder must start with {schemes}")
         return v if v.endswith("/") else f"{v}/"
 
     @model_validator(mode="after")

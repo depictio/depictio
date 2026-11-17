@@ -10,7 +10,7 @@ import pytest
 async def initialization_test():
     """Async fixture to replace setup/teardown methods"""
     # Set up patches for all dependencies
-    s3_checks_patcher = patch("depictio.api.v1.initialization.S3_storage_checks")
+    s3_checks_patcher = patch("depictio.api.v1.initialization.check_instance_storage")
     mock_s3_checks = s3_checks_patcher.start()
 
     generate_keys_patcher = patch("depictio.api.v1.initialization.generate_keys")
@@ -362,7 +362,7 @@ class TestInitializationOrder:
     @staticmethod
     def _patches():
         return {
-            "s3_checks": patch("depictio.api.v1.initialization.S3_storage_checks"),
+            "s3_checks": patch("depictio.api.v1.initialization.check_instance_storage"),
             "initialize_db": patch("depictio.api.v1.initialization.initialize_db"),
             "create_bucket": patch("depictio.api.v1.initialization.create_bucket"),
             "settings": patch("depictio.api.v1.initialization.settings"),
@@ -389,7 +389,7 @@ class TestInitializationOrder:
 
             called = [name for name, _, _ in order.mock_calls]
             assert called.index("create_bucket") < called.index("s3_checks"), (
-                "S3_storage_checks ran before create_bucket: a fresh deployment would "
+                "storage checks ran before create_bucket: a fresh deployment would "
                 "fail startup on a bucket that does not exist yet"
             )
         finally:

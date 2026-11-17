@@ -35,9 +35,9 @@ DC_OID = ObjectId(DC_ID)
 
 @pytest.fixture(autouse=True)
 def _reset_presign_client():
-    routes._presign_client = None
+    routes._instance_storage.cache_clear()
     yield
-    routes._presign_client = None
+    routes._instance_storage.cache_clear()
 
 
 @pytest.fixture

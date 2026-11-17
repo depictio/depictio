@@ -92,13 +92,8 @@ async def test_delete_all_multiqc_reports_for_dc_with_s3(mock_multiqc_collection
         ]
     )
 
-    class _Paginator:
-        def paginate(self, **_kwargs):
-            return [{"Contents": [{"Key": "fake/key"}]}]
-
-    with patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.s3_client") as mock_s3:
-        mock_s3.get_paginator.return_value = _Paginator()
-        mock_s3.delete_objects.return_value = {}
+    with patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.instance_backend") as storage:
+        storage.delete_prefix.return_value = 1
 
         result = await delete_all_multiqc_reports_for_dc(target_dc, delete_s3_files=True)
 
@@ -118,8 +113,8 @@ async def test_delete_all_multiqc_reports_for_dc_continues_on_s3_failure(mock_mu
         ]
     )
 
-    with patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.s3_client") as mock_s3:
-        mock_s3.get_paginator.side_effect = RuntimeError("boom")
+    with patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.instance_backend") as storage:
+        storage.delete_prefix.side_effect = RuntimeError("boom")
 
         result = await delete_all_multiqc_reports_for_dc(target_dc, delete_s3_files=True)
 

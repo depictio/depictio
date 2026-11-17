@@ -82,6 +82,11 @@ class TestServerInfo:
         body = world.client_as().get("/utils/server-info").json()
         assert body["features"]["changes_since"] is enabled
 
+    def test_features_name_the_storage_backend_but_no_bucket(self, world):
+        body = world.client_as().get("/utils/server-info").json()
+        assert body["features"]["storage"] == {"backend": "s3", "scheme": "s3"}
+        assert settings.s3.bucket not in str(body)
+
     def test_migration_ui_is_off_by_default(self):
         from depictio.api.v1.configs.settings_models import MigrationConfig
 

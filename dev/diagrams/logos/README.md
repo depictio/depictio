@@ -10,4 +10,4 @@ Each mark belongs to its project and is used only to name that project in our do
 | `nextflow.png` | Nextflow brand assets (Seqera) |
 | `apptainer.png` | apptainer.org docs (`_static/logo.png`) |
 | `depictio.png` | `docs/images/logo_icon.png`, downscaled |
-| `docker.svg`, `github.svg`, `githubactions.svg`, `mongodb.svg`, `redis.svg`, `anaconda.svg` | simple-icons 13.0.0 (CC0), brand colour added |
+| `docker.svg`, `github.svg`, `githubactions.svg`, `mongodb.svg`, `redis.svg`, `anaconda.svg`, `amazons3.svg`, `minio.svg`, `googlecloudstorage.svg` | simple-icons 13.0.0 (CC0), brand colour added |

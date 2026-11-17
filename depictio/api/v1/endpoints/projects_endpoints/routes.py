@@ -1,7 +1,6 @@
 import asyncio
 from collections.abc import Awaitable
 
-import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ValidationError
@@ -148,7 +147,7 @@ from depictio.models.project_merge import (
     merge_project_data_collections,
     merge_project_workflows,
 )
-from depictio.models.s3_utils import delete_keys
+from depictio.models.storage import instance_storage
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 projects_endpoint_router = APIRouter()
@@ -202,26 +201,11 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
     # S3 cleanup is best-effort — Mongo cascade still runs even if the S3 store is down.
     if dc_ids:
         try:
-            s3_paths = _collect_s3_locations_for_project(dc_ids, settings.s3.bucket)
+            storage = instance_storage(settings)
+            s3_paths = _collect_s3_locations_for_project(dc_ids, storage.bucket)
             if s3_paths:
-                s3_client = boto3.client(
-                    "s3",
-                    endpoint_url=settings.s3.endpoint_url,
-                    aws_access_key_id=settings.s3.aws_access_key_id,
-                    aws_secret_access_key=settings.s3.aws_secret_access_key,
-                    region_name="us-east-1",
-                    verify=settings.s3.verify_tls,
-                )
                 for prefix in s3_paths:
-                    paginator = s3_client.get_paginator("list_objects_v2")
-                    for page in paginator.paginate(
-                        Bucket=settings.s3.bucket, Prefix=prefix.strip("/")
-                    ):
-                        delete_keys(
-                            s3_client,
-                            settings.s3.bucket,
-                            (obj["Key"] for obj in page.get("Contents", [])),
-                        )
+                    storage.delete_prefix(prefix.strip("/"))
                 logger.info(f"Deleted S3 objects for project {project_id}: {s3_paths}")
         except Exception as exc:
             logger.warning(f"S3 cleanup failed for project {project_id} (non-fatal): {exc}")

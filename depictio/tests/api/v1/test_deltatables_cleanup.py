@@ -9,6 +9,9 @@ from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import _cleanup_s3_delta_table
 from depictio.models.models.s3 import PolarsStorageOptions
 from depictio.models.s3_utils import S3ProviderBase
+from depictio.models.storage import S3Backend
+
+UTILS = "depictio.api.v1.endpoints.datacollections_endpoints.utils"
 
 
 class TestDeltaTableCleanupWithS3Models:
@@ -40,80 +43,55 @@ class TestDeltaTableCleanupWithS3Models:
             {"Key": f"{self.dc_id}/_delta_log/00000000000000000001.checkpoint.parquet"},
         ]
 
-    @pytest.mark.asyncio
-    @patch("depictio.api.v1.endpoints.datacollections_endpoints.utils.settings")
-    async def test_cleanup_s3_delta_table_success_with_models(self, mock_settings):
-        """Test successful S3 Delta table cleanup using actual S3 models."""
-        # Arrange - use actual S3 configuration model
-        mock_settings.s3 = self.s3_config
-
-        with patch("boto3.client") as mock_boto3:
-            mock_s3_client = MagicMock()
-            mock_s3_client.list_objects_v2.return_value = {"Contents": self.delta_objects}
-            mock_boto3.return_value = mock_s3_client
-
-            # Act
-            await _cleanup_s3_delta_table(self.dc_id)
-
-            # Assert
-            mock_boto3.assert_called_once_with(
-                "s3",
-                endpoint_url=self.s3_config.endpoint_url,
-                aws_access_key_id=self.s3_config.root_user,
-                aws_secret_access_key=self.s3_config.aws_secret_access_key,
-                region_name="us-east-1",
-            )
-            mock_s3_client.list_objects_v2.assert_called_once_with(
-                Bucket=self.s3_config.bucket, Prefix=self.dc_id
-            )
-            mock_s3_client.delete_objects.assert_called_once()
-
-            # Verify all Delta table files were included in deletion
-            delete_call_args = mock_s3_client.delete_objects.call_args[1]
-            deleted_keys = [obj["Key"] for obj in delete_call_args["Delete"]["Objects"]]
-            assert len(deleted_keys) == 5
-            assert all(key.startswith(self.dc_id) for key in deleted_keys)
+    def _backend(self, client: MagicMock) -> S3Backend:
+        backend = S3Backend(self.s3_config)
+        backend._client = client
+        return backend
 
     @pytest.mark.asyncio
-    @patch("depictio.api.v1.endpoints.datacollections_endpoints.utils.settings")
-    async def test_cleanup_s3_delta_table_empty_bucket_with_models(self, mock_settings):
-        """Test cleanup when no objects exist using actual S3 models."""
-        # Arrange
-        mock_settings.s3 = self.s3_config
+    async def test_cleanup_s3_delta_table_success_with_models(self):
+        """Every object under the collection id is deleted, in one bulk call."""
+        client = MagicMock()
+        client.get_paginator.return_value.paginate.return_value = [{"Contents": self.delta_objects}]
+        backend = self._backend(client)
 
-        with patch("boto3.client") as mock_boto3:
-            mock_s3_client = MagicMock()
-            mock_s3_client.list_objects_v2.return_value = {}  # No Contents key
-            mock_boto3.return_value = mock_s3_client
-
-            # Act
+        with patch(f"{UTILS}.instance_storage", return_value=backend):
             await _cleanup_s3_delta_table(self.dc_id)
 
-            # Assert
-            mock_s3_client.list_objects_v2.assert_called_once()
-            mock_s3_client.delete_objects.assert_not_called()
+        client.get_paginator.return_value.paginate.assert_called_once_with(
+            Bucket=self.s3_config.bucket, Prefix=self.dc_id
+        )
+        client.delete_objects.assert_called_once()
+        delete_call_args = client.delete_objects.call_args[1]
+        deleted_keys = [obj["Key"] for obj in delete_call_args["Delete"]["Objects"]]
+        assert len(deleted_keys) == 5
+        assert all(key.startswith(self.dc_id) for key in deleted_keys)
 
     @pytest.mark.asyncio
-    @patch("depictio.api.v1.endpoints.datacollections_endpoints.utils.settings")
-    async def test_cleanup_s3_delta_table_client_error_with_models(self, mock_settings):
-        """Test error handling during S3 cleanup using actual S3 models."""
-        # Arrange
-        mock_settings.s3 = self.s3_config
+    async def test_cleanup_s3_delta_table_empty_bucket_with_models(self):
+        """No object under the prefix: nothing is deleted."""
+        client = MagicMock()
+        client.get_paginator.return_value.paginate.return_value = [{}]  # no Contents key
 
-        with patch("boto3.client") as mock_boto3:
-            mock_s3_client = MagicMock()
-            mock_s3_client.list_objects_v2.side_effect = ClientError(
-                {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},  # type: ignore[arg-type]
-                "ListObjectsV2",
-            )
-            mock_boto3.return_value = mock_s3_client
-
-            # Act (should not raise exception)
+        with patch(f"{UTILS}.instance_storage", return_value=self._backend(client)):
             await _cleanup_s3_delta_table(self.dc_id)
 
-            # Assert
-            mock_s3_client.list_objects_v2.assert_called_once()
-            mock_s3_client.delete_objects.assert_not_called()
+        client.get_paginator.return_value.paginate.assert_called_once()
+        client.delete_objects.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_s3_delta_table_client_error_with_models(self):
+        """A storage error is logged, not raised, and nothing is deleted."""
+        client = MagicMock()
+        client.get_paginator.return_value.paginate.side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},  # type: ignore[arg-type]
+            "ListObjectsV2",
+        )
+
+        with patch(f"{UTILS}.instance_storage", return_value=self._backend(client)):
+            await _cleanup_s3_delta_table(self.dc_id)  # must not raise
+
+        client.delete_objects.assert_not_called()
 
 
 class TestS3ProviderWithActualModels:

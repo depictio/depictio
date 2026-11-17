@@ -29,7 +29,7 @@ from depictio.cli.cli.utils.server_target import (
 )
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
-from depictio.models.s3_utils import S3_storage_checks
+from depictio.models.storage import check_instance_storage
 from depictio.models.utils import convert_model_to_dict
 
 app = typer.Typer()
@@ -396,7 +396,7 @@ def check(
         # the command looked like it had died mid-load.
         rich_print_checked_statement("Checking S3 storage configuration...", "loading")
         cli_config = load_depictio_config(yaml_config_path=config_path, quiet=True)
-        S3_storage_checks(cli_config.s3_storage)
+        check_instance_storage(cli_config)
         rich_print_checked_statement("S3 storage configuration is valid", "success")
     except typer.Exit:
         raise

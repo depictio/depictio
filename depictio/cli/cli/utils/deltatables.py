@@ -66,7 +66,7 @@ from depictio.models.s3_access import (
     S3Target,
     blank_foreign_session_token,
 )
-from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
+from depictio.models.storage import instance_polars_options, instance_storage, is_object_url
 
 
 def calculate_dataframe_size_bytes(df: pl.DataFrame) -> int:
@@ -738,9 +738,12 @@ def delta_storage_options(storage_options: PolarsStorageOptions) -> dict:
     over the environment, and there is no way to give none: it is given empty. The rule
     is ``blank_foreign_session_token``, which the remote reads share.
     """
-    return blank_foreign_session_token(
-        storage_options.model_dump(), storage_options.aws_access_key_id
-    )
+    options = storage_options.model_dump()
+    access_key = getattr(storage_options, "aws_access_key_id", None)
+    if access_key is None:
+        # Not S3 (gs://, ...): no AWS option to guard.
+        return options
+    return blank_foreign_session_token(options, access_key)
 
 
 def delta_table_stats(
@@ -1107,17 +1110,17 @@ def client_aggregate_data(
         )
 
     # Generate destination prefix using the data collection id - should be a S3 path
-    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
+    destination_prefix = instance_storage(CLI_config).url(str(data_collection.id))
     logger.debug(f"Destination prefix: {destination_prefix}")
     # logger.info(f"Destination prefix: {destination_prefix}")
 
     # Check if existing Delta table exists and is accessible
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    storage_options = instance_polars_options(CLI_config)
     logger.debug(f"Storage options: {storage_options}")
     # logger.info(f"Storage options: {storage_options}")
 
     # if destination_prefix is not a valid S3 path, raise an error
-    if not destination_prefix.startswith("s3://"):
+    if not is_object_url(destination_prefix):
         raise ValueError("Invalid destination prefix. It should be an S3 path.")
 
     # Metadata only. This used to be a full eager read of the whole table whose
@@ -1644,20 +1647,12 @@ def process_geojson_data_collection(
         # File is already on S3 (uploaded by scan), estimate size
         file_size = 0
 
+    storage = instance_storage(CLI_config)
+
     # Check if destination already exists
     if not overwrite:
-        storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
         try:
-            import s3fs
-
-            fs = s3fs.S3FileSystem(
-                endpoint_url=storage_options.endpoint_url,
-                key=storage_options.aws_access_key_id,
-                secret=storage_options.aws_secret_access_key,
-            )
-            bucket_prefix = f"{CLI_config.s3_storage.bucket}/{dc_id}"
-            existing_files = fs.ls(bucket_prefix)
-            if existing_files:
+            if next(iter(storage.list_objects(f"{dc_id}/")), None) is not None:
                 rich_print_checked_statement(
                     "GeoJSON already uploaded, skipping (use --overwrite to replace)", "info"
                 )
@@ -1668,13 +1663,11 @@ def process_geojson_data_collection(
     # Upload the GeoJSON file to S3 if it's local
     if not file_path.startswith("s3://"):
         try:
-            s3_client = _s3_client(CLI_config)
-
             # Upload to S3 under the DC ID
             s3_key = geojson_s3_key(str(dc_id))
             logger.info(f"Uploading GeoJSON to S3: {file_path} -> {s3_key}")
-            s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
-            s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
+            storage.upload_file(s3_key, file_path)
+            s3_location = storage.url(s3_key)
             logger.info(f"Successfully uploaded GeoJSON to {s3_location}")
 
         except Exception as e:
@@ -1710,20 +1703,6 @@ def process_geojson_data_collection(
         "result": "success",
         "message": f"GeoJSON uploaded to {s3_location}",
     }
-
-
-def _s3_client(CLI_config: CLIConfig):
-    """boto3 S3 client for the CLI's configured storage (GeoJSON and phylogeny uploads)."""
-    import boto3
-
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
-    return boto3.client(
-        "s3",
-        endpoint_url=storage_options.endpoint_url,
-        aws_access_key_id=storage_options.aws_access_key_id,
-        aws_secret_access_key=storage_options.aws_secret_access_key,
-        region_name=storage_options.region,
-    )
 
 
 def _project_level_file(files: list, data_collection: DataCollection) -> File:
@@ -1786,7 +1765,7 @@ def process_phylogeny_data_collection(
     file_path = _project_level_file(files, data_collection).file_location
     logger.info(f"Phylogeny tree location: {file_path}")
 
-    bucket = CLI_config.s3_storage.bucket
+    storage = instance_storage(CLI_config)
     s3_key = phylogeny_s3_key(dc_id)
     if file_path[:5].lower() == "s3://":
         # Copied, not referenced: the Newick endpoint reads the fixed key with the
@@ -1796,7 +1775,7 @@ def process_phylogeny_data_collection(
             source = s3_read_target_in_region("s3://" + file_path[5:], CLI_config)
             obj = source.client().get_object(Bucket=source.bucket, Key=source.key)
             logger.info(f"Copying phylogeny tree to S3: {file_path} -> {s3_key}")
-            _s3_client(CLI_config).put_object(Bucket=bucket, Key=s3_key, Body=obj["Body"].read())
+            storage.put_bytes(s3_key, obj["Body"].read())
         except Exception as e:
             return {"result": "error", "message": f"Failed to copy phylogeny tree to S3: {e}"}
     else:
@@ -1810,10 +1789,10 @@ def process_phylogeny_data_collection(
             }
         try:
             logger.info(f"Uploading phylogeny tree to S3: {file_path} -> {s3_key}")
-            _s3_client(CLI_config).upload_file(file_path, bucket, s3_key)
+            storage.upload_file(s3_key, file_path)
         except Exception as e:
             return {"result": "error", "message": f"Failed to upload phylogeny tree to S3: {e}"}
-    s3_location = f"s3://{bucket}/{s3_key}"
+    s3_location = storage.url(s3_key)
 
     rich_print_checked_statement(
         f"Phylogeny data collection processed: {escape(data_collection.data_collection_tag)}",
@@ -1947,13 +1926,11 @@ def process_indexed_file_data_collection(
             ),
         }
 
-    bucket = CLI_config.s3_storage.bucket
-    client = _s3_client(CLI_config)
+    storage = instance_storage(CLI_config)
 
     def _already_there(key: str) -> bool:
         try:
-            client.head_object(Bucket=bucket, Key=key)
-            return True
+            return storage.head(key) is not None
         except Exception:
             return False
 
@@ -1970,12 +1947,12 @@ def process_indexed_file_data_collection(
                 logger.debug(f"indexed_file: {key} already in the bucket, skipping upload")
                 continue
             try:
-                logger.info(f"Uploading indexed file: {local_path} -> s3://{bucket}/{key}")
-                client.upload_file(local_path, bucket, key)
+                logger.info(f"Uploading indexed file: {local_path} -> {storage.url(key)}")
+                storage.upload_file(key, local_path)
             except Exception as e:
                 return {
                     "result": "error",
-                    "message": f"Failed to upload {local_path} to s3://{bucket}/{key}: {e}",
+                    "message": f"Failed to upload {local_path} to {storage.url(key)}: {e}",
                 }
 
         file_obj.sample = upload["sample"]
@@ -2001,7 +1978,7 @@ def process_indexed_file_data_collection(
         "result": "success",
         "message": (
             f"{len(updated)} indexed file(s) available under "
-            f"s3://{bucket}/{indexed_file_s3_prefix(dc_id, '')}".rstrip("/")
+            f"{storage.url(indexed_file_s3_prefix(dc_id, ''))}".rstrip("/")
         ),
     }
 
@@ -2200,7 +2177,7 @@ def process_recipe_data_collection(
         dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]
 
         if dc_ref_sources and workflow is not None:
-            storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+            storage_options = instance_polars_options(CLI_config)
             for src in dc_ref_sources:
                 # Find the referenced DC in the workflow by tag
                 ref_dc = next(
@@ -2223,7 +2200,7 @@ def process_recipe_data_collection(
                             f"Ensure the referenced data collection is processed first."
                         ),
                     }
-                ref_s3_path = f"s3://{CLI_config.s3_storage.bucket}/{ref_dc.id!s}"
+                ref_s3_path = instance_storage(CLI_config).url(str(ref_dc.id))
                 read_result = read_delta_table(ref_s3_path, storage_options)
                 if read_result.get("result") != "success":
                     if src.optional:
@@ -2288,8 +2265,8 @@ def process_recipe_data_collection(
         except RecipeError as e:
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
-    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id!s}"
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    destination_prefix = instance_storage(CLI_config).url(str(data_collection.id))
+    storage_options = instance_polars_options(CLI_config)
 
     # How the output relates to the runs (recipe_scopes). A recipe that mixes
     # samples is recomputed over every run at once, the others run per run.

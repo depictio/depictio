@@ -3299,7 +3299,13 @@ export interface ServerInfo {
   docs_url: string;
   version_check: VersionCheckBlock | null;
   /** UI switches from the server's settings; absent on older servers. */
-  features?: { migration?: boolean; changes_since?: boolean };
+  features?: {
+    migration?: boolean;
+    changes_since?: boolean;
+    /** The instance's storage backend (`s3`, `gcs`) and the scheme of the
+     *  locations it stores (`s3`, `gs`). */
+    storage?: { backend: string; scheme: string };
+  };
 }
 
 /** Optional-auth: the bearer goes along when there is one (it is what makes

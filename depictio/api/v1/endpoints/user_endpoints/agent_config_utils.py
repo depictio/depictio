@@ -9,6 +9,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
 from depictio.models.models.users import TokenBeanie, UserBeanie
+from depictio.models.storage import cli_storage_fields
 from depictio.models.utils import make_json_serializable
 
 
@@ -63,6 +64,7 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
         user=user_cli_config,
         api_base_url=settings.fastapi.external_url,  # Always use external URL for CLI
         s3_storage=settings.s3,
+        **cli_storage_fields(settings),
     )
 
     logger.debug(f"Generated CLI config for user: {user.email}")

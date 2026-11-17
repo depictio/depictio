@@ -27,6 +27,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.settings_models import BUNDLED_PROJECTS_DIR
 from depictio.api.v1.endpoints.advanced_viz_endpoints import routes
 from depictio.models.s3_access import S3Target
+from depictio.tests.storage_fakes import s3_backend_on
 
 DC_ID = ObjectId("646b0f3c1e4a2d7f8e5b8ca9")
 SEED_TREE = BUNDLED_PROJECTS_DIR / "init" / "advanced_viz_showcase" / "data" / "bacterial_tree.nwk"
@@ -49,7 +50,7 @@ def newick(monkeypatch: pytest.MonkeyPatch, instance_client: MagicMock):
     monkeypatch.setattr(db, "files_collection", mongo.files)
     monkeypatch.setattr(db, "projects_collection", mongo.projects)
     monkeypatch.setattr(routes, "_assert_dc_access", lambda dc_oid, user: None)
-    monkeypatch.setattr(routes, "_phylogeny_s3_client", lambda: instance_client)
+    monkeypatch.setattr(routes, "_phylogeny_storage", lambda: s3_backend_on(instance_client))
     monkeypatch.setattr(
         "depictio.api.v1.endpoints.projects_endpoints.storage_config.project_storage_for",
         lambda project_id: None,

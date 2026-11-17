@@ -55,6 +55,32 @@ persistence:
     size: 5Gi
     accessMode: ReadWriteMany
 
+# Instance storage (#1358). "s3": the bucket of the s3: block below (bundled
+# SeaweedFS or any S3 endpoint). "gcs": a Google Cloud Storage bucket, read and
+# written natively (gs:// locations) with no HMAC key: set gcs.bucket, turn
+# s3.enabled off, and give the pods a Google identity, on GKE through Workload
+# Identity (serviceAccount below), elsewhere through a mounted key file
+# (gcs.serviceAccountPath). The bucket must exist; Depictio does not create it.
+storage:
+  backend: s3
+
+gcs:
+  bucket: ""
+  # Key file mounted into the backend and Celery pods. Empty: Application
+  # Default Credentials (the GKE metadata server under Workload Identity).
+  serviceAccountPath: ""
+
+# Kubernetes service account of the backend and Celery worker pods. Empty and
+# not created: the namespace's default one. For GKE Workload Identity:
+#   serviceAccount:
+#     create: true
+#     annotations:
+#       iam.gke.io/gcp-service-account: depictio@<project>.iam.gserviceaccount.com
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
 # Secrets
 secrets:
   # Optionally override the generated S3 access key (bundled SeaweedFS).

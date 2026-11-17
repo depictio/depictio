@@ -16,29 +16,28 @@ WORKER_ID = os.getpid()
 
 def check_s3_delta_table_exists(bucket: str, data_collection_id: str) -> bool:
     """
-    Check if a delta table exists in S3 by looking for the _delta_log directory.
+    Check if a delta table exists in the instance bucket (its _delta_log directory).
 
     Args:
-        bucket: S3 bucket name
+        bucket: Kept for callers; the instance backend names its own bucket
         data_collection_id: Data collection ID (used as S3 prefix)
 
     Returns:
         True if delta table exists in S3, False otherwise
     """
-    from depictio.api.v1.s3 import s3_client
+    from depictio.api.v1.s3 import instance_backend
 
     try:
         delta_log_prefix = f"{data_collection_id}/_delta_log/"
-        response = s3_client.list_objects_v2(Bucket=bucket, Prefix=delta_log_prefix, MaxKeys=1)
-        exists = "Contents" in response and len(response["Contents"]) > 0
+        exists = next(iter(instance_backend.list_objects(delta_log_prefix)), None) is not None
 
         if exists:
             logger.info(
-                f"Worker {WORKER_ID}: Delta table found in S3 at s3://{bucket}/{data_collection_id}"
+                f"Worker {WORKER_ID}: Delta table found at {instance_backend.url(data_collection_id)}"
             )
         else:
             logger.info(
-                f"Worker {WORKER_ID}: Delta table NOT found in S3 at s3://{bucket}/{data_collection_id}"
+                f"Worker {WORKER_ID}: Delta table NOT found at {instance_backend.url(data_collection_id)}"
             )
 
         return exists

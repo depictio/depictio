@@ -5,17 +5,16 @@ from typing import List, Optional
 from bson import ObjectId
 from fastapi import HTTPException
 
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import multiqc_collection
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
-from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.s3 import instance_backend
 
 # Import build_sample_mapping from CLI utils to avoid code duplication
 # This function is now shared between API and CLI without circular dependencies
 from depictio.cli.cli.utils.sample_mapping import build_sample_mapping
 from depictio.models.models.multiqc_reports import MultiQCReport, general_stats_available
-from depictio.models.s3_utils import delete_keys
+from depictio.models.storage import is_object_url, split_object_url
 
 # Re-export for backward compatibility
 __all__ = ["build_sample_mapping"]
@@ -428,31 +427,12 @@ async def delete_multiqc_report_by_id(report_id: str, delete_s3_file: bool = Fal
         s3_file_deleted = False
         if delete_s3_file and report.s3_location:
             try:
-                # Parse S3 location to get bucket and key
-                # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
-                s3_path = report.s3_location.replace("s3://", "")
-                bucket_name = settings.s3.bucket
-
-                # Extract the prefix (everything after bucket name)
-                if "/" in s3_path:
-                    s3_key_prefix = s3_path.split("/", 1)[1]
-
-                    # List all objects with this prefix and delete them
-                    paginator = s3_client.get_paginator("list_objects_v2")
-                    pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_key_prefix)
-
-                    objects_to_delete = []
-                    for page in pages:
-                        if "Contents" in page:
-                            for obj in page["Contents"]:
-                                objects_to_delete.append({"Key": obj["Key"]})
-
-                    if objects_to_delete:
-                        delete_keys(s3_client, bucket_name, (o["Key"] for o in objects_to_delete))
-
-                        logger.info(
-                            f"Deleted {len(objects_to_delete)} S3 objects from: {report.s3_location}"
-                        )
+                # Format: <scheme>://bucket/data_collection_id/timestamp_id/multiqc.parquet
+                s3_key_prefix = _report_key(report.s3_location)
+                if s3_key_prefix:
+                    deleted = instance_backend.delete_prefix(s3_key_prefix)
+                    if deleted:
+                        logger.info(f"Deleted {deleted} S3 objects from: {report.s3_location}")
                         s3_file_deleted = True
                     else:
                         logger.warning(f"No S3 objects found at: {report.s3_location}")
@@ -460,7 +440,6 @@ async def delete_multiqc_report_by_id(report_id: str, delete_s3_file: bool = Fal
                 else:
                     logger.warning(f"Invalid S3 location format: {report.s3_location}")
                     s3_file_deleted = False
-
             except Exception as s3_error:
                 logger.warning(f"Failed to delete S3 file: {s3_error}")
                 s3_file_deleted = False
@@ -497,7 +476,6 @@ async def delete_all_multiqc_reports_for_dc(
     deleted_s3_count = 0
 
     if delete_s3_files:
-        bucket_name = settings.s3.bucket
         # Project to s3_location only — report docs carry full plots/sample
         # mappings payloads which can be large; we just need the location.
         cursor = multiqc_collection.find(
@@ -509,24 +487,15 @@ async def delete_all_multiqc_reports_for_dc(
             if not s3_location:
                 continue
             try:
-                # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
-                s3_path = s3_location.replace("s3://", "")
-                if "/" not in s3_path:
+                s3_key_prefix = _report_key(s3_location)
+                if not s3_key_prefix:
                     logger.warning(f"Invalid S3 location format: {s3_location}")
                     continue
-                s3_key_prefix = s3_path.split("/", 1)[1]
-
-                paginator = s3_client.get_paginator("list_objects_v2")
-                pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_key_prefix)
-                objects_to_delete = [
-                    {"Key": obj["Key"]} for page in pages for obj in page.get("Contents", [])
-                ]
-
-                if not objects_to_delete:
+                deleted = instance_backend.delete_prefix(s3_key_prefix)
+                if not deleted:
                     logger.warning(f"No S3 objects found at: {s3_location}")
                     continue
-                delete_keys(s3_client, bucket_name, (o["Key"] for o in objects_to_delete))
-                logger.info(f"Deleted {len(objects_to_delete)} S3 objects from: {s3_location}")
+                logger.info(f"Deleted {deleted} S3 objects from: {s3_location}")
                 deleted_s3_count += 1
             except Exception as s3_error:
                 logger.warning(f"Failed to delete S3 file at {s3_location}: {s3_error}")
@@ -683,24 +652,28 @@ def _rollback_reports(report_ids: list[str], *, context: str) -> int:
     return deleted
 
 
+def _report_key(location: str) -> str | None:
+    """The object key of a report location in the instance bucket, else None."""
+    if not is_object_url(location):
+        return None
+    key = split_object_url(location).key
+    return key or None
+
+
 def _download_parquet_from_s3(s3_location: str, local_path: str) -> None:
-    """Download s3://bucket/key to local_path, creating parent dirs.
+    """Download a stored report (``<scheme>://bucket/key``) to local_path, creating parent dirs.
 
     Used by the append flow: existing reports' parquets are pulled back so
     the processor sees the full file set on every run.
     """
     import os as _os
 
-    if not s3_location.startswith("s3://"):
+    key = _report_key(s3_location)
+    if key is None:
         raise ValueError(f"Invalid S3 location: {s3_location!r}")
-    rest = s3_location[len("s3://") :]
-    if "/" not in rest:
-        raise ValueError(f"Invalid S3 location: {s3_location!r} (missing key)")
-    bucket, key = rest.split("/", 1)
-    if not bucket or not key:
-        raise ValueError(f"Invalid S3 location: {s3_location!r}")
-    _os.makedirs(_os.path.dirname(local_path), exist_ok=True)
-    s3_client.download_file(bucket, key, local_path)
+    _os.makedirs(_os.path.dirname(local_path) or ".", exist_ok=True)
+    with open(local_path, "wb") as fh:
+        fh.write(instance_backend.read_bytes(key))
 
 
 def _replace_multiqc_dc_uploads(

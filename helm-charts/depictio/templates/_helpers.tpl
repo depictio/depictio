@@ -345,3 +345,19 @@ DEPICTIO_EVENTS_REDIS_DB: {{ .Values.backend.env.DEPICTIO_EVENTS_REDIS_DB | defa
 DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED: {{ .Values.backend.env.DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED | default "true" | quote }}
 {{- end }}
 {{- end }}
+
+
+{{/*
+Service account of the backend and the Celery worker: the one this chart
+creates (serviceAccount.create), a named existing one, or none (the
+namespace's default). GKE Workload Identity binds it to a Google service
+account through serviceAccount.annotations (#1358).
+*/}}
+{{- define "depictio.serviceAccountName" -}}
+{{- $sa := .Values.serviceAccount | default dict -}}
+{{- if $sa.create -}}
+{{- default (printf "%s-depictio" .Release.Name) $sa.name -}}
+{{- else if $sa.name -}}
+{{- $sa.name -}}
+{{- end -}}
+{{- end -}}

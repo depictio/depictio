@@ -26,6 +26,7 @@ from depictio.cli.cli.utils.image_upload import (
     verify_s3_images,
 )
 from depictio.models.models.data_collections_types.image import DCImageConfig
+from depictio.tests.storage_fakes import s3_backend_on
 
 BUCKET = "depictio-bucket"
 FOLDER = f"s3://{BUCKET}/image_demo/"
@@ -147,7 +148,9 @@ class TestUpload:
         s3 = FakeS3(keys={"image_demo/sample_001.png"})
         images = sorted(images_dir.rglob("*.png"))
 
-        counts = upload_images(images, images_dir, s3, BUCKET, "image_demo/", label=FOLDER)
+        counts = upload_images(
+            images, images_dir, s3_backend_on(s3, BUCKET), "image_demo/", label=FOLDER
+        )
 
         assert counts == {"uploaded": 2, "replaced": 0, "skipped": 1, "error": 0}
         assert sorted(key for _, key, _ in s3.uploads) == [
@@ -161,7 +164,12 @@ class TestUpload:
         images = sorted(images_dir.rglob("*.png"))
 
         counts = upload_images(
-            images, images_dir, s3, BUCKET, "image_demo/", overwrite=True, label=FOLDER
+            images,
+            images_dir,
+            s3_backend_on(s3, BUCKET),
+            "image_demo/",
+            overwrite=True,
+            label=FOLDER,
         )
 
         assert counts == {"uploaded": 2, "replaced": 1, "skipped": 0, "error": 0}
@@ -172,7 +180,7 @@ class TestUpload:
         s3.upload_file = MagicMock(side_effect=RuntimeError("SlowDown"))
 
         counts = upload_images(
-            [images_dir / "sample_001.png"], images_dir, s3, BUCKET, "x/", label="x"
+            [images_dir / "sample_001.png"], images_dir, s3_backend_on(s3, BUCKET), "x/", label="x"
         )
 
         assert counts == {"uploaded": 0, "replaced": 0, "skipped": 0, "error": 1}
@@ -184,8 +192,10 @@ class TestUploadAndVerifyAgree:
     def _round_trip(self, source, folder, referenced, cli_config):
         s3 = FakeS3()
         bucket, prefix = parse_s3_folder(folder)
-        upload_images(sorted(source.rglob("*.png")), source, s3, bucket, prefix, label=folder)
-        with patch.object(image_upload, "s3_client", return_value=s3):
+        upload_images(
+            sorted(source.rglob("*.png")), source, s3_backend_on(s3, bucket), prefix, label=folder
+        )
+        with patch.object(image_upload, "image_storage", return_value=s3_backend_on(s3, BUCKET)):
             return s3, verify_s3_images(folder, cli_config, referenced)
 
     def test_paths_that_start_with_the_folder_name(self, images_dir, cli_config):
@@ -215,7 +225,7 @@ class TestVerify:
     def test_it_counts_the_images_and_names_the_missing_ones(self, cli_config):
         s3 = FakeS3(keys={"image_demo/a.png", "image_demo/b.png", "image_demo/readme.txt"})
 
-        with patch.object(image_upload, "s3_client", return_value=s3):
+        with patch.object(image_upload, "image_storage", return_value=s3_backend_on(s3, BUCKET)):
             result = verify_s3_images(FOLDER, cli_config, ["a.png", "image_demo/b.png", "c.png"])
 
         assert result["count"] == 2
@@ -224,11 +234,15 @@ class TestVerify:
     def test_it_counts_past_a_hundred_images(self, cli_config):
         s3 = FakeS3(keys={f"image_demo/{i}.png" for i in range(250)})
 
-        with patch.object(image_upload, "s3_client", return_value=s3):
+        with patch.object(image_upload, "image_storage", return_value=s3_backend_on(s3, BUCKET)):
             assert verify_s3_images(FOLDER, cli_config)["count"] == 250
 
     def test_a_folder_that_cannot_be_listed_is_an_error(self, cli_config):
-        with patch.object(image_upload, "s3_client", return_value=FakeS3(list_fails=True)):
+        with patch.object(
+            image_upload,
+            "image_storage",
+            return_value=s3_backend_on(FakeS3(list_fails=True), BUCKET),
+        ):
             result = verify_s3_images(FOLDER, cli_config, ["a.png"])
 
         assert "AccessDenied" in result["error"]
@@ -237,7 +251,7 @@ class TestVerify:
 class TestCollectionUpload:
     def _upload(self, dc, cli_config, s3, referenced, **kwargs):
         with (
-            patch.object(image_upload, "s3_client", return_value=s3),
+            patch.object(image_upload, "image_storage", return_value=s3_backend_on(s3, BUCKET)),
             patch.object(image_upload, "_referenced_images", return_value=referenced),
         ):
             return upload_collection_images(dc, cli_config, **kwargs)
@@ -358,7 +372,10 @@ class TestNoBucketFolder:
         self, images_dir, cli_config, missing
     ):
         dc = self._without_folder(images_dir, missing)
-        with patch.object(image_upload, "s3_client") as client:
+        client = MagicMock()
+        with patch.object(
+            image_upload, "image_storage", return_value=s3_backend_on(client, BUCKET)
+        ):
             with pytest.raises(ImageUploadError) as exc:
                 upload_collection_images(dc, cli_config)
         assert str(exc.value) == (
@@ -366,7 +383,7 @@ class TestNoBucketFolder:
             f"the server's bucket, e.g. s3://{BUCKET}/images/sample_images"
         )
         # Nothing was listed or uploaded: it is refused before storage is reached.
-        client.assert_not_called()
+        assert client.method_calls == []
 
     def test_it_is_an_upload_error_not_a_crash_on_a_missing_value(self, images_dir, cli_config):
         """Before, `parse_s3_folder(None)` raised an AttributeError."""
@@ -384,7 +401,7 @@ class TestNoBucketFolder:
         s3 = FakeS3()
         dc = self._without_folder(images_dir, FOLDER)
         with (
-            patch.object(image_upload, "s3_client", return_value=s3),
+            patch.object(image_upload, "image_storage", return_value=s3_backend_on(s3, BUCKET)),
             patch.object(image_upload, "_referenced_images", return_value=None),
         ):
             result = upload_collection_images(dc, cli_config)

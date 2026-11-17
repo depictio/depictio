@@ -107,7 +107,8 @@ class TestDCImageConfig:
                 image_column="img",
                 s3_base_folder="bucket/images",
             )
-        assert "s3_base_folder must start with 's3://'" in str(exc_info.value)
+        assert "s3_base_folder must start with" in str(exc_info.value)
+        assert "'s3://'" in str(exc_info.value)
 
     def test_s3_base_folder_empty_allowed(self):
         """Test s3_base_folder can be None or empty."""

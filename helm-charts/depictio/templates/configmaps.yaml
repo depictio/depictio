@@ -209,6 +209,16 @@ data:
   {{- $s3Bucket := index $s3Env "DEPICTIO_S3_BUCKET" | default "depictio-bucket" }}
   {{- $s3PublicUrl := index $s3Env "DEPICTIO_S3_PUBLIC_URL" }}
   {{- $s3ServicePort := index $s3Env "DEPICTIO_S3_SERVICE_PORT" | default "9000" }}
+  # Instance storage backend (#1358): s3 (the s3: block) or gcs (the gcs: block).
+  {{- $storage := .Values.storage | default dict }}
+  DEPICTIO_STORAGE_BACKEND: {{ $storage.backend | default "s3" | quote }}
+  {{- if eq ($storage.backend | default "s3") "gcs" }}
+  {{- $gcs := .Values.gcs | default dict }}
+  DEPICTIO_GCS_BUCKET: {{ required "gcs.bucket is required when storage.backend is gcs" $gcs.bucket | quote }}
+  {{- with $gcs.serviceAccountPath }}
+  DEPICTIO_GCS_SERVICE_ACCOUNT_PATH: {{ . | quote }}
+  {{- end }}
+  {{- end }}
   DEPICTIO_S3_BUCKET: {{ $s3Bucket | quote }}
   {{- if not $s3.enabled }}
   # External S3 configuration (when the bundled store is disabled)
@@ -333,6 +343,16 @@ data:
   {{- $s3Bucket := index $s3Env "DEPICTIO_S3_BUCKET" | default "depictio-bucket" }}
   {{- $s3PublicUrl := index $s3Env "DEPICTIO_S3_PUBLIC_URL" }}
   {{- $s3ServicePort := index $s3Env "DEPICTIO_S3_SERVICE_PORT" | default "9000" }}
+  # Instance storage backend (#1358): s3 (the s3: block) or gcs (the gcs: block).
+  {{- $storage := .Values.storage | default dict }}
+  DEPICTIO_STORAGE_BACKEND: {{ $storage.backend | default "s3" | quote }}
+  {{- if eq ($storage.backend | default "s3") "gcs" }}
+  {{- $gcs := .Values.gcs | default dict }}
+  DEPICTIO_GCS_BUCKET: {{ required "gcs.bucket is required when storage.backend is gcs" $gcs.bucket | quote }}
+  {{- with $gcs.serviceAccountPath }}
+  DEPICTIO_GCS_SERVICE_ACCOUNT_PATH: {{ . | quote }}
+  {{- end }}
+  {{- end }}
   DEPICTIO_S3_BUCKET: {{ $s3Bucket | quote }}
   {{- if not $s3.enabled }}
   DEPICTIO_S3_PUBLIC_URL: {{ $s3PublicUrl | quote }}

@@ -1,6 +1,7 @@
 import asyncio
 import mimetypes
 import posixpath
+from functools import cache
 from typing import Any
 from urllib.parse import quote, unquote, urlencode
 
@@ -17,13 +18,13 @@ from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_dc_project_unlocked
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
-from depictio.api.v1.s3 import s3_client
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.data_collections_types.indexed_file import (
     DEFAULT_INDEX_SUFFIX,
     indexed_file_s3_key,
 )
 from depictio.models.models.files import File
+from depictio.models.storage import StorageNotFound, instance_storage, is_object_url
 
 files_endpoint_router = APIRouter()
 
@@ -291,8 +292,8 @@ SUPPORTED_IMAGE_EXTENSIONS = frozenset(
 
 
 def _parse_s3_path(s3_path: str) -> tuple[str, str]:
-    """Parse an S3 path into bucket and key components."""
-    path = s3_path[5:] if s3_path.startswith("s3://") else s3_path
+    """Parse a stored location (``<scheme>://bucket/key``, or bare ``bucket/key``)."""
+    path = s3_path.partition("://")[2] if is_object_url(s3_path) else s3_path
     parts = path.split("/", 1)
     if len(parts) < 2:
         raise ValueError(f"Invalid S3 path format: {s3_path}")
@@ -368,7 +369,8 @@ async def serve_image(
 
     # SECURITY: lock serving to Depictio's configured bucket. Without this an
     # attacker could point s3_path at any bucket the S3 credentials can read.
-    if bucket != settings.s3.bucket:
+    storage = _instance_storage()
+    if bucket != storage.bucket:
         logger.warning(f"Image request for disallowed bucket rejected: {bucket}")
         raise HTTPException(status_code=403, detail="Access to the requested bucket is forbidden")
 
@@ -377,28 +379,21 @@ async def serve_image(
         raise HTTPException(status_code=400, detail="Invalid image path or unsupported format")
 
     try:
-        response = s3_client.get_object(Bucket=bucket, Key=key)
+        chunks = storage.iter_chunks(key, chunk_size=8192)
         content_type = _get_mime_type(key)
         filename = key.split("/")[-1]
 
-        def iterfile():
-            for chunk in response["Body"].iter_chunks(chunk_size=8192):
-                yield chunk
-
         return StreamingResponse(
-            iterfile(),
+            chunks,
             media_type=content_type,
             headers={
                 "Cache-Control": "public, max-age=3600",
                 "Content-Disposition": f'inline; filename="{filename}"',
             },
         )
-    except s3_client.exceptions.NoSuchKey:
+    except StorageNotFound:
         logger.warning(f"Image not found: {bucket}/{key}")
         raise HTTPException(status_code=404, detail="Image not found")
-    except s3_client.exceptions.NoSuchBucket:
-        logger.error(f"Bucket not found: {bucket}")
-        raise HTTPException(status_code=404, detail="Storage bucket not found")
     except Exception as e:
         # SECURITY: log the underlying error internally, but do not leak
         # exception details (which may include S3 internals) to the client.
@@ -435,38 +430,20 @@ async def serve_image(
 #: track, short enough that a leaked link dies on its own.
 INDEXED_FILE_URL_TTL_SECONDS = 15 * 60
 
-_presign_client = None
-
-
-def _presigning_s3_client():
-    """boto3 client whose signatures are valid for the browser's endpoint.
-
-    Built lazily and once: instantiating a boto3 client costs a session load,
-    and this one is only needed by deployments that expose indexed files.
-    """
-    global _presign_client
-    if _presign_client is None:
-        import boto3
-        from botocore.client import Config
-
-        _presign_client = boto3.client(
-            "s3",
-            aws_access_key_id=settings.minio.aws_access_key_id,
-            aws_secret_access_key=settings.minio.aws_secret_access_key,
-            endpoint_url=settings.minio.external_url,
-            verify=settings.minio.verify_tls,
-            config=Config(signature_version="s3v4"),
-        )
-    return _presign_client
-
 
 def presign_indexed_file(key: str, ttl_seconds: int = INDEXED_FILE_URL_TTL_SECONDS) -> str:
-    """Presigned GET URL for one bucket object, valid for ``ttl_seconds``."""
-    return _presigning_s3_client().generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.minio.bucket, "Key": key},
-        ExpiresIn=ttl_seconds,
-    )
+    """Presigned GET URL for one bucket object, valid for ``ttl_seconds``.
+
+    Signed for the endpoint the browser reaches (the S3 public URL, or the
+    backend's own signed-URL host), not the internal one.
+    """
+    return _instance_storage().presign_get(key, ttl_seconds)
+
+
+@cache
+def _instance_storage():
+    """The instance backend, built once: its presigning client is reused."""
+    return instance_storage(settings)
 
 
 API_PREFIX = "/depictio/api/v1"
@@ -723,7 +700,7 @@ async def proxy_indexed_file(
     from depictio.api.v1.endpoints.jbrowse_endpoints.routes import serve_source
     from depictio.api.v1.services import remote_read
 
-    src = remote_read.ByteSource("depictio_s3", bucket=settings.s3.bucket, key=key)
+    src = remote_read.ByteSource("depictio_s3", bucket=_instance_storage().bucket, key=key)
     return await asyncio.to_thread(serve_source, request, src, key)
 
 

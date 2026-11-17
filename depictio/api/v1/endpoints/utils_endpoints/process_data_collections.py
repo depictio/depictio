@@ -10,6 +10,7 @@ from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
 from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
 from depictio.models.models.projects import ProjectResponse
+from depictio.models.storage import cli_storage_fields
 from depictio.models.utils import get_config
 
 
@@ -126,6 +127,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
         ),
         api_base_url=settings.fastapi.url,
         s3_storage=settings.s3,
+        **cli_storage_fields(settings),
     )
 
     logger.debug(f"CLI config: {format_pydantic(cli_config)}")

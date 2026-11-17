@@ -315,6 +315,52 @@ jobs:
           path: .quality-passed
           key: quality-${{ needs.check-quality-cache.outputs.code-hash }}
 
+  # The instance storage backends against real stores (#1358): the GCS backend
+  # on a GCS emulator, and anonymous reads of a public GCS bucket. The emulator
+  # is the XML-API build `object_store` tests against (upstream fake-gcs-server
+  # refuses its PUTs); it ignores GCS preconditions, so concurrent commits are
+  # left to the opt-in `gcs_live` suite on a real bucket.
+  storage-gcs:
+    runs-on: ubuntu-22.04
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install Dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Start the GCS emulator
+        # docker run, not a service container: the emulator needs its own arguments.
+        run: |
+          docker run -d --name fake-gcs -p 4443:4443 tustvold/fake-gcs-server \
+            -scheme http -backend memory -public-host localhost:4443
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:4443/storage/v1/b > /dev/null && break
+            sleep 1
+          done
+
+      - name: Run the storage backend suites
+        env:
+          DEPICTIO_TEST_GCS_EMULATOR: http://localhost:4443
+          DEPICTIO_TEST_GCS_PUBLIC: "1"
+        run: |
+          source venv/bin/activate
+          python -m pytest -v depictio/tests/storage -m "gcs or gcs_public" -p no:randomly
+
   # Vitest unit suites in the pnpm workspace (pure-logic tests only —
   # currently depictio-react-core's phylo/subtree-selection helpers). No
   # Docker, no browser; DOM-level coverage lives in e2e-playwright.
@@ -3169,6 +3215,7 @@ jobs:
       - check-quality-cache
       - lint
       - quality
+      - storage-gcs
       - js-unit
       - pixi-install-test
       - docker-build

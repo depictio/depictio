@@ -1,10 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from botocore.exceptions import ClientError
 from bson import ObjectId
 from fastapi import HTTPException
-from mypy_boto3_s3.client import S3Client
 from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
@@ -14,9 +12,9 @@ from depictio.api.v1.db import (
     migration_requests_collection,
     multiqc_collection,
 )
-from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.s3 import instance_backend
 from depictio.models.models.users import UserBeanie
-from depictio.models.s3_utils import delete_keys
+from depictio.models.storage import StorageError
 
 
 class BucketResponse(BaseModel):
@@ -26,75 +24,12 @@ class BucketResponse(BaseModel):
     bucket_name: str
 
 
-def check_bucket_exists(s3_client: S3Client, bucket_name: str) -> bool:
-    """
-    Check if a bucket exists in the S3 storage.
-
-    Args:
-        s3_client: The S3 client to use for checking
-        bucket_name: Name of the bucket to check
-
-    Returns:
-        True if the bucket exists, False otherwise
-
-    Raises:
-        HTTPException: If there's an error checking the bucket status
-    """
-    try:
-        s3_client.head_bucket(Bucket=bucket_name)
-        return True
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code")
-        if error_code == "404":
-            return False
-        logger.error(f"Error checking bucket existence: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Error checking bucket existence: {error_code}"
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error during bucket existence check: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Unexpected error occurred checking bucket existence",
-        )
-
-
-def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
-    """
-    Create a new bucket in the S3 storage.
-
-    Args:
-        s3_client: The S3 client to use for creation
-        bucket_name: Name of the bucket to create
-
-    Returns:
-        BucketResponse with success message
-
-    Raises:
-        HTTPException: If there's an error creating the bucket
-    """
-    try:
-        s3_client.create_bucket(Bucket=bucket_name)
-        return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code")
-        # BucketAlreadyOwnedByYou / BucketAlreadyExists mean the bucket is already
-        # there - treat as success. Happens in race conditions during initialization
-        # with multiple workers, and on every boot with the bundled SeaweedFS
-        # (S3_BUCKET pre-creates the bucket at container start).
-        if error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
-            logger.info(f"Bucket '{bucket_name}' already exists and is owned by us")
-            return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
-        logger.error(f"Failed to create bucket '{bucket_name}': {error_code}")
-        raise HTTPException(status_code=500, detail=f"Bucket creation failed: {error_code}")
-    except Exception as e:
-        logger.error(f"Unexpected error creating bucket '{bucket_name}': {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Bucket creation failed: {str(e)}")
-
-
 def create_bucket(current_user: UserBeanie) -> BucketResponse:
     """
-    Create the configured bucket in the S3 store if it doesn't exist.
+    Create the instance bucket if it doesn't exist.
+
+    A backend that cannot create buckets (GCS: a bucket needs a project and a
+    location) only checks that it exists.
 
     Args:
         current_user: The user requesting bucket creation, must be an admin
@@ -109,11 +44,15 @@ def create_bucket(current_user: UserBeanie) -> BucketResponse:
         logger.warning(f"Unauthorized bucket creation attempt by user: {current_user.email}")
         raise HTTPException(status_code=403, detail="User is not an admin")
 
-    bucket_name = settings.s3.bucket
-
-    if check_bucket_exists(s3_client, bucket_name):
-        return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
-    return create_s3_bucket(s3_client, bucket_name)
+    bucket_name = instance_backend.bucket
+    try:
+        created = instance_backend.ensure_bucket()
+    except StorageError as e:
+        logger.error(f"Bucket '{bucket_name}' is not usable: {e}")
+        raise HTTPException(status_code=500, detail=f"Bucket creation failed: {e.code or e}")
+    if created:
+        return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
+    return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
 
 
 #: A prefix written this recently is never treated as orphaned. Every Delta write
@@ -191,7 +130,6 @@ async def cleanup_orphaned_s3_files(
         - dry_run: Whether this was a dry run
     """
 
-    bucket_name = settings.s3.bucket
     deleted_count = 0
     total_size_bytes = 0
     orphaned_prefixes = []
@@ -200,18 +138,13 @@ async def cleanup_orphaned_s3_files(
         # List all top-level prefixes in S3 bucket (data collection IDs). S3 is
         # listed before MongoDB is read, so a table registered in between counts
         # as registered rather than orphaned.
-        paginator = s3_client.get_paginator("list_objects_v2")
-        pages = paginator.paginate(Bucket=bucket_name, Delimiter="/")
-
-        s3_prefixes = set()
-        for page in pages:
-            if "CommonPrefixes" in page:
-                for prefix_obj in page["CommonPrefixes"]:
-                    prefix = prefix_obj["Prefix"].rstrip("/")
-                    # Only consider prefixes that look like MongoDB ObjectIds (24 hex chars)
-                    # This excludes raw file storage folders like "image_demo", "uploads", etc.
-                    if len(prefix) == 24 and all(c in "0123456789abcdef" for c in prefix.lower()):
-                        s3_prefixes.add(prefix)
+        s3_prefixes = {
+            prefix
+            for prefix in instance_backend.list_folders()
+            # Only consider prefixes that look like MongoDB ObjectIds (24 hex chars)
+            # This excludes raw file storage folders like "image_demo", "uploads", etc.
+            if len(prefix) == 24 and all(c in "0123456789abcdef" for c in prefix.lower())
+        }
 
         # The staging prefix holds pushed bundles awaiting a decision. It can
         # never look like an ObjectId (MigrationConfig refuses that), but the
@@ -253,15 +186,11 @@ async def cleanup_orphaned_s3_files(
             prefix = f"{dc_id}/"
 
             # List all objects under this prefix
-            objects = [
-                obj
-                for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-                for obj in page.get("Contents", [])
-            ]
+            objects = list(instance_backend.list_objects(prefix))
             if not objects:
                 continue
 
-            written_at = [obj["LastModified"] for obj in objects if obj.get("LastModified")]
+            written_at = [obj.last_modified for obj in objects if obj.last_modified]
             if min_age_seconds > 0 and written_at and max(written_at) > cutoff:
                 recent_prefixes.append(dc_id)
                 continue
@@ -271,10 +200,10 @@ async def cleanup_orphaned_s3_files(
 
             deleted_prefixes.append(dc_id)
             deleted_count += len(objects)
-            total_size_bytes += sum(obj.get("Size", 0) for obj in objects)
+            total_size_bytes += sum(obj.size for obj in objects)
 
             if not dry_run:
-                errors = delete_keys(s3_client, bucket_name, (obj["Key"] for obj in objects))
+                errors = instance_backend.delete_keys(obj.key for obj in objects)
                 if errors:
                     logger.error(f"Errors deleting objects: {errors}")
 
