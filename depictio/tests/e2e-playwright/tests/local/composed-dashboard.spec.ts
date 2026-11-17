@@ -87,10 +87,6 @@ test.describe("Composed dashboard (depictio ingest <dir>)", () => {
     await page.setViewportSize({ width: 1600, height: 2600 });
     for (const [i, tab] of tabs.entries()) {
       await page.goto(`/dashboard/${tab.dashboard_id}`);
-      await page
-        .getByRole("button", { name: "Skip tour" })
-        .click({ timeout: 5_000 })
-        .catch(() => {});
       await expect(page.locator("[data-testid='dashboard-content']")).toBeVisible({
         timeout: 30_000,
       });
@@ -143,10 +139,6 @@ test.describe("Composed dashboard (depictio ingest <dir>)", () => {
     const total = (counts: number[]) => counts.reduce((a, b) => a + b, 0);
     const open = async (tab: Tab) => {
       await page.goto(`/dashboard/${tab.dashboard_id}`);
-      await page
-        .getByRole("button", { name: "Skip tour" })
-        .click({ timeout: 5_000 })
-        .catch(() => {});
       await expect(page.locator("[data-testid='dashboard-content']")).toBeVisible({ timeout: 30_000 });
       // Folded sections (a stage tab's Tables) hold linked tables too, and a
       // tile mounts when scrolled into view.
@@ -212,10 +204,6 @@ test.describe("Composed dashboard (depictio ingest <dir>)", () => {
     test.skip(left === 0, "This run left no file out.");
 
     await page.goto(`/projects/${result.project.id}`);
-    await page
-      .getByRole("button", { name: "Skip tour" })
-      .click({ timeout: 5_000 })
-      .catch(() => {});
     const panel = page.locator("[data-testid='unrecognised-files-panel']");
     await expect(panel).toBeVisible({ timeout: 30_000 });
     await expect(panel.locator("tbody tr")).toHaveCount(left);

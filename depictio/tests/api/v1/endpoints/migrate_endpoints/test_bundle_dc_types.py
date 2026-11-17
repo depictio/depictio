@@ -11,6 +11,7 @@ from bson import ObjectId
 
 from depictio.api.v1.endpoints.migrate_endpoints import routes
 from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
+from depictio.models.models.data_collections_types.indexed_file import indexed_file_s3_key
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 
 from .conftest import FakeS3, make_db, seed_source_project
@@ -37,7 +38,7 @@ def _dc(dc_id, tag, dc_type, props=None):
 def world():
     db = make_db()
     ids = seed_source_project(db)
-    geo, img, jb, phy, gt = (ObjectId() for _ in range(5))
+    geo, img, jb, phy, gt, idx = (ObjectId() for _ in range(6))
     uri_geo = f"s3://{SRC}/{geo}/map.geojson"
     uri_img = f"s3://{SRC}/{img}/images/"
     uri_jb = f"s3://{SRC}/{jb}/tracks/sample.bam"
@@ -49,6 +50,7 @@ def world():
         _dc(jb, "jb", "jbrowse2"),
         _dc(phy, "phy", "phylogeny"),
         _dc(gt, "gt", "genomic_tracks"),
+        _dc(idx, "idx", "indexed_file"),
     ]
     db.projects_collection.update_one(
         {"_id": ids["project_id"]}, {"$push": {"workflows.0.data_collections": {"$each": new_dcs}}}
@@ -79,15 +81,22 @@ def world():
         phylogeny_s3_key(str(phy)): b"(A,B);",
         f"{genomic_tracks_s3_prefix(str(gt))}x.bw": b"bw",
         f"{genomic_tracks_s3_prefix(str(gt))}sub/y.bw": b"bw2",
+        indexed_file_s3_key(str(idx), "P12345", "P12345.pdb"): b"ATOM",
+        indexed_file_s3_key(str(idx), "Q67890", "Q67890.cif"): b"data_",
     }
     for k, v in objects.items():
         s3.put(SRC, k, v)
     s3.put(SRC, "unrelated/file", b"nope")
-    return db, {**ids, "geo": geo, "img": img, "jb": jb, "phy": phy, "gt": gt}, s3, objects
+    return (
+        db,
+        {**ids, "geo": geo, "img": img, "jb": jb, "phy": phy, "gt": gt, "idx": idx},
+        s3,
+        objects,
+    )
 
 
 def _all_dc_ids(ids):
-    return [ids[k] for k in ("table_dc", "mqc_dc", "geo", "img", "jb", "phy", "gt")]
+    return [ids[k] for k in ("table_dc", "mqc_dc", "geo", "img", "jb", "phy", "gt", "idx")]
 
 
 def test_collect_s3_locations_covers_every_type(world, monkeypatch):
@@ -108,8 +117,9 @@ def test_collect_s3_locations_covers_every_type(world, monkeypatch):
     assert f"{ids['jb']}/tracks/sample.bam" in locs
     assert phylogeny_s3_key(str(ids["phy"])) in locs
     assert genomic_tracks_s3_prefix(str(ids["gt"])) in locs
+    assert f"indexed_files/{ids['idx']}/" in locs
     assert not any("example.org" in loc for loc in locs)
-    assert len(locs) == len(set(locs)) == 7
+    assert len(locs) == len(set(locs)) == 8
 
 
 def test_export_carries_every_object_and_import_rewrites_every_reference(

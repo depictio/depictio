@@ -99,7 +99,7 @@ import { useUiScalePref } from './hooks/useUiScalePref';
 import { BrandingContext, getBranding, setBranding, subscribeBranding } from './branding';
 import { setFeedback } from './feedback';
 import { initGoogleAnalytics } from './googleAnalytics';
-import { WalkthroughHost } from './walkthrough';
+import { CoachHost } from './coach';
 import { MigrationPushHost } from './projects/MigrationPushHost';
 
 /** Served by `depictio project-builder <dir>` (or `vite dev` with
@@ -261,7 +261,7 @@ function ThemeRoot({
             </ErrorBoundary>
             {!standalone && (
               <>
-                <WalkthroughHost />
+                <CoachHost />
                 <MigrationPushHost />
               </>
             )}

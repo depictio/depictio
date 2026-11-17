@@ -33,6 +33,7 @@ import { Icon } from '@iconify/react';
 import { genomeConfigOf, TextRenderer, useCommentsControl } from 'depictio-react-core';
 import { paletteVar } from 'depictio-react-core';
 import type {
+  AnnotationTable,
   DashboardData,
   DashboardSummary,
   GuideModel,
@@ -48,6 +49,11 @@ import { GenomeDemo, GenomeWhere } from './demos/GenomeDemo';
 import { LiveFilterDemo, LiveFilterDemoSkeleton } from './demos/LiveFilterDemo';
 import { SectionsDemo } from './demos/SectionsDemo';
 import { VersionsDemo } from './demos/VersionsDemo';
+import { MetadataDemo } from './demos/MetadataDemo';
+import { WhatsNewPanel } from './demos/WhatsNewPanel';
+import { useChangesSince } from '../changes/ChangesSinceContext';
+import { changeCounts, hasChanges } from '../changes/describe';
+import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import { findDemoTargets, showDemoTarget, type GuideTarget } from './showMe';
 import { useGuideSources } from './useGuideSources';
 
@@ -75,6 +81,11 @@ export interface DashboardGuideProps {
   onClose: () => void;
   /** Opens the dashboard settings on "Your view". */
   onOpenYourView: () => void;
+  /** Set only where the dashboard has a metadata table to label, which is
+   *  when the header shows the Metadata button: the table the panel opens on
+   *  (null on a past view, which shows no live rows) and how to open the
+   *  panel, closing the Guide. */
+  metadata?: { table: AnnotationTable | null; open: () => void };
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +342,10 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   canEdit,
   onClose,
   onOpenYourView,
+  metadata,
 }) => {
+  const changes = useChangesSince();
+  const changesEnabled = useChangesSinceEnabled();
   const sources = useGuideSources({
     dashboardId,
     dashboard,
@@ -391,6 +405,35 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   const ownSelection = selection.filter((s) => !s.floating);
 
   const parts: (PartProps & { navLabel: string })[] = [];
+
+  // The reader's news, if any. Its part sits with Versions, not first: the
+  // landing card and the header's pill already announce it.
+  const news = changes && !changes.readOnly && hasChanges(changes.changeSet) ? changes.changeSet : null;
+
+  // 0. What the Guide is: read first by whoever opens it without knowing.
+  parts.push({
+    id: 'about',
+    navLabel: 'About this Guide',
+    icon: 'mdi:book-open-page-variant-outline',
+    title: 'What this Guide is for',
+    subtitle: `How to read and use ${dashboardName}, one part at a time`,
+    points: [
+      <>
+        Each part below covers one thing you can do here, in the order you meet it: tabs, sections,
+        filters and components first, then the rest. A part shows only when this dashboard has what
+        it covers.
+      </>,
+      <>
+        The examples are live: they use this dashboard&apos;s own components and data. What you
+        try in them stays in the Guide; the dashboard does not change.
+      </>,
+      <>
+        <b>Show me</b>, beside a part, rings the control its example is about.{' '}
+        <b>Back to {tabName}</b> returns to the dashboard, and <b>Guide</b> in the sidebar brings
+        you back here.
+      </>,
+    ],
+  });
 
   // 1. Tabs
   parts.push({
@@ -740,6 +783,65 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     });
   }
 
+  // 5b. Metadata: only where the header offers it (a metadata table linked to
+  // the data).
+  if (metadata) {
+    parts.push({
+      id: 'metadata',
+      navLabel: 'Metadata',
+      icon: 'mdi:table-edit',
+      title: 'Label your samples',
+      subtitle: 'The metadata table as a grid, with columns of your own',
+      points: [
+        <>
+          <Kbd icon="mdi:table-edit">Metadata</Kbd> in the header opens the samplesheet or metadata
+          sheet behind this dashboard, one grid per table.
+        </>,
+        <>
+          A label column is yours: type a value, paste a block from a spreadsheet, drop a CSV or
+          TSV, or fill a range by dragging.{' '}
+          {analysis.available ? 'Each label of the column you compare by becomes a group in Analysis.' : ''}
+        </>,
+        <>
+          Your labels are kept with your account (in this browser for a guest). Whoever may edit
+          the dashboard can <b>share</b> a label column from its header menu, for every reader.
+        </>,
+        <>
+          Every column action sits in its header menu; Export downloads the table with your labels
+          added.
+        </>,
+      ],
+      ...(metadata.table
+        ? {
+            demoLabel: 'Live · this dashboard\'s metadata · label a few samples',
+            demo: (
+              <MetadataDemo
+                dashboardId={dashboardId}
+                table={metadata.table}
+                analysis={analysis.available}
+              />
+            ),
+            note: (
+              <Text size="xs" c="dimmed">
+                Labels typed here stay in the Guide. The panel keeps yours.
+              </Text>
+            ),
+          }
+        : {}),
+      footer: (
+        <Button
+          variant="light"
+          size="sm"
+          leftSection={<Icon icon="mdi:table-edit" width={16} />}
+          onClick={metadata.open}
+          data-testid="guide-open-metadata"
+        >
+          Open the Metadata panel
+        </Button>
+      ),
+    });
+  }
+
   // 6. Comments and annotations: only where the dashboard has comments.
   if (commentsRole) {
     const guest = commentsRole === 'guest';
@@ -846,6 +948,60 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       demoLabel: 'An example · one component, its history',
       demo: <VersionsDemo family={sources.family} />,
       ...(showVersions ? { showMe: { target: 'versions', label: 'Show me Preview' } } : {}),
+    });
+  }
+
+  // 7b. What's new: the changes since the reader's last visit (the viewer
+  // alone tracks visits; the editor never has news), else how the feature
+  // will speak once something changes.
+  if (news) {
+    const counts = changeCounts(news);
+    parts.push({
+      id: 'news',
+      navLabel: "What's new",
+      icon: 'mdi:update',
+      title: "What's new since your last visit",
+      subtitle: `${plural(counts.total, 'change')}: ${[
+        counts.data > 0 && 'the data',
+        counts.dashboard > 0 && 'the dashboard itself',
+        counts.comments > 0 && 'its comments',
+      ]
+        .filter(Boolean)
+        .join(', ')}`,
+      points: [
+        <>
+          <Kbd icon="mdi:update">What&apos;s new</Kbd> in the header lists the same changes. A
+          component that changed carries a dot in its corner, and its tooltip says why.
+        </>,
+        <>
+          <Kbd icon="mdi:eye-outline">Show on the dashboard</Kbd> marks the new rows in place
+          (Overlay), or draws the new runs beside the ones you had seen (Split).
+        </>,
+        <>
+          <Kbd icon="mdi:check-all">Mark as seen</Kbd> moves your mark to now: the dots go, and the
+          next visit compares with this one.
+        </>,
+      ],
+      demoLabel: 'Since your last visit',
+      demo: <WhatsNewPanel />,
+    });
+  } else if (changesEnabled && !isEdit) {
+    parts.push({
+      id: 'news',
+      navLabel: "What's new",
+      icon: 'mdi:update',
+      title: 'Keep up with changes',
+      subtitle: changes ? 'Nothing has changed since your last visit' : 'Starting with your next visit',
+      points: [
+        <>
+          When new data arrives or the dashboard is edited, a <Kbd icon="mdi:update">What&apos;s new</Kbd>{' '}
+          button appears in the header, with the number of changes since your last visit.
+        </>,
+        <>
+          A component that changed carries a dot in its corner. New rows can be marked in place, or new
+          runs drawn beside the ones you had seen.
+        </>,
+      ],
     });
   }
 
@@ -1004,9 +1160,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
               <Text span inherit fw={600}>
                 Guide
               </Text>{' '}
-              at the end of the tab list, or{' '}
-              <Icon icon="mdi:help-circle-outline" width={13} style={{ verticalAlign: '-2px' }} />{' '}
-              in the header.
+              at the end of the tab list.
             </Text>
           </Group>
         </Stack>

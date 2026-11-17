@@ -4,12 +4,13 @@ import { Badge, Tooltip } from '@mantine/core';
 import { isDataVersionActive, useDataVersions, type DataVersionState } from '../../dataVersions';
 
 /**
- * Component types whose data endpoints do not read data pins: MultiQC reports,
- * JBrowse sessions and every advanced visualisation (record cards included),
- * plus the filter funnel (`funnel`, its overview modal). They draw the latest
- * data whatever the dashboard is pinned to.
+ * Component types whose data endpoints do not read data pins: JBrowse
+ * sessions and every advanced visualisation (record cards included), plus the
+ * filter funnel (`funnel`, its overview modal). They draw the latest data
+ * whatever the dashboard is pinned to. MultiQC is not here: its renders read
+ * the set of reports a version held (`manifest` stamps).
  */
-const CURRENT_DATA_ONLY_TYPES = new Set(['multiqc', 'jbrowse', 'advanced_viz', 'funnel']);
+const CURRENT_DATA_ONLY_TYPES = new Set(['jbrowse', 'advanced_viz', 'funnel']);
 
 /** Is this a component type that never reads a data pin? */
 export function isCurrentDataOnlyType(componentType: string | null | undefined): boolean {

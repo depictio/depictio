@@ -16,6 +16,7 @@ import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
+import NotificationsBell from './NotificationsBell';
 import { brandAccent, useBranding, type BrandRole } from 'depictio-react-core';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { canSeeActivity } from '../admin/access';
@@ -153,6 +154,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
         <PoweredBy />
         <Divider w="100%" />
         <ThemeToggle />
+        <NotificationsBell />
         <ServerStatusBadge />
         <AuthModeBadge />
         <ProfileBadge />

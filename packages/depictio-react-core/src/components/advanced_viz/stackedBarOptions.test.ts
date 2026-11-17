@@ -343,6 +343,7 @@ describe('taxonomyLegend', () => {
       y: 0,
       yref: 'container',
       yanchor: 'bottom',
+      traceorder: 'normal',
       title: { text: 'Level ' },
     });
     expect(taxonomyLegendTopPx('bottom', false, true)).toBe(0);
@@ -357,6 +358,27 @@ describe('taxonomyLegend', () => {
     expect(taxonomyLegendTopPx('bottom', true, true)).toBe(40);
     // No legend shown, no room kept for it.
     expect(taxonomyLegendTopPx('bottom', true, false)).toBe(0);
+  });
+
+  it("puts a split's key above the bars in every panel, dense or not", () => {
+    // The panels of a split hold different sample counts: a key that followed
+    // the density sat on top of one panel and under its neighbour.
+    for (const dense of [false, true]) {
+      expect(taxonomyLegend('top', dense, 'Phylum')).toEqual({
+        orientation: 'h',
+        x: 0,
+        xanchor: 'left',
+        y: 1.02,
+        yanchor: 'bottom',
+        // Read left to right, largest first and Other last, as a figure's
+        // legend reads; Plotly reverses a stacked bar's key by default.
+        traceorder: 'normal',
+        title: { text: 'Phylum ' },
+        font: { size: 10 },
+      });
+      expect(taxonomyLegendTopPx('top', dense, true)).toBe(40);
+    }
+    expect(taxonomyLegendTopPx('top', false, false)).toBe(0);
   });
 });
 

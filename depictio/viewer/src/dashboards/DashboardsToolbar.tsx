@@ -380,7 +380,7 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
 
   return (
     <Stack gap="xs" mb="md">
-      <Group gap="xs" wrap="nowrap" align="center" className="dc-list-toolbar">
+      <Group gap="xs" wrap="nowrap" align="center" className="dc-list-toolbar" data-tour-id="dashboards-toolbar">
         <TextInput
           placeholder="Search dashboards…"
           value={prefs.search}

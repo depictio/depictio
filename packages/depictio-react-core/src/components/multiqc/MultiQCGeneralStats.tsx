@@ -22,6 +22,7 @@ import {
   renderMultiQCGeneralStats,
 } from '../../api';
 import { useInView } from '../../hooks/useInView';
+import { useDataVersionRequest } from '../../dataVersions';
 import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import ComponentSkeleton from '../ComponentSkeleton';
 import RefetchOverlay from '../RefetchOverlay';
@@ -41,6 +42,9 @@ import type { RowAnnotationMark } from '../../annotations/tableRows';
 import type { RenderableAnnotation } from '../../annotations/types';
 import AnnotateToolbar from '../annotations/AnnotateToolbar';
 import InlineAnnotationEditor from '../annotations/InlineAnnotationEditor';
+import DiffSummaryChip from '../chrome/DiffSummaryChip';
+import { useChangeMark } from '../../changeMarks';
+import { useComponentDiff } from '../../hooks/useComponentDiff';
 
 interface MultiQCGeneralStatsProps {
   dashboardId: string;
@@ -172,6 +176,10 @@ const CELL_STYLE: React.CSSProperties = {
 
 const NO_ANNOTATIONS: RenderableAnnotation[] = [];
 
+/** A row of a sample the reader had already seen, under "Compare with last visit":
+ *  faded but legible, the new rows stay as they are. */
+const SEEN_ROW_OPACITY = 0.35;
+
 /** Narrow first column carrying the ①② badges of annotated rows. */
 const BADGE_CELL_STYLE: React.CSSProperties = {
   ...CELL_STYLE,
@@ -222,6 +230,8 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   );
 
   const filtersSig = JSON.stringify(filters ?? []);
+  // Data time travel: the version's report set rides in the body, its key in the effect deps.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
 
   useEffect(() => {
     if (!inView) return;
@@ -231,7 +241,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     // Queue the fetch (vertical position = priority) so a dense dashboard paints
     // top-down instead of firing every panel at once — mirrors FigureRenderer.
     enqueueFetch(
-      () => renderMultiQCGeneralStats(dashboardId, metadata.index, filters),
+      () => renderMultiQCGeneralStats(dashboardId, metadata.index, filters, versionBody),
       metadata.layout?.y ?? 0,
     )
       .then((res) => {
@@ -252,7 +262,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, filtersSig, inView, refreshTick]);
+  }, [dashboardId, metadata.index, filtersSig, inView, refreshTick, versionKey]);
 
   const titleText = (metadata.title as string | undefined) || 'MultiQC General Statistics';
 
@@ -309,6 +319,28 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     [layerItems, highlightAnnotationId],
   );
   const hasRowAnnotations = rowAnnotations.size > 0;
+
+  // "Compare with last visit" (#1397): the rows of samples new since the
+  // reader's last visit keep their look, the rows already seen fade.
+  const changeMark = useChangeMark(componentIndex);
+  const diffState = useComponentDiff({
+    dashboardId,
+    componentId: componentIndex,
+    comparing: changeMark.comparing,
+    filters: filters ?? [],
+  });
+  const newSamples = useMemo(() => {
+    const d = diffState.diff;
+    // A truncated list would fade new rows it left out: then fade nothing.
+    return d && d.supported && d.shape === 'samples' && !d.truncated ? new Set(d.added.map(String)) : null;
+  }, [diffState.diff]);
+  const matchedNew = useMemo(() => {
+    if (!newSamples) return 0;
+    return (mode?.table_data ?? []).filter((r) => {
+      const s = rowSample(r);
+      return s != null && newSamples.has(String(s));
+    }).length;
+  }, [newSamples, mode]);
 
   const annotatable = !!payload && !error && view === 'table';
   const reportAnnotatable = layer?.reportAnnotatable;
@@ -414,7 +446,17 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     // "All" pill (instead of "Mean") so the active label matches the data.
     return (
       <Group justify="space-between" align="center" wrap="nowrap">
-        <Text fw={600} size="sm">{titleText}</Text>
+        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Text fw={600} size="sm">{titleText}</Text>
+          {changeMark.comparing && (
+            <DiffSummaryChip
+              diff={diffState.diff}
+              loading={diffState.loading}
+              error={diffState.error}
+              matched={matchedNew}
+            />
+          )}
+        </Group>
         <Group gap="xs" wrap="nowrap">
           <SegmentedControl
             size="xs"
@@ -493,11 +535,20 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                 const picked = annotating && sample != null && annotateSelected.has(String(sample));
                 const tone = rowTone(mark, picked);
                 const stripe = mark ? annotationColorValue(mark.color, colorScheme) : undefined;
+                // Faded only when some row is known new: a name mismatch must not
+                // dim the whole table, nor a row whose sample cannot be read.
+                const seenBefore =
+                  newSamples !== null &&
+                  matchedNew > 0 &&
+                  sample != null &&
+                  !newSamples.has(String(sample));
                 return (
                   <Table.Tr
                     key={rowIdx}
                     onClick={annotating ? () => toggleAnnotateRow(row) : undefined}
+                    data-diff-row={newSamples ? (seenBefore ? 'seen' : 'new') : undefined}
                     style={{
+                      ...(seenBefore ? { opacity: SEEN_ROW_OPACITY } : {}),
                       ...(annotating ? { cursor: 'pointer' } : {}),
                       ...(picked
                         ? { outline: '2px dashed var(--mantine-primary-color-filled)', outlineOffset: -2 }

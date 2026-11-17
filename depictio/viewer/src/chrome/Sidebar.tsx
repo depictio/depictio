@@ -38,6 +38,7 @@ import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
 import StaticProvenance from './StaticProvenance';
 import { useBundleProjectPage } from './bundlePage';
+import NotificationsBell from './NotificationsBell';
 import { dashboardHref, dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
@@ -860,6 +861,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             bundle has no server to report on and no account to manage. */}
         {!isStaticBundle && (
           <>
+            <NotificationsBell />
             <div className="dc-sidebar-footer-item dc-sidebar-status">
               <ServerStatusBadge />
             </div>

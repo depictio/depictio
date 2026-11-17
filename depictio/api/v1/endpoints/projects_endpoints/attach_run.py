@@ -544,6 +544,7 @@ def _attach_run_sync(
         command="from_run",
         scan_modes=_scan_modes(stored),
         data_root=new_location,
+        run_tags=list(report.new_runs),
     )
     report.run_id = run_id
     if not all_dispatched:

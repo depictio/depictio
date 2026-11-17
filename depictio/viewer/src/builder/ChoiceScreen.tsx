@@ -147,7 +147,7 @@ const GlassChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog })
         tools in your project's data.
       </p>
     </div>
-    <div className="bgl-choice-grid">
+    <div className="bgl-choice-grid" data-tour-id="component-source-choice">
       <GlassChoiceCard
         source={COMPONENT_SOURCE.manual}
         description={MANUAL_COPY}
@@ -189,7 +189,12 @@ const ClassicChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog 
         </Text>
       </Stack>
 
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl" style={{ maxWidth: 860, width: '100%' }}>
+      <SimpleGrid
+        cols={{ base: 1, sm: 2 }}
+        spacing="xl"
+        style={{ maxWidth: 860, width: '100%' }}
+        data-tour-id="component-source-choice"
+      >
         <ChoiceCard
           source={COMPONENT_SOURCE.manual}
           description={MANUAL_COPY}

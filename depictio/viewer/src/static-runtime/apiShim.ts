@@ -361,6 +361,59 @@ export async function fetchIngestionHealth(_projectId: string) {
   throw new Error('static bundle: no ingestion backend');
 }
 
+// ---- "changes since" (notifications bell, component diff) ------------------
+// A bundle is one export: there is no later ingestion to announce and no
+// reader state to persist. The bell is hidden in a bundle; these answer if a
+// caller reaches them anyway, without a request.
+
+export async function fetchChangesInbox() {
+  return { items: [], server_held: false, followed_project_ids: [] as string[] };
+}
+
+export async function markProjectSeen(_projectId: string) {
+  return { persisted: false };
+}
+
+export async function saveChangesPrefs<M>(markMode: M) {
+  return { persisted: false, mark_mode: markMode };
+}
+
+export async function fetchChangesPrefs() {
+  return {
+    mark_mode: 'sticky' as const,
+    default_mark_mode: 'sticky' as const,
+    server_held: false,
+  };
+}
+
+export async function markDashboardSeen(_dashboardId: string, _componentKeys?: string[]) {
+  return { persisted: false };
+}
+
+export async function recordDashboardVisit(_dashboardId: string) {
+  return { persisted: false };
+}
+
+export async function recordProjectVisit(_projectId: string) {
+  return { persisted: false };
+}
+
+export async function fetchProjectTimeline() {
+  return { events: [], next_before: null };
+}
+
+export async function fetchDashboardChanges(): Promise<never> {
+  throw new Error('static bundle: no change history to compare against');
+}
+
+export async function fetchProjectChanges(): Promise<never> {
+  throw new Error('static bundle: no change history to compare against');
+}
+
+export async function fetchComponentDiff(): Promise<never> {
+  throw new Error('static bundle: no change history to compare against');
+}
+
 export async function saveDashboardNotes(_dashboardId: string, _notes: unknown) {
   throw new Error('static bundle: read-only — notes cannot be saved');
 }

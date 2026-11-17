@@ -166,7 +166,10 @@ async def server_info(
         "docs_url": "https://depictio.github.io/depictio-docs/",
         "version_check": public_block() if getattr(user, "is_admin", False) else None,
         # UI switches only: each feature's API keeps its own settings.
-        "features": {"migration": settings.migration.ui_enabled},
+        "features": {
+            "migration": settings.migration.ui_enabled,
+            "changes_since": settings.dashboard_versions.changes_since_enabled,
+        },
     }
 
 

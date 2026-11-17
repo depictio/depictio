@@ -183,6 +183,25 @@ def test_json_answer_size_capped():
     assert "too large" in exc.value.detail
 
 
+def test_redirect_names_where_the_target_sends_us():
+    """A target behind an SSO proxy answers every call with a redirect to its
+    login page. Redirects are not followed, and saying so beats "Target did not
+    answer with JSON", which is what the HTML body of the redirect produced."""
+    import httpx
+
+    target = outbound_http.ResolvedTarget("1", "t", "http://x", KEY, True)
+    login = "https://sso.example.org/accounts/login/?next=/depictio/api/v1/migrate/inbound/check"
+    redirect = httpx.MockTransport(
+        lambda r: httpx.Response(302, headers={"location": login}, text="<html>302</html>")
+    )
+    with outbound_http.TargetClient(target, transport=redirect) as client:
+        with pytest.raises(outbound_http.RemoteError) as exc:
+            client.check({})
+    assert exc.value.status_code == 502
+    assert "sso.example.org/accounts/login/" in exc.value.detail
+    assert "?next" not in exc.value.detail
+
+
 def test_remote_error_detail_has_no_key():
     import httpx
 

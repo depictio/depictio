@@ -175,6 +175,26 @@ def _detail(response: httpx.Response, body: bytes) -> str:
     return text[:_MAX_DETAIL_CHARS]
 
 
+def _redirect_detail(response: httpx.Response) -> str:
+    """Name where a redirect points, without its query (it may carry tokens).
+
+    Redirects are never followed (the SSRF guard checked this URL, not the next
+    one). The usual cause is an SSO proxy in front of the target that sends
+    every request to its login page.
+    """
+    try:
+        parts = urlsplit(response.headers.get("location", ""))
+        where = f"{parts.netloc}{parts.path}" if parts.netloc else parts.path
+    except ValueError:
+        where = ""
+    detail = (
+        f"Target redirected to {where or 'another page'} instead of answering (HTTP "
+        f"{response.status_code}). It may sit behind a login page or proxy: its "
+        "/depictio/api/v1/migrate/inbound routes must be reachable without one."
+    )
+    return detail[:_MAX_DETAIL_CHARS]
+
+
 class TargetClient:
     """Calls the ``/migrate/inbound`` API of one paired instance."""
 
@@ -223,6 +243,8 @@ class TargetClient:
                 status = response.status_code
                 if status >= 400:
                     raise RemoteError(status, _detail(response, bytes(body)))
+                if 300 <= status < 400:
+                    raise RemoteError(502, _redirect_detail(response))
         except RemoteError:
             raise
         except httpx.HTTPError as exc:
