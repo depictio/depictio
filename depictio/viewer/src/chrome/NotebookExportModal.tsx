@@ -272,8 +272,11 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               <Text size="sm">
                 {preflight?.combined_reason
                   ? `Why: ${preflight.combined_reason}.`
-                  : 'This server cannot produce it.'}{' '}
-                The dashboard alone still exports as one offline HTML file.
+                  : 'This server cannot produce it.'}
+                {/* Offered only where the dashboard-only export is (its owner):
+                    a non-owner was sent to an export that then failed. */}
+                {onExportDashboardOnly &&
+                  ' The dashboard alone still exports as one offline HTML file.'}
               </Text>
             </Stack>
           </Alert>
@@ -537,14 +540,15 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
             Close
           </Button>
           {combinedFallback && !job ? (
-            <Button
-              leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-              onClick={handleDashboardOnly}
-              disabled={!onExportDashboardOnly}
-              data-testid="export-dashboard-only-primary"
-            >
-              Export dashboard only
-            </Button>
+            onExportDashboardOnly ? (
+              <Button
+                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+                onClick={handleDashboardOnly}
+                data-testid="export-dashboard-only-primary"
+              >
+                Export dashboard only
+              </Button>
+            ) : null
           ) : isReport && job?.status !== 'ready' ? (
             <Button
               leftSection={<Icon icon="mdi:file-document-outline" width={16} />}

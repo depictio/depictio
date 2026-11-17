@@ -721,7 +721,7 @@ const ExportBlock: React.FC<{
         dashboardId={dashboardId}
         dashboardTitle={dashboard?.title}
         getAnalysisState={getAnalysisState}
-        onExportDashboardOnly={staticExport?.onExportStatic}
+        onExportDashboardOnly={staticExport?.isOwner ? staticExport.onExportStatic : undefined}
       />
     </Stack>
   );
