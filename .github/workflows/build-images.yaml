@@ -17,6 +17,9 @@ name: Build images (api / worker / viewer / cli / allinone)
 # ingest its own results without a local install (see the Nextflow completion
 # trigger); the all-in-one image reopens the artifact the Nextflow module
 # publishes with one `docker run` / `apptainer run`.
+#
+# A same-repo PR also publishes its all-in-one image as `pr-<number>` and
+# `pr-<number>-<sha7>` (allinone-pr-image), to try the module before a release.
 
 on:
   pull_request:
@@ -493,6 +496,116 @@ jobs:
           [ "$(jq -r .num_rows <<< "$shape")" = 150 ] || { echo "::error::expected 150 rows"; exit 1; }
           docker stop -t 60 instance
           docker rm instance
+
+  allinone-pr-image:
+    # A same-repo PR also publishes its all-in-one image, so the module can be
+    # tried on a real pipeline before a release: ghcr.io/<owner>/depictio-allinone
+    # tagged `pr-<number>` (moving) and `pr-<number>-<sha7>` (this commit). Only
+    # once the image's own checks passed (allinone-image-check: local up, the
+    # module under Nextflow, cli_config, reopen). Fork PRs have no registry
+    # credentials and stop at validation, as before. Release tags (`<version>`,
+    # `next`) still come only from a tag push or workflow_dispatch.
+    name: Publish PR all-in-one image (${{ matrix.arch }})
+    needs: allinone-image-check
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.OWNER }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      # Same recipe and cache scope as allinone-image-check, so this is a cache hit.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker-images/allinone/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.OWNER }}/depictio-allinone,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=depictio-allinone-${{ matrix.arch }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-digests-depictio-allinone-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  allinone-pr-manifest:
+    name: Tag PR all-in-one image
+    needs: allinone-pr-image
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: pr-digests-depictio-allinone-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.OWNER }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Create the multi-arch manifest and push
+        working-directory: /tmp/digests
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.OWNER }}/depictio-allinone
+          PR: pr-${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          docker buildx imagetools create -t "$IMAGE:$PR" -t "$IMAGE:$PR-${SHA:0:7}" \
+            $(printf "$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$IMAGE:$PR-${SHA:0:7}"
+          {
+            echo "### All-in-one image for this PR"
+            echo
+            echo "\`$IMAGE:$PR-${SHA:0:7}\` (also \`$IMAGE:$PR\`, which follows the PR)."
+            echo
+            echo "In the pipeline's config:"
+            echo
+            echo "\`\`\`groovy"
+            echo "process { withName: '.*DEPICTIO_INGEST' { container = '$IMAGE:$PR-${SHA:0:7}' } }"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   allinone-nfcore-rnaseq:
     # A whole nf-core run through the module, as a pipeline would use it: the real
