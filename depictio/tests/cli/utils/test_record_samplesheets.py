@@ -107,6 +107,21 @@ def test_records_with_missing_keys_take_the_union_of_columns():
     ]
 
 
+def test_a_column_whose_records_disagree_on_a_type_reads_as_text():
+    """YAML types each value (``yes`` a bool, ``2024-01-05`` a date): a column
+    mixing kinds is read as text rather than failing the whole sheet."""
+    text = "- {sample: a, v: yes}\n- {sample: b, v: 2024-01-05}\n- {sample: c, v: x}\n"
+    frame = read_record_sheet(text.encode(), "sheet.yaml")
+    assert frame["v"].dtype == pl.String
+    assert frame["v"].to_list() == ["True", "2024-01-05", "x"]
+
+
+def test_numbers_and_one_kind_columns_keep_their_type():
+    text = "- {n: 1, f: 1, ok: true, d: 2024-01-05}\n- {n: 2, f: 2.5, ok: false, d: null}\n"
+    frame = read_record_sheet(text.encode(), "sheet.yaml")
+    assert frame.schema == {"n": pl.Int64, "f": pl.Float64, "ok": pl.Boolean, "d": pl.Date}
+
+
 @pytest.mark.parametrize(
     ("name", "body", "message"),
     [

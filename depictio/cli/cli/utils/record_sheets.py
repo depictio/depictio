@@ -87,7 +87,20 @@ def read_record_sheet(data: bytes | str, name: str) -> pl.DataFrame:
     records = parse_record_sheet(data, name)
     if not records:
         return pl.DataFrame()
+    # YAML types every value on its own (``yes`` a bool, ``2024-01-05`` a
+    # date), so one column can mix kinds polars has no common type for. Such
+    # a column is read as text; whole and decimal numbers stay numeric.
+    kinds: dict[str, set[type]] = {}
+    for record in records:
+        for key, value in record.items():
+            if value is not None:
+                kinds.setdefault(key, set()).add(type(value))
+    mixed = {key for key, seen in kinds.items() if len(seen) > 1 and not seen <= {int, float}}
+    if mixed:
+        records = [
+            {k: str(v) if k in mixed and v is not None else v for k, v in record.items()}
+            for record in records
+        ]
     # Every record decides the schema, so a column first seen on the last
-    # record still exists; a column whose records disagree on a type is
-    # widened (to a string at worst) rather than refused.
+    # record still exists.
     return pl.from_dicts(records, infer_schema_length=None, strict=False)
