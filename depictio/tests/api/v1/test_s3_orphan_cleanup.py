@@ -12,8 +12,10 @@ import mongomock
 import pytest
 from bson import ObjectId
 
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.endpoints.utils_endpoints import core_functions
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import cleanup_orphaned_s3_files
+from depictio.models.storage import S3Backend
 
 REGISTERED = "646b0f3c1e4a2d7f8e5b8c9c"
 OLD_ORPHAN = "646b0f3c1e4a2d7f8e5b8d03"
@@ -35,7 +37,7 @@ class FakeS3:
         assert name == "list_objects_v2"
         return self
 
-    def paginate(self, Bucket, Delimiter=None, Prefix=None):
+    def paginate(self, Bucket, Delimiter=None, Prefix=""):
         if Delimiter:
             prefixes = sorted({key.split("/", 1)[0] + "/" for key in self.objects})
             return [{"CommonPrefixes": [{"Prefix": p} for p in prefixes]}]
@@ -53,6 +55,12 @@ class FakeS3:
             self.objects.pop(obj["Key"], None)
             self.deleted.append(obj["Key"])
         return {"Deleted": Delete["Objects"]}
+
+
+def _backend(client: FakeS3) -> S3Backend:
+    backend = S3Backend(S3DepictioCLIConfig(bucket="depictio-bucket"))
+    backend._client = client  # type: ignore[assignment]
+    return backend
 
 
 def _table(dc_id: str, written: datetime) -> dict[str, datetime]:
@@ -74,7 +82,7 @@ def store():
         }
     )
     with (
-        patch.object(core_functions, "s3_client", s3),
+        patch.object(core_functions, "instance_backend", _backend(s3)),
         patch.object(core_functions, "deltatables_collection", db.deltatables),
         patch.object(core_functions, "multiqc_collection", db.multiqc),
         patch.object(core_functions, "migration_requests_collection", db.migration_requests),

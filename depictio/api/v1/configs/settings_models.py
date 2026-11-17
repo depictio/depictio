@@ -364,6 +364,53 @@ class MongoDBConfig(ServiceConfig):
     collections: Collections = Field(default_factory=Collections)
 
 
+class StorageConfig(BaseSettings):
+    """Which backend holds the instance's own bucket (#1358).
+
+    ``s3`` (default): any S3-compatible store, configured by ``DEPICTIO_S3_*``.
+    ``gcs``: Google Cloud Storage, natively (``gs://`` locations), configured by
+    ``DEPICTIO_GCS_*``, with no static keys. The names are those of the storage
+    backends registered in ``depictio.models.storage``.
+    """
+
+    backend: str = Field(
+        default="s3",
+        description="Instance storage backend: 's3' (DEPICTIO_S3_*) or 'gcs' (DEPICTIO_GCS_*).",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_STORAGE_")
+
+
+class GCSConfig(BaseSettings):
+    """Google Cloud Storage as the instance's own bucket (``DEPICTIO_STORAGE_BACKEND=gcs``).
+
+    Credentials come from Application Default Credentials unless
+    ``service_account_path`` names a key file: the GKE / GCE metadata server
+    (Workload Identity), ``GOOGLE_APPLICATION_CREDENTIALS``, or the gcloud user
+    credentials. No HMAC key is involved. The bucket must exist: creating one
+    needs a project and a location, which are the operator's choice.
+    """
+
+    bucket: str = Field(default="", description="Existing GCS bucket holding the instance's data.")
+    service_account_path: str | None = Field(
+        default=None,
+        description="Service-account key file. Unset: Application Default Credentials.",
+    )
+    anonymous: bool = Field(
+        default=False,
+        description="Read without credentials (public buckets only; tests and demos).",
+    )
+    endpoint_url: str | None = Field(
+        default=None,
+        description=(
+            "Emulator base URL (fake-gcs-server), for tests only: requests go there "
+            "unauthenticated, over HTTP if the URL says so."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_GCS_")
+
+
 class S3DepictioCLIConfig(ServiceConfig):
     """S3-compatible object storage configuration.
 
@@ -2888,6 +2935,8 @@ class Settings(BaseSettings):
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
     s3: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    gcs: GCSConfig = Field(default_factory=GCSConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     bootstrap: AuthBootstrapConfig = Field(default_factory=AuthBootstrapConfig)
 
@@ -3016,19 +3065,23 @@ class Settings(BaseSettings):
         errors: list[str] = []
 
         # The S3 secret key is consumed by API + worker, so it must always
-        # be set on a server boot regardless of single-user / public mode.
-        s3_pw = self.s3.root_password.get_secret_value()
-        if s3_pw.lower() in _WEAK_PASSWORDS_S3:
-            errors.append(
-                "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) is unset "
-                "or matches a known-default value. "
-                "Set it to a strong secret before starting the server."
-            )
-        elif len(s3_pw) < _MIN_SECRET_LEN:
-            errors.append(
-                "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) must be "
-                f"at least {_MIN_SECRET_LEN} characters."
-            )
+        # be set on a server boot regardless of single-user / public mode,
+        # when S3 holds the instance bucket. Another backend has no S3 key.
+        if self.storage.backend == "s3":
+            s3_pw = self.s3.root_password.get_secret_value()
+            if s3_pw.lower() in _WEAK_PASSWORDS_S3:
+                errors.append(
+                    "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) is unset "
+                    "or matches a known-default value. "
+                    "Set it to a strong secret before starting the server."
+                )
+            elif len(s3_pw) < _MIN_SECRET_LEN:
+                errors.append(
+                    "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) must be "
+                    f"at least {_MIN_SECRET_LEN} characters."
+                )
+        elif self.storage.backend == "gcs" and not self.gcs.bucket:
+            errors.append("DEPICTIO_GCS_BUCKET must name the instance's bucket.")
 
         # Bootstrap admin credentials. Empty values are allowed at validator
         # time — the admin may already exist in MongoDB from a prior boot, in

@@ -33,6 +33,7 @@ from depictio.api.v1.endpoints.advanced_viz_endpoints import (  # noqa: E402
 from depictio.api.v1.endpoints.advanced_viz_endpoints.structure_resolver import (  # noqa: E402
     StructureResolveRequest,
 )
+from depictio.tests.storage_fakes import s3_backend_on  # noqa: E402
 
 AFDB = "https://alphafold.ebi.ac.uk"
 ACC = "P12345"
@@ -99,7 +100,7 @@ def cfg(monkeypatch):
 @pytest.fixture
 def bucket(monkeypatch):
     fake = FakeS3()
-    monkeypatch.setattr(sr, "_s3_client", lambda: fake)
+    monkeypatch.setattr(sr, "_storage", lambda: s3_backend_on(fake))
     monkeypatch.setattr(sr, "_presign", lambda key: f"https://s3.test/{key}?X-Amz-Signature=x")
     return fake
 

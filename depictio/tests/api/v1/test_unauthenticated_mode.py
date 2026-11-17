@@ -562,7 +562,7 @@ class TestInitializationProcess:
         mock_anon_user = MagicMock()
 
         with patch("depictio.api.v1.initialization.settings", mock_settings):
-            with patch("depictio.api.v1.initialization.S3_storage_checks"):
+            with patch("depictio.api.v1.initialization.check_instance_storage"):
                 with patch("depictio.api.v1.initialization.initialize_db") as mock_init_db:
                     mock_admin = MagicMock()
                     mock_admin.id = "admin_id"
@@ -598,7 +598,7 @@ class TestInitializationProcess:
         mock_settings.mongodb.wipe = False
 
         with patch("depictio.api.v1.initialization.settings", mock_settings):
-            with patch("depictio.api.v1.initialization.S3_storage_checks"):
+            with patch("depictio.api.v1.initialization.check_instance_storage"):
                 with patch("depictio.api.v1.initialization.initialize_db") as mock_init_db:
                     mock_admin = MagicMock()
                     mock_admin.id = "admin_id"

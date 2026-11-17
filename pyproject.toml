@@ -22,6 +22,9 @@ dependencies = [
   "deltalake==1.6.2",
   "httpx==0.28.1",
   "numpy==2.4.6",
+  # Native object stores (gs:// today) for the instance bucket: the same Rust
+  # object_store that polars and deltalake embed (#1358).
+  "obstore==0.12.1",
   "pandas==3.0.5",
   "plotly==6.9.0",
   # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]

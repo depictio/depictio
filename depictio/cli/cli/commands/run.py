@@ -63,7 +63,7 @@ from depictio.cli.cli.utils.step_reporter import StepReporter
 from depictio.cli.cli.utils.watch import ProjectLock, ProjectLockError
 from depictio.cli.cli_logging import logger
 from depictio.models.models.manifest import is_remote_url
-from depictio.models.s3_utils import S3_storage_checks
+from depictio.models.storage import check_instance_storage
 from depictio.models.utils import convert_model_to_dict
 
 # Colour per ``template_preview.PreviewStatus``, so a wrong DATA_DIR is
@@ -2011,7 +2011,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             # with this step's error.
             if CLI_config is None:
                 CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
-            S3_storage_checks(CLI_config.s3_storage)
+            check_instance_storage(CLI_config)
             rich_print_checked_statement("S3 storage configuration check passed", "success")
             success_count += 1
             _rec("s3_check", "success", "S3 storage reachable")

@@ -18,7 +18,6 @@ import gzip
 import json
 from typing import Optional
 
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 # Shared "figure file name from cache key" — the same helper the on-disk store
@@ -26,14 +25,20 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.cli.cli.utils.multiqc_figures import figure_cache_key_sha
 
 
-def _dc_prefix_uri(dc_id: str) -> str:
-    """``s3://{bucket}/{dc_id}/prerender/`` — where the CLI uploads this DC's figures."""
-    return f"s3://{settings.s3.bucket}/{dc_id}/prerender/"
+def _storage():
+    from depictio.api.v1.s3 import instance_backend
+
+    return instance_backend
 
 
-def _figure_uri(dc_id: str, cache_key: str) -> str:
-    """URI of a single prerendered figure object, named by the cache key's hash."""
-    return f"{_dc_prefix_uri(dc_id)}{figure_cache_key_sha(cache_key)}.json.gz"
+def _dc_prefix(dc_id: str) -> str:
+    """``{dc_id}/prerender/`` in the instance bucket — where the CLI uploads this DC's figures."""
+    return f"{dc_id}/prerender/"
+
+
+def _figure_key(dc_id: str, cache_key: str) -> str:
+    """Key of a single prerendered figure object, named by the cache key's hash."""
+    return f"{_dc_prefix(dc_id)}{figure_cache_key_sha(cache_key)}.json.gz"
 
 
 def _presence_key(dc_id: str) -> str:
@@ -74,13 +79,9 @@ def _dc_has_prerender(dc_id: str) -> bool:
         logger.warning(f"multiqc_s3_prerender: presence cache read failed for dc={dc_id}: {exc}")
         return True
 
-    from depictio.api.v1.services.multiqc.figures import _get_s3_filesystem
-
-    prefix = _dc_prefix_uri(dc_id)
+    prefix = _dc_prefix(dc_id)
     try:
-        present = bool(_get_s3_filesystem().ls(prefix, detail=False))
-    except FileNotFoundError:
-        present = False
+        present = next(iter(_storage().list_objects(prefix)), None) is not None
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"multiqc_s3_prerender: presence probe failed for {prefix}: {exc}")
         return True
@@ -105,20 +106,16 @@ def read_figure(dc_id: str, cache_key: str) -> Optional[dict]:
     if not _dc_has_prerender(dc_id):
         return None
 
-    # Reuse the render service's cached fsspec S3 filesystem so we don't
-    # re-create a client per request.
-    from depictio.api.v1.services.multiqc.figures import _get_s3_filesystem
+    from depictio.models.storage import StorageNotFound
 
-    uri = _figure_uri(dc_id, cache_key)
+    key = _figure_key(dc_id, cache_key)
     try:
-        fs = _get_s3_filesystem()
-        if not fs.exists(uri):
-            return None
-        with fs.open(uri, "rb") as f:
-            raw = f.read()
+        raw = _storage().read_bytes(key)
         return json.loads(gzip.decompress(raw).decode("utf-8"))
+    except StorageNotFound:
+        return None
     except Exception as exc:  # noqa: BLE001 — any failure is a cache miss
-        logger.warning(f"multiqc_s3_prerender: read failed for {uri}: {exc}")
+        logger.warning(f"multiqc_s3_prerender: read failed for {key}: {exc}")
         return None
 
 
@@ -129,8 +126,6 @@ def delete_dc_prefix(dc_id: str) -> int:
     (keyed over the pre-mutation report set) don't linger. Returns the number of
     objects deleted; idempotent (missing prefix returns 0).
     """
-    from depictio.api.v1.services.multiqc.figures import _get_s3_filesystem
-
     # Drop the cached presence marker first: whatever it says is about to be
     # wrong either way, and clearing it means the next read re-probes rather
     # than trusting a stale "present" (or skipping S3 on a stale "absent" after
@@ -142,20 +137,11 @@ def delete_dc_prefix(dc_id: str) -> int:
     except Exception as exc:  # noqa: BLE001 — invalidation must never raise
         logger.warning(f"multiqc_s3_prerender: presence marker drop failed for dc={dc_id}: {exc}")
 
-    prefix = _dc_prefix_uri(dc_id)
+    prefix = _dc_prefix(dc_id)
     try:
-        fs = _get_s3_filesystem()
-        if not fs.exists(prefix.rstrip("/")):
-            return 0
-        objects = fs.find(prefix)
-        if not objects:
-            return 0
-        try:
-            fs.rm(objects)
-        except Exception:  # noqa: BLE001 — no bulk delete (GCS XML API): one by one
-            for obj in objects:
-                fs.rm_file(obj)
-        return len(objects)
+        # The backend falls back to one delete per object where bulk delete is
+        # missing (GCS's XML API).
+        return _storage().delete_prefix(prefix)
     except Exception as exc:  # noqa: BLE001 — invalidation must never raise
         logger.warning(f"multiqc_s3_prerender: prefix delete failed for {prefix}: {exc}")
         return 0

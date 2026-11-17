@@ -1841,25 +1841,16 @@ def _read_phylogeny_s3_location(url: str, project_id: ObjectId | None) -> str:
     return obj["Body"].read().decode("utf-8")
 
 
-def _phylogeny_s3_client():
-    """boto3 client for the backend's bucket, shared by both Newick reads below.
+def _phylogeny_storage():
+    """The instance bucket, shared by the GeoJSON and Newick reads below.
 
-    Every Newick request tries S3 first, so an unreachable endpoint must fail
-    fast and fall through to the stored paths instead of waiting on retries.
+    Every Newick request tries the bucket first, so an unreachable store must
+    fail fast and fall through to the stored paths instead of waiting on retries.
     """
-    import boto3
-    from botocore.config import Config
-
     from depictio.api.v1.configs.config import settings
+    from depictio.models.storage import instance_storage
 
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.s3.endpoint_url,
-        aws_access_key_id=settings.s3.aws_access_key_id,
-        aws_secret_access_key=settings.s3.aws_secret_access_key,
-        verify=settings.s3.verify_tls,
-        config=Config(connect_timeout=3, retries={"total_max_attempts": 2}),
-    )
+    return instance_storage(settings, fail_fast=True)
 
 
 @advanced_viz_endpoint_router.get("/geojson/{data_collection_id}")
@@ -1872,7 +1863,6 @@ def get_geojson(
     Reads only the fixed key ingest writes in the instance bucket, never a
     stored location, so no project content can steer what is read.
     """
-    from depictio.api.v1.configs.config import settings
     from depictio.models.models.data_collections_types.geojson import geojson_s3_key
 
     try:
@@ -1883,11 +1873,11 @@ def get_geojson(
     _assert_dc_access(dc_oid, current_user)
 
     key = geojson_s3_key(str(dc_oid))
+    storage = _phylogeny_storage()
     try:
-        obj = _phylogeny_s3_client().get_object(Bucket=settings.s3.bucket, Key=key)
-        body = obj["Body"].read()
+        body = storage.read_bytes(key)
     except Exception as exc:
-        logger.warning("geojson not read from s3://%s/%s (%s)", settings.s3.bucket, key, exc)
+        logger.warning("geojson not read from %s (%s)", storage.url(key), exc)
         raise HTTPException(status_code=404, detail="GeoJSON file not found.") from exc
     return Response(content=body, media_type="application/geo+json")
 
@@ -1935,18 +1925,16 @@ def get_phylogeny_newick(
     _assert_dc_access(dc_oid, current_user)
 
     # Ingest-time copy (CLI `process_phylogeny_data_collection`); a miss falls through.
-    from depictio.api.v1.configs.config import settings
     from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 
     s3_key = phylogeny_s3_key(str(dc_oid))
+    storage = _phylogeny_storage()
     try:
-        obj = _phylogeny_s3_client().get_object(Bucket=settings.s3.bucket, Key=s3_key)
-        return obj["Body"].read().decode("utf-8")
+        return storage.read_bytes(s3_key).decode("utf-8")
     except Exception as exc:
         logger.debug(
-            "phylogeny newick not read from s3://%s/%s (%s); trying stored paths",
-            settings.s3.bucket,
-            s3_key,
+            "phylogeny newick not read from %s (%s); trying stored paths",
+            storage.url(s3_key),
             exc,
         )
 

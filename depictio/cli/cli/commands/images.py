@@ -12,7 +12,7 @@ from typing import Annotated
 import typer
 
 from depictio.cli.cli.commands.data import push_images
-from depictio.cli.cli.utils.image_upload import is_image_file, s3_client
+from depictio.cli.cli.utils.image_upload import image_storage, is_image_file, parse_s3_folder
 from depictio.cli.cli.utils.rich_utils import (
     console,
     rich_print_checked_statement,
@@ -62,16 +62,14 @@ def list_bucket(
     rich_print_command_usage("images list-bucket")
 
     # Parse S3 path
-    if not s3_path.startswith("s3://"):
+    try:
+        bucket, prefix = parse_s3_folder(s3_path)
+    except ValueError:
         rich_print_checked_statement(
             "S3 path must start with 's3://' (e.g., s3://bucket/path/)",
             "error",
         )
         raise typer.Exit(code=1)
-
-    s3_parts = s3_path[5:].split("/", 1)
-    bucket = s3_parts[0]
-    prefix = s3_parts[1] if len(s3_parts) > 1 else ""
 
     # Load S3 configuration
     from depictio.cli.cli.utils.common import load_depictio_config
@@ -79,17 +77,19 @@ def list_bucket(
     CLI_config = load_depictio_config(resolve_server(server, CLI_config_path))
 
     try:
-        client = s3_client(CLI_config)
+        storage = image_storage(CLI_config)
     except Exception as e:
         rich_print_checked_statement(f"Failed to initialize S3 client: {e}", "error")
         raise typer.Exit(code=1)
+    if storage.key_of(s3_path) is None:
+        rich_print_checked_statement(
+            f"{s3_path} is not in the server's bucket ({storage.url()})", "error"
+        )
+        raise typer.Exit(code=1)
 
-    rich_print_section_separator(f"Listing: s3://{bucket}/{prefix}")
+    rich_print_section_separator(f"Listing: {storage.url(prefix)}")
 
     try:
-        paginator = client.get_paginator("list_objects_v2")
-        pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
-
         from rich.table import Table
 
         table = Table(show_header=True, header_style="bold cyan")
@@ -100,23 +100,17 @@ def list_bucket(
         count = 0
         total_size = 0
 
-        for page in pages:
-            for obj in page.get("Contents", []):
-                if count >= max_items:
-                    break
-
-                key = obj["Key"]
-                size = obj["Size"]
-                modified = obj["LastModified"].strftime("%Y-%m-%d %H:%M")
-
-                # Only show image files
-                if is_image_file(Path(key)):
-                    table.add_row(key, _format_size(size), modified)
-                    count += 1
-                    total_size += size
-
+        for obj in storage.list_objects(prefix):
             if count >= max_items:
                 break
+
+            modified = obj.last_modified.strftime("%Y-%m-%d %H:%M") if obj.last_modified else ""
+
+            # Only show image files
+            if is_image_file(Path(obj.key)):
+                table.add_row(obj.key, _format_size(obj.size), modified)
+                count += 1
+                total_size += obj.size
 
         console.print(table)
         console.print(

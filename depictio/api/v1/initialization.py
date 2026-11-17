@@ -13,7 +13,7 @@ from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_anonymous_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
-from depictio.models.s3_utils import S3_storage_checks
+from depictio.models.storage import check_instance_storage
 
 
 async def run_initialization(
@@ -37,6 +37,8 @@ async def run_initialization(
     """
     logger.info("Starting system initialization...")
 
+    # The instance backend's own section, unless a caller hands an S3 one in.
+    storage_cfg: Any = settings if s3_config_input is None else s3_config_input
     if s3_config_input is None:
         s3_config_input = settings.s3
 
@@ -63,7 +65,7 @@ async def run_initialization(
     # least-privilege, bucket-scoped credential (e.g. EMBL's NetApp S3
     # buckets, which only ever issue per-bucket keys) even when that
     # credential works fine for everything the app actually does.
-    S3_storage_checks(s3_config_input, checks or ["bucket", "write"])
+    check_instance_storage(storage_cfg, checks or ["bucket", "write"])
 
     from depictio.api.v1.db import initialization_collection
 

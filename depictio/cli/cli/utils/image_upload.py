@@ -18,7 +18,7 @@ from rich.markup import escape
 
 from depictio.cli.cli.utils.rich_utils import console, rich_print_checked_statement
 from depictio.cli.cli_logging import logger
-from depictio.models.storage import instance_storage
+from depictio.models.storage import instance_polars_options, instance_storage, object_schemes
 
 SUPPORTED_IMAGE_EXTENSIONS = {
     ".png",
@@ -73,12 +73,14 @@ def get_content_type(path: Path) -> str:
 
 
 def parse_s3_folder(uri: str) -> tuple[str, str]:
-    """``s3://bucket/some/folder`` as ``("bucket", "some/folder/")``, the prefix
-    empty for the bucket root and without empty segments ('a//b' is 'a/b').
-    Raises ValueError for anything but an s3:// path."""
-    if not uri.startswith("s3://"):
+    """``s3://bucket/some/folder`` (or ``gs://``, any instance scheme) as
+    ``("bucket", "some/folder/")``, the prefix empty for the bucket root and
+    without empty segments ('a//b' is 'a/b'). Raises ValueError for anything
+    but an object-store path."""
+    scheme = uri.partition("://")[0].lower() if "://" in uri else ""
+    if scheme not in object_schemes():
         raise ValueError(f"S3 path must start with 's3://' (e.g., s3://bucket/path/): {uri}")
-    bucket, _, path = uri[5:].partition("/")
+    bucket, _, path = uri[len(scheme) + 3 :].partition("/")
     if not bucket:
         raise ValueError(f"S3 path names no bucket: {uri}")
     path = "/".join(segment for segment in path.split("/") if segment)
@@ -103,19 +105,12 @@ def image_key(s3_base_folder: str, relative_path: str) -> str:
     return f"{prefix}{rel}"
 
 
-def s3_client(CLI_config):
-    """A boto3 client for the S3 storage of a CLI configuration."""
-    import boto3
-
-    return boto3.client(
-        "s3",
-        aws_access_key_id=CLI_config.s3_storage.aws_access_key_id,
-        aws_secret_access_key=CLI_config.s3_storage.aws_secret_access_key,
-        endpoint_url=CLI_config.s3_storage.url,
-    )
+def image_storage(CLI_config):
+    """The instance bucket of a CLI configuration, where images are uploaded."""
+    return instance_storage(CLI_config)
 
 
-def list_existing_keys(client, bucket: str, prefix: str) -> set[str]:
+def list_existing_keys(storage, prefix: str) -> set[str]:
     """Every object key already under ``prefix``, via one paginated LIST.
 
     Replaces a per-image ``head_object`` when skipping existing uploads: LIST
@@ -125,10 +120,7 @@ def list_existing_keys(client, bucket: str, prefix: str) -> set[str]:
     """
     keys: set[str] = set()
     try:
-        paginator = client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                keys.add(obj["Key"])
+        keys = {obj.key for obj in storage.list_objects(prefix)}
     except Exception as e:
         logger.warning(f"Could not list existing objects under {prefix}: {e}")
         return set()
@@ -138,8 +130,7 @@ def list_existing_keys(client, bucket: str, prefix: str) -> set[str]:
 def upload_images(
     images: list[Path],
     source_root: Path,
-    client,
-    bucket: str,
+    storage,
     prefix: str,
     *,
     overwrite: bool = False,
@@ -153,18 +144,18 @@ def upload_images(
     ``label`` names the upload in the DEPICTIO_INGEST_TIMINGS marker. Returns how
     many images were uploaded new, replaced an older copy, were skipped and failed.
     """
-    # Uploads are independent and network-bound, so they run in parallel; boto3
-    # low-level clients are thread-safe, so one client is shared.
+    # Uploads are independent and network-bound, so they run in parallel; the
+    # backend's clients are thread-safe, so one backend is shared.
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
     from depictio.cli.cli.utils.ingest_timing import ingest_run, record, timed
 
-    folder = f"s3://{bucket}/{prefix}"
+    folder = storage.url(prefix)
     # Listed with overwrite too, to tell a replaced image from a new one.
     with timed("list_existing"):
-        existing_keys = list_existing_keys(client, bucket, prefix)
+        existing_keys = list_existing_keys(storage, prefix)
     logger.debug(f"Found {len(existing_keys)} existing object(s) under {prefix}")
 
     def _upload_one(img: Path) -> str:
@@ -174,10 +165,8 @@ def upload_images(
         if exists and not overwrite:
             return "skipped"
         try:
-            client.upload_file(
-                str(img), bucket, s3_key, ExtraArgs={"ContentType": get_content_type(img)}
-            )
-            logger.debug(f"Uploaded: {rel_path} → s3://{bucket}/{s3_key}")
+            storage.upload_file(s3_key, img, content_type=get_content_type(img))
+            logger.debug(f"Uploaded: {rel_path} → {storage.url(s3_key)}")
             return "replaced" if exists else "uploaded"
         except Exception as e:
             # The count of failures names none of them: each is said here.
@@ -219,13 +208,8 @@ def verify_s3_images(
     (sorted), or ``error`` when the folder cannot be listed.
     """
     try:
-        bucket, prefix = parse_s3_folder(s3_base_folder)
-        paginator = s3_client(CLI_config).get_paginator("list_objects_v2")
-        keys = {
-            obj["Key"]
-            for page in paginator.paginate(Bucket=bucket, Prefix=prefix)
-            for obj in page.get("Contents", [])
-        }
+        _, prefix = parse_s3_folder(s3_base_folder)
+        keys = {obj.key for obj in image_storage(CLI_config).list_objects(prefix)}
     except Exception as e:
         logger.warning(f"Failed to verify S3 images at {s3_base_folder}: {e}")
         return {"count": 0, "sample": [], "missing": [], "error": str(e)}
@@ -279,13 +263,10 @@ def _referenced_images(data_collection, CLI_config) -> list[str] | None:
     """The image paths in the data collection's processed table, or None if it
     cannot be read."""
     from depictio.cli.cli.utils.deltatables import read_delta_table
-    from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
     column = data_collection.config.dc_specific_properties.image_column
     table = instance_storage(CLI_config).url(str(data_collection.id))
-    result = read_delta_table(
-        table, turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
-    )
+    result = read_delta_table(table, instance_polars_options(CLI_config))
     df = result.get("data")
     if result.get("result") != "success" or df is None or column not in df.columns:
         logger.warning(f"Could not read column '{column}' of {table}: {result.get('message')}")
@@ -303,26 +284,27 @@ def upload_collection_images(data_collection, CLI_config, overwrite: bool = Fals
     tag = data_collection.data_collection_tag
     props = data_collection.config.dc_specific_properties
     s3_base_folder = props.s3_base_folder
-    served = CLI_config.s3_storage.bucket
+    storage = image_storage(CLI_config)
+    served = storage.bucket
     if not s3_base_folder:
         raise ImageUploadError(
             f"'{tag}': no s3_base_folder to upload the images to. Set it to a folder in "
-            f"the server's bucket, e.g. s3://{served}/images/{tag}"
+            f"the server's bucket, e.g. {storage.url(f'images/{tag}')}"
         )
     bucket, prefix = parse_s3_folder(s3_base_folder)
     # Both checked before uploading: the dashboard could show none of the images.
-    if bucket != served:
+    if storage.key_of(s3_base_folder) is None:
         # The server's image route refuses any other bucket.
         raise ImageUploadError(
             f"'{tag}': s3_base_folder {s3_base_folder} is in bucket '{bucket}', but the "
             f"server serves images from its bucket '{served}' only. Set s3_base_folder "
-            f"to a folder in it, e.g. s3://{served}/{prefix}"
+            f"to a folder in it, e.g. {storage.url(prefix)}"
         )
-    if f"s3://{bucket}/{prefix}".rstrip("/") != s3_base_folder.rstrip("/"):
+    if storage.url(prefix).rstrip("/") != s3_base_folder.rstrip("/"):
         # The viewer keeps the empty segment in the key, which the server refuses.
         raise ImageUploadError(
             f"'{tag}': s3_base_folder {s3_base_folder} has an empty segment ('//'), and "
-            f"the dashboard cannot read images from it. Write it as s3://{bucket}/{prefix}"
+            f"the dashboard cannot read images from it. Write it as {storage.url(prefix)}"
         )
     source = resolve_local_images_path(props.local_images_path)
     if not source.is_dir():
@@ -343,8 +325,7 @@ def upload_collection_images(data_collection, CLI_config, overwrite: bool = Fals
         counts = upload_images(
             images,
             source,
-            s3_client(CLI_config),
-            bucket,
+            storage,
             prefix,
             overwrite=overwrite,
             label=s3_base_folder,

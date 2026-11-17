@@ -1,18 +1,14 @@
 import collections
 import functools
 import hashlib
-import os
 from collections.abc import Callable
 from datetime import datetime
 
 import polars as pl
-from botocore.exceptions import ClientError
 from bson import ObjectId
-from fastapi import HTTPException
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import files_collection
-from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.utils import numpy_to_python
 from depictio.models.models.deltatables import latest_complete_aggregation
 
@@ -99,49 +95,6 @@ def previous_column_types(
     return {s["name"]: s["type"] for s in specs or [] if s.get("name") and s.get("type")}
 
 
-def get_s3_folder_size(bucket_name, prefix):
-    """
-    Calculate the total size of all objects within a given S3 folder (prefix).
-
-    Args:
-        bucket_name: Name of the S3 bucket
-        prefix: Prefix (path) of the folder in the bucket
-
-    Returns:
-        Total size of all objects in bytes
-
-    Raises:
-        HTTPException: If folder is empty, doesn't exist, or on error
-    """
-    total_size = 0
-    try:
-        paginator = s3_client.get_paginator("list_objects_v2")
-        response_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-
-        objects_found = False
-        for page in response_iterator:
-            if "Contents" in page:
-                objects_found = True
-                for obj in page["Contents"]:
-                    total_size += obj["Size"]
-
-        if not objects_found:
-            raise HTTPException(status_code=404, detail="Folder is empty or does not exist.")
-
-        return total_size
-    except ClientError as e:
-        logger.error(f"Error listing objects in folder '{prefix}': {str(e)}")
-        raise HTTPException(status_code=500, detail="Error listing folder contents.")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error calculating folder size: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Unexpected error occurred while calculating folder size.",
-        )
-
-
 def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     """
     Read a table file and return a Polars DataFrame.
@@ -188,16 +141,6 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
         },
     )
     return df
-
-
-def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
-    """Recursively upload a directory to S3 preserving the directory structure."""
-    for root, dirs, files in os.walk(local_dir):
-        for filename in files:
-            local_path = os.path.join(root, filename)
-            relative_path = os.path.relpath(local_path, local_dir)
-            s3_path = os.path.join(s3_folder, relative_path).replace("\\", "/")
-            s3_client.upload_file(local_path, bucket_name, s3_path)
 
 
 # Per-column aggregations, expressed lazily so the frame is never materialised.

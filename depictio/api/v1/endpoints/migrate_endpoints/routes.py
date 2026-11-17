@@ -364,6 +364,13 @@ def _migration_setting(name: str, default: Any) -> Any:
 
 
 def _instance_s3_client() -> Any:
+    """boto3 on the instance bucket: migration bundles are S3-only for now (#1358)."""
+    from depictio.models.storage import StorageError, require_s3_instance
+
+    try:
+        require_s3_instance(settings, "Project migration")
+    except StorageError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
     return boto3.client(
         "s3",
         endpoint_url=settings.s3.endpoint_url,

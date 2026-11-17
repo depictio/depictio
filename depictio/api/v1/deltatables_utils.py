@@ -1802,17 +1802,16 @@ def load_geojson_from_s3(dc_id: str, TOKEN: str | None = None) -> dict | None:
 
         logger.info(f"Loading GeoJSON from S3: {s3_path}")
 
-        # Read the GeoJSON from S3. Not through s3fs: ``polars_s3_config`` holds
-        # polars/delta storage options, which s3fs does not take.
-        bucket, _, key = s3_path.removeprefix("s3://").partition("/")
-        if not s3_path.startswith("s3://") or not bucket or not key:
-            logger.error(f"GeoJSON location of DC {dc_id} is not an s3:// URI: {s3_path}")
-            return None
-
+        # Read the GeoJSON from the instance bucket. Not through s3fs:
+        # ``polars_s3_config`` holds polars/delta storage options, which s3fs does not take.
         from depictio.api.v1 import s3
 
-        obj = s3.s3_client.get_object(Bucket=bucket, Key=key)
-        geojson_data = json.loads(obj["Body"].read())
+        key = s3.instance_backend.key_of(s3_path)
+        if not key:
+            logger.error(f"GeoJSON location of DC {dc_id} is not in the instance bucket: {s3_path}")
+            return None
+
+        geojson_data = json.loads(s3.instance_backend.read_bytes(key))
 
         feature_count = len(geojson_data.get("features", []))
         logger.info(f"Loaded GeoJSON with {feature_count} features from {s3_path}")

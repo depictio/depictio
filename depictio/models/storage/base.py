@@ -76,6 +76,10 @@ class StorageBackend(Protocol):
         """Every object whose key starts with ``prefix``, paginated lazily."""
         ...
 
+    def list_folders(self, prefix: str = "") -> list[str]:
+        """The folder names directly under ``prefix`` (``a/`` → ``["a/b", "a/c"]``), no slash."""
+        ...
+
     def head(self, key: str) -> ObjectInfo | None:
         """Metadata of ``key``, or None when it does not exist."""
         ...
@@ -86,6 +90,21 @@ class StorageBackend(Protocol):
 
     def read_range(self, key: str, start: int, end: int) -> bytes:
         """Bytes ``[start, end)`` of ``key``."""
+        ...
+
+    def iter_chunks(
+        self,
+        key: str,
+        chunk_size: int = 1 << 16,
+        *,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> Iterator[bytes]:
+        """``key``'s contents (bytes ``[start, end)`` when given) in chunks, for streaming.
+
+        The request is made by the call, so :class:`StorageNotFound` raises
+        before the first chunk is consumed.
+        """
         ...
 
     # -- writes ------------------------------------------------------------
@@ -110,6 +129,12 @@ class StorageBackend(Protocol):
 
     def ensure_bucket(self) -> bool:
         """Make sure the bucket exists; True when this call created it."""
+        ...
+
+    def check(self, checks: Iterable[str] | None = None) -> None:
+        """Startup checks: ``bucket`` (it answers), ``write`` (put + delete a test
+        object), ``s3`` (account-wide listing; S3 only). :class:`StorageError` names
+        what failed."""
         ...
 
     # -- handing the store to other libraries ------------------------------

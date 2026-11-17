@@ -15,6 +15,7 @@ import typer
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.data import app, link_app
+from depictio.tests.storage_fakes import s3_backend_on
 
 runner = CliRunner()
 
@@ -140,7 +141,10 @@ def test_a_dry_run_lists_the_keys_the_upload_writes(tmp_path):
 def _push(img_dir, counts, *options):
     with (
         patch("depictio.cli.cli.utils.common.load_depictio_config"),
-        patch("depictio.cli.cli.utils.image_upload.s3_client"),
+        patch(
+            "depictio.cli.cli.utils.image_upload.image_storage",
+            return_value=s3_backend_on(MagicMock(), "bucket"),
+        ),
         patch("depictio.cli.cli.utils.image_upload.upload_images", return_value=counts),
     ):
         return runner.invoke(app, ["push-images", str(img_dir), "s3://bucket/imgs/", *options])

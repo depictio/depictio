@@ -28,11 +28,10 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
     new_aggregation_hash,
 )
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
-from depictio.api.v1.s3 import polars_s3_config, s3_client
+from depictio.api.v1.s3 import polars_s3_config
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
 from depictio.models.models.users import User
-from depictio.models.s3_utils import delete_keys
 from depictio.models.storage import instance_storage
 
 _MAX_PER_FILE_BYTES = 50 * 1024 * 1024
@@ -596,18 +595,10 @@ def clear_table_data(*, data_collection_id: str, current_user) -> dict:
     _load_table_dc(data_collection_id, current_user)
 
     delta_loc = _delta_location_for(data_collection_id)
-    bucket = settings.s3.bucket
-    s3_prefix = data_collection_id  # delta_loc is s3://{bucket}/{dc_id}/...
     deleted_s3_count = 0
     try:
-        paginator = s3_client.get_paginator("list_objects_v2")
-        pages = paginator.paginate(Bucket=bucket, Prefix=s3_prefix + "/")
-        objects_to_delete = [
-            {"Key": obj["Key"]} for page in pages for obj in page.get("Contents", []) or []
-        ]
-        if objects_to_delete:
-            delete_keys(s3_client, bucket, (o["Key"] for o in objects_to_delete))
-            deleted_s3_count = len(objects_to_delete)
+        deleted_s3_count = instance_storage(settings).delete_prefix(data_collection_id + "/")
+        if deleted_s3_count:
             logger.info(f"Cleared {deleted_s3_count} S3 object(s) under {delta_loc}")
         else:
             logger.info(f"Clear: no S3 objects found under {delta_loc}")

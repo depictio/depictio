@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from depictio.api.v1 import deltatables_utils
+from depictio.tests.storage_fakes import s3_backend_on
 
 GEOJSON = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {}}]}
 
@@ -40,7 +41,7 @@ def located(monkeypatch):
 
     monkeypatch.setattr(deltatables_utils.httpx, "get", fake_get)
     fake = _FakeS3({("bucket-a", "dc1/geojson_data.geojson"): json.dumps(GEOJSON).encode()})
-    monkeypatch.setattr("depictio.api.v1.s3.s3_client", fake)
+    monkeypatch.setattr("depictio.api.v1.s3.instance_backend", s3_backend_on(fake, "bucket-a"))
     return fake
 
 

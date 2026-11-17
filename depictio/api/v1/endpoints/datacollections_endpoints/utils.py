@@ -19,8 +19,7 @@ from depictio.api.v1.permissions import build_access_query, get_user_group_ids, 
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.data_collections import DataOrigin
 from depictio.models.s3_access import ProjectS3Config
-from depictio.models.s3_utils import delete_keys
-from depictio.models.storage import StorageError, instance_storage
+from depictio.models.storage import StorageError, cli_storage_fields, instance_storage
 from depictio.models.timestamps import utc_now_naive
 
 
@@ -901,7 +900,6 @@ def _create_asset_dc_from_uploads(
 
     Synchronous, like the other create-DC flows: callers use ``asyncio.to_thread``.
     """
-    from depictio.cli.cli.utils.deltatables import _s3_client
     from depictio.models.models.data_collections import (
         DataCollection,
         DataCollectionConfig,
@@ -945,21 +943,19 @@ def _create_asset_dc_from_uploads(
 
     project_oid, full_token = _editable_project_and_token(project_id, current_user)
     cli_config = _cli_config_with_token(current_user, full_token, None)
-    bucket = cli_config.s3_storage.bucket
+    storage = instance_storage(cli_config)
     origin_name = _upload_basename(files[0][1]) if len(files) == 1 else f"{len(files)} files"
 
     temp_dir = tempfile.mkdtemp(prefix="depictio_asset_upload_")
     written_keys: list[str] = []
-    client = None
     try:
         if kind == "image":
             extensions = [*DEFAULT_IMAGE_EXTENSIONS, ".tif"]
             image_names = _unique_image_names(files, extensions)
             prefix = f"images/{uuid4().hex}"
-            client = _s3_client(cli_config)
             for (body, _), image_name in zip(files, image_names, strict=True):
                 key = f"{prefix}/{image_name}"
-                client.put_object(Bucket=bucket, Key=key, Body=body)
+                storage.put_bytes(key, body)
                 written_keys.append(key)
             local_path = os.path.join(temp_dir, "images.csv")
             with open(local_path, "w", encoding="utf-8", newline="") as fh:
@@ -970,7 +966,7 @@ def _create_asset_dc_from_uploads(
                 format="csv",
                 polars_kwargs={"separator": ","},
                 image_column=_IMAGE_COLUMN,
-                s3_base_folder=f"s3://{bucket}/{prefix}/",
+                s3_base_folder=storage.url(f"{prefix}/"),
                 supported_formats=extensions,
             )
         else:
@@ -996,8 +992,7 @@ def _create_asset_dc_from_uploads(
             # a temp folder is one: the bytes go straight to the key the Newick
             # endpoint reads.
             key = phylogeny_s3_key(str(data_collection.id))
-            client = _s3_client(cli_config)
-            client.put_object(Bucket=bucket, Key=key, Body=files[0][0])
+            storage.put_bytes(key, files[0][0])
             written_keys.append(key)
             pushed = projects_collection.update_one(
                 {"_id": project_oid}, {"$push": {"workflows": workflow.mongo()}}
@@ -1020,8 +1015,8 @@ def _create_asset_dc_from_uploads(
             full_token=full_token,
         )
     except Exception:
-        if client is not None and written_keys:
-            delete_keys(client, bucket, written_keys)
+        if written_keys:
+            storage.delete_keys(written_keys)
         raise
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -1300,6 +1295,7 @@ def _cli_config_with_token(
         api_base_url=settings.fastapi.url,
         s3_storage=settings.s3,
         remote_storage_options=remote_storage_options,
+        **cli_storage_fields(settings),
     )
 
 

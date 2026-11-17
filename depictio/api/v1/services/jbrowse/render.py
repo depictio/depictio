@@ -63,7 +63,9 @@ def _storage_of(uri: str, props: Any) -> str:
         return "direct"
     if "://" not in uri:
         return "remote" if props.remote_base_uri else "depictio"
-    if uri.lower().startswith(f"s3://{settings.s3.bucket}/"):
+    from depictio.models.storage import instance_storage
+
+    if instance_storage(settings).key_of(uri) is not None:
         return "depictio"
     return "remote"
 

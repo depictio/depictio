@@ -39,6 +39,9 @@ class S3BackupStrategyManager:
         Args:
             source_s3_config: Source S3 configuration
         """
+        from depictio.models.storage import require_s3_instance
+
+        require_s3_instance(settings, "S3 backups")
         self.source_s3_config = source_s3_config
         self.backup_config = settings.backup
 

@@ -161,14 +161,14 @@ class TestConfigCommands:
 
         def test_success(self, command, cli_config_path, login):
             """Test successful execution"""
-            with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
+            with patch("depictio.cli.cli.commands.config.check_instance_storage"):
                 result = command.run("check", cli_config=cli_config_path)
             assert result.exit_code == 0, result.output
 
         def test_a_failed_s3_check_fails_the_command(self, command, cli_config_path, login):
             """It used to report the failure and exit 0, so a script gating on it passed."""
             with patch(
-                "depictio.cli.cli.commands.config.S3_storage_checks",
+                "depictio.cli.cli.commands.config.check_instance_storage",
                 side_effect=Exception("bucket missing"),
             ):
                 result = command.run("check", cli_config=cli_config_path)
@@ -179,7 +179,7 @@ class TestConfigCommands:
             self, command, cli_config_path, login
         ):
             login.return_value = {"success": False}
-            with patch("depictio.cli.cli.commands.config.S3_storage_checks") as s3:
+            with patch("depictio.cli.cli.commands.config.check_instance_storage") as s3:
                 result = command.run("check", cli_config=cli_config_path)
             assert result.exit_code == 1
             assert "invalid or expired" in " ".join(result.output.split())
@@ -188,7 +188,7 @@ class TestConfigCommands:
         def test_another_answer_is_not_blamed_on_the_token(self, command, cli_config_path, login):
             """A viewer host's 404: the check names the status, not the token."""
             login.return_value = {"success": False, "status_code": 404}
-            with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
+            with patch("depictio.cli.cli.commands.config.check_instance_storage"):
                 result = command.run("check", cli_config=cli_config_path)
             assert result.exit_code == 1
             out = " ".join(result.output.split())
@@ -200,7 +200,7 @@ class TestConfigCommands:
             import httpx
 
             login.side_effect = httpx.ConnectError("[Errno 61] Connection refused")
-            with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
+            with patch("depictio.cli.cli.commands.config.check_instance_storage"):
                 result = command.run("check", cli_config=cli_config_path)
             assert result.exit_code == 1
             assert "Cannot reach the Depictio server: [Errno 61] Connection refused" in (
@@ -381,7 +381,7 @@ class TestServerOption:
                 return_value={"success": True, "email": "a@b.co"},
             ) as login,
             patch("depictio.cli.cli.commands.config.load_depictio_config"),
-            patch("depictio.cli.cli.commands.config.S3_storage_checks"),
+            patch("depictio.cli.cli.commands.config.check_instance_storage"),
         ):
             yield login
 

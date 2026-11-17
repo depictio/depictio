@@ -24,6 +24,7 @@ from depictio.cli.cli.utils import api_calls, deltatables
 from depictio.cli.cli.utils import multiqc_processor as mp
 from depictio.models import s3_utils
 from depictio.tests.cli.s3_stubs import StubS3Client, install_s3_client, s3_client_error
+from depictio.tests.storage_fakes import s3_backend_on
 
 BUCKET = "nf-core-awsmegatests"
 PREFIX = "ampliseq/results-runs"
@@ -68,7 +69,7 @@ class _InstanceBucket:
     def __init__(self):
         self.uploads: dict[str, dict] = {}
 
-    def upload_file(self, path, bucket, key, Config=None):  # noqa: N803
+    def upload_file(self, path, bucket, key, Config=None, ExtraArgs=None):  # noqa: N803
         self.uploads[key] = {"path": path, "body": Path(path).read_bytes()}
 
     def put_object(self, Bucket, Key, Body):  # noqa: N803
@@ -140,7 +141,9 @@ def ingest(monkeypatch, _env):
             "turn_S3_config_into_polars_storage_options",
             lambda _s3: SimpleNamespace(endpoint_url="http://s3:9000"),
         )
-        monkeypatch.setattr(mp, "_make_s3_client", lambda _options: instance)
+        monkeypatch.setattr(
+            mp, "_instance_storage", lambda _config: s3_backend_on(instance, "depictio-bucket")
+        )
         monkeypatch.setattr(mp, "api_check_duplicate_multiqc_report", _check_duplicate)
         monkeypatch.setattr(mp, "api_create_multiqc_report", _create)
         monkeypatch.setattr(mp, "api_update_multiqc_report", _update)

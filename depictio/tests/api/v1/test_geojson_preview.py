@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.advanced_viz_endpoints import routes
+from depictio.tests.storage_fakes import s3_backend_on
 
 DC_ID = ObjectId("646b0f3c1e4a2d7f8e5b8ca9")
 BODY = b'{"type": "FeatureCollection", "features": []}'
@@ -20,7 +21,7 @@ BODY = b'{"type": "FeatureCollection", "features": []}'
 def client(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     s3 = MagicMock()
     s3.get_object.return_value = {"Body": io.BytesIO(BODY)}
-    monkeypatch.setattr(routes, "_phylogeny_s3_client", lambda: s3)
+    monkeypatch.setattr(routes, "_phylogeny_storage", lambda: s3_backend_on(s3))
     monkeypatch.setattr(routes, "_assert_dc_access", lambda dc_oid, user: None)
     return s3
 

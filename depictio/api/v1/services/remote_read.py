@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.storage import StorageError, instance_storage
 
 SourceKind = Literal["depictio_s3", "remote_s3", "https"]
 
@@ -104,7 +105,8 @@ def resolve_location(uri: str, base_folder: str) -> ByteSource:
     """
     uri = uri.strip()
     scheme = urlparse(uri).scheme.lower()
-    own_bucket = settings.s3.bucket
+    own = _own_storage()
+    own_bucket = own.bucket
 
     if scheme in ("", "file") and "://" not in uri and base_folder.lower().startswith("https://"):
         # Relative location under an https results folder: read in place like
@@ -127,9 +129,9 @@ def resolve_location(uri: str, base_folder: str) -> ByteSource:
             )
         return ByteSource("remote_s3", bucket=base_bucket, key=key)
 
-    if scheme == "s3":
+    if scheme in ("s3", own.scheme):
         bucket, key = _split_s3(uri)
-        if bucket == own_bucket:
+        if bucket == own_bucket and scheme == own.scheme:
             base_bucket, base_prefix = _split_s3(base_folder.rstrip("/") + "/_")
             base_prefix = base_prefix[: -len("_")]
             if base_bucket != bucket or not key.startswith(base_prefix) or ".." in key.split("/"):
@@ -137,6 +139,8 @@ def resolve_location(uri: str, base_folder: str) -> ByteSource:
                     403, "Depictio's data bucket is only readable inside a collection's folder"
                 )
             return ByteSource("depictio_s3", bucket=bucket, key=key)
+        if scheme != "s3":
+            raise RemoteReadError(400, f"Unsupported track location scheme: {scheme}")
         if bucket not in settings.jbrowse.s3_buckets:
             raise RemoteReadError(
                 403,
@@ -166,23 +170,14 @@ _clients: dict[str, object] = {}
 _clients_lock = threading.Lock()
 
 
-def _own_s3_client():
-    import boto3
-    from botocore.config import Config
-
+def _own_storage():
+    """The instance bucket, fail-fast: a track read must not hang on a dead store."""
     with _clients_lock:
-        client = _clients.get("own")
-        if client is None:
-            client = boto3.client(
-                "s3",
-                endpoint_url=settings.s3.endpoint_url,
-                aws_access_key_id=settings.s3.aws_access_key_id,
-                aws_secret_access_key=settings.s3.aws_secret_access_key,
-                verify=settings.s3.verify_tls,
-                config=Config(connect_timeout=5, retries={"total_max_attempts": 2}),
-            )
-            _clients["own"] = client
-    return client
+        storage = _clients.get("own")
+        if storage is None:
+            storage = instance_storage(settings, fail_fast=True)
+            _clients["own"] = storage
+    return storage
 
 
 def _remote_s3_client():
@@ -217,7 +212,9 @@ def _remote_s3_client():
 
 
 def _s3_client_for(src: ByteSource):
-    return _own_s3_client() if src.kind == "depictio_s3" else _remote_s3_client()
+    """The boto3 client of a ``remote_s3`` source (the instance bucket goes through
+    :func:`_own_storage`)."""
+    return _remote_s3_client()
 
 
 def _http_client():
@@ -300,6 +297,14 @@ def source_size(src: ByteSource) -> int:
         if size is None:
             _check_https_status(resp.status_code, src.url)
             raise RemoteReadError(502, "Remote host did not report the file size")
+    elif src.kind == "depictio_s3":
+        try:
+            info = _own_storage().head(src.key)
+        except StorageError as exc:
+            raise RemoteReadError(502, f"Storage error: {exc.code or exc}") from exc
+        if info is None:
+            raise RemoteReadError(404, "Track file not found")
+        size = info.size
     else:
         from botocore.exceptions import ClientError
 
@@ -392,6 +397,13 @@ def open_range(src: ByteSource, rng: ByteRange) -> Iterator[bytes]:
                 resp.close()
 
         return _https_chunks()
+
+    if src.kind == "depictio_s3":
+        try:
+            return _own_storage().iter_chunks(src.key, _CHUNK, start=rng.start, end=rng.end + 1)
+        except StorageError as exc:
+            logger.warning(f"Track range read failed for {src.cache_key}: {exc}")
+            raise RemoteReadError(502, "Storage read failed") from exc
 
     try:
         obj = _s3_client_for(src).get_object(

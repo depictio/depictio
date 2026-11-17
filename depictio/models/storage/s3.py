@@ -133,6 +133,17 @@ class S3Backend:
                 raise
             raise _wrap(exc, f"listing {self.url(prefix)}") from exc
 
+    def list_folders(self, prefix: str = "") -> list[str]:
+        try:
+            paginator = self.client.get_paginator("list_objects_v2")
+            return [
+                common["Prefix"].rstrip("/")
+                for page in paginator.paginate(Bucket=self.bucket, Delimiter="/", Prefix=prefix)
+                for common in page.get("CommonPrefixes", [])
+            ]
+        except Exception as exc:
+            raise _wrap(exc, f"listing folders of {self.url(prefix)}") from exc
+
     def head(self, key: str) -> ObjectInfo | None:
         try:
             meta = self.client.head_object(Bucket=self.bucket, Key=key)
@@ -164,6 +175,30 @@ class S3Backend:
         except Exception as exc:
             raise _wrap(exc, f"reading {self.url(key)}") from exc
 
+    def iter_chunks(
+        self,
+        key: str,
+        chunk_size: int = 1 << 16,
+        *,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> Iterator[bytes]:
+        extra: dict[str, Any] = {}
+        if start is not None or end is not None:
+            extra["Range"] = f"bytes={start or 0}-{'' if end is None else end - 1}"
+        try:
+            body = self.client.get_object(Bucket=self.bucket, Key=key, **extra)["Body"]
+        except Exception as exc:
+            raise _wrap(exc, f"reading {self.url(key)}") from exc
+
+        def chunks() -> Iterator[bytes]:
+            try:
+                yield from body.iter_chunks(chunk_size=chunk_size)
+            finally:
+                body.close()
+
+        return chunks()
+
     # -- writes --------------------------------------------------------------
 
     def put_bytes(self, key: str, data: bytes, *, content_type: str | None = None) -> None:
@@ -173,8 +208,22 @@ class S3Backend:
         except Exception as exc:
             raise _wrap(exc, f"writing {self.url(key)}") from exc
 
-    def upload_file(self, key: str, path: str | Path, *, content_type: str | None = None) -> None:
-        extra = {"ExtraArgs": {"ContentType": content_type}} if content_type else {}
+    def upload_file(
+        self,
+        key: str,
+        path: str | Path,
+        *,
+        content_type: str | None = None,
+        multipart: bool | None = None,
+    ) -> None:
+        extra: dict[str, Any] = {}
+        if content_type:
+            extra["ExtraArgs"] = {"ContentType": content_type}
+        if multipart is False:
+            from boto3.s3.transfer import TransferConfig
+
+            # One PUT up to S3's 5 GB single-object limit.
+            extra["Config"] = TransferConfig(multipart_threshold=5 * 1024**3)
         try:
             self.client.upload_file(str(path), self.bucket, key, **extra)
         except Exception as exc:
@@ -216,6 +265,14 @@ class S3Backend:
             if _code(exc) in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
                 return False
             raise _wrap(exc, f"creating bucket {self.bucket}") from exc
+
+    def check(self, checks: Iterable[str] | None = None) -> None:
+        from depictio.models.s3_utils import S3_storage_checks
+
+        try:
+            S3_storage_checks(self.config, list(checks) if checks is not None else None)
+        except Exception as exc:
+            raise StorageError(f"S3 storage is not usable: {exc}") from exc
 
     # -- handing the store to other libraries --------------------------------
 

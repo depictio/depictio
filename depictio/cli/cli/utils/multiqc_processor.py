@@ -38,6 +38,12 @@ from depictio.models.s3_access import (
     is_missing_object,
     is_s3_url,
 )
+from depictio.models.storage import (
+    instance_polars_options,
+    instance_storage,
+    is_object_url,
+    split_object_url,
+)
 
 _FETCH_CHUNK_BYTES = 1024 * 1024
 
@@ -477,24 +483,12 @@ def _iter_module_plots(entries: Any):
                 yield plot_name, (datasets if isinstance(datasets, list) else [])
 
 
-def _make_s3_client(storage_options):
-    """boto3 S3 client configured for S3-compatible stores (path-style + s3v4).
+def _instance_storage(CLI_config):
+    """The instance bucket MultiQC reports and prerendered figures are written to.
 
-    Works against the bundled SeaweedFS as well as MinIO / AWS / NetApp. Shared
-    by the report-upload loop and the offline figure prerender so the S3-compat
-    config lives in one place.
+    Shared by the report-upload loop and the offline figure prerender.
     """
-    import boto3
-    from botocore.config import Config as BotoConfig
-
-    return boto3.client(
-        "s3",
-        endpoint_url=storage_options.endpoint_url,
-        aws_access_key_id=storage_options.aws_access_key_id,
-        aws_secret_access_key=storage_options.aws_secret_access_key,
-        region_name=storage_options.region,
-        config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
-    )
+    return instance_storage(CLI_config)
 
 
 @holds_multiqc_state
@@ -568,19 +562,17 @@ def _prerender_multiqc_figures(
     modules = multiqc.list_modules()
     plots = multiqc.list_plots()
 
-    s3_client = _make_s3_client(storage_options)
-    bucket = CLI_config.s3_storage.bucket
+    storage = _instance_storage(CLI_config)
 
     def _upload(cache_key: str, fig_dict: dict) -> None:
         # Filename mirrors the API stores: the trailing hash of the bare key.
         buf = io.BytesIO()
         with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
             gz.write(json.dumps(fig_dict, separators=(",", ":")).encode("utf-8"))
-        s3_client.put_object(
-            Bucket=bucket,
-            Key=f"{dc_id}/prerender/{figure_cache_key_sha(cache_key)}.json.gz",
-            Body=buf.getvalue(),
-            ContentType="application/gzip",
+        storage.put_bytes(
+            f"{dc_id}/prerender/{figure_cache_key_sha(cache_key)}.json.gz",
+            buf.getvalue(),
+            content_type="application/gzip",
         )
 
     built = 0
@@ -621,7 +613,7 @@ def _prerender_multiqc_figures(
     record("prerendered_figures", built)
     logger.info(
         f"Prerender: uploaded {built} figure(s) for DC {dc_id} "
-        f"({len(modules)} modules) to s3://{bucket}/{dc_id}/prerender/"
+        f"({len(modules)} modules) to {storage.url(f'{dc_id}/prerender/')}"
     )
 
 
@@ -732,7 +724,6 @@ def process_multiqc_data_collection(
 
         # Import here to avoid circular imports
         from depictio.cli.cli.utils.deltatables import fetch_file_data
-        from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
         # Get the files for this data collection
         files = []
@@ -825,7 +816,7 @@ def process_multiqc_data_collection(
             )
 
         # S3 storage setup
-        storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+        storage_options = instance_polars_options(CLI_config)
 
         # Process each MultiQC parquet file and collect individual metadata
         individual_file_metadata = []
@@ -942,9 +933,8 @@ def process_multiqc_data_collection(
                 MultiQCReportChange,
             )
 
-            # S3 client (MinIO-compatible: s3v4 + path-style addressing). Raises
-            # ImportError if boto3 is unavailable — caught below like before.
-            s3_client = _make_s3_client(storage_options)
+            # The instance bucket, whatever its backend.
+            storage = _instance_storage(CLI_config)
 
             logger.info(f"Processing {len(individual_file_metadata)} files individually...")
 
@@ -994,10 +984,9 @@ def process_multiqc_data_collection(
                             # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
                             if existing_s3_location:
                                 try:
-                                    s3_path = existing_s3_location.replace("s3://", "")
-                                    if "/" in s3_path:
+                                    if is_object_url(existing_s3_location):
                                         # Skip bucket name, get the rest as s3_key
-                                        s3_key = s3_path.split("/", 1)[1]
+                                        s3_key = split_object_url(existing_s3_location).key
                                         logger.info(f"Preserving S3 key: {s3_key}")
                                     else:
                                         # Fallback: generate new key if parsing fails
@@ -1023,13 +1012,9 @@ def process_multiqc_data_collection(
 
                             logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
                             # Use put_object: single-part PUT is the most portable path across S3-compatible stores
-                            with open(local_path, "rb") as f, timed("upload"):
-                                s3_client.put_object(
-                                    Bucket=CLI_config.s3_storage.bucket,
-                                    Key=s3_key,
-                                    Body=f,
-                                )
-                            s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
+                            with timed("upload"):
+                                storage.upload_file(s3_key, local_path, multipart=False)
+                            s3_location = storage.url(s3_key)
                             logger.info(f"Successfully uploaded {file_path} to {s3_location}")
                             prerender_inputs.append((local_path, s3_location))
 
@@ -1132,17 +1117,9 @@ def process_multiqc_data_collection(
                     # on the manifest XML). Single-part is portable everywhere.
                     # MultiQC parquet files are bounded (~25-50 MB), so a
                     # 5 GB threshold keeps every realistic upload single-part.
-                    from boto3.s3.transfer import TransferConfig
-
-                    _single_part_cfg = TransferConfig(multipart_threshold=5 * 1024**3)
                     with timed("upload"):
-                        s3_client.upload_file(
-                            local_path,
-                            CLI_config.s3_storage.bucket,
-                            s3_key,
-                            Config=_single_part_cfg,
-                        )
-                    s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
+                        storage.upload_file(s3_key, local_path, multipart=False)
+                    s3_location = storage.url(s3_key)
                     logger.info(f"Successfully uploaded {file_path} to {s3_location}")
                     prerender_inputs.append((local_path, s3_location))
 

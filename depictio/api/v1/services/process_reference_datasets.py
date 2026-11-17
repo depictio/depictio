@@ -6,6 +6,7 @@ from bson import ObjectId
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.storage import cli_storage_fields
 
 
 class ReferenceDatasetProcessor:
@@ -321,6 +322,7 @@ async def process_all_reference_datasets() -> None:
             "api_base_url": settings.fastapi.url,
             # Convert settings.s3 to dict for CLIConfig
             "s3_storage": settings.s3.model_dump(),
+            **cli_storage_fields(settings, dump=True),
         }
 
         # Convert dict to CLIConfig instance (some functions don't have @validate_call)

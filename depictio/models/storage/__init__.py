@@ -20,7 +20,16 @@ from depictio.models.storage.base import (
     StorageError,
     StorageNotFound,
 )
-from depictio.models.storage.factory import instance_storage
+from depictio.models.storage.factory import (
+    BackendStorageOptions,
+    check_instance_storage,
+    cli_storage_fields,
+    instance_polars_options,
+    instance_storage,
+    require_s3_instance,
+)
+from depictio.models.storage.gcs import GCSBackend
+from depictio.models.storage.obstore_backend import ObstoreBackend
 from depictio.models.storage.registry import (
     backend_class,
     backend_names,
@@ -36,18 +45,25 @@ from depictio.models.storage.uri import (
 )
 
 __all__ = [
+    "BackendStorageOptions",
     "ObjectInfo",
+    "GCSBackend",
     "ObjectURL",
+    "ObstoreBackend",
     "S3Backend",
     "StorageBackend",
     "StorageError",
     "StorageNotFound",
     "backend_class",
     "backend_names",
+    "check_instance_storage",
+    "cli_storage_fields",
+    "instance_polars_options",
     "instance_storage",
     "is_object_url",
     "object_schemes",
     "object_url",
     "register_backend",
+    "require_s3_instance",
     "split_object_url",
 ]

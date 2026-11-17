@@ -29,8 +29,7 @@ from depictio.cli.cli.utils.server_target import (
 )
 from depictio.cli.cli_logging import logger
 from depictio.models.models.s3 import PolarsStorageOptions
-from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
-from depictio.models.storage import instance_storage
+from depictio.models.storage import instance_polars_options, instance_storage
 
 app = typer.Typer()
 
@@ -539,8 +538,8 @@ def push_images(
 
     from depictio.cli.cli.utils.image_upload import (
         image_key,
+        image_storage,
         parse_s3_folder,
-        s3_client,
         scan_directory_for_images,
         upload_images,
     )
@@ -579,7 +578,9 @@ def push_images(
         raise typer.Exit(code=0)
 
     console.print(f"[bold]Source:[/bold] {source_path}")
-    console.print(f"[bold]Destination:[/bold] s3://{bucket}/{prefix}")
+    console.print(
+        f"[bold]Destination:[/bold] {s3_destination.split('://', 1)[0]}://{bucket}/{prefix}"
+    )
     console.print(f"[bold]Images found:[/bold] {len(images)}")
 
     if dry_run:
@@ -588,7 +589,7 @@ def push_images(
             rel_path = img.relative_to(source_path)
             # The key the upload itself would write.
             s3_key = image_key(s3_destination, rel_path.as_posix())
-            console.print(f"  {rel_path} → s3://{bucket}/{s3_key}")
+            console.print(f"  {rel_path} → {s3_destination.split('://', 1)[0]}://{bucket}/{s3_key}")
         if len(images) > 20:
             console.print(f"  ... and {len(images) - 20} more")
         rich_print_checked_statement(
@@ -600,16 +601,23 @@ def push_images(
 
     CLI_config = load_depictio_config(config_path)
     try:
-        client = s3_client(CLI_config)
+        storage = image_storage(CLI_config)
     except Exception as e:
         rich_print_checked_statement(f"Failed to initialize S3 client: {e}", "error")
+        raise typer.Exit(code=1)
+    if storage.key_of(s3_destination) is None:
+        # Images are served from the instance bucket only.
+        rich_print_checked_statement(
+            f"{s3_destination} is not in the server's bucket; upload to a folder of "
+            f"{storage.url()}",
+            "error",
+        )
         raise typer.Exit(code=1)
 
     counts = upload_images(
         images,
         source_path,
-        client,
-        bucket,
+        storage,
         prefix,
         overwrite=overwrite,
         concurrency=concurrency,
@@ -670,7 +678,7 @@ def _delta_table_of(
 
     # The location client_aggregate_data writes to.
     destination = instance_storage(CLI_config).url(str(data_collection.id))
-    return destination, turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    return destination, instance_polars_options(CLI_config)
 
 
 @app.command()

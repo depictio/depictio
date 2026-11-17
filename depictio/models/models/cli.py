@@ -3,6 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
+from depictio.api.v1.configs.settings_models import GCSConfig
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import Group, TokenBase, UserBase
@@ -85,6 +86,10 @@ class CLIConfig(BaseModel):
     api_base_url: str
     user: UserBaseCLIConfig
     s3_storage: S3DepictioCLIConfig
+    # Which backend holds the instance bucket (#1358): ``s3`` uses ``s3_storage``,
+    # ``gcs`` uses ``gcs_storage``. See ``depictio.models.storage.instance_storage``.
+    storage_backend: str = "s3"
+    gcs_storage: GCSConfig | None = None
     instance_label: str | None = None  # Friendly CLI instance name for server-side monitoring
     # The project's own storage settings, for *reading* remote s3:// sources
     # (url, manifest and s3_prefix scans). None = no project storage: the read

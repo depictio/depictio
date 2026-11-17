@@ -27,6 +27,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.storage import cli_storage_fields
 
 
 @celery_app.task(
@@ -227,6 +228,7 @@ def build_server_cli_config(user_id: str):
             },
             "api_base_url": settings.fastapi.url,
             "s3_storage": settings.s3.model_dump(),
+            **cli_storage_fields(settings, dump=True),
         }
     )
 
