@@ -97,6 +97,9 @@ class QuartoFrontMatter:
         if self.after_body:
             doc["format"]["html"]["include-after-body"] = {"text": self.after_body}
         if self.pdf:
+            # The HTML is one self-contained file: a link to "the other
+            # format" beside it would point at nothing once it is moved.
+            doc["format"]["html"]["format-links"] = False
             doc["format"]["typst"] = {
                 "toc": True,
                 "toc-depth": 3,
