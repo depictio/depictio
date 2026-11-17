@@ -73,10 +73,25 @@ def test_optional_datasets_are_not_in_the_default_set():
     An optional dataset that also sits in `all_datasets` would seed everywhere,
     which is exactly what opting in is meant to prevent.
     """
-    from depictio.api.v1.db_init_reference_datasets import OPTIONAL_DATASETS
+    from depictio.api.v1.db_init_reference_datasets import DEFAULT_DATASETS, OPTIONAL_DATASETS
 
-    default_set = {"iris", "penguins", "ampliseq", "advanced_viz_showcase", "viralrecon"}
-    assert set(OPTIONAL_DATASETS).isdisjoint(default_set)
+    assert set(OPTIONAL_DATASETS).isdisjoint(DEFAULT_DATASETS)
+
+
+def test_genome_tracks_showcase_is_opt_in():
+    """A fresh instance opens without the genome tracks showcase.
+
+    It stays seedable on request, with its hand-maintained ids intact.
+    """
+    from depictio.api.v1.db_init_reference_datasets import (
+        DEFAULT_DATASETS,
+        OPTIONAL_DATASETS,
+        STATIC_IDS,
+    )
+
+    assert "genome_tracks_examples" not in DEFAULT_DATASETS
+    assert "genome_tracks_examples" in OPTIONAL_DATASETS
+    assert STATIC_IDS["genome_tracks_examples"]["project"] == "946b0f3c1e4a2d7f8e5bca00"
 
 
 @pytest.mark.parametrize(
@@ -98,6 +113,7 @@ def test_optional_datasets_are_not_in_the_default_set():
         ("viralrecon_overview", "viralrecon"),
         ("viralrecon_variants", "viralrecon"),
         ("catalog_conformance_overview", "catalog_conformance"),
+        ("genome_tracks_strandseq", "genome_tracks_examples"),
     ],
 )
 def test_dataset_of_dashboard_mapping(dashboard_name, dataset):

@@ -423,8 +423,10 @@ def test_report_pipeline_without_a_release_run_judges_nothing(
 
     monkeypatch.setattr(nfm, "resolve_results_prefix", no_run)
     monkeypatch.setattr(nfm, "run_catalog_validate", lambda: ("PASS", "OK"))
+    monkeypatch.setattr(nfm, "params_drift", lambda *a: (["## Params — same"], 0))
     report = nfm.report_pipeline("hic", "2.1.0", index={})
     assert report.verdict.key == "unverified"
+    assert "## Params — same" in report.markdown
     assert "> ⚠️ nf-core/hic 2.1.0: megatest run is empty" in report.markdown
     assert "| table |" not in report.markdown  # the fallback table stays out of the report
     assert "Nothing was compared" in report.markdown
@@ -467,3 +469,40 @@ def test_verified_reason_names_the_paths_that_were_compared(nfm: ModuleType) -> 
     assert verdict.reason == (
         "1 of 1 file-based recipes ran on its data; 29 path(s) the template reads are unchanged"
     )
+
+
+def test_a_broken_rule_needs_review_even_without_a_run(
+    nfm: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two schemas are enough to know a rule broke: no megatest needed."""
+
+    def no_run(*args: object, **kwargs: object) -> str:
+        raise nfm.MegatestError("nf-core/hic 2.1.0: megatest run is empty", "")
+
+    monkeypatch.setattr(nfm, "resolve_results_prefix", no_run)
+    monkeypatch.setattr(nfm, "run_catalog_validate", lambda: ("PASS", "OK"))
+    monkeypatch.setattr(nfm, "params_drift", lambda *a: (["- ❌ `X` reads `p`, gone"], 1))
+    report = nfm.report_pipeline("hic", "2.1.0", index={})
+    assert report.verdict.key == "review"
+    assert "from_params rule(s) broken" in report.verdict.reason
+
+
+def test_params_drift_reads_both_schemas(nfm: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    from depictio.cli.cli.utils import template_check
+
+    schemas = {
+        "1.0.0": {"properties": {"skip_x": {"type": "boolean"}}},
+        "2.0.0": {"properties": {"skip_xx": {"type": "boolean"}, "skip_new": {"type": "boolean"}}},
+    }
+    monkeypatch.setattr(template_check, "fetch_schema", lambda p, r, cache=None: schemas[r])
+    template = {
+        "template": {
+            "template_id": "nf-core/demo/1.0.0",
+            "description": "d",
+            "version": "1.0.0",
+            "variables": [{"name": "X", "description": "x", "from_params": {"param": "skip_x"}}],
+        }
+    }
+    lines, problems = nfm.params_drift(template, "demo", "1.0.0", "2.0.0")
+    assert problems == 1
+    assert "`X` reads `skip_x`, gone from the release; renamed to `skip_xx`" in "\n".join(lines)

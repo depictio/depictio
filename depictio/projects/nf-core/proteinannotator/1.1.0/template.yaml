@@ -69,9 +69,11 @@ template:
     - name: "SKIP_INTERPROSCAN"
       description: "Set (--var SKIP_INTERPROSCAN=true) for a run with --skip_interproscan: no functional_annotation/, so the InterProScan collections are pruned."
       required: false
+      from_params: {param: skip_interproscan}
     - name: "SKIP_S4PRED"
       description: "Set (--var SKIP_S4PRED=true) for a run with --skip_s4pred: no s4pred/, so the secondary-structure collections are pruned (the residue table keeps its sequence and domains)."
       required: false
+      from_params: {param: skip_s4pred}
   # Variables for the BUNDLED reference dataset: the megatest run with the
   # design table vendored in input/ (see docs/dashboards.md).
   reference:

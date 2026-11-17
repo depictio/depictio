@@ -29,7 +29,7 @@
 template:
   template_id: "nf-core/rnaseq/3.26.0"
   description: "nf-core/rnaseq template for bulk RNA-seq: MultiQC funnel, Salmon expression overview, gene explorer"
-  version: "2.2.0"
+  version: "2.3.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing rnaseq pipeline output for one aligner route (multiqc/, star_salmon/, salmon/, trimgalore/)"
@@ -40,12 +40,15 @@ template:
     - name: "PSEUDOALIGNER_ONLY"
       description: "Set (--var PSEUDOALIGNER_ONLY=true) for a --skip_alignment run: there is no star_salmon/, so the expression panels read the matrices under salmon/ instead. Matches the run's params.json skip_alignment."
       required: false
+      from_params: {param: skip_alignment}
     - name: "SKIP_MULTIQC"
-      description: "Set (--var SKIP_MULTIQC=true) for a run with --skip_multiqc or --skip_qc. Prunes the MultiQC data collection: no report was written, so the QC tab has nothing to read."
+      description: "Set from the run's --skip_multiqc (in 3.26.0, --skip_qc keeps MultiQC). Prunes the MultiQC data collection: no report was written, so the QC tab has nothing to read."
       required: false
+      from_params: {param: skip_multiqc}  # --skip_qc keeps MultiQC in 3.26.0
     - name: "SKIP_QUANTIFICATION_MERGE"
       description: "Set (--var SKIP_QUANTIFICATION_MERGE=true) for a run with --skip_quantification_merge. The merged salmon.merged.gene_*.tsv matrices are absent, so every expression panel loses its source and only the QC tab survives."
       required: false
+      from_params: {param: skip_quantification_merge}
     - name: "TRACKS_URI"
       description: "s3:// or https:// folder holding the aligner route's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (stranded bigWig, BAM) in place instead of uploading them from DATA_ROOT. For the megatest: s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon"
       required: false
@@ -101,7 +104,7 @@ template:
   dashboards:
     - "dashboards/base.yaml"
   conditional:
-    # --skip_multiqc / --skip_qc: no report is written, so the MultiQC data
+    # --skip_multiqc: no report is written, so the MultiQC data
     # collection has no file. Dropping it lets the run ingest its expression
     # panels instead of aborting on a missing scan.
     - if_var_present: "SKIP_MULTIQC"

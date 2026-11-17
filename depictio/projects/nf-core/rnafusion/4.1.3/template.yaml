@@ -29,7 +29,7 @@
 template:
   template_id: "nf-core/rnafusion/4.1.3"
   description: "nf-core/rnafusion gene-fusion template: caller consensus, per-caller evidence, in-silico validation and splice-junction analysis"
-  version: "2.2.0"
+  version: "2.3.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing rnafusion pipeline output (multiqc/, fusionreport/, arriba/, starfusion/, fusioncatcher/, fusioninspector/, ctatsplicing/)"
@@ -47,21 +47,27 @@ template:
     - name: "SKIP_ARRIBA"
       description: "Set when params.json `tools` does not include arriba. Prunes the Arriba data collection."
       required: false
+      from_params: {all: [{param: tools, not_contains: arriba}, {param: tools, not_contains: all}]}
     - name: "SKIP_STARFUSION"
       description: "Set when params.json `tools` does not include starfusion. Prunes the STAR-Fusion data collection."
       required: false
+      from_params: {all: [{param: tools, not_contains: starfusion}, {param: tools, not_contains: all}]}
     - name: "SKIP_FUSIONCATCHER"
       description: "Set when params.json `tools` does not include fusioncatcher. Prunes the FusionCatcher data collection."
       required: false
+      from_params: {all: [{param: tools, not_contains: fusioncatcher}, {param: tools, not_contains: all}]}
     - name: "SKIP_FUSIONINSPECTOR"
       description: "Set when the run did not validate the calls with FusionInspector. Prunes the validated-fusion and protein-domain collections."
       required: false
+      from_params: {all: [{param: tools, not_contains: fusioninspector}, {param: tools, not_contains: all}]}
     - name: "SKIP_CTATSPLICING"
       description: "Set when params.json `tools` does not include ctatsplicing. Prunes the splice-junction collections."
       required: false
+      from_params: {all: [{param: tools, not_contains: ctatsplicing}, {param: tools, not_contains: all}]}
     - name: "SKIP_QC"
       description: "Set when the run used --skip_qc (params.json skip_qc). Prunes the MultiQC collection and the Quality control tab."
       required: false
+      from_params: {param: skip_qc}
   # Variables used when materialising the bundled reference dataset. The
   # samplesheet is the one file the run does not publish, so its location is
   # pinned here rather than guessed.

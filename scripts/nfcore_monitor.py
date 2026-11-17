@@ -600,12 +600,18 @@ def compute_verdict(
     n_problems: int,
     recipe_results: list[RecipeCheck] | None,
     structure: StructureDiff | None,
+    params_problems: int = 0,
 ) -> Verdict:
-    """Order matters: a major bump always needs a person; without the release's own
-    data nothing else counts; then drift, then how much actually ran.
+    """Order matters: a major bump always needs a person; a broken from_params rule
+    is known from the two schemas alone, with or without a run; without the
+    release's own data nothing else counts; then drift, then how much actually ran.
     """
     if is_major_bump(local, new):
         return Verdict("review", f"major version bump {local} → {new}")
+    if params_problems:
+        return Verdict(
+            "review", f"{params_problems} from_params rule(s) broken or flipped by the release"
+        )
     if not new_data:
         return Verdict("unverified", "no usable megatest run for this release")
     if structure is not None and structure.lost_paths:
@@ -811,6 +817,21 @@ class PipelineReport(NamedTuple):
     n_problems: int
 
 
+def params_drift(template: dict, pipeline: str, local: str, new: str) -> tuple[list[str], int]:
+    """The ``## Params`` section and its problem count: the template's
+    ``from_params`` rules read against both releases' ``nextflow_schema.json``
+    (``depictio template check --against``). Needs no megatest run."""
+    from depictio.cli.cli.utils.template_check import compare_releases, fetch_schema
+    from depictio.models.models.templates import TemplateMetadata
+
+    try:
+        meta = TemplateMetadata(**template["template"])
+        drift = compare_releases(meta, fetch_schema(pipeline, local), fetch_schema(pipeline, new))
+    except Exception as exc:  # noqa: BLE001 - reported, never crashes the run
+        return [f"## Params — not compared ({type(exc).__name__}: {exc})", ""], 0
+    return drift.markdown(local, new), len(drift.broken) + len(drift.flipped)
+
+
 def _run_prefix(pipeline: str, sha: str, run_root: str) -> str:
     root = run_root.strip("/")
     return f"{pipeline}/results-{sha}/" + (f"{root}/" if root else "")
@@ -852,6 +873,7 @@ def report_pipeline(
     print(f"→ nf-core/{pipeline}: {local} (local) → {new_version} (release)", file=sys.stderr)
     template = load_template(pipeline, local)
     catalog_result = None if no_exec else run_catalog_validate()
+    params_lines, params_problems = params_drift(template, pipeline, local, new_version)
 
     try:
         results_prefix = resolve_results_prefix(
@@ -859,7 +881,13 @@ def report_pipeline(
         )
     except MegatestError as exc:
         verdict = compute_verdict(
-            local, new_version, new_data=False, n_problems=0, recipe_results=None, structure=None
+            local,
+            new_version,
+            new_data=False,
+            n_problems=0,
+            recipe_results=None,
+            structure=None,
+            params_problems=params_problems,
         )
         lines = [
             f"# nf-core/{pipeline} drift report — {local} → {new_version}",
@@ -872,6 +900,7 @@ def report_pipeline(
             "",
             "Nothing was compared: another release's run says nothing about this one.",
             "",
+            *params_lines,
         ]
         if catalog_result is not None:
             lines += [f"## Catalog validate — {catalog_result[0]}", f"- {catalog_result[1]}", ""]
@@ -926,10 +955,12 @@ def report_pipeline(
         n_problems=n_problems,
         recipe_results=recipe_results,
         structure=structure,
+        params_problems=params_problems,
     )
     report, _ = build_drift_report(
         pipeline, local, new_version, results_prefix, source_paths, keys, recipe_results,
-        catalog_result, run_root=run_root, verdict=verdict, structure_lines=structure_lines,
+        catalog_result, run_root=run_root, verdict=verdict,
+        structure_lines=params_lines + (structure_lines or []),
     )  # fmt: skip
     return PipelineReport(pipeline, local, new_version, verdict, report, n_problems)
 
