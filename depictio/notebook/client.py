@@ -449,8 +449,13 @@ class DepictioClient:
         this document computed for it. A worker rendering the report composes
         the block itself and names it in ``DEPICTIO_REPORT_RUNTIME_FILE``.
         """
+        from .components import static_figures
         from .report_runtime import RUNTIME_FILE_ENV, compose_report_runtime, raw_html_block
 
+        if static_figures():
+            # A page with no browser (the PDF) runs no script: the block would
+            # only be megabytes of raw HTML for the typst writer to drop.
+            return ""
         prebuilt = os.environ.get(RUNTIME_FILE_ENV)
         if prebuilt:
             try:

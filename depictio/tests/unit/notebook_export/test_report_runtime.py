@@ -246,3 +246,16 @@ def test_a_child_tab_with_its_own_filters_gets_its_panel(penguins_tabs):
             ]
     src = generate_qmd(replace(penguins_plan(bare), embed_runtime=True))
     assert src.count(FILTERS_ATTR) == 1
+
+
+def test_a_static_render_embeds_no_runtime(monkeypatch, tmp_path):
+    """The PDF render runs no script: the runtime block is not printed at all."""
+    from depictio.notebook.report_runtime import RUNTIME_FILE_ENV
+
+    block = tmp_path / "block.html"
+    block.write_text("<script>1</script>")
+    monkeypatch.setenv(RUNTIME_FILE_ENV, str(block))
+    client = DepictioClient(base_url="http://127.0.0.1:9", token="t")
+    assert client.report_runtime("d") != ""
+    monkeypatch.setenv("DEPICTIO_STATIC_FIGURES", "1")
+    assert client.report_runtime("d") == ""
