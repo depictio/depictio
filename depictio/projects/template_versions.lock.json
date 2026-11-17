@@ -529,6 +529,16 @@
         "seqfu": "1.0.0"
       }
     },
+    "nf-core/proteinfamilies/2.6.0": {
+      "version": "1.1.2",
+      "content_hash": "6223deebbda0b6769155925e33c42f96c5174394c55527efd5c0a6a5989e752e",
+      "catalog": {
+        "famsa": "1.0.0",
+        "hmmer": "1.0.0",
+        "proteinfamilies": "1.0.0",
+        "seqfu": "1.0.0"
+      }
+    },
     "nf-core/proteinfold/2.1.0": {
       "version": "1.1.2",
       "content_hash": "1f2a38897dbf7730a95aac3dbdf2f45e70e775c8e69b3dace666c46b860cfcb5",
