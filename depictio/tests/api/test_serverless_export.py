@@ -1743,6 +1743,25 @@ def test_a_failing_celery_compute_degrades_to_omitted(
     assert list(manifest.data_refs) == [str(FAM_DC_OID)]
 
 
+def test_the_soft_time_limit_stops_the_export_not_one_tile(
+    family_stack, monkeypatch: pytest.MonkeyPatch
+):
+    """Celery's soft time limit is an Exception too. Caught per tile, it read
+    as one more "unsupported" tile and the export ran on until the hard limit
+    killed it, omitting tile after tile: it must end the export instead."""
+    from depictio.api.v1 import celery_tasks as celery_mod
+
+    class SoftTimeLimitExceeded(Exception):
+        pass
+
+    def out_of_time(payload: dict[str, Any]) -> dict[str, Any]:
+        raise SoftTimeLimitExceeded()
+
+    monkeypatch.setattr(celery_mod, "compute_upset", out_of_time)
+    with pytest.raises(SoftTimeLimitExceeded):
+        export_manifest(str(MAIN_TAB_OID), _admin())
+
+
 def test_an_exhausted_compute_budget_omits_without_computing(family_stack):
     """Wall-clock guard: once the export's total budget is spent, the remaining
     computes are skipped (and say so) rather than running the task past the

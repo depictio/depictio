@@ -88,11 +88,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import json
 import logging
 import os
 import re
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -1656,6 +1658,8 @@ def freeze_celery_compute(
         logger.warning("producer A: %s", detail)
         return None, detail
     except Exception as exc:
+        if _is_time_limit(exc):
+            raise
         budget.charge(time.monotonic() - started)
         detail = f"advanced_viz '{kind}' compute failed: {exc}"
         logger.warning("producer A: %s", detail)
@@ -1809,6 +1813,40 @@ def multiqc_prerender_note(
     )
 
 
+def _is_time_limit(exc: BaseException) -> bool:
+    """Celery's soft time limit is an ``Exception`` too: a per-tile catch that
+    swallows it lets the export run on past its limit, omitting tile after tile
+    as "unsupported" until the hard limit kills it."""
+    return type(exc).__name__ == "SoftTimeLimitExceeded"
+
+
+#: ``expansion_from_mappings`` results by (collection, mappings digest). Every
+#: MultiQC tile of a collection asks for the same expansion; viralrecon has 16
+#: tiles over ~21k ids at ~45 s each, which ran the export past its time limit.
+#: Keyed by the mappings' digest too, so a re-ingested collection recomputes.
+_EXPANSION_CACHE: OrderedDict[tuple[str, str], dict[str, list[str]]] = OrderedDict()
+_EXPANSION_CACHE_SIZE = 8
+_EXPANSION_LOCK = threading.Lock()
+
+
+def _cached_expansion(dc_id: str, mappings: dict[str, list[str]]) -> dict[str, list[str]]:
+    digest = hashlib.sha256(
+        json.dumps(mappings, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    key = (dc_id, digest)
+    with _EXPANSION_LOCK:
+        hit = _EXPANSION_CACHE.get(key)
+        if hit is not None:
+            _EXPANSION_CACHE.move_to_end(key)
+            return hit
+    out = expansion_from_mappings(mappings)
+    with _EXPANSION_LOCK:
+        _EXPANSION_CACHE[key] = out
+        while len(_EXPANSION_CACHE) > _EXPANSION_CACHE_SIZE:
+            _EXPANSION_CACHE.popitem(last=False)
+    return out
+
+
 def multiqc_sample_expansion(dc_id: str) -> dict[str, list[str]]:
     """``{sample id: report variants}`` for a MultiQC collection, precomputed.
 
@@ -1832,11 +1870,11 @@ def multiqc_sample_expansion(dc_id: str) -> dict[str, list[str]]:
                 for v in variants or []:
                     if str(v) not in bucket:
                         bucket.append(str(v))
-        return expansion_from_mappings(mappings)
+        return _cached_expansion(dc_id, mappings)
     except Exception as exc:
-        # Celery's soft time limit is an Exception too: swallowing it here let
-        # an export run on past it and ship without its sample expansion.
-        if type(exc).__name__ == "SoftTimeLimitExceeded":
+        # Swallowing the soft time limit here let an export run on past it and
+        # ship without its sample expansion.
+        if _is_time_limit(exc):
             raise
         logger.warning("producer A: MultiQC sample expansion for %s failed: %s", dc_id, exc)
         return {}
@@ -3464,6 +3502,8 @@ def export_manifest(
                 if outcome.renderable:
                     jbrowse_tiles.append(str(comp.get("title") or component_id))
         except Exception as exc:
+            if _is_time_limit(exc):
+                raise
             row.tier = ComponentTier.OMITTED
             row.reason = row.reason or TierReason.UNSUPPORTED
             row.detail = f"frozen payload could not be computed: {exc}"
