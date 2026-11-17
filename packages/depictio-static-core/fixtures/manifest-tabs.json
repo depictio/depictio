@@ -243,7 +243,32 @@
     "type": "table",
     "metatype": "Aggregate",
     "workflow_id": "f1x7000000000000000000w1",
-    "description": "One row per penguin."
+    "description": "One row per penguin.",
+    "rows": 3,
+    "size_bytes": 2048,
+    "updated_at": "2026-08-01T10:05:00",
+    "version": 2,
+    "format": "csv",
+    "columns": [
+     {
+      "name": "species",
+      "type": "string",
+      "description": "Penguin species",
+      "distinct": 2
+     },
+     {
+      "name": "bill_length_mm",
+      "type": "float64",
+      "description": null,
+      "distinct": 3
+     },
+     {
+      "name": "island",
+      "type": "string",
+      "description": null,
+      "distinct": 2
+     }
+    ]
    },
    {
     "id": "dc00000000000000000000m1",
@@ -251,7 +276,13 @@
     "type": "multiqc",
     "metatype": null,
     "workflow_id": "f1x7000000000000000000w1",
-    "description": null
+    "description": null,
+    "rows": null,
+    "size_bytes": 4096,
+    "updated_at": null,
+    "version": null,
+    "format": null,
+    "columns": []
    }
   ],
   "links": [

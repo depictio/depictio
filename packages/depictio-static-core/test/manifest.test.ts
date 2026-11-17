@@ -92,6 +92,9 @@ describe('contract pinning against the committed JSON-schema snapshot', () => {
     expect(keys(project.data_collections[0])).toEqual(
       keys(defs.ProjectDataCollectionSummary.properties),
     );
+    expect(keys(project.data_collections[0].columns![0])).toEqual(
+      keys(defs.ProjectColumnSummary.properties),
+    );
     expect(keys(project.links[0])).toEqual(keys(defs.ProjectLinkSummary.properties));
     expect(keys(project.joins[0])).toEqual(keys(defs.ProjectJoinSummary.properties));
     expect(keys(project.run_parameters[0])).toEqual(keys(defs.RunParameter.properties));

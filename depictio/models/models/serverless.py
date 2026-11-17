@@ -650,10 +650,32 @@ class ProjectWorkflowSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ProjectColumnSummary(BaseModel):
+    """One column of a collection as its last ingestion recorded it.
+
+    The schema the live project page lists (name, dtype, description, distinct
+    values), so a bundle shows it for every collection of the project, the
+    ones the export left out included. Statistics other than the distinct
+    count (min, max, samples of values) stay on the server.
+    """
+
+    name: str
+    type: str | None = Field(default=None, description="Column dtype as recorded at ingestion")
+    description: str | None = None
+    distinct: int | None = Field(default=None, description="Distinct values at ingestion")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ProjectDataCollectionSummary(BaseModel):
     """One data collection of the project. Size comes from ``data_refs`` when the
     bundle carries the table; a collection the export left out is still listed,
-    so a reader can see what the live project holds."""
+    so a reader can see what the live project holds.
+
+    The ingestion facts (rows, columns, size, time, version, format) are what
+    the live data collection viewer shows; none of them names a location, a
+    user or a run folder.
+    """
 
     id: str
     tag: str
@@ -661,6 +683,14 @@ class ProjectDataCollectionSummary(BaseModel):
     metatype: str | None = Field(default=None, description="Free-form label, display only")
     workflow_id: str | None = Field(default=None, description="Owning workflow, null when direct")
     description: str | None = None
+    rows: int | None = Field(default=None, description="Rows at the last ingestion")
+    size_bytes: int | None = Field(default=None, description="Stored size at the last ingestion")
+    updated_at: str | None = Field(default=None, description="Time of the last ingestion")
+    version: int | None = Field(default=None, description="Delta commit of the last ingestion")
+    format: str | None = Field(default=None, description="Source file format (csv, parquet, ...)")
+    columns: list[ProjectColumnSummary] = Field(
+        default_factory=list, description="Schema at the last ingestion"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

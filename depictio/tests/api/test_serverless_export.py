@@ -1562,6 +1562,77 @@ def test_family_manifest_carries_a_sanitised_project_summary(family_stack, monke
     assert "permissions" not in dumped
 
 
+class _FakeDeltatables(_FakeCollection):
+    """``deltatables_collection`` as the project summary reads it: ``find`` by
+    ``$in`` of data collection ids, the newest aggregation sliced."""
+
+    def find(self, query: dict[str, Any], projection: Any = None):
+        wanted = set(query["data_collection_id"]["$in"])
+        return [d for d in self.docs if d["data_collection_id"] in wanted]
+
+
+def test_project_summary_carries_each_collections_ingestion_facts(family_stack, monkeypatch):
+    """Rows, schema, size and time of the last ingestion reach the bundle's
+    project page; who ran it and where the table lives do not."""
+    from depictio.api.v1 import db as db_mod
+
+    project = {
+        "_id": PROJECT_OID,
+        "name": "Fake project",
+        "links": [],
+        "workflows": [
+            {
+                "_id": WF_OID,
+                "name": "wf",
+                "data_collections": [
+                    {
+                        "_id": FAM_DC_OID,
+                        "data_collection_tag": "diversity",
+                        "config": {"type": "table", "dc_specific_properties": {"format": "csv"}},
+                        "flexible_metadata": {"deltatable_size_bytes": 1234},
+                    }
+                ],
+            }
+        ],
+    }
+    monkeypatch.setattr(db_mod, "projects_collection", _FakeCollection([project]))
+    monkeypatch.setattr(
+        db_mod,
+        "deltatables_collection",
+        _FakeDeltatables(
+            [
+                {
+                    "data_collection_id": FAM_DC_OID,
+                    "delta_table_location": "s3://secret-bucket/fam",
+                    "aggregation": [
+                        {
+                            "aggregation_time": "2026-08-02 09:30:00",
+                            "aggregation_by": {"email": "runner@example.org"},
+                            "rows_total": 3,
+                            "delta_version": 1,
+                            "aggregation_columns_specs": [
+                                {"name": "shannon", "type": "float64", "specs": {"nunique": 3}},
+                                {"name": "depth", "type": "int64"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        ),
+    )
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None and manifest.project is not None
+    [dc] = manifest.project.data_collections
+    assert (dc.rows, dc.version, dc.size_bytes, dc.format) == (3, 1, 1234, "csv")
+    assert [(c.name, c.type, c.distinct) for c in dc.columns] == [
+        ("shannon", "float64", 3),
+        ("depth", "int64", None),
+    ]
+    dumped = json.dumps(manifest.project.model_dump(mode="json"))
+    assert "runner@example.org" not in dumped
+    assert "secret-bucket" not in dumped
+
+
 def test_family_bundles_a_shared_data_collection_once(family_stack):
     """The size win: two tabs reading one DC inline one Parquet blob, not two."""
     manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest

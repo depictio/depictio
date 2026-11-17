@@ -851,9 +851,9 @@
       "title": "Producer",
       "type": "string"
     },
-    "ProjectDataCollectionSummary": {
+    "ProjectColumnSummary": {
       "additionalProperties": false,
-      "description": "One data collection of the project. Size comes from ``data_refs`` when the\nbundle carries the table; a collection the export left out is still listed,\nso a reader can see what the live project holds.",
+      "description": "One column of a collection as its last ingestion recorded it.\n\nThe schema the live project page lists (name, dtype, description, distinct\nvalues), so a bundle shows it for every collection of the project, the\nones the export left out included. Statistics other than the distinct\ncount (min, max, samples of values) stay on the server.",
       "properties": {
         "description": {
           "anyOf": [
@@ -866,6 +866,80 @@
           ],
           "default": null,
           "title": "Description"
+        },
+        "distinct": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Distinct values at ingestion",
+          "title": "Distinct"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Column dtype as recorded at ingestion",
+          "title": "Type"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProjectColumnSummary",
+      "type": "object"
+    },
+    "ProjectDataCollectionSummary": {
+      "additionalProperties": false,
+      "description": "One data collection of the project. Size comes from ``data_refs`` when the\nbundle carries the table; a collection the export left out is still listed,\nso a reader can see what the live project holds.\n\nThe ingestion facts (rows, columns, size, time, version, format) are what\nthe live data collection viewer shows; none of them names a location, a\nuser or a run folder.",
+      "properties": {
+        "columns": {
+          "description": "Schema at the last ingestion",
+          "items": {
+            "$ref": "#/$defs/ProjectColumnSummary"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source file format (csv, parquet, ...)",
+          "title": "Format"
         },
         "id": {
           "title": "Id",
@@ -884,6 +958,32 @@
           "description": "Free-form label, display only",
           "title": "Metatype"
         },
+        "rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rows at the last ingestion",
+          "title": "Rows"
+        },
+        "size_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stored size at the last ingestion",
+          "title": "Size Bytes"
+        },
         "tag": {
           "title": "Tag",
           "type": "string"
@@ -893,6 +993,32 @@
           "description": "dc type (table, multiqc, image, ...)",
           "title": "Type",
           "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Time of the last ingestion",
+          "title": "Updated At"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Delta commit of the last ingestion",
+          "title": "Version"
         },
         "workflow_id": {
           "anyOf": [

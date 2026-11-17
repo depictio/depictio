@@ -10,6 +10,7 @@ of it comes out, while every display fact does.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from bson import ObjectId
 
@@ -114,13 +115,21 @@ def _project_doc() -> dict:
                                 "mode": "single",
                                 "scan_parameters": {"filename": "/data/a.tsv"},
                             },
-                            "dc_specific_properties": {"format": "tsv"},
+                            "dc_specific_properties": {
+                                "format": "tsv",
+                                "columns_description": {"shannon": "Shannon index"},
+                            },
+                        },
+                        "flexible_metadata": {
+                            "deltatable_size_bytes": 20480,
+                            "s3_location": "s3://depictio-bucket/alpha/",
                         },
                     },
                     {
                         "_id": DC_MQC,
                         "data_collection_tag": "multiqc_data",
                         "config": {"type": "multiqc"},
+                        "flexible_metadata": {"total_file_size_bytes": 4096},
                     },
                     {"data_collection_tag": "no_id"},  # unusable: dropped
                 ],
@@ -164,6 +173,85 @@ def _project_doc() -> dict:
             }
         ],
     }
+
+
+def _aggregations() -> dict:
+    """What producer A reads from ``deltatables``: a whole aggregation entry,
+    the user who ran it and the run folders included."""
+    return {
+        str(DC_TABLE): {
+            "aggregation_time": datetime(2026, 8, 2, 9, 30, 5, 123456),
+            "aggregation_by": {"id": str(ObjectId()), "email": "runner@example.org"},
+            "aggregation_version": 3,
+            "aggregation_hash": "cafebabe",
+            "aggregation_columns_specs": [
+                {"name": "sample", "type": "string", "specs": {"nunique": 12}},
+                {"name": "shannon", "type": "float64", "specs": {"nunique": 11, "min": 1.2}},
+                {"name": "depictio_run_id", "type": "string"},
+                {"type": "int64"},  # nameless: dropped
+            ],
+            "delta_version": 4,
+            "write_mode": "overwrite",
+            "rows_total": 12,
+            "content_digest": "digest-1",
+            "run_tags": ["/data/runs/ampliseq-2026/run-A"],
+            "ingestion_run_id": "ing-1",
+        }
+    }
+
+
+def test_ingestion_facts_come_through():
+    """The live collection viewer's facts: rows, schema, size, time, version."""
+    summary = build_project_summary(_project_doc(), None, _aggregations())
+    assert summary is not None
+    by_tag = {dc.tag: dc for dc in summary.data_collections}
+    alpha = by_tag["alpha_diversity"]
+    assert alpha.rows == 12
+    assert alpha.version == 4
+    assert alpha.size_bytes == 20480
+    assert alpha.format == "tsv"
+    assert alpha.updated_at == "2026-08-02T09:30:05"
+    assert [(c.name, c.type, c.distinct) for c in alpha.columns] == [
+        ("sample", "string", 12),
+        ("shannon", "float64", 11),
+        ("depictio_run_id", "string", None),
+    ]
+    assert alpha.columns[1].description == "Shannon index"
+    # A MultiQC report's size is its files'; no aggregation, no facts.
+    mqc = by_tag["multiqc_data"]
+    assert (mqc.size_bytes, mqc.rows, mqc.columns) == (4096, None, [])
+
+
+def test_an_enriched_document_carries_its_own_aggregation():
+    """The API's enriched project (`last_aggregation` stamped on each DC) needs
+    no separate map."""
+    doc = _project_doc()
+    dc = doc["workflows"][0]["data_collections"][0]
+    dc["last_aggregation"] = [{"rows_total": 1}, _aggregations()[str(DC_TABLE)]]
+    dc["delta_location"] = "s3://depictio-bucket/alpha"
+    summary = build_project_summary(doc, None)
+    assert summary is not None
+    alpha = next(d for d in summary.data_collections if d.tag == "alpha_diversity")
+    assert alpha.rows == 12  # the newest entry, not the first
+    text = json.dumps(summary.model_dump(mode="json"))
+    assert "depictio-bucket" not in text
+
+
+def test_ingestion_facts_keep_out_who_and_where():
+    summary = build_project_summary(_project_doc(), None, _aggregations())
+    assert summary is not None
+    text = json.dumps(summary.model_dump(mode="json"))
+    for leaked in (
+        "runner@example.org",  # aggregation_by
+        "aggregation_by",
+        "cafebabe",  # aggregation_hash
+        "digest-1",
+        "run-A",  # run folders
+        "ing-1",
+        "depictio-bucket",  # s3_location in flexible_metadata
+        '"min"',  # column statistics other than the distinct count
+    ):
+        assert leaked not in text, f"{leaked!r} leaked into the bundle's project summary"
 
 
 def test_display_facts_come_through():
