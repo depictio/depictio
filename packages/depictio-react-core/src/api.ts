@@ -5130,6 +5130,9 @@ export interface RunScan {
 export interface ProjectRun {
   run_tag: string;
   workflow: string | null;
+  /** Tells apart two workflows' runs that share a tag; pass it to
+   *  `fetchProjectRunFiles`. */
+  workflow_id?: string | null;
   run_location: string | null;
   folder_created: string | null;
   folder_modified: string | null;
@@ -5203,11 +5206,17 @@ export interface RunFiles {
 }
 
 /** The files of one run of a project, with what each scan did to them.
- *  Backend: GET /projects/project-runs/{id}/files?run_tag=. */
-export async function fetchProjectRunFiles(projectId: string, runTag: string): Promise<RunFiles> {
-  const res = await authFetch(
-    `${API_BASE}/projects/project-runs/${projectId}/files?run_tag=${encodeURIComponent(runTag)}`,
-  );
+ *  `workflowId` (`ProjectRun.workflow_id`) picks the workflow's run when two
+ *  workflows hold a run with that tag; without it their files are mixed.
+ *  Backend: GET /projects/project-runs/{id}/files?run_tag=&workflow_id=. */
+export async function fetchProjectRunFiles(
+  projectId: string,
+  runTag: string,
+  workflowId?: string | null,
+): Promise<RunFiles> {
+  const params = new URLSearchParams({ run_tag: runTag });
+  if (workflowId) params.set('workflow_id', workflowId);
+  const res = await authFetch(`${API_BASE}/projects/project-runs/${projectId}/files?${params}`);
   if (!res.ok) await throwHttpError(res, `Failed to fetch the files of run ${runTag}`);
   return (await res.json()) as RunFiles;
 }
