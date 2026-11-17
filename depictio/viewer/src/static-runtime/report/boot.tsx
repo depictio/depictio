@@ -73,14 +73,45 @@ function readConfig(): ReportConfig {
   }
 }
 
-/** A root of the runtime: the class its scoped CSS keys on, Paper, light. */
+type Scheme = 'light' | 'dark';
+
+/** The report's own scheme: Quarto marks its dark page `body.quarto-dark`
+ *  (the reader's preference, or its toggle). */
+function reportScheme(): Scheme {
+  return document.body?.classList.contains('quarto-dark') ? 'dark' : 'light';
+}
+
+const roots: HTMLElement[] = [];
+
+/** A root of the runtime: the class its scoped CSS keys on, Paper, in the
+ *  report's scheme. */
 function runtimeRoot(extraClass: string): HTMLDivElement {
   const el = document.createElement('div');
   el.className = `${ROOT_CLASS} ${extraClass}`;
   el.dataset.chrome = paper.id;
-  el.setAttribute('data-mantine-color-scheme', 'light');
+  el.setAttribute('data-mantine-color-scheme', reportScheme());
+  roots.push(el);
   return el;
 }
+
+/** Mantine in the report's scheme, following it when the reader toggles. */
+const SchemeProvider: React.FC<
+  Omit<React.ComponentProps<typeof MantineProvider>, 'forceColorScheme'>
+> = (props) => {
+  const [scheme, setScheme] = React.useState<Scheme>(reportScheme);
+  React.useEffect(() => {
+    const sync = () => {
+      const next = reportScheme();
+      for (const el of roots) el.setAttribute('data-mantine-color-scheme', next);
+      setScheme(next);
+    };
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    sync();
+    return () => observer.disconnect();
+  }, []);
+  return <MantineProvider {...props} forceColorScheme={scheme} />;
+};
 
 export interface BootReportOptions {
   /** One filter state shared with another view of the same file. */
@@ -161,9 +192,8 @@ export function bootReport(options: BootReportOptions = {}): BootedReport | null
 
   ReactDOM.createRoot(reactRoot).render(
     <React.StrictMode>
-      <MantineProvider
+      <SchemeProvider
         theme={theme}
-        forceColorScheme="light"
         cssVariablesSelector={`.${ROOT_CLASS}`}
         getRootElement={() => portalRoot}
       >
@@ -179,7 +209,7 @@ export function bootReport(options: BootReportOptions = {}): BootedReport | null
             </StaticBadgeProvider>
           </DatesProvider>
         </BrandingContext.Provider>
-      </MantineProvider>
+      </SchemeProvider>
     </React.StrictMode>,
   );
   return { manifest, tiles };

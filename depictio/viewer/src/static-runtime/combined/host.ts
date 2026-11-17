@@ -95,12 +95,17 @@ const HOST_CSS = `
   background:#fff;visibility:hidden}
 html.dpx-view-dashboard{overflow:hidden}
 html.dpx-view-dashboard .dpx-dashboard-frame{visibility:visible}
-.dpx-open-dashboard{display:inline-flex;align-items:center;gap:.35em;margin-inline-end:.4em}
-.dpx-open-dashboard svg{width:1em;height:1em}
-.dpx-tile-links{display:flex;justify-content:flex-end;margin:0 0 -0.25rem}
-.dpx-tile-links button{all:unset;cursor:pointer;font:500 12px/1.4 system-ui,-apple-system,sans-serif;
-  color:#1c7ed6;padding:2px 6px;border-radius:4px;opacity:.75}
-.dpx-tile-links button:hover,.dpx-tile-links button:focus-visible{opacity:1;background:rgba(28,126,214,.08)}
+.dpx-open-dashboard{display:inline-flex;align-items:center;gap:6px;margin-inline-end:8px}
+.dpx-open-dashboard svg{width:14px;height:14px;flex:none}
+.dpx-tile-links{display:flex;justify-content:flex-end;margin:0 0 4px}
+.dpx-tile-links button{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:5px;
+  cursor:pointer;height:26px;padding:0 10px;border-radius:999px;
+  font:600 12px/1 var(--dpx-font,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif);
+  color:var(--gl-muted,#868e96);border:1px solid var(--gl-hair,rgba(33,37,41,.11));
+  background:var(--gl-paper,#fff);transition:color .12s ease,background-color .12s ease}
+.dpx-tile-links button svg{width:13px;height:13px;flex:none}
+.dpx-tile-links button:hover{color:var(--gl-accent-fg,#1c7ed6);background:var(--gl-accent-soft,rgba(28,126,214,.08))}
+.dpx-tile-links button:focus-visible{outline:2px solid var(--gl-accent,#228be6);outline-offset:2px}
 .dpx-flash{animation:dpx-flash 1.6s ease-out 1}
 @keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px rgba(34,139,230,.55)}100%{box-shadow:0 0 0 3px rgba(34,139,230,0)}}
 @media print{.dpx-open-dashboard,.dpx-dashboard-frame,.dpx-tile-links{display:none!important}
@@ -151,7 +156,15 @@ function tabTarget(tabId: string, hosts: Map<string, HTMLElement>): HTMLElement 
     const section = heading?.parentElement;
     return section && section.tagName === 'SECTION' && section.id ? section : null;
   };
-  const mark = document.querySelector<HTMLElement>(`[${REPORT_TAB_ATTR}="${CSS.escape(tabId)}"]`);
+  // The mark on the heading itself: Quarto copies a heading's markup into the
+  // contents list (and the sticky contents keep it first in the document), so
+  // the first match is a link in `#TOC`, which is no place to scroll to.
+  const marks = Array.from(
+    document.querySelectorAll<HTMLElement>(`[${REPORT_TAB_ATTR}="${CSS.escape(tabId)}"]`),
+  );
+  const mark =
+    marks.find((m) => !m.closest('nav, #TOC, #quarto-margin-sidebar') && m.closest('h1,h2,h3,h4,h5,h6')) ??
+    null;
   if (mark) {
     const heading = mark.closest('h1,h2,h3,h4,h5,h6');
     return sectionOf(heading) ?? (heading as HTMLElement | null) ?? mark;
@@ -426,10 +439,15 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
     if (push) storageSet(memoryKey, next);
     if (next === 'dashboard') {
       if (route?.tab) pendingTab = route.tab;
+      // `#dashboard/<tab>/<component>`: the tile is scrolled to and flashed.
+      if (route?.component) pendingTile = route.component;
       if (!frame) frame = buildFrame();
       else if (route?.tab) withController((c) => c.switchTab(route.tab!));
       const tab = route?.tab ?? controller?.currentTab() ?? pendingTab ?? undefined;
-      setHash({ view: 'dashboard', tab: tab ?? undefined }, push);
+      setHash(
+        { view: 'dashboard', tab: tab ?? undefined, component: route?.component },
+        push,
+      );
       if (pendingTile) {
         const index = pendingTile;
         pendingTile = null;
@@ -459,11 +477,12 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
     row.setAttribute(RUNTIME_ATTR, 'tile-links');
     const open = document.createElement('button');
     open.type = 'button';
-    open.textContent = 'Open in dashboard ↗';
+    open.innerHTML = GRID_ICON;
+    open.append(document.createTextNode('Open in dashboard'));
     open.title = 'Show this tile in the interactive dashboard';
+    open.setAttribute('aria-label', 'Open this tile in the dashboard');
     open.addEventListener('click', () => {
-      pendingTile = ref.index;
-      show('dashboard', { view: 'dashboard', tab: ref.tabId }, true);
+      show('dashboard', { view: 'dashboard', tab: ref.tabId, component: ref.index }, true);
     });
     row.appendChild(open);
     host.insertBefore(row, host.firstChild);
@@ -519,6 +538,7 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
     }
     if (next.view === 'dashboard' && view === 'dashboard' && next.tab) {
       if (next.tab !== controller?.currentTab()) withController((c) => c.switchTab(next.tab!));
+      if (next.component) void scrollToDashboardTile(next.component);
       return;
     }
     show(next.view, next);

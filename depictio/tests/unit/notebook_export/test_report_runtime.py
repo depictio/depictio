@@ -214,3 +214,35 @@ def test_the_worker_block_wins_over_the_api(monkeypatch, tmp_path):
     assert "<b>runtime</b>" in _client(handler).report_runtime("d1")
     path.write_text("")
     assert _client(handler).report_runtime("d1") == ""
+
+
+def test_a_child_tab_with_its_own_filters_gets_its_panel(penguins_tabs):
+    """The Filters part holds the entry tab's controls; a child tab's own are
+    drawn in that tab's part, so they can be set from the report too."""
+    tabs = [dict(t) for t in penguins_tabs]
+    child = next(t for t in tabs if str(t["dashboard_id"]) != PENGUINS_DASHBOARD)
+    child["stored_metadata"] = [
+        *child.get("stored_metadata", []),
+        {
+            "index": "child-island",
+            "component_type": "interactive",
+            "interactive_component_type": "MultiSelect",
+            "column_name": "island",
+        },
+    ]
+    src = generate_qmd(replace(penguins_plan(tabs), embed_runtime=True))
+    child_id = str(child["dashboard_id"])
+    assert src.count(f'{FILTERS_ATTR}="{child_id}"') == 1
+    # In the child tab's part: after its heading.
+    heading = src.index(f'data-depictio-tab="{child_id}"')
+    assert src.index(f'{FILTERS_ATTR}="{child_id}"') > heading
+    # Not without the runtime, and not for a tab without filters of its own.
+    assert FILTERS_ATTR not in generate_qmd(penguins_plan(tabs))
+    bare = [dict(t) for t in penguins_tabs]
+    for t in bare:
+        if str(t["dashboard_id"]) != PENGUINS_DASHBOARD:
+            t["stored_metadata"] = [
+                m for m in t.get("stored_metadata", []) if m.get("component_type") != "interactive"
+            ]
+    src = generate_qmd(replace(penguins_plan(bare), embed_runtime=True))
+    assert src.count(FILTERS_ATTR) == 1

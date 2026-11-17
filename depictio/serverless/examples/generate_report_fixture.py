@@ -14,6 +14,9 @@ without Quarto, so the JS-only CI jobs can mount the runtime into a report:
   fallback must stay;
 * the "Filters" part's panel placeholder;
 * a host stylesheet the runtime must not restyle;
+* the tab's heading, marked with its dashboard tab (``data-depictio-tab``), in
+  its Quarto section, and the copy of that mark Quarto puts in the contents
+  list (``nav#TOC``), first in the document as on a rendered page;
 * the ``<!--DEPICTIO_REPORT_RUNTIME-->`` token where the producer's block goes
   (the demo build and the e2e helper replace it).
 
@@ -42,6 +45,7 @@ MANIFEST = REPO_ROOT / "depictio" / "viewer" / "demo" / "manifests" / "penguins.
 OUT = REPO_ROOT / "depictio" / "viewer" / "demo" / "reports" / "penguins.html"
 TOKEN = "<!--DEPICTIO_REPORT_RUNTIME-->"
 MISSING = "not-in-the-manifest"
+TAB_ANCHOR = "tab-species-analysis"
 
 # Quarto's own page, reduced to what a guest could break: a serif body in a
 # colour of its own, paragraph margins, a heading style.
@@ -85,6 +89,9 @@ def build() -> str:
         f"<style>\n{HOST_STYLE}\n</style>",
         "</head>",
         "<body>",
+        # Quarto copies a heading's markup into the contents list, mark and all.
+        f'<nav id="TOC" role="doc-toc"><ul><li><a href="#{TAB_ANCHOR}">'
+        f'<span data-depictio-tab="{escape(tab)}"></span>Species analysis</a></li></ul></nav>',
         '<main id="quarto-document-content">',
         "<h1>Penguins report</h1>",
         '<p class="host-probe">A paragraph of the report itself, styled by the host page.</p>',
@@ -92,12 +99,14 @@ def build() -> str:
         "<p>Stage 1, Species: Adelie.</p>",
         filters_placeholder(tab),
         "<h2>Results</h2>",
+        f'<section id="{TAB_ANCHOR}" class="level3">',
+        f'<h3><span data-depictio-tab="{escape(tab)}"></span>Species analysis</h3>',
         _tile([tile_ref(tab, c["index"]) for c in cards], [c.get("title", "") for c in cards]),
     ]
     for c in others:
         parts.append(_tile([tile_ref(tab, c["index"])], [c.get("title") or c["index"]]))
     parts.append(_tile([tile_ref(tab, MISSING)], ["a tile the manifest does not hold"]))
-    parts += [TOKEN, "</main>", "</body>", "</html>", ""]
+    parts += ["</section>", TOKEN, "</main>", "</body>", "</html>", ""]
     return "\n".join(parts)
 
 

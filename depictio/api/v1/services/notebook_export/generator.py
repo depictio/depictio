@@ -2348,6 +2348,19 @@ fig_funnel"""
                         )
                     )
                 )
+                if entry.kind == "tab" and self.plan.embed_runtime:
+                    # A tab with filters of its own gets them in its part: the
+                    # Filters part draws the entry tab's only.
+                    tid = entry.dashboard_id or ""
+                    if (
+                        tid
+                        and tid != self.entry_tab_id
+                        and any(
+                            isinstance(m, dict) and m.get("component_type") == "interactive"
+                            for m in tab_doc.get("stored_metadata") or []
+                        )
+                    ):
+                        cells.append(md_cell(filters_placeholder(tid)))
                 continue
             pending.append(entry)
         flush()

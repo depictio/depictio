@@ -229,22 +229,46 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
   );
   const seen = useSeen(hosts);
 
+  // Each panel's tab: the entry tab's in the Filters part, a child tab's own
+  // in that tab's part (the export writes one where the tab has filters).
   // The panel, compact: the report's controls are a block of the page, not the
   // app's rail, so every section opens folded but one narrowing the exported
   // view. A section's own filter bar on the dashboard is a section here too.
-  const panelSections = useMemo(() => {
-    const doc = manifest.dashboard.doc as {
-      filter_sections?: ReportSectionSpec[];
-      grid_sections?: ReportSectionSpec[];
-    };
+  const panelSpecs = useMemo(() => {
     const active = new Set(activeFiltersFor(initialFilters).map((f) => String(f.index)));
-    return compactPanelSections(
-      doc.filter_sections,
-      entryInteractive,
-      active,
-      doc.grid_sections ?? [],
-    ) as unknown as FilterSectionSpec[];
-  }, [manifest, entryInteractive, initialFilters]);
+    const out = new Map<
+      string,
+      { components: StoredMetadata[]; sections: FilterSectionSpec[]; layout: unknown }
+    >();
+    for (const panel of panels) {
+      if (out.has(panel.tabId)) continue;
+      const doc = (
+        panel.tabId === entryId
+          ? manifest.dashboard.doc
+          : ((manifest.tabs ?? []).find((t) => t.id === panel.tabId)?.doc ?? null)
+      ) as {
+        stored_metadata?: StoredMetadata[];
+        filter_sections?: ReportSectionSpec[];
+        grid_sections?: ReportSectionSpec[];
+        left_panel_layout_data?: unknown;
+      } | null;
+      const components =
+        panel.tabId === entryId
+          ? entryInteractive
+          : (doc?.stored_metadata ?? []).filter((m) => m.component_type === 'interactive');
+      out.set(panel.tabId, {
+        components,
+        sections: compactPanelSections(
+          doc?.filter_sections,
+          components,
+          active,
+          doc?.grid_sections ?? [],
+        ) as unknown as FilterSectionSpec[],
+        layout: doc?.left_panel_layout_data,
+      });
+    }
+    return out;
+  }, [manifest, panels, entryId, entryInteractive, initialFilters]);
 
   // Tiles that failed: their fallback comes back.
   const [failed, setFailed] = useState<ReadonlySet<HTMLElement>>(() => new Set());
@@ -387,20 +411,13 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
                   </Group>
                   <div className="depictio-report-panel">
                     <FilterPanel
-                      components={
-                        panel.tabId === entryId
-                          ? entryInteractive
-                          : metadata.filter((m) => m.component_type === 'interactive')
-                      }
+                      components={panelSpecs.get(panel.tabId)?.components ?? []}
                       allMetadata={metadata}
                       filters={filters}
                       onFilterChange={onFilterChange}
                       onResetAllFilters={resetFilters}
-                      layoutData={
-                        (manifest.dashboard.doc as { left_panel_layout_data?: unknown })
-                          .left_panel_layout_data
-                      }
-                      filterSections={panelSections}
+                      layoutData={panelSpecs.get(panel.tabId)?.layout}
+                      filterSections={panelSpecs.get(panel.tabId)?.sections}
                       dashboardId={entryId}
                       stateScopeId={`report:${entryId}`}
                       funnel={{

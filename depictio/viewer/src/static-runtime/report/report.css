@@ -49,3 +49,11 @@
   position: relative;
   z-index: 1100;
 }
+
+/* The document numbers each figure and captions it (the tile's caption, then
+   where its data came from): the renderer's own copy under the plot would say
+   it twice. */
+.depictio-tile[data-depictio-mounted] [data-testid='figure-caption'],
+.depictio-tile[data-depictio-mounted] [data-testid='advanced-viz-caption'] {
+  display: none;
+}

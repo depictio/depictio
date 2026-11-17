@@ -117,6 +117,35 @@ test.describe("combined file — report + dashboard", () => {
     expect(attempts).toEqual([]);
   });
 
+  test("the dashboard's Report row lands on its tab's heading, not the contents list", async ({
+    page,
+  }) => {
+    const attempts = await blockNetwork(page);
+    await page.goto(combinedUrl());
+    await expect(page.locator(".dpx-open-dashboard")).toBeVisible({ timeout: 30_000 });
+    // Read on past the tab's heading, then switch to the dashboard and back.
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await openDashboard(page);
+    const frame = await dashboardFrame(page);
+    await backToReport(frame);
+    await expect.poll(() => viewOf(page)).toBe("report");
+    // The heading in its section, not the copy of its mark in nav#TOC (which
+    // has no id, so the hash would have no anchor).
+    await expect(page).toHaveURL(/#report\/tab-species-analysis$/);
+    await expect(page.locator("section#tab-species-analysis > h3")).toBeInViewport();
+    expect(attempts).toEqual([]);
+  });
+
+  test("deep links to a component open the dashboard on its tile", async ({ page }) => {
+    const attempts = await blockNetwork(page);
+    await page.goto(combinedUrl() + `#dashboard/${TAB}/scatter-mass-flipper`);
+    const frame = await dashboardFrame(page);
+    await expect(frame.locator('[data-component-index="scatter-mass-flipper"]')).toBeInViewport({
+      timeout: 30_000,
+    });
+    expect(attempts).toEqual([]);
+  });
+
   test("deep links, the export's default view, and print", async ({ page }) => {
     const attempts = await blockNetwork(page);
     // Opens on the dashboard when the export says so.

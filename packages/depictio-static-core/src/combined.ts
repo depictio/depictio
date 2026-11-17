@@ -141,6 +141,8 @@ export interface CombinedRoute {
   view: CombinedView;
   /** Dashboard view: the tab asked for (an id of the family). */
   tab?: string;
+  /** Dashboard view: a component of that tab (its index) to scroll to. */
+  component?: string;
   /** Report view: the element id to scroll to. */
   anchor?: string;
 }
@@ -189,8 +191,15 @@ export function parseCombinedHash(hash: string, tabs: RouteTab[] = []): Combined
   const [head, ...rest] = raw.split('/');
   const tail = decode(rest.join('/'));
   if (head === 'dashboard') {
-    const tab = tail ? resolveTab(tail, tabs) : null;
-    return tab ? { view: 'dashboard', tab } : { view: 'dashboard' };
+    // `#dashboard/<tab>/<component>`: ids and titles are written encoded, so
+    // a `/` is always a separator here. A whole tail that names a tab (an
+    // unencoded title with a slash) still wins.
+    const whole = tail ? resolveTab(tail, tabs) : null;
+    if (whole) return { view: 'dashboard', tab: whole };
+    const tab = rest[0] ? resolveTab(decode(rest[0]), tabs) : null;
+    const component = rest.length > 1 ? decode(rest.slice(1).join('/')) : '';
+    if (!tab) return { view: 'dashboard' };
+    return component ? { view: 'dashboard', tab, component } : { view: 'dashboard', tab };
   }
   if (head === 'report') {
     return tail ? { view: 'report', anchor: tail } : { view: 'report' };
@@ -201,7 +210,9 @@ export function parseCombinedHash(hash: string, tabs: RouteTab[] = []): Combined
 /** The hash naming a route; tab ids are written as ids (titles can repeat). */
 export function formatCombinedHash(route: CombinedRoute): string {
   if (route.view === 'dashboard') {
-    return route.tab ? `#dashboard/${encodeURIComponent(route.tab)}` : '#dashboard';
+    if (!route.tab) return '#dashboard';
+    const tab = `#dashboard/${encodeURIComponent(route.tab)}`;
+    return route.component ? `${tab}/${encodeURIComponent(route.component)}` : tab;
   }
   return route.anchor ? `#report/${encodeURIComponent(route.anchor)}` : '#report';
 }

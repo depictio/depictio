@@ -144,6 +144,21 @@ describe('deep links', () => {
     });
   });
 
+  it('reads #dashboard/<tab>/<component>: the tile to scroll to', () => {
+    expect(parseCombinedHash(`#dashboard/${CHILD}/kpi-1`, TABS)).toEqual({
+      view: 'dashboard',
+      tab: CHILD,
+      component: 'kpi-1',
+    });
+    expect(parseCombinedHash('#dashboard/species-islands/a%2Fb', TABS)).toEqual({
+      view: 'dashboard',
+      tab: CHILD,
+      component: 'a/b',
+    });
+    // A component on a tab the file does not hold opens the dashboard as is.
+    expect(parseCombinedHash('#dashboard/nope/kpi-1', TABS)).toEqual({ view: 'dashboard' });
+  });
+
   it('an unknown tab still opens the dashboard, on its current tab', () => {
     expect(parseCombinedHash('#dashboard/nope', TABS)).toEqual({ view: 'dashboard' });
   });
@@ -168,6 +183,7 @@ describe('deep links', () => {
     for (const route of [
       { view: 'dashboard' as const },
       { view: 'dashboard' as const, tab: CHILD },
+      { view: 'dashboard' as const, tab: CHILD, component: 'x/y z' },
       { view: 'report' as const },
       { view: 'report' as const, anchor: 'tab-species-islands' },
     ]) {
