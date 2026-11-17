@@ -372,7 +372,7 @@ def test_the_pdf_carries_its_page(ampliseq_tabs):
     # The title page shows the dashboard's logo (as SVG text typst can read).
     assert "#dpx-logo(54pt)" in block and "<svg" in block
     # Tab colours by heading label.
-    assert "\"tab-multiqc\": rgb(" in block
+    assert '"tab-multiqc": rgb(' in block
 
 
 def test_the_mono_pdf_emits_no_tab_colours(ampliseq_tabs):
