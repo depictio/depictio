@@ -508,7 +508,10 @@ def test_seed_corpus_classification_is_stable():
     counts = Counter(
         classify(folded_code(doc, component)) for _, doc, component in code_mode_figures_with_docs()
     )
-    assert sum(counts.values()) == 26
+    # 34 since main added the nf-core/ampliseq 3.1.0 seeds: their 8 code-mode
+    # figures classify exactly as 2.18.0's 8 do (4 free, 2 prologue, 2 frozen),
+    # so the corpus grew and no verdict moved. Before: 26, {9, 5, 12}.
+    assert sum(counts.values()) == 34
     # Re-baselined when the producers started folding the injected context
     # (`context_fold`: `depictio_group_by` / `depictio_group_kwargs` /
     # `depictio_category_colors` are constants at the export's ungrouped
@@ -517,7 +520,7 @@ def test_seed_corpus_classification_is_stable():
     # "fig line mixes several prologue frames", i.e. those injected names read
     # as frames. Data-free here (no schema), so a `'x' in df.columns` guard
     # stays unfolded; the producers fold it against the real columns.
-    assert counts == {"free": 9, "prologue": 5, "frozen": 12}
+    assert counts == {"free": 13, "prologue": 7, "frozen": 14}
 
 
 # ---------------------------------------------------------------------------

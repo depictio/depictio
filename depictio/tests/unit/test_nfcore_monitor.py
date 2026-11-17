@@ -423,8 +423,10 @@ def test_report_pipeline_without_a_release_run_judges_nothing(
 
     monkeypatch.setattr(nfm, "resolve_results_prefix", no_run)
     monkeypatch.setattr(nfm, "run_catalog_validate", lambda: ("PASS", "OK"))
+    monkeypatch.setattr(nfm, "params_drift", lambda *a: (["## Params — same"], 0))
     report = nfm.report_pipeline("hic", "2.1.0", index={})
     assert report.verdict.key == "unverified"
+    assert "## Params — same" in report.markdown
     assert "> ⚠️ nf-core/hic 2.1.0: megatest run is empty" in report.markdown
     assert "| table |" not in report.markdown  # the fallback table stays out of the report
     assert "Nothing was compared" in report.markdown
@@ -467,3 +469,128 @@ def test_verified_reason_names_the_paths_that_were_compared(nfm: ModuleType) -> 
     assert verdict.reason == (
         "1 of 1 file-based recipes ran on its data; 29 path(s) the template reads are unchanged"
     )
+
+
+def test_a_broken_rule_needs_review_even_without_a_run(
+    nfm: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two schemas are enough to know a rule broke: no megatest needed."""
+
+    def no_run(*args: object, **kwargs: object) -> str:
+        raise nfm.MegatestError("nf-core/hic 2.1.0: megatest run is empty", "")
+
+    monkeypatch.setattr(nfm, "resolve_results_prefix", no_run)
+    monkeypatch.setattr(nfm, "run_catalog_validate", lambda: ("PASS", "OK"))
+    monkeypatch.setattr(nfm, "params_drift", lambda *a: (["- ❌ `X` reads `p`, gone"], 1))
+    report = nfm.report_pipeline("hic", "2.1.0", index={})
+    assert report.verdict.key == "review"
+    assert "from_params rule(s) broken" in report.verdict.reason
+
+
+def test_params_drift_reads_both_schemas(nfm: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    from depictio.cli.cli.utils import template_check
+
+    schemas = {
+        "1.0.0": {"properties": {"skip_x": {"type": "boolean"}}},
+        "2.0.0": {"properties": {"skip_xx": {"type": "boolean"}, "skip_new": {"type": "boolean"}}},
+    }
+    monkeypatch.setattr(template_check, "fetch_schema", lambda p, r, cache=None: schemas[r])
+    template = {
+        "template": {
+            "template_id": "nf-core/demo/1.0.0",
+            "description": "d",
+            "version": "1.0.0",
+            "variables": [{"name": "X", "description": "x", "from_params": {"param": "skip_x"}}],
+        }
+    }
+    lines, problems = nfm.params_drift(template, "demo", "1.0.0", "2.0.0")
+    assert problems == 1
+    assert "`X` reads `skip_x`, gone from the release; renamed to `skip_xx`" in "\n".join(lines)
+
+
+def test_an_error_running_the_template_on_both_runs_needs_review(nfm: ModuleType) -> None:
+    """Recipes passing on the new run prove nothing when the differential run
+    found a source the recipe silently fell back from (ampliseq 3.x)."""
+    passing = [nfm.RecipeCheck("t", "r", "PASS", "ok")] * 3
+    structure = nfm.StructureDiff([], [], [], [], n_checked=3)
+    verdict = nfm.compute_verdict(
+        "1.0.0", "1.0.1", new_data=True, n_problems=0,
+        recipe_results=passing, structure=structure, diff_errors=2,
+    )  # fmt: skip
+    assert verdict.key == "review"
+    assert "both runs" in verdict.reason
+
+
+def test_diff_variables_leave_out_the_vendored_paths(nfm: ModuleType) -> None:
+    template = {
+        "template": {
+            "reference": {
+                "vars": {"GROUP_COL": "habitat", "METADATA_FILE": "{DATA_ROOT}/input/m.tsv"}
+            }
+        }
+    }
+    assert nfm._diff_variables(template) == {"GROUP_COL": "habitat"}
+
+
+# -- bump: a version a pull request adds, against the one it was copied from ---
+
+_SHA_A, _SHA_B = "a" * 40, "b" * 40
+
+
+def _bump_tree(root: Path, versions: dict[str, str | None]) -> Path:
+    """``versions``: version → the results_sha its megatest.yaml pins (None: no file)."""
+    for version, sha in versions.items():
+        d = root / "demo" / version
+        d.mkdir(parents=True)
+        (d / "template.yaml").write_text("template: {}\n")
+        if sha is not None:
+            (d / "megatest.yaml").write_text(
+                f'pipeline: "demo"\nversion: "{version}"\nresults_sha: {sha}\nkeys: []\n'
+            )
+    return root
+
+
+def test_a_bump_is_compared_with_the_version_below_it(
+    nfm: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _bump_tree(tmp_path, {"1.0.0": _SHA_A, "1.2.0": _SHA_A, "2.0.0": _SHA_A})
+    monkeypatch.setattr(nfm, "NFCORE_PROJECTS_DIR", root)
+    assert nfm.previous_version("demo", "2.0.0", root) == "1.2.0"
+
+    calls: list[dict] = []
+
+    def fake_ingestion(template, pipeline, local, new_version, old_prefix, new_prefix, **kw):
+        calls.append({"local": local, "new": new_version, "old": old_prefix,
+                      "new_prefix": new_prefix, **kw})  # fmt: skip
+        return ["## Differential ingestion — x: 1 error(s), 0 warning(s)"], 1
+
+    monkeypatch.setattr(nfm, "differential_ingestion", fake_ingestion)
+    # The copied megatest.yaml still names the old run: the release's own is looked up.
+    monkeypatch.setattr(
+        nfm, "resolve_run", lambda *a, **k: type("Run", (), {"results_sha": _SHA_B})()
+    )
+    text, errors = nfm.bump_report("demo", "2.0.0", index={})
+
+    assert errors == 1
+    (call,) = calls
+    assert (call["local"], call["new"], call["new_template_version"]) == ("1.2.0", "2.0.0", "2.0.0")
+    assert call["old"] == f"demo/results-{_SHA_A}/"
+    assert call["new_prefix"] == f"demo/results-{_SHA_B}/"
+    assert call["strict"] is True
+    assert "### Differential ingestion" in text  # demoted under the bump's own title
+
+
+def test_a_bump_with_nothing_to_compare_says_so_and_fails_nothing(
+    nfm: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _bump_tree(tmp_path, {"1.0.0": None, "2.0.0": _SHA_B, "0.9.0-only": None})
+    monkeypatch.setattr(nfm, "NFCORE_PROJECTS_DIR", root)
+
+    text, errors = nfm.bump_report("demo", "1.0.0", index={})
+    assert errors == 0 and "no earlier version" in text
+
+    text, errors = nfm.bump_report("demo", "2.0.0", index={})
+    assert errors == 0 and "no pinned run" in text
+
+    with pytest.raises(nfm.ReportError):
+        nfm.bump_report("demo", "3.0.0", index={})

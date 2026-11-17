@@ -100,6 +100,21 @@ in-cluster endpoint is rejected when a browser uses it, even if the bytes are
 reachable another way. Models fetched by the structure resolver are served the
 same way, from the same endpoint.
 
+### When browsers cannot reach the storage
+
+On an instance whose S3 has no public route (an IP-only install, a Serve app,
+a store kept on the cluster network), set `DEPICTIO_S3_BROWSER_ACCESS=proxy`.
+Both routes then hand out URLs of
+`GET|HEAD /depictio/api/v1/files/indexed/{dc_id}/object/{sample}/{name}`: the
+API streams the object, by byte range when the browser asks for one (tabix, BAM
+and bigWig readers do), so a region still loads without the whole file. These
+URLs are signed for one object and one user and live 15 minutes, like presigned
+ones, and the reader's access to the collection is checked again on every
+request. No CORS rule and no CSP entry for the storage is needed in this mode.
+The default is `presigned`. The Helm chart sets `proxy` itself when it does not
+route the bundled store (no ingress or gateway, or no `global.domain`), or when
+an external store has no public URL; `s3.browserAccess` forces either.
+
 ## CORS on the storage
 
 The bytes never pass through the API, so the storage itself has to answer the

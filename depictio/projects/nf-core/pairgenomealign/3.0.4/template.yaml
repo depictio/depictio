@@ -41,7 +41,7 @@
 template:
   template_id: "nf-core/pairgenomealign/3.0.4"
   description: "nf-core/pairgenomealign template for pairwise genome alignment: how much of the target each query genome aligns to and at what identity, divergence and the substitution spectrum, assembly contiguity and gaps of the queries, and synteny with the target."
-  version: "1.1.0"
+  version: "1.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one pairgenomealign run (alignment/, assemblyscan/, cutn/, multiqc/, pipeline_info/)."
@@ -64,6 +64,7 @@ template:
     - name: "SKIP_ASSEMBLY_QC"
       description: "Set (--var SKIP_ASSEMBLY_QC=true) for a run with --skip_assembly_qc: no assemblyscan/ reports, so the assembly statistics collection is pruned."
       required: false
+      from_params: {param: skip_assembly_qc}
   # Variables for the BUNDLED reference dataset: the megatest run with the
   # design table vendored in input/ (see megatest.yaml).
   reference:

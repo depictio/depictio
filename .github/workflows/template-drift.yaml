@@ -1,0 +1,92 @@
+name: template-drift
+
+# A pull request that adds a version of an nf-core template (what
+# `scripts/bump_template_version.py` creates) is compared with the version it
+# was copied from: the old template on its pinned megatest run, the new one on
+# the release's own run, both resolved and built as `depictio ingest` would.
+# The report (lost files, changed columns, renamed params, new outputs) is the
+# job summary and a comment on the pull request; an error fails the check.
+# A version with no earlier one, or no megatest run on either side, is reported
+# as not compared and fails nothing.
+on:
+  pull_request:
+    paths:
+      - "depictio/projects/nf-core/**/template.yaml"
+
+jobs:
+  drift:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Which versions this pull request adds
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          targets=$(git diff --name-only --diff-filter=A "$BASE"...HEAD \
+            | sed -nE 's#^depictio/projects/nf-core/([^/]+)/([^/]+)/template\.yaml$#\1/\2#p')
+          echo "added versions: ${targets:-none}"
+          echo "targets=$(echo $targets)" >> "$GITHUB_OUTPUT"
+
+      - uses: astral-sh/setup-uv@v7
+        if: steps.scope.outputs.targets != ''
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        if: steps.scope.outputs.targets != ''
+        run: |
+          uv venv --python 3.12.9 venv
+          uv pip install --python venv/bin/python -e ".[dev]"
+          # Recipes need polars-lts-cpu (same pin as the quality/catalog jobs)
+          uv pip uninstall --python venv/bin/python polars polars-runtime-32 2>/dev/null || true
+          uv pip install --python venv/bin/python --force-reinstall \
+            "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1"
+
+      - name: Compare each added version with the one it was copied from
+        id: drift
+        if: steps.scope.outputs.targets != ''
+        env:
+          TARGETS: ${{ steps.scope.outputs.targets }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPICTIO_CONTEXT: cli
+          DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: nf-core-awsmegatests
+        run: |
+          args=()
+          for t in $TARGETS; do args+=(--target "$t"); done
+          status=0
+          venv/bin/python scripts/nfcore_monitor.py bump "${args[@]}" --out drift.md > /dev/null \
+            || status=$?
+          cat drift.md >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      # One comment per pull request, updated on each push. A fork's token
+      # cannot write: the job summary still holds the report.
+      - name: Post the report on the pull request
+        if: steps.scope.outputs.targets != '' && always() && hashFiles('drift.md') != ''
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- template-drift -->';
+            let body = fs.readFileSync('drift.md', 'utf8');
+            if (body.length > 60000) body = body.slice(0, 60000) + '\n\n… (truncated: see the job summary)';
+            body = `${marker}\n${body}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const mine = comments.find(c => c.body && c.body.startsWith(marker));
+            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+      - name: Fail on an error in the report
+        if: steps.scope.outputs.targets != ''
+        run: exit ${{ steps.drift.outputs.status }}

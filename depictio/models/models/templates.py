@@ -10,13 +10,14 @@ Key concepts:
 - TemplateOrigin: Stored on Project model to track that a template was used
 - TemplateVariable: A required variable (e.g., DATA_ROOT) with description
 - TemplateConditional: Optional-variable rules for DC removal and dashboard selection
+- ParamRule: How a variable is set from the run's own parameters (params.json)
 """
 
 from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from depictio.models.timestamps import utc_now_str
 
@@ -28,12 +29,130 @@ def _require_nonempty(v: str, label: str) -> str:
     return v.strip()
 
 
+def _param_items(value: Any) -> list[str]:
+    """The items of a list-valued param, lowercased: a JSON list, or the comma /
+    whitespace separated string nf-core takes for one (`--tools arriba,starfusion`)."""
+    if value is None or value is False:
+        return []
+    if isinstance(value, list):
+        return [str(v).strip().lower() for v in value if str(v).strip()]
+    return [p.lower() for p in str(value).replace(",", " ").split() if p]
+
+
+class ParamRule(BaseModel):
+    """When a run's own parameters (its nf-core ``pipeline_info/params*.json``)
+    set a template variable, so a pipeline needs no ``--var`` for its routes.
+
+    A leaf names one ``param`` and tests it with at most one of ``is``,
+    ``equals``, ``not_equals``, ``contains``, ``not_contains`` (none: the param is
+    on: true, "true", or a non-empty value such as a file). ``any`` / ``all``
+    combine rules. Strings compare case-insensitively; ``is: false`` holds for a
+    false, empty or absent param.
+
+        from_params: {param: skip_alignment}
+        from_params: {param: ancombc, is: false}
+        from_params: {param: platform, equals: nanopore}
+        from_params: {param: tools, not_contains: arriba}
+        from_params: {any: [{param: skip_multiqc}, {param: skip_qc}]}
+
+    A rule that holds sets the variable to "true" (it fires ``if_var_present``);
+    one that does not leaves it unset. An explicit ``--var`` always wins, and a
+    run with no params file sets nothing.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    param: str | None = Field(default=None, description="The params.json key tested")
+    is_: bool | None = Field(
+        default=None, alias="is", description="true: the param is on; false: off, empty or absent"
+    )
+    equals: str | None = Field(default=None, description="The param's value, any case")
+    not_equals: str | None = Field(default=None, description="Any value but this one (or absent)")
+    contains: str | None = Field(
+        default=None, description="An item of a list param (JSON list or comma-separated)"
+    )
+    not_contains: str | None = Field(default=None, description="Not an item of a list param")
+
+    @field_validator("equals", "not_equals", "contains", "not_contains", mode="before")
+    @classmethod
+    def _as_text(cls, v: Any) -> Any:
+        """YAML reads `equals: 0.1` or `equals: true` as a number or a bool; the
+        comparison is on text anyway."""
+        if isinstance(v, bool):
+            return str(v).lower()
+        if isinstance(v, (int, float)):
+            return str(v)
+        return v
+
+    any: list["ParamRule"] | None = Field(default=None, description="Holds when one rule holds")
+    all: list["ParamRule"] | None = Field(default=None, description="Holds when every rule holds")
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> "ParamRule":
+        shapes = [self.param is not None, self.any is not None, self.all is not None]
+        if sum(shapes) != 1:
+            raise ValueError("a params rule is exactly one of: param, any, all")
+        tests = [
+            t
+            for t in (self.is_, self.equals, self.not_equals, self.contains, self.not_contains)
+            if t is not None
+        ]
+        if self.param is None and tests:
+            raise ValueError("is/equals/not_equals/contains/not_contains go with a param")
+        if len(tests) > 1:
+            raise ValueError(f"param {self.param!r}: one test per rule; combine with any/all")
+        for group in (self.any, self.all):
+            if group is not None and not group:
+                raise ValueError("any/all need at least one rule")
+        return self
+
+    def params_used(self) -> set[str]:
+        """Every params.json key the rule reads."""
+        if self.param is not None:
+            return {self.param}
+        return set().union(*(r.params_used() for r in (self.any or self.all or [])))
+
+    def holds(self, params: dict[str, Any]) -> bool:
+        if self.any is not None:
+            return any(r.holds(params) for r in self.any)
+        if self.all is not None:
+            return all(r.holds(params) for r in self.all)
+        value = params.get(self.param or "")
+        if self.is_ is not None:
+            return _truthy(value) == self.is_
+        if self.equals is not None:
+            return value is not None and str(value).strip().lower() == self.equals.lower()
+        if self.not_equals is not None:
+            return value is None or str(value).strip().lower() != self.not_equals.lower()
+        if self.contains is not None:
+            return self.contains.lower() in _param_items(value)
+        if self.not_contains is not None:
+            return self.not_contains.lower() not in _param_items(value)
+        return _truthy(value)
+
+
+def _truthy(value: Any) -> bool:
+    """Whether a param is on: true, the string "true" (Nextflow stores a flag as
+    given on the command line), a non-empty value such as a file path, a non-zero
+    number or a non-empty list. "false", "null", empty and absent are off."""
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "null", "none")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return bool(value)
+
+
 class TemplateVariable(BaseModel):
     """A variable required by a template (e.g., DATA_ROOT).
 
     Variables are declared in the template metadata section and must be provided
     by the user at template instantiation time (e.g., via the DATA_DIR argument of `depictio ingest`).
     """
+
+    # A misspelt key (`from_param:`) would otherwise be dropped in silence.
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Variable name (e.g., 'DATA_ROOT')")
     description: str = Field(..., description="Human-readable description of this variable")
@@ -45,6 +164,24 @@ class TemplateVariable(BaseModel):
         "and satisfies `required`, but does not count as provided for `if_var_present` "
         "conditionals.",
     )
+    from_params: ParamRule | None = Field(
+        default=None,
+        description="Set the variable from the run's own params.json (see ParamRule): "
+        "the run's --skip_* and route parameters, so a pipeline passes no --var.",
+    )
+
+    @model_validator(mode="after")
+    def _from_params_is_optional(self) -> "TemplateVariable":
+        """A rule that does not hold leaves the variable unset, so it cannot be
+        required: unset, `required` follows; set to true, it is refused."""
+        if self.from_params is not None:
+            if "required" in self.model_fields_set and self.required:
+                raise ValueError(
+                    f"variable {self.name!r}: a from_params variable cannot be required "
+                    "(a rule that does not hold leaves it unset)"
+                )
+            self.required = False
+        return self
 
     @field_validator("name")
     @classmethod
@@ -346,6 +483,17 @@ class TemplateMetadata(BaseModel):
     def get_variable_defaults(self) -> dict[str, str]:
         """Return ``{name: default}`` for every declared variable that has a default."""
         return {var.name: var.default for var in self.variables if var.default is not None}
+
+    def variables_from_params(self, params: dict[str, Any]) -> dict[str, str]:
+        """``{name: "true"}`` for every variable whose ``from_params`` rule holds on
+        the run's params. Empty when the run left no params (nothing is guessed)."""
+        if not params:
+            return {}
+        return {
+            var.name: "true"
+            for var in self.variables
+            if var.from_params is not None and var.from_params.holds(params)
+        }
 
 
 class ExpectedDataCollection(BaseModel):
