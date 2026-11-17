@@ -23,7 +23,9 @@ import pytest
 
 from depictio.recipes import load_recipe, resolve_sources
 from depictio.recipes.lib.lineage import (
+    CANONICAL_RANKS,
     UNCLASSIFIED,
+    asv_sample_columns,
     asv_table_to_ranks,
     kingdom_phylum,
     parent_rank,
@@ -177,3 +179,47 @@ def test_asv_table_to_ranks_sums_per_taxon_tuple() -> None:
     # Relative abundances still sum to 1 per sample.
     totals = out.group_by("sample_id").agg(pl.col("abundance").sum())["abundance"].to_list()
     assert all(t == pytest.approx(1.0) for t in totals)
+
+
+# nf-core/ampliseq 3.0.0 names the top rank after what the database holds
+# (`Domain` for GTDB, SILVA 138, RDP, sbdi-gtdb) and adds one `<rank>_confidence`
+# column per rank next to `confidence`.
+_ASV_3X = pl.DataFrame(
+    {
+        "ID": ["asv1", "asv2"],
+        "Domain": ["Bacteria", "Archaea"],
+        "Phylum": ["Pseudomonadota", "Nanoarchaeota"],
+        "Class": ["Alphaproteobacteria", ""],
+        "Order": ["Rhizobiales", ""],
+        "Family": ["Beijerinckiaceae", ""],
+        "Genus": ["Microvirga", ""],
+        "Species": ["", ""],
+        "Species_exact": ["", ""],
+        "confidence": ["0.98", "0.60"],
+        "domain_confidence": ["1.0", "1.0"],
+        "phylum_confidence": ["0.99", "0.7"],
+        "genus_confidence": ["0.9", "0.1"],
+        "sequence": ["ACGT", "TGCA"],
+        # asv2 carries more abundance; asv1 the higher per-rank confidences, so
+        # a confidence summed as a sample would rank it first.
+        "S1": ["0.4", "0.6"],
+        "S2": ["0.4", "0.6"],
+    }
+)
+
+
+def test_ampliseq3_domain_is_the_top_rank_and_confidences_are_not_samples() -> None:
+    out = asv_table_to_ranks(_ASV_3X)
+
+    assert out.columns == ["sample_id", *CANONICAL_RANKS, "abundance"]
+    assert sorted(out["sample_id"].unique().to_list()) == ["S1", "S2"]
+    assert sorted(out["Kingdom"].unique().to_list()) == ["Archaea", "Bacteria"]
+    assert asv_sample_columns(_ASV_3X) == ["S1", "S2"]
+
+
+def test_ampliseq3_tree_tips_carry_the_domain_as_kingdom() -> None:
+    recipe = load_recipe("nf-core/ampliseq/tree_metadata_canonical.py")
+    assert recipe.top_taxa(_ASV_3X, 1) == ["asv2"]
+    tips = recipe._from_asv_table(_ASV_3X)
+    assert tips["Kingdom"].to_list() == ["Bacteria", "Archaea"]
+    assert "domain_confidence" not in tips.columns

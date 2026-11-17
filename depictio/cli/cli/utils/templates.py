@@ -42,6 +42,7 @@ from depictio.models.models.templates import (
     TemplateMetadata,
     TemplateOrigin,
 )
+from depictio.models.models.templates import _truthy as _param_truthy
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
@@ -1207,6 +1208,22 @@ def _params_newest_first(root: DataRoot, directory: str) -> list[str]:
     return []
 
 
+def _ampliseq_dada2_label(params: dict) -> str | None:
+    """The database label ampliseq >= 3.0 writes into the name of the DADA2
+    taxonomy its single-taxonomy steps read (``rel-table-ASV_with-DADA2-<label>-tax.tsv``),
+    spelt as workflows/ampliseq.nf does: the first listed ``--dada_ref_taxonomy``
+    database with ``=`` and ``.`` turned to ``_``, or ``consolidated_<mode>`` when
+    several databases are consolidated by another rule than ``first``."""
+    databases = [db.strip() for db in str(params.get("dada_ref_taxonomy") or "").split(",")]
+    databases = [db for db in databases if db]
+    if not databases:
+        return None
+    mode = params.get("consolidate_taxonomies") or "first"
+    if len(databases) > 1 and mode != "first":
+        return f"consolidated_{mode}"
+    return databases[0].replace("=", "_").replace(".", "_")
+
+
 def _infer_phylum_level(root: DataRoot, params: dict) -> int | None:
     """Depth at which an ampliseq run's QIIME2 collapsed taxonomy ends in the Phylum.
 
@@ -1246,13 +1263,23 @@ def _infer_phylum_level(root: DataRoot, params: dict) -> int | None:
         and not (params.get("pplace_tree") and params.get("pplace_taxonomy"))
     )
     if level is None and dada2_collapsed:
-        tax_table = "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
-        ranks = header(tax_table, "\t")[1:]
+        # ampliseq >= 3.0 takes a comma-separated list of databases, the first
+        # feeding every single-taxonomy step, and names the table after the
+        # classifier and database (`rel-table-ASV_with-DADA2-<db>-tax.tsv`).
+        first_db = str(params.get("dada_ref_taxonomy") or "").split(",")[0].strip()
+        ranks: list[str] = []
+        for tax_table in (
+            f"qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-{_ampliseq_dada2_label(params)}-tax.tsv",
+            "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv",
+        ):
+            ranks = header(tax_table, "\t")[1:]
+            if ranks:
+                break
         if not ranks and params:
             # ampliseq's precedence: --dada_assign_taxlevels, the database's
             # taxlevels, then DADA2's 7-rank default.
             databases = params.get("dada_ref_databases") or {}
-            database = databases.get(params["dada_ref_taxonomy"]) or {}
+            database = databases.get(first_db) or {}
             taxlevels = params.get("dada_assign_taxlevels") or database.get("taxlevels")
             ranks = (taxlevels or "Kingdom,Phylum,Class,Order,Family,Genus,Species").split(",")
         if "Phylum" in ranks:
@@ -1298,33 +1325,10 @@ def _pick_input_samplesheet(root: DataRoot) -> str | None:
     ) or _pick_input_file(root, "samplesheet", RECORD_SHEET_SUFFIXES)
 
 
-def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str]) -> None:
-    """Read the run's nf-core ``params.json`` and set synthesized template flags.
-
-    nf-core pipelines write ``pipeline_info/params*.json``. We translate a few fields
-    into present/absent flag variables so they compose with the existing
-    ``if_var_present``/``if_var_absent`` conditionals (no model change), and auto-fill
-    ``METADATA_FILE`` when the run shipped a metadata file — so the common cases need
-    no ``--var``. Best-effort: silently no-ops when no params file is found/parseable,
-    except for ``PHYLUM_LEVEL``, which the run's outputs can settle on their own.
-
-    Flags set (only when applicable; never overrides an explicit ``--var``):
-      - ``SKIP_QIIME``     — ampliseq ITS/sintax runs without QIIME2 outputs
-      - ``SKIP_TAXONOMY`` / ``SKIP_ALPHA_RAREFACTION`` — ampliseq runs that suppress
-        a qiime2/ output subtree via the matching --skip_* flag
-      - ``SKIP_ANCOM`` — ampliseq runs where ANCOM-BC was not opted into (no
-        ``--ancombc``), so qiime2/ancombc/ is absent
-      - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
-      - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
-      - ``IS_BCLCONVERT``: demultiplex runs using BCL Convert instead of bcl2fastq
-      - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
-        reconstructed into one cross-region feature table under ``sidle/``)
-      - ``PPLACE_TREE_FILE``: ampliseq phylogenetic-placement runs (``pplace_tree``
-        set); the path of the grafted tree under ``pplace/``, the route's only Newick
-      - ``PHYLUM_LEVEL``: ampliseq's QIIME2 collapse depth of the Phylum (see
-        ``_infer_phylum_level``), with ``CLASS_LEVEL``, ``ORDER_LEVEL``,
-        ``FAMILY_LEVEL`` and ``GENUS_LEVEL`` one depth deeper each; the ranks also
-        follow an explicit ``--var PHYLUM_LEVEL``
+def _read_run_params(root: DataRoot | str, *, full_dump_only: bool = False) -> dict:
+    """The run's nf-core ``pipeline_info/params*.json``, parsed; ``{}`` when there
+    is none (or none parses). Best effort: a run without one simply gets no
+    params-derived variables.
     """
     # Locate the run's params.json. For "flat" projects (e.g. ampliseq, one run =
     # one DATA_ROOT) it sits directly under DATA_ROOT. For "sequencing-runs" projects
@@ -1352,13 +1356,69 @@ def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str])
                     f"explicitly via --var."
                 )
                 break
-    params: dict = {}
+    # full_dump_only, for from_params rules: only the dump nf-core writes
+    # (params_<timestamp>.json). nf-params.json holds just the params the user
+    # overrode, and a rule reads an absent param as off, so a default left out
+    # of it would route the run wrongly.
+    if full_dump_only:
+        candidates = [c for c in candidates if c.rsplit("/", 1)[-1].startswith("params")]
     for candidate in candidates:
         try:
             params = json.loads(root.read_bytes(candidate))
-            break
         except (OSError, ValueError):
             continue
+        # Best effort: a file that is not a JSON object sets nothing.
+        return params if isinstance(params, dict) else {}
+    return {}
+
+
+def apply_params_rules(
+    template_metadata: TemplateMetadata, params: dict, variables: dict[str, str]
+) -> list[str]:
+    """Set the variables the template's ``from_params`` rules derive from the
+    run's params (``params`` as ``_read_run_params`` returns it). An explicit
+    ``--var`` (already in ``variables``) always wins. Returns the names set."""
+    added = []
+    for name, value in template_metadata.variables_from_params(params).items():
+        if name not in variables:
+            variables[name] = value
+            added.append(name)
+    # Conditionals test presence, so `--var X=false` on a from_params variable
+    # would still fire `if_var_present: X`: an explicit off unsets it instead,
+    # the way to overrule a rule that misfires.
+    for var in template_metadata.variables:
+        if var.from_params is not None and var.name in variables:
+            if not _param_truthy(variables[var.name]):
+                del variables[var.name]
+                logger.info(f"{var.name} set off explicitly: unset, its conditionals do not fire")
+    if added:
+        logger.info(f"Set from the run's params.json: {', '.join(sorted(added))}")
+    return added
+
+
+def _introspect_pipeline_params(
+    root: DataRoot | str, variables: dict[str, str], params: dict | None = None
+) -> None:
+    """What the run's params and outputs say that a template's ``from_params``
+    rules cannot: values found in the outputs rather than flags.
+
+    The flags themselves (``--skip_*``, platform, route parameters) are declared
+    per template, on each variable's ``from_params`` (``ParamRule``), and applied
+    by ``resolve_template_config``. Here, never overriding an explicit ``--var``:
+      - ``PPLACE_TREE_FILE``: ampliseq phylogenetic-placement runs (``pplace_tree``
+        set); the path of the grafted tree under ``pplace/``, the route's only Newick
+      - ``PHYLUM_LEVEL``: ampliseq's QIIME2 collapse depth of the Phylum (see
+        ``_infer_phylum_level``), with ``CLASS_LEVEL``, ``ORDER_LEVEL``,
+        ``FAMILY_LEVEL`` and ``GENUS_LEVEL`` one depth deeper each; the ranks also
+        follow an explicit ``--var PHYLUM_LEVEL``
+      - ``METADATA_FILE``: the run's metadata copy under ``input/`` when the run
+        used one
+      - ``DADA2_REF_DB``: the database label ampliseq 3.x writes into the name
+        of the DADA2 taxonomy its single-taxonomy steps read
+    """
+    root = as_data_root(root)
+    if params is None:
+        params = _read_run_params(root)
 
     # Ahead of the no-params return: the outputs alone can name the Phylum depth.
     # The deeper ranks follow whichever value wins, an explicit --var included.
@@ -1373,36 +1433,10 @@ def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str])
     if not params:
         return
 
-    def flag(name: str) -> bool:
-        # Nextflow writes a boolean param as given on the command line, so a
-        # run launched with `--ancombc true` stores the string "true".
-        value = params.get(name)
-        return value is True or (isinstance(value, str) and value.strip().lower() == "true")
+    dada2_label = _ampliseq_dada2_label(params)
+    if dada2_label:
+        variables.setdefault("DADA2_REF_DB", dada2_label)
 
-    if (params.get("platform") or "").lower() == "nanopore":
-        variables.setdefault("IS_NANOPORE", "true")
-    if (params.get("protocol") or "").lower() == "metagenomic":
-        variables.setdefault("IS_METAGENOMIC", "true")
-    if (params.get("demultiplexer") or "").lower() == "bclconvert":
-        variables.setdefault("IS_BCLCONVERT", "true")
-    if flag("skip_qiime"):
-        variables.setdefault("SKIP_QIIME", "true")
-    # ampliseq output-suppressing skip flags: each removes a subtree of qiime2/
-    # outputs. Surface them as flags so the template prunes the dependent DCs
-    # (otherwise a REQUIRED DC's missing source aborts ingestion on a valid run).
-    if flag("skip_taxonomy"):
-        variables.setdefault("SKIP_TAXONOMY", "true")
-    if flag("skip_alpha_rarefaction"):
-        variables.setdefault("SKIP_ALPHA_RAREFACTION", "true")
-    # ANCOM-BC is opt-in (positive `ancombc` flag, default false) — there is no
-    # `skip_ancom` param. When it didn't run, no qiime2/ancombc/ output exists, so
-    # prune the differential-abundance DCs.
-    if not flag("ancombc"):
-        variables.setdefault("SKIP_ANCOM", "true")
-    # ampliseq multiregion/SIDLE: the route is keyed by a regions reference AND a
-    # SIDLE reference taxonomy (standard runs leave 'multiregion' null).
-    if params.get("multiregion") and params.get("sidle_ref_taxonomy"):
-        variables.setdefault("IS_MULTIREGION", "true")
     # ampliseq phylogenetic placement never writes qiime2/phylogenetic_tree/tree.nwk;
     # the tree is the EPA-ng graft under pplace/. Keyed on the reference tree input
     # because run_pplace stays false on runs that pass the pplace_* inputs directly.
@@ -1611,10 +1645,15 @@ def resolve_template_config(
     if extra_vars:
         variables.update(extra_vars)
 
-    # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
-    # METADATA_FILE (does not override explicit --var values).
+    # 3a. The run's own params.json: the template's ``from_params`` rules set its
+    # route variables (--skip_*, platform...), then what only the outputs tell
+    # (introspection). Neither overrides an explicit --var.
     if root is not None:
-        _introspect_pipeline_params(root, variables)
+        run_params = _read_run_params(root)
+        apply_params_rules(
+            template_metadata, _read_run_params(root, full_dump_only=True), variables
+        )
+        _introspect_pipeline_params(root, variables, run_params)
 
     # 3b. Collect the run's provenance (parameters, thresholds, tool versions)
     # per the template's spec — persisted on TemplateOrigin for the ingestion

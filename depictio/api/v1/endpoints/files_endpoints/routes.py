@@ -2,11 +2,11 @@ import asyncio
 import mimetypes
 import posixpath
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import quote, unquote, urlencode
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
@@ -423,6 +423,13 @@ async def serve_image(
 # 2. The storage must send CORS headers for Range, and expose
 #    Content-Range / Accept-Ranges. See the MinIO service in
 #    docker-compose.dev.yaml and docs/indexed-files.md.
+#
+# Where browsers cannot reach S3 at all (IP-only installs, Serve apps),
+# ``DEPICTIO_S3_BROWSER_ACCESS=proxy`` hands out URLs of
+# ``/files/indexed/{dc}/object/{sample}/{name}`` instead (#1420): the API
+# streams the object by byte range, behind the same access check. They are
+# signed like the genome browser's (``jbrowse.signing``): GenomeSpy and the 3D
+# viewer fetch them without an Authorization header.
 
 #: Lifetime of a presigned indexed-file URL. Long enough for a reader to pan a
 #: track, short enough that a leaked link dies on its own.
@@ -460,6 +467,47 @@ def presign_indexed_file(key: str, ttl_seconds: int = INDEXED_FILE_URL_TTL_SECON
         Params={"Bucket": settings.minio.bucket, "Key": key},
         ExpiresIn=ttl_seconds,
     )
+
+
+API_PREFIX = "/depictio/api/v1"
+#: What the indexed-file proxy URLs are signed for (``jbrowse.signing``).
+_PROXY_SCOPE = "indexed"
+_PROXY_ROLE = "object"
+
+
+def _proxied_indexed_file_url(dc_oid: ObjectId, key: str, uid: str) -> str | None:
+    """Signed URL of ``key`` on the proxy route, valid as long as a presigned one.
+
+    The path ends with the object's own name, which the 3D viewer reads the
+    format from. None when ``key`` is not one ``indexed_file_s3_key`` builds.
+    """
+    import time
+
+    from depictio.api.v1.services.jbrowse import signing
+
+    rest, name = posixpath.split(key)
+    sample = posixpath.basename(rest)
+    try:
+        if indexed_file_s3_key(str(dc_oid), sample, name) != key:
+            return None
+    except ValueError:
+        return None
+    exp = int(time.time()) + INDEXED_FILE_URL_TTL_SECONDS
+    sig = signing.sign(_PROXY_SCOPE, str(dc_oid), key, _PROXY_ROLE, uid, exp)
+    query = urlencode({"uid": uid, "exp": exp, "sig": sig})
+    return (
+        f"{API_PREFIX}/files/indexed/{dc_oid}/object/"
+        f"{quote(sample, safe='')}/{quote(name, safe='')}?{query}"
+    )
+
+
+def indexed_file_url(dc_oid: ObjectId, key: str, current_user) -> str:
+    """The URL a browser reads one indexed-file object from (``s3.browser_access``)."""
+    if settings.s3.browser_access == "proxy":
+        proxied = _proxied_indexed_file_url(dc_oid, key, str(current_user.id))
+        if proxied is not None:
+            return proxied
+    return presign_indexed_file(key)
 
 
 def _indexed_file_dc_properties(dc_oid: ObjectId) -> dict:
@@ -537,8 +585,10 @@ async def list_indexed_files(
                 "sample": doc.get("sample") or "",
                 "name": doc.get("filename") or posixpath.basename(str(key)),
                 "size_bytes": doc.get("filesize"),
-                "url": presign_indexed_file(str(key)),
-                "index_url": presign_indexed_file(str(index_key)) if index_key else None,
+                "url": indexed_file_url(dc_oid, str(key), current_user),
+                "index_url": (
+                    indexed_file_url(dc_oid, str(index_key), current_user) if index_key else None
+                ),
             }
         )
     entries.sort(key=lambda e: (e["sample"], e["name"]))
@@ -590,10 +640,91 @@ async def get_indexed_file_url(
 
     is_index = doc.get("s3_key") != key
     return {
-        "url": presign_indexed_file(key),
+        "url": indexed_file_url(dc_oid, key, current_user),
         "expires_in": INDEXED_FILE_URL_TTL_SECONDS,
         "size_bytes": doc.get("index_filesize") if is_index else doc.get("filesize"),
     }
+
+
+def _signed_url_reader(dc_oid: ObjectId, key: str, request: Request):
+    """The user a signed proxy URL was minted for, or None when it does not verify."""
+    from types import SimpleNamespace
+
+    from depictio.api.v1.db import users_collection
+    from depictio.api.v1.services.jbrowse import signing
+
+    q = request.query_params
+    uid = q.get("uid")
+    if not uid or not ObjectId.is_valid(uid):
+        return None
+    if not signing.verify(
+        _PROXY_SCOPE, str(dc_oid), key, _PROXY_ROLE, uid, q.get("exp"), q.get("sig")
+    ):
+        return None
+    doc = users_collection.find_one({"_id": ObjectId(uid)}, {"is_admin": 1, "is_anonymous": 1})
+    if doc is None:
+        return None
+    return SimpleNamespace(
+        id=doc["_id"],
+        is_admin=bool(doc.get("is_admin")),
+        is_anonymous=bool(doc.get("is_anonymous")),
+    )
+
+
+async def _optional_reader(request: Request):
+    """The caller when a bearer token (or public/single-user mode) identifies one."""
+    from depictio.api.v1.endpoints.user_endpoints.routes import oauth2_scheme_optional
+
+    try:
+        return await get_user_or_anonymous(await oauth2_scheme_optional(request))
+    except HTTPException:
+        return None
+
+
+@files_endpoint_router.api_route(
+    "/indexed/{data_collection_id}/object/{sample}/{name}", methods=["GET", "HEAD"]
+)
+async def proxy_indexed_file(
+    data_collection_id: str,
+    sample: str,
+    name: str,
+    request: Request,
+    bearer=Depends(_optional_reader),
+) -> Response:
+    """Serve (a byte range of) one object of an indexed_file DC through the API.
+
+    For instances whose S3 browsers cannot reach (``DEPICTIO_S3_BROWSER_ACCESS=proxy``,
+    #1420). The URL is signed for one object and one user (``indexed_file_url``);
+    a bearer token works too. The reader's access to the DC is checked on every
+    request, as for a presigned URL, and the key is rebuilt server side and must
+    be registered for the DC.
+    """
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+    try:
+        key = indexed_file_s3_key(str(dc_oid), unquote(sample), unquote(name))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    reader = _signed_url_reader(dc_oid, key, request) or bearer
+    if reader is None:
+        raise HTTPException(status_code=401, detail="Missing or expired file URL signature")
+    _assert_indexed_file_access(dc_oid, reader)
+
+    registered = files_collection.find_one(
+        {"data_collection_id": dc_oid, "$or": [{"s3_key": key}, {"index_s3_key": key}]},
+        {"_id": 1},
+    )
+    if not registered:
+        raise HTTPException(status_code=404, detail="File not found for this data collection.")
+
+    from depictio.api.v1.endpoints.jbrowse_endpoints.routes import serve_source
+    from depictio.api.v1.services import remote_read
+
+    src = remote_read.ByteSource("depictio_s3", bucket=settings.s3.bucket, key=key)
+    return await asyncio.to_thread(serve_source, request, src, key)
 
 
 def _assert_indexed_file_access(dc_oid: ObjectId, current_user) -> None:

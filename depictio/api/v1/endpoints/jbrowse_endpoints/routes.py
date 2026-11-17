@@ -159,7 +159,12 @@ def _authorize(
     raise HTTPException(status_code=401, detail="Missing or expired track URL signature")
 
 
-def _serve(request: Request, src: remote_read.ByteSource, uri: str) -> Response:
+def serve_source(request: Request, src: remote_read.ByteSource, uri: str) -> Response:
+    """Answer a GET or HEAD for ``src``: the whole object, or the byte range asked.
+
+    Shared with the indexed-file proxy (``files_endpoints``). ``uri`` only picks
+    the Content-Type.
+    """
     try:
         size = remote_read.source_size(src)
     except remote_read.RemoteReadError as exc:
@@ -239,7 +244,7 @@ def proxy_track_file(
     except remote_read.RemoteReadError as exc:
         logger.info(f"jbrowse proxy refused {dc_id}/{track_key}/{role}: {exc.detail}")
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
-    return _serve(request, src, uri)
+    return serve_source(request, src, uri)
 
 
 def _assembly_uri(assembly: CustomAssembly, role: str) -> str | None:
@@ -275,7 +280,7 @@ def proxy_assembly_file(
         src = remote_read.resolve_location(uri, s3_base_folder(dc_id, tdc.props))
     except remote_read.RemoteReadError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
-    return _serve(request, src, uri)
+    return serve_source(request, src, uri)
 
 
 # Small preset files (chrom.sizes, alias tables) are read whole by the browser
@@ -365,7 +370,7 @@ def proxy_preset_file(name: str, role: str, request: Request) -> Response:
             _small_files.clear()
         _small_files[uri] = data
         return _serve_bytes(request, data, uri)
-    return _serve(request, src, uri)
+    return serve_source(request, src, uri)
 
 
 @jbrowse_endpoints_router.get("/ucsc/{assembly}/tracks")
@@ -403,4 +408,4 @@ def proxy_ucsc_file(genome: str, track: str, role: str, request: Request) -> Res
     uri = None if entry is None else (entry.url if role == "data" else entry.index_url)
     if not uri:
         raise HTTPException(status_code=404, detail="Unknown UCSC track file")
-    return _serve(request, remote_read.ByteSource("https", url=uri), uri)
+    return serve_source(request, remote_read.ByteSource("https", url=uri), uri)

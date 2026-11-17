@@ -255,6 +255,31 @@ renamed to `DEPICTIO_S3_*`, overriding the new-name value.
 {{- end }}
 
 {{/*
+How browsers read indexed files (3D structures, GenomeSpy tracks), handed to the
+API as DEPICTIO_S3_BROWSER_ACCESS: "presigned" when browsers can reach the S3
+store, "proxy" (streamed through the API) when they cannot. `s3.browserAccess`
+forces one. Otherwise the bundled store counts as reachable when the chart routes
+it (ingress or gateway enabled, and a domain set), and an external store when it
+has a public URL.
+*/}}
+{{- define "depictio.s3BrowserAccess" -}}
+{{- $s3 := include "depictio.s3" . | fromYaml -}}
+{{- $mode := $s3.browserAccess | default "" -}}
+{{- if not $mode -}}
+{{- if $s3.enabled -}}
+{{- $routed := or .Values.ingress.enabled ((.Values.gateway | default dict).enabled) -}}
+{{- $mode = ternary "presigned" "proxy" (and $routed (not (empty .Values.global.domain))) -}}
+{{- else -}}
+{{- $mode = ternary "presigned" "proxy" (not (empty (index ($s3.env | default dict) "DEPICTIO_S3_PUBLIC_URL"))) -}}
+{{- end -}}
+{{- end -}}
+{{- if not (has $mode (list "presigned" "proxy")) -}}
+{{- fail (printf "s3.browserAccess must be \"presigned\" or \"proxy\", got %q" $mode) -}}
+{{- end -}}
+{{- $mode -}}
+{{- end }}
+
+{{/*
 Effective S3 store PVC values: `persistence.s3` with the legacy
 `persistence.minio` merged on top.
 */}}

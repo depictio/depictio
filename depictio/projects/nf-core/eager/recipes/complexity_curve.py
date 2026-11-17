@@ -68,8 +68,10 @@ SOURCE_PATH_COL = "source_path"
 MAX_TOTAL_READS = 1_000_000_000.0
 MAX_POINTS = 200
 
-# "<library>.filtered.preseq", eager's fixed lc_extrap output name.
-_STEM_RE = re.compile(r"^(?P<sample>.+?)\.filtered\.preseq$")
+# "<library>.<bam stem>.preseq": eager names the curve after the BAM it read,
+# `.filtered` with --run_bam_filtering, `.mapped` without (main.nf,
+# `${input.baseName}.preseq`).
+_STEM_RE = re.compile(r"^(?P<sample>.+?)\.(?:filtered|mapped)\.preseq$")
 
 
 def _sample_from_path(source_path: str) -> str:

@@ -243,3 +243,294 @@ def compose(
         f"Ingest it: depictio ingest {data_root} --template {result.template_dir}",
         "info",
     )
+
+
+def _load_metadata(template: str):
+    """(TemplateMetadata, path) for a template id or path; exits on a load error."""
+    import yaml
+    from pydantic import ValidationError
+
+    from depictio.cli.cli.utils.templates import locate_template
+    from depictio.models.models.templates import TemplateMetadata
+
+    try:
+        path = locate_template(template)
+    except FileNotFoundError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(1)
+    raw = yaml.safe_load(path.read_text()) or {}
+    try:
+        return TemplateMetadata(**(raw.get("template") or {})), path
+    except ValidationError as exc:
+        console.print(f"[red]✗ {path}: the template does not load[/red]")
+        for err in exc.errors():
+            where = ".".join(str(p) for p in err["loc"])
+            console.print(f"  [red]{where}: {err['msg']}[/red]")
+        raise typer.Exit(1)
+
+
+def _print_check(result, *, verbose: bool) -> None:
+    from rich.table import Table
+
+    from depictio.cli.cli.utils.template_check import TemplateCheck
+
+    assert isinstance(result, TemplateCheck)
+    console.print(f"\n[bold]{result.template_id}[/bold]  [dim]{result.path or ''}[/dim]")
+    table = Table(show_lines=False, pad_edge=False)
+    table.add_column("variable", style="bold")
+    table.add_column("set by")
+    table.add_column("default run" if result.schema_checked else "", justify="center")
+    if result.fired is not None:
+        table.add_column("this run", justify="center")
+    table.add_column("when set → template")
+    mark = {True: "[green]set[/green]", False: "[dim]–[/dim]", None: ""}
+    by = {
+        "rule": "[cyan]{how}[/cyan]",
+        "auto": "[magenta]auto[/magenta]: {how}",
+        "user": "[yellow]--var[/yellow]",
+        "required": "[yellow]required[/yellow]",
+    }
+    for row in result.rows:
+        if row.source in ("user", "required") and not row.effects and not verbose:
+            continue
+        cells = [row.name, by[row.source].format(how=row.how), mark[row.on_default_run]]
+        if result.fired is not None:
+            cells.append(mark[row.on_this_run])
+        cells.append("\n".join(row.effects) or "[dim]in paths only[/dim]")
+        table.add_row(*cells)
+    console.print(table)
+    if result.fired is not None:
+        if result.fired:
+            console.print("[bold]This run fires:[/bold]")
+            for f in result.fired:
+                console.print(f"  • [cyan]{f.condition}[/cyan] → {f.effect}")
+        else:
+            console.print("[bold]This run fires no conditional[/bold]: the full template applies.")
+    for var, missing in result.unknown_params.items():
+        console.print(
+            f"[red]✗ {var} reads {', '.join(missing)}: not a parameter of this release[/red]"
+        )
+    if result.schema_checked and not result.unknown_params:
+        console.print("[green]✓ every param a rule reads exists in this release[/green]")
+    if result.suspect_skip_params:
+        console.print(
+            "[yellow]! skip_* params no rule reads, whose tool the template names:[/yellow] "
+            + ", ".join(result.suspect_skip_params)
+        )
+        console.print(
+            "  [dim]a run with one of them may lack files the template reads: check with "
+            "`depictio ingest <run> --dry-run`, then add a rule and a conditional "
+            "(docs/template-params.md)[/dim]"
+        )
+    others = len(result.unread_skip_params) - len(result.suspect_skip_params)
+    if others:
+        console.print(f"  [dim]{others} other skip_* params name nothing the template reads[/dim]")
+
+
+@app.command("check")
+def check(
+    template: Annotated[
+        str | None,
+        typer.Argument(
+            help="Template id (nf-core/rnaseq/3.26.0, nf-core/rnaseq) or path. "
+            "Omitted with --run: the template `depictio ingest` would pick"
+        ),
+    ] = None,
+    run: Annotated[
+        Path | None,
+        typer.Option("--run", help="A results directory: its pipeline_info/params_<ts>.json"),
+    ] = None,
+    params: Annotated[
+        Path | None,
+        typer.Option("--params", help="A params JSON (nf-core's params_<ts>.json)"),
+    ] = None,
+    var: Annotated[
+        list[str] | None,
+        typer.Option("--var", help="KEY=VALUE as given to `depictio ingest`; repeatable"),
+    ] = None,
+    schema: Annotated[
+        Path | None,
+        typer.Option("--schema", help="The pipeline's nextflow_schema.json (a local checkout)"),
+    ] = None,
+    fetch_schema: Annotated[
+        bool,
+        typer.Option(
+            "--fetch-schema",
+            help="Fetch the template release's nextflow_schema.json from GitHub (nf-core only)",
+        ),
+    ] = False,
+    all_templates: Annotated[
+        bool, typer.Option("--all", help="Every bundled template, one line each")
+    ] = False,
+    schema_cache: Annotated[
+        Path | None, typer.Option("--schema-cache", help="Keep fetched schemas here")
+    ] = None,
+    against: Annotated[
+        str | None,
+        typer.Option(
+            "--against",
+            help="A newer release (3.27.0) or its nextflow_schema.json: which rules it "
+            "breaks or flips, which skip_* flags it adds",
+        ),
+    ] = None,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="Also list variables no conditional reads")
+    ] = False,
+) -> None:
+    """Check a template's variables against a pipeline's parameters.
+
+    Lists each variable and what sets it: a `from_params` rule on the run's
+    params, the outputs themselves (auto), or the user (`--var`). With
+    `--schema`/`--fetch-schema`: every param a rule reads must exist in the
+    release, each rule is evaluated on a default run, and the release's skip_*
+    params no rule reads are listed. With `--run`/`--params`: which rules hold for
+    that run and which conditionals fire. Offline unless --fetch-schema.
+
+    Examples:
+        depictio template check nf-core/rnaseq/3.26.0 --fetch-schema
+        depictio template check --run results/ --var TRACKS_URI=s3://bucket/run
+        depictio template check ./my-template --schema ../rnaseq/nextflow_schema.json
+        depictio template check nf-core/rnaseq/3.26.0 --against 3.27.0
+    """
+    import json
+
+    import yaml
+
+    from depictio.cli.cli.utils.data_root import as_data_root
+    from depictio.cli.cli.utils.template_check import check_template, nfcore_target
+    from depictio.cli.cli.utils.template_check import fetch_schema as fetch
+    from depictio.cli.cli.utils.templates import (
+        _introspect_pipeline_params,
+        _pick_input_file,
+        _projects_roots,
+        _read_run_params,
+        detect_template_from_run_dir,
+    )
+
+    explicit: dict[str, str] = {}
+    for item in var or []:
+        if "=" not in item:
+            console.print(f"[red]--var must be KEY=VALUE, got {item!r}[/red]")
+            raise typer.Exit(1)
+        key, value = item.split("=", 1)
+        explicit[key.strip()] = value.strip()
+
+    run_params: dict | None = None
+    if params is not None:
+        loaded = json.loads(params.read_text())
+        run_params = loaded if isinstance(loaded, dict) else {}
+    elif run is not None:
+        run_params = _read_run_params(run, full_dump_only=True)
+        if not run_params:
+            console.print(f"[yellow]! no pipeline_info/params_*.json under {run}[/yellow]")
+        # What `depictio ingest` finds in the outputs, never over an explicit --var.
+        auto = {"DATA_ROOT": str(run), **explicit}
+        _introspect_pipeline_params(run, auto, _read_run_params(run))
+        samplesheet = _pick_input_file(
+            as_data_root(run), "samplesheet", (".csv", ".tsv", ".tab", ".txt")
+        )
+        if samplesheet:
+            auto.setdefault("SAMPLESHEET_FILE", samplesheet)
+        explicit = auto
+
+    if all_templates:
+        root = next(r for r in _projects_roots() if r.is_dir())
+        ids = [str(p.parent) for p in sorted(root.glob("**/template.yaml"))]
+    elif template is not None:
+        ids = [template]
+    elif run is not None:
+        detected, _info = detect_template_from_run_dir(run)
+        if detected is None:
+            console.print(f"[red]✗ no bundled template fits {run}: pass one[/red]")
+            raise typer.Exit(1)
+        console.print(f"[cyan]{run} → {detected}[/cyan]")
+        ids = [detected]
+    else:
+        console.print("[red]Pass a template, --run or --all[/red]")
+        raise typer.Exit(1)
+
+    failed = unreachable = 0
+    for template_ref in ids:
+        meta, path = _load_metadata(template_ref)
+        has_rules = any(v.from_params is not None for v in meta.variables)
+        target = nfcore_target(meta.template_id)
+        schema_doc = None
+        if schema is not None:
+            schema_doc = json.loads(schema.read_text())
+        elif (fetch_schema or against) and target is not None:
+            try:
+                schema_doc = fetch(*target, cache=schema_cache)
+            except Exception as exc:  # noqa: BLE001 - reported; fatal only for rules
+                console.print(f"[yellow]? {meta.template_id}: no schema ({exc})[/yellow]")
+                unreachable += has_rules
+        # What the template reads: its collections and dashboards, not its
+        # `template:` metadata (provenance lists params) and not its comments.
+        docs = [
+            yaml.safe_load(f.read_text()) or {}
+            for f in [path, *sorted(path.parent.glob("dashboards/*.yaml"))]
+        ]
+        docs[0] = {k: v for k, v in docs[0].items() if k != "template"}
+        text = "\n".join(json.dumps(d) for d in docs)
+        result = check_template(
+            meta,
+            path=path,
+            schema=schema_doc,
+            run_params=run_params,
+            run_vars=explicit or None,
+            template_text=text,
+        )
+        if len(ids) > 1:
+            _print_summary_line(result)
+        else:
+            _print_check(result, verbose=verbose)
+        failed += not result.ok
+        if against and schema_doc is not None:
+            failed += not _print_release_drift(meta, schema_doc, against, target, schema_cache)
+    if len(ids) > 1:
+        console.print(
+            f"\n{len(ids)} templates, {failed} with unknown params, "
+            f"{unreachable} schemas unreachable (templates with rules)"
+        )
+    raise typer.Exit(1 if failed else 2 if unreachable else 0)
+
+
+def _print_release_drift(meta, old_schema: dict, against: str, target, cache) -> bool:
+    """Print what a newer release changes for the template's rules; True when nothing breaks."""
+    import json
+
+    from depictio.cli.cli.utils.template_check import compare_releases, fetch_schema
+
+    if Path(against).is_file():
+        new_schema, label = json.loads(Path(against).read_text()), against
+    elif target is not None:
+        new_schema, label = fetch_schema(target[0], against, cache=cache), against
+    else:
+        console.print(
+            "[red]--against: give a nextflow_schema.json for a non nf-core template[/red]"
+        )
+        return False
+    old_label = target[1] if target else "the template's release"
+    drift = compare_releases(meta, old_schema, new_schema)
+    console.print()
+    for line in drift.markdown(old_label, label):
+        console.print(line.replace("`", ""), markup=False, highlight=False)
+    return drift.ok
+
+
+def _print_summary_line(result) -> None:
+    """One template in an --all listing."""
+    status = "[red]✗[/red]" if not result.ok else "[green]✓[/green]"
+    unknown = "".join(
+        f" [red]{v} reads {', '.join(m)}: not a param[/red]"
+        for v, m in result.unknown_params.items()
+    )
+    skips = (
+        f" [yellow]to check: {', '.join(result.suspect_skip_params)}[/yellow]"
+        if result.suspect_skip_params
+        else ""
+    )
+    routes = sum(bool(r.effects) for r in result.rows if r.source != "rule")
+    console.print(
+        f"{status} {result.template_id:<52} rules {result.rule_count:>2} · "
+        f"routes via --var/auto {routes:>2}{skips}{unknown}"
+    )
