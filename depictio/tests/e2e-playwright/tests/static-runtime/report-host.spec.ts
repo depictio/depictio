@@ -79,6 +79,8 @@ test.describe("report host — the runtime mounted into a report", () => {
     // The exported state: Adelie only, in the card and in the figure.
     const cards = tile(page, "card-body-mass");
     await expect(cards.getByText("3,700.6623")).toBeVisible({ timeout: 30_000 });
+    // A figure draws once it is near the viewport (the report mounts lazily).
+    await tile(page, "scatter-mass-flipper").scrollIntoViewIfNeeded();
     await expect.poll(() => scatterPoints(page), { timeout: 30_000 }).toBe(151);
 
     // Drop the species filter in the report's own panel: the card and the
