@@ -1,0 +1,7 @@
+ID	Condition	Sample	ReplicateFileName	Fasta
+1	A	PBMC009	ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD011628/PBMC009_msms37.raw	https://raw.githubusercontent.com/nf-core/test-datasets/mhcquant/testdata/UP000005640_9606.fasta
+2	A	PBMC009	ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD011628/PBMC009_msms36.raw	https://raw.githubusercontent.com/nf-core/test-datasets/mhcquant/testdata/UP000005640_9606.fasta
+3	A	PBMC009	ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD011628/PBMC009_msms35.raw	https://raw.githubusercontent.com/nf-core/test-datasets/mhcquant/testdata/UP000005640_9606.fasta
+4	B	PBMC007	ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD011628/PBMC007_msms31.raw	https://raw.githubusercontent.com/nf-core/test-datasets/mhcquant/testdata/2025_02_human_swissprot.fasta
+5	B	PBMC007	ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD011628/PBMC007_msms30.raw	https://raw.githubusercontent.com/nf-core/test-datasets/mhcquant/testdata/2025_02_human_swissprot.fasta
+6	B	PBMC007	ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD011628/PBMC007_msms29.raw	https://raw.githubusercontent.com/nf-core/test-datasets/mhcquant/testdata/2025_02_human_swissprot.fasta
