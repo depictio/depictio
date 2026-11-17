@@ -20,6 +20,7 @@ export const ADMIN_TABS = [
   'branding',
   'monitoring',
   'backups',
+  'migrations',
   'maintenance',
   'settings',
 ] as const;

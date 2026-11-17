@@ -68,6 +68,41 @@ class TestUpSetPlotBasic:
         assert len(name_axes) == 1
         assert name_axes[0].get("automargin")
 
+    def test_three_sets_get_a_roomy_dot_matrix(self, binary_df: pd.DataFrame) -> None:
+        plot = UpSetPlot(binary_df[["SetA", "SetB", "SetC"]])
+        plot.to_plotly()
+        layout = plot._build_layout()
+        assert layout.row_heights[-1] >= 0.22
+        assert plot.dot_size == 18
+
+    def test_dot_size_shrinks_with_many_sets_and_honours_an_explicit_value(self) -> None:
+        assert UpSetPlot._default_dot_size(3) == 18
+        assert UpSetPlot._default_dot_size(4) == 18
+        assert UpSetPlot._default_dot_size(20) == 12
+        df = pd.DataFrame({"A": [1, 0, 1], "B": [0, 1, 1]})
+        assert UpSetPlot(df, dot_size=9).dot_size == 9
+
+    def test_legend_sits_in_the_empty_top_left_corner(self, annotated_df: pd.DataFrame) -> None:
+        anno = UpSetAnnotation(data=annotated_df, category="category")
+        fig = UpSetPlot(
+            annotated_df,
+            set_columns=["SetA", "SetB", "SetC", "SetD"],
+            annotation=anno,
+        ).to_plotly()
+        legend = fig.layout.legend
+        assert (legend.x, legend.y) == (0, 1)
+        assert (legend.xanchor, legend.yanchor) == ("left", "top")
+        # No band reserved above the plot for it.
+        assert fig.layout.margin.t == 30
+
+    def test_titled_plot_keeps_its_larger_top_margin(self, binary_df: pd.DataFrame) -> None:
+        assert UpSetPlot(binary_df, title="T").to_plotly().layout.margin.t == 60
+        assert UpSetPlot(binary_df, title="T", subtitle="S").to_plotly().layout.margin.t == 80
+
+    def test_legend_without_annotation_tracks_still_builds(self, binary_df: pd.DataFrame) -> None:
+        fig = UpSetPlot(binary_df).to_plotly()
+        assert fig.layout.legend.yanchor == "top"
+
     def test_set_columns_explicit(self, annotated_df: pd.DataFrame) -> None:
         plot = UpSetPlot(annotated_df, set_columns=["SetA", "SetB", "SetC", "SetD"])
         fig = plot.to_plotly()

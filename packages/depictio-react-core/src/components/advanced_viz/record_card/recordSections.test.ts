@@ -72,6 +72,16 @@ describe('buildRecordSections', () => {
     expect(layout.sections[0].columns).toEqual(['reads', 'dup_rate']);
   });
 
+  it('keeps a heading column the author puts in a section', () => {
+    const layout = buildRecordSections({
+      columns,
+      sections: { Sample: ['sample', 'reads'] },
+      headingColumns: ['sample'],
+      maxFields: 40,
+    });
+    expect(layout.sections).toEqual([{ title: 'Sample', columns: ['sample', 'reads'] }]);
+  });
+
   it('caps the field count across sections and reports the remainder', () => {
     const layout = buildRecordSections({
       columns,

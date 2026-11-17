@@ -8,12 +8,14 @@ import { Icon } from '@iconify/react';
 // dashboard that never opens a table. Mantine unmounts a closed dropdown, so it
 // resolves on first open and never otherwise.
 const DataGridBody = lazy(() => import('../data/DataGridBody'));
-import type { TierAnnotation } from '../data/DataGridBody';
+import type { DataGridSelection, TierAnnotation } from '../data/DataGridBody';
+import DataGridModal from '../data/DataGridModal';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 import { useZoomSyncMember } from '../../highlight/zoomSync';
 import { VizControlsGrid } from './controls/VizControls';
+import type { OpenLocusReader } from '../jbrowse/locusForAction';
 
 /**
  * Bridges the per-renderer Settings + Show-data popovers into ComponentChrome's
@@ -61,6 +63,9 @@ export interface AdvancedVizExtrasPayload {
     columns?: string[];
     tierAnnotation?: TierAnnotation;
   };
+  /** Column of `data.rows` identifying a drawn point, when the tile's plot and
+   *  table share a highlight (see `highlight/`). */
+  highlightColumn?: string;
   /** The frame shows the controls docked beside or above the plot, so the
    *  chrome row offers a toggle for them rather than a popover. */
   docked?: boolean;
@@ -70,11 +75,26 @@ export interface AdvancedVizExtrasPayload {
    *  Shaped as `LoadAllState` so the dispatch can hand it straight to
    *  `LoadAllButton`. */
   reduction?: LoadAllState;
+  /** A genomic tile says where it is looking (its last clicked point, its
+   *  visible window), read when the "Open in genome browser" action is used.
+   *  Stable across renders: the dispatch holds the payload in state. */
+  openLocus?: OpenLocusReader;
 }
 
 type Publisher = (payload: AdvancedVizExtrasPayload | null) => void;
 
 export const AdvancedVizExtrasContext = createContext<Publisher | null>(null);
+
+/** How many rows of panels the tile holds when it is split into small
+ *  multiples. Every panel reports the height one whole figure needs, and the
+ *  panels then share the tile: without this scale each row got a fraction of
+ *  what its legend and strips need, and the figure drew over itself. */
+export const SplitRowsContext = createContext<number>(1);
+
+/** True inside a panel of a split. Panels are read side by side, so a figure
+ *  keeps what they compare (the value axis) the same across them and trades
+ *  its side legend for one under the bars, which leaves them the width. */
+export const InSplitPanelContext = createContext<boolean>(false);
 
 interface ProviderProps {
   children: React.ReactNode;
@@ -238,6 +258,13 @@ interface DataPopoverProps {
   dataRows: Record<string, unknown[]>;
   dataColumns?: string[];
   tierAnnotation?: TierAnnotation;
+  /** Ticks the rows of the highlighted points; see `highlight/`. */
+  selection?: DataGridSelection;
+  /** Whether the table is floating (`FloatingDataTable`) right now. While it is,
+   *  the icon stands for it: filled, and a click puts the table away. */
+  floating?: boolean;
+  /** Present when the tile can float its table: adds the button that does. */
+  onFloatingChange?: (open: boolean) => void;
 }
 
 /** The columns actually rendered, in order. Shared so the popover can decide
@@ -264,10 +291,14 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
   dataRows,
   dataColumns,
   tierAnnotation,
+  selection,
+  floating = false,
+  onFloatingChange,
 }) => {
   // Controlled so the table's own close button can reach it; Mantine only
   // attaches its toggle to the target while uncontrolled, hence the onClick.
   const [opened, setOpened] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const portalTarget = useFullscreenPortalTarget();
 
   // Hide the icon outright when there is nothing behind it. Unlike the map's
@@ -275,50 +306,78 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
   // up front - so an icon with no rows behind it is just a dead affordance.
   if (resolveDataColumns(dataRows, dataColumns).length === 0) return null;
 
+  const close = () => {
+    setOpened(false);
+    setExpanded(false);
+  };
+  const grid = (
+    <Suspense fallback={null}>
+      <DataGridBody
+        dataRows={dataRows}
+        dataColumns={dataColumns}
+        tierAnnotation={tierAnnotation}
+        selection={selection}
+        onClose={close}
+        expanded={expanded}
+        onToggleExpand={() => setExpanded((v) => !v)}
+        onDetach={
+          onFloatingChange
+            ? () => {
+                close();
+                onFloatingChange(true);
+              }
+            : undefined
+        }
+      />
+    </Suspense>
+  );
+
   return (
-    <Popover
-      position="bottom-end"
-      shadow="md"
-      withArrow
-      closeOnClickOutside={false}
-      closeOnEscape
-      opened={opened}
-      onChange={setOpened}
-      portalProps={{ target: portalTarget }}
-    >
-      <Popover.Target>
-        <ActionIcon
-          variant={opened ? 'filled' : 'subtle'}
-          color={TILE_ACTION_STYLE.data.color}
-          size="sm"
-          aria-label="Show underlying data"
-          title={TILE_ACTION_STYLE.data.label}
-          data-tile-action="data"
-          onClick={() => setOpened((v) => !v)}
-        >
-          <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
-        </ActionIcon>
-      </Popover.Target>
-      <Popover.Dropdown
-        p="sm"
-        style={{
-          width: 'min(820px, 88vw)',
-          // Cap the dropdown so it never extends past the viewport;
-          // overflow:auto lets users scroll the whole popover when the grid
-          // pushes content below the bottom of the screen.
-          maxHeight: '85vh',
-          overflow: 'auto',
-        }}
+    <>
+      <Popover
+        position="bottom-end"
+        shadow="md"
+        withArrow
+        closeOnClickOutside={false}
+        closeOnEscape
+        opened={opened && !expanded && !floating}
+        onChange={setOpened}
+        portalProps={{ target: portalTarget }}
       >
-        <Suspense fallback={null}>
-          <DataGridBody
-            dataRows={dataRows}
-            dataColumns={dataColumns}
-            tierAnnotation={tierAnnotation}
-            onClose={() => setOpened(false)}
-          />
-        </Suspense>
-      </Popover.Dropdown>
-    </Popover>
+        <Popover.Target>
+          <ActionIcon
+            variant={opened || floating ? 'filled' : 'subtle'}
+            color={TILE_ACTION_STYLE.data.color}
+            size="sm"
+            aria-label={floating ? 'Close the floating data table' : 'Show underlying data'}
+            title={floating ? 'Close the floating data table' : TILE_ACTION_STYLE.data.label}
+            data-tile-action="data"
+            onClick={() => (floating ? onFloatingChange?.(false) : setOpened((v) => !v))}
+          >
+            <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
+          </ActionIcon>
+        </Popover.Target>
+        <Popover.Dropdown
+          p="sm"
+          style={{
+            width: 'min(820px, 88vw)',
+            // Cap the dropdown so it never extends past the viewport;
+            // overflow:auto lets users scroll the whole popover when the grid
+            // pushes content below the bottom of the screen.
+            maxHeight: '85vh',
+            overflow: 'auto',
+          }}
+        >
+          {expanded ? null : grid}
+        </Popover.Dropdown>
+      </Popover>
+      {/* Mounted only while enlarged: a closed modal still leaves a portal
+          behind, which a fullscreen tile lays out as a child. */}
+      {opened && expanded ? (
+        <DataGridModal opened onClose={close}>
+          {grid}
+        </DataGridModal>
+      ) : null}
+    </>
   );
 };

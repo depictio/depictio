@@ -232,6 +232,36 @@ def _manifest_entry(block: str, key: str) -> str | None:
     return match.group(1) if match else None
 
 
+#: ``manifest {}`` keys :func:`parse_manifest_block` reads, and the name each is
+#: returned under. ``nextflowVersion`` is left out: a constraint, not a version.
+MANIFEST_FIELDS: dict[str, str] = {
+    "name": "name",
+    "version": "version",
+    "description": "description",
+    "author": "author",
+    "homePage": "homepage",
+}
+
+
+def parse_manifest_block(text: str) -> dict[str, str]:
+    """The ``manifest {}`` entries of a ``nextflow.config``'s text, by
+    :data:`MANIFEST_FIELDS` name; empty when the text has no manifest block.
+
+    Shared by run-info detection (a pipeline checkout on disk) and the Project
+    Builder's repository metadata (a ``nextflow.config`` fetched from GitHub).
+    """
+    block_match = _MANIFEST_BLOCK_RE.search(text)
+    if block_match is None:
+        return {}
+    block = block_match.group(1)
+    found: dict[str, str] = {}
+    for key, name in MANIFEST_FIELDS.items():
+        value = _manifest_entry(block, key)
+        if value:
+            found[name] = value.strip()
+    return found
+
+
 def _identity_from_nextflow_config(
     run_dir: Path,
 ) -> tuple[str | None, str | None, str | None]:
@@ -249,15 +279,8 @@ def _identity_from_nextflow_config(
     except OSError as exc:
         logger.warning(f"Nextflow run-info: could not read {config}: {exc}")
         return None, None, None
-    block_match = _MANIFEST_BLOCK_RE.search(text)
-    if block_match is None:
-        return None, None, None
-    block = block_match.group(1)
-    return (
-        _manifest_entry(block, "name"),
-        _manifest_entry(block, "version"),
-        _manifest_entry(block, "homePage"),
-    )
+    manifest = parse_manifest_block(text)
+    return manifest.get("name"), manifest.get("version"), manifest.get("homepage")
 
 
 def _read_params(path: Path | None) -> dict:

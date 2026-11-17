@@ -4,6 +4,8 @@ import os
 import sys
 import threading
 import warnings
+from collections.abc import Callable
+from functools import lru_cache
 
 import httpx
 import polars as pl
@@ -12,6 +14,7 @@ from bson import ObjectId
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
+from depictio.models.components.constants import TEXT_MATCH_MODES
 
 # FEATURE FLAGS
 ENABLE_CACHING = True  # Global toggle for caching system
@@ -116,6 +119,18 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
 
         # Create stable representation
         filter_dict = {"col": column_name, "type": component_type, "val": value}
+        # A text pattern means something different per option, so the options are
+        # part of the filter's identity (same text, other case rule, other rows).
+        if component_type == "TextInput":
+            options = {**component, **(component.get("metadata") or {})}
+            filter_dict["txt"] = list(
+                normalize_text_filter_options(
+                    options.get("case_sensitive"), options.get("match_mode")
+                )
+            )
+        # A region pair compares chromosome names loosely (see GENOME_SELECTION_SOURCE).
+        if component.get("source") == GENOME_SELECTION_SOURCE:
+            filter_dict["src"] = GENOME_SELECTION_SOURCE
         filter_repr.append(filter_dict)
 
     # Sort for stability
@@ -128,11 +143,20 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
     return filter_hash
 
 
+# Filter source of a genome region pair (``genomeRegionFilters`` in selection.ts).
+# Its chromosome half matches names with and without the ``chr`` prefix: the region
+# comes from an assembly or another collection that may spell them differently.
+GENOME_SELECTION_SOURCE = "genome_selection"
+
 # Synthetic ``interactive_component_type`` for "a cross-DC link resolved to no
 # target values". Not a user-facing component: it exists so an empty resolution
 # can be carried through the ordinary filter payload and still mean "no rows",
 # which an empty value list cannot express (see ``add_filter``).
 LINK_NO_MATCH = "__link_no_match__"
+
+#: The column every run-tagged row carries its run in (epic #1399). Mirrors
+#: ``depictio.cli.cli.utils.delta_versioning.RUN_ID_COLUMN``.
+RUN_ID_COLUMN = "depictio_run_id"
 
 
 def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | None) -> pl.Expr:
@@ -257,6 +281,118 @@ def _slider_predicate(column_name: str, value, slider_mode: str | None) -> pl.Ex
     }[mode]
 
 
+#: ``TEXT_MATCH_MODES``: ``regex`` reads a TextInput value as a regular expression
+#: (a plain substring is one too), ``contains`` as literal text.
+DEFAULT_TEXT_MATCH_MODE = "regex"
+
+# Characters the Rust ``regex`` crate (Polars' engine) treats as syntax.
+_REGEX_META = frozenset("\\.+*?()|[]{}^$#&-~")
+
+
+def escape_regex(text: str) -> str:
+    """Escape ``text`` so the Rust regex engine matches it literally."""
+    return "".join(f"\\{ch}" if ch in _REGEX_META else ch for ch in text)
+
+
+def normalize_text_filter_options(
+    case_sensitive: object = None, match_mode: object = None
+) -> tuple[bool, str]:
+    """``(case_sensitive, match_mode)`` with defaults filled and junk replaced.
+
+    The options arrive from the client, so an unknown ``match_mode`` falls back to
+    ``regex`` rather than failing the render.
+    """
+    mode = str(match_mode).lower() if match_mode else DEFAULT_TEXT_MATCH_MODE
+    if mode not in TEXT_MATCH_MODES:
+        mode = DEFAULT_TEXT_MATCH_MODE
+    return bool(case_sensitive), mode
+
+
+#: A pattern longer than this is not a filter: a person types a few characters, and
+#: the regex engine compiles whatever it is given for every query.
+MAX_TEXT_PATTERN_LENGTH = 512
+
+
+def text_filter_pattern(
+    value: object, case_sensitive: object = None, match_mode: object = None
+) -> tuple[str, bool] | None:
+    """The ``(pattern, literal)`` a TextInput value compiles to, or ``None`` for no filter.
+
+    ``None`` covers an empty or whitespace-only value and a pattern the regex
+    engine rejects: both mean "do not filter", never an error. Surrounding
+    whitespace is trimmed (a pasted sequence often carries a trailing space).
+    Case-insensitive matching is the ``(?i)`` flag, so a literal match in that
+    mode is a regex with its metacharacters escaped. Polars' engine is a
+    linear-time automaton, so no pattern can backtrack catastrophically.
+    """
+    if value is None or isinstance(value, list | tuple | dict):
+        return None
+    text = str(value).strip()
+    if not text or len(text) > MAX_TEXT_PATTERN_LENGTH:
+        return None
+    sensitive, mode = normalize_text_filter_options(case_sensitive, match_mode)
+    literal = mode == "contains"
+    if literal and sensitive:
+        return text, True
+    if literal:
+        text = escape_regex(text)
+    pattern = text if sensitive else f"(?i){text}"
+    if not _is_valid_regex(pattern):
+        return None
+    return pattern, False
+
+
+@lru_cache(maxsize=512)
+def _is_valid_regex(pattern: str) -> bool:
+    """Whether Polars' regex engine accepts ``pattern`` (compiled once, then cached)."""
+    try:
+        pl.Series([""]).str.contains(pattern)
+    except Exception:
+        return False
+    return True
+
+
+def is_valid_text_pattern(value: object, match_mode: object = None) -> bool:
+    """False when ``value`` is a pattern that cannot filter: over the length cap, or a regex
+    the engine rejects (a literal under the cap always compiles)."""
+    _, mode = normalize_text_filter_options(None, match_mode)
+    text = "" if value is None else str(value).strip()
+    if len(text) > MAX_TEXT_PATTERN_LENGTH:
+        return False
+    if mode == "contains" or not text:
+        return True
+    return _is_valid_regex(text)
+
+
+def text_filter_predicate(
+    column_name: str,
+    value: object,
+    case_sensitive: object = None,
+    match_mode: object = None,
+    dtype: pl.DataType | None = None,
+) -> pl.Expr | None:
+    """The predicate of a ``TextInput`` filter, or ``None`` when it should not filter.
+
+    A null cell never matches (``str.contains`` yields null and the filter keeps
+    only true). The column is read as text, so a categorical or numeric column
+    that reaches here is matched on its string form rather than failing the render;
+    a column already of the string dtype stays bare.
+    """
+    compiled = text_filter_pattern(value, case_sensitive, match_mode)
+    if compiled is None:
+        if not is_valid_text_pattern(value, match_mode):
+            logger.warning(
+                f"TextInput filter on column {column_name!r} ignored: {str(value)!r} "
+                "cannot be used as a pattern (invalid regex or too long)"
+            )
+        return None
+    pattern, literal = compiled
+    column = pl.col(column_name)
+    if dtype != pl.String:
+        column = column.cast(pl.Utf8, strict=False)
+    return column.str.contains(pattern, literal=literal)
+
+
 def add_filter(
     filter_list: list,
     interactive_component_type: str,
@@ -266,6 +402,8 @@ def add_filter(
     max_value=None,
     dtype: pl.DataType | None = None,
     slider_mode: str | None = None,
+    case_sensitive: bool | None = None,
+    match_mode: str | None = None,
 ) -> None:
     """Add filter criteria to a filter list based on component type.
 
@@ -275,6 +413,9 @@ def add_filter(
 
     ``slider_mode`` only affects ``Slider``: one of ``SLIDER_MODES`` (``gte``
     by default, i.e. a threshold; ``eq`` restores the old equality filter).
+
+    ``case_sensitive`` / ``match_mode`` only affect ``TextInput`` (see
+    ``text_filter_predicate``): case-insensitive regex unless they say otherwise.
     """
     if interactive_component_type == LINK_NO_MATCH:
         # A cross-DC link resolved to zero target values: the user's filter is
@@ -294,11 +435,19 @@ def add_filter(
             if not isinstance(value, list):
                 value = [value]
 
-            filter_list.append(_categorical_predicate(column_name, value, dtype))
+            predicate = _categorical_predicate(column_name, value, dtype)
+            if column_name == RUN_ID_COLUMN:
+                # A row with no run aggregates several runs' samples (a recipe
+                # recomputed over every run): it belongs to each of them.
+                predicate = predicate | pl.col(column_name).is_null()
+            filter_list.append(predicate)
 
     elif interactive_component_type == "TextInput":
-        if value:
-            filter_list.append(pl.col(column_name).str.contains(value))
+        # An empty value, or a pattern the regex engine rejects, adds nothing:
+        # the frame comes back unfiltered rather than failing the whole render.
+        predicate = text_filter_predicate(column_name, value, case_sensitive, match_mode, dtype)
+        if predicate is not None:
+            filter_list.append(predicate)
 
     elif interactive_component_type == "Slider":
         # `is not None`, not truthiness: 0 is a real threshold / value.
@@ -420,19 +569,33 @@ def process_metadata_and_filter(
             column_name = meta["column_name"]
             filter_expr = meta.get("filter_expr") or component.get("filter_expr")
             slider_mode = meta.get("slider_mode") or component.get("slider_mode")
+            text_source = {**component, **meta}
         else:
             interactive_component_type = component["interactive_component_type"]
             column_name = component["column_name"]
             filter_expr = component.get("filter_expr")
             slider_mode = component.get("slider_mode")
+            text_source = component
+
+        value = component["value"]
+        if (
+            component.get("source") == GENOME_SELECTION_SOURCE
+            and interactive_component_type in ("Select", "MultiSelect")
+            and value
+        ):
+            from depictio.api.v1.services.jbrowse.regions import chrom_name_variants
+
+            value = chrom_name_variants(value)
 
         add_filter(
             filter_list,
             interactive_component_type=interactive_component_type,
             column_name=column_name,
-            value=component["value"],
+            value=value,
             dtype=schema.get(column_name) if schema else None,
             slider_mode=slider_mode,
+            case_sensitive=text_source.get("case_sensitive"),
+            match_mode=text_source.get("match_mode"),
         )
 
         if filter_expr:
@@ -746,7 +909,7 @@ def _get_delta_location(
     token: str | None,
 ) -> str:
     """
-    Get Delta table location from init_data or via API call (legacy).
+    Get Delta table location from init_data, the deltatables collection, or an API call (legacy).
 
     Args:
         data_collection_id_str: String ID of the data collection.
@@ -762,6 +925,16 @@ def _get_delta_location(
     """
     if init_data and data_collection_id_str in init_data:
         file_id = init_data[data_collection_id_str]["delta_location"]
+        return file_id
+
+    # The deltatables collection is the same source the endpoint below answers
+    # from, and needs no bearer: a reader with none (an anonymous visitor on a
+    # public dashboard) would be refused by the HTTP call with a 401 and fail
+    # the whole read as "Error loading deltatable".
+    from depictio.api.v1.services.export.delta_location import delta_location_for
+
+    file_id = delta_location_for(data_collection_id_str)
+    if file_id:
         return file_id
 
     # Legacy API path with deprecation warning
@@ -923,6 +1096,26 @@ def _get_cached_schema(
     """
     schema = _get_cached_dtypes(delta_scan, data_collection_id_str, version_salt)
     return None if schema is None else frozenset(schema)
+
+
+def get_cached_column_names(
+    data_collection_id_str: str,
+    make_scan: Callable[[], pl.LazyFrame],
+    delta_version: int | None = None,
+) -> frozenset[str] | None:
+    """A DC's column names from the schema cache, opening the Delta table only on a miss.
+
+    ``_get_cached_schema`` takes an already-built scan, and building one reads
+    the Delta log, so a caller that made the scan first paid that round-trip on
+    every request and used the cache for nothing. Taking the scan as a factory
+    means a hit costs one Mongo lookup for the version salt and no S3 access.
+    """
+    salt = _version_salt_for(data_collection_id_str, delta_version)
+    if salt is not None:
+        cached = _DELTA_SCHEMA_CACHE.get((data_collection_id_str, str(salt)))
+        if cached is not None:
+            return frozenset(cached)
+    return _get_cached_schema(make_scan(), data_collection_id_str, salt)
 
 
 def _filter_columns(metadata: list[dict] | None) -> set[str]:
@@ -1145,10 +1338,6 @@ def _cache_dataframe_to_stores(
         df: DataFrame to cache.
         size_bytes: Estimated size in bytes.
     """
-    import time
-
-    global _total_memory_usage
-
     if size_bytes > MEMORY_THRESHOLD_BYTES:
         return
 
@@ -1161,11 +1350,31 @@ def _cache_dataframe_to_stores(
         pass
 
     # Also cache in memory
+    _remember_in_memory(cache_key, df, size_bytes)
+
+
+def _remember_in_memory(cache_key: str, df: pl.DataFrame, size_bytes: int) -> None:
+    """Keep a frame in the process, within the cache's budget.
+
+    Every frame read is cached, one per collection and Delta version, so
+    without eviction a process keeps every version a time-travel read or a
+    before/after diff ever touched. A key cached again replaces its entry
+    rather than counting twice.
+    """
+    import time
+
+    global _total_memory_usage
+
+    previous = _cache_metadata.pop(cache_key, None)
+    if previous is not None:
+        _dataframe_memory_cache.pop(cache_key, None)
+        _total_memory_usage -= previous["size_bytes"]
+    if size_bytes > MEMORY_PER_ITEM_MAX_BYTES:
+        return
+    while _total_memory_usage + size_bytes > MEMORY_THRESHOLD_BYTES and _cache_metadata:
+        evict_oldest_cached_dataframe()
     _dataframe_memory_cache[cache_key] = df
-    _cache_metadata[cache_key] = {
-        "size_bytes": size_bytes,
-        "timestamp": time.time(),
-    }
+    _cache_metadata[cache_key] = {"size_bytes": size_bytes, "timestamp": time.time()}
     _total_memory_usage += size_bytes
 
 
@@ -1201,7 +1410,6 @@ def _load_and_cache_fresh_data(
     Returns:
         Loaded DataFrame.
     """
-    import time
 
     global _total_memory_usage
 
@@ -1230,17 +1438,9 @@ def _load_and_cache_fresh_data(
 
                 if not cache_dataframe(filtered_cache_key, df):
                     # Fallback to memory cache if Redis fails
-                    _dataframe_memory_cache[filtered_cache_key] = df
-                    _cache_metadata[filtered_cache_key] = {
-                        "size_bytes": filtered_size,
-                        "timestamp": time.time(),
-                    }
+                    _remember_in_memory(filtered_cache_key, df, filtered_size)
             except Exception:
-                _dataframe_memory_cache[filtered_cache_key] = df
-                _cache_metadata[filtered_cache_key] = {
-                    "size_bytes": filtered_size,
-                    "timestamp": time.time(),
-                }
+                _remember_in_memory(filtered_cache_key, df, filtered_size)
 
     return df
 
@@ -1317,6 +1517,14 @@ def clean_filter_payload(filters: list[dict] | None) -> list[dict]:
         filter_expr = f.get("filter_expr") or meta.get("filter_expr")
         if filter_expr:
             entry["filter_expr"] = filter_expr
+        if (f.get("source") or meta.get("source")) == GENOME_SELECTION_SOURCE:
+            entry["source"] = GENOME_SELECTION_SOURCE
+        if entry["interactive_component_type"] == "TextInput":
+            # The options change which rows a pattern keeps, so they travel with it.
+            for key in ("case_sensitive", "match_mode"):
+                option = f.get(key) if f.get(key) is not None else meta.get(key)
+                if option is not None:
+                    entry[key] = option
         out.append(entry)
     return out
 
@@ -1383,6 +1591,53 @@ def _estimate_frame_size_bytes(delta_scan: pl.LazyFrame) -> int:
         return -1
 
 
+# Base Delta scans, one per (location, dc_type, pinned commit, aggregation
+# version). A new LazyFrame resolves the table on its first collect (the Delta
+# log and the parquet footers, ~200 ms against S3) and the plans derived from it
+# share that, so a filter change that reuses the base scan skips the read: a
+# 193 MB collection answered in ~47 ms instead of ~230 ms. The version is in the
+# key, so an ingest that bumps it builds a fresh scan; an unknown version
+# (``None``) is never cached, since nothing then says the table has not changed.
+_BASE_SCAN_CACHE: dict[tuple[str, str | None, int | None, str], pl.LazyFrame] = {}
+_BASE_SCAN_CACHE_MAX = 64
+# A cached scan is shared across request threads, and its first schema
+# resolution must not run on two of them at once: polars resolves a Delta schema
+# by calling back into Python on its own pool, and a second thread entering
+# `collect_schema()` meanwhile waits inside polars holding the GIL, so the
+# callback never runs and every request that touches the table hangs (seen on a
+# tab whose cards, filters and charts read the same collections at once). The
+# schema is resolved here, under the lock, before the scan is shared; once
+# resolved, `collect_schema()` answers without calling back.
+_BASE_SCAN_LOCK = threading.Lock()
+
+
+def _base_delta_scan(
+    file_id: str,
+    dc_type: str | None,
+    delta_version: int | None,
+    version_salt: str | int | None,
+) -> pl.LazyFrame:
+    """``_create_delta_scan``, reusing the scan built for the same table version."""
+    if version_salt is None:
+        return _create_delta_scan(file_id, dc_type, delta_version)
+    key = (file_id, dc_type, delta_version, str(version_salt))
+    scan = _BASE_SCAN_CACHE.get(key)
+    if scan is not None:
+        return scan
+    with _BASE_SCAN_LOCK:
+        scan = _BASE_SCAN_CACHE.get(key)
+        if scan is not None:
+            return scan
+        scan = _create_delta_scan(file_id, dc_type, delta_version)
+        scan.collect_schema()
+        # Bounded like the schema cache: a scan is cheap to rebuild, so clearing
+        # on overflow avoids tracking per-entry recency.
+        if len(_BASE_SCAN_CACHE) >= _BASE_SCAN_CACHE_MAX:
+            _BASE_SCAN_CACHE.clear()
+        _BASE_SCAN_CACHE[key] = scan
+    return scan
+
+
 def _open_sortable_scan(
     workflow_id_str: str,
     data_collection_id_str: str,
@@ -1414,7 +1669,7 @@ def _open_sortable_scan(
         else:
             dc_type = _get_dc_type_from_db(ObjectId(data_collection_id_str))
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-        delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
+        delta_scan = _base_delta_scan(file_id, dc_type, delta_version, version_salt)
         delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
         delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
         return delta_scan
@@ -1547,12 +1802,17 @@ def load_geojson_from_s3(dc_id: str, TOKEN: str | None = None) -> dict | None:
 
         logger.info(f"Loading GeoJSON from S3: {s3_path}")
 
-        # Read the GeoJSON from S3
-        import s3fs
+        # Read the GeoJSON from S3. Not through s3fs: ``polars_s3_config`` holds
+        # polars/delta storage options, which s3fs does not take.
+        bucket, _, key = s3_path.removeprefix("s3://").partition("/")
+        if not s3_path.startswith("s3://") or not bucket or not key:
+            logger.error(f"GeoJSON location of DC {dc_id} is not an s3:// URI: {s3_path}")
+            return None
 
-        fs = s3fs.S3FileSystem(**polars_s3_config)
-        with fs.open(s3_path, "r") as f:
-            geojson_data = json.load(f)
+        from depictio.api.v1 import s3
+
+        obj = s3.s3_client.get_object(Bucket=bucket, Key=key)
+        geojson_data = json.loads(obj["Body"].read())
 
         feature_count = len(geojson_data.get("features", []))
         logger.info(f"Loaded GeoJSON with {feature_count} features from {s3_path}")

@@ -19,10 +19,11 @@ import type {
   SelectionChangedEvent,
   SortChangedEvent,
 } from 'ag-grid-community';
-import type { RowClickedEvent } from 'ag-grid-community';
+import type { CellMouseOverEvent, IRowNode, RowClickedEvent } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
+import { useOverlayNewRuns } from '../changeMarks';
 import { renderDefinitionKey } from '../renderKey';
 import {
   createTableDatasource,
@@ -31,13 +32,23 @@ import {
   tableGridKey,
 } from './tableVersionFollow';
 import { LoadAllState } from './chrome/LoadAllButton';
+import { TileSubtitle, TileTitleRow } from './chrome/ComponentInfo';
+import { titleCarriesDescription } from './chrome/descriptionText';
 import { visibleTableColumns } from './tableColumns';
+import { categoryDotCellRenderer, pinnedColourColumns } from './tableCategoryCell';
+import { useCategoryColorSource } from '../hooks/useCategoryColors';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
+import { useHighlight, usePublishHighlight } from '../highlight/bus';
+import { genomicFromRowByName, rowMatcher, type RowMatcher } from '../highlight/genomicHover';
+import { useGenomeBrowserTarget } from './jbrowse/browserTarget';
+import { centreGenomeBrowser } from './jbrowse/openAction';
+import { usePickedRowKeysJson } from './jbrowse/genomeTracksStore';
+import { pickedRowMatcher } from './jbrowse/pickedColour';
 import { useUiScale } from '../uiScale';
 import { rowsForHeight, useContentDemand } from './autofit';
 import RefetchOverlay from './RefetchOverlay';
@@ -69,6 +80,97 @@ const NO_ANNOTATIONS: RenderableAnnotation[] = [];
  *  replacing ``columnDefs``, which would reset the user's sort). */
 const ANNOTATION_COL_ID = '__depictio_annotation';
 
+/** `positionColumn` of the hover a table publishes: no residue axis carries
+ *  this name, so the protein tiles ignore the event. */
+const RECORD_POSITION_COLUMN = '__record__';
+
+/**
+ * Lights the rows another tile's hover refers to. It lives in its own
+ * component so a hover re-renders this one (a few lines) and not the table:
+ * the matcher goes into `matcherRef`, which the table's `getRowClass` reads,
+ * and only the rendered rows whose state flipped are redrawn. The bus already
+ * delivers one event per animation frame. Nothing here touches filters, so
+ * nothing refetches.
+ */
+const TableHoverLink: React.FC<{
+  ownIndex: string;
+  selectionColumn?: string;
+  gridApiRef: React.RefObject<GridApi | null>;
+  matcherRef: React.MutableRefObject<RowMatcher | null>;
+}> = ({ ownIndex, selectionColumn, gridApiRef, matcherRef }) => {
+  const hovered = useHighlight(ownIndex);
+  const litRef = useRef<Set<IRowNode>>(new Set());
+  useEffect(() => {
+    const matcher = rowMatcher(hovered, selectionColumn);
+    matcherRef.current = matcher;
+    const api = gridApiRef.current;
+    if (!api || api.isDestroyed()) return;
+    const before = litRef.current;
+    if (!matcher && before.size === 0) return;
+    const now = new Set<IRowNode>();
+    if (matcher) {
+      for (const node of api.getRenderedNodes()) {
+        if (node.data && matcher(node.data as Record<string, unknown>)) now.add(node);
+      }
+    }
+    const flipped: IRowNode[] = [];
+    for (const n of now) if (!before.has(n)) flipped.push(n);
+    for (const n of before) if (!now.has(n)) flipped.push(n);
+    litRef.current = now;
+    if (flipped.length) api.redrawRows({ rowNodes: flipped });
+  }, [hovered, selectionColumn, gridApiRef, matcherRef]);
+  // The grid is rebuilt (new data version, "show all"): drop the stale nodes.
+  useEffect(
+    () => () => {
+      litRef.current = new Set();
+      matcherRef.current = null;
+    },
+    [matcherRef],
+  );
+  return null;
+};
+
+/**
+ * Marks the rows a genome browser of the dashboard points at (the pick, else
+ * its best call), the way `TableHoverLink` lights a hover: the matcher goes
+ * into `matcherRef` and only the rows whose state flipped are redrawn. The
+ * browser paints the same rows' features in the same colour.
+ */
+const TablePickLink: React.FC<{
+  dashboardId: string;
+  gridApiRef: React.RefObject<GridApi | null>;
+  matcherRef: React.MutableRefObject<RowMatcher | null>;
+}> = ({ dashboardId, gridApiRef, matcherRef }) => {
+  const keysJson = usePickedRowKeysJson(dashboardId);
+  const litRef = useRef<Set<IRowNode>>(new Set());
+  useEffect(() => {
+    const matcher = pickedRowMatcher(JSON.parse(keysJson) as Array<Record<string, unknown>>);
+    matcherRef.current = matcher;
+    const api = gridApiRef.current;
+    if (!api || api.isDestroyed()) return;
+    const before = litRef.current;
+    const now = new Set<IRowNode>();
+    if (matcher) {
+      for (const node of api.getRenderedNodes()) {
+        if (node.data && matcher(node.data as Record<string, unknown>)) now.add(node);
+      }
+    }
+    const flipped: IRowNode[] = [];
+    for (const n of now) if (!before.has(n)) flipped.push(n);
+    for (const n of before) if (!now.has(n)) flipped.push(n);
+    litRef.current = now;
+    if (flipped.length) api.redrawRows({ rowNodes: flipped });
+  }, [keysJson, gridApiRef, matcherRef]);
+  useEffect(
+    () => () => {
+      litRef.current = new Set();
+      matcherRef.current = null;
+    },
+    [matcherRef],
+  );
+  return null;
+};
+
 interface TableRendererProps {
   dashboardId: string;
   metadata: StoredMetadata;
@@ -91,6 +193,8 @@ interface TableRendererProps {
 
 const MAX_BLOCKS_IN_CACHE = 10;
 const DEFAULT_PAGE_SIZE = 100;
+/** The selection checkbox and its gap, which column auto-size leaves out. */
+const SELECTION_CHECKBOX_PX = 32;
 /** Pages the full set must span before the chrome offers "load all rows".
  *  Tied to the author's own page size rather than an absolute row count: a
  *  dashboard that deliberately shows 15 rows at a time has said the table is a
@@ -362,6 +466,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               },
             ]
           : [];
+        const coloured = pinnedColourColumns(
+          categorySourceRef.current,
+          visibleColumns.map((c) => c.field),
+        );
         setColDefs([
           ...annotationCol,
           ...visibleColumns.map((c, i) => {
@@ -384,6 +492,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               resizable: true,
               cellClass: isNumeric ? 'ag-right-aligned-cell' : undefined,
               headerClass: isNumeric ? 'ag-right-aligned-header' : undefined,
+              cellRenderer: coloured.has(c.field)
+                ? categoryDotCellRenderer(categorySourceRef, c.field)
+                : undefined,
               sort: isDefaultSort ? defaultSortDir : undefined,
               sortIndex: isDefaultSort ? 0 : undefined,
               // Surface the selection checkbox in the first column so users
@@ -598,6 +709,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // reads the latest map through this ref.
   const rowAnnotationsRef = useRef<RowAnnotationMap>(rowAnnotations);
   rowAnnotationsRef.current = rowAnnotations;
+  // A column the dashboard colours (`category_colors`) draws a dot before each
+  // value; the cell reads the latest source through this ref.
+  const categorySource = useCategoryColorSource();
+  const categorySourceRef = useRef(categorySource);
+  categorySourceRef.current = categorySource;
   const hasRowAnnotations = rowAnnotations.size > 0;
   const hasRowAnnotationsRef = useRef(hasRowAnnotations);
   hasRowAnnotationsRef.current = hasRowAnnotations;
@@ -625,13 +741,29 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // Stringified row id → raw value (kept so numeric ids stay numeric).
   const annotateSelectedRef = useRef<Map<string, string | number>>(new Map());
 
+  // The row test for the hover in force (set by `TableHoverLink`).
+  const hoverMatcherRef = useRef<RowMatcher | null>(null);
+  // The rows a genome browser points at (set by `TablePickLink`).
+  const pickMatcherRef = useRef<RowMatcher | null>(null);
+  const publishHover = usePublishHighlight(componentIndex);
+  // What's new, Overlay (#1397): the rows of runs the reader had already seen
+  // fade, the new run's rows stay as they are. Rows carry their run in
+  // `depictio_run_id`; a table without it is left alone.
+  const overlayNewRuns = useOverlayNewRuns(metadata.dc_id as string | undefined);
+  const getRowStyle = useMemo(() => {
+    if (overlayNewRuns.length === 0) return undefined;
+    const fresh = new Set(overlayNewRuns);
+    return (params: { data?: Record<string, unknown> }) => {
+      const run = params.data?.depictio_run_id;
+      return run != null && !fresh.has(String(run)) ? { opacity: 0.35 } : undefined;
+    };
+  }, [overlayNewRuns]);
   const getRowClass = useMemo(() => {
     const legacyOn = !!rowIdColumn && highlightActive && newRowIds.size > 0;
     const batchOn =
       batchHighlightOn && !!batchIds && !!batchIdColumn && batchIds.size > 0;
     const annotOn = !!annotationColumn && rowAnnotations.size > 0;
     const annotSelOn = annotating && !!annotationColumn;
-    if (!legacyOn && !batchOn && !annotOn && !annotSelOn) return undefined;
     const realtimeClass = (data: Record<string, unknown>): string | undefined => {
       // A pinned batch gets the steady ``-pinned`` class (stays until cleared);
       // live arrivals (batch or legacy diff) get the one-shot ``-new`` flash.
@@ -662,6 +794,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       }
       const rt = realtimeClass(data);
       if (rt) classes.push(rt);
+      // Read at draw time: the hover lands in a ref so it never rebuilds this
+      // callback (which would redraw every row on every hover).
+      if (hoverMatcherRef.current?.(data)) classes.push('depictio-row-linked');
+      if (pickMatcherRef.current?.(data)) classes.push('depictio-row-picked');
       return classes.length ? classes : undefined;
     };
   }, [
@@ -825,7 +961,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     if (api && !api.isDestroyed()) api.redrawRows();
   }, [annotating]);
 
+  // A click on a row that names a contig and a position (the usual column
+  // names) centres the genome browser of this tab on it. The pending-locus
+  // event is what "Open in genome browser" uses on the same tab: no filter,
+  // nothing refetched, and a browser on another tab is left alone.
+  const browserTarget = useGenomeBrowserTarget();
   const onRowClicked = (event: RowClickedEvent) => {
+    if (event.data && !annotatingRef.current) {
+      centreGenomeBrowser(browserTarget, genomicFromRowByName(event.data as Record<string, unknown>));
+    }
     if (!annotatingRef.current || !annotationColumn || !event.data || pendingHere) return;
     // The checkbox keeps toggling the dashboard selection, as outside annotate mode.
     const target = event.event?.target as Element | null | undefined;
@@ -897,6 +1041,23 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [annotating, layer, pendingHere, containerRef]);
 
+  // The row under the pointer goes out whole: each subscriber reads its own
+  // columns from it (a browser its contig and start, a plot its chrom and
+  // position), so a dashboard names no extra field. The selection value rides
+  // as the row key for tiles that ring rows. A hover is never a filter.
+  const onCellMouseOver = (event: CellMouseOverEvent) => {
+    const data = event.data as Record<string, unknown> | undefined;
+    if (!data) return;
+    const key = rowIdColumn ? data[rowIdColumn] : undefined;
+    publishHover({
+      record: data,
+      rowKeys: key != null && key !== '' ? [String(key)] : undefined,
+      start: 0,
+      positionColumn: RECORD_POSITION_COLUMN,
+    });
+  };
+  const clearHover = () => publishHover(null);
+
   const onSelectionChanged = (event: SelectionChangedEvent) => {
     if (!selectionEnabled || !selectionColumn || !onFilterChange) return;
     const selectedRows = event.api.getSelectedRows() as Array<Record<string, unknown>>;
@@ -933,6 +1094,14 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   const fitColumns = (api: GridApi) => {
     api.autoSizeAllColumns(false);
+    // Auto-size measures the values, not the selection checkbox the first
+    // column carries: without its width the sample names were cut to "HG00...".
+    const boxed = (api.getColumns() ?? []).filter((c) => c.getColDef().checkboxSelection === true);
+    if (boxed.length) {
+      api.setColumnWidths(
+        boxed.map((c) => ({ key: c, newWidth: c.getActualWidth() + SELECTION_CHECKBOX_PX })),
+      );
+    }
     const { left, right } = api.getHorizontalPixelRange();
     const viewport = right - left;
     const used = (api.getColumns() ?? []).reduce((sum, c) => sum + c.getActualWidth(), 0);
@@ -1017,6 +1186,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         : `${total.toLocaleString()} rows`}
     </Badge>
   ) : null;
+  // The description rides the title row (the chrome leaves its toolbar icon out
+  // then, see `titleCarriesDescription`).
+  const infoDescription = titleCarriesDescription('table', metadata)
+    ? String(metadata.description).trim()
+    : '';
 
   return (
     <Paper
@@ -1033,8 +1207,22 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {(metadata.title || rowBadge) && (
-        <Group gap="xs" mb="xs" wrap="nowrap">
+      {infoDescription ? (
+        // The title row and a one-line subtitle; the full description is one
+        // click away on the info icon (see ComponentInfo).
+        <Stack gap={2} mb="xs" className="dc-tile-head">
+          <TileTitleRow
+            title={metadata.title as string}
+            description={infoDescription}
+            badges={rowBadge}
+          />
+          <TileSubtitle description={infoDescription} />
+        </Stack>
+      ) : (
+        (metadata.title || rowBadge) && (
+        // `dc-tile-head`: the title leads the row (a chrome style reads the
+        // class instead of looking into the row with `:has()`).
+        <Group gap="xs" mb="xs" wrap="nowrap" className={metadata.title ? 'dc-tile-head' : undefined}>
           {metadata.title && (
             <Text fw={600} size="sm">
               {metadata.title}
@@ -1042,6 +1230,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           )}
           {rowBadge}
         </Group>
+        )
       )}
       {showInitialLoader && <ComponentSkeleton variant="table" />}
       {error && !ready && (
@@ -1058,6 +1247,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
             </Text>
           )}
           <div
+            onMouseLeave={clearHover}
             className={`${isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}${
               badgesClickable ? ' depictio-annot-badges-clickable' : ''
             }`}
@@ -1110,6 +1300,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               onFirstDataRendered={(e) => fitColumns(e.api)}
               onGridSizeChanged={(e) => fitColumns(e.api)}
               getRowClass={getRowClass}
+              getRowStyle={getRowStyle}
               getRowId={
                 rowIdColumn
                   ? (params: { data?: Record<string, unknown> }) =>
@@ -1121,7 +1312,13 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               // path separator and tries ``row.sepal.length`` (nested), which
               // fails because the row has flat keys → empty cells.
               suppressFieldDotNotation
-              rowSelection={selectionEnabled ? 'multiple' : undefined}
+              rowSelection={
+                selectionEnabled
+                  ? metadata.row_selection_mode === 'single'
+                    ? 'single'
+                    : 'multiple'
+                  : undefined
+              }
               // Plain click adds/removes from the selection set — without this
               // AG Grid Community requires Ctrl/Shift modifiers, which is not
               // discoverable. The checkbox column rendered on the first column
@@ -1132,8 +1329,21 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               suppressRowClickSelection={selectionEnabled ? annotating : undefined}
               onSelectionChanged={selectionEnabled ? onSelectionChanged : undefined}
               onRowClicked={onRowClicked}
+              onCellMouseOver={onCellMouseOver}
+              onCellMouseOut={clearHover}
               onDisplayedColumnsChanged={(e) => syncCsvColumns(e.api)}
               onSortChanged={onSortChanged}
+            />
+            <TableHoverLink
+              ownIndex={componentIndex}
+              selectionColumn={rowIdColumn}
+              gridApiRef={gridApiRef}
+              matcherRef={hoverMatcherRef}
+            />
+            <TablePickLink
+              dashboardId={dashboardId}
+              gridApiRef={gridApiRef}
+              matcherRef={pickMatcherRef}
             />
             {annotating && layer && (
               <AnnotateToolbar

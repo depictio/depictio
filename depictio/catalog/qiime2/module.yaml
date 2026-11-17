@@ -3,6 +3,7 @@
 # `nf_core_url` is per-output.
 id: qiime2
 name: QIIME 2
+version: "2.0.0"
 description: >-
   Decentralised microbiome bioinformatics platform; emits many distinct
   artefacts depending on the plugin/subcommand invoked.

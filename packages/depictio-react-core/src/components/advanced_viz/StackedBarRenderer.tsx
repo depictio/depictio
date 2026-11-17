@@ -1,0 +1,1309 @@
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { useElementSize } from '@mantine/hooks';
+import Plot from './LegendAwarePlot';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
+
+import {
+  fetchAdvancedVizData,
+  fetchUniqueValues,
+  InteractiveFilter,
+  StoredMetadata,
+} from '../../api';
+import { isStaleFetch } from '../../fetchQueue';
+import { advancedVizSelectionFilter, filtersExcludingOwn } from '../../selection';
+import { columnCategoryColors } from '../../categoryColors';
+import { resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
+import AdvancedVizFrame from './AdvancedVizFrame';
+import { InSplitPanelContext } from './AdvancedVizExtras';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import { usePersistedVizControl } from './usePersistedVizControl';
+import { OTHER_COLOR, OTHER_LABEL } from './groupSplit';
+import { GroupColouringReportContext } from '../../groupReach';
+import type { GroupRenderState } from '../../selectionGroups';
+import { withRanksInOrder } from './phylo/view';
+import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeColors, plotlyThemeFragment } from './plotlyTheme';
+import { syncAxisBreak, type AxisBreakSpec } from './axisBreakOverlay';
+import { demandForPx } from './contentDemand';
+import {
+  barSlots,
+  compositionColumns,
+  formatAxisValue,
+  groupSamples,
+  isDenseTaxonomyAxis,
+  isSpacerSlot,
+  meltWideRows,
+  percentTickFormat,
+  resolveSortCategory,
+  SAMPLE_SORT_OPTIONS,
+  sortSamples,
+  taxonomyAxisTitle,
+  taxonomyLegend,
+  taxonomyLegendTopPx,
+  valueAxisTitle,
+  visibleTaxonomyControls,
+  wideCategoryName,
+  zoomedValueRange,
+  type TaxonomyLegendPos,
+  type TaxonomyOrientation,
+  type TaxonomySampleSort,
+} from './stackedBarOptions';
+
+/** The stacked bars run vertically: samples are the x axis, so the tile's
+ *  height is furniture, not a count. This is the plot area a stack of
+ *  proportions stays readable in once the tilted sample labels and the axis
+ *  title have taken their share. */
+const TAXONOMY_PLOT_PX = 300;
+/** A data value placed inside a Plotly `hovertemplate`: `<` would open a tag
+ *  and `%{` a template variable, so a taxon or column name carrying either is
+ *  defused. */
+function escapeHover(text: string): string {
+  return text.replace(/</g, '&lt;').replace(/%\{/g, '%​{');
+}
+
+/** Black or white, whichever reads on `colour` (a `#rgb` / `#rrggbb` fill; any
+ *  other form falls back to dark text). */
+function readableOn(colour: string | undefined): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec((colour ?? '').trim());
+  if (!m) return '#212529';
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#212529' : '#ffffff';
+}
+
+/** One bar of a horizontal chart (`orientation: h`), where the bar count is
+ *  the tile's height problem. */
+const BAR_ROW_PX = 18;
+/** Below this plot width a strip's key is dropped rather than drawn over the bars. */
+const STRIP_KEY_MIN_WIDTH_PX = 460;
+
+/** What a horizontal chart spends outside its rows: top margin, value axis
+ *  ticks and title. */
+const H_PLOT_CHROME_PX = 90;
+/** One entry of the legend, a column right of the plot at 10 px: under the
+ *  plot it fought the tilted sample labels for the same band. */
+const LEGEND_ITEM_PX = 16;
+/** Entries per row of a legend drawn in rows (`legend_pos: bottom`), roughly:
+ *  a 10 px taxon name and its swatch across a w8 tile. */
+const LEGEND_ROW_ITEMS = 5;
+/** One legend entry in a panel of a split, swatch and a phylum name at 10 px. */
+const LEGEND_SPLIT_ITEM_W_PX = 135;
+/** The legend's title and its padding. */
+const LEGEND_CHROME_PX = 30;
+/** One annotation strip: tall enough for its 10 px labels. */
+const STRIP_BAND_PX = 22;
+/** Between a strip and the bars (or the next strip), so the strip's name and
+ *  the bars' top tick do not touch. */
+const STRIP_GAP_PX = 8;
+/** What the figure spends outside the plot area: the top margin and, below,
+ *  the tilted sample labels and the axis title. */
+const PLOT_CHROME_PX = 150;
+/** Across a horizontal chart: the sample labels on the left and the legend
+ *  column on the right. */
+const H_PLOT_CHROME_W_PX = 260;
+/** The frame's own header above the figure: title and row count. */
+const FRAME_HEADER_PX = 60;
+/** The band above a vertical chart that names its groups. */
+const GROUP_LABEL_PX = 18;
+
+/** Generic per-sample categorical annotation strip drawn above/below the
+ *  stacked bars. Reusable across any viz with a sample axis when the DC
+ *  carries a categorical metadata column the user wants visualised as a
+ *  colour band (habitat, batch, treatment, timepoint, …). */
+interface AnnotationStrip {
+  /** Metadata column in the DC; values are looked up per sample. */
+  column: string;
+  /** Optional label shown to the left of the strip. Defaults to `column`. */
+  label?: string;
+  /** Where to draw the strip relative to the chart (right / left of
+   *  horizontal bars). */
+  position?: 'top' | 'bottom';
+  /** Per-category colour overrides; falls back to TAB10-style cycling. */
+  palette?: Record<string, string> | null;
+}
+
+interface StackedBarConfig {
+  sample_id_col: string;
+  taxon_col: string;
+  /** Null (or a column the table lacks) draws a single-level composition;
+   *  unset is the model default, `rank`. */
+  rank_col?: string | null;
+  abundance_col: string;
+  /** Wide form: one numeric column per category, melted client-side. */
+  value_cols?: string[] | null;
+  /** Wide form: column -> category display name. */
+  value_labels?: Record<string, string> | null;
+  default_rank?: string | null;
+  top_n?: number;
+  sort_by?: 'abundance' | 'alphabetical';
+  normalise_to_one?: boolean;
+  /** Categorical annotation strips drawn alongside the bars. Each strip
+   *  reads its values from the row's metadata column at the matching
+   *  sample. Renderer ensures the fetched column list includes these. */
+  annotation_strips?: AnnotationStrip[] | null;
+  /** Taxon → colour overrides. The default cycle has twelve hues, so a top-15
+   *  view always repeats some; pinning the taxa a reader compares keeps them
+   *  apart and keeps them the same colour across dashboards. */
+  taxon_palette?: Record<string, string> | null;
+  /** Controls the tile does not offer; the config value still applies. */
+  hidden_controls?: string[] | null;
+  /** Label of the rank picker, 'Rank' when unset. */
+  rank_label?: string | null;
+  /** Sample axis title: unset reads 'Sample', an empty string shows none. */
+  x_title?: string | null;
+  /** Value axis title: unset reads 'Relative abundance' or the abundance
+   *  column, an empty string shows none. */
+  value_title?: string | null;
+  /** The legend in a column right of the bars (default) or in rows under them. */
+  legend_pos?: TaxonomyLegendPos;
+  /** Vertical bars (default) or one horizontal bar per sample. */
+  orientation?: TaxonomyOrientation;
+  /** Per-sample column grouping the bars; the sort applies inside groups. */
+  group_col?: string | null;
+  /** A click on a bar emits a filter on its sample. Opt-in. */
+  selection_enabled?: boolean;
+  /** Column the picked sample belongs to; null falls back to `sample_id_col`. */
+  selection_column?: string | null;
+}
+
+interface Props {
+  metadata: StoredMetadata & { viz_kind?: string; config?: StackedBarConfig };
+  filters: InteractiveFilter[];
+  refreshTick?: number;
+  /** Selection-as-filter callback; absent on read-only hosts. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  /** The dashboard's groups in the Overlay display: a strip above the bars,
+   *  one cell per sample, so the bars keep their taxa's colours. */
+  groupRender?: GroupRenderState;
+}
+
+/** The strip the groups draw, apart from the configured ones. */
+const GROUP_STRIP_COLUMN = '\u0000groups';
+
+/** Fallback cycle for an unbranded deployment; a brand's colorway wins. */
+const PALETTE = [
+  '#1c7ed6', '#e64980', '#fab005', '#37b24d', '#7048e8', '#f76707',
+  '#0ca678', '#d6336c', '#15aabf', '#fd7e14', '#82c91e', '#ae3ec9',
+];
+
+/** Runs of equal consecutive values, by position. */
+function categoryRuns(values: readonly string[]): { value: string; start: number; end: number }[] {
+  const runs: { value: string; start: number; end: number }[] = [];
+  values.forEach((v, i) => {
+    const last = runs[runs.length - 1];
+    if (last && last.value === v && last.end === i - 1) last.end = i;
+    else runs.push({ value: v, start: i, end: i });
+  });
+  return runs;
+}
+
+/** Dark or light text, whichever reads on a fill. */
+function textOn(fill: string | undefined): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(fill ?? '').trim());
+  if (!m) return '#212529';
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return lum < 0.4 ? '#ffffff' : '#212529';
+}
+
+/** Stand-in value of a spacer slot in a strip: breaks runs, never shown. */
+const SPACER_VALUE = '\u0000';
+
+const StackedBarRenderer: React.FC<Props> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+  groupRender,
+}) => {
+  const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
+  const isDark = colorScheme === 'dark';
+  const config = (metadata.config || {}) as StackedBarConfig;
+  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const categorySource = useCategoryColorSource();
+  // A wide table (`value_cols`) is melted into the long form below; it has no
+  // taxon, abundance or rank column of its own.
+  const valueCols = useMemo(
+    () => (config.value_cols ?? []).filter(Boolean),
+    [config.value_cols],
+  );
+  const wide = valueCols.length > 0;
+  // Unset is the model default; null is "no rank column" (one level).
+  const rankCol = wide ? null : config.rank_col === undefined ? 'rank' : config.rank_col;
+  const horizontal = config.orientation === 'h';
+
+  const [rank, setRank] = usePersistedVizControl<string | null>(metadata, 'default_rank', null);
+  const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 20);
+  const [normalise, setNormalise] = usePersistedVizControl<boolean>(
+    metadata,
+    'normalise_to_one',
+    true,
+  );
+  const [sampleSort, setSampleSort] = usePersistedVizControl<TaxonomySampleSort>(metadata, 'sample_sort', 'input');
+  const [sortCategory, setSortCategory] = usePersistedVizControl<string | null>(metadata, 'sort_category', null);
+  const [groupCol, setGroupCol] = usePersistedVizControl<string | null>(metadata, 'group_col', null);
+  const [yZoom, setYZoom] = usePersistedVizControl<'off' | 'auto'>(metadata, 'y_zoom', 'auto');
+  const [showLegend, setShowLegend] = usePersistedVizControl(metadata, 'show_legend', true);
+  const [logY, setLogY] = usePersistedVizControl(metadata, 'log_y', false);
+
+  // The strips are drawn as fractions of the plot area, so they are sized from
+  // the box: a fixed share was a 13 px band in a short tile, too thin for its
+  // labels. Rounded so a sub-pixel reflow does not rebuild the figure. A
+  // horizontal chart's strips are columns, sized from its width.
+  const { ref: plotBoxRef, height: plotBoxPx, width: plotBoxW } = useElementSize();
+  const narrow = plotBoxW > 0 && plotBoxW < STRIP_KEY_MIN_WIDTH_PX;
+  const inSplit = useContext(InSplitPanelContext);
+  const plotAreaPx = horizontal
+    ? Math.max(120, plotBoxW - H_PLOT_CHROME_W_PX)
+    : Math.max(120, plotBoxPx - PLOT_CHROME_PX);
+  const plotFraction = (px: number, cap: number) =>
+    Math.round(Math.min(cap, px / plotAreaPx) * 1000) / 1000;
+  const stripBand = plotFraction(STRIP_BAND_PX, 0.15);
+  const stripGap = plotFraction(STRIP_GAP_PX, 0.05);
+  const groupLabelBand = horizontal
+    ? 0
+    : Math.round(Math.min(0.2, GROUP_LABEL_PX / Math.max(120, plotBoxPx - PLOT_CHROME_PX)) * 1000) /
+      1000;
+
+  // What the bars can be grouped by: the configured group column and every
+  // strip's column, all of which are fetched with the rows.
+  const groupOptions = useMemo(() => {
+    const out: { value: string; label: string }[] = [];
+    const add = (value: string | null | undefined, label?: string) => {
+      if (value && !out.some((o) => o.value === value)) out.push({ value, label: label || value });
+    };
+    add(config.group_col);
+    for (const s of config.annotation_strips ?? []) add(s?.column, s?.label);
+    return out;
+  }, [config.group_col, config.annotation_strips]);
+  const activeGroupCol =
+    groupCol && groupOptions.some((o) => o.value === groupCol) ? groupCol : null;
+
+  // Stable taxon→colour universe so a habitat filter doesn't shuffle the
+  // top-N taxon colours. Pulled from the DC's unique values for taxon_col;
+  // falls back to the filtered ordering when the endpoint is slow/errors.
+  const [fetchedUniverse, setTaxonUniverse] = useState<string[] | null>(null);
+  // A wide table's categories are its value columns, known up front.
+  const taxonUniverse = useMemo(
+    () => (wide ? valueCols.map((c) => wideCategoryName(c, config.value_labels)) : fetchedUniverse),
+    [wide, valueCols, config.value_labels, fetchedUniverse],
+  );
+  useEffect(() => {
+    if (wide || !metadata.dc_id || !config.taxon_col) {
+      setTaxonUniverse(null);
+      return;
+    }
+    let cancelled = false;
+    fetchUniqueValues(metadata.dc_id, config.taxon_col)
+      .then((values) => {
+        if (!cancelled) setTaxonUniverse(values);
+      })
+      .catch(() => {
+        /* best-effort — colours stay reactive to the current filter */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wide, metadata.dc_id, config.taxon_col]);
+
+  // The table holds every rank (Kingdom to Genus, 773k rows for a metabarcoding
+  // run) but a bar chart draws one. The rank picker's options come from this
+  // cheap lookup, and the fetch below asks for the active rank only, so the
+  // server ships the rows that are drawn rather than every rank's.
+  const [rankUniverse, setRankUniverse] = useState<string[] | null>(null);
+  const [rankLookupFailed, setRankLookupFailed] = useState(false);
+  useEffect(() => {
+    if (!metadata.dc_id || !config.rank_col) return;
+    let cancelled = false;
+    setRankLookupFailed(false);
+    fetchUniqueValues(metadata.dc_id, config.rank_col)
+      .then((values) => {
+        if (!cancelled) setRankUniverse(withRanksInOrder(values));
+      })
+      .catch(() => {
+        // Without the list the old behaviour stands: fetch every rank, read the
+        // picker's options off the rows.
+        if (!cancelled) setRankLookupFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [metadata.dc_id, config.rank_col]);
+  const wantedRank = rank || config.default_rank || rankUniverse?.[0] || null;
+  const rankFilter = useMemo<InteractiveFilter[]>(
+    () =>
+      wantedRank && config.rank_col
+        ? [
+            {
+              index: `${metadata.index}-rank`,
+              value: [wantedRank],
+              column_name: config.rank_col,
+              interactive_component_type: 'MultiSelect',
+              metadata: {
+                dc_id: metadata.dc_id,
+                column_name: config.rank_col,
+                interactive_component_type: 'MultiSelect',
+              },
+            },
+          ]
+        : [],
+    [wantedRank, config.rank_col, metadata.index, metadata.dc_id],
+  );
+  // No rank column: nothing to look up, so nothing to wait for.
+  const rankReady = !config.rank_col || rankUniverse !== null || rankLookupFailed;
+
+  // The bindings (long form) or the sample id and value columns (wide form),
+  // then the columns any annotation strip needs, so the renderer looks up
+  // per-sample categorical values without a second fetch, then the group
+  // column: after the strips, so grouping by a strip's column (which persists
+  // `group_col`) leaves the column list, and the fetch, unchanged.
+  const requiredCols = useMemo(
+    () =>
+      compositionColumns({
+        sampleCol: config.sample_id_col,
+        taxonCol: config.taxon_col,
+        rankCol,
+        abundanceCol: config.abundance_col,
+        valueCols,
+        extra: [...(config.annotation_strips ?? []).map((s) => s?.column), config.group_col],
+      }),
+    [config, rankCol, valueCols],
+  );
+
+  const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
+  // The rank the rows were fetched for: the figure follows the rows, not the picker,
+  // so choosing a rank keeps the old bars up until the new ones arrive.
+  const [rowsRank, setRowsRank] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
+  const [fullLoad, setFullLoad] = useState(false);
+  const [reduction, setReduction] = useState<{
+    displayed: number;
+    total: number;
+    sampled: boolean;
+    degraded: boolean;
+  } | null>(null);
+
+  // The tile's own pick must not narrow its own bars: it dims the others
+  // instead, so the pick can be moved or cleared from the same chart.
+  const fetchFilters = useMemo(
+    () => filtersExcludingOwn(filters, String(metadata.index), 'scatter_selection'),
+    [filters, metadata.index],
+  );
+  const filterSig = JSON.stringify(fetchFilters);
+  const pickedSamples = useMemo(() => {
+    const own = filters.find(
+      (f) => f.index === String(metadata.index) && f.source === 'scatter_selection',
+    );
+    const value = own?.value;
+    return new Set(Array.isArray(value) ? value.map((v) => String(v)) : []);
+  }, [filters, metadata.index]);
+  useEffect(() => {
+    setFullLoad(false);
+  }, [filterSig]);
+
+  const bound = Boolean(
+    config.sample_id_col && (wide || (config.taxon_col && config.abundance_col)),
+  );
+  useEffect(() => {
+    if (!metadata.wf_id || !metadata.dc_id || !bound) {
+      setError('Stacked bar: missing data binding');
+      setLoading(false);
+      return;
+    }
+    if (!rankReady) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetchAdvancedVizData(
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters: [...fetchFilters, ...rankFilter],
+        fullLoad,
+        vizKind: 'stacked_bar',
+      },
+      ctrl.signal,
+    )
+      .then((res) => {
+        if (cancelled) return;
+        setRows(res.rows);
+        setRowsRank(rankFilter.length ? wantedRank : null);
+        setReduction({
+          displayed: res.row_count,
+          total: res.total_rows ?? res.row_count,
+          sampled: Boolean(res.sampled),
+          degraded: Boolean(res.sampling?.degraded),
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled || isStaleFetch(err)) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [metadata.wf_id, metadata.dc_id, bound, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad, rankReady, wantedRank]);
+
+  // Each sample's group, first group winning, and the strip's colours.
+  const groupStrip = useMemo(() => {
+    const groups = groupRender?.colorByGroup ? groupRender.groups.filter((g) => g.values.length > 0) : [];
+    if (groups.length === 0) return null;
+    const bySample = new Map<string, string>();
+    for (const g of groups) {
+      for (const v of g.values) if (!bySample.has(String(v))) bySample.set(String(v), g.name);
+    }
+    const palette: Record<string, string> = { [OTHER_LABEL]: OTHER_COLOR };
+    for (const g of groups) palette[g.name] = g.color;
+    return { bySample, palette };
+  }, [groupRender]);
+  // Whether any bar is in a group, for the dispatch's "not grouped" badge.
+  const reportColouring = useContext(GroupColouringReportContext);
+  const groupMatched = useMemo(() => {
+    if (!groupStrip || !rows) return null;
+    const samples = (rows[config.sample_id_col] as unknown[] | undefined) ?? [];
+    return samples.some((v) => groupStrip.bySample.has(String(v ?? '')));
+  }, [groupStrip, rows, config.sample_id_col]);
+  useEffect(() => {
+    if (!reportColouring || groupMatched === null) return;
+    reportColouring(groupMatched);
+    return () => reportColouring(null);
+  }, [reportColouring, groupMatched]);
+
+  const { figure, allRanks, categories, seriesCount, stripCount, slotCount, canZoom, axisBreak } = useMemo(() => {
+    if (!rows)
+      return {
+        figure: null,
+        allRanks: [] as string[],
+        categories: [] as string[],
+        seriesCount: 0,
+        stripCount: 0,
+        slotCount: 0,
+        canZoom: false,
+        axisBreak: null as { axis: 'x' | 'y'; normalise: boolean } | null,
+      };
+    // A panel of a split is too narrow for a column of taxa beside its bars:
+    // the key goes above them, in every panel alike, and the bars keep the width.
+    const legendPos = inSplit ? 'top' : (config.legend_pos ?? 'right');
+    const melted = wide
+      ? meltWideRows(rows, config.sample_id_col, valueCols, config.value_labels)
+      : null;
+    const samples =
+      melted?.samples ??
+      ((rows[config.sample_id_col] || []).map((v) => String(v ?? '')) as string[]);
+    // A lineage that stops above the shown rank ("Eukaryota;") has a blank leaf.
+    // Named, so it gets a legend entry a reader can identify rather than an
+    // unlabelled swatch.
+    const taxa =
+      melted?.taxa ??
+      ((rows[config.taxon_col] || []).map(
+        (v) => String(v ?? '').trim() || 'Unclassified',
+      ) as string[]);
+    // No rank column bound, or none in the table (the endpoint drops a column
+    // the DC lacks): one level, no filtering.
+    const ranks = ((rankCol && rows[rankCol]) || []).map((v) => String(v ?? '')) as string[];
+    const ab = melted?.abundances ?? ((rows[config.abundance_col] || []) as number[]);
+
+    const seen = Array.from(new Set(ranks));
+    // Root to leaf in the picker. The options come from the lookup; only when it
+    // failed (and every rank was fetched) are they read off the rows.
+    const allRanks = rankUniverse ?? withRanksInOrder(seen);
+    // The rank the rows are for. Rows fetched without a rank filter hold several.
+    const activeRank = rowsRank ?? (rank || seen[0] || null);
+
+    // Filter to active rank, then aggregate (sample × taxon → abundance).
+    const cellTotals = new Map<string, Map<string, number>>(); // sample -> taxon -> abundance
+    for (let i = 0; i < samples.length; i++) {
+      if (activeRank && ranks[i] !== activeRank) continue;
+      const s = samples[i];
+      const t = taxa[i];
+      const v = Number(ab[i]) || 0;
+      if (!cellTotals.has(s)) cellTotals.set(s, new Map());
+      const inner = cellTotals.get(s)!;
+      inner.set(t, (inner.get(t) || 0) + v);
+    }
+
+    // Rank taxa by total abundance and keep top-N; lump others into "Other".
+    // Largest first, which is also the stacking order: the overall largest
+    // category sits at the bottom of every bar, which is what lets the zoom
+    // crop a shared base away.
+    const taxonTotals = new Map<string, number>();
+    for (const inner of cellTotals.values()) {
+      for (const [t, v] of inner.entries()) {
+        taxonTotals.set(t, (taxonTotals.get(t) || 0) + v);
+      }
+    }
+    const topTaxaSorted = Array.from(taxonTotals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([t]) => t);
+    const topTaxa = topTaxaSorted.slice(0, topN);
+    const topSet = new Set(topTaxa);
+    const firstTaxon = topTaxaSorted[0];
+
+    const totalOf = (s: string): number => {
+      let total = 0;
+      for (const v of (cellTotals.get(s) || new Map<string, number>()).values()) total += v;
+      return total;
+    };
+    // A category's plotted value in one bar: its share when normalised.
+    const shownValue = (s: string, category: string): number => {
+      const inner = cellTotals.get(s) || new Map<string, number>();
+      let v = 0;
+      if (category === 'Other') {
+        for (const [t, x] of inner.entries()) if (!topSet.has(t)) v += x;
+      } else v = inner.get(category) || 0;
+      const total = totalOf(s);
+      return normalise && total > 0 ? v / total : v;
+    };
+    const shownCategories = [
+      ...topTaxa.filter((t) => (taxonTotals.get(t) || 0) > 0),
+      ...(topTaxaSorted.slice(topN).some((t) => (taxonTotals.get(t) || 0) > 0) ? ['Other'] : []),
+    ];
+    const sortCat = resolveSortCategory(sortCategory, shownCategories);
+
+    // `input` keeps the table's order; `name` is natural; the value sorts are
+    // largest first: the raw total, the raw value of the overall largest
+    // category (`first_taxon`, as shipped), or the plotted value of the chosen
+    // category (`category`).
+    const sampleKeys = Array.from(cellTotals.keys());
+    const orderedSamples = sortSamples(sampleKeys, sampleSort, {
+      total: totalOf,
+      firstTaxon: (s) => (firstTaxon ? cellTotals.get(s)?.get(firstTaxon) || 0 : 0),
+      category: (s) => (sortCat ? shownValue(s, sortCat) : 0),
+    });
+
+    // Multi-level: bars grouped by a per-sample column, the sort applying
+    // inside each group, the groups set apart by a blank slot.
+    const firstValueBySample = (column: string): Map<string, string> => {
+      const out = new Map<string, string>();
+      const sampleCol = rows[config.sample_id_col] as unknown[] | undefined;
+      const valueCol = rows[column] as unknown[] | undefined;
+      if (sampleCol && valueCol) {
+        for (let i = 0; i < sampleCol.length; i++) {
+          const key = String(sampleCol[i] ?? '');
+          if (!out.has(key)) out.set(key, String(valueCol[i] ?? '—'));
+        }
+      }
+      return out;
+    };
+    const { slots, spans } = (() => {
+      if (!activeGroupCol) return { slots: orderedSamples, spans: [] as ReturnType<typeof barSlots>['spans'] };
+      const groupBy = firstValueBySample(activeGroupCol);
+      const groups = groupSamples(
+        orderedSamples,
+        sampleKeys,
+        (s) => groupBy.get(s) ?? '—',
+        sampleSort === 'name',
+      );
+      return barSlots(groups, horizontal);
+    })();
+    const spacer = slots.map(isSpacerSlot);
+
+    const tracesByTaxon = new Map<string, (number | null)[]>();
+    for (const t of [...topTaxa, 'Other'])
+      tracesByTaxon.set(t, slots.map((_, i) => (spacer[i] ? null : 0)));
+
+    // What a segment's tooltip reads, whatever the bar is drawn in: the raw
+    // value, its share of the bar and the bar's total. Plotly's default label
+    // only echoes the position and the plotted number, which in a normalised
+    // bar is a bare "87%" with no way to tell what it is a share of.
+    const rawByTaxon = new Map<string, (number | null)[]>();
+    for (const t of [...topTaxa, 'Other'])
+      rawByTaxon.set(t, slots.map((_, i) => (spacer[i] ? null : 0)));
+    const barTotals = slots.map(() => 0);
+
+    slots.forEach((s, sIdx) => {
+      if (spacer[sIdx]) return;
+      const inner = cellTotals.get(s) || new Map();
+      let total = 0;
+      for (const v of inner.values()) total += v;
+      barTotals[sIdx] = total;
+      for (const [t, v] of inner.entries()) {
+        const bucket = topSet.has(t) ? t : 'Other';
+        const arr = tracesByTaxon.get(bucket)!;
+        arr[sIdx] = (arr[sIdx] ?? 0) + (normalise && total > 0 ? v / total : v);
+        const raw = rawByTaxon.get(bucket)!;
+        raw[sIdx] = (raw[sIdx] ?? 0) + v;
+      }
+    });
+    // A bar that already sums to 100 (percentages) or 1 (fractions) has a raw
+    // value equal to its share; repeating it as "Value" would be noise.
+    // Most bars, not all: rounding and a dropped class leave a few off by a
+    // little.
+    const filled = barTotals.filter((_, i) => !spacer[i]);
+    const rawIsShare =
+      filled.length > 0 &&
+      filled.filter((t) => Math.abs(t - 100) < 2 || Math.abs(t - 1) < 0.02).length >=
+        filled.length * 0.9;
+
+    // Stable taxon→colour map so filtering (e.g. by habitat) doesn't reshuffle
+    // the top-N colours. Universe = all taxa in the DC; fallback = the filtered
+    // top-N set ordered as they appear in tracesByTaxon.
+    const taxaForPalette = Array.from(tracesByTaxon.keys()).filter((t) => t !== 'Other');
+    // A taxon wears the dashboard's colour for it: under the rank shown (a
+    // Phylum pinned in `category_colors.Phylum`), else under the taxon column,
+    // the component's own `taxon_palette` winning value by value.
+    const taxonPinned = columnCategoryColors(categorySource, config.taxon_col, {
+      ...(columnCategoryColors(categorySource, activeRank) ?? {}),
+      ...(config.taxon_palette ?? {}),
+    });
+    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette, taxonPinned);
+    const series = Array.from(tracesByTaxon.entries()).filter(([, arr]) =>
+      arr.some((v) => (v ?? 0) > 0),
+    );
+    const barLabel = '%{' + (horizontal ? 'y' : 'x') + '}';
+    const valueLabel = (config.value_title || config.abundance_col || 'Value').trim();
+    const data = series.map(([t, arr]) => {
+      const colour = t === 'Other' ? '#adb5bd' : colourSource.get(t);
+      const raw = rawByTaxon.get(t) ?? [];
+      return {
+        type: 'bar' as const,
+        name: t,
+        ...(horizontal
+          ? { orientation: 'h' as const, x: arr, y: slots }
+          : { x: slots, y: arr }),
+        marker: { color: colour },
+        // [value, share of the bar, bar total]
+        customdata: slots.map((_, i) => [
+          raw[i] ?? 0,
+          barTotals[i] > 0 ? (raw[i] ?? 0) / barTotals[i] : 0,
+          barTotals[i],
+        ]),
+        hovertemplate:
+          `<b>${barLabel}</b><br><b>${escapeHover(t)}</b>: %{customdata[1]:.1%} of the bar` +
+          (rawIsShare
+            ? ''
+            : `<br>${escapeHover(valueLabel)}: %{customdata[0]:,.4~g} of %{customdata[2]:,.4~g}`) +
+          '<extra></extra>',
+        // The segment's own colour fills its tooltip, as Plotly does by
+        // default, so the label reads as the segment under the pointer.
+        hoverlabel: { bgcolor: colour, bordercolor: colour, font: { color: readableOn(colour) } },
+      };
+    });
+
+    // Zoom: the value axis starts just under the smallest bottom segment.
+    // Never on a log axis, which is a crop of its own.
+    const totals = slots.map((_, i) => series.reduce((acc, [, arr]) => acc + (arr[i] ?? 0), 0));
+    const zoomCandidate =
+      !normalise && logY ? null : zoomedValueRange(series[0]?.[1] ?? [], totals, normalise);
+    // Not in a split: each panel would start its axis where its own bottom
+    // segment does, and panels read side by side would not compare.
+    const zoom = yZoom === 'auto' && !inSplit ? zoomCandidate : null;
+
+    // Annotation strips — one row of per-sample coloured cells per configured
+    // strip, each a one-row heatmap on its own y-axis sharing the bars' x-axis
+    // (a one-column heatmap on its own x-axis beside horizontal bars).
+    // A heatmap rather than layout shapes: shapes take no hover and no legend,
+    // so a strip told nothing about which category a colour stood for.
+    const strips: AnnotationStrip[] = [
+      // The groups first, nearest the top: they are what the reader asked for.
+      ...(groupStrip && !inSplit
+        ? [{ column: GROUP_STRIP_COLUMN, label: 'Group', position: 'top' as const, palette: groupStrip.palette }]
+        : []),
+      ...(config.annotation_strips ?? []).filter((s) => s && s.column),
+    ];
+    const stripTraces: Record<string, unknown>[] = [];
+    // A strip's categories were legend entries after the taxa, one legend
+    // holding two keys that read as one. A strip whose categories each hold a
+    // block wide enough is labelled on itself instead; the others get a key
+    // of their own above the plot.
+    const stripLabels: Record<string, unknown>[] = [];
+    let stripKey = false;
+    const stripAxes: Record<string, unknown> = {};
+    const step = stripBand + stripGap;
+    const nTop = strips.filter((s) => s.position === 'top').length;
+    const nBottom = strips.length - nTop;
+    // Along y for vertical bars; along x (bottom = left) for horizontal ones.
+    const barDomain: [number, number] = [nBottom * step, 1 - nTop * step];
+    const nSamples = slots.length - spacer.filter(Boolean).length;
+    if (strips.length > 0) {
+      let topCursor = 1;
+      let bottomCursor = 0;
+      strips.forEach((strip, k) => {
+        const isGroupStrip = strip.column === GROUP_STRIP_COLUMN;
+        const sampleToValue =
+          isGroupStrip && groupStrip ? groupStrip.bySample : firstValueBySample(strip.column);
+        const missing = isGroupStrip ? OTHER_LABEL : '—';
+        const values = slots.map((s, i) => (spacer[i] ? SPACER_VALUE : sampleToValue.get(s) ?? missing));
+        // Stable category→colour for THIS strip's categories: the dashboard's
+        // colours for its column, the strip's own `palette` winning per value.
+        const categories = Array.from(new Set(values.filter((v) => v !== SPACER_VALUE))).sort();
+        const stripPalette = stableColorMap(
+          categories,
+          palette,
+          columnCategoryColors(categorySource, strip.column, strip.palette),
+        );
+        const n = categories.length;
+        // Category i gets z = i; zmin/zmax at ±0.5 put each category in its own
+        // [i/n, (i+1)/n] band of the colorscale, a step function.
+        const colorscale = categories.flatMap((c, i) => [
+          [i / n, stripPalette.get(c)],
+          [(i + 1) / n, stripPalette.get(c)],
+        ]);
+
+        const isTop = strip.position === 'top';
+        const domain: [number, number] = isTop
+          ? [topCursor - stripBand, topCursor]
+          : [bottomCursor, bottomCursor + stripBand];
+        if (isTop) topCursor -= step;
+        else bottomCursor += step;
+
+        const axisLetter = horizontal ? 'x' : 'y';
+        const axis = `${axisLetter}${k + 2}`;
+        const label = strip.label || strip.column;
+        stripAxes[`${axisLetter}axis${k + 2}`] = {
+          domain,
+          anchor: horizontal ? 'y' : 'x',
+          fixedrange: true,
+          showgrid: false,
+          zeroline: false,
+          ticks: '',
+          tickfont: { size: 10, color: isDark ? '#ced4da' : '#495057' },
+          ...(horizontal ? { tickangle: -90 } : {}),
+          automargin: true,
+        };
+        const z = values.map((v) => (v === SPACER_VALUE ? null : categories.indexOf(v)));
+        const shown = values.map((v) => (v === SPACER_VALUE ? '' : v));
+        stripTraces.push({
+          type: 'heatmap',
+          ...(horizontal
+            ? {
+                x: [label],
+                y: slots,
+                z: z.map((v) => [v]),
+                customdata: shown.map((v) => [v]),
+                xaxis: axis,
+                hovertemplate: `%{y}<br>${label}: %{customdata}<extra></extra>`,
+              }
+            : {
+                x: slots,
+                y: [label],
+                z: [z],
+                customdata: [shown],
+                yaxis: axis,
+                hovertemplate: `%{x}<br>${label}: %{customdata}<extra></extra>`,
+              }),
+          zmin: -0.5,
+          zmax: n - 0.5,
+          colorscale,
+          showscale: false,
+          xgap: 0,
+          hoverongaps: false,
+        });
+        const runs = categoryRuns(values).filter((r) => r.value !== SPACER_VALUE);
+        const minRun = Math.max(2, Math.ceil(nSamples * 0.12));
+        const longest = new Map<string, { start: number; end: number }>();
+        for (const r of runs) {
+          const best = longest.get(r.value);
+          if (!best || r.end - r.start > best.end - best.start) longest.set(r.value, r);
+        }
+        const labelled = categories.every((c) => {
+          const r = longest.get(c);
+          return r != null && r.end - r.start + 1 >= minRun;
+        });
+        if (labelled) {
+          for (const c of categories) {
+            const r = longest.get(c)!;
+            // A category axis places numbers by position: the run's middle.
+            const mid = (r.start + r.end) / 2;
+            stripLabels.push({
+              ...(horizontal
+                ? { xref: axis, yref: 'y', x: 0, y: mid, textangle: -90 }
+                : { xref: 'x', yref: axis, x: mid, y: 0 }),
+              text: c,
+              showarrow: false,
+              font: { size: 10, color: textOn(stripPalette.get(c)) },
+            });
+          }
+        } else if (!narrow && !inSplit) {
+          // A tile too narrow for a key beside its bars, or a panel of a split
+          // (its key stacked over the bars, one entry per sample for a column
+          // like Name), keeps the strip and drops the key: hovering a cell names it.
+          stripKey = true;
+          categories.forEach((c) =>
+            stripTraces.push({
+              type: 'scatter',
+              mode: 'markers',
+              x: [null],
+              y: [null],
+              name: c,
+              legend: 'legend2',
+              legendgroup: `strip-${strip.column}`,
+              legendgrouptitle: { text: label },
+              marker: { color: stripPalette.get(c), symbol: 'square', size: 10 },
+              hoverinfo: 'skip',
+            }),
+          );
+        }
+      });
+    }
+
+    // Group names: a band above vertical bars, centred on each group with a
+    // rule under it; in the blank row heading each group of horizontal bars.
+    const axisColour = plotlyAxisOverrides(isDark, theme).color;
+    const groupLabels: Record<string, unknown>[] = [];
+    const groupRules: Record<string, unknown>[] = [];
+    for (const span of spans) {
+      if (horizontal) {
+        if (span.labelSlot == null) continue;
+        groupLabels.push({
+          xref: 'paper',
+          yref: 'y',
+          x: barDomain[0],
+          y: span.labelSlot,
+          xanchor: 'left',
+          yanchor: 'middle',
+          text: `<b>${span.name}</b>`,
+          showarrow: false,
+          font: { size: 10, color: axisColour },
+        });
+      } else {
+        groupLabels.push({
+          xref: 'x',
+          yref: 'paper',
+          x: (span.start + span.end) / 2,
+          y: 1,
+          yanchor: 'bottom',
+          text: `<b>${span.name}</b>`,
+          showarrow: false,
+          font: { size: 10, color: axisColour },
+        });
+        groupRules.push({
+          type: 'line',
+          xref: 'x',
+          yref: 'paper',
+          x0: span.start - 0.4,
+          x1: span.end + 0.4,
+          y0: 1,
+          y1: 1,
+          line: { color: axisColour, width: 1 },
+        });
+      }
+    }
+    const groupBandPx = !horizontal && spans.length > 0 ? GROUP_LABEL_PX : 0;
+
+    // Past 40 bars the tilted sample labels run into each other: they go (the
+    // hover still names each bar), and a legend in rows moves above the bars.
+    const denseAxis = isDenseTaxonomyAxis(nSamples);
+    const legendTopPx = taxonomyLegendTopPx(legendPos, denseAxis, showLegend);
+
+    const categoryAxis = {
+      ...plotlyAxisOverrides(isDark, theme),
+      title: { text: taxonomyAxisTitle(config.x_title) },
+      ...(horizontal ? {} : { tickangle: -45 }),
+      showticklabels: !denseAxis,
+      automargin: true,
+      // Pinned to the edge of the plot area, past any strip on that side, and
+      // to the bars' sample order so the strips line up with them.
+      anchor: 'free' as const,
+      position: 0,
+      categoryorder: 'array' as const,
+      categoryarray: slots,
+      // The first sample on top, as a table reads.
+      ...(horizontal ? { autorange: 'reversed' as const } : {}),
+    };
+    // When normalise is ON we lock the value axis to [0, 1] and format ticks
+    // as percentages — this gives the toggle a visible effect even when the
+    // input data is already pre-normalised (the old behaviour: both toggle
+    // states rendered identically because each sample already summed to 1).
+    const valueAxis = {
+      ...plotlyAxisOverrides(isDark, theme),
+      domain: barDomain,
+      title: {
+        text: valueAxisTitle(
+          config.value_title,
+          normalise ? 'Relative abundance' : wide ? 'Value' : config.abundance_col,
+          // The cropped axis says where it starts in the break marker's live
+          // caption (axisBreakOverlay), which follows zoom and pan; a title
+          // would keep printing the opening floor.
+          null,
+        ),
+      },
+      ...(normalise
+        ? {
+            range: zoom ? [zoom.floor, 1] : [0, 1],
+            tickformat: zoom ? percentTickFormat(zoom.step) : '.0%',
+          }
+        : {
+            // Log is only meaningful for raw counts — normalised data is
+            // bounded [0,1] and log would compress to noise.
+            ...(logY ? { type: 'log' as const } : {}),
+            ...(zoom ? { range: [zoom.floor, zoom.top] } : {}),
+          }),
+      // A cropped axis draws its line, so the base reads as a cut.
+      ...(zoom ? { showline: true } : {}),
+    };
+
+    return {
+      // The legend and the strips are what actually grows this tile, so the
+      // figure reports them back rather than the renderer re-deriving them.
+      seriesCount: data.length,
+      stripCount: strips.length,
+      slotCount: slots.length,
+      categories: shownCategories,
+      canZoom: zoomCandidate != null,
+      // Zoom is cropping the value axis: draw it as a broken one.
+      axisBreak: zoom ? { axis: (horizontal ? 'x' : 'y') as 'x' | 'y', normalise } : null,
+      figure: {
+        data: [...data, ...stripTraces],
+        layout: {
+          ...plotlyThemeFragment(isDark, theme),
+          barmode: 'stack' as const,
+          // Larger, left-aligned text; the fill is each segment's colour (set on
+          // its trace), not a theme plaque, so the colour survives in the tooltip.
+          hoverlabel: { font: { size: 12 }, align: 'left' as const, namelength: -1 },
+          // Automargins: the tilted sample ids, the strip names and the legend
+          // take what they need instead of a guess that clipped them.
+          margin: { l: 60, r: 20, t: (stripKey ? 44 : 30) + legendTopPx + groupBandPx, b: 30 },
+          annotations: [...stripLabels, ...groupLabels],
+          ...(groupRules.length ? { shapes: groupRules } : {}),
+          ...(horizontal
+            ? { yaxis: categoryAxis, xaxis: valueAxis }
+            : { xaxis: categoryAxis, yaxis: valueAxis }),
+          ...stripAxes,
+          showlegend: showLegend,
+          // The taxa's key, titled with the rank they are, in a column right of
+          // the plot by default: under it, it collided with the tilted sample
+          // labels. `legend_pos: bottom` puts it in rows under the figure.
+          legend: taxonomyLegend(legendPos, denseAxis, activeRank ?? (seen.length ? 'Taxon' : 'Category')),
+          ...(stripKey
+            ? {
+                legend2: {
+                  orientation: 'h',
+                  x: 1,
+                  xanchor: 'right',
+                  y: 1 + (groupBandPx ? groupLabelBand : 0),
+                  yanchor: 'bottom',
+                  font: { size: 10 },
+                },
+              }
+            : {}),
+          autosize: true,
+        },
+      },
+      allRanks,
+    };
+  }, [narrow, inSplit, rows, rowsRank, rankUniverse, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand, groupStrip]);
+
+  // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
+  // element re-fires the frame's publish effect and loops it against
+  // ComponentRenderer's setState ("Maximum update depth exceeded").
+  // Encoding tier: rank, how many taxa survive the pooling, sample order (and
+  // its grouping), and how the value axis reads (proportions, cropped). Most
+  // used first: a docked panel shows the first few (DockedControls). Change
+  // one of those and it is a different figure; the legend and the log scale
+  // only change how it looks.
+  // A tile stacking something other than taxa (CCS outcomes per library)
+  // hides the controls that mean nothing for it (`hidden_controls`); their
+  // config values still apply. The rank picker also hides itself when the
+  // table has a single rank, or none.
+  const shown = useMemo(() => {
+    const visible = visibleTaxonomyControls(config.hidden_controls);
+    return {
+      ...visible,
+      rank: visible.rank && (allRanks.length > 1 || Boolean(rank)),
+      group: visible.group && groupOptions.length > 0,
+    };
+  }, [config.hidden_controls, allRanks.length, rank, groupOptions.length]);
+  const rankLabel = config.rank_label || 'Rank';
+  const activeSortCategory = resolveSortCategory(sortCategory, categories);
+  const primaryControls = useMemo(
+    () =>
+      Object.values(shown).some(Boolean) ? (
+        <>
+          {shown.rank ? (
+            <VizSelect
+              label={rankLabel}
+              value={rank}
+              onChange={setRank}
+              data={allRanks}
+              clearable
+            />
+          ) : null}
+          {shown.top_n ? (
+            <VizNumberInput
+              label="Top-N taxa"
+              value={topN}
+              onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
+              min={1}
+              max={50}
+            />
+          ) : null}
+          {shown.sample_sort ? (
+            <VizSelect
+              label="Sort samples"
+              value={sampleSort}
+              onChange={(v) => v && setSampleSort(v as TaxonomySampleSort)}
+              data={SAMPLE_SORT_OPTIONS as { value: string; label: string }[]}
+              allowDeselect={false}
+            />
+          ) : null}
+          {shown.sample_sort && sampleSort === 'category' && categories.length > 0 ? (
+            <VizSelect
+              label="Sort by share of"
+              value={activeSortCategory}
+              onChange={(v) => v && setSortCategory(v)}
+              data={categories}
+              allowDeselect={false}
+              searchable={categories.length > 8}
+            />
+          ) : null}
+          {shown.group ? (
+            <VizSelect
+              label="Group samples by"
+              value={activeGroupCol}
+              onChange={(v) => setGroupCol(v || null)}
+              data={groupOptions}
+              placeholder="None"
+              clearable
+            />
+          ) : null}
+          {shown.normalise ? (
+            <VizSwitch
+              checked={normalise}
+              onChange={(e) => setNormalise(e.currentTarget.checked)}
+              label="Normalise"
+            />
+          ) : null}
+          {shown.zoom ? (
+            <VizSwitch
+              checked={yZoom === 'auto'}
+              onChange={(e) => setYZoom(e.currentTarget.checked ? 'auto' : 'off')}
+              disabled={!canZoom && yZoom !== 'auto'}
+              label="Zoom"
+              title={
+                canZoom
+                  ? 'Crop the value axis to the part that varies between samples'
+                  : 'Nothing to crop: the bottom segment does not fill most of every bar'
+              }
+            />
+          ) : null}
+        </>
+      ) : undefined,
+    [
+      rank,
+      sampleSort,
+      topN,
+      normalise,
+      allRanks,
+      rankLabel,
+      shown,
+      categories,
+      activeSortCategory,
+      activeGroupCol,
+      groupOptions,
+      yZoom,
+      canZoom,
+    ],
+  );
+
+  const controls = useMemo(
+    () => (
+      <VizControlGroup title="Display">
+        <VizSwitch
+          checked={showLegend}
+          onChange={(e) => setShowLegend(e.currentTarget.checked)}
+          label="Legend"
+        />
+        {!normalise ? (
+          <VizSwitch
+            checked={logY}
+            onChange={(e) => setLogY(e.currentTarget.checked)}
+            label="Log y"
+          />
+        ) : null}
+      </VizControlGroup>
+    ),
+    [normalise, showLegend, logY],
+  );
+
+  // Vertical bars, so the sample count is the tile's width problem, not its
+  // height: the demand is the plot area, or the legend's column when that is
+  // taller (it only has the plot area's height), plus what the annotation
+  // strips take off it.
+  // A legend in rows (`legend_pos: bottom`) adds its rows to the plot area
+  // instead. Horizontal bars turn the count into a height: one row per bar.
+  const legendRows = inSplit || config.legend_pos === 'bottom';
+  // A panel of a split is a few hundred px wide: Plotly wraps its legend to
+  // what fits, so the rows it takes follow the width (stepped, so a pixel of
+  // reflow does not republish the demand), not the w8 tile the constant guesses.
+  const legendRowItems = inSplit
+    ? Math.max(1, Math.floor(Math.round((plotBoxW || 280) / 40) * 40 / LEGEND_SPLIT_ITEM_W_PX))
+    : LEGEND_ROW_ITEMS;
+  const contentDemand = useMemo(() => {
+    if (!figure) return undefined;
+    const plotPx = horizontal
+      ? Math.max(TAXONOMY_PLOT_PX, slotCount * BAR_ROW_PX + H_PLOT_CHROME_PX)
+      : TAXONOMY_PLOT_PX;
+    return demandForPx(
+      (legendRows
+        ? plotPx +
+          (showLegend
+            ? LEGEND_CHROME_PX + Math.ceil(seriesCount / legendRowItems) * LEGEND_ITEM_PX
+            : 0)
+        : Math.max(
+            plotPx,
+            showLegend
+              ? FRAME_HEADER_PX + PLOT_CHROME_PX + LEGEND_CHROME_PX + seriesCount * LEGEND_ITEM_PX
+              : 0,
+          )) + (horizontal ? 0 : stripCount * (STRIP_BAND_PX + STRIP_GAP_PX)),
+    );
+  }, [figure, showLegend, seriesCount, stripCount, legendRows, legendRowItems, horizontal, slotCount]);
+
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(() => {
+    const themed = figure ? applyDataTheme(figure.data, isDark, theme) : null;
+    if (!themed || pickedSamples.size === 0) return themed;
+    // A pick leaves the other bars drawn, dimmed, so the pick can be moved.
+    return themed.map((trace: any) =>
+      trace.type === 'bar'
+        ? {
+            ...trace,
+            marker: {
+              ...trace.marker,
+              opacity: ((horizontal ? trace.y : trace.x) as unknown[]).map((slot) =>
+                pickedSamples.has(String(slot)) ? 1 : 0.3,
+              ),
+            },
+          }
+        : trace,
+    );
+  }, [figure, isDark, theme, pickedSamples, horizontal]);
+  const plotLayout = useMemo(() => {
+    if (!figure) return null;
+    const themed = applyLayoutTheme(figure.layout as any, isDark, theme);
+    if (!axisBreak) return themed;
+    // The theme leaves axis lines at the grid's hairline colour; a broken
+    // axis needs a line a gap can interrupt and slashes can cross.
+    const key = horizontal ? 'xaxis' : 'yaxis';
+    return {
+      ...themed,
+      [key]: { ...(themed as any)[key], linecolor: plotlyThemeColors(isDark, theme).textColor },
+    };
+  }, [figure, isDark, theme, axisBreak, horizontal]);
+
+  // The break marker is an overlay on Plotly's own svg (axisBreakOverlay). It
+  // attaches through the plot's graph div and follows the current spec; the
+  // ref keeps the Plot's handlers stable across renders.
+  const breakSpec = useMemo<AxisBreakSpec | null>(
+    () =>
+      axisBreak
+        ? {
+            axis: axisBreak.axis,
+            // Read from the range on every draw, so the caption follows zoom and pan.
+            formatFloor: (floor: number, span: number) => formatAxisValue(floor, span, axisBreak.normalise),
+            fallbackBg: isDark ? theme.colors.dark[7] : theme.white,
+          }
+        : null,
+    [axisBreak, isDark, theme],
+  );
+  const breakSpecRef = useRef(breakSpec);
+  breakSpecRef.current = breakSpec;
+  const graphRef = useRef<unknown>(null);
+  const onGraph = useCallback((_figure: unknown, gd: unknown) => {
+    graphRef.current = gd;
+    syncAxisBreak(gd, breakSpecRef.current);
+  }, []);
+  useEffect(() => {
+    // Zoom toggled, floor changed, theme switched: the Plot's own update may
+    // not fire (nothing else about the figure moved), so push the spec here.
+    if (graphRef.current) syncAxisBreak(graphRef.current, breakSpec);
+  }, [breakSpec]);
+  useEffect(
+    () => () => {
+      syncAxisBreak(graphRef.current, null);
+      graphRef.current = null;
+    },
+    [],
+  );
+  const selectionEnabled = Boolean(onFilterChange) && config.selection_enabled === true;
+  const selectionColumn = config.selection_column || config.sample_id_col;
+  const handleClick = useCallback(
+    (event: any) => {
+      if (!onFilterChange) return;
+      const point = event?.points?.[0];
+      if (!point) return;
+      const sample = String(horizontal ? point.y : point.x);
+      if (!sample || isSpacerSlot(sample)) return;
+      // Clicking the one picked bar again clears the pick.
+      const clear = pickedSamples.size === 1 && pickedSamples.has(sample);
+      onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, clear ? [] : [sample]));
+    },
+    [onFilterChange, horizontal, pickedSamples, metadata, selectionColumn],
+  );
+  // Chart annotations. A bar is a taxon's total in one sample, not a row,
+  // so marked bars are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+  });
+
+  return (
+    <AdvancedVizFrame
+      title={metadata.title || 'Stacked bar'}
+      subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
+      controls={controls}
+      contentDemand={contentDemand}
+      loading={loading}
+      error={error}
+      emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
+      dataRows={rows ?? undefined}
+      dataColumns={requiredCols}
+      badges={annotations.badges}
+      estimated={Boolean(reduction?.degraded)}
+      reduction={
+        reduction && (reduction.sampled || fullLoad)
+          ? {
+              displayed: reduction.displayed,
+              total: reduction.total,
+              sampled: reduction.sampled,
+              full: fullLoad,
+              loading,
+              onToggle: () => setFullLoad((v) => !v),
+            }
+          : undefined
+      }
+    >
+      {figure ? (
+        <>
+          <div ref={plotBoxRef} style={{ width: '100%', height: '100%' }}>
+            <Plot
+              data={annotations.data as any}
+              layout={annotations.layout as any}
+              useResizeHandler
+              style={{ width: '100%', height: '100%' }}
+              config={{ displaylogo: false, responsive: true } as any}
+              {...annotations.plotProps({
+                onClick: selectionEnabled ? handleClick : undefined,
+                onInitialized: onGraph,
+                onUpdate: onGraph,
+              })}
+            />
+          </div>
+          {annotations.toolbar}
+        </>
+      ) : null}
+    </AdvancedVizFrame>
+  );
+};
+
+export default StackedBarRenderer;

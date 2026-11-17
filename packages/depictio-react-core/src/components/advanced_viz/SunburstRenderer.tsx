@@ -41,6 +41,9 @@ const TAB20_PALETTE = [
   '#17becf', '#9edae5',
 ] as const;
 
+const PLOT_STYLE = { width: '100%', height: '100%' } as const;
+const PLOT_CONFIG = { displaylogo: false, responsive: true } as any;
+
 const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
@@ -113,6 +116,10 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       columns: requiredCols,
       filters,
       vizKind: 'sunburst',
+      // The tree below only adds abundances up the lineage, so one row per
+      // lineage says the same as one per lineage and sample, in a fraction of
+      // the bytes (4.5 MB of rows for a few hundred distinct lineages).
+      aggregate: { group_by: ranks, sum: config.abundance_col },
     })
       .then((res) => {
         if (cancelled) return;
@@ -323,6 +330,18 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     };
   }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark, pinned]);
 
+  // Themed once per figure: react-plotly redraws on any new data/layout/config
+  // reference, and a 600-node sunburst takes ~150 ms a time. Fresh objects on
+  // every parent render made one filter change redraw it about six times.
+  const plotData = useMemo(
+    () => (figure ? applyDataTheme(figure.data, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (figure ? applyLayoutTheme(figure.layout as any, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+
   // Encoding tier: which ranks the rings are built from and which one carries
   // the colour. The palette, the minimum arc and the labels are paint on the
   // same hierarchy.
@@ -416,13 +435,13 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {figure && plotData && plotLayout ? (
         <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+          data={plotData as any}
+          layout={plotLayout as any}
           useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
+          style={PLOT_STYLE}
+          config={PLOT_CONFIG}
         />
       ) : null}
     </AdvancedVizFrame>

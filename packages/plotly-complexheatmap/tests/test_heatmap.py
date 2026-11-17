@@ -261,3 +261,18 @@ class TestBrickDensity:
         fraction = layout.row_heights[layout.heatmap_cells[0][0] - 1]
         assert pitch == pytest.approx((hm.height - top - bottom) * fraction / 250)
         assert pitch < hm.height * fraction / 250
+
+
+def test_empty_frame_does_not_divide_by_zero():
+    """A filter can leave no row; the figure is empty rather than a ZeroDivisionError."""
+    import pandas as pd
+
+    from plotly_complexheatmap import ComplexHeatmap
+
+    frame = pd.DataFrame(
+        {"id": pd.Series([], dtype=object), "a": pd.Series([], dtype=float), "b": pd.Series([], dtype=float)}
+    )
+    fig = ComplexHeatmap.from_dataframe(
+        frame, index_column="id", value_columns=["a", "b"], cluster_rows=False, cluster_cols=False
+    ).to_plotly()
+    assert fig is not None

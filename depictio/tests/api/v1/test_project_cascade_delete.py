@@ -20,7 +20,10 @@ WF_ID = ObjectId()
 DC_ID = ObjectId()
 
 
-def _run_cascade(delete_project_versions: MagicMock | None = None):
+def _run_cascade(
+    delete_project_versions: MagicMock | None = None,
+    delete_annotations: MagicMock | None = None,
+):
     """Run the cascade against mocked collections; return the runs and storage mocks."""
     from depictio.api.v1.endpoints.projects_endpoints.routes import _cascade_delete_project
 
@@ -44,6 +47,9 @@ def _run_cascade(delete_project_versions: MagicMock | None = None):
         # Mongo's server-selection timeout.
         patch(f"{MODULE}.delete_threads_for_project", MagicMock()),
         patch(f"{MODULE}.delete_project_versions", delete_project_versions or MagicMock()),
+        # Same: each lists the project's tabs on the real Mongo.
+        patch(f"{MODULE}.delete_filter_states_for_project", MagicMock()),
+        patch(f"{MODULE}.delete_annotations_for_project", delete_annotations or MagicMock()),
     ):
         _cascade_delete_project(PROJECT_ID, "demo")
     return runs, storage
@@ -54,6 +60,13 @@ def test_dashboard_version_ledgers_follow_the_project():
     family's ledger, so the cascade has to drop the project's ledgers itself."""
     cleanup = MagicMock()
     _run_cascade(delete_project_versions=cleanup)
+    cleanup.assert_called_once_with(PROJECT_ID)
+
+
+def test_session_annotations_follow_the_project():
+    """Before the dashboards go: an annotation only knows its dashboard id."""
+    cleanup = MagicMock()
+    _run_cascade(delete_annotations=cleanup)
     cleanup.assert_called_once_with(PROJECT_ID)
 
 
@@ -128,3 +141,40 @@ def test_phylogeny_trees_are_collected_for_deletion():
         locations = _collect_s3_locations_for_project([tree_dc, table_dc], "bucket")
 
     assert locations == [phylogeny_s3_key(str(tree_dc))]
+
+
+def test_genomic_track_folders_are_collected():
+    """Track files are uploaded under ``genomic_tracks/<dc_id>/`` with no document
+    recording them, so the cascade and migration find them by DC type."""
+    from depictio.api.v1.endpoints.migrate_endpoints.routes import (
+        _collect_s3_locations_for_project,
+    )
+
+    tracks_dc, table_dc = ObjectId(), ObjectId()
+    projects = MagicMock()
+    projects.find.return_value = [
+        {
+            "workflows": [
+                {
+                    "data_collections": [
+                        {"_id": tracks_dc, "config": {"type": "genomic_tracks"}},
+                        {"_id": table_dc, "config": {"type": "table"}},
+                    ]
+                }
+            ]
+        }
+    ]
+    empty = MagicMock()
+    empty.find.return_value = []
+    migrate = "depictio.api.v1.endpoints.migrate_endpoints.routes"
+
+    with (
+        patch(f"{migrate}.projects_collection", projects),
+        patch(f"{migrate}.deltatables_collection", empty),
+        patch(f"{migrate}.data_collections_collection", empty),
+        patch(f"{migrate}.multiqc_collection", empty),
+        patch(f"{migrate}.jbrowse_collection", empty),
+    ):
+        locations = _collect_s3_locations_for_project([tracks_dc, table_dc], "bucket")
+
+    assert locations == [f"genomic_tracks/{tracks_dc}/"]

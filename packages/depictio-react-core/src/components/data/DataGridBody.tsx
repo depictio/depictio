@@ -1,10 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Badge, CloseButton, Group, Stack, Text, useMantineColorScheme } from '@mantine/core';
+import {
+  ActionIcon,
+  Badge,
+  CloseButton,
+  Group,
+  Stack,
+  Text,
+  Tooltip,
+  useMantineColorScheme,
+} from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { AgGridReact } from 'ag-grid-react';
 import type {
+  CellMouseOverEvent,
   ColDef,
   GridApi,
+  IRowNode,
   PostProcessPopupParams,
+  RowClassParams,
   SelectionChangedEvent,
 } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -51,6 +64,14 @@ export interface DataGridSelection {
    *  matching rows, so a selection made elsewhere shows up here. */
   selected: string[];
   onChange: (values: string[]) => void;
+  /** A counter: when it moves, the grid scrolls its first ticked row into
+   *  view. Bumped by whoever made the selection somewhere other than the grid. */
+  reveal?: number;
+  /** A value under the pointer elsewhere (a hovered plot point): its row is
+   *  tinted and scrolled into view. */
+  hovered?: string | null;
+  /** Reports the value of the row under the pointer, null when it leaves. */
+  onHover?: (value: string | null) => void;
 }
 
 export interface DataGridBodyProps {
@@ -70,7 +91,18 @@ export interface DataGridBodyProps {
    *  leaves the trigger icon and Escape as the only ways out — neither of them
    *  visible from inside a table that covers most of the screen. */
   onClose?: () => void;
+  /** Whether the grid is shown enlarged (`DataGridModal`); with
+   *  `onToggleExpand`, a button in the header switches between the two. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  /** Adds a button that lifts the table out into a floating panel. */
+  onDetach?: () => void;
+  /** Header label; defaults to "Underlying data". */
+  title?: string;
 }
+
+/** Grid heights in the popover and enlarged in `DataGridModal`. */
+const GRID_HEIGHT = { compact: 420, expanded: '75vh' };
 
 const TIER_COLUMN = '__tier';
 const ROW_ID_COLUMN = '__rowIndex';
@@ -100,9 +132,14 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   tierAnnotation,
   extraBadge,
   selection,
-  height = 420,
+  height,
   onClose,
+  expanded = false,
+  onToggleExpand,
+  onDetach,
+  title = 'Underlying data',
 }) => {
+  const gridHeight = height ?? (expanded ? GRID_HEIGHT.expanded : GRID_HEIGHT.compact);
   const { colorScheme } = useMantineColorScheme();
   const uiScale = useUiScale();
   // A fullscreen tile shows its own subtree only (see
@@ -267,6 +304,68 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
 
   useEffect(syncTicks, [syncTicks]);
 
+  // Scroll to the first ticked row when the selection came from elsewhere. Runs
+  // after `syncTicks` (declared above, so it fires first in the same commit).
+  const reveal = selection?.reveal ?? 0;
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  const revealFirst = useCallback(() => {
+    const api = gridApiRef.current;
+    if (!api || revealRef.current === 0) return;
+    // `rowIndex` is the display position (null while a column filter hides the row).
+    const first = api
+      .getSelectedNodes()
+      .filter((n) => n.rowIndex != null)
+      .sort((x, y) => (x.rowIndex as number) - (y.rowIndex as number))[0];
+    if (first) api.ensureNodeVisible(first, 'middle');
+  }, []);
+  useEffect(revealFirst, [reveal, revealFirst]);
+
+  // The row of a point hovered elsewhere: tinted through `getRowStyle`, which
+  // reads the ref, so only the rows that gain or lose the tint are redrawn.
+  const hovered = selection?.hovered ?? null;
+  const hoveredRef = useRef<string | null>(null);
+  useEffect(() => {
+    const api = gridApiRef.current;
+    const column = selection?.column;
+    const before = hoveredRef.current;
+    hoveredRef.current = hovered;
+    if (!api || !column || before === hovered) return;
+    const touched: IRowNode[] = [];
+    api.forEachNode((node) => {
+      const raw = (node.data as Record<string, unknown> | undefined)?.[column];
+      const value = raw == null ? null : String(raw);
+      if (value !== null && (value === before || value === hovered)) touched.push(node);
+    });
+    if (touched.length) api.redrawRows({ rowNodes: touched });
+    const target = touched.find(
+      (n) => String((n.data as Record<string, unknown>)[column]) === hovered && n.rowIndex != null,
+    );
+    if (target) api.ensureNodeVisible(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hovered, selection?.column]);
+  const getRowStyle = useCallback(
+    (params: RowClassParams) => {
+      const column = selection?.column;
+      if (!column || hoveredRef.current === null) return undefined;
+      const raw = (params.data as Record<string, unknown> | undefined)?.[column];
+      return raw != null && String(raw) === hoveredRef.current
+        ? { background: 'var(--mantine-primary-color-light)' }
+        : undefined;
+    },
+    [selection?.column],
+  );
+  const onHover = selection?.onHover;
+  const onCellMouseOver = useCallback(
+    (event: CellMouseOverEvent) => {
+      const column = selection?.column;
+      if (!onHover || !column) return;
+      const raw = (event.data as Record<string, unknown> | undefined)?.[column];
+      onHover(raw == null ? null : String(raw));
+    },
+    [onHover, selection?.column],
+  );
+
   const onSelectionChanged = (event: SelectionChangedEvent) => {
     if (!selection) return;
     const values = extractRowSelection(
@@ -292,6 +391,35 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   const isDark = colorScheme === 'dark';
   const paginated = total > PAGINATION_THRESHOLD;
 
+  const expandButton = onToggleExpand ? (
+    <Tooltip label={expanded ? 'Shrink the table' : 'Enlarge the table'} withinPortal={false}>
+      <ActionIcon
+        size="sm"
+        variant="subtle"
+        color="gray"
+        aria-label={expanded ? 'Shrink the data table' : 'Enlarge the data table'}
+        onClick={onToggleExpand}
+      >
+        <Icon icon={expanded ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'} width={16} height={16} />
+      </ActionIcon>
+    </Tooltip>
+  ) : null;
+
+  const detachButton = onDetach ? (
+    <Tooltip label="Float the table over the dashboard" withinPortal={false}>
+      <ActionIcon
+        size="sm"
+        variant="subtle"
+        color="gray"
+        aria-label="Float the data table"
+        data-testid="detach-data-table"
+        onClick={onDetach}
+      >
+        <Icon icon="tabler:picture-in-picture" width={16} height={16} />
+      </ActionIcon>
+    </Tooltip>
+  ) : null;
+
   const closeButton = onClose ? (
     <CloseButton size="sm" aria-label="Close the data table" onClick={onClose} />
   ) : null;
@@ -308,10 +436,10 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   }
 
   return (
-    <Stack gap="xs">
+    <Stack gap="xs" style={height === '100%' ? { height: '100%', minHeight: 0 } : undefined}>
       <Group gap={6} justify="space-between" wrap="nowrap">
         <Text size="xs" fw={600} c="dimmed">
-          Underlying data
+          {title}
         </Text>
         <Group gap={6} wrap="nowrap">
           <Badge size="xs" color="gray" variant="light">
@@ -319,6 +447,8 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
             {paginated ? ' · paginated' : ''}
           </Badge>
           {extraBadge}
+          {detachButton}
+          {expandButton}
           {closeButton}
         </Group>
       </Group>
@@ -331,11 +461,12 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
           42px row height was too sparse for a quick data peek. */}
       <div
         className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+        onMouseLeave={onHover ? () => onHover(null) : undefined}
         style={
           {
             width: '100%',
-            height,
-            flex: height === '100%' ? 1 : undefined,
+            height: gridHeight,
+            flex: gridHeight === '100%' ? 1 : undefined,
             minHeight: 0,
             '--ag-font-size': `${Math.round(11 * uiScale)}px`,
             '--ag-row-height': `${Math.round(24 * uiScale)}px`,
@@ -362,12 +493,15 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
           onGridReady={(e) => {
             gridApiRef.current = e.api;
             syncTicks();
+            revealFirst();
           }}
           rowSelection={selectable ? 'multiple' : undefined}
           // Plain click toggles a row, as in TableRenderer: AG Grid Community
           // otherwise wants Ctrl/Shift, which nobody discovers.
           rowMultiSelectWithClick={selectable || undefined}
           onSelectionChanged={selectable ? onSelectionChanged : undefined}
+          getRowStyle={selection ? getRowStyle : undefined}
+          onCellMouseOver={onHover ? onCellMouseOver : undefined}
           animateRows={false}
           rowBuffer={25}
           rowHeight={Math.round(24 * uiScale)}

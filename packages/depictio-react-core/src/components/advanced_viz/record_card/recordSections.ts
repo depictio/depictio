@@ -52,8 +52,10 @@ export interface RecordSectionInput {
   sections?: Record<string, string[]> | null;
   /** The collection's `columns_description` entries, keyed by column. */
   descriptions?: Record<string, string | null | undefined> | null;
-  /** Columns already shown in the card's heading, so a field does not repeat
-   *  what the reader has just read. */
+  /** Columns already shown in the card's heading, so a field laid out by
+   *  description does not repeat what the reader has just read. A column the
+   *  author puts in a section stays: the title is often a gene symbol the
+   *  reader still looks for under Gene. */
   headingColumns?: readonly string[];
   /** How many fields to lay out before the card truncates. */
   maxFields: number;
@@ -70,9 +72,10 @@ export function buildRecordSections(input: RecordSectionInput): RecordSectionLay
   const heading = new Set(input.headingColumns ?? []);
   // A Set keyed by the collection's own column order: dedupes a column named
   // twice by the author without reordering anything.
+  const present = new Set(input.columns.filter(Boolean));
   const available = new Set<string>();
-  for (const column of input.columns) {
-    if (column && !heading.has(column)) available.add(column);
+  for (const column of present) {
+    if (!heading.has(column)) available.add(column);
   }
 
   const sections = input.sections
@@ -81,7 +84,7 @@ export function buildRecordSections(input: RecordSectionInput): RecordSectionLay
         // The author named these columns; anything the frame did not bring
         // back (a renamed column, a pruned one) drops out silently rather
         // than rendering an empty field a reader would take for a null.
-        columns: (columns ?? []).filter((column) => available.has(column)),
+        columns: Array.from(new Set(columns ?? [])).filter((column) => present.has(column)),
       }))
     : groupByDescription(Array.from(available), input.descriptions);
 

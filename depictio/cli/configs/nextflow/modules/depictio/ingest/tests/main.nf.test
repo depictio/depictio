@@ -1,0 +1,159 @@
+nextflow_process {
+
+    name "Test Process DEPICTIO_INGEST"
+    script "../main.nf"
+    process "DEPICTIO_INGEST"
+
+    tag "modules"
+    tag "depictio"
+    tag "depictio/ingest"
+
+    // A real ingestion needs a Depictio server, which a module test has no way
+    // to reach, so only the stub runs here. The CLI's own tests cover ingestion.
+    test("results directory with a template - stub") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id:'test' ],
+                    file("${moduleDir}/tests", checkIfExists: true),
+                    []
+                ]
+                input[1] = 'nf-core/rnaseq/latest'
+                input[2] = []
+                input[3] = []
+                input[4] = []
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert process.success },
+                { assert process.out.result.size() == 1 },
+                { assert file(process.out.result[0][1]).name == 'test.depictio.json' },
+                { assert file(process.out.artifact[0][1]).name == 'test_depictio' },
+                { assert path(process.out.versions[0]).text.contains('depictio:') }
+            )
+        }
+    }
+
+    test("files laid out at their published paths - stub") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id:'layout' ],
+                    [
+                        file("${moduleDir}/main.nf", checkIfExists: true),
+                        file("${moduleDir}/meta.yml", checkIfExists: true),
+                    ],
+                    [ 'pipeline_info/main.nf', 'multiqc/meta.yml' ]
+                ]
+                input[1] = 'nf-core/rnaseq/latest'
+                input[2] = []
+                input[3] = []
+                input[4] = []
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert process.success },
+                { assert file(process.out.result[0][1]).name == 'layout.depictio.json' }
+            )
+        }
+    }
+
+    // Both checks run before any command, so no depictio and no server are needed.
+    test("fails when files and relpaths do not pair up") {
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id:'mismatch' ],
+                    [
+                        file("${moduleDir}/main.nf", checkIfExists: true),
+                        file("${moduleDir}/meta.yml", checkIfExists: true),
+                    ],
+                    [ 'main.nf' ]
+                ]
+                input[1] = ''
+                input[2] = []
+                input[3] = []
+                input[4] = []
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert process.failed },
+                { assert process.errorReport.contains('2 files but 1 relpaths') }
+            )
+        }
+    }
+
+    test("fails when a relpath leaves the results directory") {
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id:'outside' ],
+                    [ file("${moduleDir}/main.nf", checkIfExists: true) ],
+                    [ '../main.nf' ]
+                ]
+                input[1] = ''
+                input[2] = []
+                input[3] = []
+                input[4] = []
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert process.failed },
+                { assert process.errorReport.contains('leaves the results directory') }
+            )
+        }
+    }
+
+    test("a cli_config sends the run to that instance, with no artifact - stub") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id:'remote' ],
+                    file("${moduleDir}/tests", checkIfExists: true),
+                    []
+                ]
+                input[1] = 'nf-core/rnaseq/latest'
+                input[2] = []
+                input[3] = []
+                input[4] = file("${moduleDir}/meta.yml", checkIfExists: true)
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert process.success },
+                { assert process.out.artifact.size() == 0 },
+                { assert file(process.out.result[0][1]).name == 'remote.depictio.json' }
+            )
+        }
+    }
+}

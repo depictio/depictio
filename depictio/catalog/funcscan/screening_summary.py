@@ -62,9 +62,14 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "screens": pl.Int64,
 }
 
-# Candidates whose best tool probability reaches this are counted as
-# high-confidence AMPs (AMPcombi's own default parse-tables cut-off is 0.6).
-AMP_HIGH_CONFIDENCE = 0.8
+# Candidates whose best tool probability reaches this are counted in
+# `amp_high_confidence`. 0.6 is nf-core/funcscan's own default of
+# `--amp_ampcombi_parsetables_cutoff` (AMPcombi `--amp_cutoff`: a prediction score
+# below it is set to 0 in the summary), nextflow_schema.json at tag 4.0.0:
+# https://github.com/nf-core/funcscan/blob/4.0.0/nextflow_schema.json
+# The pipeline does not call this "high confidence"; it is the level the run keeps
+# a prediction at. A run that sets another cut-off should change this constant.
+AMP_HIGH_CONFIDENCE = 0.6
 
 
 def _summary(df: pl.DataFrame | None, aggs: list[pl.Expr]) -> pl.DataFrame | None:

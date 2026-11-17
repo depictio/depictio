@@ -7,11 +7,13 @@
   "scripts": {
     "test": "vitest run"
   },
-  "//sideEffects": "Only stylesheets, plotlyStrictMode and plotlyZoomGate (react-plotly.js prototype patches with no exports) are imported for their side effects; every other module's JS exports are pure. This lets bundlers tree-shake unused barrel re-exports (e.g. the plotly/ag-grid renderers) out of consumers that only pull light helpers from the index, instead of dragging the whole visualisation stack onto their boot path.",
+  "//sideEffects": "Only stylesheets, plotlyStrictMode, plotlyZoomGate, plotlySkipIdenticalUpdate and plotlySkipIdleResize (react-plotly.js prototype patches with no exports) are imported for their side effects; every other module's JS exports are pure. This lets bundlers tree-shake unused barrel re-exports (e.g. the plotly/ag-grid renderers) out of consumers that only pull light helpers from the index, instead of dragging the whole visualisation stack onto their boot path.",
   "sideEffects": [
     "**/*.css",
     "**/plotlyStrictMode.ts",
-    "**/plotlyZoomGate.ts"
+    "**/plotlyZoomGate.ts",
+    "**/plotlySkipIdenticalUpdate.ts",
+    "**/plotlySkipIdleResize.ts"
   ],
   "main": "src/index.ts",
   "module": "src/index.ts",
@@ -50,6 +52,7 @@
     "@mantine/core": "^7.14.0",
     "@mantine/dates": "^7.14.0",
     "@mantine/hooks": "^7.14.0",
+    "@types/papaparse": "^5.3.14",
     "@types/plotly.js": "^2.33.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
@@ -68,6 +71,17 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
-    "3dmol": "^2.5.5"
+    "3dmol": "^2.5.5",
+    "@jbrowse/core": "4.3.0",
+    "@jbrowse/embedded-core": "4.3.0",
+    "@jbrowse/mobx-state-tree": "5.13.0",
+    "@jbrowse/plugin-gtf": "4.3.0",
+    "@jbrowse/react-app2": "4.3.0",
+    "@jbrowse/react-circular-genome-view2": "4.3.0",
+    "@jbrowse/react-linear-genome-view2": "4.3.0",
+    "@mui/material": "7.3.11",
+    "mobx": "6.16.1",
+    "mobx-react": "9.2.2",
+    "papaparse": "^5.4.1"
   }
 }

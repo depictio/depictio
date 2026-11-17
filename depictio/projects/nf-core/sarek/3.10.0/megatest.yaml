@@ -11,7 +11,28 @@
 # NCBench Agilent exome route, so run_root is test_full_germline_ncbench_agilent/
 # and the keys below are relative to it. They are mirrored 1:1 below the
 # destination, which becomes the template DATA_ROOT. No somatic profile is
-# published, so ASCAT / ControlFREEC / MSIsensor outputs do not exist here.
+# published, so ASCAT / ControlFREEC / CNVkit / MSIsensor outputs do not exist
+# here, and this run holds no tumour: the three Somatic tabs (Somatic calls,
+# Copy number & MSI, Germline vs somatic) are pruned at import and the dashboard
+# is the germline one.
+#
+# SOMATIC SCENARIO (not an AWS megatest). The Somatic tabs are exercised on a small
+# local run of the pipeline's own `-profile test` (tumour `test2` against normal `test`,
+# `--tools strelka,mutect2,cnvkit,msisensorpro`, `--step mapping`, chr22 interval,
+# 85 MB), made on the EMBL cluster under /scratch/tweber/NF_CORE/sarek/3.10.0/run_test
+# and copied to ~/Data/depictio-nfcore/sarek/3.10.0/somatic_test. It is not fetched by
+# this script. What it holds and what it does not:
+#   - the sample hub (csv/*.csv, status 0 and 1), the mosdepth reports, the CRAMs and
+#     their indexes, the germline Strelka calls of the normal, CNVkit segments and bins
+#     of the pair and of both samples, one MSIsensor-pro summary;
+#   - the paired Mutect2 and Strelka VCFs have a header and NO record (the test data is
+#     too small to yield a somatic call), so `somatic_calls`, `somatic_vs_germline` and
+#     `patient_call_counts` are skipped at ingestion and only the Copy number & MSI tab
+#     is added to the germline ones. A VCF with somatic records is needed to see the
+#     other two; depictio/dev_scripts/sarek_synthetic_somatic.py writes an obviously
+#     synthetic one into a copy of the run.
+# depictio/tests/cli/utils/test_sarek_mapping_only.py asserts the tab sets of the
+# germline megatest, a mapping-only run and the tumour/normal variants, offline.
 #
 # One patient (NA12878), two samples (the same exome at 75M and 200M reads),
 # five germline callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta,
@@ -96,6 +117,33 @@ keys:
   - reports/snpeff/*/*/*_snpEff.genes.txt
 prefix_keys: []
 renames: {}
+# Named subsets of `keys`, fetched with `fetch --subset NAME`. `mapping_only` is what a
+# run holds when sarek stops after mapping (no `--tools`): the sample manifests, the
+# coverage and alignment QC and MultiQC, with no VCF, no bcftools / vcftools / snpEff
+# report and no `csv/variantcalled.csv`. The template must ingest it with every
+# variant-derived collection skipped and import only the Overview, MultiQC, Coverage
+# and Locus tabs (depictio/tests/cli/utils/test_sarek_mapping_only.py asserts the tab
+# set offline, from the same file names).
+subsets:
+  mapping_only:
+    - pipeline_info/params_*.json
+    - pipeline_info/*software*versions*.yml
+    - pipeline_info/execution_trace_*.txt
+    - csv/markduplicates*.csv
+    - csv/recalibrated.csv
+    - multiqc/multiqc_data/multiqc.parquet
+    - multiqc/multiqc_data/*.txt
+    - multiqc/multiqc_data/*.json
+    - multiqc/multiqc_data/*.log
+    - reports/mosdepth/*/*.mosdepth.summary.txt
+    - reports/mosdepth/*/*.mosdepth.region.dist.txt
+    - reports/mosdepth/*/*.mosdepth.global.dist.txt
+    - reports/mosdepth/*/*.regions.bed.gz
+    - reports/samtools/*/*.cram.stats
+    - reports/markduplicates/*/*.md.cram.metrics
+    - reports/fastp/*/*.fastp.json
+    - reports/fastp/*/*.fastp.log
+    - reports/fastqc/*/*_fastqc.zip
 post_fetch_help: |
   === Quick test commands ===
 

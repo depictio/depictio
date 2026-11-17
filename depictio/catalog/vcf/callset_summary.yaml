@@ -1,0 +1,28 @@
+id: vcf_callset_summary
+name: Callset summary
+mode: per-callset
+description: >-
+  One row per callset (sample and caller) computed from its own VCF: calls and
+  the share the caller kept, PASS SNVs, indels and multiallelic sites, the
+  transition/transversion ratio, the heterozygous over homozygous-alternate
+  ratio and the median quality, depth and heterozygous allele fraction. For the
+  pipelines that publish VCFs without a bcftools stats report.
+find:
+  path_glob: "**/variant_calling/**/*.vcf.gz"
+  path_glob_alt:
+    - "**/variant_calling/*/*/*.vcf.gz"
+    - "**/*.filtered.vcf.gz"
+recipe: vcf/callset_summary.py
+fixture: callset_summary.tsv
+renders_as:
+  - { id: ts_tv, component: card, column: ts_tv, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
+  - { id: pass_calls, component: card, column: pass_calls, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: pass_share, component: card, column: pass_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: het_hom, component: card, column: het_hom_ratio, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: tstv_vs_hethom, component: advanced_viz, kind: scatter_xy,
+      roles: {x: het_hom_ratio, y: ts_tv, label: sample, color: caller} }
+  - { component: table }

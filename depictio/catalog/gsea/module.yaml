@@ -8,6 +8,7 @@
 # that step: the rest of the module's output is HTML.
 id: gsea
 name: GSEA
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/gsea/gsea
 homepage: https://www.gsea-msigdb.org/gsea
 description: Gene Set Enrichment Analysis (GSEA).

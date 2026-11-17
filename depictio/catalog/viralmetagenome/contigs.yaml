@@ -1,0 +1,26 @@
+id: viralmetagenome_contigs
+name: De novo contigs
+mode: per-contig/summary
+description: >-
+  One row per de novo contig: the assembler, its length and length band, the
+  reads that map back to it and their share of the sample, the merged Kraken2
+  and Kaiju call, and the cluster it ended in as centroid or member.
+find:
+  path_glob: "**/assembly/assemblers/*/idxstats/*.idxstats"
+recipe: viralmetagenome/contigs.py
+fixture: contigs.tsv
+renders_as:
+  - { id: contigs_by_class, component: card, column: contig, aggregation: count,
+      secondary_layout: composition, breakdown_col: classification, headline: true }
+  - { id: assembled_bp, component: card, column: length_bp, aggregation: sum,
+      secondary_layout: composition, breakdown_col: length_class }
+  - { id: reads_on_contigs, component: card, column: mapped_reads, aggregation: sum,
+      secondary_layout: donut, breakdown_col: cluster_role }
+  # Length against reads: a long contig few reads support is a chimera or a
+  # contaminant, a short one with many is a fragment of a deep genome.
+  - id: length_vs_reads
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: length_bp, y: mapped_reads, label: contig, color: classification, size: read_share_pct }
+  - { component: interactive, interactive_type: MultiSelect, column_name: classification }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

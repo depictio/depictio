@@ -1,0 +1,18 @@
+id: star_read_fate
+name: Read fate
+mode: alignment/read-fate
+description: >-
+  Where each sample's input reads went, one row per sample and fate: uniquely
+  mapped, multi-mapped, mapped to too many loci, or unmapped as too short, for
+  too many mismatches or for another reason. STAR's own percentages, so the six
+  fates of a sample add up to its input.
+find:
+  path_glob: "**/*.Log.final.out"
+recipe: star/read_fate.py
+fixture: read_fate.tsv
+renders_as:
+  - { id: read_fate_bars, component: figure, visu_type: bar,
+      dict_kwargs: {x: sample, y: reads_pct, color: fate} }
+  - { id: read_fate_composition, component: card, column: reads, aggregation: sum,
+      secondary_layout: composition, breakdown_col: fate }
+  - { component: table }

@@ -178,7 +178,7 @@ def test_an_aggregating_kind_is_never_sampled(patched_scan):
     )
 
     frame, total, sampling = _reduce(
-        ["sample_id", "abundance"], policy="none", viz_kind="stacked_taxonomy"
+        ["sample_id", "abundance"], policy="none", viz_kind="stacked_bar"
     )
 
     assert frame.height == n, "the whole frame, not a sample"
@@ -201,7 +201,7 @@ def test_an_aggregating_kind_past_the_ceiling_says_its_values_are_estimates(
     n = 200_000
     patched_scan(pl.DataFrame({"row_id": range(n), "v": [float(i % 977) for i in range(n)]}))
 
-    frame, total, sampling = _reduce(["row_id", "v"], policy="none", viz_kind="stacked_taxonomy")
+    frame, total, sampling = _reduce(["row_id", "v"], policy="none", viz_kind="stacked_bar")
 
     assert total == n
     assert frame.height < n
@@ -224,7 +224,7 @@ def test_an_unsamplable_frame_past_the_ceiling_is_still_bounded(patched_scan, mo
     # Two distinct value tuples: the hash can only split all-or-nothing.
     patched_scan(pl.DataFrame({"flag": [i % 2 for i in range(n)]}))
 
-    frame, total, sampling = _reduce(["flag"], policy="none", viz_kind="stacked_taxonomy")
+    frame, total, sampling = _reduce(["flag"], policy="none", viz_kind="stacked_bar")
 
     assert frame is not None, "must not fall through to an unbounded load"
     assert frame.height <= 10_000
@@ -383,3 +383,57 @@ def test_the_declared_direction_is_read_off_the_column_range(patched_scan):
 
     assert sampling["policy"] == "tail"
     assert frame.filter(pl.col("significance") >= 8.0).height == 30
+
+
+def test_a_unit_interval_score_keeps_its_largest_rows(patched_scan):
+    """A change in usage lives in [0, 1]; ``auto`` read that as p-values and kept the weakest.
+
+    The genome view keeps the strongest rows by the k-th largest |score|, a cut-off
+    taken from the data, so the 30 isoforms that moved most survive a 150 000-row table.
+    """
+    n = 150_000
+    patched_scan(
+        pl.DataFrame(
+            {
+                "feature_id": [f"g{i}" for i in range(n)],
+                "chrom": ["chr1"] * n,
+                "pos": list(range(n)),
+                # 30 rows at 0.9, the rest spread over [0, 0.3].
+                "score": [0.9 if i < 30 else (i % 300) / 1000.0 for i in range(n)],
+            }
+        )
+    )
+
+    frame, total, sampling = _reduce(
+        ["feature_id", "chrom", "pos", "score"],
+        policy="tail",
+        viz_kind="genome_view",
+        roles={"score": "score"},
+    )
+
+    assert sampling["policy"] == "tail"
+    assert total == n
+    assert frame.filter(pl.col("score") >= 0.9).height == 30
+    assert frame.height <= 10_000 * 4
+
+
+def test_the_top_cutoff_is_not_a_convention(patched_scan):
+    """The same column scaled by 1000 keeps the same rows: nothing is hard-coded."""
+    n = 150_000
+    base = [0.9 if i < 30 else (i % 300) / 1000.0 for i in range(n)]
+    for scale in (1.0, 1000.0):
+        patched_scan(
+            pl.DataFrame(
+                {
+                    "feature_id": [f"g{i}" for i in range(n)],
+                    "score": [v * scale for v in base],
+                }
+            )
+        )
+        frame, _, _ = _reduce(
+            ["feature_id", "score"],
+            policy="tail",
+            viz_kind="genome_view",
+            roles={"score": "score"},
+        )
+        assert frame.filter(pl.col("score") >= 0.9 * scale).height == 30

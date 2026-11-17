@@ -483,3 +483,114 @@ export function analysisCardRank(dcIds: readonly (string | undefined)[]) {
     return isNumericCard(m) ? 2 : 3;
   };
 }
+
+// ---------------------------------------------------------------------------
+// The genome browser
+// ---------------------------------------------------------------------------
+
+/** What the Guide says of a genome browser tile, read from its config. */
+export interface GuideGenomeConfig {
+  assembly: string | null;
+  /** The data collection (tag) whose filtered rows the browser follows, or
+   *  null when the tile does not jump to a locus. */
+  locusFromDc: string | null;
+  /** Clicking a track selects its sample. */
+  selects: boolean;
+  /** The column that selection filters on, when the tile names one. */
+  selectionColumn: string | null;
+  /** 'visible_tracks': every open track selects; else the clicked one. */
+  selectionMode: 'feature_click' | 'visible_tracks';
+  ucscTracks: string[];
+  maxTracks: number | null;
+}
+
+const nonEmpty = (v: unknown): string | null =>
+  typeof v === 'string' && v.trim() ? v.trim() : null;
+
+/** A genome browser tile's config, through the stored metadata's open fields. */
+export function genomeConfigOf(m: StoredMetadata): GuideGenomeConfig {
+  const locusRaw = m.locus_from as
+    | { data_collection_tag?: unknown }
+    | { data_collection_tag?: unknown }[]
+    | null
+    | undefined;
+  const locus = Array.isArray(locusRaw) ? locusRaw[0] : locusRaw;
+  const ucsc = Array.isArray(m.ucsc_tracks)
+    ? (m.ucsc_tracks as unknown[]).filter((t): t is string => typeof t === 'string' && t !== '')
+    : [];
+  return {
+    assembly: nonEmpty(m.assembly),
+    locusFromDc: nonEmpty(locus?.data_collection_tag),
+    // Mirrors the renderer: selection needs `selection_enabled`.
+    selects: m.selection_enabled === true,
+    selectionColumn: nonEmpty(m.selection_column),
+    selectionMode: m.selection_mode === 'visible_tracks' ? 'visible_tracks' : 'feature_click',
+    ucscTracks: ucsc,
+    maxTracks: typeof m.max_tracks === 'number' ? m.max_tracks : null,
+  };
+}
+
+/**
+ * The genome browser the Guide describes, best first: the one that has the
+ * most to say. One that follows a table's filtered rows beats one that
+ * selects a sample, which beats a plain one, and any of them beats one that
+ * floats. Anything that is not a genome browser will not do.
+ */
+export function jbrowseRank(m: StoredMetadata): number | null {
+  if (m.component_type !== 'jbrowse') return null;
+  const config = genomeConfigOf(m);
+  // A floating browser draws in its own panel, beside the tab, and costs a
+  // second genome view in a tile: last resort, as a floating map is.
+  const floating = m.placement === 'floating' ? 3 : 0;
+  if (config.locusFromDc) return floating;
+  return floating + (config.selects ? 1 : 2);
+}
+
+/** The sections of a tab that hold a genome browser, by name. */
+export interface GuideGenomeSection {
+  /** `null` for a tile outside any section. */
+  name: string | null;
+  /** The author's one line on why the browser is here, as written. */
+  description: string | null;
+}
+
+/** A tab of the family that holds a genome browser. */
+export interface GuideGenomeTab {
+  dashboardId: string;
+  tiles: StoredMetadata[];
+  sections: GuideGenomeSection[];
+}
+
+/**
+ * Every genome browser tile of the family, by tab in `order` (the open tab
+ * first), with the sections that hold them: the section's `description` is the
+ * dashboard's "why here". `pending` lists the tabs not fetched yet; tabs whose
+ * fetch failed count as holding none.
+ */
+export function genomeTabsOf(
+  order: readonly string[],
+  docFor: (id: string) => GuideSectionsDoc | null | undefined,
+): { tabs: GuideGenomeTab[]; pending: string[] } {
+  const tabs: GuideGenomeTab[] = [];
+  const pending: string[] = [];
+  for (const id of order) {
+    const doc = docFor(id);
+    if (doc === undefined) {
+      pending.push(id);
+      continue;
+    }
+    const tiles = (doc?.stored_metadata ?? []).filter((m) => m.component_type === 'jbrowse');
+    if (tiles.length === 0) continue;
+    const specs = new Map((doc?.grid_sections ?? []).map((s) => [s.name, s]));
+    const seen = new Set<string | null>();
+    const sections: GuideGenomeSection[] = [];
+    for (const tile of tiles) {
+      const name = nonEmpty(tile.section);
+      if (seen.has(name)) continue;
+      seen.add(name);
+      sections.push({ name, description: nonEmpty(name ? specs.get(name)?.description : null) });
+    }
+    tabs.push({ dashboardId: id, tiles, sections });
+  }
+  return { tabs, pending };
+}

@@ -16,6 +16,10 @@ fixture: composition.tsv
 renders_as:
   - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,
       roles: {sample_id: assembly_id, taxon: busco_class, rank: rank, abundance: percent} }
+  # One bar per BUSCO run: an assembly assessed in two modes (genome and its
+  # annotated proteins) draws two bars side by side instead of one at 200%.
+  - { id: class_composition_by_run, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: run_id, taxon: busco_class, rank: rank, abundance: percent} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: percent, color: busco_class, barmode: stack, title: BUSCO classes per assembly} }
   - { component: card, column: percent, aggregation: median,
       aggregations: [box_plot_stats], secondary_layout: box_plot }

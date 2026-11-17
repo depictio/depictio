@@ -179,6 +179,14 @@ class TestMaterializeCategoricalStacked:
         assert tracks[0].legend_items() == []
 
 
+class TestCategoricalTrackSize:
+    def test_categorical_strip_is_tall_enough_to_read(self, annotated_df: pd.DataFrame) -> None:
+        indices, order = _get_test_context(annotated_df)
+        anno = UpSetAnnotation(data=annotated_df, category="category")
+        tracks = anno.materialize(indices, order)
+        assert tracks[0].size == 0.13
+
+
 class TestFromDataframeAnnotationDefaults:
     """The three `annotations=` values a caller can pass, and what each means.
 

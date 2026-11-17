@@ -85,7 +85,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 }) => {
   const accent = useBrandAccents();
   const projectId = (project._id ?? project.id) as string;
-  const isAdvanced = project.project_type === 'advanced';
   const isPublic = Boolean(project.is_public);
   const role = determineRole(project, currentUserId);
   const tmpl = parseTemplate(project);
@@ -117,21 +116,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     <Accordion.Item value={projectId}>
       <Accordion.Control>
         <Group gap="sm" wrap="nowrap" align="center">
-          {/* Project Type — light-variant badge (cyan/orange tint).
-           *  All three fixed-width slots use textAlign: center so the
-           *  badge sits centered under its column header, matching the
-           *  Dash visual. */}
-          <Box style={{ width: 100, flexShrink: 0, textAlign: 'center' }}>
-            <Badge
-              color={isAdvanced ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="sm"
-            >
-              {isAdvanced ? 'Advanced' : 'Basic'}
-            </Badge>
-          </Box>
-
           {/* Visibility — filled green (public) / gray (private) */}
           <Box style={{ width: 80, flexShrink: 0, textAlign: 'center' }}>
             <Badge
@@ -223,7 +207,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                     color={accent.primary}
                     size="sm"
                     leftSection={<Icon icon="mdi:pencil" width={16} />}
-                    disabled={!canMutate}
+                    disabled={!canMutate || !!project.published_lock}
+                    title={project.published_lock ? 'Read-only: editing is locked' : undefined}
                     onClick={() => onEdit(project)}
                   >
                     Edit
@@ -243,7 +228,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                     color="red"
                     size="sm"
                     leftSection={<Icon icon="mdi:delete" width={16} />}
-                    disabled={!canMutate}
+                    disabled={!canMutate || !!project.published_lock}
+                    title={project.published_lock ? 'Read-only: editing is locked' : undefined}
                     onClick={() => onDelete(project)}
                   >
                     Delete
@@ -297,7 +283,7 @@ const ProjectDetailsPanel: React.FC<{
       {parsedTemplate && (
         <Group gap="xs" align="center">
           <Text size="sm" fw={600} miw={140}>
-            Template:
+            Pipeline:
           </Text>
           <TemplateChip parsed={parsedTemplate} verbose />
         </Group>
@@ -323,19 +309,6 @@ const ProjectDetailsPanel: React.FC<{
           size="sm"
         >
           {project.is_public ? 'Public' : 'Private'}
-        </Badge>
-      </Group>
-      <Group gap="xs">
-        <Text size="sm" fw={600}>
-          Project type:
-        </Text>
-        <Badge
-          color={project.project_type === 'advanced' ? 'orange' : 'cyan'}
-          variant="light"
-          radius="sm"
-          size="sm"
-        >
-          {project.project_type === 'advanced' ? 'Advanced' : 'Basic'}
         </Badge>
       </Group>
     </Stack>

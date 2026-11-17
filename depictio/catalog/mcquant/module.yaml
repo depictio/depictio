@@ -1,0 +1,25 @@
+# MCQUANT (labsyspharm/quantification), the single-cell quantification step of
+# MCMICRO: for each image and segmentation mask, one row per cell with its mean
+# intensity in every quantified channel and its regionprops morphology.
+# nf-core/mcmicro runs it once per segmenter (Mesmer, Cellpose ...) and
+# publishes quantification/mcquant/<segmenter>/<sample>.csv. The marker
+# columns follow the run's marker sheet, so every output here reads them as the
+# numeric columns that are not an id or a morphology column.
+id: mcquant
+name: MCQUANT
+version: "1.0.0"
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mcquant
+biotools_url: null  # no bio.tools entry for MCQUANT
+description: >-
+  Single-cell quantification of multiplexed tissue images: one row per
+  segmented cell with its mean intensity in every channel of the panel, its
+  centroid in the image and its morphology (area, axes, eccentricity, solidity),
+  per image and per segmentation method, with per-image summaries of cell counts,
+  sizes and marker intensities, the correlation between markers and how far two
+  segmenters agree on the same image.
+homepage: https://github.com/labsyspharm/quantification
+source_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mcquant
+edam_topics:
+  - http://edamontology.org/topic_3383 # Bioimaging
+  - http://edamontology.org/topic_2229 # Cell biology
+stage: quantification

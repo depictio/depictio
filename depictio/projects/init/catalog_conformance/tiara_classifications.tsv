@@ -1,0 +1,23 @@
+genome	tiara_class	stage	sequence	class_fst_stage	class_snd_stage	is_eukaryotic
+Apis_mellifera	archaea	raw	NW_020555932.1	archaea		false
+Apis_mellifera	bacteria	raw	NW_020555800.1	bacteria		false
+Apis_mellifera	eukarya	raw	NW_020555788.1	eukarya		true
+Apis_mellifera	mitochondrion	raw	NC_001566.1	organelle	mitochondrion	true
+Apis_mellifera	plastid	raw	NW_020555852.1	organelle	plastid	true
+Apis_mellifera	prokarya	raw	NW_020555793.1	prokarya		false
+Apis_mellifera	unknown	raw	NC_037638.1	unknown		false
+Bombus_impatiens	archaea	raw	NT_176426.1	archaea		false
+Bombus_impatiens	bacteria	raw	NT_176459.1	bacteria		false
+Bombus_impatiens	eukarya	raw	NT_176421.1	eukarya		true
+Bombus_impatiens	mitochondrion	raw	NT_177628.1	organelle	mitochondrion	true
+Bombus_impatiens	plastid	raw	NT_178862.1	organelle	plastid	true
+Bombus_impatiens	prokarya	raw	NT_176670.1	prokarya		false
+Bombus_impatiens	unknown	raw	NT_176482.1	unknown		false
+Polistes_canadensis	archaea	raw	NW_014570372.1	archaea		false
+Polistes_canadensis	bacteria	raw	NW_014569966.1	bacteria		false
+Polistes_canadensis	eukarya	raw	NW_014569547.1	eukarya		true
+Polistes_canadensis	mitochondrion	raw	NW_014570710.1	organelle	mitochondrion	true
+Polistes_canadensis	organelle	raw	NW_014570593.1	organelle	unknown	false
+Polistes_canadensis	plastid	raw	NW_014570496.1	organelle	plastid	true
+Polistes_canadensis	prokarya	raw	NW_014570151.1	prokarya		false
+Polistes_canadensis	unknown	raw	NW_014569645.1	unknown		false

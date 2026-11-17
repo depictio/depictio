@@ -48,3 +48,16 @@ def test_no_logo_writes_none():
         "title: T\ncomponents:\n  - {component_type: text, title: T}\n"
     ).to_full()
     assert "logo:" not in DashboardDataLite.from_full(full).to_yaml()
+
+
+def test_a_legend_placeholder_needs_no_declaration():
+    TextLiteComponent(
+        title="T", body="- **Genome** {{legend:genome}}\n- **Group** {{legend:g-1.x}}"
+    )
+
+
+def test_a_legend_placeholder_names_a_column():
+    with pytest.raises(ValidationError, match="not a placeholder the viewer prints"):
+        TextLiteComponent(title="T", body="- **Key** {{legend: genome}}")
+    with pytest.raises(ValidationError, match="not a placeholder the viewer prints"):
+        TextLiteComponent(title="T", body="- **Key** {{legend:}}")

@@ -1,0 +1,20 @@
+id: tiara_classifications
+name: Sequence classes
+mode: tiara/classifications
+description: >-
+  One row per classified sequence: Tiara's first-stage class (eukarya,
+  bacteria, archaea, prokarya, organelle, unknown), its organelle call, and one
+  class that merges the two (mitochondrion and plastid replace organelle). In a
+  eukaryotic assembly every class but eukarya, mitochondrion and plastid is a
+  candidate contaminant or a sequence too short or repetitive to call.
+find:
+  path_glob: "**/tiara/**/*.txt"
+recipe: tiara/classifications.py
+fixture: classifications.tsv
+renders_as:
+  - { id: sequence_classes, component: card, column: sequence, aggregation: count,
+      secondary_layout: composition, breakdown_col: tiara_class }
+  - { component: figure, visu_type: histogram,
+      dict_kwargs: {x: genome, color: tiara_class, title: Sequences per Tiara class} }
+  - { component: interactive, interactive_type: MultiSelect, column_name: tiara_class }
+  - { component: table }

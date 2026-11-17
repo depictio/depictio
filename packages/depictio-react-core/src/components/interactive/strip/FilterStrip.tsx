@@ -30,6 +30,7 @@ import {
   StripDate,
   StripRange,
   StripSlider,
+  StripText,
   StripToggle,
 } from './StripControls';
 import { stripControlKind, stripLabel, stripShowsIcon, visibleFilterCount } from './stripLayout';
@@ -90,6 +91,8 @@ export const FilterStripControl: React.FC<{
       return <StripToggle {...props} accent={accent} />;
     case 'date':
       return <StripDate {...props} />;
+    case 'text':
+      return <StripText {...props} />;
     default:
       return (
         <Text size="xs" c="dimmed">

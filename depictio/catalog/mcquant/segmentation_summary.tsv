@@ -1,0 +1,5 @@
+summary_key	sample	segmenter	n_cells	median_area	q1_area	q3_area	mean_area	total_area	median_major_axis	median_eccentricity	median_solidity	median_aspect_ratio
+TEST1|Cellpose	TEST1	Cellpose	72	211.0	172.0	278.25	240.14	17290.0	18.832	0.6282	0.9509	1.2855
+TEST1|Mesmer	TEST1	Mesmer	2114	96.0	70.0	118.0	96.05	203047.0	12.328	0.5802	0.9286	1.2278
+TEST2|Cellpose	TEST2	Cellpose	32	325.5	263.0	423.0	356.22	11399.0	24.395	0.622	0.9522	1.2771
+TEST2|Mesmer	TEST2	Mesmer	2085	96.0	72.0	119.0	97.48	203243.0	12.396	0.5841	0.9306	1.2321

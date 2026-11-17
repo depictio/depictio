@@ -2,6 +2,7 @@
 # AMRFinderPlus, DeepARG, fARGene, RGI, ...) into one shared vocabulary.
 id: hamronization
 name: hAMRonization
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/hamronization/summarize
 description: >-
   Tool to convert and summarize AMR gene detection outputs using the

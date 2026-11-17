@@ -19,9 +19,14 @@ many of the four contributed to each row: a bin with a taxon but no CheckM2
 row, or the reverse, is a real state of the run and must not be dropped.
 
 `mimag_tier` is the MIMAG standard applied in full, which is why it belongs
-here and not in `checkm2/quality_report`: a high-quality draft needs 90%
-completeness, under 5% contamination AND the 5S / 16S / 23S rRNAs plus at least
-18 tRNAs, and only Prokka can answer the second half. The CheckM2-only
+here and not in `checkm2/quality_report`: a high-quality draft needs more than
+90% completeness, under 5% contamination AND the 5S / 16S / 23S rRNAs plus at
+least 18 tRNAs, and only Prokka can answer the second half. The limits are
+those of MIMAG Table 1 (Bowers et al. 2017, Nat Biotechnol 35:725,
+https://doi.org/10.1038/nbt.3893); a bin at 10% contamination or more is in no
+MIMAG tier and is labelled "Contaminated", this module's own label. A bin whose
+RNA criteria are unknown (`meets_mimag_rna` null) cannot be a high-quality
+draft and falls to the medium or low tier. The CheckM2-only
 `quality_tier` is carried beside it on purpose, because the gap between the two
 counts is the number of bins that look finished and are not.
 
@@ -43,7 +48,7 @@ Output schema:
     trna : Int64             transfer RNAs
     rrna : Int64             ribosomal RNAs
     cds_per_mbp : Float64    coding sequences per megabase
-    meets_mimag_rna : Boolean  at least 3 rRNAs and 18 tRNAs
+    meets_mimag_rna : Boolean  5S, 16S and 23S rRNAs present and 18 tRNAs; null when unknown
     domain, phylum, class_name, order, family, genus, species : Utf8
     rank_assigned : Utf8     deepest rank GTDB-Tk named
     classified : Boolean     GTDB-Tk placed this bin at all
@@ -114,8 +119,11 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sources_present": pl.Int64,
 }
 
-#: MIMAG thresholds. The RNA half arrives already evaluated as
-#: `meets_mimag_rna` from `prokka/summary`.
+#: MIMAG Table 1 limits (Bowers et al. 2017, https://doi.org/10.1038/nbt.3893).
+#: High-quality draft: completeness above 90% and contamination under 5%.
+#: Medium: completeness of at least 50% and contamination under 10%. Low:
+#: completeness under 50% and contamination under 10%. The RNA half arrives
+#: already evaluated as `meets_mimag_rna` from `prokka/summary`.
 HIGH_COMPLETENESS = 90.0
 HIGH_CONTAMINATION = 5.0
 MEDIUM_COMPLETENESS = 50.0
@@ -140,9 +148,9 @@ def _mimag_tier(
 ) -> str:
     if completeness is None or contamination is None:
         return "Unknown"
-    if contamination > MAX_CONTAMINATION:
+    if contamination >= MAX_CONTAMINATION:
         return "Contaminated"
-    if completeness >= HIGH_COMPLETENESS and contamination <= HIGH_CONTAMINATION and bool(rna_ok):
+    if completeness > HIGH_COMPLETENESS and contamination < HIGH_CONTAMINATION and bool(rna_ok):
         return "High quality draft"
     if completeness >= MEDIUM_COMPLETENESS:
         return "Medium quality draft"

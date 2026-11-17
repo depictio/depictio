@@ -6,6 +6,7 @@ which is battle-tested and maintained by the Zope Foundation.
 """
 
 import contextvars
+import operator
 import os
 import site
 import sys
@@ -243,6 +244,37 @@ def safe_getiter(obj):
     return iter(obj)
 
 
+_INPLACE_OPERATORS = {
+    "+=": operator.add,
+    "-=": operator.sub,
+    "*=": operator.mul,
+    "/=": operator.truediv,
+    "//=": operator.floordiv,
+    "%=": operator.mod,
+    "**=": operator.pow,
+    "<<=": operator.lshift,
+    ">>=": operator.rshift,
+    "&=": operator.and_,
+    "|=": operator.or_,
+    "^=": operator.xor,
+    "@=": operator.matmul,
+}
+
+
+def safe_inplacevar(op: str, x, y):
+    """RestrictedPython's hook for augmented assignment (``x += y``).
+
+    Evaluated as the plain binary operation, so ``x`` is rebound to a new object
+    rather than mutated: ``scale = px.colors.qualitative.Plotly; scale += [...]``
+    must not extend the palette list every later render in the process shares.
+    """
+    try:
+        func = _INPLACE_OPERATORS[op]
+    except KeyError:
+        raise TypeError(f"Augmented assignment {op!r} is not allowed in a code figure") from None
+    return func(x, y)
+
+
 # ---------------------------------------------------------------------------
 # Second layer: a process-wide ``sys.audit`` hook.
 #
@@ -399,8 +431,11 @@ def _code_figure_audit_hook(event: str, args) -> None:
         # is trying to pull in fresh (e.g. ``pty``, ``ctypes.util``) — refused.
         # (User code cannot ``import`` at all: RestrictedPython has no
         # ``__import__``. This guards a library being coaxed into a new import.)
+        # ModuleNotFoundError, not PermissionError: a library probing an optional
+        # dependency (``try: import x / except ImportError``) must read the refusal
+        # as "not installed" and carry on, not abort the figure.
         if top and top not in sys.modules:
-            raise PermissionError(f"importing '{name}' is not allowed in a code figure")
+            raise ModuleNotFoundError(f"importing '{name}' is not allowed in a code figure")
 
 
 _AUDIT_HOOK_INSTALLED = False
@@ -448,6 +483,7 @@ class SimpleCodeExecutor:
             "_iter_unpack_sequence_": safe_iter_unpack_sequence,
             "_unpack_sequence_": safe_unpack_sequence,
             "_getiter_": safe_getiter,
+            "_inplacevar_": safe_inplacevar,
             # RestrictedPython's hook for `f(*args, **kwargs)` unpacking, which
             # a code figure needs to spread `**depictio_group_kwargs`. Plain
             # forwarding is the safe default: it reaches nothing the same call

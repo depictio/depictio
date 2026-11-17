@@ -67,6 +67,7 @@ def _call(
     variables: dict[str, str] | None = None,
     dry_run: bool = False,
     request=None,
+    **extra,
 ):
     return from_run._create_project_from_run(
         data_root=data_root,
@@ -76,6 +77,7 @@ def _call(
         variables=variables,
         dry_run=dry_run,
         request=request,
+        **extra,
     )
 
 
@@ -386,7 +388,7 @@ def _imported_dashboard():
     )
 
 
-def _run_from_folder(mock_db, user=None, project_name: str = "run42"):
+def _run_from_folder(mock_db, user=None, project_name: str = "run42", **extra):
     """Create the project for real, with the dashboard import and broker stubbed."""
     from depictio.api.v1.monitoring import store as monitoring_store
 
@@ -396,7 +398,7 @@ def _run_from_folder(mock_db, user=None, project_name: str = "run42"):
         patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
         patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
     ):
-        report = _call(user=user, project_name=project_name)
+        report = _call(user=user, project_name=project_name, **extra)
     return report, user, importer, task
 
 
@@ -441,7 +443,8 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
     assert sorted(p["dc_tag"] for p in payloads) == ingestable
     assert all(p["run_id"] == report.run_id for p in payloads)
     assert all(p["project_id"] == report.project_id for p in payloads)
-    assert all(p["dc_id"] and p["sync_files"] is True for p in payloads)
+    # Nothing is registered yet: reading what moved reads everything.
+    assert all(p["dc_id"] and p["sync_files"] is False for p in payloads)
     assert all(p["user"]["id"] == str(user.id) for p in payloads)
 
     # A recipe DC's payload waits on its own recipe's dc_ref sources, only
@@ -481,6 +484,16 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
     assert modes["taxonomy_composition"] == "recipe"
 
 
+def test_the_project_is_private_unless_the_request_asks_otherwise(mock_db, megatest_s3):
+    assert from_run.FromRunRequest(data_root=S3_ROOT).is_public is False
+    megatest_s3()
+    report, *_ = _run_from_folder(mock_db)
+    assert mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})["is_public"] is False
+
+    report, *_ = _run_from_folder(mock_db, project_name="run43", is_public=True)
+    assert mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})["is_public"] is True
+
+
 def test_a_pruned_collection_is_absent_from_the_project_and_the_run(mock_db, megatest_s3):
     without_tree = {
         rel: body
@@ -498,6 +511,36 @@ def test_a_pruned_collection_is_absent_from_the_project_and_the_run(mock_db, meg
     assert "phylogenetic_tree_canonical" not in tags
     dispatched = {payload["dc_tag"] for payload in _dispatched_payloads(task)}
     assert "phylogenetic_tree_canonical" not in dispatched
+
+
+def test_the_import_knows_which_collections_are_about_to_be_ingested(
+    mock_db, megatest_s3, monkeypatch
+):
+    """Tiles on an optional collection the run has must survive the import.
+
+    The import runs before the workers, when no collection has data: without
+    this, every tab built on optional collections was dropped.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dashboards_routes
+    from depictio.api.v1.endpoints.projects_endpoints import from_run as from_run_module
+
+    seen: list[frozenset[str]] = []
+
+    def record(*_args, **_kwargs):
+        seen.append(dashboards_routes._dc_tags_being_ingested.get())
+        return []
+
+    monkeypatch.setattr(from_run_module, "_import_template_dashboards", record)
+    megatest_s3()
+    report, _user_, _importer, _task = _run_from_folder(mock_db)
+
+    rows = _rows(report)
+    found_optional = {tag for tag, row in rows.items() if row.optional and row.status == "ok"}
+    absent_optional = {tag for tag, row in rows.items() if row.optional and row.status == "missing"}
+    assert found_optional and absent_optional
+    assert found_optional <= seen[0]
+    assert not absent_optional & seen[0]
+    assert dashboards_routes._dc_tags_being_ingested.get() == frozenset()
 
 
 def test_dashboards_are_keyed_as_the_cli_keys_them(mock_db, megatest_s3):
@@ -1019,7 +1062,13 @@ def test_a_given_template_skips_detection(mock_db, megatest_s3, monkeypatch):
     seen = _detects(monkeypatch, "nf-core/other/1")
     report = _call(dry_run=True)
     assert seen == []
-    assert report.detected_template is None
+    # The run is read for the report, not to choose a template: the named one
+    # stays, and the report carries what the run's records say (this tree names
+    # its engine but not its pipeline).
+    assert report.template_id == TEMPLATE_ID
+    assert report.detected_template is not None
+    assert report.detected_template.engine == "nextflow"
+    assert report.detected_template.template_id is None
 
 
 def test_detection_on_a_local_folder(mock_db, local_home, monkeypatch):

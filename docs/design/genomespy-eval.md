@@ -195,3 +195,19 @@ before it says anything.
 - Showcase: the `Genome view` tab of `advanced_viz_showcase`.
 
 Not shipped: analysis-group colouring, file-backed sources, any renderer replacement.
+
+## 7. Decision after wave 3 (2026-10)
+
+Across the nf-core templates the audit counted 31 GenomeSpy tiles, 18 of them as the
+hidden toggle of a Plotly tile. Only the **navigators** earn their place: the brush emits
+the `genome_selection` filter the whole dashboard follows, and `facet_by_sample` lanes are
+something JBrowse does not draw in one view.
+
+- Kept: one navigator per tab (`region_filter_enabled: true`), and per-sample lanes.
+- Removed: the followers (`region_filter_enabled: false` with `follow_region_filter`), which
+  redraw what a `coverage_track` with `mark: rect` already follows, and the GenomeSpy
+  toggle of a Plotly tile in a template that has a `jbrowse`.
+- The navigator and the browser now talk: the browser follows the brush of its tab
+  (`docs/design/jbrowse-genome-tracks.md`, "The browser follows the navigator").
+- The roles and the lints that hold them are in `depictio/projects/nf-core/RULES.md`
+  section 16.

@@ -2,7 +2,11 @@
 
 from unittest.mock import patch
 
-from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import _dc_source_inputs
+from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
+    _dc_source_inputs,
+    _recipe_doc,
+    _recipe_inputs,
+)
 
 
 class _Source:
@@ -11,7 +15,23 @@ class _Source:
 
 
 class _Recipe:
+    """Taxa per group.
+
+    One row per taxon, one
+    column per group.
+
+    Details nobody reads."""
+
     SOURCES = [_Source("samplesheet", "input/samplesheet.csv")]
+
+
+class _CollectionSource:
+    def __init__(self, dc_ref: str):
+        self.ref, self.path, self.dc_ref = dc_ref, None, dc_ref
+
+
+class _DerivedRecipe:
+    SOURCES = [_CollectionSource("taxonomy"), _Source("samplesheet", "input/samplesheet.csv")]
 
 
 def _inputs(override, data_root):
@@ -56,4 +76,23 @@ def test_an_override_outside_the_root_is_shown_as_stored(tmp_path):
     assert _inputs({"samplesheet": str(link)}, root) == [str(link)]
     assert _inputs({"samplesheet": "https://example.org/sheet.csv"}, root) == [
         "https://example.org/sheet.csv"
+    ]
+
+
+def test_a_recipe_is_described_by_its_docstring_title_and_first_paragraph():
+    with patch("depictio.recipes.load_recipe", return_value=_Recipe):
+        assert _recipe_doc("nf-core/test/samples.py") == (
+            "Taxa per group.",
+            "One row per taxon, one column per group.",
+        )
+    assert _recipe_doc(None) == (None, None)
+
+
+def test_recipe_inputs_name_collections_and_files_apart():
+    config = {"source": "transformed", "transform": {"recipe": "r.py"}}
+    with patch("depictio.recipes.load_recipe", return_value=_DerivedRecipe):
+        inputs = _recipe_inputs(config, "/usr")
+    assert [(i.kind, i.name, i.path) for i in inputs] == [
+        ("collection", "taxonomy", None),
+        ("file", "samplesheet.csv", "/usr/input/samplesheet.csv"),
     ]

@@ -2,6 +2,7 @@
 # CTAT cancer intron reference to flag candidate cancer-specific introns.
 id: ctatsplicing
 name: CTAT-SPLICING
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ctatsplicing/startocancerintrons
 description: Detection and annotation of cancer splicing aberrations.
 homepage: https://github.com/TrinityCTAT/CTAT-SPLICING

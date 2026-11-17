@@ -37,6 +37,50 @@
       "logo_dark": null
     },
     {
+      "index": "ord-kingdom-filter",
+      "component_type": "interactive",
+      "title": "Kingdom",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "complex_heatmap_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ComplexHeatmap-ready taxonomy matrix (Phylum \u00d7 sample)",
+        "data_collection_tag": "complex_heatmap_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Ordination filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "grape",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
       "index": "ord-phylum-filter",
       "component_type": "interactive",
       "title": "Phylum",
@@ -73,6 +117,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -144,7 +189,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "PERMANOVA (adonis) per beta-diversity metric and formula term",
+        "description": "PERMANOVA (adonis) of the grouping column per beta-diversity metric",
         "data_collection_tag": "beta_adonis",
         "dc_specific_properties": null,
         "_id": {
@@ -163,7 +208,7 @@
       "column_type": "float64",
       "value": null,
       "aggregations": null,
-      "filter_expr": "(col('metric') == 'bray_curtis') & (col('term') == 'habitat')",
+      "filter_expr": "col('metric') == 'bray_curtis'",
       "secondary_layout": "gauge",
       "breakdown_col": null,
       "top_n_count": 3,
@@ -302,23 +347,10 @@
         "value_columns": null,
         "value_columns_pattern": null,
         "row_annotation_cols": [],
-        "col_annotations": {
-          "habitat": {
-            "SRR10070130": "Riverwater",
-            "SRR10070131": "Riverwater",
-            "SRR10070132": "Groundwater",
-            "SRR10070133": "Groundwater",
-            "SRR10070134": "Riverwater",
-            "SRR10070141": "Groundwater",
-            "SRR10070149": "Sediment",
-            "SRR10070150": "Sediment",
-            "SRR10070151": "Sediment",
-            "SRR10102392": "Soil",
-            "SRR10102393": "Soil",
-            "SRR10102394": "Soil"
-          }
-        },
-        "col_annotation_cols": [],
+        "col_annotations": null,
+        "col_annotation_cols": [
+          "habitat"
+        ],
         "annotation_source_dc_tag": null,
         "col_annotation_colors": null,
         "cluster_rows": true,
@@ -382,23 +414,10 @@
         "row_annotation_cols": [
           "Kingdom"
         ],
-        "col_annotations": {
-          "habitat": {
-            "SRR10070130": "Riverwater",
-            "SRR10070131": "Riverwater",
-            "SRR10070132": "Groundwater",
-            "SRR10070133": "Groundwater",
-            "SRR10070134": "Riverwater",
-            "SRR10070141": "Groundwater",
-            "SRR10070149": "Sediment",
-            "SRR10070150": "Sediment",
-            "SRR10070151": "Sediment",
-            "SRR10102392": "Soil",
-            "SRR10102393": "Soil",
-            "SRR10102394": "Soil"
-          }
-        },
-        "col_annotation_cols": [],
+        "col_annotations": null,
+        "col_annotation_cols": [
+          "habitat"
+        ],
         "annotation_source_dc_tag": null,
         "col_annotation_colors": null,
         "cluster_rows": true,
@@ -414,9 +433,17 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-ord-phylum-filter",
+      "i": "box-ord-kingdom-filter",
       "x": 0,
       "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ord-phylum-filter",
+      "x": 0,
+      "y": 3,
       "w": 1,
       "h": 3,
       "static": false
@@ -505,7 +532,7 @@
       "name": "Ordination filters",
       "icon": "mdi:filter-variant",
       "color": "pink",
-      "description": "Phylum narrows the rows of the abundance heatmap",
+      "description": "Kingdom and Phylum narrow the rows of the abundance heatmap",
       "collapsed": false,
       "persistent": false,
       "pin": "top",
@@ -573,6 +600,7 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",
@@ -611,11 +639,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 12:18:23",
+  "creation_time": "2026-10-28 15:04:07",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"

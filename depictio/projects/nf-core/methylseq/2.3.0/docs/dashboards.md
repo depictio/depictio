@@ -152,8 +152,8 @@ so this is the screen the published files support, labelled as one. Strip: windo
 spread) and the strongest call against padj 0.05. Then the Manhattan of every tested window,
 and side by side the volcano (its View switch draws a QQ plot of the raw p-values) and the
 distribution of the differences by call. Collapsed: `Methylation at a locus`, a navigator on the
-comparison (significance per window, a locus field and a brush) with two followers on the same
-region, one lane per library from the binned collection and the group difference; it opens on a
+comparison (significance per window, a locus field and a brush) with one follower on the same
+region, one lane per library from the binned collection; it opens on a
 documented default region (rationale in `VALIDATION_REPORT.md`). Collapsed too: the tested-window
 table. Filters: call, difference and adjusted p.
 
@@ -206,7 +206,7 @@ A picked row or point becomes a dashboard filter that narrows the other tiles of
 and follows the project links to the collections they reach. The pinned sample sheet selects on
 `sample_id`; the Bismark, Qualimap and M-bias tables and the per-library profiles select on
 `sample`; the PCA on `sample_id` (a lasso makes an analysis group); the tested-window table and
-the two window tracks on `window_id`, and the Manhattan on `chromosome`. The cohort-level
+the navigator on `window_id`, and the Manhattan on `chromosome`. The cohort-level
 collections (correlation, variable windows, comparison) hold the libraries as columns or test
 across them, so the sample filters do not narrow them; their own tab filters do.
 

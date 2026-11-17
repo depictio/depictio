@@ -21,6 +21,8 @@ export const INSPECTOR_TOGGLE_EVENT = 'depictio:inspector-toggle';
  *  here rather than letting the panel sit on top of the rightmost tiles —
  *  which is exactly the tile a user is trying to lasso a group out of. */
 export const ANALYSIS_PANEL_TOGGLE_EVENT = 'depictio:analysis-panel-toggle';
+/** The Metadata panel (session labels on a metadata table), docked like Analysis. */
+export const METADATA_PANEL_TOGGLE_EVENT = 'depictio:metadata-panel-toggle';
 
 /** Every event name `DashboardGrid` reacts to. Add a panel here, not a listener. */
 export const PANEL_TOGGLE_EVENTS = [
@@ -28,6 +30,7 @@ export const PANEL_TOGGLE_EVENTS = [
   FILTER_PANEL_TOGGLE_EVENT,
   INSPECTOR_TOGGLE_EVENT,
   ANALYSIS_PANEL_TOGGLE_EVENT,
+  METADATA_PANEL_TOGGLE_EVENT,
 ] as const;
 
 export interface PanelToggleDetail {

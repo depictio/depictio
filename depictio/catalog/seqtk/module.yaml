@@ -2,6 +2,7 @@
 # poly-N runs (assembly gaps) of a genome as a 3-column BED.
 id: seqtk
 name: seqtk
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/seqtk/cutn
 homepage: https://github.com/lh3/seqtk
 biotools_url: https://bio.tools/seqtk # from nf-core meta.yml identifier

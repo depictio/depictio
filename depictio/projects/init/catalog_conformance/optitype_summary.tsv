@@ -1,0 +1,4 @@
+sample_id	hla_a	hla_b	hla_c	alleles	distinct_alleles	typed_loci	homozygous_loci	heterozygous_loci	homozygous_class	reads	objective	objective_per_read	solutions	runner_up_gap
+DONOR_1	HLA-A*02:01 / HLA-A*11:01	HLA-B*44:02 / HLA-B*44:03	HLA-C*05:01 / HLA-C*16:01	HLA-A*02:01;HLA-A*11:01;HLA-B*44:02;HLA-B*44:03;HLA-C*05:01;HLA-C*16:01	6	3	0	3	No homozygous locus	1450	1410.85	0.973	1	
+DONOR_2	HLA-A*02:01 / HLA-A*02:01	HLA-B*07:02 / HLA-B*35:01	HLA-C*04:01 / HLA-C*07:02	HLA-A*02:01;HLA-B*07:02;HLA-B*35:01;HLA-C*04:01;HLA-C*07:02	5	3	1	2	1 homozygous locus	980	962.36	0.982	1	
+DONOR_3	HLA-A*03:01 / HLA-A*24:02	HLA-B*15:01 / HLA-B*18:01	HLA-C*03:03 / HLA-C*12:03	HLA-A*03:01;HLA-A*24:02;HLA-B*15:01;HLA-B*18:01;HLA-C*03:03;HLA-C*12:03	6	3	0	3	No homozygous locus	212	206.276	0.973	2	2.176

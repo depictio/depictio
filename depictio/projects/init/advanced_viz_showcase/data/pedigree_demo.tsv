@@ -1,0 +1,19 @@
+family	individual	father	mother	sex	status	deceased	label	note
+FAM001	F1_I1	0	0	1	1	1	I-1	Died at 71, unaffected
+FAM001	F1_I2	0	0	2	1	0	I-2	Carrier
+FAM001	F1_II1	F1_I1	F1_I2	1	1	0	II-1	Carrier
+FAM001	F1_II2	F1_I1	F1_I2	2	2	0	II-2	Affected, onset at 6 years
+FAM001	F1_II3	0	0	2	1	0	II-3	Married into the family
+FAM001	F1_II4	0	0	1	1	0	II-4	Married into the family
+FAM001	F1_III1	F1_II1	F1_II3	2	2	0	III-1	Proband
+FAM001	F1_III2	F1_II1	F1_II3	1	1	0	III-2	Unaffected brother
+FAM001	F1_III3	F1_II4	F1_II2	1	2	0	III-3	Affected cousin
+FAM001	F1_III4	F1_II1	F1_II3	0	0	1	III-4	Stillbirth, sex not recorded
+FAM002	F2_I1	0	0	1	1	0	I-1	Father
+FAM002	F2_I2	0	0	2	1	0	I-2	Mother
+FAM002	F2_II1	F2_I1	F2_I2	1	2	0	II-1	Proband
+FAM002	F2_II2	F2_I1	F2_I2	2	1	0	II-2	Unaffected sister
+FAM003	F3_I1	0	0	2	0	1	I-1	Died young, phenotype not recorded
+FAM003	F3_II1	0	F3_I1	2	2	0	II-1	Affected, father not in the table
+FAM003	F3_III1	0	F3_II1	1	2	0	III-1	Proband
+FAM003	F3_III2	0	F3_II1	2	1	0	III-2	Unaffected sister

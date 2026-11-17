@@ -227,3 +227,24 @@ class TestPreviewDeltatableTask:
         assert len(out["rows"]) == 3
         assert {r["variety"] for r in out["rows"]} == {"Setosa"}
         assert out["filter_applied"] is True
+
+
+class TestPreviewRowCap:
+    """The annotation grid reads up to 10,000 rows in one preview."""
+
+    def _run(self, tmp_path, rows: int, limit: int) -> dict:
+        from depictio.api.v1.celery_tasks import preview_deltatable
+
+        loc = str(tmp_path / "wide_delta")
+        pl.DataFrame({"sample": [f"s{i}" for i in range(rows)]}).write_delta(loc)
+        with patch("depictio.api.v1.s3.polars_s3_config", {}):
+            return preview_deltatable({"delta_table_location": loc, "limit": limit})
+
+    def test_reads_ten_thousand_rows(self, tmp_path):
+        out = self._run(tmp_path, rows=10_500, limit=10_000)
+        assert len(out["rows"]) == 10_000
+        assert out["total_rows"] == 10_500
+
+    def test_limit_clamped_to_ten_thousand(self, tmp_path):
+        out = self._run(tmp_path, rows=10_500, limit=50_000)
+        assert len(out["rows"]) == 10_000

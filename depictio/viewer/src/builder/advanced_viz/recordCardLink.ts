@@ -91,6 +91,9 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
     case 'genome_chord':
       column = named ?? str(config.label_col);
       break;
+    case 'spatial_cells':
+      column = named ?? str(config.cell_id_col) ?? 'cell_id';
+      break;
     case 'manhattan':
     case 'genome_view':
       column = named;
@@ -111,8 +114,23 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
     case 'msa':
       column = str(config.seq_id_col) ?? 'seq_id';
       break;
+    case 'allele_grid':
+      // An allele half picks the allele; a sample label the sample.
+      column = named ?? str(config.allele_col) ?? 'allele';
+      break;
     case 'lollipop':
       column = named ?? str(config.label_col) ?? str(config.position_col) ?? 'position';
+      break;
+    case 'ranked_distribution':
+      column = named ?? str(config.feature_id_col) ?? 'feature_id';
+      break;
+    case 'pedigree':
+      // A symbol is one individual.
+      column = named ?? str(config.individual_col) ?? 'individual';
+      break;
+    case 'ranked_table':
+      // A row is one candidate: its key when it has one, else its title.
+      column = named ?? str(config.title_col) ?? 'title';
       break;
     default:
       return { emits: false, column: null };

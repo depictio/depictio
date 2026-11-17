@@ -35,9 +35,16 @@ import {
 } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
-import { splitFigureByGroups } from './groupSplit';
+import { OTHER_COLOR, splitFigureByGroups } from './groupSplit';
 import { useSelectionRevision } from './selectionGesture';
 import { embeddingAxisTitles, type EmbeddingMethod } from './embeddingAxes';
+import {
+  autoMarker,
+  embeddingAxisLayout,
+  embeddingFamily,
+  reassertAxisLines,
+  type PlotStyle,
+} from './embeddingAxisStyle';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { usePlotSelectionReset } from '../usePlotSelectionReset';
@@ -54,8 +61,13 @@ interface EmbeddingConfig {
   /** Explicit value→colour overrides for the categorical colour column.
    *  Wins over the default palette-index assignment from stableColorMap. */
   category_palette?: Record<string, string> | null;
-  point_size?: number;
+  /** Unset: sized from the point count (`autoMarker`). */
+  point_size?: number | null;
   show_density?: boolean;
+  /** Axis furniture. `default` is two bold arrowed axis lines (PCA keeps its
+   *  tick labels, UMAP / t-SNE hides them); `lines`, `grid` and `clean` are
+   *  the alternatives. See `embeddingAxisStyle.ts`. */
+  plot_style?: PlotStyle;
   /** Names the dimensions on the axes and in the hover: `PCo` gives PCo1 /
    *  PCo2. Unset, live mode takes the method's and precomputed mode keeps
    *  the column names. */
@@ -91,9 +103,11 @@ interface Props {
 }
 
 // Past this many distinct values, one trace and one legend entry per value is
-// not a plot: colouring falls back to a single trace with a per-point colour
-// array. Reachable now that the Colour-by menu lists every column of the DC.
+// not a plot: the most frequent LEGEND_TOP_VALUES keep a trace and the rest
+// share a grey "Other" one. Reachable now that the Colour-by menu lists every
+// column of the DC.
 const MAX_CATEGORY_TRACES = 40;
+const LEGEND_TOP_VALUES = 10;
 // A contour drawn over a handful of points is noise, not a density.
 const MIN_DENSITY_POINTS = 8;
 // Polars dtype prefixes that mean "this column gets a continuous colourscale".
@@ -130,21 +144,26 @@ const EmbeddingRenderer: React.FC<Props> = ({
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as EmbeddingConfig;
-  // 6 to agree with EmbeddingConfig.point_size in
-  // depictio/models/components/advanced_viz/configs.py. The two layers used to
-  // disagree, so an unconfigured component drew 7 px and a configured one 6.
-  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 6);
+  // Point size and outline are null until the author or viewer picks one; the
+  // figure then sizes them from the point count (`autoMarker`).
+  const [pointSize, setPointSize] = usePersistedVizControl<number | null>(metadata, 'point_size', null);
   const [showCentroids, setShowCentroids] = usePersistedVizControl(metadata, 'show_centroids', false);
-  const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', false);
+  const [markerOutline, setMarkerOutline] = usePersistedVizControl<boolean | null>(
+    metadata,
+    'marker_outline',
+    null,
+  );
   // Outline width in px. The old hardcoded 0.5 was invisible at any point size,
   // which is what the "outline?? je ne vois rien" report was about.
-  const [outlineWidth, setOutlineWidth] = usePersistedVizControl(metadata, 'marker_outline_width', 1.5);
-  // Axis furniture preset. "default" is exactly what this renderer has always
-  // drawn (axis lines, no grid, no tick labels), so a shipped dashboard is
-  // untouched; "grid" adds gridlines and ticks, and "clean" strips the axes,
-  // which is the usual convention for a UMAP / t-SNE embedding.
-  type PlotStyle = 'default' | 'grid' | 'clean';
-  const [plotStyle, setPlotStyle] = usePersistedVizControl<PlotStyle>(metadata, 'plot_style', 'default');
+  const [outlineWidth, setOutlineWidth] = usePersistedVizControl<number | null>(
+    metadata,
+    'marker_outline_width',
+    null,
+  );
+  // Axis furniture preset (see embeddingAxisStyle.ts). "lines" is two bold axis
+  // lines; "default" adds arrowheads (tick labels for PCA / PCoA, none for
+  // UMAP / t-SNE), "grid" adds a faint grid and ticks, "clean" strips the axes.
+  const [plotStyle, setPlotStyle] = usePersistedVizControl<PlotStyle>(metadata, 'plot_style', 'lines');
   type LegendPos = 'right' | 'bottom' | 'in-tr' | 'hidden';
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
   const [ncontours, setNcontours] = usePersistedVizControl(metadata, 'ncontours', 14);
@@ -434,6 +453,12 @@ const EmbeddingRenderer: React.FC<Props> = ({
     view3D,
   ]);
 
+  const nPoints = rows ? ((rows[config.dim_1_col || 'dim_1'] || []) as unknown[]).length : 0;
+  const auto = autoMarker(nPoints);
+  const markerSize = pointSize ?? auto.size;
+  const outlineOn = markerOutline ?? auto.outlineWidth > 0;
+  const markerOutlineWidth = outlineWidth ?? (auto.outlineWidth || 1.5);
+
   const figure = useMemo(() => {
     if (!rows) return null;
     // In live-compute mode the builder skips dim_1/dim_2 column bindings (the
@@ -485,7 +510,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
       .map((c, j) => `<br>${c}: %{customdata[${j + 1}]}`)
       .join('');
 
-    const { textColor, gridColor, zeroLineColor } = plotlyThemeColors(isDark, theme);
+    const { textColor, gridColor } = plotlyThemeColors(isDark, theme);
     // Plaque behind in-plot text: the inside-top-right legend and the centroid
     // labels, both of which sit over the points.
     const inTrBg = isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.7)';
@@ -511,17 +536,37 @@ const EmbeddingRenderer: React.FC<Props> = ({
       }
       categories.sort();
     }
-    const colourSource =
+    const categoricalPalette = resolveCategoricalPalette(theme, TAB10_PALETTE);
+    let colourSource =
       isCategorical && colorValues
-        ? stableColorMap(
-            colorUniverse ?? categories,
-            resolveCategoricalPalette(theme, TAB10_PALETTE),
-            pinnedColours,
-          )
+        ? stableColorMap(colorUniverse ?? categories, categoricalPalette, pinnedColours)
         : null;
     // One trace per group only while the group count stays sane, see
-    // MAX_CATEGORY_TRACES. Past it the colours survive but the traces collapse
-    // into one, so picking a free-text column can't lock up the tab.
+    // MAX_CATEGORY_TRACES. A column with more values than that (a guide, a
+    // sample) keeps its LEGEND_TOP_VALUES most frequent values as traces and
+    // folds the rest into one grey "Other" trace: the legend still names what
+    // it can, instead of vanishing, and the points are not painted from a
+    // 10-colour palette that repeats after ten values and says nothing.
+    if (colourSource && categories.length > MAX_CATEGORY_TRACES) {
+      const count = (c: string) => categoryIdx.get(c)?.length ?? 0;
+      const kept = [...categories]
+        .sort((a, b) => count(b) - count(a) || a.localeCompare(b))
+        .slice(0, LEGEND_TOP_VALUES)
+        .sort();
+      const otherLabel = `Other (${categories.length - kept.length} values)`;
+      const otherIdx = categories
+        .filter((c) => !kept.includes(c))
+        .flatMap((c) => categoryIdx.get(c) ?? [])
+        .sort((a, b) => a - b);
+      const keptColours = stableColorMap(kept, categoricalPalette, pinnedColours);
+      for (const cat of categories) if (!kept.includes(cat)) categoryIdx.delete(cat);
+      categoryIdx.set(otherLabel, otherIdx);
+      categories.splice(0, categories.length, ...kept, otherLabel);
+      colourSource = {
+        universe: keptColours.universe,
+        get: (value: string) => (value === otherLabel ? OTHER_COLOR : keptColours.get(value)),
+      };
+    }
     const perCategoryTraces = Boolean(colourSource) && categories.length <= MAX_CATEGORY_TRACES;
 
     // 2D only: a volumetric density would dwarf the scatter, so 3D skips it.
@@ -561,10 +606,12 @@ const EmbeddingRenderer: React.FC<Props> = ({
       }
     }
 
-    const denseAutoSize = x.length > 1000 ? Math.min(pointSize, 4) : pointSize;
+    // `autoMarker` already drops a dense cloud to 4 px; a size the reader typed is
+    // theirs, so it is not clamped again here.
+    const denseAutoSize = markerSize;
     // An opaque, contrasting stroke. The old line was 0.5 px of translucent
     // background colour, which was invisible at every point size.
-    const outline = markerOutline ? { width: outlineWidth, color: textColor } : { width: 0 };
+    const outline = outlineOn ? { width: markerOutlineWidth, color: textColor } : { width: 0 };
     const baseMarker2D = {
       size: denseAutoSize,
       opacity: 0.85,
@@ -653,9 +700,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
         }
       }
     } else {
-      // Three cases land here: a continuous colour column, no colour binding at
-      // all, and a categorical column with more distinct values than
-      // MAX_CATEGORY_TRACES (which keeps its per-value colours, as one trace).
+      // Two cases land here: a continuous colour column and no colour binding at
+      // all. A categorical column of any size never does, see the fold above.
       // The continuous case uses Spectral (optionally reversed) so cluster-heavy
       // reads get a perceptually-ordered diverging palette, not Viridis monotone.
       const colourArr = isCategorical ? undefined : (colorValues as number[] | undefined) ?? undefined;
@@ -711,50 +757,28 @@ const EmbeddingRenderer: React.FC<Props> = ({
       }
     }
 
-    // Axis furniture, driven by the Plot style control. "default" reproduces
-    // the historical look exactly, so nothing shipped moves unless the user
-    // asks for gridlines or for the bare-canvas UMAP look.
-    const gridStyle = plotStyle === 'grid';
+    // Axis furniture, driven by the Plot style control. The axis stroke is
+    // deliberately the strongest line on the plot; the grid stays faint.
     const cleanStyle = plotStyle === 'clean';
-    const axisCommon = {
-      zeroline: false,
-      showgrid: gridStyle,
-      gridcolor: gridColor,
-      showticklabels: gridStyle,
-      ticks: (gridStyle ? 'outside' : '') as '' | 'outside',
-      showline: !cleanStyle,
-      linecolor: zeroLineColor,
-      linewidth: 1,
-      mirror: false,
-      color: textColor,
-      tickfont: { color: textColor },
+    const axisColors = {
+      axis: isDark ? theme.colors.gray[4] : theme.colors.gray[7],
+      grid: gridColor,
+      text: textColor,
     };
+    const axes2D = embeddingAxisLayout({
+      style: plotStyle,
+      family: embeddingFamily(config, liveMode ? method : null),
+      titles: [axisTitles[0], axisTitles[1]],
+      colors: axisColors,
+    });
     // The 3D scene already draws a grid and ticks by default, so only the
     // "clean" preset has anything to say there.
     const scene3DAxisStyle = cleanStyle
       ? { showgrid: false, showticklabels: false, zeroline: false }
       : {};
 
-    const layout2D = {
-      xaxis: {
-        ...axisCommon,
-        title: {
-          text: axisTitles[0],
-          standoff: 6,
-          font: { size: 12, color: textColor },
-        },
-      },
-      yaxis: {
-        ...axisCommon,
-        title: {
-          text: axisTitles[1],
-          standoff: 6,
-          font: { size: 12, color: textColor },
-        },
-        scaleanchor: 'x' as const,
-        scaleratio: 1,
-      },
-    };
+    const layout2D = { xaxis: axes2D.xaxis, yaxis: axes2D.yaxis };
+    const annotations2D = [...axes2D.annotations, ...centroidAnnotations];
     // 3D layout — Plotly's scene primitive owns xaxis/yaxis/zaxis. uirevision
     // on the scene means camera rotation survives re-renders from filter /
     // control changes (a value swap re-triggers the useMemo here).
@@ -795,7 +819,12 @@ const EmbeddingRenderer: React.FC<Props> = ({
       layout: {
         template: isDark ? 'plotly_dark' : 'plotly_white',
         font: { color: textColor },
-        margin: actuallyRender3D ? { l: 0, r: 0, t: 8, b: 0 } : { l: 40, r: 12, t: 12, b: 40 },
+        // A right-hand legend gets the width of the tile's action rail on top of
+        // the usual margin: the rail overlays the last ~40 px of the plot and
+        // used to cover the ends of the longest legend entries.
+        margin: actuallyRender3D
+          ? { l: 0, r: 0, t: 8, b: 0 }
+          : { l: 40, r: legendPos === 'right' && perCategoryTraces ? 52 : 12, t: 12, b: 40 },
         // Plotly wipes UI state — the drawn lasso and every trace's
         // `selectedpoints` — on each `Plotly.react`. Without a stable
         // `uirevision` a redraw while a lasso stands (the plot's props are
@@ -808,11 +837,9 @@ const EmbeddingRenderer: React.FC<Props> = ({
         // undims the cloud without dropping the zoom. See useSelectionRevision.
         selectionrevision: `sel-${selectionRevision}`,
         ...(actuallyRender3D ? { scene: scene3D, uirevision: 'embedding-3d' } : layout2D),
-        ...(!actuallyRender3D && centroidAnnotations.length > 0
-          ? { annotations: centroidAnnotations }
-          : {}),
-        // A legend only exists while there is one trace per group; the
-        // collapsed high-cardinality fallback has nothing to list.
+        ...(!actuallyRender3D && annotations2D.length > 0 ? { annotations: annotations2D } : {}),
+        // A legend only exists while there is one trace per group, which a
+        // categorical colour always has (long tails fold into "Other").
         showlegend: perCategoryTraces && legendPos !== 'hidden',
         legend: perCategoryTraces
           ? {
@@ -841,14 +868,14 @@ const EmbeddingRenderer: React.FC<Props> = ({
     selectionEnabled,
     selectionColumn,
     selectionInOwnSlot,
-    pointSize,
+    markerSize,
     colorBy,
     colorUniverse,
     pinnedColours,
     showDensity,
     showCentroids,
-    markerOutline,
-    outlineWidth,
+    outlineOn,
+    markerOutlineWidth,
     plotStyle,
     legendPos,
     ncontours,
@@ -896,7 +923,13 @@ const EmbeddingRenderer: React.FC<Props> = ({
     [groupedFigure, isDark, theme],
   );
   const plotLayout = useMemo(
-    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    () =>
+      groupedFigure
+        ? reassertAxisLines(
+            applyLayoutTheme(groupedFigure.layout as any, isDark, theme),
+            groupedFigure.layout as any,
+          )
+        : null,
     [groupedFigure, isDark, theme],
   );
   // Chart annotations, 2D only: a 3D scene has no x/y plane to draw on.
@@ -1095,7 +1128,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
             value={plotStyle}
             onChange={(v) => v && setPlotStyle(v as PlotStyle)}
             data={[
-              { value: 'default', label: 'Axis lines' },
+              { value: 'lines', label: 'Axis lines' },
+              { value: 'default', label: 'Arrowed axes' },
               { value: 'grid', label: 'Gridlines + ticks' },
               { value: 'clean', label: 'No axes' },
             ]}
@@ -1130,8 +1164,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
         <VizControlGroup title="Markers">
           <VizNumberInput
             label="Point size"
-            value={pointSize}
-            onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
+            value={markerSize}
+            onChange={(v) => setPointSize(Math.max(1, Number(v) || markerSize))}
             min={1}
             max={30}
           />
@@ -1143,15 +1177,15 @@ const EmbeddingRenderer: React.FC<Props> = ({
             />
           ) : null}
           <VizSwitch
-            checked={markerOutline}
+            checked={outlineOn}
             onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
             label="Outline"
           />
-          {markerOutline ? (
+          {outlineOn ? (
             <VizNumberInput
               label="Outline width"
-              value={outlineWidth}
-              onChange={(v) => setOutlineWidth(Math.max(0.5, Math.min(4, Number(v) || 1.5)))}
+              value={markerOutlineWidth}
+              onChange={(v) => setOutlineWidth(Math.max(0.5, Math.min(4, Number(v) || markerOutlineWidth)))}
               min={0.5}
               max={4}
               step={0.5}
@@ -1205,7 +1239,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
       view3D,
       has3DConfigured,
       plotStyle,
-      pointSize,
+      markerSize,
       colorBy,
       colorOptions,
       colorByIsNumeric,
@@ -1216,8 +1250,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
       ncontours,
       densityOpacity,
       showCentroids,
-      markerOutline,
-      outlineWidth,
+      outlineOn,
+      markerOutlineWidth,
       legendPos,
     ],
   );

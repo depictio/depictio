@@ -1,0 +1,13 @@
+step_key	dataset	platform	outcome	step	step_order	samples	samples_lost	dataset_in
+E_GEOD_10070_A_AFFY_44|1	E_GEOD_10070_A_AFFY_44	Microarray	Merged	Downloaded	1	13	0	1
+E_GEOD_102133_A_AFFY_141|1	E_GEOD_102133_A_AFFY_141	Microarray	No gene mapped	Downloaded	1	73	0	1
+E_GEOD_58991_rnaseq|1	E_GEOD_58991_rnaseq	RNA-seq	All samples filtered out	Downloaded	1	9	0	1
+E_GEOD_10070_A_AFFY_44|2	E_GEOD_10070_A_AFFY_44	Microarray	Merged	Gene IDs mapped	2	13	0	1
+E_GEOD_102133_A_AFFY_141|2	E_GEOD_102133_A_AFFY_141	Microarray	No gene mapped	Gene IDs mapped	2	0	73	0
+E_GEOD_58991_rnaseq|2	E_GEOD_58991_rnaseq	RNA-seq	All samples filtered out	Gene IDs mapped	2	9	0	1
+E_GEOD_10070_A_AFFY_44|3	E_GEOD_10070_A_AFFY_44	Microarray	Merged	Zero filter	3	13	0	1
+E_GEOD_102133_A_AFFY_141|3	E_GEOD_102133_A_AFFY_141	Microarray	No gene mapped	Zero filter	3	0	0	0
+E_GEOD_58991_rnaseq|3	E_GEOD_58991_rnaseq	RNA-seq	All samples filtered out	Zero filter	3	0	9	0
+E_GEOD_10070_A_AFFY_44|4	E_GEOD_10070_A_AFFY_44	Microarray	Merged	Missing-value filter	4	13	0	1
+E_GEOD_102133_A_AFFY_141|4	E_GEOD_102133_A_AFFY_141	Microarray	No gene mapped	Missing-value filter	4	0	0	0
+E_GEOD_58991_rnaseq|4	E_GEOD_58991_rnaseq	RNA-seq	All samples filtered out	Missing-value filter	4	0	0	0

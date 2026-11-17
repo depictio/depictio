@@ -349,13 +349,19 @@ class TestMultiQCProcessor:
                                         ) as mock_hash:
                                             mock_hash.return_value = "abc123def456"
 
-                                            result = process_multiqc_data_collection(
-                                                sample_data_collection,
-                                                sample_cli_config,
-                                                workflow=sample_workflow,
-                                            )
+                                            # Storing the collection's samples is part of
+                                            # a success: answered here, not over HTTP.
+                                            with patch(
+                                                "depictio.cli.cli.utils.api_calls.api_update_dc_specific_properties",
+                                                return_value=MagicMock(status_code=200),
+                                            ):
+                                                result = process_multiqc_data_collection(
+                                                    sample_data_collection,
+                                                    sample_cli_config,
+                                                    workflow=sample_workflow,
+                                                )
 
-                                            assert result["result"] == "success"
+                                            assert result["result"] == "success", result
                                             assert "Processed 1 MultiQC files" in result["message"]
 
                                             # Verify S3 upload was called

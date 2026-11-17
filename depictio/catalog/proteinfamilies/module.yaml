@@ -10,6 +10,7 @@
 # one row per family carries everything a family record shows.
 id: proteinfamilies
 name: nf-core/proteinfamilies
+version: "1.0.0"
 description: >-
   Protein family generation summaries of nf-core/proteinfamilies: how the
   input sequences clustered, the families built from the clusters with their

@@ -207,3 +207,24 @@ def _innermost(real: str, bases: tuple[str, ...]) -> str | None:
     counted from the most specific folder an administrator allowed."""
     holding = [base for base in bases if _under(real, base)]
     return max(holding, key=len) if holding else None
+
+
+# Folder names every listing and search of a data root leaves out, along with
+# dot-names. Here rather than with the routes so the Mongo-free readers (the
+# Project Builder's standalone server, the CLI) hide exactly the same entries.
+NOISE_DIRS = frozenset({"__pycache__", "node_modules", "__MACOSX"})
+
+
+def is_hidden_name(name: str) -> bool:
+    """Whether a sub-directory named ``name`` is left out of every listing and
+    search: a dot-name, or one of :data:`NOISE_DIRS`."""
+    return name.startswith(".") or name in NOISE_DIRS
+
+
+def is_multiqc_output(name: str, *, is_dir: bool) -> bool:
+    """Whether an entry named ``name`` is MultiQC's own output: its data folder
+    (``multiqc_data``, ``<title>_multiqc_report_data``), its parquet, or its
+    HTML report (``multiqc_report.html``, ``<title>_multiqc_report.html``)."""
+    if is_dir:
+        return name == "multiqc_data" or name.endswith("multiqc_report_data")
+    return name == "multiqc.parquet" or name.endswith("multiqc_report.html")

@@ -18,7 +18,9 @@ token: the whole stem is the sample and the stage is recorded as ``all``.
 The duplicate-marked (``md``) summaries of a GRCh38 run list every ALT,
 decoy and HLA contig, 4 345 rows against the recalibrated file's 51. Keeping
 only the primary contigs and the ``total`` roll-up makes the two stages
-comparable on one axis and keeps a per-contig bar chart legible.
+comparable on one axis and keeps a per-contig bar chart legible. Rows come out
+in karyotype order (1 to 22, X, Y, M, then ``total``), the order a per-contig
+axis follows.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.contigs import sort_contigs
 from depictio.recipes.lib.mosdepth import keep_one_stage
 
 RAW_DC_TAG = "mosdepth_summary_raw"
@@ -90,7 +93,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     basename = pl.col("source_path").str.split("/").list.last()
     is_region = pl.col("chrom").str.ends_with(_REGION_SUFFIX)
 
-    return keep_one_stage(
+    kept = keep_one_stage(
         df.with_columns(
             pl.coalesce(
                 basename.str.extract(_NAME_RE, 1), basename.str.extract(_PLAIN_NAME_RE, 1)
@@ -111,4 +114,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .drop("chrom")
         .rename({"contig": "chrom"})
         .select(list(OUTPUT_SCHEMA))
-    ).sort(["sample", "stage", "scope", "chrom"])
+    )
+    # Karyotype order inside each sample, scope and stage: a bar per contig then
+    # reads chr1, chr2 ... chr10, chrX, chrY, chrM, total, not chr1, chr10, chr11.
+    return sort_contigs(kept, "chrom", "sample", "stage", "scope")

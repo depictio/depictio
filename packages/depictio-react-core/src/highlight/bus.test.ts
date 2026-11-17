@@ -115,6 +115,22 @@ describe('highlightFor / sameHighlight', () => {
     ).toBe(true);
   });
 
+  it('tells a different mark colour apart', () => {
+    expect(
+      sameHighlight({ sourceIndex: 'a', start: 1, color: '#f00' }, { sourceIndex: 'a', start: 1, color: '#00f' }),
+    ).toBe(false);
+    expect(
+      sameHighlight({ sourceIndex: 'a', start: 1, color: '#f00' }, { sourceIndex: 'a', start: 1, color: '#f00' }),
+    ).toBe(true);
+  });
+
+  it('tells different contig aliases apart', () => {
+    const a = { sourceIndex: 'a', entity: 'x', start: 1, entityAliases: ['y'] };
+    expect(sameHighlight(a, { ...a, entityAliases: ['y'] })).toBe(true);
+    expect(sameHighlight(a, { ...a, entityAliases: ['z'] })).toBe(false);
+    expect(sameHighlight(a, { ...a, entityAliases: undefined })).toBe(false);
+  });
+
   it('compares rows and the defaulted end', () => {
     expect(sameHighlight({ sourceIndex: 'a', start: 1 }, { sourceIndex: 'a', start: 1, end: 1 })).toBe(true);
     expect(
@@ -124,5 +140,28 @@ describe('highlightFor / sameHighlight', () => {
       ),
     ).toBe(false);
     expect(sameHighlight(null, { sourceIndex: 'a', start: 1 })).toBe(false);
+  });
+});
+
+describe('sameHighlight on genomic and record', () => {
+  const base = { sourceIndex: 'a', start: 0, positionColumn: '__record__' };
+
+  it('tells two table rows apart by their record, not only their start', () => {
+    expect(
+      sameHighlight({ ...base, record: { id: 'r1', n: 1 } }, { ...base, record: { id: 'r1', n: 1 } }),
+    ).toBe(true);
+    expect(
+      sameHighlight({ ...base, record: { id: 'r1' } }, { ...base, record: { id: 'r2' } }),
+    ).toBe(false);
+    expect(sameHighlight({ ...base, record: { id: 'r1' } }, base)).toBe(false);
+  });
+
+  it('tells two intervals apart, aliases included', () => {
+    const g = { refName: 'chr1', start: 5, end: 9, aliases: ['1'] };
+    expect(sameHighlight({ ...base, genomic: g }, { ...base, genomic: { ...g } })).toBe(true);
+    expect(sameHighlight({ ...base, genomic: g }, { ...base, genomic: { ...g, end: 10 } })).toBe(false);
+    expect(sameHighlight({ ...base, genomic: g }, { ...base, genomic: { ...g, aliases: [] } })).toBe(
+      false,
+    );
   });
 });

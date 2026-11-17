@@ -7,6 +7,8 @@
  *    template was written for; one value when both agree, both when not;
  *  - Tasks: how the run's tasks ended, from its execution trace;
  *  - Folder: one run or several, of one pipeline version, listed in full;
+ *  - Samples (several runs): no MultiQC sample named in two runs, or the
+ *    creation is refused;
  *  - Input files: the files the template is pointed at (samplesheet, ...);
  *  - Collections: what the template finds in the folder, opening onto every
  *    data collection, where it looked and what it found.
@@ -46,6 +48,9 @@ import type {
 } from 'depictio-react-core';
 
 import { engineLabel, TemplateSourceLogo, WorkflowEngineLogo } from '../template';
+import { RunNames } from '../detail/FoundCard';
+import { CHECK_STATUS } from '../checkStatus';
+import type { CheckOutcome } from '../checkStatus';
 import { CollectionPlan } from './CollectionPlan';
 import { RunFilePath, RunFileScope } from './FilePreview';
 import { FlowBadge, matchStatus } from './FlowBadge';
@@ -59,16 +64,7 @@ export interface RunInfo {
   engine: string | null;
 }
 
-type CheckStatus = 'ok' | 'differs' | 'warn' | 'fail' | 'info' | 'unknown' | 'loading';
-
-const STATUS: Record<Exclude<CheckStatus, 'loading'>, { icon: string; color: string; label: string }> = {
-  ok: { icon: 'mdi:check-circle', color: 'green', label: 'Passes' },
-  differs: { icon: 'mdi:approximately-equal', color: 'yellow', label: 'Differs' },
-  warn: { icon: 'mdi:alert-circle', color: 'orange', label: 'Needs a look' },
-  fail: { icon: 'mdi:close-circle', color: 'red', label: 'Fails' },
-  info: { icon: 'mdi:minus-circle-outline', color: 'gray', label: 'Optional, absent' },
-  unknown: { icon: 'mdi:help-circle-outline', color: 'gray', label: 'Cannot be checked' },
-};
+type CheckStatus = CheckOutcome | 'loading';
 
 /** How the two sides of an identity row agree, as the tests and the mark
  *  read it. */
@@ -92,10 +88,10 @@ function agreement(
 /** Why a template other than the run's own is used, without repeating the
  *  versions the line already shows. */
 const MATCH_REASON: Partial<Record<RunTemplateMatch, string>> = {
-  closest: 'No template exists for the run’s version; the closest one is used.',
-  'other-version': 'The template you picked was written for another version.',
-  'other-pipeline': 'The template you picked was written for another pipeline.',
-  none: 'No installed template matches this run. Pick one yourself.',
+  closest: 'No version exists for the run’s version; the closest one is used.',
+  'other-version': 'The pipeline version you picked was written for another version.',
+  'other-pipeline': 'The pipeline you picked is another pipeline.',
+  none: 'No installed pipeline matches this run. Pick one yourself.',
 };
 
 const Mark: React.FC<{
@@ -107,7 +103,7 @@ const Mark: React.FC<{
   if (status === 'loading') {
     return <Loader size={14} aria-label="Checking" data-testid={testId} />;
   }
-  const meta = STATUS[status];
+  const meta = CHECK_STATUS[status];
   return (
     <Tooltip label={label ?? meta.label} withArrow zIndex={Z_LAYERS.tooltip}>
       <ThemeIcon
@@ -243,10 +239,10 @@ function folderCheck(
     status = 'warn';
     parts.push(`Runs of more than one pipeline or version: ${identities.join(', ')}`);
   }
-  const runs = report?.detected_runs.length || runInfo?.runs_scanned || 0;
-  if (runs > 1 || (report?.detected_runs.length ?? 0) > 0) {
-    parts.push(`${plural(runs, 'run')}, read together`);
-  }
+  const named = report?.runs ?? [];
+  const runs = named.length || report?.detected_runs.length || runInfo?.runs_scanned || 0;
+  // "Read together" only says something of two or more.
+  if (runs > 1) parts.push(`${plural(runs, 'run')}, read together`);
   if (listingCut || report?.truncated) {
     status = 'warn';
     parts.push('the listing stopped early, so every count is a minimum');
@@ -254,6 +250,22 @@ function folderCheck(
   if (parts.length === 0) return { status, text: 'One run, listed in full' };
   const text = parts.join(' · ');
   return { status, text: text.charAt(0).toUpperCase() + text.slice(1) };
+}
+
+/** Several runs: does any MultiQC sample appear in two of them? Null for one. */
+function samplesCheck(report: FromRunReport | null): { status: CheckStatus; text: string } | null {
+  if (!report || (report.runs?.length ?? 0) < 2) return null;
+  const shared = report.shared_samples ?? [];
+  if (shared.length === 0) return { status: 'ok', text: 'No MultiQC sample in more than one run' };
+  const text = shared
+    .map((entry) => {
+      const more = entry.count - entry.samples.length;
+      return `${plural(entry.count, 'sample')} in ${entry.runs.join(' and ')}: ${entry.samples.join(', ')}${
+        more > 0 ? ` and ${more} more` : ''
+      }`;
+    })
+    .join(' · ');
+  return { status: 'fail', text: `${text}. One collection would merge them` };
 }
 
 const baseName = (location: string) => location.replace(/\/+$/, '').split('/').pop() || location;
@@ -279,13 +291,14 @@ function collectionsCheck(report: FromRunReport): { status: CheckStatus; text: s
   const missing = groups.missing.length;
   const optional = groups.optional.length;
   if (ready + missing + optional === 0) {
-    return { status: 'unknown', text: 'The template looks for no collection here' };
+    return { status: 'unknown', text: 'Depictio looks for no collection here' };
   }
   const parts = [`${ready} found`];
-  if (missing > 0) parts.push(`${missing} not found`);
-  if (optional > 0) parts.push(`${optional} optional absent`);
+  if (missing > 0) parts.push(`${missing} empty for now`);
+  if (optional > 0) parts.push(`${optional} optional not in this run`);
+  // A collection without files stays empty, it does not fail the project.
   let status: CheckStatus = 'ok';
-  if (missing > 0) status = ready === 0 ? 'fail' : 'warn';
+  if (missing > 0) status = ready === 0 ? 'warn' : 'info';
   return { status, text: parts.join(' · ') };
 }
 
@@ -398,7 +411,9 @@ export const RunChecks: React.FC<RunChecksProps> = ({
   const inputFiles = report?.input_files ?? [];
   const inputs = report && inputFiles.length > 0 ? inputsCheck(inputFiles) : null;
   const collections = report ? collectionsCheck(report) : null;
+  const samples = samplesCheck(report);
   const runs = report?.detected_runs ?? [];
+  const readRuns = report?.runs ?? [];
 
   return (
     <RunFileScope dataRoot={report?.data_root ?? location} storage={storage}>
@@ -447,7 +462,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                   )}
                   {templateId ? (
                     <Dim>
-                      {pipelineAgreement === 'conflict' ? `template ${templatePipeline}: ` : 'read with '}
+                      {pipelineAgreement === 'conflict' ? `chosen ${templatePipeline}: ` : 'read with '}
                       <Text
                         span
                         size="sm"
@@ -460,7 +475,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                       </Text>
                     </Dim>
                   ) : (
-                    <Dim testId={`${p}-template`}>no template chosen yet</Dim>
+                    <Dim testId={`${p}-template`}>no pipeline chosen yet</Dim>
                   )}
                 </Group>
               </Check>
@@ -480,7 +495,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                         <Text span size="sm" ff="monospace" data-testid={`${p}-version`}>
                           {formatVersion(run?.version as string)}
                         </Text>
-                        <Dim>the version the template was written for</Dim>
+                        <Dim>the version Depictio's definition was written for</Dim>
                       </>
                     ) : (
                       <>
@@ -490,7 +505,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                         </Text>
                         {templateId && (
                           <>
-                            <Dim>· template</Dim>
+                            <Dim>· chosen</Dim>
                             <Text span size="sm" ff="monospace" data-testid={`${p}-template-version`}>
                               {templateVersion ? formatVersion(templateVersion) : 'single version'}
                             </Text>
@@ -511,7 +526,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                 check="engine"
                 label="Engine"
                 status={AGREEMENT_STATUS[engineAgreement]}
-                statusLabel={engineAgreement === 'unknown' ? 'The template does not say' : undefined}
+                statusLabel={engineAgreement === 'unknown' ? 'Not stated' : undefined}
                 testIdPrefix={p}
                 markTestId={`${p}-engine-agreement`}
                 agreementValue={engineAgreement}
@@ -530,7 +545,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                   )}
                   {templateEngine && engineAgreement !== 'same' && (
                     <Dim>
-                      · template written for{' '}
+                      · written for{' '}
                       <Text span size="sm" c="dimmed" data-testid={`${p}-template-engine`}>
                         {engineLabel(templateEngine)}
                       </Text>
@@ -568,15 +583,38 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                   testIdPrefix={p}
                   details={
                     runs.length > 0 ? (
-                      <Group gap={6} wrap="wrap" data-testid={`${p}-detected-runs`}>
-                        {runs.map((name) => (
-                          <Code key={name}>{name}</Code>
-                        ))}
-                      </Group>
+                      <Stack gap={6}>
+                        <Group gap={6} wrap="wrap" data-testid={`${p}-detected-runs`}>
+                          {runs.map((name) => (
+                            <Code key={name}>{name}</Code>
+                          ))}
+                        </Group>
+                        {readRuns.length > 1 && (
+                          <Text size="xs" c="dimmed">
+                            Every run goes into this one project, in one ingestion. A collection read
+                            from a single file (a samplesheet, a metadata table) comes from{' '}
+                            {readRuns[0]}.
+                          </Text>
+                        )}
+                      </Stack>
                     ) : undefined
                   }
                 >
-                  <Text size="sm">{folder?.text ?? 'Reading the folder...'}</Text>
+                  <Stack gap={2}>
+                    <Text size="sm" style={{ wordBreak: 'break-word' }}>
+                      {folder?.text ?? 'Reading the folder...'}
+                    </Text>
+                    {/* The runs read, on a line of their own: a long list stays one line. */}
+                    {readRuns.length > 1 && <RunNames names={readRuns} />}
+                  </Stack>
+                </Check>
+              )}
+
+              {samples && (
+                <Check check="samples" label="Samples" status={samples.status} testIdPrefix={p}>
+                  <Text size="sm" style={{ wordBreak: 'break-word' }} data-testid={`${p}-shared-samples`}>
+                    {samples.text}
+                  </Text>
                 </Check>
               )}
 
@@ -617,7 +655,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                     </Text>
                   ) : (
                     <Text size="sm" data-testid={`${p}-findings-summary`}>
-                      {collections?.text ?? 'Previewing the folder with the template...'}
+                      {collections?.text ?? 'Previewing the folder...'}
                     </Text>
                   )}
                 </Check>

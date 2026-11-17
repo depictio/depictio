@@ -49,6 +49,13 @@ export interface ZoomGateOptions {
    * figure that cannot zoom. Defaults to always.
    */
   canZoom?: (touch: boolean) => boolean;
+  /**
+   * The hover hint shows on this figure's first hover of every page load,
+   * even when another figure had it already or the zoom is learned, and
+   * stays `visibleMs`. For a figure whose gestures a reader must learn (a
+   * genome axis, a genome browser).
+   */
+  ownHint?: { visibleMs?: number; extra?: string };
 }
 
 /** Fade length; keep in step with zoomGate.css. */
@@ -67,6 +74,8 @@ function hintState(): ZoomHintState {
 }
 
 let hintEl: HTMLElement | null = null;
+/** The figure the visible hint is centred on, so a scroll can move the hint with it. */
+let hintTarget: Element | null = null;
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 let clearTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -98,31 +107,52 @@ function dismissHint(): void {
   const el = hintEl;
   if (!el || !el.hasAttribute('data-visible')) return;
   el.removeAttribute('data-visible');
+  hintTarget = null;
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {
     if (!el.hasAttribute('data-visible')) el.textContent = '';
   }, FADE_MS + 40);
 }
 
-function showHint(target: Element, touch: boolean): void {
-  const el = hintElement();
-  if (!el) return;
-  const at = visibleCenter(target.getBoundingClientRect(), {
+/** Centres the visible hint on the visible part of its figure; hides it once the figure is out of view. */
+function placeHint(): void {
+  const el = hintEl;
+  if (!el || !hintTarget) return;
+  const at = visibleCenter(hintTarget.getBoundingClientRect(), {
     width: window.innerWidth,
     height: window.innerHeight,
   });
-  if (!at) return;
-  clearTimeout(clearTimer);
-  clearTimeout(hideTimer);
+  if (!at) {
+    dismissHint();
+    return;
+  }
   el.style.left = `${at.x}px`;
   el.style.top = `${at.y}px`;
-  el.textContent = zoomHintText(touch);
+}
+
+function showHint(target: Element, touch: boolean, visibleMs = ZOOM_HINT_VISIBLE_MS, extra?: string): void {
+  const el = hintElement();
+  if (!el) return;
+  hintTarget = target;
+  placeHint();
+  if (!hintTarget) return;
+  clearTimeout(clearTimer);
+  clearTimeout(hideTimer);
+  el.textContent = extra ? `${zoomHintText(touch)} \u00b7 ${extra}` : zoomHintText(touch);
   // Flush the idle (transparent) style first, or a hint that was just added to
   // the page appears without fading in.
   void el.offsetWidth;
   el.setAttribute('data-visible', '');
   lastShownAt = Date.now();
-  hideTimer = setTimeout(dismissHint, ZOOM_HINT_VISIBLE_MS);
+  hideTimer = setTimeout(dismissHint, visibleMs);
+}
+
+// The hint is fixed to the viewport, so a page scroll (the very gesture that
+// raises it) would leave it behind while its figure moves on. Scrolling in
+// any container is caught in the capture phase, as scroll does not bubble.
+if (typeof window !== 'undefined') {
+  window.addEventListener('scroll', placeHint, { capture: true, passive: true });
+  window.addEventListener('resize', placeHint, { passive: true });
 }
 
 function insideSelector(target: EventTarget | null, selector: string | undefined): boolean {
@@ -133,7 +163,13 @@ function insideSelector(target: EventTarget | null, selector: string | undefined
 /** Mounts the gate on `el`; returns the function that removes it. */
 export function attachZoomGate(el: HTMLElement, options: ZoomGateOptions = {}): () => void {
   if (typeof el.addEventListener !== 'function') return () => {};
-  const { passThrough, block = true, canZoom } = options;
+  const { passThrough, block = true, canZoom, ownHint } = options;
+  // With `ownHint`, this figure keeps its own "hover hint shown" flag and
+  // shows it on every page load, as its gestures (drag, pan) are its own.
+  let shownHere = false;
+  const state = (): ZoomHintState =>
+    ownHint ? { ...hintState(), learned: false, hoverShown: shownHere } : hintState();
+  const show = (touch: boolean) => showHint(el, touch, ownHint?.visibleMs, ownHint?.extra);
   const zooms = (touch: boolean) => !canZoom || canZoom(touch);
   let dwell: ReturnType<typeof setTimeout> | undefined;
   // Since when the pointer rests on the figure; null while it is elsewhere.
@@ -151,21 +187,20 @@ export function attachZoomGate(el: HTMLElement, options: ZoomGateOptions = {}): 
     if (verdict === 'block' && block) e.stopPropagation();
     const now = Date.now();
     const rested = restingSince === null ? 0 : now - restingSince;
-    if (shouldShowZoomHint('wheel', hintState(), now, rested) && zooms(false)) {
-      showHint(el, false);
-    }
+    if (shouldShowZoomHint('wheel', state(), now, rested) && zooms(false)) show(false);
   };
 
   const onEnter = (e: PointerEvent) => {
     const touch = e.pointerType === 'touch';
     restingSince = Date.now();
-    if (!shouldShowZoomHint('hover', hintState(), restingSince) || !zooms(touch)) return;
+    if (!shouldShowZoomHint('hover', state(), restingSince) || !zooms(touch)) return;
     hintElement();
     clearTimeout(dwell);
     dwell = setTimeout(() => {
-      if (!shouldShowZoomHint('hover', hintState(), Date.now()) || !zooms(touch)) return;
+      if (!shouldShowZoomHint('hover', state(), Date.now()) || !zooms(touch)) return;
       hoverShown = true;
-      showHint(el, touch);
+      shownHere = true;
+      show(touch);
     }, zoomHintDelayMs(touch));
   };
   const onMove = () => {

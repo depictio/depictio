@@ -1,0 +1,17 @@
+# CheckV: completeness and contamination of viral genomes and genome
+# fragments, from a database of complete viral genomes and of viral and
+# microbial protein families.
+id: checkv
+name: CheckV
+version: "1.0.0"
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/checkv/endtoend
+homepage: https://bitbucket.org/berkeleylab/checkv
+biotools_url: https://bio.tools/checkv # from nf-core meta.yml identifier
+description: >-
+  Assesses the quality of single-contig viral genomes: completeness against
+  complete reference genomes, host contamination at the edges of proviruses,
+  and the MIUViG quality tier.
+edam_topics:
+  - http://edamontology.org/topic_0781 # Virology
+  - http://edamontology.org/topic_3174 # Metagenomics
+stage: qc

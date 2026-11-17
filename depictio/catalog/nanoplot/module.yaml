@@ -7,6 +7,7 @@
 # or plot the ladder. The two outputs here read the file itself.
 id: nanoplot
 name: NanoPlot
+version: "1.0.0"
 description: >-
   Quality control for long-read sequencing: read length, read quality and
   yield summaries computed from a FASTQ, a sequencing summary or an alignment.

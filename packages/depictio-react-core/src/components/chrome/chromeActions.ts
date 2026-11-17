@@ -38,9 +38,11 @@ export function actionsFor(componentType: string): ChromeAction[] {
       // The Settings + Show-data ActionIcons are injected via extraActions
       // from ComponentRenderer's advanced_viz dispatch.
       return ['metadata', 'fullscreen', 'reset'];
+    case 'jbrowse':
+      // Header / overview / status toggles arrive through extraActions.
+      return ['metadata', 'fullscreen', 'reset'];
     case 'card':
     case 'image':
-    case 'jbrowse':
       return ['metadata'];
     case 'text':
       return ['metadata'];

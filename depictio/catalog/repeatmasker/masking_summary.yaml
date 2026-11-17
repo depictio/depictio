@@ -1,0 +1,22 @@
+id: repeatmasker_masking_summary
+name: Masking summary per assembly
+mode: tbl/summary
+description: >-
+  One row per assembly from the header of RepeatMasker's summary table:
+  sequences, length with and without runs of N, GC and the bases masked, with
+  the interspersed, retroelement, DNA transposon, unclassified and simple
+  repeat shares. A large unclassified share is a library that could not name
+  the repeats; a masked share far from the genome's relatives is a library
+  that missed them or a de novo one that over-called.
+find:
+  path_glob: "**/*.tbl"
+recipe: repeatmasker/masking_summary.py
+fixture: masking_summary.tsv
+renders_as:
+  - { id: masked_share, component: card, column: masked_pct, aggregation: median,
+      secondary_layout: gauge, coverage_max: 100 }
+  - { id: interspersed_share, component: card, column: interspersed_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: masked_vs_length, component: advanced_viz, kind: scatter_xy,
+      roles: {x: total_length, y: masked_pct, label: genome, size: masked_bp} }
+  - { component: table }

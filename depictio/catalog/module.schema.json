@@ -10,6 +10,12 @@
       "title": "Name",
       "type": "string"
     },
+    "version": {
+      "default": "1.0.0",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    },
     "description": {
       "default": "",
       "title": "Description",

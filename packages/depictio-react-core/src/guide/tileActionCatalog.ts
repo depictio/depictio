@@ -172,14 +172,18 @@ export function rowActionsFor(
   if (inspector) out.push(action('inspect', 'With the inspector on'));
   if (embed) out.push(action('export', 'With the export API on'));
   out.push(action('catalog', 'Tiles added from the tools catalog'));
-  // An advanced view prints its description under its title; only the minimal
-  // style's header, which shows the short subtitle there, leaves it to the icon.
+  // A figure, table or advanced view with a title carries its description as a
+  // subtitle and an info icon beside the title (ComponentInfo); the toolbar
+  // icon covers the rest, and the minimal style, whose header shows the short
+  // subtitle field instead.
   out.push(
     action(
       'description',
       type === 'advanced_viz'
         ? 'In the minimal style, when the author wrote one'
-        : 'When the author wrote one',
+        : type === 'figure' || type === 'table'
+          ? 'When the author wrote one and the tile has no title row'
+          : 'When the author wrote one',
     ),
   );
   for (const key of actionsFor(type)) {

@@ -3,6 +3,7 @@ import { ActionIcon, Badge, Button, Indicator, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useMediaQuery } from '@mantine/hooks';
 
+import { Z_LAYERS } from '../zLayers';
 import { ChromeGroupContext } from './ChromeButtonGroup';
 import { useChromeStyle, useChromeTones } from './chromeStyle';
 import type { ChromeIconName, ChromeRole } from './chromeStyle';
@@ -200,7 +201,15 @@ export const ChromeButton = React.forwardRef<HTMLButtonElement, ChromeButtonProp
 
     if (!tip || ownTip) return control;
     return (
-      <Tooltip label={tip} withArrow openDelay={300} events={{ hover: true, focus: true, touch: false }}>
+      <Tooltip
+        label={tip}
+        withArrow
+        openDelay={300}
+        events={{ hover: true, focus: true, touch: false }}
+        // Header buttons sit beside popovers (What's new, notifications) raised
+        // to this layer: at Mantine's default 300 the tooltip went under them.
+        zIndex={Z_LAYERS.tooltip}
+      >
         {control}
       </Tooltip>
     );

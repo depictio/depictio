@@ -197,6 +197,8 @@ def _dataset_of_dashboard(name: str) -> str:
         return "viralrecon"
     if name.startswith("catalog_conformance"):
         return "catalog_conformance"
+    if name.startswith("genome_tracks"):
+        return "genome_tracks_examples"
     return name
 
 
@@ -239,6 +241,7 @@ async def create_initial_dashboards(
             "advanced_viz_showcase",
             "viralrecon",
             "catalog_conformance",
+            "genome_tracks_examples",
         )
     }
 
@@ -442,16 +445,36 @@ async def create_initial_dashboards(
                 "transcript_structure",
                 "cnv_profile",
                 "genome_chord",
+                "ideogram",
                 "record_card",
                 "parallel_coordinates",
+                "ranked_distribution",
                 "locus_section",
                 "protein_structure",
                 "protein_families",
                 "protein_quality",
+                "spatial_cells",
+                "allele_grid",
+                "pedigree",
+                "ranked_table",
                 "benchmark_pr",
                 "benchmark_confusion",
                 "benchmark_ci",
             )
+        ),
+        # Genome tracks showcase: Strand-seq (main tab) + SARS-CoV-2.
+        *(
+            {
+                "name": f"genome_tracks_{slug}",
+                "json_path": os.path.join(
+                    projects_base,
+                    rel_paths["genome_tracks_examples"],
+                    ".db_seeds",
+                    f"dashboard_{slug}.json",
+                ),
+                "static_dc_id": None,
+            }
+            for slug in ("strandseq", "sarscov2")
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted
         # from a local CLI ingest of viralrecon test_illumina output — see
@@ -478,6 +501,8 @@ async def create_initial_dashboards(
                 "coverage_depth",
                 "lineage_clustering",
                 "variants",
+                "gene",
+                "sample",
                 "sample_qc",
             )
         ),
@@ -754,7 +779,9 @@ def _ensure_ampliseq_base_project(admin_user: UserBeanie) -> None:
         "project_type": "basic",
         "registration_time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     }
-    projects_collection.insert_one(doc)
+    from depictio.api.v1.endpoints.projects_endpoints.provenance import stamp_new_project
+
+    projects_collection.insert_one(stamp_new_project(doc))
     logger.info(f"Created ampliseq-base shell project with id {base_project_id}")
 
 
@@ -803,18 +830,18 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
                     admin_email,
                 )
             elif settings.auth.is_password_login_disabled and admin_email:
-                # Google OAuth is the only door in, so this admin's password
+                # SSO (an OIDC provider) is the only door in, so this admin's password
                 # can never be used to reach it: /auth/login refuses every
                 # attempt. Requiring one anyway would make an operator invent a
                 # secret whose only job is to be unusable. The email is still
-                # required — it is what the OAuth login matches the admin on
-                # (`create_or_get_user` looks the account up by email), so
-                # setting it to your own Google address is what makes you the
+                # required — it is what the SSO login matches the admin on
+                # (`create_or_get_sso_user` looks the account up by email), so
+                # setting it to your own SSO address is what makes you the
                 # admin without any seeded local account.
                 admin_password = secrets.token_urlsafe(32)
                 logger.info(
                     "Password sign-in disabled: seeding admin '%s' with an unusable "
-                    "random password; sign in to it with Google",
+                    "random password; sign in to it with SSO",
                     admin_email,
                 )
             else:
@@ -823,7 +850,7 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
                     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD are not set. Set both env vars (via a "
                     "Kubernetes Secret in production) so the first-boot admin can be created. "
                     "With DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED=true, the email alone is "
-                    "enough: set it to the Google address that should own the instance."
+                    "enough: set it to the SSO email address that should own the instance."
                 )
 
         logger.info(
@@ -959,9 +986,10 @@ async def initialize_db() -> UserBeanie | None:
     logger.info("Running initial database setup...")
 
     # Indexes come after the (optional) wipe: dropping the database drops them.
-    from depictio.api.v1.db import ensure_project_storage_indexes
+    from depictio.api.v1.db import ensure_migration_indexes, ensure_project_storage_indexes
 
     ensure_project_storage_indexes()
+    ensure_migration_indexes()
 
     # ── Groups (idempotent; non-credential bootstrap) ────────────────────────
     for group_config in (

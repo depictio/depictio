@@ -8,6 +8,7 @@
 # module to derive identity from, the same documented exception as mhcquant.
 id: proteinfold
 name: nf-core/proteinfold
+version: "1.0.0"
 description: >-
   Protein structure prediction summaries of nf-core/proteinfold: per-residue
   confidence of every top-ranked structure, per-model confidence scores (pLDDT,

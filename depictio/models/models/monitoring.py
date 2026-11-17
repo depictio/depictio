@@ -74,6 +74,9 @@ class TaskEvent(BaseModel):
     #: hunting through every task.
     run_id: Optional[str] = Field(default=None, description="Ingestion run this task belongs to")
     project_id: Optional[str] = Field(default=None, description="Project id if applicable")
+    user_id: Optional[str] = Field(
+        default=None, description="Id of the user who queued the task, when its payload names one"
+    )
     queue: Optional[str] = Field(default=None, description="Queue the task ran on")
     worker: Optional[str] = Field(default=None, description="Worker hostname that ran the task")
     started_at: Optional[datetime] = Field(default=None, description="When the task began running")
@@ -113,6 +116,13 @@ class IngestionStep(BaseModel):
         description=(
             "A refresh scan leader's scan outcomes, by data collection id: None for a "
             "scan that succeeded, else its failure message"
+        ),
+    )
+    inputs_signature: Optional[str] = Field(
+        default=None,
+        description=(
+            "A refreshed data collection's files and configuration as it was ingested: "
+            "the next refresh leaves the collection alone when they are the same"
         ),
     )
 
@@ -261,6 +271,11 @@ class IngestionRun(BaseModel):
     )
     data_collections: list[IngestionDataCollection] = Field(
         default_factory=list, description="Per-DC summary + local scan paths for this run"
+    )
+    run_tags: list[str] = Field(
+        default_factory=list,
+        description="Run tags (run folders) this ingestion brought in, e.g. the new runs of "
+        "an attach_run. Empty when the invocation is not tied to specific runs.",
     )
     status: IngestionStatus = Field(default="running", description="Overall run status")
     steps: list[IngestionStep] = Field(default_factory=list, description="Per-step tally")

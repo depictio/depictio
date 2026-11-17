@@ -5,6 +5,7 @@
 # each ss2 file after the sequence id, so the file name is the protein.
 id: s4pred
 name: S4PRED
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/s4pred/runmodel
 homepage: https://github.com/psipred/s4pred
 biotools_url: null  # no bio.tools entry for this tool

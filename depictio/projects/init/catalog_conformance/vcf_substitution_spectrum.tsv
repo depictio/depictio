@@ -1,0 +1,13 @@
+sample	caller	callset	substitution_class	mutation_class	count	fraction
+GM12878_REP1	haplotypecaller	GM12878_REP1 · haplotypecaller	C to A	transversion	2294	0.0689
+GM12878_REP1	haplotypecaller	GM12878_REP1 · haplotypecaller	C to G	transversion	3031	0.09103
+GM12878_REP1	haplotypecaller	GM12878_REP1 · haplotypecaller	C to T	transition	11302	0.33945
+GM12878_REP1	haplotypecaller	GM12878_REP1 · haplotypecaller	T to A	transversion	1454	0.04367
+GM12878_REP1	haplotypecaller	GM12878_REP1 · haplotypecaller	T to C	transition	13049	0.39192
+GM12878_REP1	haplotypecaller	GM12878_REP1 · haplotypecaller	T to G	transversion	2165	0.06502
+H1_REP1	haplotypecaller	H1_REP1 · haplotypecaller	C to A	transversion	3399	0.07165
+H1_REP1	haplotypecaller	H1_REP1 · haplotypecaller	C to G	transversion	4303	0.09071
+H1_REP1	haplotypecaller	H1_REP1 · haplotypecaller	C to T	transition	15672	0.33036
+H1_REP1	haplotypecaller	H1_REP1 · haplotypecaller	T to A	transversion	2621	0.05525
+H1_REP1	haplotypecaller	H1_REP1 · haplotypecaller	T to C	transition	18012	0.37969
+H1_REP1	haplotypecaller	H1_REP1 · haplotypecaller	T to G	transversion	3432	0.07235

@@ -14,10 +14,17 @@
 // is enough — no manual step. Names that cannot be resolved are reported loudly
 // rather than silently shipping a blank icon.
 
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getIcons } from '@iconify/utils';
+import {
+  COLLECTIONS,
+  DATA_ICON_LITERAL,
+  SCAN_DATA_EXTENSIONS,
+  loadCollection,
+  walk as walkTree,
+} from './icon-scan.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VIEWER = join(HERE, '..');
@@ -52,32 +59,8 @@ const SCAN_FILES = [
 // itself is what makes "add a tile, pick an icon, ship it" work without also
 // remembering to mirror the id into a TS list.
 const SCAN_DATA_DIRS = [join(REPO, 'depictio/projects')];
-const SCAN_DATA_EXTENSIONS = new Set(['.yaml', '.yml', '.json']);
-
-// `<slot>: <icon>` in YAML or JSON, quoted or not. A separate matcher from
-// ICON_LITERAL because YAML writes `icon: mdi:table` bare, and matching every
-// bare `a:b` in arbitrary data would sweep up tags, paths and timestamps.
-const DATA_ICON_LITERAL =
-  /["']?(?:icon|tab_icon|icon_name)["']?\s*:\s*["']?([a-z][a-z0-9]*(?:-[a-z0-9]+)*:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)["']?/g;
 
 const OUT_FILE = join(VIEWER, 'src/generated/iconSubset.ts');
-
-// Collections installed as devDependencies. A prefix outside this list is
-// reported rather than bundled — add the matching @iconify-json package.
-const COLLECTIONS = [
-  'mdi',
-  'tabler',
-  'material-symbols',
-  'ph',
-  'bx',
-  'bi',
-  'simple-icons',
-  'octicon',
-  'mingcute',
-  'ic',
-  'carbon',
-  'formkit',
-];
 
 // `prefix:name`, both lowercase kebab. Matches icon literals wherever they are
 // written: a JSX prop, a lookup table, a ternary. Deliberately broad — anything
@@ -85,23 +68,7 @@ const COLLECTIONS = [
 // what keeps unrelated literals like `group:foo` out of the output.
 const ICON_LITERAL = /['"`]([a-z][a-z0-9]*(?:-[a-z0-9]+)*:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)['"`]/g;
 
-async function* walk(dir, extensions = SCAN_EXTENSIONS) {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return; // tree absent (e.g. a package not checked out) — nothing to scan
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === 'generated') continue;
-      yield* walk(full, extensions);
-    } else if (extensions.has(entry.name.slice(entry.name.lastIndexOf('.')))) {
-      yield full;
-    }
-  }
-}
+const walk = (dir, extensions = SCAN_EXTENSIONS) => walkTree(dir, extensions);
 
 // True when the literal sits directly behind an `icon` prop or property, as in
 // `icon="mdi:x"`, `icon={'mdi:x'}` or `icon: 'mdi:x'`. Used only to decide
@@ -157,11 +124,6 @@ async function collectUsedNames() {
     for await (const file of walk(dir, SCAN_DATA_EXTENSIONS)) await scanData(file);
   }
   return found;
-}
-
-async function loadCollection(prefix) {
-  const path = new URL(`../node_modules/@iconify-json/${prefix}/icons.json`, import.meta.url);
-  return JSON.parse(await readFile(path, 'utf8'));
 }
 
 const used = await collectUsedNames();

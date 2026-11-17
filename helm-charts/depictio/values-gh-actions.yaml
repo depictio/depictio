@@ -18,6 +18,12 @@ storageClass: "standard"
 
 # Test environment resource settings
 mongo:
+  # Same image and tag as values.yaml (mongo:8.0.5, same digest), pulled from
+  # Google's public Docker Hub mirror: an anonymous Docker Hub pull on a shared
+  # runner can hit the rate limit and leave mongo-0 in ImagePullBackOff.
+  # CI only; deployments keep pulling from Docker Hub.
+  image:
+    repository: mirror.gcr.io/library/mongo
   resources:
     requests:
       memory: "256Mi"

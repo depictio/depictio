@@ -1,0 +1,23 @@
+id: mcquant_segmenter_agreement
+name: Segmenter agreement
+mode: imaging/segmentation
+description: >-
+  For an image segmented by several methods (one MCQUANT table each), one row
+  per image, method and other method: the cells of each, their ratio, and the
+  share of the method's cells whose area (as a disc) holds the centroid of a
+  cell of the other method, with the median number held. A nuclear method
+  against a whole-cell one reads asymmetric by design. Needs two methods on an
+  image.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/segmenter_agreement.py
+fixture: segmenter_agreement.tsv
+renders_as:
+  - id: agreement_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs: { x: sample, y: matched_share, color: pair, barmode: group }
+  - { id: agreement_card, component: card, column: matched_share, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }
+  - { component: card, column: count_ratio, aggregation: max, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }
+  - { component: interactive, interactive_type: MultiSelect, column_name: pair }
+  - { component: table, row_selection_enabled: true, row_selection_column: pair_key }

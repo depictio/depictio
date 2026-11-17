@@ -31,6 +31,8 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "profile": ("selection_column", "series_col"),
     "scatter_xy": ("selection_column", "label_col"),
     "genome_chord": ("selection_column", "label_col"),
+    # A feature (its box or its lollipop): its id, which the other tiles join on.
+    "ranked_distribution": ("selection_column", "feature_id_col", "=feature_id"),
     # Protein kinds (lot 3). A picked residue is a position (the entity half
     # travels in the `residue_selection` filter pair); an MSA row is a sequence.
     # The trailing literal is the model default, used when the field is unset.
@@ -51,6 +53,15 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "domain_architecture": ("selection_column", "label_col", "=label"),
     "pae_matrix": ("position_col", "=position"),
     "ramachandran": ("position_col", "=position"),
+    # A lassoed cell is its id. Opt-in, like the other scatter kinds.
+    "spatial_cells": ("selection_column", "cell_id_col", "=cell_id"),
+    # An allele half picks the allele (a sample label picks the sample, on the
+    # same filter key). Opt-in, like the other non-protein kinds.
+    "allele_grid": ("selection_column", "allele_col", "=allele"),
+    # A symbol is one individual, which is what a sample-keyed table joins on.
+    "pedigree": ("selection_column", "individual_col", "=individual"),
+    # A row is one candidate: its key when it has one (a variant id), else its title.
+    "ranked_table": ("selection_column", "title_col", "=title"),
 }
 
 # Kinds whose pick reaches a record card as a `residue_selection` pair (an
@@ -178,6 +189,10 @@ def emitted_selection_column(
         if comp.get("selection_enabled") and comp.get("selection_column"):
             return str(comp["selection_column"])
         return None
+    if ctype == "jbrowse":
+        if comp.get("selection_enabled") and comp.get("selection_column"):
+            return str(comp["selection_column"])
+        return None
     if ctype == "advanced_viz":
         cfg = config if config is not None else _config(comp)
         kind = str(cfg.get("viz_kind") or viz_kind_of(comp))
@@ -225,7 +240,7 @@ def linked_component_problems(
             problems.append(
                 f"[{label}] linked_component '{source_label}' emits no selection "
                 "(a table needs row_selection_enabled + row_selection_column, a "
-                "figure or map selection_enabled + selection_column, an "
+                "figure, map or jbrowse selection_enabled + selection_column, an "
                 f"advanced_viz one of {sorted(SELECTION_EMITTING_KINDS)} with "
                 "selection_enabled)"
             )

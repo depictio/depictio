@@ -349,7 +349,7 @@ class TestTypeScriptParity:
         assert labels == sorted(self.TS_TOP_LABELS)
 
 
-# --- stacked_taxonomy -------------------------------------------------------
+# --- stacked_bar -------------------------------------------------------
 
 TAXONOMY_CONFIG = {
     "sample_id_col": "sample",
@@ -374,39 +374,39 @@ def _series(spec: dict) -> dict[str, list[float]]:
     return {trace["name"]: trace["y"] for trace in spec["data"]}
 
 
-def test_stacked_taxonomy_filters_to_the_active_rank() -> None:
+def test_stacked_bar_filters_to_the_active_rank() -> None:
     """The phylum row carries abundance 999 and must not reach any trace."""
-    spec = build("stacked_taxonomy", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
+    spec = build("stacked_bar", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
     assert "Ignored" not in _series(spec)
     assert max(max(ys) for ys in _series(spec).values()) < 999
 
 
-def test_stacked_taxonomy_lumps_below_top_n_into_other() -> None:
-    spec = build("stacked_taxonomy", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
+def test_stacked_bar_lumps_below_top_n_into_other() -> None:
+    spec = build("stacked_bar", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
     series = _series(spec)
     assert set(series) == {"Bacteroides", "Prevotella", "Other"}
     # "Rare" totals 1 + 2 across the two samples and is the only lumped taxon.
     assert series["Other"] == [1.0, 2.0]
 
 
-def test_stacked_taxonomy_ranks_top_n_globally_not_per_sample() -> None:
+def test_stacked_bar_ranks_top_n_globally_not_per_sample() -> None:
     """Prevotella loses sample s1 but wins overall, so it must survive top-N."""
-    spec = build("stacked_taxonomy", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
+    spec = build("stacked_bar", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
     assert "Prevotella" in _series(spec)
 
 
-def test_stacked_taxonomy_normalise_locks_the_axis_to_percent() -> None:
+def test_stacked_bar_normalise_locks_the_axis_to_percent() -> None:
     """Without the explicit range the toggle is invisible on pre-normalised data."""
     config = {**TAXONOMY_CONFIG, "normalise_to_one": True}
-    spec = build("stacked_taxonomy", config=config, rows=TAXONOMY_ROWS, theme="light")
+    spec = build("stacked_bar", config=config, rows=TAXONOMY_ROWS, theme="light")
     assert spec["layout"]["yaxis"]["range"] == [0, 1]
     assert spec["layout"]["yaxis"]["tickformat"] == ".0%"
     for values in _series(spec).values():
         assert all(0.0 <= v <= 1.0 for v in values)
 
 
-def test_stacked_taxonomy_is_a_stacked_bar_chart() -> None:
-    spec = build("stacked_taxonomy", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
+def test_stacked_bar_is_a_stacked_bar_chart() -> None:
+    spec = build("stacked_bar", config=TAXONOMY_CONFIG, rows=TAXONOMY_ROWS, theme="light")
     assert spec["layout"]["barmode"] == "stack"
     assert {trace["type"] for trace in spec["data"]} == {"bar"}
 

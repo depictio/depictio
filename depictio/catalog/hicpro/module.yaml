@@ -4,6 +4,7 @@
 # the pipeline-local source lives in `source_url`.
 id: hicpro
 name: HiC-Pro
+version: "1.0.0"
 description: >-
   Maps, pairs and filters Hi-C reads down to valid 3C products, then splits the
   survivors into cis and trans contacts. Its `stats/` directory is the run's

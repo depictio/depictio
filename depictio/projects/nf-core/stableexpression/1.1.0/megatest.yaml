@@ -1,0 +1,99 @@
+# Megatest manifest for nf-core/stableexpression 1.1.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline stableexpression --version 1.1.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to the prefix root (run_root is empty) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# WHY THIS PREFIX AND NOT THE 1.1.0 RELEASE TAG
+# ---------------------------------------------
+# `results-d6b1654c4784332cbad71f1d928cc8b75a77272f` is not a release tag sha,
+# so `nfcore_megatest.py` prints a "not the 1.1.0 release sha ... keeping the
+# pin" warning when it fetches. That is expected (same precedent as mag 5.5.0
+# and rnavar 1.3.0). Survey of the bucket (2026-10-19):
+#
+#   * `c4cbf824...` (the 1.1.0 release tag sha, 2026-10-07) is EMPTY: five
+#     pipeline_info/ files and nothing else.
+#   * `f0313431...` (the 1.0.0 release tag sha, 2026-09-22) has no prefix.
+#   * `d6b1654c...` (pinned) is the only other prefix: a complete test_full run
+#     (Homo sapiens, every Expression Atlas experiment of the species), written
+#     2026-07-16, 908 objects / 3.9 GB (the survey's 1802 counts the zero-byte
+#     directory markers). Its software_versions.yml reads
+#     `nf-core/stableexpression: v1.0.0-gd6b1654`, Nextflow 26.04.6: a
+#     development build two months before the 1.0.0 release.
+#
+# HOW THE RUN DIFFERS FROM THE 1.1.0 OUTPUT DOCS
+# ----------------------------------------------
+# (https://nf-co.re/stableexpression/1.1.0/docs/output, checked 2026-10-19)
+#   * No reporting/multiqc_report.html and no reporting/dash_app/: the trace
+#     shows MULTIQC (three attempts) and DASH_APP FAILED, so reporting/ holds
+#     all_genes_summary.csv only. A 1.1.0 run publishes both; the template reads
+#     neither (MultiQC custom content only), so it has no MultiQC tab.
+#   * The docs name the ID mapping directory `idmapping/`; this run and the
+#     1.1.0 code (subworkflows/local/idmapping, storeDir "${outdir}/id_mapping/")
+#     write `id_mapping/`. Not read by the template.
+#   * statistics/, errors/ and warnings/ are published by the 1.1.0 code but not
+#     described in the docs; the dataset collections read them.
+#   * No annotation/<name>.gff3.gz (only gene_transcript_lengths.csv) and no
+#     accessions/geo/ (fetch_geo_accessions false). Neither is read.
+#   * The parameters (params.json) match the 1.1.0 schema names used here:
+#     nb_sections 10, nb_candidates_per_section 250, stability_score_weights
+#     0.25 x 4, normalisation_method tpm, missing_value_imputer knn.
+#
+# Not fetched on purpose: the per-step dataset matrices under datasets/ (885
+# files, 3.0 GB: 0.downloaded/ to 4.quantile_normalised/, debugging copies the
+# statistics tables summarise), all_counts.imputed.parquet (500 MB; the
+# template draws measured values), id_mapping/, annotation/, accessions/ and
+# the HTML reports. all_counts.parquet is 341 MB and is the one large object.
+pipeline: stableexpression
+version: "1.1.0"
+# s3://nf-core-awsmegatests/stableexpression/results-<results_sha>/ (not the release tag_sha, see above).
+results_sha: "d6b1654c4784332cbad71f1d928cc8b75a77272f"
+run_root: ""
+keys:
+  # Pipeline params, software versions and the trace.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  # Every gene: statistics, sections, candidates' stability measures and scores.
+  - reporting/all_genes_summary.csv
+  # The merged gene x sample matrix (before imputation) and its design.
+  - merged_data/all_counts.parquet
+  - merged_data/whole_design.csv
+  # One design per downloaded dataset: the directory names carry the platform
+  # and normalisation state.
+  - datasets/*/*/*/*.design.csv
+  # Per-dataset ID mapping and filter counts, the ragged per-sample tables and
+  # the renaming failure and warning reasons.
+  - statistics/*.csv
+  - errors/*.tsv
+  - warnings/*.tsv
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/stableexpression/1.1.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/stableexpression/1.1.0 --data-root {dest}
+# Run-specific values the dashboard texts must not quote (lint rule e,
+# test_template_conventions.py): the species, the run's counts, its most
+# stable genes and an accession and cell line of its datasets.
+forbidden_terms:
+  - Homo sapiens
+  - homo_sapiens
+  - human
+  - "4332"
+  - "4330"
+  - "5087"
+  - LINC02353
+  - MT-CO1
+  - ZCCHC17
+  - E-GEOD-10070
+  - MCF10A

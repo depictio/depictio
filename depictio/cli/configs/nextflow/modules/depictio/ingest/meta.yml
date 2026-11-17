@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "depictio_ingest"
+description: Ingest a pipeline's results into a Depictio instance, with the
+  dashboards of the pipeline's bundled template
+keywords:
+  - depictio
+  - dashboard
+  - visualisation
+  - report
+tools:
+  - "depictio":
+      description: "Interactive dashboards for bioinformatics workflow outputs"
+      homepage: "https://github.com/depictio/depictio"
+      documentation: "https://depictio.github.io/depictio-docs/latest/"
+      tool_dev_url: "https://github.com/depictio/depictio"
+      licence: ["MIT"]
+      identifier: ""
+input:
+  - - meta:
+        type: map
+        description: |
+          Groovy Map containing run information, e.g. `[ id:'run1' ]`.
+          `id` names the result file.
+    - files:
+        type: directory
+        description: |
+          The pipeline's results directory, or the files and directories the
+          template reads. Directories are rebuilt as a tree of links, so a
+          template's scan patterns see the published layout.
+        pattern: "*"
+    - relpaths:
+        type: list
+        description: |
+          One path per entry of `files`, relative to the results directory
+          (e.g. `multiqc/multiqc_data`). Empty: a single directory is used as
+          the results directory itself, several files are laid out flat.
+  - template:
+      type: string
+      description: |
+        Bundled template id, e.g. `nf-core/rnaseq/3.26.0` or
+        `nf-core/rnaseq/latest`. Empty: the CLI detects the pipeline from the
+        run's `pipeline_info/` and picks the closest bundled version, unless
+        `project_config` is given.
+  - project_config:
+      type: file
+      description: Project YAML for a pipeline without a bundled template. Pass `[]` to use a template.
+      pattern: "*.{yaml,yml}"
+  - dashboards:
+      type: file
+      description: Dashboard YAMLs to import with the project. Pass `[]` for none.
+      pattern: "*.{yaml,yml}"
+  - cli_config:
+      type: file
+      description: |
+        Pass `[]` (the default) to build an artifact: the task runs a
+        single-user depictio, ingests the run into it, stops it and emits its
+        data directory. A depictio CLI configuration (`CLI.yaml`) instead sends
+        the run to that existing instance, with no artifact; this mode is not
+        the default and may change. `DEPICTIO_CLI_TOKEN` overrides its token.
+      pattern: "*.{yaml,yml}"
+output:
+  artifact:
+    - - meta:
+          type: map
+          description: Groovy Map containing run information
+      - "*_depictio":
+          type: directory
+          description: |
+            A depictio data directory holding the run (MongoDB, object storage,
+            keys). Reopen it with `DEPICTIO_LOCAL_HOME=<dir> depictio local up`.
+            Absent when `cli_config` sends the run to an existing instance.
+          pattern: "*_depictio"
+  result:
+    - - meta:
+          type: map
+          description: Groovy Map containing run information
+      - "*.depictio.json":
+          type: file
+          description: How the ingestion ended (status, project and dashboard ids and links)
+          pattern: "*.depictio.json"
+          ontologies:
+            - edam: "http://edamontology.org/format_3464" # JSON
+  versions:
+    - versions.yml:
+        type: file
+        description: File containing software versions
+        pattern: "versions.yml"
+        ontologies:
+          - edam: "http://edamontology.org/format_3750" # YAML
+authors:
+  - "@weber8thomas"
+maintainers:
+  - "@weber8thomas"

@@ -81,7 +81,8 @@ class UpSetPlot:
     show_values:
         If ``True``, display intersection count labels on top of bars.
     dot_size:
-        Marker size for matrix dots.
+        Marker size for matrix dots. ``None`` picks 18 for up to 4 sets and
+        shrinks toward 12 as the number of sets grows.
     width / height:
         Figure size in pixels.
     """
@@ -109,7 +110,7 @@ class UpSetPlot:
         color_intersections_by: str | None = None,
         degree_colors: dict[int, str] | None = None,
         show_values: bool = False,
-        dot_size: int = 12,
+        dot_size: int | None = None,
         width: int = 900,
         height: int = 700,
     ) -> None:
@@ -131,7 +132,7 @@ class UpSetPlot:
         self.color_intersections_by = color_intersections_by
         self.degree_colors = degree_colors
         self.show_values = show_values
-        self.dot_size = dot_size
+        self.dot_size = dot_size if dot_size is not None else self._default_dot_size(len(self._set_names))
         self.width = width
         self.height = height
 
@@ -142,6 +143,11 @@ class UpSetPlot:
         self._result: IntersectionResult | None = None
         self._set_sizes: dict[str, int] | None = None
         self._materialized_tracks: list[MaterializedTrack] | None = None
+
+    @staticmethod
+    def _default_dot_size(n_sets: int) -> int:
+        """Large dots for a few sets, easing back to 12 as rows get crowded."""
+        return max(12, min(18, 18 - 2 * (n_sets - 4)))
 
     def _normalize_set_colors(self, set_colors: dict[str, str] | list[str] | None) -> dict[str, str] | None:
         """Convert set_colors input to a dict[str, str] or None."""
@@ -475,6 +481,7 @@ class UpSetPlot:
             inactive_color=self.inactive_color,
             set_colors=self._set_colors_map,
             dot_size=self.dot_size,
+            edge_width=max(2.0, round(self.dot_size / 6, 1)),
         )
 
         for trace in matrix_result.traces:
@@ -686,13 +693,20 @@ class UpSetPlot:
             height=self.height,
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="white",
-            margin={"l": 140, "r": 20, "t": top_margin, "b": 20},
+            margin={"l": 90, "r": 10, "t": top_margin, "b": 20},
             font={"family": FONT_FAMILY, "size": 11},
             barmode="stack",
             showlegend=True,
+            # The top-left corner, over the set-size bars, is empty: the legend
+            # sits there instead of taking a column at the right edge or a band
+            # of its own above the plot.
             legend={
+                "x": 0,
+                "y": 1,
+                "xanchor": "left",
+                "yanchor": "top",
                 "font": {"size": 10, "family": FONT_FAMILY},
-                "tracegroupgap": 8,
+                "tracegroupgap": 4,
                 "itemsizing": "constant",
             },
         )

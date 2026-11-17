@@ -10,7 +10,7 @@ import { useMemo } from 'react';
 import type { StoredMetadata } from '../../api';
 import { useAvailableSet } from '../../availableValues';
 import { rankPickOptions } from './alwaysSelected';
-import { orderCategoricalOptions } from './categoricalOptions';
+import { optionOrderOf, orderCategoricalOptions } from './categoricalOptions';
 import { useRankedValues, useUniqueValues } from './useInteractiveData';
 
 export interface ScopeOption {
@@ -26,6 +26,7 @@ export function useScopeOptions(metadata: StoredMetadata): {
     metadata.dc_id,
     metadata.column_name,
     metadata.filter_expr,
+    metadata.order_by,
   );
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
   const { data: ranking, loading: rankLoading } = useRankedValues(
@@ -37,13 +38,13 @@ export function useScopeOptions(metadata: StoredMetadata): {
   const options = useMemo(
     () =>
       rankPickOptions(
-        orderCategoricalOptions(values, availableSet).map((value) => ({
+        orderCategoricalOptions(values, availableSet, optionOrderOf(metadata)).map((value) => ({
           value,
           disabled: availableSet ? !availableSet.has(value) : false,
         })),
         ranking,
       ),
-    [values, availableSet, ranking],
+    [values, availableSet, ranking, metadata],
   );
   return { options, loading: loading || rankLoading };
 }

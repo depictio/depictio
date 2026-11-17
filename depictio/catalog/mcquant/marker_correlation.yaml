@@ -1,0 +1,20 @@
+id: mcquant_marker_correlation
+name: Marker correlation
+mode: imaging/markers
+description: >-
+  Marker by marker Pearson correlation of the cells' asinh intensities, over
+  every cell a segmentation method found in the run: one row per segmenter and
+  marker, one column per marker of the panel. Markers expressed by the same
+  cells correlate; a marker without signal has no correlation. The marker
+  columns are only known at ingest, so a heatmap draws every numeric column.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/marker_correlation.py
+fixture: marker_correlation.tsv
+renders_as:
+  - id: correlation_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: { index: marker_row, row_annotation_cols: [segmenter, marker_role] }
+  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }
+  - { component: table }

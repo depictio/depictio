@@ -76,10 +76,11 @@ backend:
     # NOTE: DEPICTIO_FASTAPI_PUBLIC_URL must be set in environment-specific values files
     # (values-embl-demo.yaml, values-embl-trec-demo.yaml) to match the ingress host
 
-    # NOTE: To enable EMBL SSO (SAML via Keycloak), copy the
-    # DEPICTIO_AUTH_SAML_ENABLED env flag and the top-level `auth:` block from
-    # values-embl-internal-prod.yaml into the environment-specific values file, adjusting
-    # the SP entity ID / ACS host to that environment's API hostname.
+    # NOTE: To enable EMBL SSO (OpenID Connect), copy the top-level `oidc:` block from
+    # values-embl-internal-prod.yaml into the environment-specific values file, set its
+    # redirect URI host to that environment's API hostname
+    # (https://<api-host>/depictio/api/v1/auth/oidc/embl/callback) and supply
+    # secrets.oidcClients.embl in the off-repo secrets file.
 
 
 mongo:

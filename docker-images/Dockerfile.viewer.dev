@@ -20,6 +20,8 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 # Compose bind-mounts only the `src` trees on top at runtime, so deps are
 # never masked — a dependency change means a rebuild, source edits are live.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+# pnpm-workspace.yaml's patchedDependencies point here; the install fails without it.
+COPY patches ./patches/
 COPY packages ./packages/
 COPY depictio/viewer ./depictio/viewer/
 

@@ -21,6 +21,10 @@ i. a persistent (pinned) filter reaches the MultiQC panels: the data collection
    hosting it has an enabled link to the MultiQC collection, unless it is listed
    in ``PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL`` with a reason (latest version of
    each pipeline only).
+j. a ``::: steps`` line that links a tab the import can prune (every collection it
+   reads is ``optional`` or removed by a ``conditional``) cites a ``{{value}}`` from
+   one of that tab's collections, so the line goes with the tab (RULES.md 13). A
+   MultiQC tab is exempt: no value can be computed from a MultiQC collection.
 
 Run ``pytest depictio/tests/models/test_template_conventions.py -rxX`` to see
 which templates still fail which rule, or call ``collect_violations()``.
@@ -374,6 +378,11 @@ PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL: dict[str, dict[str, str]] = {
     "mag": {
         "bin_summary": "bin-level filters (assembler, binner): a bin is not a MultiQC sample",
     },
+    "mcmicro": {
+        "samples": "the report's one section is the prelude's custom-content check matrix, "
+        "whose rows are the checks and whose columns the images: no MultiQC sample is an "
+        "image, so a sample link would empty the panel rather than narrow it",
+    },
     "rnafusion": {
         "fusion_consensus": "fusion-level filters (fusion, caller agreement), not sample-level",
     },
@@ -494,6 +503,73 @@ def check_persistent_filter_allowlist_not_stale(template_id: str) -> list[Violat
     return stale
 
 
+_STEPS_BLOCK = re.compile(r"^:::\s*steps\s*$(.*?)^:::\s*$", re.M | re.S)
+_STEP_ITEM = re.compile(r"^\s*\d+[.)]\s+")
+_TAB_LINK = re.compile(r"\]\(tab:((?:[^()\n]|\([^()\n]*\))+)\)")
+_VALUE_REF = re.compile(r"\{\{\s*([a-z0-9_]+)\s*\}\}")
+
+
+def _prunable_dcs(template: dict[str, Any]) -> set[str]:
+    """Collections an import may lack: ``optional``, or removed by a ``conditional``."""
+    out: set[str] = set()
+    for workflow in template.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            if dc.get("optional") and dc.get("data_collection_tag"):
+                out.add(dc["data_collection_tag"])
+    for cond in (template.get("template") or {}).get("conditional") or []:
+        out.update(cond.get("remove_dc_tags") or [])
+    return out
+
+
+def _multiqc_dcs(template: dict[str, Any]) -> set[str]:
+    return {
+        dc["data_collection_tag"]
+        for workflow in template.get("workflows") or []
+        for dc in workflow.get("data_collections") or []
+        if str((dc.get("config") or {}).get("type") or "").lower() == "multiqc"
+    }
+
+
+def _tab_name(tab: dict[str, Any]) -> str:
+    return str(tab.get("title") or "")
+
+
+def check_steps_cite_prunable_tabs(template_id: str) -> list[Violation]:
+    template, dashboards = _load_template_and_dashboards(template_id)
+    prunable = _prunable_dcs(template)
+    multiqc = _multiqc_dcs(template)
+    out: list[Violation] = []
+    for dashboard in dashboards:
+        tab_dcs = {
+            _tab_name(tab): {
+                str(c["data_collection_tag"])
+                for c in _components(tab)
+                if c.get("data_collection_tag")
+            }
+            for tab in dashboard.get("tabs") or []
+        }
+        main = dashboard.get("main_dashboard") or {}
+        for c in _components(main, "text"):
+            values = c.get("values") or {}
+            for block in _STEPS_BLOCK.findall(str(c.get("body") or "")):
+                for line in block.splitlines():
+                    if not _STEP_ITEM.match(line):
+                        continue
+                    cited = {
+                        str((values.get(name) or {}).get("dc") or "")
+                        for name in _VALUE_REF.findall(line)
+                    }
+                    for name in _TAB_LINK.findall(line):
+                        dcs = tab_dcs.get(name.strip())
+                        if not dcs or not dcs <= prunable or dcs <= multiqc or cited & dcs:
+                            continue
+                        out.append(
+                            f"{_label(c)}: the step linking tab {name.strip()!r} cites no "
+                            f"value from its collections ({', '.join(sorted(dcs))})"
+                        )
+    return out
+
+
 def _version_key(version: str) -> tuple[int, ...]:
     return tuple(int(n) for n in re.findall(r"\d+", version))
 
@@ -521,6 +597,7 @@ RULES: dict[str, Callable[[str], list[Violation]]] = {
     "record_card_linked_source": check_record_card_linked_source,
     "record_card_linked": check_record_card_linked,
     "persistent_filters_reach_multiqc": check_persistent_filters_reach_multiqc,
+    "steps_cite_prunable_tabs": check_steps_cite_prunable_tabs,
 }
 
 
@@ -538,6 +615,11 @@ LATEST_TEMPLATE_IDS = _latest_template_ids()
 
 def _assert_clean(violations: list[Violation]) -> None:
     assert not violations, "\n".join(violations)
+
+
+@pytest.mark.parametrize("template_id", LATEST_TEMPLATE_IDS)
+def test_steps_cite_prunable_tabs(template_id: str) -> None:
+    _assert_clean(check_steps_cite_prunable_tabs(template_id))
 
 
 @pytest.mark.parametrize("template_id", TEMPLATE_IDS)

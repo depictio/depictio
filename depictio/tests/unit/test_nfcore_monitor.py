@@ -311,3 +311,159 @@ def test_resolve_results_prefix_with_explicit_hash(nfm: ModuleType) -> None:
     assert (
         nfm.resolve_results_prefix("ampliseq", "results-deadbeef") == "ampliseq/results-deadbeef/"
     )
+
+
+def test_substitute_vars_resolves_data_root_inside_a_var_value(nfm: ModuleType) -> None:
+    # rnaseq's SAMPLESHEET_FILE value itself starts with {DATA_ROOT}/.
+    out = nfm.substitute_vars(
+        "{SAMPLESHEET_FILE}", {"SAMPLESHEET_FILE": "{DATA_ROOT}/input/samplesheet.csv"}
+    )
+    assert out == "input/samplesheet.csv"
+    assert nfm.is_user_input(out)
+    assert not nfm.is_user_input("star_salmon/salmon.merged.gene_tpm.tsv")
+
+
+def test_diff_structure_reports_moved_removed_added_and_lost_paths(nfm: ModuleType) -> None:
+    old = [
+        "fastqc/s1.zip",
+        "star_salmon/salmon.merged.gene_tpm.tsv",
+        "multiqc/multiqc_data/multiqc.parquet",
+        "trimgalore/s1.txt",
+    ]
+    new = [
+        "fastqc/s2.zip",  # sample names differ: not a change
+        "salmon/salmon.merged.gene_tpm.tsv",  # star_salmon -> salmon: close name
+        "multiqc/multiqc_data/multiqc.parquet",
+        "stringtie/s1.gtf",  # new directory
+    ]
+    source_paths = [
+        ("matrix", "m", "star_salmon/salmon.merged.gene_tpm.tsv", False),  # read, now gone
+        ("mqc", "p", "multiqc/multiqc_data/multiqc.parquet", False),  # still there
+        ("opt", "o", "star_salmon/optional.tsv", True),  # optional: never "lost"
+    ]
+    diff = nfm.diff_structure(old, new, source_paths)
+    assert diff.lost_paths == [("matrix", "m", "star_salmon/salmon.merged.gene_tpm.tsv")]
+    assert ("star_salmon/", "salmon/") in diff.moved
+    assert diff.removed == ["trimgalore/"]
+    assert diff.added == ["stringtie/"]
+
+
+def test_diff_structure_identical_runs_is_empty(nfm: ModuleType) -> None:
+    keys = ["a/x.csv", "b/c/y.csv"]
+    diff = nfm.diff_structure(keys, list(keys), [("t", "r", "a/x.csv", False)])
+    assert (diff.removed, diff.added, diff.moved, diff.lost_paths) == ([], [], [], [])
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "key"),
+    [
+        # a major bump needs a person, whatever the data says
+        ({"local": "2.18.0", "new": "3.0.0", "new_data": True}, "review"),
+        ({"local": "2.18.0", "new": "3.0.0", "new_data": False}, "review"),
+        # no run of its own: nothing is judged from another release's data
+        ({"local": "5.1.1", "new": "5.1.2", "new_data": False, "n_problems": 4}, "unverified"),
+        ({"local": "1.0.0", "new": "1.1.0", "new_data": True, "n_problems": 2}, "review"),
+        ({"local": "1.0.0", "new": "1.0.1", "new_data": True, "lost": True}, "review"),
+        ({"local": "1.0.0", "new": "1.0.1", "new_data": True, "passes": 3, "skips": 1}, "verified"),
+        ({"local": "1.0.0", "new": "1.0.1", "new_data": True, "structure": True}, "probable"),
+        # a run folder that compares clean on nothing proves nothing
+        (
+            {"local": "1.0.0", "new": "1.0.1", "new_data": True, "structure": True, "checked": 0},
+            "unverified",
+        ),
+        ({"local": "1.0.0", "new": "1.0.1", "new_data": True}, "unverified"),
+    ],
+)
+def test_compute_verdict(nfm: ModuleType, kwargs: dict, key: str) -> None:
+    results = [nfm.RecipeCheck("t", "r", "PASS", "ok")] * kwargs.get("passes", 0)
+    results += [nfm.RecipeCheck("t", "r", "SKIPPED", "glob source not executed")] * kwargs.get(
+        "skips", 0
+    )
+    # dc_ref recipes cannot break from a layout move and do not dilute coverage
+    results += [nfm.RecipeCheck("t", "r", "SKIPPED", "consumes upstream DCs (dc_ref)")] * 10
+    structure = None
+    if kwargs.get("structure") or kwargs.get("lost"):
+        lost = [("t", "r", "p")] if kwargs.get("lost") else []
+        structure = nfm.StructureDiff([], [], [], lost, n_checked=kwargs.get("checked", 3))
+    verdict = nfm.compute_verdict(
+        kwargs["local"],
+        kwargs["new"],
+        new_data=kwargs["new_data"],
+        n_problems=kwargs.get("n_problems", 0),
+        recipe_results=results,
+        structure=structure,
+    )
+    assert verdict.key == key
+
+
+def test_build_drift_report_headline_carries_verdict_and_structure(nfm: ModuleType) -> None:
+    keys = ["a/x.csv"]
+    diff = nfm.diff_structure(["a/x.csv", "gone/y.csv"], keys, [])
+    report, _ = nfm.build_drift_report(
+        "hic",
+        "2.0.0",
+        "2.1.0",
+        "hic/results-abc/",
+        [("t", "r", "a/x.csv", False)],
+        keys,
+        verdict=nfm.Verdict("probable", "run folder unchanged"),
+        structure_lines=nfm.render_structure(diff, "2.0.0", 2, 1),
+    )
+    assert report.splitlines()[2].startswith("**🟡 probable — run folder unchanged**")
+    assert "## Run structure vs 2.0.0 — 2 → 1 keys" in report
+    assert "➖ `gone/` only in 2.0.0" in report
+    assert "github.com/nf-core/hic/blob/master/CHANGELOG.md" in report
+
+
+def test_report_pipeline_without_a_release_run_judges_nothing(
+    nfm: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_run(*args: object, **kwargs: object) -> str:
+        raise nfm.MegatestError("nf-core/hic 2.1.0: megatest run is empty", "| table |")
+
+    monkeypatch.setattr(nfm, "resolve_results_prefix", no_run)
+    monkeypatch.setattr(nfm, "run_catalog_validate", lambda: ("PASS", "OK"))
+    report = nfm.report_pipeline("hic", "2.1.0", index={})
+    assert report.verdict.key == "unverified"
+    assert "> ⚠️ nf-core/hic 2.1.0: megatest run is empty" in report.markdown
+    assert "| table |" not in report.markdown  # the fallback table stays out of the report
+    assert "Nothing was compared" in report.markdown
+
+
+def test_wave_summary_orders_by_verdict_and_titles_counts(nfm: ModuleType) -> None:
+    def rep(name: str, key: str) -> object:
+        return nfm.PipelineReport(name, "1.0.0", "1.1.0", nfm.Verdict(key, "why"), "# r", 0)
+
+    reports = [rep("b", "unverified"), rep("a", "review"), rep("c", "verified")]
+    assert nfm.wave_title(reports) == "nf-core wave: 3 release(s) — ❌1 ✅1 ⚪1"
+    summary = nfm.build_wave_summary(reports)
+    body = summary.splitlines()
+    rows = [line for line in body if line.startswith("| `")]
+    assert [r.split("`")[1] for r in rows] == ["a", "c", "b"]  # review, verified, unverified
+    assert ".nfcore-monitor/a-1.1.0.md" in summary
+
+
+def test_diff_structure_counts_only_paths_the_old_run_had(nfm: ModuleType) -> None:
+    old = ["multiqc/multiqc_data/multiqc.parquet", "multiqc/ms2rescore/a.tsv"]
+    new = ["multiqc/multiqc_data/multiqc.parquet"]
+    read = [
+        ("manifest", "keys", "multiqc/multiqc_data/*.parquet", False),  # in both
+        ("manifest", "keys", "multiqc/ms2rescore/*.tsv", False),  # read, then gone
+        ("manifest", "keys", "never/existed/*.csv", False),  # not in the old run: not checked
+    ]
+    diff = nfm.diff_structure(old, new, read)
+    assert diff.n_checked == 2
+    assert [p for _, _, p in diff.lost_paths] == ["multiqc/ms2rescore/*.tsv"]
+    assert diff.removed == ["multiqc/ms2rescore/"]
+
+
+def test_verified_reason_names_the_paths_that_were_compared(nfm: ModuleType) -> None:
+    passed = [nfm.RecipeCheck("t", "r", "PASS", "ok")]
+    structure = nfm.StructureDiff([], [], [], [], n_checked=29)
+    verdict = nfm.compute_verdict(
+        "3.10.0", "3.11.0", new_data=True, n_problems=0, recipe_results=passed, structure=structure
+    )
+    assert verdict.key == "verified"
+    assert verdict.reason == (
+        "1 of 1 file-based recipes ran on its data; 29 path(s) the template reads are unchanged"
+    )

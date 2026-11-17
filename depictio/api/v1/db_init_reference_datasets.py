@@ -230,6 +230,9 @@ STATIC_IDS = {
             "group_compare_demo": "646b0f3c1e4a2d7f8e5b8d8b",
             "cnv_profile_demo": "646b0f3c1e4a2d7f8e5b8d8d",
             "genome_chord_demo": "646b0f3c1e4a2d7f8e5b8d8e",
+            # The ideogram's two collections, in the 8dax block from 8da6 (the tab).
+            "ideogram_busco_demo": "646b0f3c1e4a2d7f8e5b8da7",
+            "ideogram_density_demo": "646b0f3c1e4a2d7f8e5b8da8",
             "transcript_structure_demo": "646b0f3c1e4a2d7f8e5b8d9c",
             # The two portal-shaped kinds sit in their own 8dbx block, as the
             # showcase project.yaml explains: several kind agents reserve ids
@@ -255,6 +258,25 @@ STATIC_IDS = {
             "protein_family_hits_demo": "646b0f3c1e4a2d7f8e5b8de2",
             "protein_pae_demo": "646b0f3c1e4a2d7f8e5b8de3",
             "protein_ss_demo": "646b0f3c1e4a2d7f8e5b8de4",
+            # Ranked distribution tab (the 8f5x block): pre-aggregated gene
+            # stability stats and a long-form values table.
+            "ranked_distribution_demo": "646b0f3c1e4a2d7f8e5b8f51",
+            "ranked_distribution_values_demo": "646b0f3c1e4a2d7f8e5b8f52",
+            # Spatial cells tab (the 8e7x block): the mcquant cell table.
+            "spatial_cells_demo": "646b0f3c1e4a2d7f8e5b8e71",
+            # Allele grid tab (the 8dax block): the HLA genotypes and the
+            # epitope predictions an allele pick narrows. 8da0 is the dashboard.
+            "allele_grid_demo": "646b0f3c1e4a2d7f8e5b8da1",
+            "epitope_predictions_demo": "646b0f3c1e4a2d7f8e5b8da2",
+            # Pedigree tab (the 8f6x block): three families in the PED coding.
+            # 8f60 is the dashboard.
+            "pedigree_demo": "646b0f3c1e4a2d7f8e5b8f61",
+            # Ranked table tab (the 8f7x block): 8f70 is the dashboard. The family
+            # and genotype collections are the ones a variant's popover reads.
+            "ranked_variants_demo": "646b0f3c1e4a2d7f8e5b8f71",
+            "ranked_family_demo": "646b0f3c1e4a2d7f8e5b8f72",
+            "ranked_genotypes_demo": "646b0f3c1e4a2d7f8e5b8f73",
+            "ranked_outliers_demo": "646b0f3c1e4a2d7f8e5b8f74",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -298,6 +320,7 @@ STATIC_IDS = {
             "advanced_viz_transcript_structure": "646b0f3c1e4a2d7f8e5b8d7c",
             "advanced_viz_cnv_profile": "646b0f3c1e4a2d7f8e5b8d7d",
             "advanced_viz_genome_chord": "646b0f3c1e4a2d7f8e5b8d7e",
+            "advanced_viz_ideogram": "646b0f3c1e4a2d7f8e5b8da6",
             "advanced_viz_record_card": "646b0f3c1e4a2d7f8e5b8d7f",
             # 8d80 is already the profile_demo collection, so the parallel
             # coordinates tab takes the next free id in the 8dbx block.
@@ -313,14 +336,41 @@ STATIC_IDS = {
             # collections.
             "advanced_viz_protein_families": "646b0f3c1e4a2d7f8e5b8de0",
             "advanced_viz_protein_quality": "646b0f3c1e4a2d7f8e5b8de5",
+            # Opens the 8f5x block; 8f51 and 8f52 are its collections.
+            "advanced_viz_ranked_distribution": "646b0f3c1e4a2d7f8e5b8f50",
+            # The spatial cells tab opens the 8e7x block; 8e71 is its collection.
+            "advanced_viz_spatial_cells": "646b0f3c1e4a2d7f8e5b8e70",
+            "advanced_viz_allele_grid": "646b0f3c1e4a2d7f8e5b8da0",
+            "advanced_viz_pedigree": "646b0f3c1e4a2d7f8e5b8f60",
+            "advanced_viz_ranked_table": "646b0f3c1e4a2d7f8e5b8f70",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",
         },
     },
-    # nf-core/viralrecon 3.0.0 viral-genome analysis template, a six-tab
+    # Genome tracks showcase (projects/init/genome_tracks_examples): the
+    # `jbrowse` component on Strand-seq SV calls (uploaded at ingestion) and on
+    # the viralrecon megatest's VCF/BAM files (read in place from S3).
+    "genome_tracks_examples": {
+        "project": "946b0f3c1e4a2d7f8e5bca00",
+        "workflows": {"genome_tracks_demo": "946b0f3c1e4a2d7f8e5bca01"},
+        "data_collections": {
+            "cells": "946b0f3c1e4a2d7f8e5bca10",
+            "sv_calls": "946b0f3c1e4a2d7f8e5bca11",
+            "sv_tracks": "946b0f3c1e4a2d7f8e5bca12",
+            "samples": "946b0f3c1e4a2d7f8e5bca13",
+            "variants": "946b0f3c1e4a2d7f8e5bca14",
+            "tracks": "946b0f3c1e4a2d7f8e5bca15",
+        },
+        "dashboards": {
+            # Main tab id equals project_id (same convention as ampliseq).
+            "genome_tracks_strandseq": "946b0f3c1e4a2d7f8e5bca00",
+            "genome_tracks_sarscov2": "946b0f3c1e4a2d7f8e5bca20",
+        },
+    },
+    # nf-core/viralrecon 3.0.0 viral-genome analysis template, an eight-tab
     # family: the Overview (main tab) + MultiQC + Sample QC + Coverage & Depth
-    # + Variants + Lineage & Clustering. Static IDs align with the dashboard_ids
+    # + Variants + Gene + Sample + Lineage & Clustering. Static IDs align with the dashboard_ids
     # hardcoded in
     # ``depictio/projects/nf-core/viralrecon/3.0.0/dashboards/base.yaml``.
     # Seed JSONs under ``.db_seeds/`` are generated by running the depictio
@@ -348,6 +398,9 @@ STATIC_IDS = {
             "sankey_canonical": "746b0f3c1e4a2d7f8e5b9c1d",
             "upset_canonical": "746b0f3c1e4a2d7f8e5b9c1e",
             "variant_feature_matrix_canonical": "746b0f3c1e4a2d7f8e5b9c1f",
+            # Genome-browser manifest (genomic_tracks): the Variants tab's
+            # jbrowse tile binds it.
+            "tracks": "746b0f3c1e4a2d7f8e5b9c20",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as ampliseq).
@@ -356,6 +409,8 @@ STATIC_IDS = {
             "viralrecon_coverage_depth": "746b0f3c1e4a2d7f8e5b9cb5",
             "viralrecon_lineage_clustering": "746b0f3c1e4a2d7f8e5b9cb3",
             "viralrecon_variants": "746b0f3c1e4a2d7f8e5b9cb4",
+            "viralrecon_gene": "746b0f3c1e4a2d7f8e5b9cb6",
+            "viralrecon_sample": "746b0f3c1e4a2d7f8e5b9cb7",
             "viralrecon_sample_qc": "746b0f3c1e4a2d7f8e5b9cc2",
         },
     },
@@ -569,6 +624,7 @@ class ReferenceDatasetRegistry:
         "penguins": os.path.join("init", "penguins"),
         "ampliseq": os.path.join("nf-core", "ampliseq"),
         "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
+        "genome_tracks_examples": os.path.join("init", "genome_tracks_examples"),
         "viralrecon": os.path.join("nf-core", "viralrecon"),
         "catalog_conformance": os.path.join("init", "catalog_conformance"),
     }
@@ -934,6 +990,7 @@ async def create_reference_datasets(
         "ampliseq",
         "advanced_viz_showcase",
         "viralrecon",
+        "genome_tracks_examples",
     ]
 
     if only is not None:

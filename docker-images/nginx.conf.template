@@ -99,7 +99,7 @@ server {
 
     # Other React-owned route prefixes — same SPA shell, different entry
     # paths. Keeps the vite.config.ts dev fallback list in sync with prod.
-    location ~ ^/(auth|dashboards|dashboard-edit|projects|about|admin|profile|groups|cli-agents)(/|$) {
+    location ~ ^/(auth|dashboards|dashboard-edit|projects|about|admin|activity|profile|groups|cli-agents)(/|$) {
         root /usr/share/nginx/html;
         try_files /dashboard/index.html =404;
         add_header Cache-Control "no-cache";
@@ -147,6 +147,26 @@ server {
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
         add_header Strict-Transport-Security $depictio_hsts always;
+    }
+
+    # Project bundle pushed by another instance (Send / Receive). The sender uses
+    # this instance's public URL, i.e. this nginx, so the server-wide 200m cap
+    # above would refuse any bundle above 200 MB whatever the ingress allows. No cap
+    # here: the API enforces DEPICTIO_MIGRATION_MAX_BUNDLE_BYTES (413 above it).
+    # Unbuffered, so a multi-GB body streams to the API instead of landing on this
+    # pod's disk first. Exact match: only the upload, not the small status calls.
+    location = /depictio/api/v1/migrate/inbound/requests {
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 0;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 
     # API + WebSocket. Upgrade headers cover the realtime events channel.
@@ -231,6 +251,6 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' data: ws: wss: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org ${DEPICTIO_CSP_S3_ORIGIN}; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' data: ws: wss: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org https://hgdownload.soe.ucsc.edu ${DEPICTIO_CSP_S3_ORIGIN}; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
     add_header Strict-Transport-Security $depictio_hsts always;
 }

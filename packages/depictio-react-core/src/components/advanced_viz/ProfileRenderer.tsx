@@ -44,6 +44,8 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { logLogSlope } from './logLogSlope';
+import { integerTickValues, markerSizeFor, showsMarkers } from './profileAxis';
+import { medianIqrByX, type ProfileAggregate } from './profileAggregate';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { splitFigureByGroups } from './groupSplit';
@@ -66,6 +68,7 @@ interface ProfileConfig {
   y_col: string;
   lower_col?: string | null;
   upper_col?: string | null;
+  aggregate?: ProfileAggregate | null;
   reference_x?: number | null;
   reference_label?: string | null;
   shaded_bands?: ShadedBand[] | null;
@@ -341,7 +344,10 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     const ys = (rows[config.y_col] || []) as unknown[];
     const los = bandCols ? ((rows[bandCols.lower] || []) as unknown[]) : null;
     const his = bandCols ? ((rows[bandCols.upper] || []) as unknown[]) : null;
-    const hasBand = Boolean(los && his && los.length && his.length);
+    // Long rows (one per feature, series and x) are summarised here, so the
+    // curves follow the filters; the band is then the interquartile range.
+    const aggregating = config.aggregate === 'median_iqr';
+    const hasBand = aggregating || Boolean(los && his && los.length && his.length);
 
     // A DC that carries a single curve need not spend a column saying so; the
     // y axis name is a better legend entry than an empty string.
@@ -375,6 +381,10 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       });
     }
 
+    if (aggregating) {
+      for (const [key, pts] of bySeries) bySeries.set(key, medianIqrByX(pts));
+    }
+
     const names = Array.from(bySeries.keys()).sort((a, b) =>
       a.localeCompare(b, undefined, { sensitivity: 'base' }),
     );
@@ -393,6 +403,10 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     // reader is not looking at.
     const logAxisX = derivative || logX;
     const logAxisY = derivative || logY;
+    // A step-like x (0..N) prints whole numbers only; a log axis keeps its own.
+    const wholeXTicks = logAxisX
+      ? null
+      : integerTickValues(Array.from(bySeries.values()).flatMap((pts) => pts.map((p) => p.x)));
     const derivativeWindow = Math.max(1, config.derivative_window ?? DEFAULT_DERIVATIVE_WINDOW);
 
     // Bands go in first so no series' ribbon can cover another series' line.
@@ -436,9 +450,12 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         }
       }
 
+      const withMarkers = showsMarkers(pts.length);
       lines.push({
         type: 'scatter' as const,
-        mode: 'lines' as const,
+        // A series of one point draws no line, and a step ladder reads as
+        // dots: every point of a short series carries a marker.
+        mode: withMarkers ? ('lines+markers' as const) : ('lines' as const),
         x: px,
         y: pts.map((p) => p.y),
         name,
@@ -451,6 +468,14 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
           width: lineWidth,
           shape: 'linear' as const,
         },
+        ...(withMarkers
+          ? {
+              marker: {
+                size: markerSizeFor(lineWidth),
+                color: lit ? colour : withAlpha(colour, 0.25),
+              },
+            }
+          : {}),
         hovertemplate:
           `<b>${name}</b><br>${xLabel}: %{x}<br>${yLabel}: %{y:.4g}<extra></extra>`,
       });
@@ -606,6 +631,9 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
           type: logAxisX ? 'log' : 'linear',
           zeroline: false,
           gridcolor: gridColor,
+          ...(wholeXTicks
+            ? { tickmode: 'array', tickvals: wholeXTicks, ticktext: wholeXTicks.map(String) }
+            : {}),
           ...(derivative ? { showticklabels: false, anchor: 'y' } : {}),
         },
         yaxis: {

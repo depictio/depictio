@@ -136,6 +136,51 @@ class TestImportDashboards:
         ((params, _),) = _sent(post)
         assert params["source_key"] == "nf-core/rnaseq:dashboards/base.yaml"
 
+    def test_template_dashboards_carry_the_template_revision(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, post: MagicMock
+    ) -> None:
+        template_dir = tmp_path / "nf-core" / "rnaseq" / "3.26.0"
+        _write(template_dir / "template.yaml", {})
+        inside = _write(template_dir / "dashboards" / "base.yaml", {"title": "RNA-seq"})
+        outside = _write(tmp_path / "mine" / "extra.yaml", {"title": "Mine"})
+        monkeypatch.setattr(
+            templates_module, "locate_template", lambda _id: template_dir / "template.yaml"
+        )
+
+        import_dashboards_from_template(
+            [inside, outside],
+            "http://api",
+            {},
+            project_id="p",
+            template_id="nf-core/rnaseq/3.26.0",
+            template_version="1.2.0",
+        )
+
+        (stamped, _), (plain, _) = _sent(post)
+        assert stamped["template_id"] == "nf-core/rnaseq/3.26.0"
+        assert stamped["template_version"] == "1.2.0"
+        # A --dashboard file next to --template is not part of the template.
+        assert "template_id" not in plain
+        assert "template_version" not in plain
+
+    def test_no_revision_is_sent_without_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, post: MagicMock
+    ) -> None:
+        template_dir = tmp_path / "nf-core" / "rnaseq" / "3.26.0"
+        _write(template_dir / "template.yaml", {})
+        path = _write(template_dir / "dashboards" / "base.yaml", {"title": "RNA-seq"})
+        monkeypatch.setattr(
+            templates_module, "locate_template", lambda _id: template_dir / "template.yaml"
+        )
+
+        import_dashboards_from_template(
+            [path], "http://api", {}, project_id="p", template_id="nf-core/rnaseq/3.26.0"
+        )
+
+        ((params, _),) = _sent(post)
+        assert "template_id" not in params
+        assert "template_version" not in params
+
     def test_project_config_dashboards_are_keyed_by_their_path(
         self, tmp_path: Path, post: MagicMock
     ) -> None:

@@ -2,6 +2,7 @@
 # against its threshold. nf-core/oncoanalyser publishes <group_id>/qsee/.
 id: qsee
 name: QSEE
+version: "1.0.0"
 description: >-
   Collects the QC metrics of a WiGiTS run and checks each against its threshold.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/qsee

@@ -271,3 +271,171 @@ export function withUpsetSetLabelDots(
   }
   return out;
 }
+
+// ---- Scaling to the tile ----------------------------------------------------
+//
+// plotly-upset draws for a fixed canvas (margins in pixels, fonts of 9 to 11,
+// dots of 12 to 18). A dashboard tile can be a third of that, so the figure is
+// scaled to the width the plot is measured at here, on the layout as it is
+// drawn: a figure stored long ago improves with the code, and nothing on the
+// server changes.
+
+/** The width the library's own pixel sizes were drawn for. */
+export const UPSET_REFERENCE_WIDTH = 720;
+/** How far a narrow tile shrinks fonts, margins and dots. Below this the plot
+ *  is cramped whatever the type size, and unreadable type helps nobody. */
+const MIN_SCALE = 0.7;
+
+const BASE_MARGIN = { l: 90, r: 10, t: 30, b: 20 };
+const BASE_FONT = 11;
+const BASE_LEGEND_FONT = 10;
+/** Pixels of figure above the bars that no legend or title takes. */
+const TOP_PAD = 20;
+
+/** 1 at the reference width and above, down to `MIN_SCALE` on a narrow tile.
+ *  An unmeasured plot (null) is drawn at full size. Steps of 5% so a drag of
+ *  the tile edge does not redraw the figure on every pixel. */
+export function upsetScaleForWidth(width: number | null | undefined): number {
+  if (width == null || !Number.isFinite(width) || width <= 0) return 1;
+  const raw = Math.min(1, Math.max(MIN_SCALE, width / UPSET_REFERENCE_WIDTH));
+  return Math.round(raw * 20) / 20;
+}
+
+/** The labels the legend lists, one per trace it shows, with a legend group's
+ *  title once ahead of its entries (the "Nb. of associations" heading is an
+ *  entry as far as the space it takes goes). */
+export function upsetLegendLabels(data: readonly Trace[]): string[] {
+  const labels: string[] = [];
+  const titled = new Set<string>();
+  for (const t of data) {
+    if (t.showlegend === false) continue;
+    const group = typeof t.legendgroup === 'string' ? t.legendgroup : null;
+    const title = (t.legendgrouptitle as { text?: unknown } | undefined)?.text;
+    if (group !== null && typeof title === 'string' && title && !titled.has(group)) {
+      titled.add(group);
+      labels.push(title);
+    }
+    if (t.showlegend === true || t.name != null) labels.push(String(t.name ?? ''));
+  }
+  return labels;
+}
+
+/** Rows a horizontal legend wraps to in `available` pixels. Plotly wraps by
+ *  its own measure of the text; this is the estimate the top margin is built
+ *  on, so it errs on the wide side (a row too many is a little air, a row too
+ *  few is a legend over the bars). */
+export function upsetLegendRows(
+  labels: readonly string[],
+  available: number,
+  fontSize: number,
+): number {
+  if (labels.length === 0) return 0;
+  const room = Math.max(120, available);
+  let rows = 1;
+  let used = 0;
+  for (const label of labels) {
+    const w = label.length * fontSize * 0.6 + fontSize * 3.6;
+    if (used > 0 && used + w > room) {
+      rows += 1;
+      used = 0;
+    }
+    used += w;
+  }
+  return rows;
+}
+
+function scaledSize(base: number, scale: number, floor: number): number {
+  return Math.max(floor, Math.round(base * scale));
+}
+
+/**
+ * The layout fitted to a plot `width` pixels wide.
+ *
+ * The legend moves out of the plot: a horizontal band above the intersection
+ * bars, anchored at the plot's top-left corner and growing upward, with the top
+ * margin made as tall as its rows need (and the title's room kept). In the
+ * corner over the set-size bars it covered the intersection bars of a narrow
+ * tile and ran past the top of the figure with many entries. Fonts, margins
+ * and legend spacing shrink on a narrow tile. `hideLegend` leaves no band.
+ */
+export function withUpsetResponsiveLayout(
+  layout: Layout,
+  data: readonly Trace[],
+  options: { width?: number | null; hideLegend?: boolean } = {},
+): Layout {
+  const scale = upsetScaleForWidth(options.width);
+  const margin = (layout.margin as Record<string, unknown> | undefined) ?? {};
+  const num = (v: unknown, fallback: number) => (typeof v === 'number' ? v : fallback);
+  const l = scaledSize(num(margin.l, BASE_MARGIN.l), scale, 56);
+  const r = scaledSize(num(margin.r, BASE_MARGIN.r), scale, 6);
+  const b = scaledSize(num(margin.b, BASE_MARGIN.b), scale, 14);
+  // The room the title took in the figure as drawn: its margin less the bare 30.
+  const titleBand = Math.max(0, num(margin.t, BASE_MARGIN.t) - BASE_MARGIN.t);
+
+  const out: Layout = { ...layout };
+  const font = (layout.font as Record<string, unknown> | undefined) ?? {};
+  out.font = { ...font, size: scaledSize(num(font.size, BASE_FONT), scale, 9) };
+
+  for (const [key, axis] of Object.entries(layout)) {
+    if (!/^[xy]axis\d*$/.test(key)) continue;
+    const a = axis as Record<string, unknown> | null;
+    const title = a?.title as Record<string, unknown> | undefined;
+    const titleFont = title?.font as Record<string, unknown> | undefined;
+    if (!a || !title || typeof titleFont?.size !== 'number') continue;
+    out[key] = {
+      ...a,
+      title: { ...title, font: { ...titleFont, size: scaledSize(titleFont.size, scale, 8) } },
+    };
+  }
+
+  const legendFont = (layout.legend as { font?: Record<string, unknown> } | undefined)?.font;
+  const legendSize = scaledSize(num(legendFont?.size, BASE_LEGEND_FONT), scale, 8);
+  const labels = options.hideLegend ? [] : upsetLegendLabels(data);
+  const rows = upsetLegendRows(labels, (options.width ?? UPSET_REFERENCE_WIDTH) - l - r, legendSize);
+  const rowHeight = Math.round(legendSize * 1.4) + 4;
+  const legendBand = rows > 0 ? rows * rowHeight + 8 : 0;
+
+  out.margin = {
+    ...margin,
+    l,
+    r,
+    b,
+    t: titleBand + legendBand + scaledSize(TOP_PAD, scale, 14),
+  };
+  if (layout.legend && typeof layout.legend === 'object') {
+    const legend = layout.legend as Record<string, unknown>;
+    out.legend = {
+      ...legend,
+      orientation: 'h',
+      xref: 'paper',
+      yref: 'paper',
+      x: 0,
+      xanchor: 'left',
+      y: 1,
+      yanchor: 'bottom',
+      font: { ...(legend.font as Record<string, unknown> | undefined), size: legendSize },
+      tracegroupgap: scaledSize(num(legend.tracegroupgap, 4), scale, 2),
+    };
+  }
+  return out;
+}
+
+/** The matrix dots at the size the tile's width allows: the library's 12 to 18
+ *  pixels crowd a narrow tile's rows. Never enlarged past what was drawn. */
+export function scaleUpsetDots(data: Trace[], layout: Layout, width: number | null | undefined): Trace[] {
+  const scale = upsetScaleForWidth(width);
+  if (scale >= 1) return data;
+  const axes = setNameAxes(layout);
+  const shrink = (size: unknown): unknown =>
+    Array.isArray(size)
+      ? size.map(shrink)
+      : typeof size === 'number'
+        ? Math.max(6, Math.round(size * scale))
+        : size;
+  return data.map((t) => {
+    if (!isMatrixDots(t, axes)) return t;
+    const marker = t.marker as Record<string, unknown> | undefined;
+    if (!marker || marker.size == null) return t;
+    return { ...t, marker: { ...marker, size: shrink(marker.size) } };
+  });
+}

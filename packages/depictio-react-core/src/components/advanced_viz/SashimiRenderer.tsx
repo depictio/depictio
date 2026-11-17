@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   ColorInput,
@@ -21,6 +21,7 @@ import {
 } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import { chromosomeColourMap } from './chromosomeColours';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   VizControlCell,
@@ -42,6 +43,7 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
+import type { OpenLocusReader } from '../jbrowse/locusForAction';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import SashimiGenomeSpyView from './sashimi/SashimiGenomeSpyView';
 import { coverageData, junctionData, UNANNOTATED } from './sashimi/sashimiGenomeSpySpec';
@@ -76,13 +78,13 @@ interface SashimiConfig {
   coverage_height?: number;
   coverage_color?: string | null;
   coverage_log?: boolean;
-  color_by?: 'annotation' | 'sample';
+  color_by?: 'annotation' | 'sample' | 'chromosome';
   max_arc_width?: number;
   arc_width_by_support?: boolean;
   arc_split?: 'annotation' | 'alternate';
   view?: SashimiView;
   views?: SashimiView[] | null;
-  annotation?: 'none' | 'hg38' | 'mm10';
+  annotation?: 'none' | 'hg38' | 'hg19' | 'mm10';
 }
 
 type SashimiView = 'plotly' | 'genomespy';
@@ -341,7 +343,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   /** What the arcs take their colour from. Annotation (known / novel) is the
    *  default when the binding has one; sample is the ggsashimi convention,
    *  where each track is one colour and the arcs belong to their track. */
-  const [colorBy, setColorBy] = usePersistedVizControl<'annotation' | 'sample'>(
+  const [colorBy, setColorBy] = usePersistedVizControl<'annotation' | 'sample' | 'chromosome'>(
     metadata,
     'color_by',
     'annotation',
@@ -838,6 +840,10 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     [junctions],
   );
 
+  /** Every chromosome of the junctions with the Manhattan's colour for it, so
+   *  a locus's arcs match its points on the genome-wide plot. */
+  const chromColour = useMemo(() => chromosomeColourMap(junctions.map((j) => j.chrom)), [junctions]);
+
   const figure = useMemo<{ data: unknown[]; layout: Record<string, unknown> } | null>(() => {
     if (!visible.length || !lanes.length) return null;
     const colors = plotlyThemeColors(isDark, theme);
@@ -1097,11 +1103,14 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
         // A constant width keeps every level in one trace, which is the whole
         // point of the level grouping when nothing is being scaled.
         const level = widthBySupport ? levelFor(j.count) : 0;
-        const byLane = colorBy === 'sample' || !j.annotation;
-        const colour = byLane
-          ? laneColour(laneIdx)
-          : (annotationColour.get(j.annotation!) ?? baseColour);
-        const category = byLane ? null : j.annotation;
+        const byChrom = colorBy === 'chromosome';
+        const byLane = !byChrom && (colorBy === 'sample' || !j.annotation);
+        const colour = byChrom
+          ? (chromColour.get(j.chrom) ?? baseColour)
+          : byLane
+            ? laneColour(laneIdx)
+            : (annotationColour.get(j.annotation!) ?? baseColour);
+        const category = byChrom ? j.chrom : byLane ? null : j.annotation;
         const key = `${laneIdx}|${category ?? ''}|${level}|${side}`;
         let group = groups.get(key);
         if (!group) {
@@ -1446,6 +1455,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     exons,
     arcColors,
     annotationPinned,
+    chromColour,
     coverage,
     coverageActive,
     coverageHeight,
@@ -1564,6 +1574,16 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       end: Math.ceil(win[1]),
     };
   }, [activeRegion, view, fitRange]);
+
+  // "Open in genome browser": the window on screen, whichever panel draws it
+  // (the arc panel's zoom, else the junctions' span). No clicked point: a
+  // junction is a span, and the window is what the reader is looking at.
+  const gsRegionRef = useRef(gsRegion);
+  gsRegionRef.current = gsRegion;
+  const openLocus = useCallback<OpenLocusReader>(
+    () => ({ window: gsRegionRef.current }),
+    [],
+  );
 
   const gsColours = useMemo(() => {
     const themeColours = plotlyThemeColors(isDark, theme);
@@ -1876,19 +1896,22 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           />
         </VizControlGroup>
         <VizControlGroup title="Arc colours">
-          {annotationValues.length ? (
-            <VizSelect
-              label="Colour arcs by"
-              value={colorBy}
-              onChange={(v) => setColorBy(v === 'sample' ? 'sample' : 'annotation')}
-              data={[
-                { value: 'annotation', label: config.annotation_col || 'Annotation' },
-                { value: 'sample', label: config.sample_col || 'Sample' },
-              ]}
-              allowDeselect={false}
-              comboboxProps={{ portalProps: { target: fsPortalTarget } }}
-            />
-          ) : null}
+          <VizSelect
+            label="Colour arcs by"
+            value={colorBy}
+            onChange={(v) =>
+              setColorBy(v === 'sample' || v === 'chromosome' ? v : 'annotation')
+            }
+            data={[
+              ...(annotationValues.length
+                ? [{ value: 'annotation', label: config.annotation_col || 'Annotation' }]
+                : []),
+              { value: 'sample', label: config.sample_col || 'Sample' },
+              { value: 'chromosome', label: 'Chromosome' },
+            ]}
+            allowDeselect={false}
+            comboboxProps={{ portalProps: { target: fsPortalTarget } }}
+          />
           {annotationValues.length ? (
             annotationValues.map((value) => (
               <VizInlineField key={value} label={value}>
@@ -2005,6 +2028,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Splice junctions'}
+      openLocus={openLocus}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
       primaryControls={primaryControls}
       controls={controls}
@@ -2026,6 +2050,9 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           lanes={allLanes}
           annotations={gsColours.annotations}
           colorBy={colorBy}
+          index={String(metadata.index)}
+          chroms={[...chromColour.keys()]}
+          chromColours={[...chromColour.values()]}
           laneColours={gsColours.laneColours}
           annotationColours={gsColours.annotationColours}
           colors={gsColours.colors}

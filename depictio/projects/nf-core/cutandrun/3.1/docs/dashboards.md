@@ -129,25 +129,26 @@ support filter keeps every value until narrowed, so the cards include single-rep
 intervals. Collapsed: the consensus table. Filters: replicate support, interval width and
 member peaks.
 
-**Locus.** One region on one genome axis. Strip: SEACR regions (by sample), their coverage per
-base, the MACS2 peaks (by sample) and the consensus intervals (by support) of the region in
-view; the cards
-follow the navigator's region as the tracks do. Then the SEACR navigator (`genome_view`, rect
-marks, `assembly: {GENOME}`), opening on a documented default region, and three tracks that
-follow its region through the `region` links of `template.yaml`: the fragment pile-up
-(`coverage_track`, one lane per sample, a switch to the GenomeSpy locus view), the MACS2 calls
-and the consensus intervals over the gene lane. A tab of its own because those region filters
-narrow every tile of their collections on the tab. Filters: SEACR coverage per base, MACS2
-q-value and replicate support.
+**Locus.** One region on one genome axis, and the only genome browser of the template. Strip:
+SEACR regions (by sample), their coverage per base, the MACS2 peaks (by sample) and the
+consensus intervals (by support) of the region in view; the cards follow the navigator's
+region. Then one linked section, held to one screen: the SEACR navigator (`genome_view`, rect marks,
+one lane per sample on its own scale, `assembly: {GENOME}`), opening on a documented default
+region, and the genome browser under it at full width (see the end of this page), which
+follows the navigator's brush without filtering. Its bigWigs carry the signal at the region,
+so no pile-up track repeats it; the SEACR regions and the consensus intervals are its two
+region sources. A tab of its own because those region filters narrow
+every tile of their collections on the tab. Filters: SEACR coverage per base, MACS2 q-value
+and replicate support.
 
 ## Routes and pruning
 
 | Route | What changes |
 |---|---|
-| `--peakcaller seacr` (no MACS2) | No MACS2 peak table, significance plot, Locus MACS2 track or card. The caller comparison keeps one row per sample with 0 MACS2 peaks, so it reads as complete disagreement rather than missing data (`VALIDATION_REPORT.md`, CR-D3). |
+| `--peakcaller seacr` (no MACS2) | No MACS2 peak table, significance plot or Locus card. The caller comparison keeps one row per sample with 0 MACS2 peaks, so it reads as complete disagreement rather than missing data (`VALIDATION_REPORT.md`, CR-D3). |
 | `--peakcaller macs2` (no SEACR) | The SEACR collections drop out, with the Peaks, Consensus and Locus tiles and the Findings rows that read them. |
-| No fragment BEDs published | No pile-up profile, pile-up matrix or Locus pile-up track, nor the pile-up highlight on the Overview. |
-| Another genome build | Pass `--var GENOME=<assembly>`; every Locus track reads it (default `hg38`). |
+| No fragment BEDs published | No pile-up profile or pile-up matrix, nor the pile-up highlight on the Overview. |
+| Another genome build | Pass `--var GENOME=<assembly>`; every Locus tile reads it (default `hg38`). |
 
 The import drops a highlight whose source is gone and re-packs the Overview grid, so a lone
 highlight takes the full row. Each Findings row cites one collection and is removed with it.
@@ -164,7 +165,7 @@ has some: the fragment ladder, the mean pile-up and the caller scatter colour by
 ## Cross-selection
 
 Tables select rows and the caller scatter, the depth and duplication scatters, the
-fingerprint and PCA tiles and the genome tracks select points; a pick becomes a dashboard
+fingerprint and PCA tiles and the Locus tracks select points; a pick becomes a dashboard
 filter that narrows the other tiles of the same collection and, through the project links,
 the collections downstream of it. Row selection is on `sample_id` in the sample sheet, `sample`
 in the per-sample tables (spike-in, fragment classes, SEACR summary, signal budget, caller
@@ -175,6 +176,28 @@ collection has no outgoing link, so it narrows no other tile.
 
 Advanced visualisation controls dock by width: to the right of a full-width tile, on top of a
 narrower one. Nothing is set per tab or per tile.
+
+## Genome browser (in the Locus tab)
+
+A JBrowse genome browser over the `tracks` collection, a manifest the project-local recipe
+`depictio/catalog/cutandrun/tracks.py` spells out from the validated
+samplesheet: per sample the bigWig signal, the SEACR stringent and MACS2 narrowPeak calls
+(targets only) and the deduplicated BAM, coloured per target like the run's own IGV
+session. The assembly is the `hg38` preset; the browser opens on the SEACR region
+with the highest signal (`locus_from` sorted by `max_signal`; the stepper walks the regions in that
+order), and a brush on the SEACR navigator above it moves the view without filtering.
+
+- The ENCODE candidate cis-regulatory elements open under the gene track, a UCSC track
+  (`ucsc_tracks: [encodeCcreCombined]`) read through the API's UCSC proxy.
+- The sample and target filters of the left panel pick which tracks are open; clicking a
+  feature in the browser filters every other tab on its sample. A region picked elsewhere
+  filters `seacr_peaks` to that row: the `seacr_peaks -> tracks` link opens its sample's
+  tracks, and the browser's `locus_from` moves the view onto the region (± 2 kb).
+
+The tables-only megatest subset holds none of the track files. Pass
+`--var TRACKS_URI=s3://nf-core-awsmegatests/cutandrun/results-42502fb44975e930eec865353c5481f472bcf766`
+and the collection reads them in place, by range; without it the recipe keeps only the files
+DATA_ROOT holds and the CLI uploads them at ingestion.
 
 ## Reproducing
 

@@ -1,0 +1,943 @@
+{
+  "_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb7"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb7"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "sm-filter-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Sample pick",
+      "interactive_component_type": "Select",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "always_selected": true,
+      "default_by": "coverage_median",
+      "banner_facts": [
+        {
+          "column": "lineage",
+          "label": "Lineage",
+          "icon": "tabler:dna-2"
+        },
+        {
+          "column": "pct_genome_covered_10x",
+          "label": "Genome at 10x (%)",
+          "format": "decimals:1",
+          "icon": "tabler:chart-area-line"
+        },
+        {
+          "column": "coverage_median",
+          "label": "Median depth",
+          "format": "si",
+          "icon": "tabler:layers-intersect"
+        },
+        {
+          "column": "num_variants_total",
+          "label": "Variants",
+          "format": "integer",
+          "icon": "tabler:variable"
+        }
+      ],
+      "custom_color": "teal",
+      "icon_name": "mdi:flask-outline",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-filter-af",
+      "component_type": "interactive",
+      "title": "Allele frequency",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Sample pick",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "AF",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Calls",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "pink",
+      "icon_name": "mdi:percent-outline",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Pick a sample on the left and the tab shows that one alone: its calls along the genome, with the one picked read out beside them. The depth track below shows where its coverage fell away. Open a call in the genome browser of the [Variants](tab:Variants) tab to read its reads.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "sm-card-calls",
+      "component_type": "card",
+      "title": "Variant calls",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Calls of the picked sample, one per mutation.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Sample at a glance",
+      "aggregation": "count",
+      "column_name": "POS",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "FUNCLASS",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:dna",
+      "icon_color": "cyan.4",
+      "caption": "calls, by functional class",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-card-af",
+      "component_type": "card",
+      "title": "Allele frequency",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median allele frequency of the sample's calls; the bar counts those the consensus takes.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Sample at a glance",
+      "aggregation": "median",
+      "column_name": "AF",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "threshold",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": 0.75,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:percent-outline",
+      "icon_color": "cyan.6",
+      "caption": "calls against the 0.75 consensus cut-off",
+      "decimals": 2,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-card-amplicon-depth",
+      "component_type": "card",
+      "title": "Amplicon depth",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_amplicon_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_amplicon_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median depth over the sample's amplicons; the bar counts those at 10x or more.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
+      "section": "Sample at a glance",
+      "aggregation": "median",
+      "column_name": "coverage",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "threshold",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": 10,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-areaspline",
+      "icon_color": "cyan.8",
+      "caption": "amplicons against 10x",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-card-low-windows",
+      "component_type": "card",
+      "title": "Windows under 10x",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_genome_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Genome-wide coverage in 200bp windows across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_genome_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "200 bp windows of the sample under 10x, which the consensus masks; a bar at 0 is a true gap.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/genome_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_genome_coverage",
+        "use": "mosdepth/genome_coverage",
+        "description": "Genome-wide coverage in windows, aggregated across all samples."
+      },
+      "section": "Sample at a glance",
+      "aggregation": "count",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('coverage') < 10",
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-timeline-variant",
+      "icon_color": "cyan.9",
+      "caption": "their depth, from no reads to just under 10x",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-manhattan",
+      "component_type": "advanced_viz",
+      "title": "Calls along the genome",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Pick a call to read it out beside the plot.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/manhattan",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/manhattan",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "The sample's genome",
+      "viz_kind": "manhattan",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "manhattan",
+        "chr_col": "CHROM",
+        "pos_col": "POS",
+        "score_col": "AF",
+        "feature_col": "mutation_label",
+        "effect_col": null,
+        "score_kind": "Allele frequency (AF)",
+        "score_threshold": 0.75,
+        "marker_size_above": 12,
+        "marker_size_below": 4,
+        "marker_size_uniform": 5,
+        "highlight": "above",
+        "color_by_columns": [
+          "EFFECT",
+          "FUNCLASS",
+          "sample"
+        ],
+        "hover_cols": [
+          "GENE",
+          "AA",
+          "EFFECT",
+          "DP"
+        ],
+        "default_color_by": "EFFECT",
+        "top_n_labels": 0,
+        "selection_enabled": true,
+        "selection_column": "mutation_label",
+        "mode": "manhattan",
+        "rainfall_class_col": null
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-record",
+      "component_type": "advanced_viz",
+      "title": "Picked mutation",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "The call picked in the plot, with its gene, effect and read support.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "The sample's genome",
+      "viz_kind": "record_card",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "record_card",
+        "id_col": "mutation_label",
+        "title_col": "mutation_label",
+        "sections": {
+          "Call": [
+            "GENE",
+            "AA",
+            "EFFECT",
+            "FUNCLASS"
+          ],
+          "Support": [
+            "AF",
+            "DP",
+            "REF_DP",
+            "ALT_DP"
+          ],
+          "Position": [
+            "CHROM",
+            "POS",
+            "REF",
+            "ALT"
+          ]
+        },
+        "labels": {
+          "GENE": "Gene",
+          "AA": "Amino acid change",
+          "EFFECT": "Effect",
+          "FUNCLASS": "Functional class",
+          "AF": "Allele frequency",
+          "DP": "Read depth",
+          "REF_DP": "Reference reads",
+          "ALT_DP": "Alternate reads",
+          "CHROM": "Reference sequence",
+          "POS": "Position",
+          "REF": "Reference base",
+          "ALT": "Alternate base"
+        },
+        "link_templates": null,
+        "selection_source": "any",
+        "linked_component": "sm-manhattan",
+        "max_fields": 40,
+        "default_record": null,
+        "default_record_by": null,
+        "default_record_ascending": false
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-genome-track",
+      "component_type": "advanced_viz",
+      "title": "Depth along the genome",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "coverage_track_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Coverage-track-ready genome-coverage tracks (chromosome / position / value)",
+        "data_collection_tag": "coverage_track_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "The picked sample on a linear axis; a dropout reads as a gap.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/coverage_track_genome",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_genome_coverage",
+        "use": "mosdepth/coverage_track_genome",
+        "description": "Genome-wide coverage in windows, aggregated across all samples."
+      },
+      "section": "Depth along the genome",
+      "viz_kind": "coverage_track",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "coverage_track",
+        "chromosome_col": "chromosome",
+        "position_col": "position",
+        "value_col": "value",
+        "end_col": "end",
+        "sample_col": "sample",
+        "category_col": null,
+        "y_scale": "linear",
+        "smoothing_window": 5,
+        "color_by": "single",
+        "show_annotation_lane": false,
+        "annotation_id": null,
+        "chromosomes_filter": null,
+        "samples_filter": null,
+        "view_mode": null,
+        "show_individuals": true,
+        "mark": "line",
+        "facet_by_sample": false,
+        "locus_annotation": "none",
+        "locus_assembly": null,
+        "view": "track",
+        "views": [
+          "track"
+        ]
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "sm-var-table",
+      "component_type": "table",
+      "title": "Variant calls",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Tick a row to read the call out in the card above.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Variant table",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "mutation_label",
+      "row_selection_mode": "multiple",
+      "wf_tag": "nextflow/viralrecon"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-sm-filter-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-sm-filter-af",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-sm-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sm-card-calls",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sm-card-af",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sm-card-amplicon-depth",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sm-card-low-windows",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sm-manhattan",
+      "x": 0,
+      "y": 0,
+      "w": 5,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sm-record",
+      "x": 5,
+      "y": 0,
+      "w": 3,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sm-genome-track",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sm-var-table",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [
+    {
+      "name": "Sample pick",
+      "icon": "mdi:tune",
+      "color": "cyan",
+      "description": "Choose the sample the tab shows, and the calls it keeps",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Sample at a glance",
+      "icon": "mdi:counter",
+      "color": "cyan",
+      "description": "The calls, their support and the depth of the picked sample",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "The sample's genome",
+      "icon": "mdi:dna",
+      "color": "cyan",
+      "description": "The sample's calls along the genome, beside the one picked",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": "linked",
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Depth along the genome",
+      "icon": "mdi:chart-line",
+      "color": "cyan",
+      "description": "Depth per 200 bp window; a dropout reads as a gap",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Variant table",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Every call of the sample with its support and annotation",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Sample",
+  "subtitle": "What does one sample's genome look like, from reads to variants?",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-30 14:56:15",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "tab_order": 6,
+  "main_tab_name": null,
+  "tab_icon": "mdi:test-tube",
+  "tab_icon_color": "cyan",
+  "tab_group": "Mutations",
+  "parent_dashboard_title": null,
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Sample",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-30 14:58:06"
+  }
+}

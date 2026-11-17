@@ -14,6 +14,7 @@ import {
   Loader,
   Paper,
   Stack,
+  Switch,
   Text,
   Title,
   Tooltip,
@@ -54,8 +55,9 @@ import {
   UiScaleField,
 } from '../components/settings/preferences';
 import { formatDateTime } from '../lib/datetime';
+import ChangesSincePref from '../changes/ChangesSincePref';
 import { usePageTitle } from '../branding';
-import { useTourLauncher } from '../walkthrough';
+import { resetCoach, setTipsOff, useCoachState, useTourLauncher } from '../coach';
 import { squareDownscale } from './avatarImage';
 import PasswordForm from './PasswordForm';
 
@@ -141,31 +143,53 @@ function avatarDisabledReason(user: ProfileUser, status: AuthStatusResponse | nu
 
 const PAGE_TITLE = 'Account settings';
 
-/** Restarts the guided tour. Disabled, not hidden, where the deployment turned
- *  tours off: the reason is worth knowing, and the section stays where docs
- *  point to. Restarting here works because the builder tour's first step moves
- *  on by itself and `start` takes the explorer tour to /dashboards. */
+/** The coach from here: take the tour of the dashboards list, offer every
+ *  page's tour again, or stop the offers. Disabled, not hidden, where the
+ *  deployment turned tours off: the reason is worth knowing, and the section
+ *  stays where docs point to. */
 const GettingStarted: React.FC = () => {
   const tour = useTourLauncher();
+  const coach = useCoachState();
   return (
     <Stack gap="sm" align="flex-start">
       <Text size="sm" c="dimmed">
-        A short walkthrough of the pages and the controls you will use most.
+        Short tours of the pages you use most, one page at a time. Each is offered once, the first time
+        you open its page.
       </Text>
       <Tooltip label={tour.reason} withArrow disabled={tour.reason === null}>
         {/* A disabled button swallows pointer events; the span carries the tooltip. */}
         <span>
-          <Button
-            variant="light"
-            disabled={!tour.available}
-            onClick={tour.start}
-            leftSection={<Compass size={16} strokeWidth={1.8} aria-hidden />}
-            data-testid="getting-started-tour"
-          >
-            {tour.label}
-          </Button>
+          <Group gap="xs">
+            <Button
+              variant="light"
+              disabled={!tour.available}
+              onClick={tour.start}
+              leftSection={<Compass size={16} strokeWidth={1.8} aria-hidden />}
+              data-testid="getting-started-tour"
+            >
+              Take the tour
+            </Button>
+            <Button
+              variant="default"
+              disabled={!tour.available}
+              onClick={() => {
+                resetCoach();
+                notifications.show({ message: 'Each page will offer its tour again.', color: 'teal' });
+              }}
+              data-testid="getting-started-reset"
+            >
+              Offer every tour again
+            </Button>
+          </Group>
         </span>
       </Tooltip>
+      <Switch
+        label="Offer a tour on pages I open for the first time"
+        checked={!coach.tipsOff}
+        disabled={!tour.available}
+        onChange={(e) => setTipsOff(!e.currentTarget.checked)}
+        data-testid="getting-started-offers"
+      />
     </Stack>
   );
 };
@@ -318,11 +342,7 @@ const ProfileApp: React.FC = () => {
               make with it. Sign in to leave comments.
             </Text>
             <Stack gap="xs" w="100%" maw={320} data-testid="guest-sign-in-profile">
-              <SignInProviders
-                googleEnabled={guest.googleEnabled}
-                samlEnabled={guest.samlEnabled}
-                samlLabel={guest.samlLabel}
-              />
+              <SignInProviders providers={guest.providers} />
             </Stack>
           </Stack>
         </Alert>
@@ -381,6 +401,7 @@ const ProfileApp: React.FC = () => {
             <ThemeField />
             <ChromeLookField />
             <UiScaleField />
+            <ChangesSincePref signedIn={!user.is_anonymous && !user.is_temporary} />
           </Stack>
         </SettingsSection>
 
@@ -388,7 +409,7 @@ const ProfileApp: React.FC = () => {
           value="getting-started"
           icon="mdi:compass-outline"
           title="Getting started"
-          subtitle="Replay the guided tour of Depictio"
+          subtitle="Tours of the pages, offered once each"
           testId={sectionTestId('getting-started')}
         >
           <GettingStarted />

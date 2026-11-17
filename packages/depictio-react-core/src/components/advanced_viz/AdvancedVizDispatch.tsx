@@ -6,10 +6,14 @@ import { wrapWithChrome } from '../chrome';
 import { clearedSelectionFilters, ownSelection } from '../../selection';
 import { defaultRegionKey, withoutDefaultRegion } from './genomespy/defaultRegionMemo';
 import { HideLegendContext } from './LegendAwarePlot';
+import { AdvancedVizDiffContext } from './diffOverlayContext';
+import { useChangeMark } from '../../changeMarks';
+import { useComponentDiff } from '../../hooks/useComponentDiff';
+import DiffSummaryChip from '../chrome/DiffSummaryChip';
 import VolcanoRenderer from './VolcanoRenderer';
 import EmbeddingRenderer from './EmbeddingRenderer';
 import ManhattanRenderer from './ManhattanRenderer';
-import StackedTaxonomyRenderer from './StackedTaxonomyRenderer';
+import StackedBarRenderer from './StackedBarRenderer';
 import PhylogeneticRenderer from './PhylogeneticRenderer';
 import RarefactionRenderer from './RarefactionRenderer';
 import DaBarplotRenderer from './DaBarplotRenderer';
@@ -35,6 +39,7 @@ import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
 import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
+import SpatialCellsRenderer from './SpatialCellsRenderer';
 import ContactMapRenderer from './ContactMapRenderer';
 import KneePlotRenderer from './KneePlotRenderer';
 import DamageProfileRenderer from './DamageProfileRenderer';
@@ -43,8 +48,13 @@ import GroupCompareRenderer from './GroupCompareRenderer';
 import TranscriptStructureRenderer from './TranscriptStructureRenderer';
 import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
+import IdeogramRenderer from './IdeogramRenderer';
+import AlleleGridRenderer from './AlleleGridRenderer';
+import PedigreeRenderer from './PedigreeRenderer';
+import RankedTableRenderer from './RankedTableRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
+import RankedDistributionRenderer from './RankedDistributionRenderer';
 import MsaRenderer from './MsaRenderer';
 import SequenceTrackRenderer from './SequenceTrackRenderer';
 import {
@@ -54,6 +64,10 @@ import {
   AdvancedVizSettingsPopover,
   AdvancedVizZoomSyncToggle,
 } from './AdvancedVizExtras';
+import OpenInGenomeBrowserButton from './OpenInGenomeBrowserButton';
+import FloatingDataTable from './highlight/FloatingDataTable';
+import { useTileHighlight } from './highlight/useTileHighlight';
+import type { DataGridSelection } from '../data/DataGridBody';
 import { vizKindLabel } from './vizKindTag';
 import { AdvancedVizKindContext } from './VizKindBadge';
 import { useDensity } from '../density';
@@ -76,15 +90,24 @@ import LoadAllButton from '../chrome/LoadAllButton';
 import { ComponentIndexContext } from '../DashboardLoadingProvider';
 import type { GroupRenderState } from '../../selectionGroups';
 import SplitPanels from './SplitPanels';
-import { groupingModeForKind, panelsForGrouping, shouldSplitIntoPanels } from '../../splitPanels';
+import {
+  groupDisplaysForKind,
+  groupingModeForKind,
+  panelsForGrouping,
+  shouldSplitIntoPanels,
+} from '../../splitPanels';
 import type { PanelSpec } from '../../splitPanels';
 import {
   advancedVizGroupOutcome,
   groupKindNotSplitReasons,
   groupUnmatchedReasons,
   groupUnreachableReasons,
+  runOverlayAmbiguousReasons,
+  runOverlayKindReasons,
 } from '../../groupStatus';
 import type { AdvancedVizGroupBadge } from '../../groupStatus';
+import { isRunGroup, useGroupsForDc } from './groupsForDc';
+import { useOverlayNewRuns } from '../../changeMarks';
 import {
   GroupColouringReportContext,
   groupColouringActive,
@@ -98,6 +121,7 @@ import {
   advancedVizShowcase,
   tabLinkName,
 } from './advancedVizShowcase';
+import { describeFilters, traceGenome } from '../genomeLink/genomeDebug';
 
 /** The viewer's fold of a tile's docked controls, kept per component in this
  *  browser. Storage can be missing or refuse (a private window): then the
@@ -124,7 +148,22 @@ const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
   kind: groupKindNotSplitReasons,
   unreachable: groupUnreachableReasons,
   unmatched: groupUnmatchedReasons,
+  run_kind: runOverlayKindReasons,
+  run_ambiguous: runOverlayAmbiguousReasons,
 };
+
+/** The label on that badge: the run Overlay is "by run", not a group. */
+const NOT_GROUPED_LABELS: Record<AdvancedVizGroupBadge, string> = {
+  kind: 'not grouped',
+  unreachable: 'not grouped',
+  unmatched: 'not grouped',
+  run_kind: 'not by run',
+  run_ambiguous: 'not by run',
+};
+
+/** Kinds with no mark to colour (one row read as text): the run Overlay
+ *  passes them by without a badge. */
+const KINDS_WITHOUT_MARKS: ReadonlySet<string> = new Set(['record_card']);
 
 interface AdvancedVizDispatchProps {
   metadata: StoredMetadata;
@@ -147,6 +186,10 @@ interface AdvancedVizDispatchProps {
    *  the aggregating ones (UpSet, sunburst, stacked taxonomy) ignore it,
    *  because a group cannot be attributed to a bar that is already a sum. */
   groupRender?: GroupRenderState;
+  /** The dashboard this tile belongs to. With `groupRender`, it lets a group
+   *  captured on another collection be translated onto this tile's own
+   *  (`useGroupsForDc`); without it the groups are read as they come. */
+  dashboardId?: string;
 }
 
 // 3Dmol.js is heavy and only a protein tab needs it, so the molecule_3d
@@ -210,7 +253,10 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   volcano: VolcanoRenderer,
   embedding: EmbeddingRenderer,
   manhattan: ManhattanRenderer,
-  stacked_taxonomy: StackedTaxonomyRenderer,
+  stacked_bar: StackedBarRenderer,
+  // Retired name of `stacked_bar`: `stored_metadata` reaches the client
+  // unvalidated, so a tile saved before the rename still carries it.
+  stacked_taxonomy: StackedBarRenderer,
   phylogenetic: PhylogeneticRenderer,
   rarefaction: RarefactionRenderer,
   da_barplot: DaBarplotRenderer,
@@ -253,8 +299,10 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   transcript_structure: TranscriptStructureRenderer,
   cnv_profile: CnvProfileRenderer,
   genome_chord: GenomeChordRenderer,
+  ideogram: IdeogramRenderer,
   record_card: RecordCardRenderer,
   parallel_coordinates: ParallelCoordinatesRenderer,
+  ranked_distribution: RankedDistributionRenderer,
   molecule_3d: Molecule3DRenderer,
   msa: MsaRenderer,
   sequence_track: SequenceTrackRenderer,
@@ -263,6 +311,10 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   domain_architecture: DomainArchitectureRenderer,
   pae_matrix: PaeMatrixRenderer,
   ramachandran: RamachandranRenderer,
+  spatial_cells: SpatialCellsRenderer,
+  allele_grid: AlleleGridRenderer,
+  pedigree: PedigreeRenderer,
+  ranked_table: RankedTableRenderer,
 };
 
 /**
@@ -294,8 +346,18 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   showDragHandle,
   sourceLink,
   groupRender,
+  dashboardId,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
+  // "Compare with last visit" (#1397): inert unless switched on from the tile's
+  // change dot. The diff reaches the plots through AdvancedVizDiffContext.
+  const { comparing } = useChangeMark(String(metadata.index));
+  const diffView = useComponentDiff({
+    dashboardId,
+    componentId: String(metadata.index),
+    comparing,
+    filters: filters as unknown[],
+  });
   // Where a `popover` tile docks its controls (`controls_placement` on the
   // component, see controlsDock.ts); null when the author left it unsaid.
   // A linked view cell has little room: unless the author placed them, its
@@ -357,6 +419,36 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   // its title. The dispatch is the only place that sees the dashboard filters.
   const regionEcho = React.useMemo(() => genomeRegionEcho(filters), [filters]);
 
+  // The data table, floated over the dashboard (viewer-only state, never saved).
+  // Its rows are the ones the tile draws: the same payload the popover reads.
+  // A tile whose plot and table share a highlight (`published.highlightColumn`)
+  // ticks the rows of the highlighted points and reports ticked rows back.
+  const [tableFloating, setTableFloating] = React.useState(false);
+  const highlight = useTileHighlight(String(metadata.index));
+  const highlightColumn = published?.highlightColumn;
+  const { keys: highlightKeys, reveal: highlightReveal, hoverKey } = highlight;
+  const selectHighlight = highlight.select;
+  // The row of a point hovered in the plot; a row hovered in the table is
+  // already under the reader's pointer.
+  const plotHover = highlight.hoverSource === 'plot' ? highlight.hover : null;
+  const tableSelection = React.useMemo<DataGridSelection | undefined>(
+    () =>
+      highlightColumn
+        ? {
+            column: highlightColumn,
+            selected: highlightKeys,
+            onChange: (values) => selectHighlight(values, 'table'),
+            reveal: highlightReveal,
+            hovered: plotHover,
+            onHover: (value) => hoverKey(value, 'table'),
+          }
+        : undefined,
+    [highlightColumn, highlightKeys, highlightReveal, selectHighlight, plotHover, hoverKey],
+  );
+  // The payload goes away with the data (a kind switch, a failed refetch): the
+  // card has nothing to show then, and comes back with the next one.
+  const floatingData = tableFloating && published?.data ? published.data : null;
+
   // Rebuild the popovers from the payload — byte-for-byte what the frame used
   // to publish ready-made, minus whatever the tile now draws inline.
   const popovers = React.useMemo<React.ReactNode>(() => {
@@ -400,6 +492,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
           dataRows={published.data.rows}
           dataColumns={published.data.columns}
           tierAnnotation={published.data.tierAnnotation}
+          selection={tableSelection}
+          floating={tableFloating}
+          onFloatingChange={setTableFloating}
         />,
       );
     }
@@ -411,7 +506,16 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     // controls live is picked in the header of the controls block itself
     // (popover, strip or rail), not from a separate chrome icon.
     return nodes.length ? <>{nodes}</> : null;
-  }, [published, placement, placementState, folded, toggleFolded, metadata.index]);
+  }, [
+    published,
+    placement,
+    placementState,
+    folded,
+    toggleFolded,
+    metadata.index,
+    tableSelection,
+    tableFloating,
+  ]);
 
   const vizKind = (metadata.viz_kind as string) || '';
   const kindLabel = vizKindLabel(vizKind);
@@ -446,7 +550,29 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     groupRender?.display === 'facet' && groupingModeForKind(vizKind) === 'none';
   // Not handed the groups either, so the tile matches its badge: a renderer
   // that could still colour on its own would otherwise contradict it.
-  const wholeGroupRender = kindDeclinesSplit ? undefined : groupRender;
+  // A group captured on another collection is translated through the project's
+  // links first, or a tile of libraries would match nothing in a group of guides.
+  // The Overlay of "What's new" colours by run. A kind that draws each mark
+  // from several samples cannot, and is not handed the groups: it would
+  // otherwise read them as analysis groups on its own terms.
+  const overlayNewRuns = useOverlayNewRuns(metadata.dc_id);
+  const runOverlayOn =
+    groupRender?.display !== 'facet' && (groupRender?.groups ?? []).some(isRunGroup);
+  const runOverlayDeclined = runOverlayOn && !groupDisplaysForKind(vizKind).overlay;
+  const { groupRender: linkedGroupRender, runsAmbiguous } = useGroupsForDc(
+    groupRender,
+    dashboardId,
+    metadata.dc_id,
+    metadata.index != null ? String(metadata.index) : undefined,
+  );
+  const wholeGroupRender = kindDeclinesSplit || runOverlayDeclined ? undefined : linkedGroupRender;
+  // Said only on a tile whose collection gained a run: elsewhere there is
+  // nothing new for it to show.
+  let runOverlay: 'kind' | 'ambiguous' | null = null;
+  if (overlayNewRuns.length > 0 && !KINDS_WITHOUT_MARKS.has(vizKind)) {
+    if (runOverlayDeclined) runOverlay = 'kind';
+    else if (runsAmbiguous) runOverlay = 'ambiguous';
+  }
 
   // What the renderer drawn whole reported after recolouring its figure by the
   // groups (see `useReportGroupColouring`): whether any point belonged to one.
@@ -492,12 +618,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     splitIneffective,
     coloured: colouringMatched,
     drawnHere,
+    runOverlay,
   });
   const groupBadge = React.useMemo(
     () =>
       groupOutcome.badge ? (
         <GroupStatusBadge
-          label="not grouped"
+          label={NOT_GROUPED_LABELS[groupOutcome.badge]}
           colored={false}
           reasons={NOT_GROUPED_REASONS[groupOutcome.badge]()}
         />
@@ -574,13 +701,29 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const onResetSelection =
     onFilterChange && own.filters.length > 0
       ? () => {
-          for (const cleared of clearedSelectionFilters(own.filters)) onFilterChange(cleared);
+          const cleared = clearedSelectionFilters(own.filters);
+          traceGenome(String(metadata.index), 'tile reset: own selection cleared', describeFilters(cleared));
+          for (const filter of cleared) onFilterChange(filter);
         }
       : undefined;
 
-  const combinedExtras = popovers || extraActions ? (
+  // "Open in genome browser": on a genomic tile that says where it is looking,
+  // when the family has a browser (the button hides itself otherwise). Built
+  // here rather than in `popovers` because it reads the dashboard filters.
+  const openInBrowser = published?.openLocus ? (
+    <OpenInGenomeBrowserButton
+      key="open-genome-browser"
+      reader={published.openLocus}
+      vizKind={vizKind}
+      config={metadata.config}
+      index={String(metadata.index)}
+      filters={filters}
+    />
+  ) : null;
+  const combinedExtras = popovers || openInBrowser || extraActions ? (
     <>
       {popovers}
+      {openInBrowser}
       {extraActions}
     </>
   ) : undefined;
@@ -611,6 +754,17 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     metadata,
     undefined,
     <AdvancedVizExtrasProvider onChange={setPublished}>
+      {floatingData ? (
+        <FloatingDataTable
+          index={String(metadata.index)}
+          title={metadata.title || kindLabel?.tag || 'Advanced viz'}
+          dataRows={floatingData.rows}
+          dataColumns={floatingData.columns}
+          tierAnnotation={floatingData.tierAnnotation}
+          selection={tableSelection}
+          onClose={() => setTableFloating(false)}
+        />
+      ) : null}
       <ComponentIndexContext.Provider value={metadata.index}>
         <GroupStatusBadgeContext.Provider value={groupBadge}>
           <GroupColouringReportContext.Provider value={reportColouring}>
@@ -621,7 +775,17 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
                     <AdvancedVizKindContext.Provider value={kindLabel}>
                       <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
                         <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
-                          {inner}
+                          <AdvancedVizDiffContext.Provider value={comparing ? diffView.diff : null}>
+                            {inner}
+                          </AdvancedVizDiffContext.Provider>
+                          {comparing && (
+                            <DiffSummaryChip
+                              floating
+                              diff={diffView.diff}
+                              loading={diffView.loading}
+                              error={diffView.error}
+                            />
+                          )}
                         </HideLegendContext.Provider>
                       </AdvancedVizRegionEchoContext.Provider>
                     </AdvancedVizKindContext.Provider>

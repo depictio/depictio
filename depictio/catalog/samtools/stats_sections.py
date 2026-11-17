@@ -44,7 +44,7 @@ import numpy as np
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.sample_ids import strip_stage_suffixes
+from depictio.recipes.lib.sample_ids import ALIGNMENT_STAGE_TOKENS, strip_stage_suffixes
 
 RAW_DC_TAG = "samtools_stats_raw"
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
@@ -126,7 +126,7 @@ def _sample_of(path: str) -> str:
         if name.lower().endswith(suffix):
             name = name[: -len(suffix)]
             break
-    return strip_stage_suffixes(name)
+    return strip_stage_suffixes(name, extra=ALIGNMENT_STAGE_TOKENS)
 
 
 def _number(text: str | None) -> float | None:

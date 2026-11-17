@@ -1,7 +1,7 @@
 # nf-core/crisprseq 2.3.0: Depictio dashboards
 
 This template turns the output of the targeted analysis of
-[nf-core/crisprseq](https://nf-co.re/crisprseq) 2.3.0 into an Overview and five tabs in three
+[nf-core/crisprseq](https://nf-co.re/crisprseq) 2.3.0 into an Overview and seven tabs in three
 groups. The targeted analysis sequences amplicons around edited loci: the pipeline aligns every
 library to its reference amplicon, parses the CIGAR strings of the aligned reads into wild-type,
 template-based (HDR) and indel reads, and, unless `--skip_clonality` is set, classifies each
@@ -23,6 +23,8 @@ template follows are in `depictio/projects/nf-core/RULES.md`.
 | `guide_indel_sizes`, `guide_cut_site_profile` | `crisprseq_indels` summed per library, summarised per guide | guide and size, guide and offset |
 | `guide_substitution_profile` | `cigar/<sample>_subs-perc.csv`, `_cutSite.json`, summarised per guide (guide column `profile_guide`) | guide and offset |
 | `guide_substitutions` | `guide_substitution_profile` pivoted to one column per offset | guide |
+| `guide_indel_size_matrix` | `guide_indel_sizes` pivoted to one column per signed size within 30 bp (guide column `size_guide`, with no link from the samplesheet, so no filter narrows it) | guide |
+| `library_outcome_space` | `crisprseq_edit_summary` shares per outcome class, a PCA of them, the editing quartile of the library's guide from `guide_summary` and the edit class with the most reads (`dominant_outcome`) | library |
 
 Every per-library file is read by glob inside a recipe; no raw collection is scanned, so a run
 with thousands of libraries still produces a handful of tables. The per-read indel tables are
@@ -80,12 +82,23 @@ the guides take the brand colours rather than the palette.
   indel, so the median sits on zero even where part of the libraries carry one. A mean above its
   band means a minority of libraries carries the signal; a narrow band around a peak means most
   libraries repair the cut the same way.
-- **Aligned window**: the substitution profile keeps only the offsets at least 90% of the
-  guide's libraries reach. The amplicon ends that only some libraries reach are alignment
-  edges, where the gap rate climbs towards 100% without any edit.
+- **Aligned window**: the substitution profile keeps only the offsets every library of the
+  guide reaches. The amplicon ends that only some libraries reach are alignment edges, where
+  the gap rate climbs towards 100% without any edit. The window is defined by the data (the
+  intersection of the guide's amplicons), not by a share of libraries chosen for the template.
 - **Guide summary**: the median over the guide's libraries, so one failed library does not move a
-  guide. Its `edit_class` labels the median edited share: High (50 percent and up), Moderate
-  (10 and up), Low (1 and up), Unedited.
+  guide, with the first and third quartile of the libraries beside it (`q1_edited_pct`,
+  `q3_edited_pct`, `iqr_edited_pct`: how far a guide's libraries agree).
+- **Editing quartile** (`edit_quartile`): the rank of a guide's median edited share among the
+  guides of the run, in four classes (Highest, Upper-middle, Lower-middle, Lowest quartile;
+  Not ranked when the run has fewer than four guides). No tool or paper publishes a cut-off
+  between high and low editing (CRISPResso2 and nf-core/crisprseq report the rates only), so
+  the classes are a reference the data defines. Every tile that shows them says so, and the
+  bounds move with the run. A library takes its guide's quartile.
+- **Sample space** (`library_outcome_space`): each library's share of classified reads in the
+  seven outcome classes, reduced by a PCA with each share standardised. The first component
+  is oriented so that wild type loads negatively (editing grows to the right), and the two
+  variance shares are kept on every row for the cards.
 - **Profile window**: the size and position profiles keep 100 bp either side of the cut site
   (sizes up to 100 bp); the substitution heatmap keeps 20 bp either side.
 - **Guide alleles**: per guide, alleles are matched by type, length and offset from the cut
@@ -97,8 +110,10 @@ the guides take the brand colours rather than the palette.
 ## Tabs
 
 The Overview follows the family layout (`RULES.md` section 3): hero, About and run cards, a six
-step pipeline flow, four key figures with a group and library filter bar, four findings with a
-highlight each, and a link list of the tabs. The persistent sample filters and the collapsed
+step pipeline flow, four key figures with a group and library filter bar, four findings (two
+highlights, then two summary figures: the dominant indel size per guide, and the substitution
+rate along the cut), and a link list of the seven tabs. The allele map and the guide by offset
+heatmap are not repeated here: they are too dense for a quarter-width tile. The persistent sample filters and the collapsed
 sample sheet (samplesheet and per-library summary) sit in the left panel and at the bottom of
 every other tab.
 
@@ -109,27 +124,45 @@ every other tab.
    aligned share and the indel reads the filters dropped. Raw reads against the aligned share per
    library, whose lasso narrows the other tiles.
 
+2. **Replicates & QC.** *Do the libraries lose reads alike, and do a guide's libraries agree?*
+   Four cards: classified reads per library, the edited share, the spread between a guide's
+   libraries and the fewest libraries behind a guide. The share of the raw reads left at each
+   stage (a box and a colour per stage), the classified reads of every library ranked on log axes
+   and coloured by the quartile of its guide, and the
+   25 guides whose libraries disagree most (box of the edited share with its width). Libraries
+   of a guide are replicates only where the design makes them so.
+
 **Editing**
 
-2. **Edit outcomes.** *Which libraries carry disruptive edits, and how were they called?* Four
+3. **Edit outcomes.** *Which libraries carry disruptive edits, and how were they called?* Four
    cards: edited reads, the frameshift share of the indels, the in-frame reads and the reads by
    outcome. Frameshift share against editing per library, with the library record beside it.
    The Clonality section (zygosity class, clonality label, classifier confidence and indel
    peaks) goes with `SKIP_CLONALITY`. The clonality and outcome tables are collapsed.
-3. **Guides.** *Which guides edit well, and which edits disrupt the reading frame?* Four cards:
+4. **Sample space.** *Which libraries repair alike, judged by their outcome mix?* Four cards:
+   libraries by guide quartile, variance on the first component, the wild-type share and the
+   frameshift deletions. The libraries on the first components of their outcome shares,
+   coloured by the edit class with the most reads in the library (the guide's quartile is one
+   choice away in Colour by), and the outcome mix of every library as
+   stacked bars. The coordinates table is collapsed. No group-comparison volcano: the outcome
+   mix has seven features, too few for one; lasso two groups on the plane and compare them in
+   the Analysis panel.
+5. **Guides.** *Which guides edit well, and which edits disrupt the reading frame?* Four cards:
    guide editing, frameshift share, libraries per guide and the share of the dominant indel
-   size (how predictable the repair is). Editing against frameshift share per guide, and the
-   repair outcomes of every guide as stacked bars. The guide table and the guide record are
-   collapsed.
+   size (how predictable the repair is). Editing against frameshift share per guide, coloured
+   by editing quartile, and the repair outcomes of every guide as stacked bars. The guide table
+   and the guide record are collapsed.
 
 **Repair signature**
 
-4. **Indel spectrum.** *What is the repair signature of one guide's cut?* Four cards: dominant
+6. **Indel spectrum.** *What is the repair signature of one guide's cut?* Four cards: dominant
    indel size, its share, the frameshift share and the alleles by type. The indel size
    distribution and the deletion coverage and insertion position around the cut site, as the
-   mean library with its band. The allele map (offset against size) and the tables of alleles
-   are collapsed.
-5. **Substitutions.** *Where around the cut do bases change or drop out?* Four cards: the peak
+   mean library with its band, then the allele map (offset against size) of the picked guide.
+   A guide by size matrix, clustered, puts every guide's signature side by side, so guides that
+   repair alike can be spotted before one is picked.
+   The tables of alleles are collapsed.
+7. **Substitutions.** *Where around the cut do bases change or drop out?* Four cards: the peak
    substitution rate, the peak gap rate (each with the offsets that carry the most), the
    background rate and the libraries behind an offset. The guide by offset substitution matrix
    over every guide in scope (rows clustered, offsets in order, log(1 + rate) colour scale),
@@ -142,10 +175,11 @@ adds its own filters on the left.
 
 ## Filters and the guide pickers
 
-Both Guide pickers are `always_selected`: the Indel spectrum and Substitutions tabs read one guide,
-the first of the list until another is picked, on any run and without a run-specific
-`default_value`. The pick cannot be cleared, so a profile is always one guide's signature (its
-mean library with the band of its libraries) rather than a spread of guides.
+Both Guide pickers are `always_selected` and `multiple`: the Indel spectrum and Substitutions tabs
+read one guide, the first of the list until others are picked, on any run and without a
+run-specific `default_value`. The pick cannot be emptied, so a profile always shows at least one
+guide's signature (its mean library with the band of its libraries); picking more draws one curve
+per guide, and Analysis groups colour or split those guides by group.
 
 Two pickers, two scopes. The Indel spectrum picker sits on the samplesheet's `guide` column, so
 it narrows every collection of that tab through the samplesheet links, the cards and the allele
@@ -154,15 +188,36 @@ profile carries: a dashboard filter also applies to every collection with a colu
 name, and a picker on `guide` would narrow the guide by offset heatmap as well. The pick narrows
 the profile, its cards and its table, and the heatmap stays at the scope of the sample filters.
 
+## Chart descriptions and marks
+
+Every figure, advanced viz and table tile has a description for its info popover: a lead,
+"How to read:", "Lines and annotations:" where the figure draws a mark, and "Source:" or
+"Note:" (`RULES.md` section 14). The marks and their sources:
+
+- **Cut site** (the vertical marker at offset 0 of the four position profiles and the code
+  figure of the Overview): the cut site the pipeline reports for each amplicon, from the
+  `cut_site` column of the indel table and `cigar/<sample>_cutSite.json`
+  ([output documentation](https://nf-co.re/crisprseq/2.3.0/docs/output)). It is derived from the
+  protospacer and its convention may be shifted for some guides, which moves a curve by a
+  constant and keeps its shape.
+- **Size 0** (the marker of the indel size profile): separates deletions from insertions on the
+  signed size axis. It is not the cut site.
+- **Bands** (profiles): the first and third quartile of the guide's libraries, a reference the
+  data defines. **Quartile colours**: the rank of a guide among the guides of the run, never a
+  threshold from a tool or a paper.
+- No tile draws a cut-off for depth, aligned share, editing or agreement, because no source
+  publishes one; the tiles say so.
+
 ## Reading the dashboard
 
-- Start on Read QC: a library with few classified reads or a low aligned share gives an editing
-  rate that rests on a handful of reads.
+- Start on Read QC and Replicates & QC: a library with few classified reads or a low aligned
+  share gives an editing rate that rests on a handful of reads, and a guide whose libraries
+  disagree widely has a median that hides it.
 - A guide that edits well but whose frameshift share of indels sits near a third makes in-frame
   edits as often as chance, which leaves more intact protein than a knockout needs.
 - The per-guide size profile is the repair signature: a dominant 1 bp insertion or a
   microhomology deletion is typical of Cas9 repair and reproducible across a guide's libraries.
-- The deletion profile should peak near offset 0. A peak far from it points at a misplaced cut
+- The deletion profile is expected to peak near offset 0. A peak far from it points at a misplaced cut
   site, a second site in the amplicon, or amplicon-end artefacts; the allele map shows which
   alleles make that peak.
 - Without a donor template the template-based rate is structurally zero, and without a base

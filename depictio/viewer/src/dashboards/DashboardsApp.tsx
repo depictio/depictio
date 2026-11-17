@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActionIcon,
   AppShell,
@@ -25,8 +25,8 @@ import type {
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { AppSidebar } from '../chrome';
-import TourButton from '../walkthrough/TourButton';
+import { AppSidebar, LoadErrorCard } from '../chrome';
+import TourButton from '../coach/TourButton';
 import DashboardsList from './DashboardsList';
 import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import CreateDashboardModal from './CreateDashboardModal';
@@ -79,10 +79,15 @@ const DashboardsApp: React.FC = () => {
   const [dashboards, setDashboards] = useState<DashboardListEntry[]>([]);
   const [projects, setProjects] = useState<ProjectListEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+  /** `?create_for_project=<id>`: a project page's "Create a dashboard" opens
+   *  the dialog on that project. */
+  const [requestedProjectId] = useState(() =>
+    new URLSearchParams(window.location.search).get('create_for_project'),
+  );
   const [editTarget, setEditTarget] = useState<DashboardListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardListEntry | null>(null);
 
@@ -95,12 +100,14 @@ const DashboardsApp: React.FC = () => {
     dashboardsDefaultView,
     loading: authLoading,
   } = useCurrentUser();
-  // Public/demo deployments don't allow importing user-supplied dashboard
-  // JSON — that would let an anonymous visitor write into shared projects.
-  // Mirrors the Dash gate added in `layouts_toolbox.create_dashboard_modal`.
+  // Public/demo deployments refuse imports from visitors (temporary users):
+  // user-supplied dashboard JSON would let them write into shared projects.
+  // A signed-in user keeps the tab; the API (`refuse_visitor_import`) then
+  // requires editor rights on the target project, as on any instance.
   // Fail closed while auth is loading so the import tab can't be reached on
   // the first frame before `/auth/me/optional` resolves.
-  const importDisabled = authLoading || isPublicMode || isDemoMode;
+  const importDisabled =
+    authLoading || ((isPublicMode || isDemoMode) && (!user || Boolean(user.is_temporary)));
 
   usePageTitle('Dashboards');
   const glass = useGlassPages();
@@ -113,11 +120,19 @@ const DashboardsApp: React.FC = () => {
         setDashboards(list);
         setProjects(projs);
       })
-      .catch((err: Error) => {
-        setLoadError(err.message || 'Failed to load dashboards');
+      .catch((err: unknown) => {
+        setLoadError({ error: err });
       })
       .finally(() => setLoading(false));
   }, [refreshKey]);
+
+  // Opened once the projects are in, or the dialog's project list is empty.
+  const requestHandled = useRef(false);
+  useEffect(() => {
+    if (!requestedProjectId || loading || requestHandled.current) return;
+    requestHandled.current = true;
+    openCreate();
+  }, [requestedProjectId, loading, openCreate]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -273,17 +288,7 @@ const DashboardsApp: React.FC = () => {
       </Center>
     ) : loadError ? (
       <Center mih={200}>
-        <Stack align="center" gap="xs">
-          <Icon
-            icon="mdi:alert-circle"
-            width={32}
-            color="var(--mantine-color-red-6)"
-          />
-          <Text c="red">{loadError}</Text>
-          <Button variant="light" onClick={refresh}>
-            Try again
-          </Button>
-        </Stack>
+        <LoadErrorCard subject="dashboards" error={loadError.error} onRetry={refresh} />
       </Center>
     ) : (
       <DashboardsList
@@ -314,6 +319,7 @@ const DashboardsApp: React.FC = () => {
         onCreate={handleCreate}
         onImport={handleImport}
         disableImport={importDisabled}
+        initialProjectId={requestedProjectId}
       />
       <EditDashboardModal
         opened={Boolean(editTarget)}

@@ -1,15 +1,15 @@
 """nf-core/sarek 3.10.0: the recipes and wiring of the Protein tab.
 
-The tab picks a gene on a scatter and loads its predicted structure and its
-lollipop. Three pieces have to agree on column names, and none of them is
-checked anywhere else:
+The tab picks a gene on a scatter and narrows the lollipop to it. Three pieces
+have to agree on column names, and none of them is checked anywhere else:
 
 * ``snpeff/protein_lollipop`` (the catalog recipe) writes the coding variants,
-  with the reference residue the structure tile checks its numbering against;
+  with the reference residue of each protein change;
 * ``nf-core/sarek/protein_genes`` (the project recipe) folds them to one row per
   gene, under the same ``gene`` column, so a click on the scatter reaches the
-  lollipop and the structure;
-* the dashboard binds both, and the structure through the server's resolver.
+  lollipop;
+* the dashboard binds both. It draws no 3D structure, so the structure resolver
+  is not involved.
 
 The recipes run on hand-built rows and are checked against their own
 OUTPUT_SCHEMA through ``validate_schema``, which is what ingest enforces.
@@ -17,6 +17,7 @@ OUTPUT_SCHEMA through ``validate_schema``, which is what ingest enforces.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -175,6 +176,80 @@ def test_protein_genes_has_no_sample_or_caller_column() -> None:
 
 
 # ---------------------------------------------------------------------------
+# nf-core/sarek/caller_overlap
+# ---------------------------------------------------------------------------
+
+
+def _calls(rows: list[tuple[Any, ...]]) -> pl.DataFrame:
+    """Rows shaped like ``snpeff_ann_variants``, the overlap recipe's source."""
+    return pl.DataFrame(
+        rows,
+        schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "variant_key": pl.Utf8,
+            "variant_type": pl.Utf8,
+            "is_pass": pl.Boolean,
+        },
+        orient="row",
+    )
+
+
+def test_caller_overlap_has_one_set_column_per_caller_and_counts_agreement() -> None:
+    rows = [
+        # sample, caller, variant_key, variant_type, is_pass
+        ("S1", "c1", "v1", "SNP", True),
+        ("S1", "c2", "v1", "SNP", True),
+        ("S1", "c1", "v2", "SNP", True),
+        ("S1", "c2", "v3", "INDEL", True),
+        ("S2", "c1", "v1", "SNP", True),
+        # Neither a filtered call nor a structural variant is a membership.
+        ("S1", "c2", "v9", "SNP", False),
+        ("S1", "c3", "v1", "SNP", False),
+        ("S1", "c3", "sv1", "SV", True),
+    ]
+    out = _run("nf-core/sarek/caller_overlap.py", {"variants": _calls(rows)}, VERSION)
+    assert out.columns == ["sample", "variant_key", "n_callers", "sample_shared_pct", "c1", "c2"]
+
+    s1 = {r["variant_key"]: r for r in out.filter(pl.col("sample") == "S1").iter_rows(named=True)}
+    assert set(s1) == {"v1", "v2", "v3"}
+    assert (s1["v1"]["c1"], s1["v1"]["c2"], s1["v1"]["n_callers"]) == (1, 1, 2)
+    assert (s1["v2"]["c1"], s1["v2"]["c2"]) == (1, 0)
+    # One of the sample's three PASS calls is made by two callers.
+    assert abs(s1["v1"]["sample_shared_pct"] - 100 / 3) < 1e-9
+    s2 = out.filter(pl.col("sample") == "S2")
+    assert s2["sample_shared_pct"].to_list() == [0.0]
+
+
+def test_caller_overlap_keeps_the_most_shared_calls_when_it_caps() -> None:
+    module = load_recipe("nf-core/sarek/caller_overlap.py", VERSION)
+    rows = [("S1", "c1", f"v{i}", "SNP", True) for i in range(5)]
+    rows += [("S1", "c2", "v0", "SNP", True)]
+    original = module.MAX_ELEMENTS
+    module.MAX_ELEMENTS = 2
+    try:
+        out = module.transform({"variants": _calls(rows)})
+    finally:
+        module.MAX_ELEMENTS = original
+    assert out.height == 2
+    assert "v0" in out["variant_key"].to_list()
+    # The share is counted before the cap: 1 of the 5 calls is shared.
+    assert out["sample_shared_pct"].to_list() == [20.0, 20.0]
+
+
+def test_caller_overlap_is_wired_to_the_dashboard() -> None:
+    dashboard = yaml.safe_load(DASHBOARD.read_text())
+    tab = next(t for t in dashboard["tabs"] if t["title"] == "Caller concordance")
+    tile = _tile(tab, "cc-variant-upset")
+    assert tile["data_collection_tag"] == "snpeff_variant_upset"
+    # The two numeric helper columns are 0/1 on a one-caller run: they are not sets.
+    pattern = tile["config"]["set_columns_pattern"]
+    assert re.search(pattern, "n_callers") is None
+    assert re.search(pattern, "sample_shared_pct") is None
+    assert re.search(pattern, "deepvariant") is not None
+
+
+# ---------------------------------------------------------------------------
 # The dashboard's Protein tab
 # ---------------------------------------------------------------------------
 
@@ -203,7 +278,7 @@ def test_structure_render_is_bound_by_gene_and_checks_its_numbering() -> None:
     assert set(render.roles.values()) <= set(recipe.OUTPUT_SCHEMA)
 
 
-def test_tiles_share_the_gene_column_so_a_pick_reaches_all_three(
+def test_tiles_share_the_gene_column_so_a_pick_reaches_the_lollipop(
     protein_tab: dict[str, Any],
 ) -> None:
     genes_schema = load_recipe("nf-core/sarek/protein_genes.py", VERSION).OUTPUT_SCHEMA
@@ -213,32 +288,15 @@ def test_tiles_share_the_gene_column_so_a_pick_reaches_all_three(
     cfg = scatter["config"]
     assert scatter["data_collection_tag"] == "protein_genes"
     assert cfg["selection_enabled"] is True
-    # The click emits `gene`, and the lollipop and the structure have that column.
+    # The click emits `gene`, and the lollipop has that column.
     assert cfg["selection_column"] == "gene"
     assert "gene" in genes_schema and "gene" in lollipop_schema
     for key in ("x_col", "y_col", "label_col", "color_col"):
         assert cfg[key] in genes_schema, key
 
-    for index in ("pr-structure", "pr-lollipop"):
-        assert _tile(protein_tab, index)["data_collection_tag"] == "snpeff_protein_lollipop"
-
-
-def test_structure_tile_resolves_by_gene_and_never_sets_header_controls(
-    protein_tab: dict[str, Any],
-) -> None:
-    tile = _tile(protein_tab, "pr-structure")
-    assert tile["use"] == "snpeff/coding_variant_structure"
-    cfg = tile["config"]
-    # Off by default on the server: the tile says so, nothing is fetched at import.
-    assert cfg["structure_source"] == "resolve"
-    assert cfg["gene_col"] == "gene"
-    assert cfg["entity_col"] == "gene"
-    # RULES.md section 8: the dock decides where controls go.
-    assert "controls_placement" not in cfg
-    # The tile owns the limit a reader would otherwise meet as an empty tile.
-    assert "2,700" in tile["description"]
-    assert "2,700" in _tile(protein_tab, "pr-intro")["body"]
-    assert "DEPICTIO_STRUCTURE_RESOLVER_ENABLED" in _tile(protein_tab, "pr-intro")["body"]
+    assert _tile(protein_tab, "pr-lollipop")["data_collection_tag"] == "snpeff_protein_lollipop"
+    # The tab draws no 3D structure tile.
+    assert all(c.get("index") != "pr-structure" for c in protein_tab["components"])
 
 
 def test_every_protein_card_reads_a_column_its_collection_has(

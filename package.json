@@ -4,7 +4,11 @@
   "description": "pnpm workspace root; the apps live in packages/* and depictio/viewer. See pnpm-workspace.yaml for why the override exists.",
   "pnpm": {
     "overrides": {
-      "@gmod/bgzf-filehandle": "6.3.3"
+      "@gmod/bgzf-filehandle": "6.3.3",
+      "@gmod/tabix@^3.10": "3.10.2"
+    },
+    "patchedDependencies": {
+      "@jbrowse/plugin-data-management@4.3.0": "patches/@jbrowse__plugin-data-management@4.3.0.patch"
     }
   }
 }

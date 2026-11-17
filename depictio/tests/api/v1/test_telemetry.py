@@ -557,7 +557,9 @@ class TestKubernetesResourcesInPayload:
         assert properties.kubernetes.memory_limit_mib == 4096
 
         blob = json.dumps(properties.model_dump(mode="json"))
-        assert "0.5" not in blob, "the raw operator-typed CPU string must never reach the payload"
+        # Quoted: a raw value would be serialised as a JSON string, and a bare
+        # "0.5" also matches version numbers such as "1.20.5".
+        assert '"0.5"' not in blob, "the raw operator-typed CPU string must never reach the payload"
         assert "Gi" not in blob, "the raw operator-typed memory string must never reach the payload"
 
     def test_a_malformed_quantity_degrades_to_none_not_a_crash(self, seeded_db):

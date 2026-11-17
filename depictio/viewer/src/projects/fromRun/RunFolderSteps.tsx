@@ -8,11 +8,15 @@ import React from 'react';
 import { Alert, Box, Button, Center, Group, Loader, Paper, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { runCollectionTotals, useBrandAccents } from 'depictio-react-core';
+import { useBrandAccents } from 'depictio-react-core';
 import type { DetectedTemplate, FromRunReport, RunStorageIn } from 'depictio-react-core';
 
+import { collectionCounts } from './collectionCounts';
 import { plural } from './plural';
-import { RunPreview, RunSummaryCard } from './RunPreview';
+import { RunPreview, RunSummaryCard, readsSeveralRuns, runsParent } from './RunPreview';
+import { SourceSection } from '../create/SourceSection';
+import { pipelineLabel } from './pipelineLabel';
+import { readySummary } from './collectionCounts';
 
 /** The preview's answer when no template was picked and the server could not
  *  tell which pipeline produced the folder: say so, and send the reader back
@@ -31,7 +35,7 @@ const TemplateNotDetectedAlert: React.FC<{
     <Stack gap="xs">
       <Text size="sm">{message}</Text>
       <Text size="sm">
-        Choose the pipeline that produced this folder and its template version, then
+        Choose the pipeline that produced this folder and its version, then
         preview again.
       </Text>
       <Group>
@@ -49,6 +53,15 @@ const TemplateNotDetectedAlert: React.FC<{
     </Stack>
   </Alert>
 );
+
+/** "nf-core/ampliseq 2.18.0 · 21 collections ready · ~/results". */
+function runSummary(report: FromRunReport): string {
+  return [
+    pipelineLabel(report.template_id) ?? report.template_id,
+    readySummary(collectionCounts(report.data_collections)),
+    readsSeveralRuns(report) ? `${plural(report.runs?.length ?? 0, 'run')} in ${runsParent(report)}` : report.data_root,
+  ].join(' · ');
+}
 
 interface RunPreviewStepProps {
   loading: boolean;
@@ -71,6 +84,10 @@ interface RunPreviewStepProps {
   /** The private bucket's connection details, to preview its files. */
   storage?: RunStorageIn | null;
   detection: DetectedTemplate | null;
+  /** Where the pipeline came from, for the facts card. */
+  chosenFrom?: 'detected' | 'user' | null;
+  /** Open the run's details: nothing else competes for the screen. */
+  sectionsOpen?: boolean;
 }
 
 export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
@@ -86,6 +103,8 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
   templateEngine = null,
   detection,
   storage = null,
+  chosenFrom = null,
+  sectionsOpen = true,
 }) => {
   const accent = useBrandAccents();
   return (
@@ -98,7 +117,7 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
               <Text size="sm" c="dimmed">
                 {detecting
                   ? 'Reading the run folder and recognising its pipeline...'
-                  : 'Reading the run folder and resolving the template...'}
+                  : 'Reading the run folder and resolving the pipeline...'}
               </Text>
             </Group>
           </Center>
@@ -146,13 +165,22 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
         </Alert>
       )}
       {report && (
-        <RunPreview
-          report={report}
-          templateTitle={templateTitle}
-          templateEngine={templateEngine}
-          detection={detection}
-          storage={storage}
-        />
+        <SourceSection
+          icon="mdi:folder-check-outline"
+          title="Run folder"
+          summary={runSummary(report)}
+          defaultOpen={sectionsOpen}
+          testId="found-section-run"
+        >
+          <RunPreview
+            report={report}
+            templateTitle={templateTitle}
+            templateEngine={templateEngine}
+            detection={detection}
+            storage={storage}
+            found={{ chosenFrom }}
+          />
+        </SourceSection>
       )}
     </Stack>
   );
@@ -171,6 +199,10 @@ interface RunCreateStepProps {
   projectName: string;
   /** The private bucket's connection details go with the request. */
   savesStorage: boolean;
+  /** The dropped files, still in sight before creating. */
+  dropped?: React.ReactNode;
+  /** The project's visibility control, shown before the button that creates. */
+  visibility?: React.ReactNode;
 }
 
 export const RunCreateStep: React.FC<RunCreateStepProps> = ({
@@ -181,9 +213,11 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
   storage = null,
   projectName,
   savesStorage,
+  dropped = null,
+  visibility = null,
 }) => {
   const accent = useBrandAccents();
-  const totals = report ? runCollectionTotals(report.data_collections) : null;
+  const totals = report ? collectionCounts(report.data_collections) : null;
   return (
     <Stack gap="md" pt="md">
       {report && (
@@ -195,6 +229,8 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
           storage={storage}
         />
       )}
+      {dropped}
+      {visibility}
       <Paper withBorder radius="md" p="lg">
         <Stack gap="sm" align="center">
           <Icon
@@ -207,10 +243,14 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
           </Text>
           <Text size="xs" c="dimmed" ta="center">
             {totals
-              ? `${totals.ready} of ${plural(totals.considered, 'data collection')} will be ` +
-                'ingested in the background. You can watch the run and open the dashboard ' +
+              ? `${plural(totals.ready, 'data collection')} will be ingested` +
+                (totals.optionalAbsent > 0
+                  ? ` (${plural(totals.optionalAbsent, 'optional one')} ` +
+                    `${totals.optionalAbsent === 1 ? 'is' : 'are'} not in this run)`
+                  : '') +
+                ' in the background. You can watch the run and open the dashboard ' +
                 'from the next screen.'
-              : 'The run folder will be ingested and the template dashboards imported.'}
+              : 'The run folder will be ingested and the dashboards imported.'}
           </Text>
           {savesStorage && (
             <Group gap={6} wrap="nowrap" justify="center" data-testid="run-create-storage-note">

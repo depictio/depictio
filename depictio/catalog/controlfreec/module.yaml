@@ -3,6 +3,7 @@
 # `<sample>_ratio.txt` window table this catalog binds.
 id: controlfreec
 name: Control-FREEC
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/controlfreec/freec
 biotools_url: https://bio.tools/freec
 description: >-

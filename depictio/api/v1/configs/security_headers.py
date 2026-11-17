@@ -39,7 +39,11 @@ from depictio.api.v1.configs.config import settings
 BASEMAP_CONNECT_SRC = (
     "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org"
 )
-_BASE_CONNECT_SRC = f"'self' data: ws: wss: {BASEMAP_CONNECT_SRC}"
+# The genome browser (jbrowse component) reads its reference sequences and gene
+# annotations straight from UCSC's download server (public, CORS + Range);
+# everything else goes through the API's track proxy ('self').
+UCSC_CONNECT_SRC = "https://hgdownload.soe.ucsc.edu"
+_BASE_CONNECT_SRC = f"'self' data: ws: wss: {BASEMAP_CONNECT_SRC} {UCSC_CONNECT_SRC}"
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 

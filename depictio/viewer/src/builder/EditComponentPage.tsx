@@ -9,6 +9,7 @@ import {
   AppShell,
   Alert,
   Button,
+  Center,
   Container,
   Group,
   Loader,
@@ -21,6 +22,7 @@ import type { BrandTheme, StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
 import StepDesign from './steps/StepDesign';
 import BrandMark from '../chrome/BrandMark';
+import { DashboardLoadErrorCard } from '../chrome/DashboardLoadError';
 import { useGlassPages } from '../chrome/variants/glass/pages';
 import GlassBuilderShell from './glass/GlassBuilderShell';
 import { getComponentTypeMeta } from './componentTypes';
@@ -38,6 +40,11 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
   const reset = useBuilderStore((s) => s.reset);
   const loadExisting = useBuilderStore((s) => s.loadExisting);
   const [error, setError] = useState<string | null>(null);
+  // What the dashboard fetch threw, as thrown: the card tells a missing
+  // dashboard from a refused one from a server that is down.
+  const [loadFailure, setLoadFailure] = useState<{ error: unknown } | null>(null);
+  // Bumped by "Try again": the load effect depends on it.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   // The dashboard's brand, so the preview draws in the colours the component
   // will have once saved rather than the instance defaults.
@@ -64,10 +71,18 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
+        setLoadFailure({ error: err });
       })
       .finally(() => setLoading(false));
     return () => reset();
-  }, [dashboardId, componentId, init, loadExisting, reset]);
+  }, [dashboardId, componentId, init, loadExisting, reset, loadAttempt]);
+
+  const retryLoad = () => {
+    setError(null);
+    setLoadFailure(null);
+    setLoading(true);
+    setLoadAttempt((n) => n + 1);
+  };
 
   const cancel = () => {
     window.location.assign(`/dashboard-edit/${dashboardId}`);
@@ -80,10 +95,20 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
           <Loader size="sm" />
         </Group>
       )}
-      {error && (
-        <Alert color="red" title="Cannot edit component">
-          {error}
-        </Alert>
+      {loadFailure ? (
+        <Center mih={360} py="xl">
+          <DashboardLoadErrorCard
+            error={loadFailure.error}
+            resourceId={dashboardId}
+            onRetry={retryLoad}
+          />
+        </Center>
+      ) : (
+        error && (
+          <Alert color="red" title="Cannot edit component">
+            {error}
+          </Alert>
+        )
       )}
       {!loading && !error && <StepDesign />}
     </>

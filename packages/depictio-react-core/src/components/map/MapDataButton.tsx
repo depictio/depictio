@@ -16,6 +16,7 @@ import {
 } from '../../selection';
 import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import DataGridModal from '../data/DataGridModal';
 import { useDataVersionRequest } from '../../dataVersions';
 
 // AG Grid is ~250kB of CSS plus its own chunk, and the map branch of
@@ -79,6 +80,7 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
     isMapSelectionEnabled(metadata, Boolean(onFilterChange)) && Boolean(selectionColumn);
 
   const [opened, setOpened] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   // Into the fullscreen tile while there is one, as the advanced-viz popover
   // does: portaled to the page, the table opened where nothing is painted,
   // and the icon seemed to do nothing.
@@ -116,99 +118,117 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
   };
 
   const close = () => abortRef.current?.abort();
+  const closeTable = () => {
+    setOpened(false);
+    setExpanded(false);
+  };
 
-  return (
-    // closeOnClickOutside disabled for the same reason as the advanced-viz
-    // popover: AG Grid renders its column and filter-operator menus in their
-    // own portal at document.body level, and the outside-click detector reads
-    // clicks on those as "outside" and shuts the table. Dismiss via the close
-    // button in the table's header, the icon (toggle), or Escape.
-    //
-    // Controlled `opened` so that close button can reach it. Mantine only
-    // attaches its own toggle to the target while UNcontrolled
-    // (`PopoverTarget`: `...!ctx.controlled ? { onClick: ctx.onToggle }`), so
-    // the trigger carries its own onClick below. `onOpen`/`onClose` fire either
-    // way — they come off a `useDidUpdate` on the resolved open state.
-    <Popover
-      position="bottom-end"
-      shadow="md"
-      withArrow
-      closeOnClickOutside={false}
-      closeOnEscape
-      opened={opened}
-      onChange={setOpened}
-      onOpen={load}
-      onClose={close}
-      portalProps={{ target: portalTarget }}
-    >
-      <Popover.Target>
-        <ActionIcon
-          variant={opened ? 'filled' : 'subtle'}
-          color={TILE_ACTION_STYLE.data.color}
-          size="sm"
-          aria-label="Show underlying data"
-          title={TILE_ACTION_STYLE.data.label}
-          data-tile-action="data"
-          data-no-drag
-          onClick={() => setOpened((v) => !v)}
-        >
-          <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
-        </ActionIcon>
-      </Popover.Target>
-      <Popover.Dropdown
-        p="sm"
-        style={{
-          width: 'min(820px, 88vw)',
-          // Cap the dropdown so it never extends past the viewport;
-          // overflow:auto lets users scroll the whole popover when the grid
-          // pushes content below the bottom of the screen.
-          maxHeight: '85vh',
-          overflow: 'auto',
-        }}
-      >
-        {state.status === 'error' ? (
-          <Text size="xs" c="red">
-            Could not load the map's data: {state.message}
-          </Text>
-        ) : state.status === 'ready' ? (
-          <Suspense
-            fallback={
-              <Center h={120}>
-                <Loader size="sm" />
-              </Center>
-            }
-          >
-            <DataGridBody
-              dataRows={state.data.rows}
-              dataColumns={state.data.columns}
-              onClose={() => setOpened(false)}
-              selection={
-                selectable && selectionColumn
-                  ? {
-                      column: selectionColumn,
-                      selected,
-                      onChange: (values) =>
-                        onFilterChange?.(mapSelectionFilter(metadata, values)),
-                    }
-                  : undefined
-              }
-              extraBadge={
-                state.data.truncated ? (
-                  <Badge size="xs" color="orange" variant="light">
-                    first {state.data.row_count.toLocaleString()} of{' '}
-                    {state.data.total_rows.toLocaleString()}
-                  </Badge>
-                ) : undefined
-              }
-            />
-          </Suspense>
-        ) : (
+  const body =
+    state.status === 'error' ? (
+      <Text size="xs" c="red">
+        Could not load the map's data: {state.message}
+      </Text>
+    ) : state.status === 'ready' ? (
+      <Suspense
+        fallback={
           <Center h={120}>
             <Loader size="sm" />
           </Center>
-        )}
-      </Popover.Dropdown>
-    </Popover>
+        }
+      >
+        <DataGridBody
+          dataRows={state.data.rows}
+          dataColumns={state.data.columns}
+          onClose={closeTable}
+          expanded={expanded}
+          onToggleExpand={() => setExpanded((v) => !v)}
+          selection={
+            selectable && selectionColumn
+              ? {
+                  column: selectionColumn,
+                  selected,
+                  onChange: (values) =>
+                    onFilterChange?.(mapSelectionFilter(metadata, values)),
+                }
+              : undefined
+          }
+          extraBadge={
+            state.data.truncated ? (
+              <Badge size="xs" color="orange" variant="light">
+                first {state.data.row_count.toLocaleString()} of{' '}
+                {state.data.total_rows.toLocaleString()}
+              </Badge>
+            ) : undefined
+          }
+        />
+      </Suspense>
+    ) : (
+      <Center h={120}>
+        <Loader size="sm" />
+      </Center>
+    );
+
+  // closeOnClickOutside disabled for the same reason as the advanced-viz
+  // popover: AG Grid renders its column and filter-operator menus in their
+  // own portal at document.body level, and the outside-click detector reads
+  // clicks on those as "outside" and shuts the table. Dismiss via the close
+  // button in the table's header, the icon (toggle), or Escape.
+  //
+  // Controlled `opened` so that close button can reach it. Mantine only
+  // attaches its own toggle to the target while UNcontrolled
+  // (`PopoverTarget`: `...!ctx.controlled ? { onClick: ctx.onToggle }`), so
+  // the trigger carries its own onClick below. `onOpen`/`onClose` fire either
+  // way — they come off a `useDidUpdate` on the resolved open state.
+  return (
+    <>
+      <Popover
+        position="bottom-end"
+        shadow="md"
+        withArrow
+        closeOnClickOutside={false}
+        closeOnEscape
+        opened={opened && !expanded}
+        onChange={setOpened}
+        onOpen={load}
+        onClose={close}
+        portalProps={{ target: portalTarget }}
+      >
+        <Popover.Target>
+          <ActionIcon
+            variant={opened ? 'filled' : 'subtle'}
+            color={TILE_ACTION_STYLE.data.color}
+            size="sm"
+            aria-label="Show underlying data"
+            title={TILE_ACTION_STYLE.data.label}
+            data-tile-action="data"
+            data-no-drag
+            onClick={() => setOpened((v) => !v)}
+          >
+            <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
+          </ActionIcon>
+        </Popover.Target>
+        <Popover.Dropdown
+          p="sm"
+          style={{
+            width: 'min(820px, 88vw)',
+            // Cap the dropdown so it never extends past the viewport;
+            // overflow:auto lets users scroll the whole popover when the grid
+            // pushes content below the bottom of the screen.
+            maxHeight: '85vh',
+            overflow: 'auto',
+          }}
+        >
+          {expanded ? null : body}
+        </Popover.Dropdown>
+      </Popover>
+      {/* Mounted only while enlarged: a closed modal still leaves a portal
+          behind, which a fullscreen tile lays out as a child. */}
+      {opened && expanded ? (
+        <DataGridModal opened onClose={closeTable}>
+          {body}
+        </DataGridModal>
+      ) : null}
+    </>
   );
 };
 

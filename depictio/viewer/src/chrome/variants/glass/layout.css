@@ -268,13 +268,77 @@
   width: 44px;
   height: 40px;
 }
+/* The scroll region sits in a host so its overflow cue (a fade at the edge
+   that has more tabs, and a chevron that pages the list) can sit over it. The
+   fade is a mask, not a coloured overlay, so it holds on any rail background. */
+.hy-side-scroll-host {
+  position: relative;
+  /* Takes every pixel the tools and the foot leave: the list scrolls inside the
+     whole free height instead of stopping at its content or a spacer's share. */
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
 .hy-side-scroll {
-  flex: 0 1 auto;
+  --hy-side-fade: 36px;
+  flex: 1 1 auto;
   width: 100%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
+}
+.hy-side-scroll[data-more-below] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--hy-side-fade)), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--hy-side-fade)), transparent);
+}
+.hy-side-scroll[data-more-above] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--hy-side-fade));
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--hy-side-fade));
+}
+.hy-side-scroll[data-more-above][data-more-below] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--hy-side-fade),
+    #000 calc(100% - var(--hy-side-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--hy-side-fade),
+    #000 calc(100% - var(--hy-side-fade)),
+    transparent
+  );
+}
+.hy-side-more {
+  position: absolute;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--gl-rail-muted);
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+.hy-side-more:hover {
+  background: var(--gl-rail-hover);
+  color: var(--gl-rail-fg);
+}
+.hy-side-more--above {
+  top: 0;
+}
+.hy-side-more--below {
+  bottom: 0;
 }
 .hy-side-scroll::-webkit-scrollbar {
   display: none;
@@ -317,46 +381,69 @@
 }
 /* The open sidebar's foot (the server's state, the way home) centres its rows
    instead of hanging them off the left edge like the navigation above. */
-.hy-shell:not([data-side='folded']) .hy-side-foot :is(.hy-status, .hy-row) {
+.hy-shell:not([data-side='folded']) .hy-side-foot .hy-row {
   justify-content: center;
 }
-/* The server's state at the sidebar's foot: a quiet row, smaller than the
-   rows above it, that opens the server info popover. */
-.hy-status {
-  position: relative;
-  display: flex;
-  align-items: center;
+.hy-side-foot {
+  gap: 12px;
+}
+/* The server's state at the sidebar's foot, drawn like the landing pages'
+   footer (`.gp-side-foot`): one soft card, the live dot and "Online" with the
+   dimmed version, then the instance mode. A subgrid keeps the two leading
+   glyphs in one column. It opens the server info popover. */
+.hy-status-card {
+  flex: none;
+  display: grid;
+  grid-template-columns: 14px max-content;
+  justify-content: center;
+  align-content: center;
   gap: 12px;
   width: 100%;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
+  padding: 16px 16px;
   border-radius: var(--gl-key-radius);
-  background: transparent;
+  background: var(--gl-well);
   color: var(--gl-rail-muted);
+}
+.hy-status-card > .hy-status,
+.hy-status-card > .hy-mode {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  justify-items: start;
+  align-items: center;
+}
+.hy-status-card > :is(.hy-status, .hy-mode) > :first-child {
+  justify-self: center;
+}
+.hy-status {
+  position: relative;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gl-rail-fg);
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 550;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: left;
   cursor: pointer;
   outline: none;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease,
-    box-shadow 150ms ease;
+  column-gap: 8px;
+  transition: color 150ms ease;
 }
-.hy-status:hover {
-  color: var(--gl-rail-fg);
-  background: var(--gl-rail-hover);
+.hy-status-card > .hy-status:has(> .dc-update-dot) {
+  grid-template-columns: 14px max-content auto;
 }
 .hy-status:focus-visible {
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
 .hy-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--mantine-color-green-6);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-green-6) 20%, transparent);
@@ -370,31 +457,61 @@
   box-shadow: none;
 }
 .hy-status-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
+.hy-status-ver {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--gl-faint);
+}
+.hy-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gl-rail-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.hy-mode svg {
+  flex: none;
+  color: var(--gl-faint);
+}
+/* Open: the update dot is the third column, right after the tag whatever its
+   length. Folded (below) pins it to the corner of the dot. */
 .hy-status .dc-update-dot {
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
+  position: static;
+  align-self: center;
+  transform: none;
+}
+.hy-shell[data-side='folded'] .hy-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
 }
 .hy-shell[data-side='folded'] .hy-status {
-  width: 40px;
-  padding: 0;
+  display: flex;
   justify-content: center;
+  width: 100%;
+  min-height: 100%;
 }
 .hy-shell[data-side='folded'] .hy-status-text {
   display: none;
 }
 .hy-shell[data-side='folded'] .hy-status .dc-update-dot {
-  top: 6px;
-  right: 6px;
+  position: absolute;
+  top: 3px;
+  right: 3px;
   transform: none;
 }
 .hy-side-spacer {
-  flex: 1;
-  min-height: 12px;
+  flex: 0 0 12px;
 }
 .hy-rail-tabs {
   display: flex;
@@ -711,7 +828,10 @@
   padding: var(--gl-panel-pad) !important;
   border-radius: 0 !important;
 }
-.hy-drawer:has(.dc-filter-panel-header) .hy-drawer-head {
+/* The shell sets `data-tools` on the drawer while the panel's tool row is
+ * showing (the panel is open and drawn): the head and the row share one
+ * hairline. */
+.hy-drawer[data-tools] .hy-drawer-head {
   border-bottom: 0;
 }
 /* The list scrolls with a reserved gutter; slide it into the panel's padding
@@ -862,8 +982,9 @@
 }
 /* A `placement: top` strip (the Timeline) heads the canvas, full width of the
  * reading column; the canvas scrolls under it, the dock stays at the foot. The
- * scope banner (the unit a one-unit tab shows) is the same card. */
-.hy-stage:has(> :is(.hy-strip, .depictio-scope-banner)) > [data-testid='dashboard-content'] {
+ * scope banner (the unit a one-unit tab shows) is the same card. The page marks
+ * the canvas `data-lead` when it has either. */
+.hy-stage > [data-testid='dashboard-content'][data-lead] {
   padding-top: 12px !important;
 }
 .hy-strip,
@@ -911,8 +1032,17 @@
 .hy-anchor[data-anchor='bottom-center'],
 .hy-anchor[data-anchor='top-center'] {
   right: auto;
+  /* Centred on the window while the dock clears the open panel (Dock.tsx sets
+   * `data-clear`); otherwise centred on what the panel leaves, since a dock
+   * under the panel is hidden by it. */
   left: calc((100% - var(--gl-pad-r, 0px)) / 2);
+  /* Pushed left when it would run under the notes button (Dock.tsx). */
+  margin-left: var(--gl-dock-shift, 0px);
   translate: -50% 0;
+}
+.hy-anchor[data-clear][data-anchor='bottom-center'],
+.hy-anchor[data-clear][data-anchor='top-center'] {
+  left: 50%;
 }
 .hy-anchor[data-anchor='bottom-left'],
 .hy-anchor[data-anchor='bottom-right'] {
@@ -926,8 +1056,9 @@
   left: auto;
   right: calc(var(--gl-pad-r, 0px) + var(--gl-gutter));
 }
-/* The notes button holds the foot's right corner: the dock stops short of it. */
-:root:has(.dc-notes-toggle) .hy-anchor[data-anchor='bottom-right'] {
+/* The notes button holds the foot's right corner: the dock stops short of it.
+ * NotesFooter sets `data-notes-toggle` on the root while its button is mounted. */
+:root[data-notes-toggle] .hy-anchor[data-anchor='bottom-right'] {
   right: calc(var(--gl-pad-r, 0px) + 78px);
 }
 .hy-anchor[data-anchor^='bottom'] {
@@ -1649,6 +1780,12 @@ button.hy-sheet-link {
   background: var(--gl-on-bg) !important;
   box-shadow: var(--gl-on-ring) !important;
 }
+/* Search lit is neutral, not the accent: it is a finder, not a mode. */
+.hy-shell[data-hy-showing~='search'] [data-hy-slot='search'] .hy-key {
+  --gl-on-fg: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-2));
+  --gl-on-bg: color-mix(in srgb, var(--mantine-color-gray-6) 14%, var(--mantine-color-body));
+  --gl-on-ring: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-gray-6) 30%, transparent);
+}
 .hy-dock
   :is(
     .hy-key--on,
@@ -1717,7 +1854,7 @@ button.hy-sheet-link {
   --gl-panel-pad: 16px;
   --gl-panel-head-h: 56px;
 }
-:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) .mantine-Drawer-header {
+:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root.dc-notes-drawer) .mantine-Drawer-header {
   min-height: var(--gl-panel-head-h);
   padding: 0 calc(var(--gl-panel-pad) - 6px) 0 var(--gl-panel-pad) !important;
 }
@@ -1757,7 +1894,7 @@ button.hy-sheet-link {
   }
 
   /* Search rises out of the dock, centred over the canvas. */
-  :root[data-chrome='glass'] .mantine-Modal-inner:has(> [data-testid='dashboard-spotlight']) {
+  :root[data-chrome='glass'] .mantine-Modal-inner.dc-spotlight-inner {
     align-items: flex-end !important;
     padding: 0 0 86px var(--gl-nav-offset, 0px) !important;
   }
@@ -1779,12 +1916,12 @@ button.hy-sheet-link {
   }
 
   /* The notes open as a card over their button, bottom right. */
-  :root[data-chrome='glass'] .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen']) .mantine-Drawer-inner {
+  :root[data-chrome='glass'] .mantine-Drawer-root.dc-notes-drawer .mantine-Drawer-inner {
     left: auto !important;
     right: 0 !important;
     width: min(640px, calc(100vw - var(--gl-nav-offset, 0px) - 24px)) !important;
   }
-  :root[data-chrome='glass'] .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen']) .mantine-Drawer-content {
+  :root[data-chrome='glass'] .mantine-Drawer-root.dc-notes-drawer .mantine-Drawer-content {
     --drawer-offset: var(--gl-pane-inset);
     margin-bottom: 84px !important;
     max-height: calc(100dvh - var(--gl-top-offset, 0px) - 108px);
@@ -1799,6 +1936,11 @@ button.hy-sheet-link {
   }
 }
 
+/* The notes button rises above the dock when the two cannot share the foot
+ * (Dock.tsx sets `data-dock-crowded`). */
+:root[data-chrome='glass'][data-dock-crowded] .dc-notes-toggle {
+  bottom: calc(24px + 58px + var(--dc-bottom-offset, 0px)) !important;
+}
 /* The notes button: level with the dock, past its right end. */
 :root[data-chrome='glass'] .dc-notes-toggle {
   width: 46px !important;

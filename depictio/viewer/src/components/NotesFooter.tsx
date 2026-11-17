@@ -15,7 +15,7 @@
  * Drawer open/closed state is persisted per dashboard in localStorage under
  * `notes-footer-open:{dashboardId}` so a reload preserves the user's choice.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { ActionIcon, Drawer, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { Z_LAYERS } from 'depictio-react-core';
@@ -62,6 +62,15 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
 }) => {
   const [opened, setOpened] = useState<boolean>(() => readStoredOpen(dashboardId));
   const [fullscreen, setFullscreen] = useState<boolean>(false);
+  // The glass dock leaves the foot's right corner to this button. A chrome
+  // style reads it off the root (`:root[data-notes-toggle]`) rather than with
+  // `:root:has(.dc-notes-toggle)`, which would make every DOM write on the page
+  // restyle the whole document.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-notes-toggle', '');
+    return () => root.removeAttribute('data-notes-toggle');
+  }, []);
   const { editor, canEdit, status, savedAt } = useNotesEditor(
     dashboardId,
     initialContent,
@@ -111,6 +120,9 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
       </Tooltip>
 
       <Drawer
+        // The chrome styles find the notes drawer by this class (a card over
+        // its button in glass); Mantine puts it on the drawer's root.
+        className="dc-notes-drawer"
         opened={opened}
         onClose={handleClose}
         position="bottom"

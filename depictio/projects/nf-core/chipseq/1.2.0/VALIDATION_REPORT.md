@@ -160,6 +160,13 @@ interactive filters, 13 MultiQC panels, 12 advanced visualisations, 7 tables and
 the megatest since; it is model-validated by
 `depictio/tests/models/test_shipped_dashboard_yamls.py`.
 
+A sixth tab, `Genome tracks` (text, JBrowse browser, design table with row selection), and
+the `genomic_tracks` collection `tracks` behind it were added after this validation and are
+not part of the counts above. Its recipe was run offline on the design sheet: 32 manifest
+rows (8 ChIP bigWigs, 8 narrowPeaks, 8 input bigWigs, 8 BAMs), whose paths were checked
+against the megatest bucket. Ingest with `--var TRACKS_URI=<results root>` to read them in
+place (see `megatest.yaml`).
+
 ## Post-ingest verification
 
 Every collection was read back from its Delta table in MinIO and every tile grounded against

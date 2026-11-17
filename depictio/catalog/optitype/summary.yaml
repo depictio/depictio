@@ -1,0 +1,27 @@
+id: optitype_summary
+name: HLA typing per sample
+mode: summary
+description: >-
+  One row per sample from OptiType's optimal solution: the HLA-A, -B and -C
+  allele pairs, the distinct alleles as the ;-separated list an
+  epitopeprediction samplesheet takes, the loci typed and how many are
+  homozygous or heterozygous, the reads the genotype explains, the objective and
+  the objective per read (about 1 minus beta per heterozygous locus, so it reads
+  the zygosity rather than the fit), and with --enumerations the number of
+  solutions and the objective gap to the runner-up.
+find:
+  path_glob: "**/optitype/*/*_result.tsv"
+recipe: optitype/summary.py
+fixture: summary.tsv
+renders_as:
+  - { id: typing_reads, component: card, column: reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
+  - { id: objective_per_read, component: card, column: objective_per_read, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: heterozygous_loci, component: card, column: heterozygous_loci, aggregation: median, secondary_layout: gauge, coverage_max: 3 }
+  # The objective sits under the diagonal by beta per heterozygous locus, so
+  # the points split by zygosity.
+  - id: reads_objective
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: reads, y: objective, label: sample_id, color: homozygous_class }
+  - { component: figure, visu_type: bar, dict_kwargs: { x: sample_id, y: reads } }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }

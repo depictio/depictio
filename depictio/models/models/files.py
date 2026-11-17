@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -141,6 +142,9 @@ class FileScanResult(BaseModel):
     file: File
     scan_result: dict[str, str]
     scan_time: str
+    #: A registered file this scan found changed: its size and modification
+    #: time as last registered, so the run's history can say what moved.
+    previous: dict[str, Any] | None = None
 
     class Config:
         extra = "forbid"

@@ -49,7 +49,7 @@ The landing page, at compact width with the filter panel collapsed:
   filter and an ARG-hits range above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link
   to its tab: the distinct resistance gene names and the number of ARG tools behind them,
-  the peptide candidates with a best probability of at least 0.8, the leading BGC product
+  the peptide candidates with a best probability of at least 0.6 (the AMPcombi cut-off, the pipeline default), the leading BGC product
   class and its share of the classified regions, and the leading CAZyme substrate and its
   share of the genes with a substrate call. Below them, four figures in two rows, one per
   screen tab: the resistome sunburst beside the AMP property plane, then the BGC caller
@@ -74,7 +74,7 @@ ranked by screen. Then the tool versions per screen as a bar; a screen missing t
 not run, the first thing to check when a tab is empty. The versions table is collapsed.
 Filters: screen and tool.
 
-**Samples.** Strip: the median assembly's resistance genes, high-confidence AMPs, BGC
+**Samples.** Strip: the median assembly's resistance genes, AMPs reaching the AMPcombi cut-off, BGC
 product classes and CAZy families, each with its spread or distribution. Then the findings
 per assembly and screen as grouped bars on a log axis (the screens differ by two orders of
 magnitude; with Analysis mode groups, one panel per group), and the resistance load against
@@ -102,7 +102,7 @@ scatter, the contig track of resistance islands and the hit table. Filters: tool
 class, identity and the number of tools calling a gene.
 
 **AMPs.** Strip: AMP candidates (a ring by charge class), the median best probability
-against 0.8, the median peptide length and the largest peptide cluster with the sizes of
+against 0.6 (the AMPcombi cut-off), the median peptide length and the largest peptide cluster with the sizes of
 all clusters. Then the property plane (hydrophobicity against the isoelectric point,
 coloured by charge, a line at pI 7) beside the candidate record card, which waits for a
 picked peptide; the physicochemistry PCA; and the cluster sizes on a log count axis. The candidate and cluster

@@ -6,6 +6,7 @@
 # files into data collections, so the panels follow the dashboard's filters.
 id: rseqc
 name: RSeQC
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rseqc/readdistribution
 homepage: https://rseqc.sourceforge.net
 description: Modules that evaluate high-throughput sequencing data, especially RNA-seq.

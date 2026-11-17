@@ -60,6 +60,13 @@
   background: var(--gl-accent-soft);
   color: var(--gl-accent-fg);
 }
+/* Visibility and the editing lock side by side: who may view, whether
+ * anyone may edit. They stack on a narrow screen. */
+:root[data-chrome='glass'] .gp-main .pm-access {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+}
 :root[data-chrome='glass'] .gp-main .pm-visibility-body {
   flex: 1;
   min-width: 0;

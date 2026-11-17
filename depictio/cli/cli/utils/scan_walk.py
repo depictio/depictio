@@ -66,6 +66,27 @@ class ScannedPath:
     mtime_ns: int
 
 
+@dataclass(frozen=True, slots=True)
+class ScanBounds:
+    """A data collection's ``max_depth``/``ignore`` restrictions.
+
+    Lives with the walker so every reader of a run tree applies them the same
+    way: the scan itself, and the previews that claim to predict it.
+    """
+
+    max_depth: int | None
+    ignore: tuple[str, ...]
+
+    @property
+    def is_unbounded(self) -> bool:
+        return self.max_depth is None and not self.ignore
+
+    def allows(self, scanned: ScannedPath) -> bool:
+        if self.max_depth is not None and scanned.rel_path.count("/") > self.max_depth:
+            return False
+        return not is_ignored(scanned.match_name, scanned.rel_path, self.ignore)
+
+
 def is_ignored(name: str, rel_path: str, patterns: tuple[str, ...]) -> bool:
     """Whether an entry matches any ignore glob, by basename or run-relative path.
 

@@ -38,6 +38,11 @@
 # multiqc/<peak_type>/multiqc_data/multiqc.parquet itself; the template's MultiQC
 # collection accepts either location, and a tree only ever holds one of them.
 #
+# Genome tracks: the bigWig, peak and BAM files are not fetched. The Locus tab's `tracks`
+# collection needs the assembly (`--var GENOME=<assembly>`; without it the browser is left
+# out) and either uploads the files DATA_ROOT holds or, with `--var TRACKS_URI=<results
+# folder>`, reads them in place by range.
+#
 # Not fetched on purpose: BAM, bigWig and FASTQ files, the deepTools
 # computeMatrix / plotHeatmap matrices, the IGV session, the size-factor RData
 # and the PDF plots.
@@ -150,4 +155,6 @@ post_fetch_help: |
   depictio-cli ingest --template nf-core/chipseq/2.1.0 --data-root {dest}
 
   # A run made with --skip_preseq false adds --var PRESEQ_RAN=true, a run on a
-  # UCSC assembly --var GENOME=<assembly> (hg19 for the megatest design).
+  # UCSC assembly --var GENOME=<assembly> (hg19 for the megatest design), which also
+  # switches the Locus genome browser on; --var TRACKS_URI=<results folder> reads its
+  # bigWig, peak and BAM files in place.

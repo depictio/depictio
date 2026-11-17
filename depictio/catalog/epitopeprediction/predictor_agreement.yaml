@@ -1,0 +1,24 @@
+id: epitopeprediction_predictor_agreement
+name: Agreement between tools
+mode: epitope/agreement
+description: >-
+  One row per sample, peptide, allele and pair of tools that both scored it: the
+  two IC50s, their log10 ratio, the two binder calls and the outcome (both call
+  a binder, neither does, or only one of the two). A run with one tool per MHC
+  class has no pair.
+find:
+  path_glob: "**/predictions/*.tsv"
+recipe: epitopeprediction/predictor_agreement.py
+fixture: predictor_agreement.tsv
+renders_as:
+  # One tool's IC50 against the other's: on the diagonal they agree, and the
+  # colour names who calls a binder.
+  - id: agreement_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: ic50_a_nm, y: ic50_b_nm, label: sequence, color: agreement }
+  - { id: paired_predictions, component: card, column: pair_key, aggregation: count, secondary_layout: composition, breakdown_col: agreement }
+  - { id: ic50_gap, component: card, column: abs_log10_ratio, aggregation: median, secondary_layout: histogram }
+  - { id: disputed_binders, component: card, column: pair_key, aggregation: count, filter_expr: "col('concordant') == 0", secondary_layout: composition, breakdown_col: agreement }
+  - { component: interactive, interactive_type: MultiSelect, column_name: agreement }
+  - { component: table, row_selection_enabled: true, row_selection_column: pair_key }

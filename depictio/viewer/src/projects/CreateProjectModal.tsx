@@ -1,148 +1,111 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
-  Badge,
   Box,
   Button,
-  Center,
-  FileButton,
+  Divider,
   Group,
-  Loader,
   Modal,
-  Paper,
-  Select,
   SimpleGrid,
   Stack,
-  Stepper,
   Switch,
-  Tabs,
   Text,
   Textarea,
   TextInput,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { createProjectFromManifest, listProjectTemplates, Z_LAYERS } from 'depictio-react-core';
+import { listProjectTemplates } from 'depictio-react-core';
 import { useListingAccents } from '../lib/useListingAccents';
-import { useGlassPages } from '../chrome/variants/glass/pages';
 import type {
   CreateProjectInput,
   CreateProjectResult,
-  FromManifestReport,
-  FromManifestRequest,
-  FromRunReport,
   FromRunRequest,
   TemplateInfo,
-  TemplateVariable,
 } from 'depictio-react-core';
 
-import IngestionResultTable from './IngestionResultTable';
-import { useStepSettling } from './hooks/useStepSettling';
-import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
 import { RunFolderTab } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
 
-type Tab = 'create' | 'import' | 'manifest' | 'run';
-type ProjectType = 'basic' | 'advanced';
-
-/** A required template variable with a declared default is filled in
- *  server-side, so only the ones without a default must be typed here. */
-const mustBeTyped = (v: TemplateVariable): boolean => v.required && !v.default;
-
-/** Stack id of the create dialog: the run tab's folder browser opens above
- *  it, in the same `Modal.Stack`. */
+/** Stack id of the create dialog: the folder browser opens above it, in the
+ *  same `Modal.Stack`. */
 const CREATE_STACK_ID = 'create-project';
-
-/** "1 dashboard", "2 dashboards". */
-const plural = (n: number, one: string, many = `${one}s`): string =>
-  `${n} ${n === 1 ? one : many}`;
 
 interface CreateProjectModalProps {
   opened: boolean;
   existingNames: string[];
   onClose: () => void;
-  onCreate: (input: CreateProjectInput) => Promise<CreateProjectResult>;
-  onImport: (file: File, overwrite: boolean) => Promise<void>;
-  onCreateFromManifest: (input: FromManifestRequest) => Promise<FromManifestReport>;
-  onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
+  /** `keepOpen`: create the project only; the dialog stays for what follows. */
+  onCreate: (
+    input: CreateProjectInput,
+    options?: { keepOpen?: boolean },
+  ) => Promise<CreateProjectResult>;
+  /** A project started from data is complete (or the reader chose to open it
+   *  despite problems): close the dialog and go to its page, on `tableId` when
+   *  it holds a table to show. */
+  onProjectReady: (projectId: string, name: string, tableId?: string | null) => void;
+  onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => void;
+  /** Leave for the import dialog (a project that exists elsewhere). */
+  onOpenImport: () => void;
+  /** Where "See an example" goes; null when this server holds no example. */
+  exampleHref?: string | null;
   /** The server reads run folders from its own disk (`depictio local`): the
-   *  run tab then takes a local path and offers a folder browser. */
+   *  folder field then takes a local path and offers a folder browser. */
   localDataRootsEnabled?: boolean;
   /** The server may browse allowed S3 locations: the folder browser then
    *  offers an S3 side. */
   remoteBrowseEnabled?: boolean;
-  /** Why the run tab may not take a private bucket's connection details
-   *  (public mode, non-admin); null when it may. */
+  /** Why a private bucket's connection details may not be given (public
+   *  mode, non-admin); null when they may. */
   privateBucketDisabledReason?: string | null;
 }
 
+/** "New project", in two screens: what the project is (a name, and whatever
+ *  else scopes it), then its data. The rarer ways in stay in a quiet row. */
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   opened,
   existingNames,
   onClose,
   onCreate,
-  onImport,
-  onCreateFromManifest,
+  onProjectReady,
   onCreateFromRun,
+  onOpenImport,
+  exampleHref = null,
   localDataRootsEnabled = false,
   remoteBrowseEnabled = false,
   privateBucketDisabledReason = null,
 }) => {
   const accent = useListingAccents('projects');
-  const [tab, setTab] = useState<Tab>('create');
-  const [activeStep, setActiveStep] = useState(0);
-  const [projectType, setProjectType] = useState<ProjectType | null>(null);
+  /** Past the first screen: the project is described, its data comes next. */
+  const [onData, setOnData] = useState(false);
+  /** The data screen over the whole window, when the reader asks for it
+   *  (kept across opens). The first screen stays a small dialog. */
+  const [wide, setWide] = useState(false);
+  const fullScreen = onData && wide;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Import tab state
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [overwrite, setOverwrite] = useState(false);
-  const importResetRef = useRef<() => void>(null);
-
-  // From Manifest tab state
-  const [manifestStep, setManifestStep] = useState(0);
-  const [manifestUrl, setManifestUrl] = useState('');
-  const [manifestTemplateId, setManifestTemplateId] = useState<string | null>(null);
-  const [manifestProjectName, setManifestProjectName] = useState('');
-  const [manifestVariables, setManifestVariables] = useState<Record<string, string>>({});
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<FromManifestReport | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Reset everything whenever the modal opens.
   useEffect(() => {
     if (!opened) return;
-    setTab('create');
-    setActiveStep(0);
-    setProjectType(null);
+    setOnData(false);
     setName('');
     setDescription('');
     setIsPublic(false);
-    setImportFile(null);
-    setOverwrite(false);
-    setManifestStep(0);
-    setManifestUrl('');
-    setManifestTemplateId(null);
-    setManifestProjectName('');
-    setManifestVariables({});
-    setPreview(null);
-    setPreviewError(null);
     setError(null);
     setSubmitting(false);
-    importResetRef.current?.();
   }, [opened]);
 
   // Every template the backend knows, fetched fresh per open so a newly
-  // registered template shows up without a page reload. The From Manifest tab
-  // narrows this to the manifest-capable ones, the From a run folder tab to
-  // the run-folder-capable ones (grouped per pipeline).
+  // registered one shows up without a page reload.
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
@@ -152,44 +115,29 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         if (!cancelled) setTemplates(all);
       })
       .catch((err: Error) => {
-        if (!cancelled) setTemplatesError(err.message || 'Failed to load templates.');
+        if (!cancelled) setTemplatesError(err.message || 'Failed to load the list of pipelines.');
       });
     return () => {
       cancelled = true;
     };
   }, [opened]);
 
-  const manifestTemplates = useMemo(
-    () => templates.filter((t) => t.manifest_capable),
-    [templates],
-  );
-
-  // Step-1 card click also auto-advances (matches Dash UX).
-  const handleSelectType = (type: ProjectType) => {
-    if (type === 'advanced') return; // disabled card
-    setProjectType(type);
-    setActiveStep(1);
-  };
-
-  const isNameTaken = (candidate: string) =>
-    existingNames.some((n) => n.toLowerCase() === candidate.toLowerCase());
-
   const trimmedName = name.trim();
-  const nameAlreadyUsed = isNameTaken(trimmedName);
-  const canSubmit =
-    !!projectType && trimmedName.length > 0 && !nameAlreadyUsed && !submitting;
+  const nameAlreadyUsed = existingNames.some((n) => n.toLowerCase() === trimmedName.toLowerCase());
+  const canSubmit = trimmedName.length > 0 && !nameAlreadyUsed && !submitting;
 
   const handleCreate = async () => {
-    if (!projectType || !trimmedName) return;
+    if (!trimmedName) return;
     setSubmitting(true);
     setError(null);
     try {
       await onCreate({
         name: trimmedName,
-        project_type: projectType,
+        // Legacy field: the type no longer changes what a project can do.
+        project_type: 'basic',
         is_public: isPublic,
-        ...(description.trim() ? { description: description.trim() } : {}),
-      } as CreateProjectInput);
+        description: description.trim() || null,
+      });
     } catch (err) {
       setError((err as Error).message || 'Failed to create project.');
     } finally {
@@ -197,822 +145,240 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     }
   };
 
-  const handleImport = async () => {
-    if (!importFile) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onImport(importFile, overwrite);
-    } catch (err) {
-      setError((err as Error).message || 'Failed to import project.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const selectedTemplate =
-    manifestTemplates.find((t) => t.template_id === manifestTemplateId) ?? null;
-  // MANIFEST_URL is injected server-side from the URL field: never render a
-  // form input for it.
-  const extraVariables = (selectedTemplate?.variables ?? []).filter(
-    (v) => v.name !== 'MANIFEST_URL',
-  );
-  const missingVariables = extraVariables
-    .filter((v) => mustBeTyped(v) && !(manifestVariables[v.name] ?? '').trim())
-    .map((v) => v.name);
-  const missingVariablesReason =
-    missingVariables.length > 0
-      ? `Enter a value for ${missingVariables.join(', ')} to continue.`
-      : null;
-
-  const trimmedManifestUrl = manifestUrl.trim();
-  const trimmedManifestName = manifestProjectName.trim();
-  const manifestNameUsed = trimmedManifestName.length > 0 && isNameTaken(trimmedManifestName);
-  const manifestSourceReady =
-    trimmedManifestUrl.length > 0 &&
-    !!manifestTemplateId &&
-    !manifestNameUsed &&
-    missingVariables.length === 0;
-
-  const buildManifestRequest = (dryRun: boolean): FromManifestRequest => {
-    const variables: Record<string, string> = {};
-    for (const v of extraVariables) {
-      const value = (manifestVariables[v.name] ?? '').trim();
-      if (value) variables[v.name] = value;
-    }
-    return {
-      manifest_url: trimmedManifestUrl,
-      template_id: manifestTemplateId as string,
-      project_name: trimmedManifestName || null,
-      ...(Object.keys(variables).length > 0 ? { variables } : {}),
-      dry_run: dryRun,
-    };
-  };
-
-  // Dry-run plan, re-fetched every time the Preview step is entered so a
-  // Previous → Next round-trip picks up edited inputs.
-  useEffect(() => {
-    if (!opened || tab !== 'manifest' || manifestStep !== 1) return;
-    if (!trimmedManifestUrl || !manifestTemplateId) return;
-    let cancelled = false;
-    setPreview(null);
-    setPreviewError(null);
-    setPreviewLoading(true);
-    createProjectFromManifest(buildManifestRequest(true))
-      .then((r) => {
-        if (!cancelled) setPreview(r);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setPreviewError(err.message || 'Failed to preview manifest.');
-      })
-      .finally(() => {
-        if (!cancelled) setPreviewLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Inputs are frozen while on the Preview step, so entering it is the only
-    // dependency that matters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, tab, manifestStep]);
-
-  // Single primary action for the manifest stepper: Next / Next / Create.
-  // It ignores clicks for a moment after each step change, so a double click
-  // on Next stops on the Create step instead of creating straight away.
-  const manifestStepSettling = useStepSettling(manifestStep);
-  const handleManifestSubmit = async () => {
-    if (!manifestSourceReady || manifestStepSettling) return;
-    if (manifestStep < 2) {
-      setManifestStep(manifestStep + 1);
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onCreateFromManifest(buildManifestRequest(false));
-    } catch (err) {
-      setError((err as Error).message || 'Failed to create project from manifest.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const manifestSubmitDisabled =
-    !manifestSourceReady ||
-    submitting ||
-    (manifestStep === 1 && (previewLoading || !!previewError || !preview));
-
-  const manifestDisplayName =
-    preview?.project_name || trimmedManifestName || selectedTemplate?.name || 'project';
-
   // Escape and the close button both land here; neither may drop a request
   // that is still being sent.
   const handleModalClose = () => {
     if (!submitting) onClose();
   };
 
+  const tinted = `var(--mantine-color-${accent.secondary}-6)`;
+  /** A big two-line button: what it does, and what that means. */
+  const choice = (icon: string, title: string, detail: string, iconColor?: string) => (
+    <Stack gap={2} align="center">
+      <Icon icon={icon} width={26} color={iconColor} />
+      <Text fw={600} size="md" inherit>
+        {title}
+      </Text>
+      <Text size="xs" inherit style={{ opacity: 0.8, fontWeight: 400, whiteSpace: 'normal' }}>
+        {detail}
+      </Text>
+    </Stack>
+  );
+  const CHOICE_STYLES = { label: { whiteSpace: 'normal' as const }, inner: { justifyContent: 'center' } };
+
+  const otherRow = (
+    <Stack gap="sm" data-testid="create-source-other">
+      <Divider label="Or start from" labelPosition="center" />
+      <SimpleGrid cols={exampleHref ? 2 : 1}>
+        <Button
+          variant="default"
+          h={92}
+                radius="md"
+          fullWidth
+          styles={CHOICE_STYLES}
+          onClick={onOpenImport}
+          data-testid="create-source-import"
+        >
+          {choice('mdi:package-down', 'Import a project', 'One exported from Depictio', tinted)}
+        </Button>
+        {exampleHref && (
+          <Button
+            component="a"
+            href={exampleHref}
+            variant="default"
+            h={92}
+                radius="md"
+            fullWidth
+            styles={CHOICE_STYLES}
+            data-testid="create-source-example"
+          >
+            {choice('mdi:compass-outline', 'See an example', 'A finished project to explore', tinted)}
+          </Button>
+        )}
+      </SimpleGrid>
+    </Stack>
+  );
+
   const createDialog = (
     <Modal
       stackId={CREATE_STACK_ID}
+      className="depictio-form-modal"
       opened={opened}
       onClose={handleModalClose}
       centered
-      // The run tab shows a detection card, a two-column summary and the
-      // grouped plan, which the other tabs' width would wrap into noise.
-      size={tab === 'run' ? 'xl' : 'lg'}
+      // The data screen: two source boxes, a detection card, a two-column
+      // summary and the grouped plan, which a narrow dialog wraps into noise.
+      size={onData ? 1160 : 640}
+      fullScreen={fullScreen}
+      transitionProps={{ duration: onData ? 0 : undefined }}
       withCloseButton
       closeOnClickOutside={false}
       closeOnEscape={!submitting}
       overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
-      title={null}
-      padding="lg"
-    >
-      <Stack gap="md">
-        {/* Title row: folder+ icon + Virgil "Projects" */}
-        <Center>
-          <Group gap="xs">
+      // The title stays in the header, which stays at the top while the body
+      // scrolls; the size toggle sits at its right, beside the close button.
+      title={
+        <Group justify="space-between" wrap="nowrap" gap="xs">
+          {/* As wide as the toggle and the close button, so the title is centred. */}
+          <Box w={onData ? 60 : 28} style={{ flexShrink: 0 }} />
+          <Group gap="xs" wrap="nowrap" data-testid="create-project-title">
             <Icon
               icon="mdi:folder-plus-outline"
               width={28}
               color={`var(--mantine-color-${accent.secondary}-6)`}
             />
-            <Title
-              order={2}
-              c={accent.secondary}
-              style={{ fontFamily: 'Virgil', fontWeight: 400 }}
-            >
+            <Title order={2} c={accent.secondary} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
               Projects
             </Title>
           </Group>
-        </Center>
-
-        {/* Pill-style tabs (Create new / Import / From manifest / From a run folder) */}
-        <Tabs
-          value={tab}
-          onChange={(v) => setTab((v as Tab) || 'create')}
-          variant="pills"
-          color={accent.secondary}
-        >
-          <Tabs.List justify="center" className="dc-modal-modes">
-            <Tabs.Tab
-              value="create"
-              leftSection={<Icon icon="mdi:plus" width={16} />}
-            >
-              Create new
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="import"
-              leftSection={<Icon icon="mdi:import" width={16} />}
-            >
-              Import
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="manifest"
-              leftSection={<Icon icon="mdi:link-variant" width={16} />}
-            >
-              From manifest
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="run"
-              leftSection={<Icon icon="mdi:folder-search-outline" width={16} />}
-            >
-              From a run folder
-            </Tabs.Tab>
-          </Tabs.List>
-
-          <Tabs.Panel value="create" pt="md">
-            <Stack gap="md">
-              <Stepper
-                active={activeStep}
-                onStepClick={setActiveStep}
-                color={accent.secondary}
-                size="sm"
-                allowNextStepsSelect={false}
-              >
-                <Stepper.Step
-                  label="Project Type"
-                  description="Choose basic or advanced"
+          <Box w={28} style={{ flexShrink: 0 }}>
+            {onData && (
+              <Tooltip label={wide ? 'Back to a dialog' : 'Use the whole window'} withArrow>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setWide((w) => !w)}
+                  aria-label={wide ? 'Back to a dialog' : 'Use the whole window'}
+                  data-testid="create-project-fullscreen"
+                  data-active={wide || undefined}
                 >
-                  <Stack gap="md" pt="md">
-                    <Text ta="center" fw={500}>
-                      Choose your project type:
-                    </Text>
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                      <ProjectTypeCard
-                        active={projectType === 'basic'}
-                        type="basic"
-                        title="Basic Project"
-                        description="Perfect for simple data visualization and exploration. No workflows required: upload data collections directly through the UI. Best for individual datasets and quick analysis."
-                        icon="mdi:view-dashboard-outline"
-                        tag="UI Creation Only"
-                        tagColor="cyan"
-                        onClick={() => handleSelectType('basic')}
-                      />
-                      <ProjectTypeCard
-                        active={false}
-                        type="advanced"
-                        title="Advanced Project"
-                        description="Designed for complex bioinformatics runs, processing workflows, and data ingestion pipelines. Requires depictio-CLI for project design and workflow management. Best for bioinformatics and computational analysis."
-                        icon="mdi:sitemap"
-                        tag="Depictio-CLI Only"
-                        tagColor="orange"
-                        disabled
-                      />
-                    </SimpleGrid>
-                  </Stack>
-                </Stepper.Step>
-
-                <Stepper.Step
-                  label="Project Details"
-                  description="Configure your project"
-                >
-                  <Stack gap="md" pt="md">
-                    <TextInput
-                      label="Project Name"
-                      description="Give your project a descriptive name"
-                      required
-                      placeholder="Enter project name"
-                      value={name}
-                      onChange={(e) => setName(e.currentTarget.value)}
-                      leftSection={<Icon icon="mdi:folder-outline" width={16} />}
-                      error={
-                        nameAlreadyUsed
-                          ? 'A project with this name already exists.'
-                          : undefined
-                      }
-                    />
-                    <Textarea
-                      label="Project Description (Optional)"
-                      description="Describe what this project is about"
-                      placeholder="Enter project description..."
-                      value={description}
-                      onChange={(e) => setDescription(e.currentTarget.value)}
-                      autosize
-                      minRows={2}
-                      maxRows={5}
-                    />
-                    <Switch
-                      label={
-                        <span style={{ fontFamily: 'Virgil' }}>
-                          Make this project public
-                        </span>
-                      }
-                      description="Public projects are visible to all users"
-                      checked={isPublic}
-                      onChange={(e) => setIsPublic(e.currentTarget.checked)}
-                      color={accent.secondary}
-                    />
-                  </Stack>
-                </Stepper.Step>
-              </Stepper>
-
-              {error && (
-                <Alert color="red" variant="light">
-                  {error}
-                </Alert>
-              )}
-
-              <Group justify="space-between">
-                <Button
-                  variant="default"
-                  onClick={() => setActiveStep((s) => Math.max(0, s - 1))}
-                  disabled={activeStep === 0 || submitting}
-                >
-                  Previous
-                </Button>
-                {activeStep === 0 ? (
-                  <Button
-                    color={accent.secondary}
-                    onClick={() => setActiveStep(1)}
-                    disabled={!projectType}
-                  >
-                    Next
-                  </Button>
-                ) : (
-                  <Button
-                    color={accent.secondary}
-                    onClick={handleCreate}
-                    loading={submitting}
-                    disabled={!canSubmit}
-                  >
-                    Create Project
-                  </Button>
-                )}
-              </Group>
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="import" pt="md">
-            <Stack gap="md">
-              <Text size="sm" c="dimmed" ta="center">
-                Upload a .zip bundle exported from another Depictio instance.
-              </Text>
-              <FileButton
-                resetRef={importResetRef}
-                accept=".zip,application/zip,application/x-zip-compressed"
-                onChange={(f) => setImportFile(f)}
-              >
-                {(props) => (
-                  <Box
-                    {...props}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-                      if (e.key === 'Enter' || e.key === ' ') props.onClick();
-                    }}
-                    style={{
-                      cursor: 'pointer',
-                      border: `2px dashed var(--mantine-color-${accent.secondary}-6)`,
-                      borderRadius: 12,
-                      padding: 32,
-                      textAlign: 'center' as const,
-                      background: 'var(--mantine-color-default-hover)',
-                    }}
-                  >
-                    <Stack gap="xs" align="center">
-                      <Icon
-                        icon="mdi:file-upload-outline"
-                        width={36}
-                        color={`var(--mantine-color-${accent.secondary}-6)`}
-                      />
-                      <Text fw={500}>
-                        {importFile
-                          ? importFile.name
-                          : 'Drop .zip here or click to browse'}
-                      </Text>
-                      {importFile && (
-                        <Text size="xs" c="dimmed">
-                          {(importFile.size / 1024).toFixed(1)} KB
-                        </Text>
-                      )}
-                    </Stack>
-                  </Box>
-                )}
-              </FileButton>
-              <Switch
-                label={
-                  <span style={{ fontFamily: 'Virgil' }}>
-                    overwrite if project already exists
-                  </span>
-                }
-                checked={overwrite}
-                onChange={(e) => setOverwrite(e.currentTarget.checked)}
-                color={accent.secondary}
-              />
-              {error && (
-                <Alert color="red" variant="light">
-                  {error}
-                </Alert>
-              )}
-              <Button
-                color={accent.secondary}
-                onClick={handleImport}
-                disabled={!importFile || submitting}
-                loading={submitting}
-                leftSection={<Icon icon="mdi:check" width={16} />}
-                fullWidth
-              >
-                Import Project
-              </Button>
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="manifest" pt="md">
-            <Stack gap="md">
-              <Stepper
-                active={manifestStep}
-                onStepClick={setManifestStep}
-                color={accent.secondary}
-                size="sm"
-                allowNextStepsSelect={false}
-              >
-                <Stepper.Step label="Source" description="Manifest & template">
-                  <Stack gap="md" pt="md">
-                    <TextInput
-                      label="Manifest URL"
-                      description="HTTP(S) link to a {id, type, url} Data Manifest"
-                      required
-                      placeholder="https://example.org/data/manifest.json"
-                      value={manifestUrl}
-                      onChange={(e) => setManifestUrl(e.currentTarget.value)}
-                      leftSection={<Icon icon="mdi:link-variant" width={16} />}
-                      data-testid="manifest-url-input"
-                    />
-                    <Select
-                      label="Template"
-                      description={
-                        selectedTemplate?.description ||
-                        'Choose a manifest-capable project template'
-                      }
-                      required
-                      placeholder="Select a template"
-                      data={manifestTemplates.map((t) => ({
-                        value: t.template_id,
-                        label: t.name,
-                      }))}
-                      value={manifestTemplateId}
-                      onChange={setManifestTemplateId}
-                      comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
-                      leftSection={
-                        <Icon icon="mdi:file-document-outline" width={16} />
-                      }
-                      error={templatesError ?? undefined}
-                      // Show the template_id under each name so near-identical
-                      // templates stay distinguishable in the dropdown.
-                      renderOption={({ option }) => (
-                        <Stack gap={0}>
-                          <Text size="sm">{option.label}</Text>
-                          <Text size="xs" c="dimmed">
-                            {option.value}
-                          </Text>
-                        </Stack>
-                      )}
-                      data-testid="manifest-template-select"
-                    />
-                    <TextInput
-                      label="Project Name (Optional)"
-                      description="Defaults to a name derived from the template"
-                      placeholder="Enter project name"
-                      value={manifestProjectName}
-                      onChange={(e) => setManifestProjectName(e.currentTarget.value)}
-                      leftSection={<Icon icon="mdi:folder-outline" width={16} />}
-                      error={
-                        manifestNameUsed
-                          ? 'A project with this name already exists.'
-                          : undefined
-                      }
-                      data-testid="manifest-project-name-input"
-                    />
-                    {extraVariables.map((v) => (
-                      <TextInput
-                        key={v.name}
-                        label={mustBeTyped(v) ? v.name : `${v.name} (Optional)`}
-                        required={mustBeTyped(v)}
-                        description={v.description ?? undefined}
-                        placeholder={v.default ?? ''}
-                        value={manifestVariables[v.name] ?? ''}
-                        onChange={(e) => {
-                          const value = e.currentTarget.value;
-                          setManifestVariables((prev) => ({
-                            ...prev,
-                            [v.name]: value,
-                          }));
-                        }}
-                      />
-                    ))}
-                  </Stack>
-                </Stepper.Step>
-
-                <Stepper.Step label="Preview" description="Planned ingestion">
-                  <Stack gap="md" pt="md">
-                    {previewLoading && (
-                      <Center mih={120}>
-                        <Group gap="xs">
-                          <Loader size="sm" color={accent.secondary} />
-                          <Text size="sm" c="dimmed">
-                            Reading the manifest and planning ingestion…
-                          </Text>
-                        </Group>
-                      </Center>
-                    )}
-                    {previewError && (
-                      <Alert
-                        color="red"
-                        variant="light"
-                        icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
-                      >
-                        {previewError}
-                      </Alert>
-                    )}
-                    {preview && (
-                      <ManifestPreviewReport report={preview} />
-                    )}
-                  </Stack>
-                </Stepper.Step>
-
-                <Stepper.Step label="Create" description="Confirm & create">
-                  <Stack gap="md" pt="md">
-                    <Paper withBorder radius="md" p="lg" data-testid="manifest-create-step">
-                      <Stack gap="sm" align="center">
-                        <Icon
-                          icon="mdi:rocket-launch-outline"
-                          width={36}
-                          color={`var(--mantine-color-${accent.secondary}-6)`}
-                        />
-                        <Text fw={500} ta="center">
-                          Create “{manifestDisplayName}”
-                        </Text>
-                        <Text size="xs" c="dimmed" ta="center">
-                          {preview
-                            ? `${plural(preview.manifest_entries, 'manifest entry', 'manifest entries')} → ` +
-                              `${plural(preview.ingestion.length, 'data collection')}, ` +
-                              `${plural(preview.dashboards.length, 'dashboard')}.`
-                            : 'The manifest will be ingested and the template dashboards imported.'}
-                        </Text>
-                      </Stack>
-                    </Paper>
-                  </Stack>
-                </Stepper.Step>
-              </Stepper>
-
-              {error && (
-                <Alert
-                  color="red"
-                  variant="light"
-                  icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
-                >
-                  {error}
-                </Alert>
-              )}
-
-              <Group justify="space-between">
-                <Button
-                  variant="default"
-                  onClick={() => setManifestStep((s) => Math.max(0, s - 1))}
-                  disabled={manifestStep === 0 || submitting}
-                >
-                  Previous
-                </Button>
-                <Button
-                  color={accent.secondary}
-                  onClick={handleManifestSubmit}
-                  loading={submitting}
-                  disabled={manifestSubmitDisabled}
-                  aria-disabled={manifestStepSettling || undefined}
-                  data-testid="create-from-manifest-submit"
-                >
-                  {manifestStep === 2 ? 'Create Project' : 'Next'}
-                </Button>
-              </Group>
-              {manifestStep === 0 && <DisabledReason reason={missingVariablesReason} />}
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="run" pt="md">
-            <RunFolderTab
-              opened={opened}
-              existingNames={existingNames}
-              templates={templates}
-              templatesError={templatesError}
-              localDataRootsEnabled={localDataRootsEnabled}
-              remoteBrowseEnabled={remoteBrowseEnabled}
-              privateBucketDisabledReason={privateBucketDisabledReason}
-              onCreateFromRun={onCreateFromRun}
-              submitting={submitting}
-              setSubmitting={setSubmitting}
-            />
-          </Tabs.Panel>
-        </Tabs>
-      </Stack>
-    </Modal>
-  );
-
-  // One stack, so the run tab's folder browser gets the higher layer and
-  // Escape closes only the top one.
-  return <Modal.Stack>{createDialog}</Modal.Stack>;
-};
-
-/** True when a real (non dry-run) from-manifest report carries something the
- *  user should see before moving on: a manifest type no collection matched,
- *  an optional collection the template pruned, a collection or dashboard
- *  that failed. A clean report redirects straight to the dashboard. */
-export function manifestReportNeedsReview(report: FromManifestReport): boolean {
-  return (
-    !report.success ||
-    report.unmatched_manifest_types.length > 0 ||
-    report.pruned_optional_dcs.length > 0 ||
-    report.ingestion.some((dc) => dc.status === 'failed') ||
-    report.dashboards.some((d) => !d.success)
-  );
-}
-
-/** A dimmed label followed by one grey badge per tag; nothing when empty. */
-const TagList: React.FC<{ label: string; tags: string[] }> = ({ label, tags }) =>
-  tags.length > 0 ? (
-    <Group gap="xs" wrap="wrap">
-      <Text size="xs" c="dimmed">
-        {label}
-      </Text>
-      {tags.map((t) => (
-        <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
-          {t}
-        </Badge>
-      ))}
-    </Group>
-  ) : null;
-
-/** Per-DC rows plus the manifest types the template didn't match and the
- *  optional collections it pruned. Renders the dry-run plan on the Preview
- *  step and, unchanged, the real report after creation (where dashboards
- *  that failed to import are listed as well). */
-export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = ({ report }) => {
-  const accent = useListingAccents('projects');
-  const failedDashboards = report.dashboards.filter((d) => !d.success);
-  return (
-    <Stack gap="sm" data-testid="manifest-preview-report">
-      <Group gap="xs" wrap="wrap">
-        <Badge variant="light" color={accent.secondary} radius="sm">
-          {report.project_name}
-        </Badge>
-        {report.manifest_entries > 0 && (
-          <Badge variant="light" color="gray" radius="sm">
-            {plural(report.manifest_entries, 'manifest entry', 'manifest entries')}
-          </Badge>
-        )}
-        {report.dashboards.length > 0 && (
-          <Badge variant="light" color="gray" radius="sm">
-            {plural(report.dashboards.length, 'dashboard')}
-          </Badge>
-        )}
-      </Group>
-      {(report.manifest_entries === 0 || report.dashboards.length === 0) && (
-        <Text size="xs" c="dimmed">
-          {report.manifest_entries === 0 ? 'The manifest lists no entry. ' : ''}
-          {report.dashboards.length === 0 ? 'The template has no dashboard to import.' : ''}
-        </Text>
-      )}
-      <IngestionResultTable
-        rows={report.ingestion}
-        rowTestIdPrefix="manifest-preview"
-        emptyText="The template matched no data collection in this manifest."
-      />
-      <TagList label="Unmatched manifest types:" tags={report.unmatched_manifest_types} />
-      <TagList label="Skipped optional collections:" tags={report.pruned_optional_dcs} />
-      {failedDashboards.length > 0 && (
-        <Stack gap={4}>
-          <Text size="xs" c="dimmed">
-            Dashboards that failed to import:
-          </Text>
-          {failedDashboards.map((d) => (
-            <Group key={d.path} gap="xs" wrap="nowrap">
-              <Badge variant="light" color="red" size="sm" radius="sm">
-                {d.title || d.path}
-              </Badge>
-              {d.error && (
-                <Text size="xs" c="red">
-                  {d.error}
-                </Text>
-              )}
-            </Group>
-          ))}
-        </Stack>
-      )}
-    </Stack>
-  );
-};
-
-/** "3 of 4 collections ingested, 1 failed; 2 manifest types without a matching
- *  collection", one clause per kind of note the report carries. */
-function summarizeCreated(report: FromManifestReport): string {
-  const ingested = report.ingestion.filter((dc) => dc.status === 'ingested').length;
-  const failed = report.ingestion.filter((dc) => dc.status === 'failed').length;
-  const failedDashboards = report.dashboards.filter((d) => !d.success).length;
-  const clauses = [
-    `${ingested} of ${plural(report.ingestion.length, 'collection')} ingested` +
-      (failed > 0 ? `, ${failed} failed` : ''),
-  ];
-  if (report.unmatched_manifest_types.length > 0) {
-    clauses.push(
-      `${plural(report.unmatched_manifest_types.length, 'manifest type')} without a matching collection`,
-    );
-  }
-  if (report.pruned_optional_dcs.length > 0) {
-    clauses.push(`${plural(report.pruned_optional_dcs.length, 'optional collection')} skipped`);
-  }
-  if (failedDashboards > 0) {
-    clauses.push(`${plural(failedDashboards, 'dashboard')} failed to import`);
-  }
-  return clauses.join('; ');
-}
-
-/** Post-creation report for a from-manifest project that needs a look before
- *  the user lands on its dashboard (see `manifestReportNeedsReview`). The
- *  project already exists and the list behind the modal is refreshed; the
- *  user picks between opening the dashboard and staying on the list. */
-export const ManifestCreatedModal: React.FC<{
-  report: FromManifestReport | null;
-  onClose: () => void;
-}> = ({ report, onClose }) => {
-  const accent = useListingAccents('projects');
-  const dashboardId =
-    report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
-  const openDashboardReason = dashboardId ? null : 'No dashboard was imported for this project.';
-
-  return (
-    <Modal
-      opened={Boolean(report)}
-      onClose={onClose}
-      centered
-      size="lg"
-      title={
-        <Group gap="xs" wrap="nowrap">
-          <Icon
-            icon="mdi:clipboard-check-outline"
-            width={20}
-            color={`var(--mantine-color-${accent.secondary}-6)`}
-          />
-          <Text fw={600}>Project created with notes</Text>
+                  <Icon icon={wide ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'} width={18} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Box>
         </Group>
       }
+      styles={{
+        // Opaque under the content that scrolls below it (the glass look
+        // leaves modal headers transparent).
+        header: { background: 'inherit', backdropFilter: 'blur(14px)', paddingBottom: 8 },
+        title: { flex: 1, marginRight: 4 },
+      }}
+      padding="xl"
     >
-      {report && (
-        <Stack gap="md" data-testid="manifest-created-modal">
-          <Alert
-            color={report.success ? 'yellow' : 'orange'}
-            variant="light"
-            icon={<Icon icon="mdi:information-outline" width={16} />}
-          >
-            <Text size="sm">
-              &ldquo;{report.project_name}&rdquo; was created: {summarizeCreated(report)}.
-            </Text>
-          </Alert>
-          <ManifestPreviewReport report={report} />
-          <Stack gap={6} align="flex-end">
-            <Group justify="flex-end" gap="xs">
-              <Button variant="default" onClick={onClose} data-testid="manifest-created-stay">
-                Stay on projects
-              </Button>
-              <GatedButton
-                color={accent.secondary}
-                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-                reason={openDashboardReason}
-                onClick={() => {
-                  if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-                }}
-                data-testid="manifest-created-open-dashboard"
-              >
-                Open dashboard
-              </GatedButton>
-            </Group>
-            <DisabledReason reason={openDashboardReason} />
-          </Stack>
+      <Stack gap="md">
+        <Stack gap={4} align="center">
+          <Text size="sm" c="dimmed" ta="center" data-testid="create-project-intro">
+            {onData
+              ? `Add data to “${trimmedName}”: Depictio works out what each file or folder is.`
+              : 'Tell Depictio what this project is. You add its data next.'}
+          </Text>
         </Stack>
-      )}
+
+        {!onData ? (
+          <Stack gap="md" data-testid="create-project-info">
+            <TextInput
+              size="md"
+              label="Project name"
+              required
+              placeholder="Enter project name"
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+              leftSection={<Icon icon="mdi:folder-outline" width={16} />}
+              error={nameAlreadyUsed ? 'A project with this name already exists.' : undefined}
+              data-testid="create-project-name"
+            />
+            <Textarea
+              size="md"
+              label="Description"
+              description="Optional. What this project is about"
+              value={description}
+              onChange={(e) => setDescription(e.currentTarget.value)}
+              autosize
+              minRows={2}
+              maxRows={5}
+              data-testid="create-project-description"
+            />
+            <Switch
+              size="md"
+              label={<span style={{ fontFamily: 'Virgil' }}>Make this project public</span>}
+              description="Public projects are visible to all users"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.currentTarget.checked)}
+              color={accent.secondary}
+            />
+            {error && (
+              <Alert color="red" variant="light">
+                {error}
+              </Alert>
+            )}
+            <SimpleGrid cols={2}>
+              <Button
+                color={accent.secondary}
+                h={92}
+                radius="md"
+                fullWidth
+                styles={CHOICE_STYLES}
+                onClick={() => setOnData(true)}
+                disabled={!canSubmit}
+                data-testid="create-project-next"
+              >
+                {choice('mdi:database-plus-outline', 'Add data', "Files, a folder, a pipeline run or your own pipeline's outputs")}
+              </Button>
+              <Button
+                variant="default"
+                h={92}
+                radius="md"
+                fullWidth
+                styles={CHOICE_STYLES}
+                onClick={handleCreate}
+                loading={submitting}
+                disabled={!canSubmit}
+                data-testid="create-project-submit"
+              >
+                {choice('mdi:folder-outline', 'Create without data', 'Add data later', tinted)}
+              </Button>
+            </SimpleGrid>
+            {!trimmedName && (
+              <Text size="xs" c="dimmed" ta="center" data-testid="create-project-name-hint">
+                Name the project to continue.
+              </Text>
+            )}
+            {otherRow}
+          </Stack>
+        ) : (
+          <Stack gap="md">
+          <Button
+            variant="subtle"
+            color="gray"
+            size="compact-sm"
+            leftSection={<Icon icon="mdi:arrow-left" width={16} />}
+            onClick={() => setOnData(false)}
+            disabled={submitting}
+            style={{ alignSelf: 'flex-start' }}
+            data-testid="create-project-back"
+          >
+            Project details
+          </Button>
+          <RunFolderTab
+            opened={opened}
+            existingNames={existingNames}
+            templates={templates}
+            templatesError={templatesError}
+            localDataRootsEnabled={localDataRootsEnabled}
+            remoteBrowseEnabled={remoteBrowseEnabled}
+            privateBucketDisabledReason={privateBucketDisabledReason}
+            onCreateFromRun={onCreateFromRun}
+            onCreateProject={onCreate}
+            onProjectReady={onProjectReady}
+            submitting={submitting}
+            setSubmitting={setSubmitting}
+            projectInfo={{
+              name: trimmedName,
+              description: description.trim(),
+              isPublic,
+            }}
+          />
+          </Stack>
+        )}
+      </Stack>
     </Modal>
   );
-};
 
-interface ProjectTypeCardProps {
-  active: boolean;
-  type: ProjectType;
-  title: string;
-  description: string;
-  icon: string;
-  tag: string;
-  tagColor: string;
-  disabled?: boolean;
-  onClick?: () => void;
-}
-
-const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
-  active,
-  type,
-  title,
-  description,
-  icon,
-  tag,
-  tagColor,
-  disabled,
-  onClick,
-}) => {
-  // Project-type taxonomy, not a brand role — basic and advanced have to stay
-  // told apart, so these keep their own hues.
-  const glass = useGlassPages();
-  const typeAccent = glass
-    ? type === 'basic'
-      ? 'var(--mantine-primary-color-filled)'
-      : 'var(--mantine-color-gray-6)'
-    : type === 'basic'
-      ? 'var(--mantine-color-teal-6)'
-      : 'var(--mantine-color-orange-6)';
-  return (
-    <Paper
-      withBorder
-      radius="md"
-      p="lg"
-      onClick={disabled ? undefined : onClick}
-      style={{
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.55 : 1,
-        borderColor: active ? typeAccent : undefined,
-        borderWidth: active ? 2 : 1,
-        transition: 'border-color 120ms ease',
-      }}
-    >
-      <Stack gap="sm" align="center">
-        <Icon icon={icon} width={42} height={42} color={typeAccent} />
-        <Title order={4} ta="center">
-          {title}
-        </Title>
-        <Text size="xs" c="dimmed" ta="center" lh={1.4}>
-          {description}
-        </Text>
-        <Badge color={glass ? 'gray' : tagColor} variant="light" radius="sm">
-          {tag}
-        </Badge>
-      </Stack>
-    </Paper>
-  );
+  // One stack, so the folder browser gets the higher layer and Escape closes
+  // only the top one.
+  return <Modal.Stack>{createDialog}</Modal.Stack>;
 };
 
 export default CreateProjectModal;

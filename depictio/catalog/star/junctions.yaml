@@ -1,0 +1,21 @@
+id: star_junctions
+name: Splice junctions
+mode: alignment/splice-junctions
+description: >-
+  STAR's collapsed splice junctions summed per sample into intron motif class
+  (GT/AG, GC/AG, AT/AC, non-canonical) by annotated or novel, with the junctions
+  and the uniquely and multi-mapping reads in each cell. A clean library spends
+  nearly all its reads on annotated GT/AG junctions; novel non-canonical ones
+  with few reads each are alignment noise.
+find:
+  path_glob: "**/*.SJ.out.tab"
+recipe: star/junctions.py
+fixture: junctions.tsv
+renders_as:
+  - { id: junction_motif_bars, component: figure, visu_type: bar,
+      dict_kwargs: {x: sample, y: junctions_pct, color: motif_class} }
+  - { id: junctions_by_annotation, component: card, column: junctions, aggregation: sum,
+      secondary_layout: composition, breakdown_col: annotation }
+  - { id: junction_reads_by_motif, component: card, column: unique_reads, aggregation: sum,
+      secondary_layout: donut, breakdown_col: motif_class }
+  - { component: table }

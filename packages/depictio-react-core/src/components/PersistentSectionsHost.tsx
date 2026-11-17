@@ -16,7 +16,7 @@ import { useDataVersionRequest } from '../dataVersions';
 import { hasLiveValues } from './textValues';
 import { countActiveFilters } from '../activeFilters';
 import { useCollapseState } from '../hooks/useCollapseState';
-import { useRevealComponent } from '../reveal';
+import { sameSectionName, useRevealComponent, useRevealSection } from '../reveal';
 import {
   applyAccordionValue,
   SectionAccordion,
@@ -149,6 +149,12 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   // its section, as DashboardGrid does for the tab's own.
   useRevealComponent((index) => {
     const hit = renderable.find((s) => s.members.some((c) => c.metadata.index === index));
+    if (!hit) return;
+    const key = hostSectionKey(hit.section);
+    if (!collapse.isOpen(key)) collapse.setAll([key], false);
+  });
+  useRevealSection((name) => {
+    const hit = renderable.find((s) => sameSectionName(s.section.spec.name, name));
     if (!hit) return;
     const key = hostSectionKey(hit.section);
     if (!collapse.isOpen(key)) collapse.setAll([key], false);
@@ -456,6 +462,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                   key={key}
                   value={key}
                   color={sectionColor}
+                  name={section.spec.name}
                   actions={
                     sectionFiltered && onResetFilters ? (
                       <Group gap={6} wrap="nowrap">

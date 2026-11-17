@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,14 @@ CATALOG_DIR = Path(__file__).parent.parent / "catalog"
 
 class RecipeError(Exception):
     """Raised when a recipe fails validation."""
+
+
+class RecipeSourceMissing(RecipeError):
+    """A required input file of the recipe is not in the data root.
+
+    Raised apart so a project with several runs can tell a run where that
+    pipeline step did not run (skipped) from a recipe that is broken (fails).
+    """
 
 
 # Pre-#863 constant names. A recipe still using them fails loudly instead of
@@ -349,7 +358,7 @@ def _read_source_outside_root(
     if not Path(location).is_file():
         if source.optional:
             return None
-        raise RecipeError(f"Source '{source.ref}': file not found: {location}")
+        raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {location}")
     return _read_source_file(location, source)
 
 
@@ -374,7 +383,7 @@ def _resolve_glob_source(
     if not matched_files:
         if source.optional:
             return None
-        raise RecipeError(
+        raise RecipeSourceMissing(
             f"Source '{source.ref}': no files matched glob '{pattern}' in {root.location}"
         )
 
@@ -470,7 +479,7 @@ def resolve_sources(
                 if source.optional:
                     sources[source.ref] = None  # type: ignore[assignment]
                     continue
-                raise RecipeError(f"Source '{source.ref}': file not found: {file_location}")
+                raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {file_location}")
             df = _read_source_file(
                 file_location, source, storage_options, rel_path=rel_path, root=root
             )
@@ -585,21 +594,64 @@ def validate_schema(
 _UNRESOLVED_PLACEHOLDER = re.compile(r"^\{[A-Z0-9_]+\}$")
 
 
-def call_transform(module: Any, sources: dict, params: dict[str, str] | None = None) -> Any:
-    """Call ``module.transform``, passing template ``params`` when the recipe takes them.
+@dataclass(frozen=True)
+class RecipeContext:
+    """What a two-argument ``transform(sources, context)`` receives.
 
-    A recipe opts in by declaring a ``params`` keyword. Values that are still an
-    unresolved ``{VAR}`` placeholder (the template variable was not set) are dropped,
-    so the recipe sees the parameter as absent and uses its own fallback.
+    Recipes that describe files rather than read them (a genome-track manifest
+    lists which track files the run published) ask the run folder what it holds
+    through this, local or remote alike.
     """
-    if params is not None and "params" in inspect.signature(module.transform).parameters:
+
+    root: DataRoot
+    # The collection's dc_specific_properties (e.g. a genomic_tracks manifest's
+    # ``remote_base_uri``, set when the run is read in place).
+    properties: dict = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, data_dir: str | Path | DataRoot, properties: dict | None = None) -> RecipeContext:
+        """The context for whatever data root the caller passed."""
+        return cls(root=_as_data_root(data_dir), properties=dict(properties or {}))
+
+    @property
+    def reads_in_place(self) -> bool:
+        """The run's files are read from a remote folder, not from ``root``."""
+        return bool(self.properties.get("remote_base_uri"))
+
+    def exists(self, rel_path: str) -> bool:
+        """Whether the run folder holds ``rel_path``."""
+        return self.root.exists(rel_path)
+
+    def glob(self, pattern: str) -> list[str]:
+        """Run-relative paths matching ``pattern`` (sorted)."""
+        return self.root.glob(pattern)
+
+
+def call_transform(
+    module: Any,
+    sources: dict,
+    params: dict[str, str] | None = None,
+    context: RecipeContext | None = None,
+) -> Any:
+    """Call ``module.transform``, passing template ``params`` and the run context when it takes them.
+
+    A recipe opts in to ``params`` by declaring a ``params`` keyword. Values that are
+    still an unresolved ``{VAR}`` placeholder (the template variable was not set) are
+    dropped, so the recipe sees the parameter as absent and uses its own fallback.
+    A recipe opts in to the context with a second positional argument.
+    """
+    declared = inspect.signature(module.transform).parameters
+    args: list[Any] = [sources]
+    if context is not None and len([n for n in declared if n != "params"]) >= 2:
+        args.append(context)
+    if params is not None and "params" in declared:
         clean = {
             k: v
             for k, v in params.items()
             if v is not None and not _UNRESOLVED_PLACEHOLDER.match(str(v).strip())
         }
-        return module.transform(sources, params=clean)
-    return module.transform(sources)
+        return module.transform(*args, params=clean)
+    return module.transform(*args)
 
 
 def execute_recipe(
@@ -609,6 +661,8 @@ def execute_recipe(
     extra_sources: dict[str, pl.DataFrame] | None = None,
     pipeline_version: str | None = None,
     params: dict[str, str] | None = None,
+    properties: dict | None = None,
+    sources: dict[str, pl.DataFrame] | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -621,6 +675,9 @@ def execute_recipe(
         pipeline_version: Optional pipeline version for version-specific recipe lookup.
         params: Optional template parameters, passed to ``transform(sources, params=...)``
             when the recipe accepts them (see ``call_transform``).
+        sources: The file sources, already read (from several run folders,
+            put back together by the caller). ``data_dir`` is then only the
+            context the transform receives.
 
     Returns:
         Validated output DataFrame.
@@ -629,7 +686,7 @@ def execute_recipe(
     module = load_recipe(recipe_name, pipeline_version)
 
     # Checkpoint 2: resolve
-    sources = resolve_sources(module, data_dir, overrides)
+    sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
 
     # Inject dc_ref sources
     if extra_sources:
@@ -649,8 +706,11 @@ def execute_recipe(
     # Checkpoint 3: input schema
     validate_sources(module, sources, recipe_name)
 
-    # Checkpoint 4: transform
-    result = call_transform(module, sources, params)
+    # Checkpoint 4: transform. A recipe whose transform() takes a second
+    # argument also receives the run folder, for recipes that describe files
+    # rather than read them (a genome-track manifest lists which track files
+    # the run published).
+    result = call_transform(module, sources, params, RecipeContext.of(data_dir, properties))
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
             f"Recipe {recipe_name}: transform() must return pl.DataFrame, "

@@ -190,17 +190,17 @@ def test_metadata_dc_order_does_not_change_result(patched_db):
     ) == _resolve_multiqc_sample_filter(dashboard, component, filters_ba)
 
 
-def test_empty_intersection_returns_empty_list_not_none(patched_db, monkeypatch):
+def test_empty_intersection_returns_empty_list_not_none(patched_db):
     """Filters that match no sample must yield ``[]`` (render nothing)."""
-    import depictio.api.v1.deltatables_utils as dtu
-
-    monkeypatch.setattr(
-        dtu,
-        "load_deltatable_lite",
-        lambda *a, **k: pl.DataFrame({"sample": [], "habitat": []}),
-    )
-    filters = [_filter("habitat-a", "habitat", ["nope"])]
-    result = _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters)
+    # A nested patch, not monkeypatch: monkeypatch is torn down after the
+    # fixture's patch and would restore the fixture's mock, leaving
+    # load_deltatable_lite mocked for every later test on the same worker.
+    with patch(
+        "depictio.api.v1.deltatables_utils.load_deltatable_lite",
+        side_effect=lambda *a, **k: pl.DataFrame({"sample": [], "habitat": []}),
+    ):
+        filters = [_filter("habitat-a", "habitat", ["nope"])]
+        result = _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters)
     assert result == []
 
 

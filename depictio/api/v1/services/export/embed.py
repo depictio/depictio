@@ -589,6 +589,34 @@ def _advanced_viz_columns(config: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(columns))
 
 
+def _tab_family(dashboard_id: Any, current_user: Any) -> list[dict[str, Any]]:
+    """The tabs a text tile's `tab:` links name, as the dashboard's sidebar lists them.
+
+    A link wears its tab's icon and colour; the embed has no tab family to read
+    them from, so the payload carries one. A caller who may not read the family
+    gets none, and the links render as plain text.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import _resolve_tab_family
+
+    projection = {
+        "_id": 0,
+        "dashboard_id": 1,
+        "parent_dashboard_id": 1,
+        "title": 1,
+        "subtitle": 1,
+        "main_tab_name": 1,
+        "icon": 1,
+        "icon_color": 1,
+        "tab_icon": 1,
+        "tab_icon_color": 1,
+    }
+    try:
+        _, tabs = _resolve_tab_family(dashboard_id, current_user, projection)
+    except HTTPException:
+        return []
+    return [convert_objectid_to_str(tab) for tab in tabs]
+
+
 async def build_component_embed_payload(
     *,
     dashboard_doc: dict,
@@ -607,6 +635,7 @@ async def build_component_embed_payload(
 
     viz_kind = resolve_viz_kind(component.get("viz_kind"))
     data = _empty_data()
+    tabs: list[dict[str, Any]] = []
 
     # The embedded metadata is a copy: dc_id is rewritten to a per-component value
     # so the dc-keyed payload buckets cannot collide.
@@ -658,6 +687,8 @@ async def build_component_embed_payload(
 
         if _text_has_live_values(component):
             _add_card(data, dashboard_id, component_id, filters, current_user, access_token)
+        if "](tab:" in (component.get("body") or ""):
+            tabs = _tab_family(dashboard_id, current_user)
     else:
         raise HTTPException(
             status_code=422,
@@ -669,12 +700,15 @@ async def build_component_embed_payload(
             },
         )
 
-    return {
+    payload: dict[str, Any] = {
         "theme": "dark" if theme == "dark" else "light",
         "component": embedded,
         "title": component.get("title") or "",
         "data": data,
     }
+    if tabs:
+        payload["tabs"] = tabs
+    return payload
 
 
 async def render_component_embed(

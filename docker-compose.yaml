@@ -11,9 +11,14 @@
 
 services:
   mongo:
-    image: mongo:8.0.14
+    image: mongo:8.0.34
     container_name: mongo
     command: mongod --port 27018
+    environment:
+      # The official image sets glibc.pthread.rseq=0, and mongod then refuses
+      # Linux 6.19+ (SERVER-121912). Letting glibc own rseq moves tcmalloc to
+      # per-thread caches, the path that does not crash.
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     volumes:
       - mongo_data:/data/db
     # Internal-only: no host port — don't publish the DB.
@@ -71,7 +76,7 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.19.2}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.21.0}
     container_name: depictio-backend
     ports:
       # Loopback-only: front with a TLS proxy for external access.
@@ -117,6 +122,12 @@ services:
       # NO default: unset (empty) means "on, and the admin may toggle it from
       # /admin"; any value here wins and locks that toggle. See .env.example.
       DEPICTIO_VERSION_CHECK_ENABLED: "${DEPICTIO_VERSION_CHECK_ENABLED:-}"
+      # Genome browser: remote track sources must be allow-listed
+      # (comma-separated hosts / buckets). See .env.example.
+      DEPICTIO_JBROWSE_ENABLED: "${DEPICTIO_JBROWSE_ENABLED:-true}"
+      DEPICTIO_JBROWSE_REMOTE_HTTPS_HOSTS: "${DEPICTIO_JBROWSE_REMOTE_HTTPS_HOSTS:-nf-core-awsmegatests.s3-eu-west-1.amazonaws.com}"
+      DEPICTIO_JBROWSE_REMOTE_S3_BUCKETS: "${DEPICTIO_JBROWSE_REMOTE_S3_BUCKETS:-nf-core-awsmegatests}"
+      DEPICTIO_JBROWSE_PRESET_ACCESS: "${DEPICTIO_JBROWSE_PRESET_ACCESS:-proxy}"
       # Which view /dashboards opens in for someone who never picked one, and
       # the geometry of the thumbnails it shows. See .env.example.
       DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-table}"
@@ -161,7 +172,7 @@ services:
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.19.2}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.21.0}
     container_name: depictio-viewer
     ports:
       - 5080:8080
@@ -184,7 +195,7 @@ services:
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Always enabled — the dashboard editor (stepper / design mode) needs it.
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.19.2}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.21.0}
     volumes:
       - depictio_keys:/app/depictio/keys
       # Shared with the backend (see above) — worker writes screenshots here.

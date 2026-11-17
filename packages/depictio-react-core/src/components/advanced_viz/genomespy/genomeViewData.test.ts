@@ -12,6 +12,8 @@ import type { GenomeViewConfig } from './genomeSpySpec';
 import {
   filtersForGenomeViewFetch,
   loadGenomeViewRows,
+  mergeWindowRows,
+  rowsOnKnownContigs,
   navigatorWindow,
   navigatorWindowFilters,
   ownRegion,
@@ -287,5 +289,61 @@ describe('navigator window', () => {
   it('drops the empty position half of a chromosome-only window', () => {
     const extra = navigatorWindowFilters(metadata, 'chrom', 'start', { chroms: ['chr1'], range: null });
     expect(extra).toHaveLength(1);
+  });
+});
+
+describe('mergeWindowRows', () => {
+  it('keeps the genome read off the window chromosome and the window read on it', () => {
+    const genome = { chr: ['chr1', 'chr6', 'chr7'], pos: [10, 20, 30], score: [1, 2, 3] };
+    const window = { chr: ['chr6', 'chr6'], pos: [21, 22], score: [5, 6] };
+    expect(mergeWindowRows(genome, window, 'chr', 'chr6')).toEqual({
+      chr: ['chr1', 'chr7', 'chr6', 'chr6'],
+      pos: [10, 30, 21, 22],
+      score: [1, 3, 5, 6],
+    });
+  });
+  it('drops the genome rows on contigs the assembly does not name', () => {
+    const genome = { chr: ['chr1', 'chr17_GL000205v2_random'], pos: [10, 20] };
+    const window = { chr: ['chr6'], pos: [21] };
+    expect(mergeWindowRows(genome, window, 'chr', 'chr6', new Set(['chr1', 'chr6']))).toEqual({
+      chr: ['chr1', 'chr6'],
+      pos: [10, 21],
+    });
+  });
+  it('reads a contig spelled without the assembly\'s prefix as the same contig', () => {
+    const genome = { chr: ['20', '21', '22'], pos: [10, 20, 30] };
+    const window = { chr: ['21'], pos: [21] };
+    expect(mergeWindowRows(genome, window, 'chr', 'chr21', new Set(['chr20', 'chr21', 'chr22']))).toEqual({
+      chr: ['20', '22', '21'],
+      pos: [10, 30, 21],
+    });
+  });
+  it('falls back to the window read when the genome read has no chromosome column', () => {
+    const window = { chr: ['chr6'], pos: [1] };
+    expect(mergeWindowRows({ pos: [9] }, window, 'chr', 'chr6')).toBe(window);
+  });
+});
+
+describe('rowsOnKnownContigs', () => {
+  it('drops the rows on contigs the assembly does not name', () => {
+    const rows = { chr: ['chr1', 'chr1_KI270706v1_random', 'chr2'], pos: [1, 2, 3] };
+    expect(rowsOnKnownContigs(rows, 'chr', new Set(['chr1', 'chr2']))).toEqual({
+      chr: ['chr1', 'chr2'],
+      pos: [1, 3],
+    });
+  });
+
+  it('keeps the rows whose contigs the assembly spells with a prefix', () => {
+    const rows = { chr: ['21', 'KI270711.1', 'chrX'], pos: [1, 2, 3] };
+    expect(rowsOnKnownContigs(rows, 'chr', new Set(['chr21', 'chrX']))).toEqual({
+      chr: ['21', 'chrX'],
+      pos: [1, 3],
+    });
+  });
+
+  it('leaves the rows alone without an assembly or when every contig is known', () => {
+    const rows = { chr: ['chr1'], pos: [1] };
+    expect(rowsOnKnownContigs(rows, 'chr', null)).toBe(rows);
+    expect(rowsOnKnownContigs(rows, 'chr', new Set(['chr1']))).toBe(rows);
   });
 });

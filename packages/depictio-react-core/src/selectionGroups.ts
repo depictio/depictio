@@ -36,6 +36,12 @@ export interface SelectionGroup {
   createdAt: number;
   /** When true the group participates in the projected dashboard filter. */
   filterActive: boolean;
+  /** Set on groups derived from a session annotation (`annotationGroups.ts`):
+   *  the annotation they come from. Recomputing replaces exactly these. */
+  annotationColumnId?: string;
+  /** The label a derived group stands for; its name may differ when the label
+   *  collides with another group's name. */
+  annotationLabel?: string;
 }
 
 /** Payload sent to the figure render endpoint when "color by group" is on. */
@@ -68,6 +74,12 @@ export interface GroupRenderState {
   /** Groups mode only: false drops ungrouped rows ("Other") from figures
    *  instead of drawing them gray. Omitted means true. */
   showOther?: boolean;
+  /** Groups in "facet" only: one panel per group, the figure keeping its own
+   *  colours. Set by the "what's new" split (#1397), never by saved groups. */
+  keepColor?: boolean;
+  /** Groups in "facet" only: an "All" panel first, every row whatever its
+   *  group. Set by the "what's new" split (#1399). */
+  showOverall?: boolean;
 }
 
 /** The dashboard-global "Color by" control: nothing, the saved groups, or a
@@ -200,6 +212,7 @@ const SELECTION_SOURCES = new Set([
   // position half is a `[start, end]` span, which as group members would mean
   // "residue start or residue end", so it is left out below.
   'residue_selection',
+  'jbrowse_selection',
 ]);
 
 /** A `[low, high]` span rather than picked values (a residue range half). */

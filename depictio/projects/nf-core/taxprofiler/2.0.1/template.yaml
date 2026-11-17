@@ -19,7 +19,7 @@
 template:
   template_id: "nf-core/taxprofiler/2.0.1"
   description: "nf-core/taxprofiler template for metagenomic taxonomic profiling across many classifiers"
-  version: "1.0.0"
+  version: "1.1.1"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing taxprofiler pipeline output (multiqc/, taxpasta/, one directory per profiler)"
@@ -47,7 +47,7 @@ template:
         exclude_keys:
           - "hook_url" # nf-core runs put a live Slack webhook here
       - name: "software_versions"
-        glob: "pipeline_info/*software*versions.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"

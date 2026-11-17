@@ -9,11 +9,18 @@ export { default as ThemeToggle } from './ThemeToggle';
 export { default as ServerStatusBadge } from './ServerStatusBadge';
 export { default as ProfileBadge } from './ProfileBadge';
 export { default as AuthModeBadge } from './AuthModeBadge';
+export { default as NotificationsBell } from './NotificationsBell';
 export { default as PoweredBy } from './PoweredBy';
 export { useBrandLogoMode } from './useBrandLogoMode';
 export { default as SettingsDrawer } from './SettingsDrawer';
 export type { TabDefaults } from './SettingsDrawer';
 export { default as RunParametersHost } from './RunParametersHost';
-export { default as TabIntro } from './TabIntro';
+export { default as TabIntro, tabIntroShown } from './TabIntro';
 export { default as TabModal } from './TabModal';
 export type { TabModalSubmitPayload } from './TabModal';
+export {
+  default as DashboardLoadError,
+  DashboardLoadErrorCard,
+  LoadErrorCard,
+} from './DashboardLoadError';
+export type { DashboardLoadErrorProps, LoadErrorSubject } from './DashboardLoadError';

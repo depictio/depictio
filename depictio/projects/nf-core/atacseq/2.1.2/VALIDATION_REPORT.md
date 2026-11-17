@@ -2,8 +2,8 @@
 
 **Dates:** 2026-09-14 (port of the 1.2.2 template to 2.1.2), 2026-10-09 (templates v2: dashboard
 rebuilt on `depictio/projects/nf-core/RULES.md`, collections brought level with the current
-1.2.2 template)
-**Scope:** offline checks only: recipe execution against local copies of EMBL HPC runs, link
+1.2.2 template), 2026-11-02 (genome browser on the Locus tab)
+**Scope (2026-09 and 2026-10 passes):** offline checks only: recipe execution against local copies of EMBL HPC runs, link
 replay, MultiQC tile pruning and rendering, `dashboard validate --offline` and the template
 unit tests. **No ingest was run**, so nothing here was read back from Delta, rendered by the
 API or imported into a live dashboard.
@@ -229,6 +229,41 @@ values. The Consensus tab's PCA first drew every point in one colour: the catalo
 adds `group` (the sample id without its `_REP<n>`), and the tile colours by it, in the
 family's `group: auto` colours.
 
+## Genome browser (2026-11-02, template 3.0.0)
+
+The Locus tab gains the genome browser the 1.2.2 template has: a `tracks` collection
+(`recipes/tracks.py`, `genomic_tracks`), a `jbrowse` tile under the navigator, the
+`TRACKS_URI` variable with its `conditional` override (`remote_base_uri`), and three links
+joining the hub, the broad calls and the tracks on the merged-library spelling. The
+navigator drops `default_region` for `open_on_view_window`, so it opens on the chromosome the
+browser shows. The version is a major bump: a collection and a variable are new, so a project
+ingested with 2.x of the template needs a new ingest.
+
+What differs from 1.2.2: the manifest reads `pipeline_info/samplesheet.valid.csv` and spells
+samples `<group>_REP<n>`; files live under `<aligner>/merged_library/` with
+`bigwig/`, `macs2/broad_peak/` (or `macs2/narrow_peak/`) and the BAM beside them. The recipe
+takes the aligner folder (`bwa`, `bowtie2`, `chromap`, `star`) from the merged-library folder
+DATA_ROOT holds, in both modes, and falls back to bwa and broad peaks when it holds none.
+
+Checked on a local stack against the `test_full` run (`--var GENOME=hg19`), tracks uploaded
+from DATA_ROOT (every bigWig and peak file, the two smallest BAMs):
+
+- ingest 8/8, no error; all eight tabs load with no console error besides the CSP refusal
+  of a font-metadata fetch by the genome view, and no 4xx or 5xx on the API;
+- the browser opens on the strongest call, the six bigWigs are drawn (replicate 1 of each
+  group first), all 14 listed tracks answer range requests with 206 (bigWig, broadPeak, BAM),
+  and a BAM draws reads when opened by picking its sample in the left rail;
+- Next and Previous step through the peaks and the consensus intervals, a brush on the
+  navigator moves the browser and recounts the cards, and the navigator shows the browser's
+  window as a band;
+- read in place (`--var TRACKS_URI=s3://<bucket>` on a second bucket of the local S3, which
+  needs `DEPICTIO_JBROWSE_REMOTE_S3_BUCKETS`, the endpoint and keys): all 18 expected rows are
+  listed, the files present answer 206 and the BAMs not copied answer 404;
+- `recipes/tracks.py` run on listings of the `test`, `test_star` and `test_controls` trees:
+  aligner folder and sample naming resolve, 18 rows each.
+
+Recipe tests: `depictio/tests/recipes/test_atacseq_2_1_2_tracks.py`.
+
 ## Discrepancies and open items
 
 ### AT2-D1: MultiQC tiles are checked against the `test` run's report only
@@ -282,3 +317,15 @@ The catalog's `picard/markduplicates_metrics` keeps `<sample>.mLb.mkD.sorted` as
 so the hub reaches it with a `pattern` link and the Picard table and scatter show that name.
 Picard estimates no library size for single-end reads, so the Signal tab's library-size card
 is the median of the paired-end libraries and prints a dash on an all single-end run.
+
+### AT2-D9: the left-rail Sample filter empties the peak-level collections
+
+Found while checking the genome browser, not caused by its links (it reproduces with the
+three track links removed). The peak calls, the HOMER annotation and the HOMER profile name
+a library `<sample>.mLb.clN`, the hub's `sample` is the short name, and a filter on a column
+called `sample` also narrows any collection that has a column of that name, by value. A
+Sample pick therefore matches nothing there and the tiles show no rows (the peak-width
+figure raises a join error on the empty frame). The Group and Replicate filters, and the
+sample-keyed collections (ataqv, deepTools, Picard, DESeq2 QC), are unaffected, and the
+genome browser follows the Sample pick through its own link. Left as is: the fix is a
+platform or a hub-column change, not part of the browser port.

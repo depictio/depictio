@@ -32,6 +32,7 @@ from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.local import app as local
 from depictio.cli.cli.commands.manifest import app as manifest
 from depictio.cli.cli.commands.migrate import migrate
+from depictio.cli.cli.commands.project_builder import register_project_builder_command
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
 from depictio.cli.cli.commands.template import app as template
@@ -49,7 +50,14 @@ TAGLINE = "Interactive dashboards for bioinformatics data"
 # The panels of `depictio --help`, in display order, with their commands.
 HELP_PANELS = {
     "Get started": ("local", "ingest", "watch"),
-    "Projects and data": ("config", "data", "dashboard", "template", "manifest"),
+    "Projects and data": (
+        "config",
+        "data",
+        "dashboard",
+        "template",
+        "project-builder",
+        "manifest",
+    ),
     "Administration": ("migrate", "backup"),
     "Reference": ("catalog", "commands", "version"),
 }
@@ -129,6 +137,8 @@ register_standalone_commands(app)
 register_run_command(app)
 # `watch` is `ingest` on a loop, so it sits next to it rather than under `data`.
 register_watch_command(app)
+# Hand-authoring a project from a folder no template fits.
+register_project_builder_command(app)
 
 
 def _version_callback(value: bool) -> None:

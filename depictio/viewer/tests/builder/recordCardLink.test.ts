@@ -82,3 +82,26 @@ describe('findEmitter', () => {
     expect(findEmitter(emitters, 'gone')).toBeUndefined();
   });
 });
+
+describe('a spatial cells tile as the source', () => {
+  it('emits its cell ids once its lasso is on', () => {
+    const tiles = [
+      meta({ index: 'card', component_type: 'advanced_viz', viz_kind: 'record_card', config: {} }),
+      meta({
+        index: 'cells-on',
+        component_type: 'advanced_viz',
+        viz_kind: 'spatial_cells',
+        config: { selection_enabled: true, cell_id_col: 'cell_uid' },
+      }),
+      meta({
+        index: 'cells-off',
+        component_type: 'advanced_viz',
+        viz_kind: 'spatial_cells',
+        config: { cell_id_col: 'cell_uid' },
+      }),
+    ];
+    expect(selectionEmitters(tiles, 'card').map((e) => [e.index, e.column])).toEqual([
+      ['cells-on', 'cell_uid'],
+    ]);
+  });
+});

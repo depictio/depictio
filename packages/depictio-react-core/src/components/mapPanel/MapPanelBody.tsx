@@ -83,9 +83,11 @@ export interface MapPanelBodyProps {
  *
  * - `map`: `MapRenderer` in its bare presentation, with the data and legend
  *   buttons in the header.
- * - `structure`: the same tile the grid would draw (`ComponentRenderer`, so
- *   the same chrome, controls and hover linking), in compact density so its
- *   frame keeps to a one-line header. The card around it is the only border.
+ * - `structure` and `genome`: the same tile the grid would draw
+ *   (`ComponentRenderer`, so the same chrome, controls and hover linking), in
+ *   compact density so its frame keeps to a one-line header. The card around it
+ *   is the only border. A genome browser (`jbrowse`) is what the second branch
+ *   below hosts for `genome`: it needs only a sized parent, which that box is.
  */
 const MapPanelBody: React.FC<MapPanelBodyProps> = ({
   panel,
@@ -175,7 +177,7 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
             carries the component's. A structure keeps its tile's frame, which
             already prints the component's title and what is on screen; saying
             it twice would cost the viewer a line of height, so the header names
-            the panel instead. */}
+            the panel instead (a genome browser's tile does the same). */}
         <Text size="sm" fw={600} truncate style={{ flex: 1, minWidth: 0 }}>
           {isMap ? (active.metadata.title as string) || spec.label : spec.label}
         </Text>
@@ -375,15 +377,16 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
         </Box>
       )}
 
-      {/* The structure is the grid's own tile, drawn by the same path. Compact
-          density gives its frame a one-line header; the box around it is a
-          definite, positioned parent, because the molecule's split layouts
-          position themselves absolutely against the nearest one. */}
+      {/* The structure (or the genome browser) is the grid's own tile, drawn by
+          the same path. Compact density gives its frame a one-line header; the
+          box around it is a definite, positioned parent, because the molecule's
+          split layouts position themselves absolutely against the nearest one
+          and the browser sizes its view to its parent. */}
       {!collapsed && !isMap && (
         <Box style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <div className="depictio-panel-embed">
             <DensityContext.Provider value="compact">
-              {/* Keyed by index so switching structures remounts the viewer
+              {/* Keyed by index so switching components remounts the viewer
                   rather than feeding it another component's metadata. */}
               <ComponentRenderer
                 key={active.metadata.index}

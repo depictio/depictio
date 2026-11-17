@@ -70,7 +70,9 @@ neither recipe depends on the other's row cap).
 MAD rules (sc-best-practices), computed per sample on log1p values:
     - low outlier: log1p(n_umi) or log1p(n_genes) < median - 5 * MAD
     - high pct_top20 outlier: pct_top20 > median + 5 * MAD (on the raw %, not log1p)
-    - high pct_mito outlier: pct_mito > median + 3 * MAD, OR pct_mito > 8
+    - high pct_mito outlier: pct_mito > median + 3 * MAD AND pct_mito > 8 (a cell must
+      exceed both, as in sc-best-practices; the MAD is taken on the raw percentage here,
+      where the source takes it on the logit of the fraction)
 
 `cluster_label` = "C<n> <top1>/<top2>": the 2 genes with the highest log2FC
 among {adjusted p-value < 0.05, mean_counts > 0.5} for that graph-based
@@ -274,7 +276,13 @@ _DIFFEXP_CLUSTER_COL_RE = re.compile(r"^Cluster (\d+) Mean Counts$")
 #: built from the graph-based file.
 _GRAPHCLUST_DIFFEXP_DIR = "analysis/diffexp/gene_expression_graphclust/"
 
-# sc-best-practices MAD multipliers.
+# sc-best-practices MAD multipliers: 5 MADs for counts, genes and top-20 share, 3 MADs
+# for the mitochondrial share, which must also exceed the fixed 8 % floor (a cell is
+# flagged only when it passes BOTH). Source, Heumos et al. 2023, Nat Rev Genet,
+# https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+# ("only flag cells that exceed both 3 MADs and a fixed cutoff of 8 %"). The book says
+# the 8 % "is not universal since mitochondrial content differs between cell types and
+# tissues".
 _MAD_K_COUNT = 5.0
 _MAD_K_TOP20 = 5.0
 _MAD_K_MITO = 3.0
@@ -532,7 +540,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         ).alias("mad_high_top20"),
         (
             (pl.col("pct_mito") > pl.col("_med_mito") + _MAD_K_MITO * _C * pl.col("_mad_mito"))
-            | (pl.col("pct_mito") > _MITO_HARD_PCT)
+            & (pl.col("pct_mito") > _MITO_HARD_PCT)
         ).alias("mad_high_mito"),
     )
 

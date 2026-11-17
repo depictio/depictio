@@ -28,7 +28,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { runStorageFromFields, s3BucketOf, testRunStorage } from 'depictio-react-core';
+import { runStorageFromFields, s3BucketOf, testRunStorage, useBrandAccents } from 'depictio-react-core';
 import type {
   ProjectStorageTestResult,
   RunStorageFieldErrors,
@@ -114,6 +114,7 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
   onConnected,
   disabledReason,
 }) => {
+  const accent = useBrandAccents();
   const [test, setTest] = useState<TestState>({ status: 'idle' });
   /** A missing key or secret is marked on its field only after a first
    *  test: on an untouched form, or while the reader is between the two
@@ -272,7 +273,8 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
             <Stack gap={6}>
               <Group gap="sm" wrap="wrap">
                 <GatedButton
-                  size="xs"
+                  color={accent.secondary}
+                  size="sm"
                   variant="light"
                   leftSection={<Icon icon="mdi:connection" width={14} />}
                   onClick={handleTest}

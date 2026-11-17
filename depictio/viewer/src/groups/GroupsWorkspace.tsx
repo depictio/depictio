@@ -279,7 +279,7 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
                 />
               )}
               {params.data?.sso_managed && (
-                <Badge color="grape" variant="light" size="xs" radius="sm">
+                <Badge color="grape" variant="light" size="xs" radius="sm" style={{ flexShrink: 0 }}>
                   SSO
                 </Badge>
               )}

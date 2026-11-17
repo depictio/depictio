@@ -32,8 +32,8 @@ export const TILE_ACTION_STYLE = {
   /** Export through the API: a Plotly spec or a self-contained page. Only
    *  when the server's export API is on (`ComponentExportContext`). */
   export: { icon: 'mdi:code-json', color: 'blue', label: 'Export / embed' },
-  description: { icon: 'mdi:text-box-outline', color: 'teal', label: 'About this component' },
-  metadata: { icon: 'mdi:information-outline', color: 'cyan', label: 'Component metadata' },
+  description: { icon: 'mdi:information-outline', color: 'teal', label: 'About this component' },
+  metadata: { icon: 'mdi:format-list-bulleted', color: 'cyan', label: 'Data source and settings' },
   fullscreen: { icon: 'mdi:fullscreen', color: 'indigo', label: 'Toggle fullscreen' },
   download: { icon: 'mdi:download', color: 'green', label: 'Download CSV' },
   reset: { icon: 'bx:reset', color: 'orange', label: 'Reset selection' },

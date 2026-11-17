@@ -145,7 +145,8 @@ def apply_figure_style(
     Args:
         figure: A serialised Plotly figure (``{"data": [...], "layout": {...}}``).
         style: A name from ``FIGURE_STYLES``. ``default`` and unknown names
-            return the figure as it is (bar ``hide_legend``).
+            keep the drawing as it is (bar ``hide_legend``, and the tooltips
+            that wear their series colour).
         theme: ``light`` or ``dark``, for the grid, tick and hover colours.
         header_title: The card header shows the figure's title, so the plot
             drops its own rather than printing it twice.
@@ -156,10 +157,14 @@ def apply_figure_style(
     if not isinstance(figure, dict):
         return figure
     if normalize_figure_style(style) != "minimal":
-        if not hide_legend:
-            return figure
+        # The default style leaves the drawing alone; only the tooltips follow
+        # the series colours, whatever the style (see ``_style_hover``).
         out = dict(figure)
-        out["layout"] = {**(figure.get("layout") or {}), "showlegend": False}
+        traces = [dict(t) if isinstance(t, dict) else t for t in (figure.get("data") or [])]
+        _style_hover([t for t in traces if isinstance(t, dict)])
+        out["data"] = traces
+        if hide_legend:
+            out["layout"] = {**(figure.get("layout") or {}), "showlegend": False}
         return out
     return _apply_minimal(
         figure,
@@ -190,6 +195,7 @@ def _apply_minimal(
 
     _style_font(layout)
     _style_traces(traces, layout, palette)
+    _style_hover(traces)
     has_title = _style_title(layout, header_title, palette)
     _style_axes(layout, traces, palette)
     _style_legend(layout, palette, hide_legend)
@@ -350,6 +356,133 @@ def _style_traces(traces: list[dict], layout: dict, palette: dict[str, str]) -> 
         layout["bargap"] = 0.22
         layout["bargroupgap"] = 0.06
         layout.setdefault("barcornerradius", _BAR_CORNER_RADIUS_PX)
+
+
+_HEX_COLOUR = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_RGB_COLOUR = re.compile(
+    r"^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([\d.]+)\s*)?\)$"
+)
+# Below this alpha a colour is a wash, not a series colour: a label filled with
+# it would be composited over the plot and its ink chosen for the wrong colour.
+_MIN_HOVER_ALPHA = 0.9
+
+#: The `<extra>...</extra>` that ends a hover template.
+_EXTRA_TAIL = re.compile(r"<extra>.*?</extra>\s*$", re.DOTALL)
+
+# Ink on a coloured hover label: the card's own dark and a white.
+_HOVER_INK_DARK = "#212529"
+_HOVER_INK_LIGHT = "#ffffff"
+# Its outline: white, so a label over a bar of its own colour still stands out.
+_HOVER_EDGE = "#ffffff"
+
+
+def _rgb_of(colour: object) -> tuple[int, int, int] | None:
+    """``(r, g, b)`` of a hex or rgb()/rgba() colour; None for anything else (a name, hsl, a scale)."""
+    if not isinstance(colour, str):
+        return None
+    text = colour.strip()
+    if _HEX_COLOUR.match(text):
+        digits = text[1:]
+        if len(digits) == 3:
+            digits = "".join(ch * 2 for ch in digits)
+        return int(digits[0:2], 16), int(digits[2:4], 16), int(digits[4:6], 16)
+    match = _RGB_COLOUR.match(text)
+    if match:
+        r, g, b = (int(v) for v in match.groups()[:3])
+        alpha = match.group(4)
+        if alpha is not None and float(alpha) < _MIN_HOVER_ALPHA:
+            return None
+        return (r, g, b) if max(r, g, b) <= 255 else None
+    return None
+
+
+def _hover_ink(rgb: tuple[int, int, int]) -> str:
+    """Dark or white ink for text on ``rgb``, whichever reads better (WCAG relative luminance)."""
+
+    def channel(v: int) -> float:
+        c = v / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = rgb
+    luminance = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    # Where white ink and the dark ink (#212529, luminance 0.018) have the same
+    # contrast ratio: (L + 0.05)^2 = 1.05 * (0.018 + 0.05).
+    return _HOVER_INK_DARK if luminance > 0.217 else _HOVER_INK_LIGHT
+
+
+def _series_colour(trace: dict) -> Any:
+    """What a trace is drawn in: one colour, or a list of them (one per point), else None.
+
+    Bars, histograms, boxes and violins and scatter markers carry it on
+    ``marker.color``; a line-only scatter on ``line.color``. A numeric array
+    maps a colour scale and a name is not parsed, so those give None and the
+    hover label keeps the neutral look.
+    """
+    marker = trace.get("marker") if isinstance(trace.get("marker"), dict) else {}
+    line = trace.get("line") if isinstance(trace.get("line"), dict) else {}
+    kind = trace.get("type", "scatter")
+    candidates = [marker.get("color")]
+    if kind in _SCATTER_TYPES and "markers" not in str(trace.get("mode") or "markers"):
+        candidates.insert(0, line.get("color"))
+    for colour in candidates:
+        if _rgb_of(colour) is not None:
+            return colour
+        if (
+            isinstance(colour, (list, tuple))
+            and colour
+            and all(_rgb_of(c) is not None for c in colour)
+        ):
+            return list(colour)
+    return None
+
+
+def _drop_unnamed_hover_lines(trace: dict) -> None:
+    """Remove the ``=value`` lines Plotly Express writes for a column titled "".
+
+    A code figure hides an axis title with ``labels={'caller': ''}``, and Plotly
+    Express then names that column nothing in its hover template as well, so the
+    tooltip reads "=manta". The value stays in the tooltip through the others
+    lines and the axis; the line without a name says nothing.
+    """
+    template = trace.get("hovertemplate")
+    if not isinstance(template, str) or "=%{" not in template:
+        return
+    # `<extra>...</extra>` closes the template; keep it (or Plotly draws the
+    # trace-name box back) and filter only the lines before it.
+    extra = _EXTRA_TAIL.search(template)
+    body, tail = (template[: extra.start()], extra.group(0)) if extra else (template, "")
+    parts = body.split("<br>")
+    kept = [part for part in parts if not part.startswith("=%{")]
+    if len(kept) != len(parts) and kept:
+        trace["hovertemplate"] = "<br>".join(kept) + tail
+
+
+def _style_hover(traces: list[dict]) -> None:
+    """Colour each series' hover label like the series, with ink that reads on it.
+
+    The preset sets one neutral hover label for the whole figure, which cut the
+    link between a tooltip and the series it names: on a stacked bar every
+    segment answered in the same white box. A trace drawn in one colour (or one
+    per point) answers in that colour; the rest keep the neutral label.
+    """
+    for trace in traces:
+        _drop_unnamed_hover_lines(trace)
+        colour = _series_colour(trace)
+        if colour is None:
+            continue
+        colours = colour if isinstance(colour, list) else [colour]
+        inks = [_hover_ink(_rgb_of(c)) for c in colours]  # type: ignore[arg-type]
+        label = _sub(trace, "hoverlabel")
+        own = label.get("bgcolor")
+        if own is not None and own != colour:
+            # A label the figure chose for itself is kept, as on the client.
+            continue
+        label["bgcolor"] = colour
+        label["bordercolor"] = _HOVER_EDGE
+        label["font"] = {
+            **(label.get("font") if isinstance(label.get("font"), dict) else {}),
+            "color": inks if isinstance(colour, list) else inks[0],
+        }
 
 
 def _style_title(layout: dict, header_title: bool, palette: dict[str, str]) -> bool:

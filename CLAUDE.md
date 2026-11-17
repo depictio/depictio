@@ -15,8 +15,8 @@ Managed with **uv** (`uv.lock`). No venv is checked in — CI does
 `uv venv --python 3.12.9 venv && uv pip install -e ".[dev]"`. Prefix commands with
 `uv run --extra dev`: a fresh env from a plain `uv run` holds only the base install (the
 CLI alone), and a plain `uv sync` removes the extras.
-Extras: `[multiqc]`, `[server]` (API + worker), `[local]` (`depictio local up`), `[dev]`
-(server + test tools). `depictio/cli/pyproject.toml` is only the `depictio-cli` alias.
+Extras: `[multiqc]`, `[server]` (API + worker), `[local]` (`depictio local up`),
+`[builder]` (`depictio project-builder`), `[dev]` (server + test tools). `depictio/cli/pyproject.toml` is only the `depictio-cli` alias.
 `pixi.toml` offers an alternative Docker-free stack (`pixi run start-infra`, `pixi run api`).
 
 ### Testing
@@ -90,6 +90,7 @@ pre-commit run --all-files         # mandatory after all code changes
 | `/dashboard/{id}` | viewer |
 | `/dashboard-edit/{id}` | editor (`+ /component/add/{id}`, `/component/edit/{id}`) |
 | `/groups` | my-groups list + group-admin management |
+| `/projects/build` | Project Builder (also the whole SPA under `depictio project-builder`) |
 | `/about`, `/admin`, `/profile`, `/cli-agents` | supporting pages |
 
 Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
@@ -98,8 +99,8 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 ### Dashboard Versioning
 - Every save snapshots the whole tab family into `dashboard_versions` (`dashboards_endpoints/versioning.py`)
 - **`/save` is not the only route that captures.** `POST /edit`, `PATCH /tab`,
-  `DELETE /tab`, `/tabs/reorder`, `PATCH /appearance` and a child-tab `DELETE /delete`
-  all change content, so each seeds a baseline *before* its write and captures *after*
+  `DELETE /tab`, `/tabs/reorder`, `PATCH /appearance`, a child-tab `DELETE /delete` and
+  `PUT /dashboards/annotations/{id}/shared` all change content, so each seeds a baseline *before* its write and captures *after*
   it. A tab delete anchors on the parent (the deleted tab can no longer resolve its own
   family) and is `explicit`, so it never coalesces into a neighbouring autosave. Every
   import records the state it replaces, then an `import` version. `/upload_logo` is not
@@ -107,7 +108,9 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   content-mutating route without both calls silently makes that change unrecoverable
 - Autosaves coalesce within an anchored window; an unchanged save writes nothing, **whatever its kind**.
   One exception: a Save click (`seal=True`) on content an autosave already holds turns that
-  autosave `explicit` and closes its window, or the click would leave no trace. A dashboard's
+  autosave `explicit` and closes its window, or the click would leave no trace. A reader's
+  mark (#1397) closes the window of the version it points at too (`close_window`), without
+  sealing it: folding into a version a reader saw would erase what changed since. A dashboard's
   creation is `explicit` too, so the creator's first edits cannot fold into and erase it
 - Version timestamps are naive UTC (`utc_now_naive`), like every other API timestamp: a local
   clock is invisible in Docker but hours off under `depictio local up`
@@ -119,6 +122,9 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   pre-edit state is restorable; capture otherwise only ever records states already left
 - `tab_count`/`component_count` are **stored**, not derived: the list endpoint projects
   `tabs` away, so a timeline row has nothing left to count
+- Shared session labels (`shared_labels`, main tab only) are written only by
+  `PUT /dashboards/annotations/{id}/shared`; `/save` pops the field so the editor never
+  overwrites them. Sharing or unsharing a column is an `explicit` version, a label edit an autosave
 - Snapshots are content-only: `permissions`/`is_public`/`project_id` always come from the live doc
 - `TabSnapshot` is `extra="forbid"` and must cover every content field of `DashboardData`.
   A new dashboard field goes into `TabSnapshot` or one of the `SNAPSHOT_*_FIELDS` sets in
@@ -170,8 +176,13 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   so a round trip keeps it. `restore_component` takes `tab_id` with the index. Without
   stable ids no component-level history can match anything
 - Time-travel UI is **edit mode only** (timeline, dataset picker, component history):
-  all of it writes or re-points data. The viewer keeps only the `?version=` preview.
+  all of it writes or re-points data. The viewer keeps the `?version=` preview and the
+  read-only "changed since" compare (overlay + Before | Now modal), which renders through
+  the preview contract and never writes or re-pins the page.
   `check_served_bundle.py` asserts that split in the *served bundle*, in both directions
+- MultiQC time travel is by **report set**: `DataCollectionStamp.report_ids` at save,
+  `report_sets: {dc_id: [report ids]}` in a render request. An in-place overwrite keeps
+  its S3 key, so its past is not recoverable
 - Deleting a main tab drops its ledger + seq counter; a child tab's versions belong to
   the family and must survive. Deleting a project drops its families' ledgers
 - `depictio/projects/init/iris_versioned/` is the fixture for exercising any of this:
@@ -183,6 +194,77 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   and all four versions stamp the newest commit: labels, counts and stamps all look
   right, and "restore v1's data" quietly shows the complete survey. `rebuild_demo.py`
   asserts the stamps ascend
+
+### Changed Since Last Visit (#1397)
+- Per-reader mark per dashboard family / project (`reader_marks`, routes under `/changes`),
+  off by default (`DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_ENABLED`, `features.changes_since`).
+  Anonymous readers keep it in localStorage and send it back. **Detail**:
+  `docs/changes-since-last-visit.md`
+- A mark is a **snapshot** (version id, Delta commit per DC, MultiQC report set by S3
+  location, cursors), not a timestamp: ingestion records no dashboard version and several
+  ingestion clocks are local. Writing one records no dashboard version
+- Never written by the editor, a `?version=` preview, `?since=` or `?before_run=`. The
+  reader's own versions and comments never count as news; ingestions always do (a run is
+  asynchronous, and on a single-user instance every ingestion is the reader's)
+- MultiQC append recreates every report document: identify reports by `s3_location`, never
+  by `_id`
+- A new ingestion path must set `ingestion_run_id` (and `run_tags`, `trigger`) on what it
+  writes, or the project Runs tab cannot tell which run produced it
+
+### Migration & Publishing (#1303)
+- One instance pushes a project to another (`/migrate/push` → target `/migrate/inbound/requests`,
+  pairing key header); an admin approves it in Admin > Migrations; the import runs in a
+  FastAPI background task, not Celery. All off by default (`DEPICTIO_MIGRATION_*`); the UI
+  is hidden unless `DEPICTIO_MIGRATION_UI_ENABLED=true` (`features.migration` in `/utils/server-info`).
+  **Detail**: `docs/project-migration.md`
+- `project.published_lock` makes a project read-only: guards in
+  `projects_endpoints/publish_lock.py` return 409. An approved migration is the only
+  writer past it; `POST /projects/{id}/unlock` (admin) lifts it
+- **Every new POST/PUT/PATCH/DELETE route** must be classified in
+  `tests/api/v1/test_publish_lock_routes.py`: `GUARDED` if it changes project content
+  (and calls a lock guard), else `EXEMPT` with a reason. An unclassified route fails the test
+- A lock covers dashboards whose id or `parent_dashboard_id` is in
+  `published_lock.dashboard_ids`, so a viewer's copy of a published dashboard stays editable
+- Import records the state it replaces, then an `import` version; a re-push from the same
+  source lineage is a new version. Provenance (`project.provenance`) is server-owned:
+  create/update strip it from payloads
+- `published_lock` is returned by `/dashboards/get` but is runtime-only on `DashboardData`
+  (popped in `/save`, in `SNAPSHOT_DERIVED_FIELDS`)
+- **Invite codes** (`migration_invites`, `services/migration_invites.py`): a target admin
+  issues a code (shown once, only its sha256 stored; one kind: the first project it brings,
+  then that project's updates, until it expires); a source owner publishes with
+  URL + code (`DEPICTIO_MIGRATION_DESTINATION_DOMAINS`, https, SSRF guard per call). An
+  accepted invite push imports at once (no queue), as source `invite:<id>`; status is read
+  back with a per-request token, never the code. The chart turns `INBOUND_ENABLED` and
+  `UI_ENABLED` on; code defaults stay off. Startup marks stuck pushes/imports failed
+  (`interrupted by a restart`, retryable). An admin may toggle visibility of a locked project
+
+### Project Builder (`depictio/project_builder/`)
+- For a folder no template fits: pick files, group data collections under workflows, get an
+  ad-hoc **template** (`custom/<name>`, every location under `{DATA_ROOT}`), not a project.yaml
+- Two doors, one core: the SPA page `/projects/build` on a server (creates the project via
+  `POST /projects/from_run {template}`), and `depictio project-builder <dir>`, a thin no-Mongo
+  FastAPI app serving the same `viewer/dist` with a `depictio-mode` meta tag; it writes
+  `<dir>/.depictio/template/template.yaml` for `depictio ingest <dir|s3://…> --template`
+- The core asks everything of a `DataRoot` (local or `s3://`) and imports no FastAPI outside
+  `routes.py`/`standalone.py`: it must run on the CLI-only install (`cli-base-install.yaml`)
+- The match panel is `template_preview.scan_dc_hits`, the scan's own rule
+  (`iter_run_files` + `select_run_files`). A preview with its own walk drifts from ingestion;
+  `test_scan_parity.py` asks both sides the same questions
+- An inline template is browser input: `validate.validate_inline_template` holds it to what the
+  builder produces (native single/recursive scans, no dashboards/conditionals/recipes/joins,
+  `DATA_ROOT` only, indexed files and images refused on S3) before `from_run` resolves it.
+  A new draft option needs its key in `validate.py` too, or every template using it is a 422
+- `GET /projects/builder/capabilities` is what the SPA offers: kinds are detected from the
+  models (`capabilities.py`, `find_spec`), never from a version. `genomic_tracks`, `bioimage`
+  and `format: spatialdata` tables come from unmerged work: listed unavailable with a reason
+  and refused until their model modules exist. Bioimage stores and SpatialData tables are
+  refused on S3 roots; genomic tracks under S3 get `remote_base_uri: {DATA_ROOT}/<dir>/`
+- A project's `realtime` flag only acts when the instance has `DEPICTIO_EVENTS_ENABLED`
+  (off by default; `depictio local up` passes it through when set), and only on re-ingestion
+  (`depictio watch`, `depictio ingest`, Data refresh): nothing watches folders or S3 itself
+- Wildcard names are lowercase-capable identifiers: `{SAMPLE}` would be read as a template
+  variable. A `*.zarr` folder is one store (tree leaf, matched by name, never descended)
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
@@ -204,6 +286,25 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
 
+### Multi-run templates (#1399)
+- `depictio ingest <dir> --attach-run` adds a run to an existing project. A single-run
+  project must come out identical apart from `depictio_run_id`; `multirun_harness.py
+  compare` checks that, `multirun` drives athens -> barcelona -> naples
+- An attach writes **only the new run**: `plan_attach_write` gives a predicate write
+  (`depictio_run_id IN (...)`, works unpartitioned). It falls back to a full rewrite when
+  the table holds tags that are not project runs (`*-single-file-scan`, old recipe
+  outputs). A scoped write without a predicate raises, never overwrites the table
+- `single` files bind to their real run (`File.run_id` = stored `WorkflowRun`), so the
+  Runs tab counts them; a file shared by every run keeps the synthetic tag
+- Recipe scopes live in `cli/cli/utils/recipe_scopes.py` (`TransformConfig.scope`
+  overrides): `run` (default, per run, stacked), `aggregate` (mixes samples: recomputed
+  over all runs, `combine` = rows/wide/unique per source, rows get the run of their
+  `sample_column`), `pipeline` (pipeline statistic, per run). `--per-run` forces `run`.
+  A new recipe that mixes samples must be registered, or it is silently wrong once stacked
+- Lineage: `Aggregation.run_scope / computed_from_runs / inputs` and commit metadata
+  `depictio.run_scope / computed_from / inputs` (`tag@version`). Read by
+  `ProjectRun.dc_outputs`, `_delta_change.recomputed_run_tags` and the viewer history
+
 ### Data Collection Storage Families
 Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with three storage shapes:
 - **Delta** — `table`, `image` (manifest only), joined/transformed: Delta table at `s3://{bucket}/{dc_id}`
@@ -215,6 +316,12 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
   `DEPICTIO_AUTH_SINGLE_USER_MODE`
+- SSO is generic OpenID Connect: providers are a JSON list in `DEPICTIO_AUTH_OIDC_PROVIDERS`
+  (secrets via `DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID/_SECRET`); routes in
+  `auth_endpoints/oidc_routes.py`; verification in `oidc.py` (PKCE S256, state in
+  `oauth_states` consumed atomically, nonce, JWKS rotation). One provisioning path:
+  `sso_sync.provision_sso_login` → `create_or_get_sso_user` → `sync_sso_user`. SAML is
+  removed; `DEPICTIO_AUTH_GOOGLE_OAUTH_*` maps to provider `google` (deprecated)
 - S3-compatible storage (bundled SeaweedFS `weed mini` locally, compose service `s3` with a
   `minio` network alias; any S3 endpoint in prod), Delta Lake format. Config prefix
   `DEPICTIO_S3_*` (`settings.s3`); legacy `DEPICTIO_MINIO_*` / `settings.minio` still accepted.

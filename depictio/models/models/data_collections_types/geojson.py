@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 
 
+def geojson_s3_key(dc_id: str) -> str:
+    """Where ingest stores a GeoJSON collection's file in the instance bucket."""
+    return f"{dc_id}/geojson_data.geojson"
+
+
 class DCGeoJSONConfig(BaseModel):
     """Configuration for GeoJSON data collections.
 

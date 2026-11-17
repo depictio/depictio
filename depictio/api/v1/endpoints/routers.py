@@ -14,15 +14,19 @@ from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
     router as analytics_data_router,
 )
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
-from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
-from depictio.api.v1.endpoints.auth_endpoints.saml_routes import saml_router
+from depictio.api.v1.endpoints.auth_endpoints.oidc_routes import oidc_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
 from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
+from depictio.api.v1.endpoints.changes_endpoints.routes import changes_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.annotation_routes import annotation_router
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_routes import filter_state_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.shared_labels_routes import (
+    shared_labels_router,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import (
     dashboard_versions_endpoint_router,
 )
@@ -38,9 +42,15 @@ from depictio.api.v1.endpoints.groups_endpoints.routes import groups_endpoint_ro
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.jobs_endpoints.routes import jobs_endpoint_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
+from depictio.api.v1.endpoints.migrate_endpoints.inbound_routes import inbound_router
+from depictio.api.v1.endpoints.migrate_endpoints.invites_routes import invites_router
+from depictio.api.v1.endpoints.migrate_endpoints.push_routes import push_router
+from depictio.api.v1.endpoints.migrate_endpoints.requests_routes import requests_router
 from depictio.api.v1.endpoints.migrate_endpoints.routes import migrate_endpoint_router
+from depictio.api.v1.endpoints.migrate_endpoints.targets_routes import targets_router
 from depictio.api.v1.endpoints.monitoring_endpoints.routes import monitoring_endpoint_router
 from depictio.api.v1.endpoints.multiqc_endpoints.routes import router as multiqc_router
+from depictio.api.v1.endpoints.projects_endpoints.builder import builder_endpoint_router
 from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
 from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
@@ -49,6 +59,13 @@ from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoi
 
 router = APIRouter()
 
+# Before the projects router, whose `/{project_id}/...` routes would otherwise
+# be tried first for `/projects/builder/...`.
+router.include_router(
+    builder_endpoint_router,
+    prefix="/projects/builder",
+    tags=["Project Builder"],
+)
 router.include_router(
     projects_endpoint_router,
     prefix="/projects",
@@ -89,12 +106,13 @@ router.include_router(
     prefix="/deltatables",
     tags=["DeltaTables"],
 )
-if settings.jbrowse.enabled:
-    router.include_router(
-        jbrowse_endpoints_router,
-        prefix="/jbrowse",
-        tags=["JBrowse"],
-    )
+# Always mounted: the genome browser's track proxy and assembly catalogue. The
+# signed URLs it serves are only minted when ``settings.jbrowse.enabled``.
+router.include_router(
+    jbrowse_endpoints_router,
+    prefix="/jbrowse",
+    tags=["JBrowse"],
+)
 
 router.include_router(
     utils_endpoint_router,
@@ -113,6 +131,13 @@ router.include_router(
     prefix="/migrate",
     tags=["Migrate"],
 )
+
+# Server-to-server push (#1303).
+router.include_router(inbound_router, prefix="/migrate/inbound", tags=["Migrate"])
+router.include_router(requests_router, prefix="/migrate/requests", tags=["Migrate"])
+router.include_router(invites_router, prefix="/migrate/invites", tags=["Migrate"])
+router.include_router(targets_router, prefix="/migrate/targets", tags=["Migrate"])
+router.include_router(push_router, prefix="/migrate/push", tags=["Migrate"])
 
 router.include_router(
     cli_endpoint_router,
@@ -140,6 +165,24 @@ router.include_router(
 router.include_router(
     filter_state_router,
     prefix="/dashboards/filter_state",
+    tags=["Dashboards"],
+)
+
+# What changed since a reader's last visit (#1397). Own prefix, no overlap.
+router.include_router(changes_router, prefix="/changes", tags=["Changes"])
+
+# Same reasoning: no dashboards route has a literal `annotations` segment.
+router.include_router(
+    annotation_router,
+    prefix="/dashboards/annotations",
+    tags=["Dashboards"],
+)
+
+# Shares the prefix; its only route, `PUT /{id}/shared`, has a literal segment
+# the per-viewer routes never use.
+router.include_router(
+    shared_labels_router,
+    prefix="/dashboards/annotations",
     tags=["Dashboards"],
 )
 
@@ -213,17 +256,11 @@ router.include_router(
     tags=["Authentication"],
 )
 
-# Include Google OAuth routes separately
+# OpenID Connect SSO (every provider, Google included, goes through these)
 router.include_router(
-    google_oauth_router,
-    prefix="/auth/google",
-    tags=["Google OAuth"],
-)
-
-router.include_router(
-    saml_router,
-    prefix="/auth/saml",
-    tags=["SAML SSO"],
+    oidc_router,
+    prefix="/auth/oidc",
+    tags=["OIDC SSO"],
 )
 
 # Include Analytics routes

@@ -10,6 +10,7 @@
 # with a reference GTF gives its SQANTI-style structural category.
 id: tama
 name: TAMA
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/gstama/merge
 source_url: https://github.com/GenomeRIK/tama
 homepage: https://github.com/GenomeRIK/tama

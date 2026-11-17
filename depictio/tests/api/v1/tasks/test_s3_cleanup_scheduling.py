@@ -5,6 +5,7 @@ worker started, in the middle of boot-time seeding, once per worker: each pass
 could delete a table that was written but not yet registered.
 """
 
+import asyncio
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -125,3 +126,21 @@ async def test_a_cycle_another_worker_claimed_runs_nothing():
         await periodic_cleanup_orphaned_s3_files(interval_hours=1)
 
     cleanup.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_the_migration_expiry_loop_sweeps_then_sleeps():
+    """The pending-request TTL is enforced on a timer, not only on demand (#1303)."""
+    sweeps = []
+
+    async def stop_after_first_sleep(_seconds):
+        raise asyncio.CancelledError
+
+    with (
+        patch.object(cleanup_tasks, "expire_stale_requests", lambda: sweeps.append(1) or 0),
+        patch.object(cleanup_tasks.asyncio, "sleep", stop_after_first_sleep),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await cleanup_tasks.periodic_expire_migration_requests(interval_hours=1)
+
+    assert sweeps == [1]

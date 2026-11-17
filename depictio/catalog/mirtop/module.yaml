@@ -6,6 +6,7 @@
 # outputs here aggregate that table to the miRNA and to the isomiR class.
 id: mirtop
 name: mirtop
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mirtop/export
 homepage: https://github.com/miRTop/mirtop
 description: >-

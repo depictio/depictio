@@ -15,8 +15,9 @@
 import type { StoredMetadata } from '../api';
 import { formatNumber } from './card/metrics/format';
 
-/** A placeholder: `{{name}}` (the names `values:` allows) or `{{param:KEY}}`. */
-const PLACEHOLDER = /\{\{(param:[A-Za-z0-9_.-]+|[a-z][a-z0-9_]{0,11})\}\}/g;
+/** A placeholder: `{{name}}` (the names `values:` allows), `{{param:KEY}}`, or
+ *  `{{legend:column}}` (a fact line's colour key, drawn by the renderer). */
+const PLACEHOLDER = /\{\{(param:[A-Za-z0-9_.-]+|legend:[A-Za-z0-9_.-]+|[a-z][a-z0-9_]{0,11})\}\}/g;
 
 /** What a missing or unresolvable value shows. */
 export const MISSING_VALUE = '–';

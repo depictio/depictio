@@ -1,0 +1,132 @@
+# Megatest manifest for nf-core/genomeqc 1.0.1 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline genomeqc --version 1.0.1 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored design table
+#
+# Keys are fnmatch globs relative to the prefix root (run_root is empty) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# THE RUN
+# -------
+# `results-bce44e5b...` is the 1.0.1 release run (tag_sha), `test_full`: three
+# RefSeq assemblies with their annotations (samplesheet
+# test-datasets/genomeqc/samplesheet/input_hymen.csv), BUSCO hymenoptera_odb10,
+# FCS-GX on its test-only database, RepeatMasker with RepeatModeler, OrthoFinder
+# v3, tidk, MultiQC 1.35. 54,093 objects / 1.2 GB, 53,910 of them under
+# orthofinder/ (per-orthogroup sequences, alignments and gene trees, and the
+# WorkingDirectory). 1.0.0 published no MultiQC report.
+#
+# WHAT THE RUN DOES NOT HAVE
+# --------------------------
+#   * No BUSCO full_table.tsv: genomeqc publishes BUSCO's summaries and its own
+#     per-sequence ideogram CSV (complete BUSCOs per sequence), not the gene
+#     positions, so the karyotype shades whole sequences, not single genes.
+#   * No sequence lengths table (.fai, chrom.sizes): the lengths come from the
+#     tidk search windows, whose last window of a sequence ends at its length.
+#   * No samplesheet and no design: input/genome_metadata.tsv is vendored next to
+#     this file (family and subfamily of the three assemblies, their accessions).
+#   * The FCS-GX database is NCBI's test-only one (3,042 sequences): the
+#     contamination shares are a smoke test, not a screen.
+#
+# Not fetched on purpose: the RepeatMasker .masked FASTAs (216 to 252 MB) and
+# .out tables (52 to 95 MB), decontamination/fcs-adaptor/*.cleaned_sequences.fa.gz,
+# every PNG / SVG / PDF / HTML report, the Excel report, shiny/, and every
+# OrthoFinder file but the summary tables listed below.
+pipeline: genomeqc
+version: "1.0.1"
+results_sha: "bce44e5b558e21b38d4dd2b6521302246b4dae6d"
+run_root: ""
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params, software versions and the trace.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  # MultiQC 1.35 parquet (QUAST only) + the tables exported next to it.
+  - multiqc/multiqc_data/multiqc.parquet
+  - multiqc/multiqc_data/*.txt
+  - multiqc/multiqc_data/*.json
+  - multiqc/multiqc_data/*.log
+  # --- contiguity: QUAST (catalog quast/*) -------------------------------
+  - quast/*/*.quast/report.tsv
+  - quast/*/*.quast/transposed_report.tsv
+  # --- completeness: BUSCO summaries and the per-sequence ideogram CSVs --
+  - busco/*/*/stats/*.txt
+  - busco/*/*/ideogram/*.csv
+  - busco/*/min_number_buscos/*.tsv
+  # --- telomeric repeats and sequence lengths: tidk ----------------------
+  - tidk/*/explore/*
+  - tidk/*/search/*/*.tsv
+  # --- annotation: AGAT and genomeqc's gene overlaps ----------------------
+  - agat/*/stats/*.stats.txt
+  - gene_overlaps/*.counts.tsv
+  # --- orthology: OrthoFinder summary tables and the ortho seq count ------
+  - orthofinder/*/*/OrthoFinder/*/Comparative_Genomics_Statistics/*.tsv
+  - orthofinder/*/*/OrthoFinder/*/Orthogroups/Orthogroups.GeneCount.tsv
+  - orthofinder/*/*/OrthoFinder/*/Orthogroups/Orthogroups_UnassignedGenes.tsv
+  - orthofinder/*/*/OrthoFinder/*/Species_Tree/*.txt
+  - orthofinder/*/*/OrthoFinder/*/Log.txt
+  - ortho_seq_count/*
+  # --- decontamination: FCS-GX, FCS-adaptor, Tiara ------------------------
+  - fcsgx/*.tsv
+  - decontamination/fcs-gx/*.fcs_gx_report.txt
+  - decontamination/fcs-gx/*.summary.txt
+  - decontamination/fcs-gx/*.taxonomy.rpt
+  - decontamination/fcs-adaptor/*.fcs_adaptor_report.txt
+  - decontamination/tiara/*/*.txt
+  # --- repeats: RepeatMasker summary tables and genomeqc's TE table -------
+  - repeatmasker/*/*.tbl
+  - te/*.tsv
+  # --- tree summary inputs (species tree and the tables it is drawn with) -
+  - tree/genome_anno/*.tsv
+  - tree/genome_anno/tree.nw
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The design table is vendored, not published: copy it next to the data
+  # (download_test_data.sh does this for you).
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/genomeqc/1.0.1/input/genome_metadata.tsv {dest}/input/
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/genomeqc/1.0.1 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/genomeqc/1.0.1 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/genome_metadata.tsv
+# Run-specific values the dashboard texts must not quote (lint rule e,
+# test_template_conventions.py): the megatest's species, their families,
+# accessions and lineage, the repeat units tidk picked and the one contaminant.
+forbidden_terms:
+  - Apis
+  - mellifera
+  - Bombus
+  - impatiens
+  - Polistes
+  - canadensis
+  - Apidae
+  - Apinae
+  - Vespidae
+  - Polistinae
+  - Hymenoptera
+  - hymenoptera_odb10
+  - honey bee
+  - bumblebee
+  - paper wasp
+  - GCF_003254395.2
+  - GCF_000188095.3
+  - GCF_001313835.1
+  - Amel_HAv3.1
+  - BIMP_2.2
+  - ASM131383v1
+  - AAAAAAAAAAG
+  - ACGCACGC
+  - AAAAGAT
+  - Bacteroides

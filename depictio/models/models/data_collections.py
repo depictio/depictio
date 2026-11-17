@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Literal
@@ -8,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.indexed_file import DCIndexedFileConfig
@@ -74,6 +76,14 @@ class ScanRecursive(BaseModel):
 
 class ScanSingle(BaseModel):
     filename: str
+    # The file of each run location, when a project's runs do not all read
+    # ``filename`` (the first location's). Written by the CLI on --attach-run and
+    # refresh, never declared in a YAML. Two locations bound to one path share
+    # it: that file belongs to no run in particular.
+    run_files: dict[str, str] | None = None
+    # "project": one file for every run, never bound per run. None lets the CLI
+    # bind each run its own file, keeping one copy of identical bytes.
+    scope: Literal["run", "project"] | None = None
 
     class Config:
         extra = "forbid"
@@ -284,7 +294,10 @@ def _scan_mode_of(parameters: object) -> str | None:
 
 def _describe_scan_parameters(mode: str) -> str:
     cls = _SCAN_MODE_PARAMETERS[mode]
-    return f"{cls.__name__} parameters ({', '.join(cls.model_fields)})"
+    # The fields a user writes; optional ones (and those the CLI fills in, such
+    # as ScanSingle.run_files) would only crowd the hint.
+    fields = [name for name, info in cls.model_fields.items() if info.is_required()]
+    return f"{cls.__name__} parameters ({', '.join(fields or cls.model_fields)})"
 
 
 def _scan_mode_mismatch(mode: str, actual_mode: str | None) -> str:
@@ -296,6 +309,19 @@ def _scan_mode_mismatch(mode: str, actual_mode: str | None) -> str:
         f"for mode '{actual_mode}'. Change mode to '{actual_mode}' or provide the "
         f"parameters of mode '{mode}'."
     )
+
+
+class DataOrigin(BaseModel):
+    """Where a data collection's data came from, recorded by the route that created it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["upload", "url", "folder", "run", "manifest"]
+    # Original file name for an upload (never the temp dir), the URL, the folder
+    # or s3:// prefix, the run's data_root, or the manifest URL.
+    location: str | None = None
+    # Naive UTC, like every API timestamp.
+    added_at: datetime | None = None
 
 
 class Scan(BaseModel):
@@ -382,9 +408,15 @@ class DataCollectionConfig(MongoModel):
         | DCGeoJSONConfig
         | DCPhylogenyConfig
         | DCIndexedFileConfig
+        | DCGenomicTracksConfig
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
+    # Explicit provenance of the data; None for CLI-made and older collections.
+    origin: DataOrigin | None = None
+    # A table a user added is locked against cell edits until an owner or
+    # editor unlocks it, marking it as metadata the project maintains by hand.
+    edit_unlocked: bool = False
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
@@ -424,6 +456,7 @@ class DataCollectionConfig(MongoModel):
         allowed_values = [
             "table",
             "jbrowse2",
+            "genomic_tracks",
             "multiqc",
             "image",
             "geojson",
@@ -498,6 +531,13 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCGeoJSONConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCGeoJSONConfig()
+        elif type_value == "genomic_tracks":
+            # Manifest table of genome-browser tracks (jbrowse component).
+            if not isinstance(dc_specific_properties, DCGenomicTracksConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCGenomicTracksConfig(
+                        **dc_specific_properties
+                    )
         elif type_value == "phylogeny":
             if not isinstance(dc_specific_properties, DCPhylogenyConfig):
                 if isinstance(dc_specific_properties, dict):

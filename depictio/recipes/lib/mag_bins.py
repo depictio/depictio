@@ -107,6 +107,14 @@ def file_stem_expr(path: pl.Expr, *strip: str) -> pl.Expr:
 def quality_tier(completeness: pl.Expr, contamination: pl.Expr) -> pl.Expr:
     """CheckM2-only quality band of a bin, in the MIMAG completeness bands.
 
+    Limits are those of MIMAG Table 1 (Bowers et al. 2017, Nat Biotechnol
+    35:725, https://doi.org/10.1038/nbt.3893): high-quality draft completeness
+    above 90% and contamination under 5%; medium completeness of at least 50%
+    and contamination under 10%; low completeness under 50% and contamination
+    under 10%. A bin at 10% contamination or more is in none of the three
+    MIMAG tiers and is labelled "Contaminated", a label of this module and not
+    a MIMAG term.
+
     This is not the full MIMAG tier: a high-quality MIMAG draft also needs the
     5S / 16S / 23S rRNA genes and at least 18 tRNAs, which CheckM2 does not
     report. `mag/bin_summary` adds those from Prokka and calls its own column
@@ -115,9 +123,9 @@ def quality_tier(completeness: pl.Expr, contamination: pl.Expr) -> pl.Expr:
     return (
         pl.when(completeness.is_null() | contamination.is_null())
         .then(pl.lit("Unknown"))
-        .when(contamination > 10)
+        .when(contamination >= 10)
         .then(pl.lit("Contaminated"))
-        .when((completeness >= 90) & (contamination <= 5))
+        .when((completeness > 90) & (contamination < 5))
         .then(pl.lit("High quality"))
         .when(completeness >= 50)
         .then(pl.lit("Medium quality"))

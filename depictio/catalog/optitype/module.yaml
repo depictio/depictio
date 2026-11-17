@@ -1,0 +1,18 @@
+# OptiType: HLA class I typing by integer linear programming over the reads
+# that map to the HLA reference. nf-core/hlatyping publishes
+# optitype/<sample>/<sample>_result.tsv (the call, one row per solution) and a
+# coverage plot (PDF, not read). The nf-core module is modules/nf-core/optitype.
+id: optitype
+name: OptiType
+version: "1.0.0"
+description: >-
+  HLA class I genotypes (HLA-A, -B and -C, two-field alleles) called by integer
+  linear programming over the reads that map to the HLA reference, with the
+  reads each genotype explains and the solver's objective value.
+homepage: https://github.com/FRED-2/OptiType
+biotools_url: https://bio.tools/optitype
+source_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/optitype
+edam_topics:
+  - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens
+  - http://edamontology.org/topic_0804 # Immunology
+stage: immune

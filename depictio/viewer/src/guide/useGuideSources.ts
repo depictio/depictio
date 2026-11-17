@@ -21,7 +21,9 @@ import {
   familyOrder,
   fetchDashboard,
   foldableSectionsOf,
+  genomeTabsOf,
   hasCards,
+  jbrowseRank,
   pickFilterDemo,
   pickFromFamily,
   pinnedDemoSections,
@@ -35,6 +37,7 @@ import type {
   FilterSectionSpec,
   GuideDemoSection,
   GuideFamilyPick,
+  GuideGenomeSection,
   PersistentSection,
   StoredMetadata,
 } from 'depictio-react-core';
@@ -104,12 +107,34 @@ export interface AnalysisDemoSource {
   card: GuideComponentSource | null;
 }
 
+/** A tab of the family that holds a genome browser. */
+export interface GenomeTabSource {
+  dashboardId: string;
+  tabLabel: string;
+  /** Whether it is the open tab. */
+  here: boolean;
+  /** How many genome browser tiles the tab holds. */
+  tiles: number;
+  /** The sections that hold them, with the author's "why here". */
+  sections: GuideGenomeSection[];
+}
+
+/** The genome browser the Guide describes, and where it appears. */
+export interface GenomeDemoSource {
+  /** The tile the explanation is built from: the open tab's first. */
+  tile: GuideComponentSource;
+  /** Every tab of the family with one, the open tab first. Grows while the
+   *  family's documents are still being fetched. */
+  tabs: GenomeTabSource[];
+}
+
 /** `undefined` while still looking, `null` when the dashboard has none. */
 export interface GuideSources {
   family: GuideFamily;
   filter: FilterDemoSource | null | undefined;
   sections: SectionsDemoSource | null | undefined;
   analysis: AnalysisDemoSource | null | undefined;
+  genome: GenomeDemoSource | null | undefined;
 }
 
 const labelFrom = (tabs: readonly DashboardSummary[], id: string, fallback = 'this tab') => {
@@ -354,5 +379,36 @@ export function useGuideSources(input: GuideSourcesInput): GuideSources {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisKey]);
 
-  return { family, filter, sections, analysis };
+  // ---- Genome browser: the open tab's tile first, then the family's; and
+  // every tab that holds one, for "where the browser appears". The list needs
+  // each tab's document, so they are all fetched (once, shared with the other
+  // demos) and the part shows as soon as the first tile turns up.
+  const genomePick = pickedSource(family, useFamilyPick(family, jbrowseRank));
+  const genomeScan = useMemo(
+    () => genomeTabsOf(family.order, docFor),
+    [family.order, docFor],
+  );
+  const pendingGenome = genomeScan.pending.join('|');
+  useEffect(() => {
+    if (pendingGenome) pendingGenome.split('|').forEach(request);
+  }, [pendingGenome, request]);
+  const genomeKey = sourceKey(genomePick);
+  const genome = useMemo<GenomeDemoSource | null | undefined>(() => {
+    if (genomePick === undefined) return undefined;
+    if (genomePick === null) return null;
+    return {
+      tile: genomePick,
+      tabs: genomeScan.tabs.map((t) => ({
+        dashboardId: t.dashboardId,
+        tabLabel: family.labelOf(t.dashboardId),
+        here: t.dashboardId === dashboardId,
+        tiles: t.tiles.length,
+        sections: t.sections,
+      })),
+    };
+    // `genomeKey` is what was picked; the object is rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genomeKey, genomeScan, family.labelOf, dashboardId]);
+
+  return { family, filter, sections, analysis, genome };
 }

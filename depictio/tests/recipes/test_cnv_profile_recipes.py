@@ -27,7 +27,7 @@ import pytest
 from depictio.models.components.advanced_viz.configs import CnvProfileConfig
 from depictio.models.components.advanced_viz.schemas import validate_binding
 from depictio.recipes import execute_recipe
-from depictio.recipes.lib.cnv_profile import LOG2_FLOOR
+from depictio.recipes.lib.cnv_profile import CNV_PROFILE_SCHEMA, LOG2_FLOOR, decimate_bins
 
 CNV_PROFILE_BINDING = CnvProfileConfig(
     sample_col="sample",
@@ -297,3 +297,27 @@ def test_controlfreec_needs_the_scanned_path(tmp_path):
     raw = _freec_ratio(with_baf=False).drop("source_path")
     with pytest.raises(Exception, match="include_file_paths"):
         execute_recipe("controlfreec/cnv_ratio.py", tmp_path, extra_sources={"ratio": raw})
+
+
+def test_decimated_bins_keep_an_integer_copy_number() -> None:
+    # The window mean is rounded back to a whole copy number. Left a Float64, it made
+    # the bins and the segments disagree and failed sarek's real CNVkit run.
+    n = 6
+    bins = pl.DataFrame(
+        {
+            "sample": ["T"] * n,
+            "chrom": ["chr1"] * n,
+            "start": [i * 100 for i in range(n)],
+            "end": [i * 100 + 100 for i in range(n)],
+            "log2": [0.1] * n,
+            "baf": [None] * n,
+            "copy_number": [2, 3, 2, 3, 4, 4],
+            "segment": ["bin"] * n,
+            "label": [None] * n,
+            "depth": [10.0] * n,
+        },
+        schema_overrides={"baf": pl.Float64, "label": pl.Utf8},
+    )
+    out = decimate_bins(bins, max_bins=2)
+    assert out.schema["copy_number"] == CNV_PROFILE_SCHEMA["copy_number"] == pl.Int64
+    assert out["copy_number"].to_list() == [2, 4]

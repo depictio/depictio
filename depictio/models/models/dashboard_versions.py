@@ -131,6 +131,9 @@ class TabSnapshot(BaseModel):
     # of every branded dashboard. The logo URLs in it name bytes that are not
     # versioned (they live in `branding_assets`), so restore keeps the live ones.
     brand_theme: Optional[dict[str, Any]] = None
+    # Label columns shared on the dashboard (main tab only, like the Guide):
+    # what every reader sees as read-only groups. Plain dicts, as stored.
+    shared_labels: list[dict[str, Any]] = Field(default_factory=list)
     # Identity, not content: never hashed and never written onto a live tab.
     # Kept so a tab a restore recreates is still the one its YAML refreshes.
     source_key: Optional[str] = None
@@ -206,6 +209,13 @@ class DataCollectionStamp(BaseModel):
     manifest_digest: Optional[str] = None
     s3_locations: list[str] = Field(default_factory=list)
     sample_count: Optional[int] = None
+    #: MultiQC only: ids of the ``MultiQCReport`` documents the collection held,
+    #: sorted. Each report has its own content-addressed parquet, so "the data
+    #: as of this version" is the set of reports it recorded. An overwrite
+    #: re-ingest updates a report in place and keeps its S3 key, which this set
+    #: cannot reproduce. Optional with a default so records stamped before it
+    #: existed still validate.
+    report_ids: list[str] = Field(default_factory=list)
 
     # version_kind == "asset"
     asset_digest: Optional[str] = None
@@ -215,7 +225,9 @@ class DataCollectionStamp(BaseModel):
     #: Parts of this collection that are NOT covered by the stamp — e.g.
     #: ``["image_pixels"]`` for an image DC, whose manifest is versioned but
     #: whose underlying image blobs live at a user-supplied prefix with no
-    #: content addressing. Recorded so the UI can state partial coverage
+    #: content addressing, and ``["track_files"]`` for a ``genomic_tracks``
+    #: DC, whose manifest rows are versioned but not the track files they
+    #: name. Recorded so the UI can state partial coverage
     #: instead of implying the whole collection is reproducible.
     unversioned_parts: list[str] = Field(default_factory=list)
 

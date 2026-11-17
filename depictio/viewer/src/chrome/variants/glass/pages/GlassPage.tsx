@@ -24,6 +24,8 @@ import { MantineThemeContext, Tooltip, useMantineTheme } from '@mantine/core';
 import type { MantineTheme } from '@mantine/core';
 import { BRAND_PALETTES, brandAccent, useBranding } from 'depictio-react-core';
 import {
+  Activity,
+  Bell,
   ChevronRight,
   Compass,
   FolderKanban,
@@ -51,6 +53,7 @@ import { useGuestSignIn } from '../../../../hooks/useGuestSignIn';
 import { AvatarPicture, useAccountIdentity } from '../../../account';
 import { ServerInfoPopover, UpdateDot } from '../../../server';
 import { useServerStatus } from '../../../../hooks/useServerStatus';
+import NotificationsBell from '../../../NotificationsBell';
 import { usePageMark } from './useGlassPages';
 import './pages.css';
 
@@ -61,6 +64,7 @@ export const SECTION_ICON: Record<SidebarSection, LucideIcon> = {
   dashboards: LayoutDashboard,
   projects: FolderKanban,
   admin: ShieldCheck,
+  activity: Activity,
   about: Info,
   profile: UserRound,
 };
@@ -78,6 +82,7 @@ export function useSectionPalettes(): Record<SidebarSection, string> {
       dashboards: brandAccent(brand, 'tertiary', 'logoOrange'),
       projects: brandAccent(brand, 'secondary', 'logoTeal'),
       admin: BRAND_PALETTES.primary,
+      activity: BRAND_PALETTES.primary,
       about: 'gray',
       profile: BRAND_PALETTES.primary,
     }),
@@ -89,6 +94,7 @@ const SECTION_LABEL: Record<SidebarSection, string> = {
   dashboards: 'Dashboards',
   projects: 'Projects',
   admin: 'Administration',
+  activity: 'Activity',
   about: 'About',
   profile: 'Account settings',
 };
@@ -276,6 +282,12 @@ const TopBar: React.FC<{ section: SidebarSection; crumbs: Crumb[] }> = ({ sectio
       </span>
       <div className="gp-top-keys">
         <ThemeKey />
+        <NotificationsBell
+          position="bottom-end"
+          renderTrigger={({ label, onClick }) => (
+            <GlassKey label={label} icon={Bell} onClick={onClick} data-testid="notifications-bell" />
+          )}
+        />
         <ProfileKey />
       </div>
     </header>

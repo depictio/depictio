@@ -63,7 +63,7 @@ If `docker-compose/.env` doesn't exist, a default is created automatically with:
 - Development mode enabled
 - S3 credentials: `minio` / `minio123`
 - Debug logging
-- OAuth disabled
+- SSO disabled
 
 ### Custom Configuration (Local Dev)
 
@@ -71,9 +71,12 @@ For local development with OAuth, custom keys, etc., create `docker-compose/.env
 
 ```bash
 # See docker-compose/.env in main repo for full example
-DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED=true
-DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID="your-client-id"
-DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET="your-secret"
+# Single sign-on (OpenID Connect): one JSON entry per provider, credentials in
+# DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID / _CLIENT_SECRET (ID upper-cased, "-" -> "_").
+# DEPICTIO_AUTH_OIDC_PROVIDERS='[{"id":"keycloak","label":"Sign in with SSO","issuer":"https://idp.example.org/realms/example"}]'
+# DEPICTIO_AUTH_OIDC_KEYCLOAK_CLIENT_ID="your-client-id"
+# DEPICTIO_AUTH_OIDC_KEYCLOAK_CLIENT_SECRET="your-secret"
+# The DEPICTIO_AUTH_GOOGLE_OAUTH_* variables still work but are deprecated.
 ```
 
 ## 📦 What Gets Installed

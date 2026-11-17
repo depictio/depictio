@@ -76,6 +76,8 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "manhattan": "tail",
     "genome_view": "tail",
     # Client-side aggregation — a sample is a wrong answer.
+    "stacked_bar": "none",
+    # Retired name, still sent by a client that predates the rename.
     "stacked_taxonomy": "none",
     "rarefaction": "none",
     "da_barplot": "none",
@@ -124,6 +126,11 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "cnv_profile": "none",
     # Links are few (fusions, SVs); ``max_links`` guards the request.
     "genome_chord": "none",
+    # A karyotype's marks are each a feature the reader may be looking for (one
+    # BUSCO gene, one variant); a uniform subset would leave holes that read as
+    # missing genes. ``IdeogramConfig.max_features`` is the guard, and above it
+    # the tile switches to density bands rather than drawing a subset.
+    "ideogram": "none",
     # One row, picked by a selection. There is nothing to reduce, and a sample
     # could drop exactly the row the reader clicked.
     "record_card": "none",
@@ -148,6 +155,34 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "domain_architecture": "none",
     "pae_matrix": "none",
     "ramachandran": "none",
+    # The renderer ranks the features and, in long form, takes each one's
+    # quartiles from every value it holds: a uniform sample would move the
+    # boxes and could drop a feature from the top-N. Pre-aggregated, it is one
+    # row per feature. ``RankedDistributionConfig.max_features`` caps what is
+    # drawn.
+    "ranked_distribution": "none",
+    # One marker per cell and no aggregate read off the frame, so a uniform
+    # subset of a tissue is the same tissue at a lower cell density, exactly
+    # as for `embedding`. A Xenium or mcquant table holds 10^5 to 10^6 cells:
+    # the hash keeps every sample and every region in proportion, where a
+    # `head` prefix would be the first image's first rows. Load-All lifts the
+    # cap to the full-load ceiling, and `SpatialCellsConfig.max_cells` bounds
+    # what the browser then draws (thinned evenly, and reported).
+    "spatial_cells": "hash",
+    # A genotype is a pair of rows: a sample drops a haplotype, and a locus
+    # turns falsely homozygous, under any row sample. The grid is small (samples
+    # x loci x 2) and ``AlleleGridConfig.max_samples`` / ``max_loci`` cap what
+    # is drawn after ordering, counting the rest.
+    "allele_grid": "none",
+    # A pedigree is a graph held in rows: a sampled frame drops a parent, and
+    # the child under it is drawn as a founder with a missing link.
+    # ``PedigreeConfig.max_individuals`` is the guard, counting what it hides.
+    "pedigree": "none",
+    # A leaderboard is the top of an ordering: a sampled frame drops candidates
+    # at random and the rank of every row under them shifts. ``top_n`` is the
+    # guard on what is drawn; a collection past the no-sample ceiling is
+    # reduced anyway and the tile says its ranks are estimates.
+    "ranked_table": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting
@@ -160,13 +195,19 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
 #: ``"auto"``  — decided at read time from the column's observed range, because
 #:               the same role is published as both a p-value and a −log10 score
 #:               depending on the pipeline. See ``resolve_tail_direction``.
-TailDirection = Literal["low", "high", "both", "auto"]
+#: ``"top"``   — the largest ``|x|`` the row budget allows. The cut-off is the value
+#:               of the k-th largest ``|x|`` in the column, so it comes from the data
+#:               and not from a convention. For a track whose score is a magnitude
+#:               (a coverage depth, a change in usage in [0, 1], a −log10 p), where
+#:               ``"auto"`` would read a [0, 1] range as p-values and keep the
+#:               weakest rows instead of the strongest.
+TailDirection = Literal["low", "high", "both", "auto", "top"]
 
 TAIL_ROLE: dict[AdvancedVizKind, tuple[str, TailDirection]] = {
     "volcano": ("significance", "auto"),
     "ma": ("log2_fold_change", "both"),
     "manhattan": ("score", "auto"),
-    "genome_view": ("score", "auto"),
+    "genome_view": ("score", "top"),
 }
 
 # Both tables are declared over ``AdvancedVizKind`` so a new kind that forgets
@@ -201,7 +242,7 @@ def tail_role_for_kind(viz_kind: str | None) -> tuple[str, TailDirection] | None
 
 def resolve_tail_direction(
     declared: TailDirection, lo: float | None, hi: float | None
-) -> Literal["low", "high", "both"]:
+) -> Literal["low", "high", "both", "top"]:
     """Pin an ``auto`` direction using the column's observed range.
 
     A significance column arrives either as a raw p-value or as its −log10, and

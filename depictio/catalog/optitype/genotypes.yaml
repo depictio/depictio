@@ -1,0 +1,33 @@
+id: optitype_genotypes
+name: HLA class I genotypes
+mode: genotypes
+description: >-
+  OptiType's optimal HLA class I genotype of each sample, melted long: one row
+  per sample, locus (HLA-A, -B, -C) and haplotype, with the two-field allele
+  normalised to HLA-A*02:01 (the spelling of the epitopeprediction tables, so an
+  allele pick selects the same string there), its allele group, the zygosity of
+  the locus, and the reads and objective of the solution.
+find:
+  path_glob: "**/optitype/*/*_result.tsv"
+recipe: optitype/genotypes.py
+fixture: genotypes.tsv
+renders_as:
+  # Sample by locus, each cell split into its two haplotypes; an allele click
+  # selects on the normalised allele.
+  - id: genotype_grid
+    component: advanced_viz
+    kind: allele_grid
+    roles: { sample_id: sample_id, locus: locus, allele: allele, haplotype: haplotype, category: hla_class, value: objective, reads: reads }
+  - { id: allele_count, component: card, column: allele, aggregation: nunique, secondary_layout: top_n, breakdown_col: locus, top_n_count: 3, headline: true }
+  - { id: homozygous_loci, component: card, column: call_id, aggregation: count, filter_expr: "(col('zygosity') == 'Homozygous') & (col('haplotype') == 1)", secondary_layout: composition, breakdown_col: locus, headline: true }
+  - { id: allele_calls, component: card, column: call_id, aggregation: count, secondary_layout: composition, breakdown_col: zygosity }
+  # Allele frequency within each locus: one trace per locus, each normalised
+  # over its own calls (two per sample).
+  - id: allele_frequency
+    component: figure
+    visu_type: histogram
+    dict_kwargs: { x: allele, color: locus, histnorm: percent }
+  - { component: interactive, interactive_type: MultiSelect, column_name: allele }
+  - { component: interactive, interactive_type: MultiSelect, column_name: locus }
+  - { component: interactive, interactive_type: MultiSelect, column_name: zygosity }
+  - { component: table, row_selection_enabled: true, row_selection_column: call_id }

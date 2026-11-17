@@ -11,6 +11,7 @@ from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
 from depictio.models.models.joins import JoinDefinition
 from depictio.models.models.links import DCLink
+from depictio.models.models.migration import ProjectProvenance, PublishedLock
 from depictio.models.models.realtime import RealtimeConfig
 from depictio.models.models.templates import TemplateOrigin
 from depictio.models.models.users import Permission
@@ -26,6 +27,7 @@ class ProjectPermissionRequest(BaseModel):
 
 class Project(MongoModel):
     name: str
+    description: str | None = None
     data_management_platform_project_url: str | None = None
     workflows: list[Workflow] = []  # Optional for basic projects
     data_collections: list[DataCollection] = []  # Direct data collections for basic projects
@@ -40,9 +42,25 @@ class Project(MongoModel):
     # Last modification timestamp, UTC. Stamped by the API on every update;
     # empty on projects that have never been edited since creation.
     last_modified: str = ""
+    # Legacy. A project created from the CLI is stamped "advanced", one created
+    # in the UI "basic", but the type no longer decides what either can do: the
+    # UI manages data collections of both. Kept so existing projects, exports
+    # and the CLI keep validating; new code should not branch on it.
     project_type: Literal["basic", "advanced"] = "basic"
+    # User override of the detected project layout; None means detect. Read by
+    # the viewer only, no backend behaviour depends on it.
+    layout: Literal["runs", "pipeline", "tables"] | None = None
     realtime: RealtimeConfig | None = None  # Optional real-time event configuration
     template_origin: TemplateOrigin | None = None  # Tracks if project was created from a template
+    # Server-written only (never taken from a create/update payload): which
+    # Depictio created the project and the instances it was imported through.
+    provenance: ProjectProvenance | None = None
+    # Set when the project is published read-only: every content- or
+    # data-mutating route answers 409 (see projects_endpoints/publish_lock.py).
+    published_lock: PublishedLock | None = None
+    # Imported for a requester with no account here yet: they become owner at
+    # their first SSO login with this email (projects_endpoints/pending_owner.py).
+    pending_owner_email: str | None = None
 
     # What INVOKED the most recent ingestion, which is a different question from
     # what produced the data: `WorkflowConfig.engine_name` already reads

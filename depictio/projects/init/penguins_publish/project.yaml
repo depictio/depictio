@@ -1,0 +1,83 @@
+# Palmer Penguins Multi-Species Analysis for Depictio
+id: "6a50b1c0e4a2d7f8e5b8c901"
+name: "Palmer Penguins Publish Test"
+project_type: "advanced"
+is_public: true
+workflows:
+  - id: "6a50b1c0e4a2d7f8e5b8c902"
+    name: "penguin_species_analysis"
+    engine:
+      name: "python"
+      version: "3.11"
+    description: "Comparative analysis of Palmer Archipelago penguin species"
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
+      locations:
+        - /app/depictio/projects/init/penguins_publish/data
+    data_collections:
+      # Physical features only
+      - id: "6a50b1c0e4a2d7f8e5b8c903"
+        data_collection_tag: "physical_features"
+        description: "Physical characteristics measurements"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "physical_features.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              individual_id: "Unique individual penguin ID within species"
+              bill_length_mm: "Bill length in millimeters"
+              bill_depth_mm: "Bill depth in millimeters"
+              flipper_length_mm: "Flipper length in millimeters"
+              body_mass_g: "Body mass in grams"
+
+      # Demographic data
+      - id: "6a50b1c0e4a2d7f8e5b8c904"
+        data_collection_tag: "demographic_data"
+        description: "Location and demographic information"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "demographic_data.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              individual_id: "Unique individual penguin ID within species"
+              island: "Island location"
+              sex: "Penguin sex"
+              year: "Observation year"
+              species: "Species name"
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Client-side joins executed locally with `depictio data join`
+# ============================================================================
+
+joins:
+  # Join physical features with demographic data
+  - id: "6a50b1c0e4a2d7f8e5b8c905"  # Stable DC ID for joined table (matches dashboard)
+    name: "penguins_complete"
+    description: "Complete penguin dataset with physical features and demographics"
+    left_dc: "physical_features"
+    right_dc: "demographic_data"
+    on_columns:
+      - "individual_id"
+      # depictio_run_id will be auto-added if present in both tables
+    how: "inner"
+    persist: true
+    workflow_name: "penguin_species_analysis"

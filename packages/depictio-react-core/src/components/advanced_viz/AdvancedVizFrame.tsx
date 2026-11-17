@@ -16,6 +16,7 @@ import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingP
 import { GRID_ROW_GAP_PX, GRID_ROW_PX, publishContentDemand, useAutofitScope } from '../autofit';
 import {
   AdvancedVizExtrasContext,
+  SplitRowsContext,
   type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
@@ -23,6 +24,7 @@ import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShow
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
 import { useDensity } from '../density';
+import ComponentInfo, { TileSubtitle, TileTitleRow } from '../chrome/ComponentInfo';
 import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
 import VizKindBadge from './VizKindBadge';
@@ -37,8 +39,8 @@ import {
   useControlsPlacement,
   useRegionEcho,
 } from './AdvancedVizInlineControls';
-import { VizControlsGrid } from './controls/VizControls';
 import { frameTiers } from './frameTiers';
+import type { OpenLocusReader } from '../jbrowse/locusForAction';
 import { usePlotSlotResize } from './plotSlotResize';
 
 /**
@@ -121,8 +123,18 @@ interface AdvancedVizFrameProps {
   dataRows?: Record<string, unknown[]>;
   /** Column ordering for the data popover. */
   dataColumns?: string[];
+  /**
+   * The column of `dataRows` that identifies a drawn point (the volcano's
+   * feature id). Set by a tile whose plot and table share a highlight (see
+   * `highlight/`): the data views then tick the rows of the highlighted points
+   * and report ticked rows back to the plot.
+   */
+  highlightColumn?: string;
   /** The tile takes part in zoom sync: its row offers the switch. */
   zoomSync?: boolean;
+  /** A genomic tile says where it is looking, for the "Open in genome
+   *  browser" action (see `AdvancedVizExtrasPayload.openLocus`). */
+  openLocus?: OpenLocusReader;
   /**
    * Threshold-aware per-row annotation aligned with `dataRows` (volcano UP/DN/NS,
    * manhattan HIT/MISS, etc.). When set, the data popover prepends a `__tier`
@@ -240,7 +252,9 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   emptyMessage,
   dataRows,
   dataColumns,
+  highlightColumn,
   zoomSync = false,
+  openLocus,
   tierAnnotation,
   counts,
   reduction,
@@ -290,6 +304,13 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const onToggleRef = useRef(reduction?.onToggle);
   onToggleRef.current = reduction?.onToggle;
   const stableToggle = useCallback(() => onToggleRef.current?.(), []);
+  // Same for `openLocus`: renderers hand a callback closed over their refs, a
+  // fresh function per render, and only whether there is one belongs in the
+  // payload's identity.
+  const hasOpenLocus = Boolean(openLocus);
+  const openLocusRef = useRef(openLocus);
+  openLocusRef.current = openLocus;
+  const stableOpenLocus = useCallback(() => openLocusRef.current?.() ?? null, []);
 
   // Where this tile's controls are drawn. Resolved once by the dispatch (which
   // holds the config and the dashboard default) and read here and there, so
@@ -349,14 +370,15 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // Docking is what `popover` placement does on a tile with room for it: a
   // tile pinned to its strip or rail already draws its controls in place.
   // Both tiers dock, the encoding one first; the view switch heads the panel
-  // and is never folded under "More options".
+  // and is never folded under "More options". The panel lays them out itself:
+  // a column beside the plot, one compact line above it.
   const docking = useMemo(
     () =>
       primaryControls || controls ? (
-        <VizControlsGrid layout="column">
+        <>
           {primaryControls}
           {controls}
-        </VizControlsGrid>
+        </>
       ) : null,
     [primaryControls, controls],
   );
@@ -377,8 +399,10 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     if (stripControls) payload.primaryControls = stripControls;
     if (docked) payload.docked = true;
     if (zoomSync) payload.zoomSync = true;
+    if (hasOpenLocus) payload.openLocus = stableOpenLocus;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
+      if (highlightColumn) payload.highlightColumn = highlightColumn;
     }
     if (redPresent && showReduction) {
       payload.reduction = {
@@ -395,8 +419,11 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     stripControls,
     docked,
     zoomSync,
+    hasOpenLocus,
+    stableOpenLocus,
     dataRows,
     dataColumns,
+    highlightColumn,
     tierAnnotation,
     redPresent,
     redFull,
@@ -454,6 +481,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // Published under the tile's autofit scope, so a copy drawn in the Guide
   // never resizes the tile on the canvas.
   const autofitScope = useAutofitScope();
+  const splitRows = useContext(SplitRowsContext);
   const demandRows = contentDemand?.rows;
   useEffect(() => {
     if (!componentIndex || demandRows === undefined) return;
@@ -462,9 +490,17 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     const extraRows =
       stackedHeight > 0 ? Math.ceil(stackedHeight / (GRID_ROW_PX + GRID_ROW_GAP_PX)) : 0;
     publishContentDemand(autofitScope + String(componentIndex), {
-      rows: demandRows + extraRows,
+      rows: (demandRows + extraRows) * splitRows,
     });
-  }, [autofitScope, componentIndex, demandRows, inlineLayout, inlineHeight, captionHeight]);
+  }, [
+    autofitScope,
+    componentIndex,
+    demandRows,
+    inlineLayout,
+    inlineHeight,
+    captionHeight,
+    splitRows,
+  ]);
 
   // One dim line saying what is on screen. Derived from the reduction the
   // renderer already publishes unless it passed something better.
@@ -583,16 +619,17 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     ) : null
   ) : compact ? (
     // One line: title, the visualization's type, what is on screen, the
-    // status chips. The subtitle moves to the title's tooltip, the tier counts
+    // status chips. The subtitle moves to the title's info popover, the tier counts
     // and the inline controls keep their own lines under it.
     <Stack gap={2} mb={4}>
       <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} pr={28}>
         {title ? (
-          <Tooltip label={subtitle} disabled={!subtitle} multiline maw={320} openDelay={300}>
-            <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
-              {title}
-            </Text>
-          </Tooltip>
+          <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
+            {title}
+          </Text>
+        ) : null}
+        {title && subtitle ? (
+          <ComponentInfo description={subtitle} title={title} trigger="title" always />
         ) : null}
         <VizKindBadge />
         {echoText ? (
@@ -620,17 +657,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     estimated ||
     groupBadge ||
     extraBadges ? (
-    <Stack gap={2} mb="xs">
+    // `dc-tile-head` while a text line leads the stack (see FigureRenderer).
+    <Stack gap={2} mb="xs" className={title || subtitle || echoLine ? 'dc-tile-head' : undefined}>
       {title ? (
-        <Text fw={600} size="sm" lineClamp={1}>
-          {title}
-        </Text>
+        <TileTitleRow title={title} description={subtitle ?? ''} />
       ) : null}
-      {subtitle ? (
-        <Text size="xs" c="dimmed" lineClamp={2}>
-          {subtitle}
-        </Text>
-      ) : null}
+      {subtitle ? <TileSubtitle description={subtitle} /> : null}
       {echoLine}
       {countBadges}
       {reductionBadge ? (
@@ -649,7 +681,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         </Group>
       ) : null}
       {extraBadges ? (
-        <Group gap={4} wrap="nowrap" mt={2}>
+        <Group gap={4} wrap="wrap" mt={2} style={{ rowGap: 2 }}>
           {extraBadges}
         </Group>
       ) : null}
@@ -669,12 +701,21 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       <ComponentSkeleton variant="block" />
     </div>
   );
+  // One shape for the drawn plot, loading or not: `children` always sits at
+  // index 0 of the same fragment and only the skeleton after it comes and goes.
+  // The loaded state used to render `children` bare. A renderer whose children
+  // are a fragment then had a fragment at index 0 while loading and its first
+  // element (the plot div) once loaded, so every filter change remounted the
+  // plot: a new graph div and a full first draw, twice.
+  const drawn = (
+    <>
+      {children}
+      {loading ? skeleton : null}
+    </>
+  );
   const body = loading ? (
     hasDrawnRef.current ? (
-      <>
-        {children}
-        {skeleton}
-      </>
+      drawn
     ) : (
       skeleton
     )
@@ -697,7 +738,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       {emptyMessage}
     </div>
   ) : (
-    children
+    drawn
   );
 
   const rail = inlineLayout === 'rail-side' || inlineLayout === 'rail-below';

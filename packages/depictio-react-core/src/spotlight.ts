@@ -20,6 +20,7 @@
 import type { StoredMetadata } from './api';
 import { componentTypeVisual } from './componentTypeMeta';
 import { interactiveTitle } from './components/interactive/titles';
+import { canonicalVizKind } from './vizKindAliases';
 
 // ---------------------------------------------------------------------------
 // Markdown
@@ -127,8 +128,9 @@ const KIND_LABELS: Record<string, string> = {
   MultiSelect: 'Multi-select',
 };
 
-/** `stacked_taxonomy` → "Stacked taxonomy", `RangeSlider` → "Range slider". */
-export function humanizeKind(raw: string): string {
+/** `stacked_bar` → "Stacked bar", `RangeSlider` → "Range slider". A renamed kind reads as its current name. */
+export function humanizeKind(rawKind: string): string {
+  const raw = canonicalVizKind(rawKind);
   if (KIND_LABELS[raw]) return KIND_LABELS[raw];
   const words = raw
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')

@@ -1,0 +1,41 @@
+/* Compact density for the admin tables: strictly one line per row.
+ * Only data cells (td[data-col]) are clamped; the expanded detail row and the
+ * checkbox / chevron / actions cells keep their own layout. No colours here. */
+.ga-table[data-density='compact'] .mantine-Table-th {
+  white-space: nowrap;
+}
+.ga-table[data-density='compact'] td[data-col] {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The first column (name / title / email) is the one that may stretch. */
+.ga-table[data-density='compact'] td[data-col][data-primary] {
+  max-width: 420px;
+}
+/* Badge and chip groups never wrap: extra items are clipped (full list in the title). */
+.ga-table[data-density='compact'] td[data-col] .mantine-Group-root {
+  flex-wrap: nowrap !important;
+  overflow: hidden;
+}
+.ga-table[data-density='compact'] td[data-col] .mantine-Group-root > * {
+  flex-shrink: 0;
+}
+.ga-table[data-density='compact'] td[data-col] .mantine-Group-root > .mantine-Text-root,
+.ga-table[data-density='compact'] td[data-col] .mantine-Group-root > [data-truncate] {
+  flex-shrink: 1;
+  min-width: 0;
+}
+.ga-table[data-density='compact'] td[data-col] .mantine-Text-root,
+.ga-table[data-density='compact'] td[data-col] .mantine-Badge-root {
+  white-space: nowrap;
+}
+.ga-table[data-density='compact'] td[data-col] .mantine-Text-root {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ga-table[data-density='compact'] td.ga-table-fixed {
+  width: 36px;
+  white-space: nowrap;
+}

@@ -10,7 +10,10 @@ import { Icon } from '@iconify/react';
  *  (renders its logo, not an mdi icon). */
 export const DC_TYPE_ICON: Record<string, { icon: string; color: string; label: string }> = {
   table: { icon: 'mdi:table', color: 'teal', label: 'Table' },
-  jbrowse2: { icon: 'mdi:dna', color: 'teal', label: 'JBrowse2' },
+  // A track manifest (one row per track, a Delta table like `table`) that the
+  // genome browser component renders.
+  genomic_tracks: { icon: 'mdi:dna', color: 'teal', label: 'Genomic tracks' },
+  jbrowse2: { icon: 'mdi:dna', color: 'teal', label: 'JBrowse2 (legacy)' },
   image: { icon: 'mdi:image-outline', color: 'pink', label: 'Image' },
   geojson: { icon: 'mdi:map-marker-radius-outline', color: 'grape', label: 'GeoJSON' },
   map: { icon: 'mdi:map-marker-radius-outline', color: 'grape', label: 'Map' },

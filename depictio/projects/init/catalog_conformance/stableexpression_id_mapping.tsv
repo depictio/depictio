@@ -1,0 +1,13 @@
+fate_key	dataset	accession	platform	outcome	fate	fate_order	gene_ids	share
+E_GEOD_10070_A_AFFY_44|Kept	E_GEOD_10070_A_AFFY_44	E-GEOD-10070	Microarray	Merged	Kept	1	21136	0.990900
+E_GEOD_10070_A_AFFY_44|Collapsed	E_GEOD_10070_A_AFFY_44	E-GEOD-10070	Microarray	Merged	Collapsed	2	158	0.007400
+E_GEOD_10070_A_AFFY_44|Rare gene	E_GEOD_10070_A_AFFY_44	E-GEOD-10070	Microarray	Merged	Rare gene	3	4	0.000200
+E_GEOD_10070_A_AFFY_44|Unmapped	E_GEOD_10070_A_AFFY_44	E-GEOD-10070	Microarray	Merged	Unmapped	4	32	0.001500
+E_GEOD_102133_A_AFFY_141|Kept	E_GEOD_102133_A_AFFY_141	E-GEOD-102133	Microarray	No gene mapped	Kept	1	0	0.000000
+E_GEOD_102133_A_AFFY_141|Collapsed	E_GEOD_102133_A_AFFY_141	E-GEOD-102133	Microarray	No gene mapped	Collapsed	2	0	0.000000
+E_GEOD_102133_A_AFFY_141|Rare gene	E_GEOD_102133_A_AFFY_141	E-GEOD-102133	Microarray	No gene mapped	Rare gene	3	0	0.000000
+E_GEOD_102133_A_AFFY_141|Unmapped	E_GEOD_102133_A_AFFY_141	E-GEOD-102133	Microarray	No gene mapped	Unmapped	4	12744	1.000000
+E_GEOD_58991_rnaseq|Kept	E_GEOD_58991_rnaseq	E-GEOD-58991	RNA-seq	All samples filtered out	Kept	1	55718	0.948600
+E_GEOD_58991_rnaseq|Collapsed	E_GEOD_58991_rnaseq	E-GEOD-58991	RNA-seq	All samples filtered out	Collapsed	2	0	0.000000
+E_GEOD_58991_rnaseq|Rare gene	E_GEOD_58991_rnaseq	E-GEOD-58991	RNA-seq	All samples filtered out	Rare gene	3	1570	0.026700
+E_GEOD_58991_rnaseq|Unmapped	E_GEOD_58991_rnaseq	E-GEOD-58991	RNA-seq	All samples filtered out	Unmapped	4	1447	0.024600

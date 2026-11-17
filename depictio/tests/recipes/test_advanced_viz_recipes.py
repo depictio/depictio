@@ -21,7 +21,7 @@ import pytest
 from depictio.models.components.advanced_viz.configs import (
     EmbeddingConfig,
     ManhattanConfig,
-    StackedTaxonomyConfig,
+    StackedBarConfig,
     VolcanoConfig,
 )
 from depictio.models.components.advanced_viz.schemas import validate_binding
@@ -94,7 +94,7 @@ def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
         "Genus",
     }
 
-    cfg = StackedTaxonomyConfig(
+    cfg = StackedBarConfig(
         sample_id_col="sample_id",
         taxon_col="taxon",
         rank_col="rank",
@@ -218,8 +218,8 @@ def test_validate_binding_ok() -> None:
             ManhattanConfig(chr_col="chr", pos_col="pos", score_col="sc"),
         ),
         (
-            "stacked_taxonomy",
-            StackedTaxonomyConfig(
+            "stacked_bar",
+            StackedBarConfig(
                 sample_id_col="s",
                 taxon_col="t",
                 rank_col="r",
@@ -234,7 +234,7 @@ def test_validate_binding_per_kind_happy_path(kind, cfg) -> None:
         schema = {"s": "String", "d1": "Float64", "d2": "Float64"}
     elif kind == "manhattan":
         schema = {"chr": "String", "pos": "Int64", "sc": "Float64"}
-    else:  # stacked_taxonomy
+    else:  # stacked_bar
         schema = {"s": "String", "t": "String", "r": "String", "a": "Float64"}
     assert validate_binding(cfg, schema) == []
 

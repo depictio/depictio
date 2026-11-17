@@ -43,7 +43,9 @@ const FigureBuilder: React.FC = () => {
   // section so authors don't think they're configuring it. Renderer
   // mirrors the same gate.
   const supportsCrossFilter = visuType === 'scatter' || visuType === 'scatter_3d';
-  const { canUseCodeMode } = useDashboardAccess(dashboardId);
+  const { canUseCodeMode, codeWriteLocked } = useDashboardAccess(dashboardId);
+  // A figure already in code mode stays there, read-only: only the way in closes.
+  const canEnterCodeMode = canUseCodeMode && !codeWriteLocked;
 
   // Public/demo deployments shouldn't expose the server-side Python executor.
   // If a non-owner / public visitor lands on a component that was saved in
@@ -58,8 +60,12 @@ const FigureBuilder: React.FC = () => {
     <Stack gap="md" pt="md">
       <Center>
         <Tooltip
-          label="Code Mode is unavailable in public / demo deployments."
-          disabled={canUseCodeMode}
+          label={
+            codeWriteLocked
+              ? 'Writing figure code is turned off on this server.'
+              : 'Code Mode is unavailable in public / demo deployments.'
+          }
+          disabled={canEnterCodeMode}
           withArrow
           position="bottom"
         >
@@ -79,7 +85,7 @@ const FigureBuilder: React.FC = () => {
               },
               {
                 value: 'code',
-                disabled: !canUseCodeMode,
+                disabled: !canEnterCodeMode,
                 label: (
                   <span style={TOGGLE_LABEL_STYLE}>
                     <Icon icon="tabler:code" width={16} />

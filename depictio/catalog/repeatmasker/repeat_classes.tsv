@@ -1,0 +1,31 @@
+genome	repeat_class	parent_class	rank	class_order	elements	length_bp	genome_pct
+Apis_mellifera	Retroelements		Summary	1	18689	2803554	1.24
+Apis_mellifera	SINEs	Retroelements	Class	2	335	41217	0.02
+Apis_mellifera	Penelope	Retroelements	Class	3	383	21093	0.01
+Apis_mellifera	LINEs	Retroelements	Class	4	7575	825602	0.37
+Apis_mellifera	CRE/SLACS	LINEs	Family	5	4	2032	0.0
+Apis_mellifera	L2/CR1/Rex	LINEs	Family	6	2394	171922	0.08
+Apis_mellifera	R1/LOA/Jockey	LINEs	Family	7	2018	306551	0.14
+Apis_mellifera	R2/R4/NeSL	LINEs	Family	8	458	98269	0.04
+Apis_mellifera	RTE/Bov-B	LINEs	Family	9	898	58583	0.03
+Apis_mellifera	L1/CIN4	LINEs	Family	10	448	31546	0.01
+Apis_mellifera	LTR elements	Retroelements	Class	11	10779	1936735	0.86
+Apis_mellifera	BEL/Pao	LTR elements	Family	12	1656	536594	0.24
+Apis_mellifera	Ty1/Copia	LTR elements	Family	13	2130	572412	0.25
+Apis_mellifera	Gypsy/DIRS1	LTR elements	Family	14	6459	769629	0.34
+Apis_mellifera	Retroviral	Gypsy/DIRS1	Family	15	311	29253	0.01
+Apis_mellifera	DNA transposons		Class	16	47012	7984878	3.54
+Apis_mellifera	hobo-Activator	DNA transposons	Family	17	4069	679024	0.3
+Apis_mellifera	Tc1-IS630-Pogo	DNA transposons	Family	18	23213	4713298	2.09
+Apis_mellifera	En-Spm	DNA transposons	Family	19	0	0	0.0
+Apis_mellifera	MULE-MuDR	DNA transposons	Family	20	977	98395	0.04
+Apis_mellifera	PiggyBac	DNA transposons	Family	21	2211	465313	0.21
+Apis_mellifera	Tourist/Harbinger	DNA transposons	Family	22	701	71784	0.03
+Apis_mellifera	Other (Mirage, P-element, Transib)	DNA transposons	Family	23	344	25903	0.01
+Apis_mellifera	Rolling-circles		Class	24	2596	399797	0.18
+Apis_mellifera	Unclassified		Class	25	99209	16873128	7.49
+Apis_mellifera	Total interspersed repeats		Summary	26		27682653	12.29
+Apis_mellifera	Small RNA		Class	27	941	159860	0.07
+Apis_mellifera	Satellites		Class	28	1137	158513	0.07
+Apis_mellifera	Simple repeats		Class	29	188378	8525555	3.78
+Apis_mellifera	Low complexity		Class	30	39965	2038010	0.9

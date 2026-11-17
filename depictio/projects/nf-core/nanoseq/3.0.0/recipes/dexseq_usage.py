@@ -10,10 +10,10 @@ the proportions are recomputed here: for each tested gene and each library,
 every transcript's count over the gene's total.
 
 Only the ``TOP_GENES`` genes with the smallest gene-level q-value are kept, the
-significant ones first, so the tile is the handful of genes the DEXSeq table
-leads with rather than 200 stacked bars. The q-value travels with every row in
-``gene_label`` so a gene kept only to fill the panel says it is not
-significant.
+significant ones first, rather than every tested gene. The tile draws the first
+few unfiltered, and the dashboard's Gene filter picks any of the kept genes. The
+q-value travels with every row in ``gene_label`` so a gene kept only to fill the
+list says it is not significant.
 
     sample, condition     library and its condition
     gene_id, gene_label   Ensembl gene id; the id with its DEXSeq q-value
@@ -74,7 +74,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 #: Genes kept, ranked by gene-level q-value.
-TOP_GENES = 6
+TOP_GENES = 40
 PADJ_THRESHOLD = 0.05
 
 

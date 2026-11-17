@@ -154,6 +154,8 @@ SEED_TO_DASHBOARD_KEY: dict[str, str] = {
     "dashboard_sample_qc.json": "viralrecon_sample_qc",
     "dashboard_coverage_depth.json": "viralrecon_coverage_depth",
     "dashboard_variants.json": "viralrecon_variants",
+    "dashboard_gene.json": "viralrecon_gene",
+    "dashboard_sample.json": "viralrecon_sample",
     "dashboard_lineage_clustering.json": "viralrecon_lineage_clustering",
 }
 MAIN_SEED = "dashboard_overview.json"

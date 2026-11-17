@@ -112,10 +112,10 @@ junction reads against transcript abundances. Only the rMATS one is labelled, wi
 symbols of its top genes. Then a sashimi of the junctions around the called rMATS events:
 one lane per condition, one arc per junction labelled with its mean reads per replicate. A
 gene picked in the left panel draws that gene's locus; without a pick the tile opens on
-the busiest cluster of junctions, the others in its locus menu, and its View switch redraws
-the junctions in GenomeSpy. Collapsed: the rMATS event table with the event record card
+the busiest cluster of junctions, the others in its locus menu. Collapsed: the rMATS event table with the event record card
 beside it (inclusion and junction reads per condition, the locus linked to the UCSC browser
-on `GENOME`), and the SUPPA2 event table. Filters: event type, call and absolute PSI
+on `GENOME`) and the genome browser under them (the coverage and reads of the samples in view,
+framed on the picked event's region), and the SUPPA2 event table. Filters: event type, call and absolute PSI
 change, each narrowing both tools.
 
 ## Routes and pruning
@@ -132,6 +132,7 @@ the agreement key figure and the agreement row survive any combination of tools.
 | DEXSeq DTU skipped | No Transcript Usage tab, DTU row or DTU highlight. |
 | rMATS and SUPPA2 both skipped | No Splicing Events tab, rMATS key figure, event row or event-type highlight. |
 | rMATS skipped, or no STAR junction tables | No sashimi section on Splicing Events. |
+| No `bigwig/` or BAM under `star_salmon/` (`--skip_bigwig`, no `--save_align_intermeds`) | The genome browser lists the files the run was expected to publish, so those tracks fail to open; read the run in place with `TRACKS_URI` only when they exist. |
 | Pseudo-alignment only (`QUANT_ROUTE=salmon`) | The PCA, the heatmap, DTU and SUPPA2 read the `salmon/` copy; STAR-based panels and tools have nothing to show. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
@@ -192,8 +193,8 @@ of a narrower one. Nothing is set per tab or per tile.
 | `QUANT_ROUTE` | `star_salmon` | which Salmon copy feeds the PCA, DTU and SUPPA2 (`salmon` for pseudo-alignment-only runs) |
 | `GENOME` | `hg38` | UCSC assembly for the event locus link |
 | `SPLICING_FDR` | `0.05` | FDR / q-value cut-off of every tool's call (SUPPA2 uses it on its p-value) |
-| `MIN_DPSI` | `0.1` | minimal absolute PSI change of an rMATS or SUPPA2 call |
-| `RMATS_MIN_READS` | `10` | mean junction reads per replicate required in both conditions |
+| `MIN_DPSI` | `0` | optional extra floor on the absolute PSI change of an rMATS or SUPPA2 call; 0 keeps the tool's own call (rMATS tests against `--cstat`, default 0.0001; SUPPA2's lower bound defaults to 0) |
+| `RMATS_MIN_READS` | `10` | mean junction reads per replicate required in both conditions; the template's working value, rMATS and nf-core/rnasplice set no such minimum |
 
 ## Method notes
 
@@ -205,7 +206,7 @@ of a narrower one. Nothing is set per tab or per tile.
 - **Gene-level calls.** DEXSeq exon usage and DTU use the per-gene q-value
   (`perGeneQValue`); edgeR uses the gene F-test FDR; rMATS and SUPPA2 call a gene when at
   least one of its events is significant with an absolute PSI change of at least
-  `MIN_DPSI`. The volcano x axis of the gene-level tools is the fold change of the gene's
+  `MIN_DPSI` (default 0: the tool's call alone). The volcano x axis of the gene-level tools is the fold change of the gene's
   most significant bin or exon.
 - **Composite genes.** DEXSeq (`ENSG1+ENSG2`) and SUPPA2 (`ENSG1_and_ENSG2`) merge
   overlapping genes; the cross-tool table counts such a row for each gene it names.

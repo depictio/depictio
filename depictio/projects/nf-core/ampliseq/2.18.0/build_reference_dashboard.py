@@ -28,7 +28,6 @@ Run:
 from __future__ import annotations
 
 import copy
-import csv
 import math
 import re
 import sys
@@ -749,7 +748,7 @@ fig.update_layout(
     }
 
 
-def annotate_heatmap_columns(dashboard: dict[str, Any], group_col: str, id_col: str) -> None:
+def annotate_heatmap_columns(dashboard: dict[str, Any], group_col: str) -> None:
     """Give every clustered heatmap a habitat strip above its columns.
 
     Both heatmaps have samples for columns, and nothing on either says which
@@ -758,24 +757,20 @@ def annotate_heatmap_columns(dashboard: dict[str, Any], group_col: str, id_col: 
     The row annotation cannot answer that, because `row_annotation_cols` reads
     columns of the heatmap's own DC and habitat lives in the metadata.
 
-    base.yaml cannot carry this: `col_annotations` is a literal
-    ``{column_label: category}`` map, so it names this run's samples. That is
-    exactly the kind of run-specific value the demo layer exists for. The
-    strip's colours come from the family's category colours.
+    The strip names the column (`col_annotation_cols`) rather than baking a
+    ``{column_label: category}`` map of this run's samples into
+    `col_annotations`: the "Column annotations" picker lists a named column as
+    selected and lets the reader drop it, whereas a baked map drew a strip the
+    picker knew nothing about (and picking the column there drew a second one).
+    The strip's colours come from the family's category colours.
     """
-    metadata = Path(__file__).parent / "input" / "Metadata_full.tsv"
-    with metadata.open(encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle, delimiter="\t"))
-    by_sample = {r[id_col]: r[group_col] for r in rows if r.get(id_col) and r.get(group_col)}
-    if not by_sample:
-        raise SystemExit(f"no {id_col}/{group_col} pairs in {metadata}")
-
     for tab in [dashboard["main_dashboard"], *dashboard.get("tabs", [])]:
         for comp in tab.get("components", []):
             cfg = comp.get("config") or {}
             if cfg.get("viz_kind") != "complex_heatmap":
                 continue
-            cfg["col_annotations"] = {group_col: dict(by_sample)}
+            cfg.pop("col_annotations", None)
+            cfg["col_annotation_cols"] = [group_col]
             print(f"  {group_col} column strip on {comp.get('index', comp.get('tag'))}")
 
 
@@ -922,7 +917,7 @@ def build() -> dict[str, Any]:
     id_col = variables["METADATA_ID_COL"]
 
     drop_absent_routes(dashboard)
-    annotate_heatmap_columns(dashboard, group_col, id_col)
+    annotate_heatmap_columns(dashboard, group_col)
     add_tree_group_colour(dashboard)
 
     main = dashboard["main_dashboard"]

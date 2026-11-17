@@ -10,12 +10,14 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { Globe, Lock, Table2, Workflow } from 'lucide-react';
+import { Globe, Lock } from 'lucide-react';
 
 import type { ProjectListEntry } from 'depictio-react-core';
 
+import SortHeader from '../../components/SortHeader';
 import ProjectActionsMenu from '../ProjectActionsMenu';
 import { parseTemplate, TemplateChip } from '../template';
+import { projectLayout, projectSentence } from '../layout';
 import { determineRole } from '../lib/projectRole';
 import type { Density } from '../hooks/useProjectViewPrefs';
 import { coerceString } from '../../dashboards/lib/format';
@@ -50,7 +52,7 @@ export interface ProjectTableViewProps {
 
 export type ProjectColumnKey =
   | 'name'
-  | 'type'
+  | 'contents'
   | 'visibility'
   | 'template'
   | 'owner'
@@ -70,9 +72,9 @@ type SortDir = 'asc' | 'desc';
  *  keeps the extra metadata columns opt-in so the default table stays readable. */
 const ALL_COLUMNS: ColumnDef<ProjectColumnKey>[] = [
   { key: 'name', label: 'Name', alwaysVisible: true },
-  { key: 'type', label: 'Type' },
+  { key: 'contents', label: 'Contents', description: 'What the project holds' },
   { key: 'visibility', label: 'Visibility' },
-  { key: 'template', label: 'Template' },
+  { key: 'template', label: 'Pipeline' },
   { key: 'owner', label: 'Owner' },
   { key: 'role', label: 'Your role', defaultVisible: false },
   { key: 'members', label: 'Members', description: 'Members with access', defaultVisible: false },
@@ -103,12 +105,13 @@ export function useProjectTableColumns(): UseTableColumnsResult<ProjectColumnKey
 interface Row {
   id: string;
   project: ProjectListEntry;
-  isAdvanced: boolean;
+  /** One sentence of what it holds, without dashboards. */
+  contents: string;
   isPublic: boolean;
   ownerEmail: string;
   role: string;
   memberCount: number | null;
-  /** Count for advanced projects; null for basic (rendered as "NA"). */
+  /** Count of real pipeline workflows; null when there are none (rendered as "NA"). */
   workflowCount: number | null;
   /** Sum of data collections across the project (or via workflows for
    *  advanced projects). null when the field isn't on the entry. */
@@ -180,13 +183,24 @@ function compareNullable(a: number | null, b: number | null, dir: SortDir): numb
   return mul * (a - b);
 }
 
+/** A project's workflows as named in the Project Builder: every one of
+ *  them, a Python workflow included. */
+function builderWorkflows(project: ProjectListEntry): { name: string; engine: string | null }[] {
+  const list = Array.isArray(project.workflows) ? project.workflows : [];
+  return list.map((w) => {
+    const raw = w as { name?: unknown; engine?: unknown };
+    const engine = raw.engine && typeof raw.engine === 'object' ? (raw.engine as { name?: unknown }).name : raw.engine;
+    return { name: typeof raw.name === 'string' ? raw.name : '', engine: typeof engine === 'string' ? engine : null };
+  });
+}
+
 function compareRows(a: Row, b: Row, key: ProjectColumnKey, dir: SortDir): number {
   const mul = dir === 'asc' ? 1 : -1;
   switch (key) {
     case 'name':
       return mul * a.project.name.localeCompare(b.project.name);
-    case 'type':
-      return mul * Number(a.isAdvanced) - mul * Number(b.isAdvanced);
+    case 'contents':
+      return mul * a.contents.localeCompare(b.contents);
     case 'visibility':
       return mul * Number(b.isPublic) - mul * Number(a.isPublic);
     case 'template':
@@ -218,48 +232,6 @@ function compareRows(a: Row, b: Row, key: ProjectColumnKey, dir: SortDir): numbe
       return 0;
   }
 }
-
-const SortHeader: React.FC<{
-  label: string;
-  ariaLabel?: string;
-  tooltip?: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
-}> = ({ label, ariaLabel, tooltip, active, dir, onClick }) => {
-  const button = (
-    <UnstyledButton
-      onClick={onClick}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        fontWeight: 600,
-      }}
-      aria-label={`Sort by ${ariaLabel ?? tooltip ?? label}`}
-    >
-      {label}
-      <Icon
-        icon={
-          active
-            ? dir === 'asc'
-              ? 'mdi:chevron-up'
-              : 'mdi:chevron-down'
-            : 'mdi:unfold-more-horizontal'
-        }
-        width={14}
-        style={{ opacity: active ? 1 : 0.4 }}
-      />
-    </UnstyledButton>
-  );
-  return tooltip ? (
-    <Tooltip label={tooltip} withinPortal>
-      {button}
-    </Tooltip>
-  ) : (
-    button
-  );
-};
 
 const Dash: React.FC = () => (
   <Text size="xs" c="dimmed">
@@ -330,19 +302,14 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
     const list: Row[] = projects.map((p) => {
       const role = determineRole(p, currentUserId);
       const tmpl = parseTemplate(p);
-      const isAdvanced = p.project_type === 'advanced';
-      // Basic projects don't expose user-managed workflows (they wrap a single
-      // implicit one), so the count would always be 0/1 and read as wrong —
-      // surface it as "NA" instead.
-      const workflowCount = isAdvanced
-        ? Array.isArray(p.workflows)
-          ? p.workflows.length
-          : 0
-        : null;
+      // Projects of hand-added tables wrap them in one implicit workflow, so
+      // only real pipeline workflows are counted; none reads as "NA".
+      const realCount = projectLayout(p).realWorkflows.length;
+      const workflowCount = realCount > 0 ? realCount : null;
       return {
         id: String(p._id ?? p.id ?? ''),
         project: p,
-        isAdvanced,
+        contents: projectSentence(p),
         isPublic: Boolean(p.is_public),
         ownerEmail: p.permissions?.owners?.[0]?.email ?? '',
         role: role ?? '',
@@ -400,36 +367,16 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             </Text>
           </UnstyledButton>
         );
-      case 'type': {
-        // Glass: told apart by glyph and word, not by hue.
-        if (glass) {
-          const TypeIcon = r.isAdvanced ? Workflow : Table2;
-          return (
-            <Badge
-              color="gray"
-              variant="light"
-              size="sm"
-              leftSection={<TypeIcon size={12} strokeWidth={2} aria-hidden />}
-              styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
-            >
-              {r.isAdvanced ? 'Advanced' : 'Basic'}
-            </Badge>
-          );
-        }
-        return (
-          <Badge
-            color={r.isAdvanced ? 'orange' : 'cyan'}
-            variant="light"
-            size="sm"
-            // Mantine clamps the INNER `.mantine-Badge-label` with
-            // overflow:hidden + text-overflow:ellipsis, so styling the root
-            // alone still renders "ADVAN…". These labels are short and fixed.
-            styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
-          >
-            {r.isAdvanced ? 'Advanced' : 'Basic'}
-          </Badge>
+      case 'contents':
+        return r.contents ? (
+          <Tooltip label={r.contents} multiline maw={360} withArrow openDelay={300} withinPortal>
+            <Text size="sm" truncate maw={260} data-testid="project-contents-cell">
+              {r.contents}
+            </Text>
+          </Tooltip>
+        ) : (
+          <Dash />
         );
-      }
       case 'visibility':
         if (glass) {
           const VisIcon = r.isPublic ? Globe : Lock;
@@ -457,7 +404,16 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
           </Badge>
         );
       case 'template':
-        return r.templateParsed ? <TemplateChip parsed={r.templateParsed} verbose plain={glass} /> : <Dash />;
+        return r.templateParsed ? (
+          <TemplateChip
+            parsed={r.templateParsed}
+            verbose
+            plain={glass}
+            workflows={builderWorkflows(r.project)}
+          />
+        ) : (
+          <Dash />
+        );
       case 'owner':
         return r.ownerEmail ? <Text size="sm">{r.ownerEmail}</Text> : <Dash />;
       case 'role':

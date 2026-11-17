@@ -17,6 +17,7 @@ const SPA_ROUTE_PREFIXES = [
   'projects',
   'about',
   'admin',
+  'activity',
   'profile',
   'groups',
   'cli-agents',
@@ -24,6 +25,11 @@ const SPA_ROUTE_PREFIXES = [
 const SPA_ROUTE_RE = new RegExp(
   `^/(?:${SPA_ROUTE_PREFIXES.join('|')})(/|$|\\?)`,
 );
+
+// `VITE_PROJECT_BUILDER_STANDALONE=1 pnpm dev` stands in for `depictio
+// project-builder <dir>`: the bare root then serves the builder instead of
+// bouncing to the dashboards list (see src/projects/builder/mode.ts).
+const STANDALONE_BUILDER = process.env.VITE_PROJECT_BUILDER_STANDALONE === '1';
 
 const authDevFallback = (): Plugin => ({
   name: 'depictio-spa-dev-fallback',
@@ -41,6 +47,11 @@ const authDevFallback = (): Plugin => ({
         req.url === '/dashboard' ||
         req.url === '/dashboard/'
       ) {
+        if (STANDALONE_BUILDER) {
+          req.url = '/dashboard/';
+          next();
+          return;
+        }
         res.statusCode = 302;
         res.setHeader('Location', '/dashboards');
         res.end();
@@ -116,6 +127,10 @@ export default defineConfig({
           if (id.includes('@mantine')) {
             return 'vendor-mantine';
           }
+          // No manual chunk for the genome browser: only the lazy
+          // JBrowseRenderer imports it, so Rollup already emits it as async
+          // chunks. Forcing one hoists shared deps (react-dom/client, clsx)
+          // into it and the entry would then preload all of JBrowse.
           return undefined;
         },
       },

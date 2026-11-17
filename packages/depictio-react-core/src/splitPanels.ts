@@ -60,6 +60,16 @@ function valueConstraint(
  *
  *  There is no "Other" panel: a MultiSelect projects `is_in`, and "in none of
  *  these groups" is not expressible that way. */
+/** The first panel of the "what's new" split: every row. Kept in step with
+ *  `OVERALL_LABEL` in `depictio/api/v1/services/figure/groups.py`. */
+export const OVERALL_LABEL = 'All';
+export const OVERALL_COLOR = '#495057';
+
+/** `panels` after an "All" panel that narrows nothing. */
+export function withOverallPanel(panels: PanelSpec[]): PanelSpec[] {
+  return panels.length > 1 ? [{ name: OVERALL_LABEL, color: OVERALL_COLOR, constraints: [] }, ...panels] : panels;
+}
+
 export function panelsFromGroups(groups: GroupRenderDef[]): PanelSpec[] {
   return groups
     .filter((g) => (g.values ?? []).length > 0)
@@ -148,7 +158,10 @@ export function panelsForGrouping(
   filters: readonly InteractiveFilter[] = [],
 ): PanelSpec[] {
   if (!groupRender || groupRender.display !== 'facet') return [];
-  if (groupRender.colorByGroup) return panelsFromGroups(groupRender.groups ?? []);
+  if (groupRender.colorByGroup) {
+    const panels = panelsFromGroups(groupRender.groups ?? []);
+    return groupRender.showOverall ? withOverallPanel(panels) : panels;
+  }
   const column = groupRender.colorByColumn;
   // A column split needs its value set up front, and the palette the dashboard
   // computed from the column's unfiltered universe is exactly that.
@@ -192,11 +205,17 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   qq: 'split',
   rarefaction: 'split',
   coverage_track: 'split',
+  stacked_bar: 'split',
   stacked_taxonomy: 'split',
   sunburst: 'split',
   sankey: 'split',
   oncoplot: 'split',
   signal_matrix: 'split',
+  // A panel per group: a matrix of samples by samples keeps the columns of its
+  // rows (the worker cuts both axes), so each panel is that group against
+  // itself, clustered on its own. In the overlay the groups are a strip above
+  // the columns.
+  complex_heatmap: 'split',
 
   // Colour in one panel. The marks share one coordinate space, and panels cost
   // the comparison the chart exists for: an ordination rebuilt per group is a
@@ -213,6 +232,9 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   lollipop: 'colour',
   da_barplot: 'colour',
   metric_ci_bars: 'colour',
+  // Cells sit in the frame of their image: a per-group panel would redraw the
+  // same tissue with holes in it, so a group is a colour on the cells.
+  spatial_cells: 'colour',
 
   // Neither. Either the rows are not samples a group can name (terms, truth-set
   // results, one locus's structure), or a subset re-derives the layout itself
@@ -220,7 +242,6 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   // comparable. Drawn whole and badged, so the tile does not pass for one that
   // honoured the split. Whatever they already do with filters is untouched.
   phylogenetic: 'none',
-  complex_heatmap: 'none',
   dot_plot: 'none',
   upset_plot: 'none',
   enrichment: 'none',
@@ -231,8 +252,8 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   gene_arrow_track: 'none',
   gsea_running_score: 'none',
   sashimi: 'none',
-  // A binned matrix re-derived per group would rebuild its own bins and axes,
-  // same bucket as complex_heatmap. Neither renderer takes a `groupRender`
+  // A binned matrix re-derived per group would rebuild its own bins and axes.
+  // Neither renderer takes a `groupRender`
   // prop (no selection/grouping wiring; see the kind's renderer docstring).
   contact_map: 'none',
   knee_plot: 'none',
@@ -250,6 +271,9 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   transcript_structure: 'none',
   cnv_profile: 'none',
   genome_chord: 'none',
+  // A karyotype already draws one per sample when `sample_col` is bound, on
+  // one shared length scale; per-group copies would rebuild that scale.
+  ideogram: 'none',
   // One row read as text: there is no mark for a group to colour and no
   // distribution for a panel to re-derive.
   record_card: 'none',
@@ -271,6 +295,20 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   domain_architecture: 'none',
   pae_matrix: 'none',
   ramachandran: 'none',
+  // One box per feature across every sample: the rows are features, which no
+  // sample group names, and a per-group copy would rank them again on its own
+  // axis, so two panels would not share the order the picture is about.
+  ranked_distribution: 'none',
+  // One row per sample already: a group is a set of rows, and the grid shows
+  // it by its rows, not by panels re-deriving columns, colours and the allele
+  // legend's frequencies per subset. Drawn whole and badged.
+  allele_grid: 'none',
+  // Parents live in other rows of the same table: a per-group copy would draw
+  // a child under a parent that the group filtered out. Drawn whole and badged.
+  pedigree: 'none',
+  // One ordering of candidates: a per-group copy would rank the same rows again
+  // on its own subset, so two tables would not share the order the list is about.
+  ranked_table: 'none',
 };
 
 /** The policy for `vizKind`.
@@ -306,6 +344,12 @@ const SPLIT_KINDS_COLOURED_WHOLE: ReadonlySet<string> = new Set<AdvancedVizKind>
   'qq',
   'rarefaction',
   'coverage_track',
+  // A bar per sample keeps its taxa's colours: the groups are a strip above
+  // the bars, one cell per sample.
+  'stacked_bar',
+  'stacked_taxonomy',
+  // Likewise a heatmap: the groups are a strip above its columns.
+  'complex_heatmap',
 ]);
 
 /**

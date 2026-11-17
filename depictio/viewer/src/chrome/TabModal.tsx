@@ -11,6 +11,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardSummary } from 'depictio-react-core';
+import { paletteVar } from 'depictio-react-core';
 
 import { SidebarModalActions, SidebarModalHeader } from './TabGroupModals';
 
@@ -153,9 +154,7 @@ const TabModal: React.FC<TabModalProps> = ({
   //   - Iconify name            → <Icon> tinted with the selected color
   //     (empty color = neutral preview, mirroring "Auto")
   const trimmedIcon = tabIcon.trim();
-  const previewColor = tabIconColor
-    ? `var(--mantine-color-${tabIconColor}-6)`
-    : undefined;
+  const previewColor = tabIconColor ? paletteVar(tabIconColor) : undefined;
   const previewIcon = !trimmedIcon ? (
     <Icon icon="mdi:tab" width={20} style={{ opacity: 0.3 }} />
   ) : isImagePath(trimmedIcon) ? (

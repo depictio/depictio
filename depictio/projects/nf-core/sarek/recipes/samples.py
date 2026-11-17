@@ -11,13 +11,21 @@ executed, so every source is optional and the first one present wins:
   first four columns, written after duplicate marking;
 - ``csv/variantcalled.csv``: ``patient,sample,variantcaller,vcf``, written
   whenever a caller ran. It carries no sex or status, and on a somatic run its
-  paired callers name the pair (``<tumour>_vs_<normal>``) rather than a sample,
-  so those rows are left out of the hub.
+  paired callers name the pair (``<tumour>_vs_<normal>``) rather than a sample.
+  A pair is not a hub row: the callers that ran on it are counted for its
+  tumour sample.
 
 ``variantcalled.csv`` also gives each sample the number of callers that ran on
 it (``n_callers``), whichever manifest supplied the design. The status label
 is sarek's convention (0 normal, 1 tumour), the only design factor a sarek
 samplesheet carries; nothing is parsed out of the sample names.
+
+``design`` says what the run can say about a patient, from the status of its
+samples (``depictio.recipes.lib.sarek_units``): ``Paired`` (a tumour and a
+normal), ``Germline only`` (normals, or samples whose status is unknown) or
+``Tumour-only`` (tumours alone). Every sample of a patient carries its label,
+so one filter keeps or drops the whole patient. The pairs themselves are the
+``pairs`` collection.
 
 Output schema:
     sample_id    : Utf8   the key every other collection is linked on
@@ -26,7 +34,9 @@ Output schema:
     status       : Int64  0 = normal, 1 = tumour; null when only
                           variantcalled.csv was available
     status_label : Utf8   "Normal", "Tumour" or "Unknown"
+    design       : Utf8   the patient's design: "Paired", "Germline only" or "Tumour-only"
     n_callers    : Int64  variant callers that produced a VCF for the sample
+                          (a pair's callers count for its tumour)
 """
 
 from __future__ import annotations
@@ -34,6 +44,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.sarek_units import PAIR_SEP, design_label
 
 _CSV_KWARGS = {"infer_schema_length": 0}
 
@@ -70,11 +81,9 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sex": pl.Utf8,
     "status": pl.Int64,
     "status_label": pl.Utf8,
+    "design": pl.Utf8,
     "n_callers": pl.Int64,
 }
-
-#: A paired somatic caller names its row after the pair, not a sample.
-_PAIR_RE = r"_vs_"
 
 
 def _design(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame | None:
@@ -97,18 +106,31 @@ def _design(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame | None:
 
 
 def _caller_counts(called: pl.DataFrame | None) -> pl.DataFrame | None:
-    """Callers per sample from variantcalled.csv, paired somatic rows left out."""
+    """Callers per sample from variantcalled.csv; a pair's callers count for its tumour."""
     if called is None or called.is_empty() or "sample" not in called.columns:
         return None
-    called = called.filter(~pl.col("sample").cast(pl.Utf8).str.contains(_PAIR_RE))
+    # `<tumour>_vs_<normal>` -> the tumour; a single sample is its own unit.
+    unit = pl.col("sample").cast(pl.Utf8)
+    called = called.with_columns(
+        unit.str.splitn(PAIR_SEP, 2).struct.field("field_0").alias("sample")
+    )
     n_callers = (
         pl.col("variantcaller").n_unique() if "variantcaller" in called.columns else pl.len()
     )
     patient = pl.col("patient") if "patient" in called.columns else pl.col("sample")
-    return called.group_by(pl.col("sample").cast(pl.Utf8).alias("sample_id")).agg(
+    return called.group_by(pl.col("sample").alias("sample_id")).agg(
         n_callers.cast(pl.Int64).alias("n_callers"),
         patient.first().cast(pl.Utf8).alias("patient"),
     )
+
+
+def _designs(hub: pl.DataFrame) -> pl.DataFrame:
+    """patient -> design label, from the status of the patient's samples."""
+    rows = [
+        {"patient": patient, "design": design_label(group["status"].to_list())}
+        for (patient,), group in hub.group_by(["patient"], maintain_order=True)
+    ]
+    return pl.DataFrame(rows, schema={"patient": pl.Utf8, "design": pl.Utf8})
 
 
 def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
@@ -132,6 +154,8 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
         design = design.join(callers.select("sample_id", "n_callers"), on="sample_id", how="left")
     else:
         design = design.with_columns(pl.lit(None, dtype=pl.Int64).alias("n_callers"))
+
+    design = design.join(_designs(design), on="patient", how="left")
 
     return (
         design.with_columns(

@@ -6,6 +6,7 @@
 # exon's fold change against the rest of its gene.
 id: edger
 name: edgeR diffSpliceDGE
+version: "1.0.0"
 description: >-
   Differential exon usage with edgeR's diffSpliceDGE: an exon-level test, a
   gene-level F-test and a Simes-combined gene test per contrast, run by

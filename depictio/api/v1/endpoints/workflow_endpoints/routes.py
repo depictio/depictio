@@ -6,6 +6,10 @@ from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, workflows_collection
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
+    assert_project_unlocked,
+    assert_workflow_project_unlocked,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
@@ -195,6 +199,9 @@ async def create_workflow(workflow: dict, current_user: User = Depends(get_curre
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to create it.")
 
+    if workflow.get("project_id"):
+        assert_project_unlocked(workflow["project_id"])
+
     group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     existing_workflow = workflows_collection.find_one(
         {
@@ -251,6 +258,8 @@ async def update_workflow(workflow: Workflow, current_user: User = Depends(get_c
             detail=f"Workflow with name '{workflow.workflow_tag}' does not exist. Use create option to create it.",
         )
 
+    assert_workflow_project_unlocked(existing_workflow["_id"])
+
     existing_data_collections = {
         dc["data_collection_tag"]: dc["_id"] for dc in existing_workflow.get("data_collections", [])
     }
@@ -302,6 +311,7 @@ async def delete_workflow(workflow_id: str, current_user: User = Depends(get_cur
             detail=f"User with ID '{user_oid}' is not authorized to delete workflow with ID '{workflow_id}'",
         )
 
+    assert_workflow_project_unlocked(workflow_oid)
     workflows_collection.delete_one({"_id": workflow_oid})
 
     return {"message": f"Workflow {workflow_tag} with ID '{workflow_id}' deleted successfully"}

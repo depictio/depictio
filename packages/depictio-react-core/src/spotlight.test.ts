@@ -90,7 +90,8 @@ describe('component labels', () => {
     ).toBe('QQ plot');
     expect(componentKindLabel(m({ index: 'a', component_type: 'card' }))).toBe('Card');
     expect(componentKindLabel(m({ index: 'a', component_type: 'interactive' }))).toBe('Filter');
-    expect(humanizeKind('stacked_taxonomy')).toBe('Stacked taxonomy');
+    expect(humanizeKind('stacked_bar')).toBe('Stacked bar');
+    expect(humanizeKind('stacked_taxonomy')).toBe('Stacked bar');
     expect(humanizeKind('RangeSlider')).toBe('Range slider');
   });
 

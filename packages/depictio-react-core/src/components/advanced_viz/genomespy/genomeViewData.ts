@@ -14,6 +14,7 @@ import {
   genomeRegionFilters,
   regionFromFilters,
 } from '../../../selection';
+import { matchChromosome } from '../crossTileCursor';
 import { requiredColumns } from './genomeSpySpec';
 import type { GenomeViewConfig } from './genomeSpySpec';
 
@@ -158,4 +159,77 @@ export async function loadGenomeViewRows(
         : undefined,
   });
   return { rows: res.rows, estimated: Boolean(res.sampling?.degraded) };
+}
+
+/**
+ * A row's contig as the assembly spells it, or `null` when the assembly has no
+ * such contig. Rows name contigs the way the pipeline's reference did (`21` on
+ * an Ensembl build), the assembly the way UCSC does (`chr21`), so a bare
+ * membership test would drop every row of such a run; the match takes the
+ * tolerance `renameToContigs` applies later (`chr` prefix and case ignored).
+ * Memoised per name: a table holds a handful of contigs over thousands of rows.
+ */
+function contigSpeller(known: ReadonlySet<string>): (name: string) => string | null {
+  const spelled = new Map<string, string | null>();
+  return (name) => {
+    if (known.has(name)) return name;
+    if (!spelled.has(name)) spelled.set(name, matchChromosome(name, known));
+    return spelled.get(name) ?? null;
+  };
+}
+
+/**
+ * The rows on contigs the assembly names, under any spelling it accepts: an alt
+ * or unplaced contig has no place on the axis, and GenomeSpy throws on it.
+ * Unchanged without a `known` set (no built-in assembly) or a chromosome
+ * column. Column-oriented.
+ */
+export function rowsOnKnownContigs(
+  rows: Record<string, unknown[]>,
+  chrColumn: string,
+  known?: ReadonlySet<string> | null,
+): Record<string, unknown[]> {
+  const chr = rows[chrColumn];
+  if (!known || !chr) return rows;
+  const spell = contigSpeller(known);
+  const keep: number[] = [];
+  for (let i = 0; i < chr.length; i++) if (spell(String(chr[i])) !== null) keep.push(i);
+  if (keep.length === chr.length) return rows;
+  const out: Record<string, unknown[]> = {};
+  for (const [c, values] of Object.entries(rows)) out[c] = keep.map((i) => values[i]);
+  return out;
+}
+
+/**
+ * The rows a navigator draws while its fetch is narrowed to a window: the
+ * whole-genome read (sampled by the server) everywhere but the window's
+ * chromosome, and the window's own read, whole, on it. So a region never
+ * empties the rest of the axis, and the region keeps its full detail.
+ * Column-oriented; the columns are the window read's.
+ */
+export function mergeWindowRows(
+  background: Record<string, unknown[]>,
+  windowRows: Record<string, unknown[]>,
+  chrColumn: string,
+  chrom: string,
+  known?: ReadonlySet<string> | null,
+): Record<string, unknown[]> {
+  const columns = Object.keys(windowRows);
+  const chr = background[chrColumn];
+  if (!chr) return windowRows;
+  const spell = known ? contigSpeller(known) : (name: string) => name;
+  const keep: number[] = [];
+  for (let i = 0; i < chr.length; i++) {
+    // A contig the assembly does not name (alt, unplaced) has no place on the
+    // axis: GenomeSpy throws on it. The window's own contig is read whole, so
+    // the genome read's rows on it go, whichever way the table spells it.
+    const c = spell(String(chr[i]));
+    if (c !== null && matchChromosome(c, [chrom]) === null) keep.push(i);
+  }
+  const out: Record<string, unknown[]> = {};
+  for (const c of columns) {
+    const bg = background[c];
+    out[c] = [...keep.map((i) => (bg ? bg[i] : null)), ...windowRows[c]];
+  }
+  return out;
 }

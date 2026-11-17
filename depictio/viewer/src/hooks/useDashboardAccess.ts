@@ -16,6 +16,9 @@ export interface UseDashboardAccessResult {
   /** Editing the Code Mode editor + executing code is allowed
    *  (false in public/demo OR when the current user is not an owner). */
   canEditCode: boolean;
+  /** New figure code is refused for this user: Code Mode cannot be entered, and
+   *  a figure already in code mode is shown read-only. */
+  codeWriteLocked: boolean;
   loading: boolean;
 }
 
@@ -29,7 +32,13 @@ export interface UseDashboardAccessResult {
 export function useDashboardAccess(
   dashboardId: string | null | undefined,
 ): UseDashboardAccessResult {
-  const { user, isPublicMode, isDemoMode, loading: userLoading } = useCurrentUser();
+  const {
+    user,
+    isPublicMode,
+    isDemoMode,
+    codeFiguresLocked,
+    loading: userLoading,
+  } = useCurrentUser();
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [dashLoading, setDashLoading] = useState<boolean>(Boolean(dashboardId));
 
@@ -67,7 +76,8 @@ export function useDashboardAccess(
   }, [dashboardId, user?.id, user?.email]);
 
   const canUseCodeMode = !isPublicMode && !isDemoMode;
-  const canEditCode = canUseCodeMode && isOwner;
+  const codeWriteLocked = codeFiguresLocked && !user?.is_admin;
+  const canEditCode = canUseCodeMode && isOwner && !codeWriteLocked;
 
   return {
     isOwner,
@@ -75,6 +85,7 @@ export function useDashboardAccess(
     isDemoMode,
     canUseCodeMode,
     canEditCode,
+    codeWriteLocked,
     loading: userLoading || dashLoading,
   };
 }

@@ -29,6 +29,7 @@
  */
 
 import type { GroupRenderState } from '../../selectionGroups';
+import { OVERALL_COLOR, OVERALL_LABEL } from '../../splitPanels';
 
 /** Kept in step with `OTHER_LABEL` / `OTHER_COLOR` in
  *  `depictio/api/v1/services/figure/groups.py`, so a split advanced_viz and a
@@ -279,8 +280,12 @@ export function splitFigureByGroups(figure: FigureLike, opts: GroupSplitOptions)
   if (order.length === 0) return figure;
   if (present.has(OTHER_LABEL)) order.push(OTHER_LABEL);
 
+  // The "what's new" split opens on every point, coloured by its group.
+  const overall = Boolean(groupRender?.showOverall) && order.length > 1;
   const facet =
-    groupRender?.display === 'facet' && facetable && order.length <= MAX_FACET_PANELS;
+    groupRender?.display === 'facet' &&
+    facetable &&
+    order.length + (overall ? 1 : 0) <= MAX_FACET_PANELS;
 
   if (!facet) {
     const data: any[] = [];
@@ -304,8 +309,9 @@ export function splitFigureByGroups(figure: FigureLike, opts: GroupSplitOptions)
     return { data, layout };
   }
 
-  const cols = Math.min(order.length, FACET_COL_WRAP);
-  const rows = Math.ceil(order.length / cols);
+  const panelsOrder = overall ? [OVERALL_LABEL, ...order] : order;
+  const cols = Math.min(panelsOrder.length, FACET_COL_WRAP);
+  const rows = Math.ceil(panelsOrder.length / cols);
   const xDomains = domains(cols, 0.06);
   const yDomains = domains(rows, 0.12).reverse(); // first panel on the top row
 
@@ -320,7 +326,7 @@ export function splitFigureByGroups(figure: FigureLike, opts: GroupSplitOptions)
 
   const data: any[] = [];
   const seen = new Set<string>();
-  order.forEach((label, panel) => {
+  panelsOrder.forEach((label, panel) => {
     const suffix = axisSuffix(panel);
     const col = panel % cols;
     const row = Math.floor(panel / cols);
@@ -354,18 +360,21 @@ export function splitFigureByGroups(figure: FigureLike, opts: GroupSplitOptions)
       xanchor: 'center',
       yanchor: 'bottom',
       showarrow: false,
-      font: { size: 12, color: colors.get(label) ?? OTHER_COLOR },
+      font: { size: 12, color: label === OVERALL_LABEL ? OVERALL_COLOR : (colors.get(label) ?? OTHER_COLOR) },
     });
 
+    // "All" holds every group's points, each in its group's colour.
     for (const { trace, buckets } of partitioned) {
-      const idx = buckets.get(label);
-      if (!idx || idx.length === 0) continue;
-      const sliced = sliceTrace(trace, idx, label, colors.get(label) ?? OTHER_COLOR);
-      sliced.xaxis = `x${suffix}`;
-      sliced.yaxis = `y${suffix}`;
-      sliced.showlegend = !seen.has(label);
-      seen.add(label);
-      data.push(sliced);
+      for (const part of label === OVERALL_LABEL ? order : [label]) {
+        const idx = buckets.get(part);
+        if (!idx || idx.length === 0) continue;
+        const sliced = sliceTrace(trace, idx, part, colors.get(part) ?? OTHER_COLOR);
+        sliced.xaxis = `x${suffix}`;
+        sliced.yaxis = `y${suffix}`;
+        sliced.showlegend = !seen.has(part);
+        seen.add(part);
+        data.push(sliced);
+      }
     }
     for (const shape of figure.layout?.shapes ?? []) shapes.push(retarget(shape, panel));
     if (contextTraces === 'repeat') {

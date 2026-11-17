@@ -27,10 +27,12 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
     delta_identity_hash,
     new_aggregation_hash,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.s3 import polars_s3_config, s3_client
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
 from depictio.models.models.users import User
+from depictio.models.s3_utils import delete_keys
 
 _MAX_PER_FILE_BYTES = 50 * 1024 * 1024
 _MAX_TOTAL_BYTES = 500 * 1024 * 1024
@@ -70,6 +72,7 @@ def _load_table_dc(data_collection_id: str, current_user) -> tuple[dict, dict]:
         raise HTTPException(
             status_code=404, detail=f"Data collection {data_collection_id} not found."
         )
+    assert_project_unlocked(project_doc)
 
     dc_dict: dict | None = None
     for wf_dict in project_doc.get("workflows", []) or []:
@@ -191,15 +194,18 @@ def _bump_table_dc_aggregation(
     current_user,
     delta_location: str,
     combined_df: pl.DataFrame,
+    *,
+    write_mode: str | None = None,
+    trigger: str | None = None,
+    delta_version: int | None = None,
+    columns_specs: list | None = None,
 ) -> int:
     """Append a new Aggregation row + return the new aggregation_version.
 
     Mirrors the upsert path in deltatables_endpoints/routes.py:upsert_deltatable
     so render_multiqc / render_table cache keys (which salt with the latest
-    aggregation_version) bump correctly. We skip ``precompute_columns_specs``
-    here — the CLI flow recomputes it on the next full process. For the
-    realtime invalidation path it's enough to bump the version + replace the
-    aggregation row.
+    aggregation_version) bump correctly. ``columns_specs`` is empty unless the
+    caller changed the columns: readers then keep the latest entry that has some.
     """
     dc_oid = ObjectId(data_collection_id)
     query_dt = deltatables_collection.find_one({"data_collection_id": dc_oid})
@@ -231,7 +237,11 @@ def _bump_table_dc_aggregation(
             aggregation_by=userbase,
             aggregation_version=version,
             aggregation_hash=final_hash,
-            aggregation_columns_specs=[],
+            aggregation_columns_specs=columns_specs or [],
+            write_mode=write_mode,
+            trigger=trigger,
+            delta_version=delta_version,
+            rows_total=combined_df.height,
         )
     )
 
@@ -269,6 +279,84 @@ def _invalidate_table_caches_for_dc(dc_id: str) -> None:
         logger.warning(f"Figure cache invalidation failed for dc={dc_id}: {exc}")
 
 
+def commit_table_frame(
+    *,
+    data_collection_id: str,
+    frame: pl.DataFrame,
+    current_user,
+    write_mode: str,
+    trigger: str | None = None,
+    dc_for_specs: dict | None = None,
+) -> tuple[int, int | None]:
+    """Overwrite a Table DC's Delta table with ``frame`` and publish the change.
+
+    The one write path of the table-management routes (append, replace, cell
+    edits): write a new Delta commit, record an aggregation entry (which
+    salts every DataFrame cache key with the new ``aggregation_version``), and
+    drop the cached frames. Returns ``(aggregation_version, delta_version)``.
+
+    ``dc_for_specs``, the data collection document, also records the columns of
+    the new table: without it the entry holds no specs and readers of the schema
+    (the dashboard builder) keep the previous columns.
+    """
+    from deltalake import DeltaTable
+
+    delta_loc = _delta_location_for(data_collection_id)
+    frame.write_delta(
+        delta_loc,
+        storage_options=polars_s3_config,
+        delta_write_options={"schema_mode": "overwrite"},
+        mode="overwrite",
+    )
+    try:
+        delta_version: int | None = DeltaTable(
+            delta_loc, storage_options=polars_s3_config
+        ).version()
+    except Exception as exc:
+        logger.debug(f"Delta version of {delta_loc} unreadable after write: {exc}")
+        delta_version = None
+
+    new_version = _bump_table_dc_aggregation(
+        data_collection_id,
+        current_user,
+        delta_loc,
+        frame,
+        write_mode=write_mode,
+        trigger=trigger,
+        delta_version=delta_version,
+        columns_specs=_columns_specs(data_collection_id, frame, dc_for_specs),
+    )
+    _invalidate_table_caches_for_dc(data_collection_id)
+    return new_version, delta_version
+
+
+def _columns_specs(data_collection_id: str, frame: pl.DataFrame, dc: dict | None) -> list | None:
+    """The specs of ``frame``, or None: a table written without them stays readable."""
+    if dc is None:
+        return None
+    from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+        precompute_columns_specs,
+        previous_column_types,
+    )
+    from depictio.api.v1.utils import agg_functions
+
+    try:
+        properties = (dc.get("config") or {}).get("dc_specific_properties") or {}
+        return precompute_columns_specs(
+            frame.lazy(),
+            agg_functions,
+            {"config": {"dc_specific_properties": properties}},
+            previous_types=previous_column_types(
+                deltatables_collection.find_one(
+                    {"data_collection_id": ObjectId(data_collection_id)}
+                )
+            ),
+        )
+    except Exception as exc:
+        logger.warning(f"Column specs not recorded for dc={data_collection_id}: {exc}")
+        return None
+
+
 def _process_table_uploads(
     *,
     data_collection_id: str,
@@ -297,12 +385,16 @@ def _process_table_uploads(
             ),
         )
 
-    _, dc_dict = _load_table_dc(data_collection_id, current_user)
+    project_doc, dc_dict = _load_table_dc(data_collection_id, current_user)
 
     # Best-effort ingestion-run ledger so UI uploads show in the admin
     # "Ingestion" pane next to CLI runs. Monitoring failures never block upload.
     run_id = _begin_ui_ingestion_run(
-        mode=mode, data_collection_id=data_collection_id, current_user=current_user
+        mode=mode,
+        data_collection_id=data_collection_id,
+        current_user=current_user,
+        project_id=str(project_doc["_id"]) if project_doc.get("_id") else None,
+        project_name=project_doc.get("name"),
     )
     try:
         result = _write_table_upload(
@@ -326,8 +418,18 @@ def _process_table_uploads(
     return result
 
 
-def _begin_ui_ingestion_run(*, mode: str, data_collection_id: str, current_user) -> str | None:
+def _begin_ui_ingestion_run(
+    *,
+    mode: str,
+    data_collection_id: str,
+    current_user,
+    project_id: str | None = None,
+    project_name: str | None = None,
+) -> str | None:
     """Best-effort: open an ingestion-run ledger record for a UI table upload.
+
+    ``project_id`` is the project owning the collection: without it the run
+    never shows in that project's ingestion history.
 
     Mirrors the CLI ``/monitoring/ingestion/start`` write so UI uploads appear in
     the admin "Ingestion" pane alongside CLI runs. Never raises — monitoring must
@@ -353,6 +455,9 @@ def _begin_ui_ingestion_run(*, mode: str, data_collection_id: str, current_user)
                 cli_hostname=socket.gethostname(),
                 user_id=str(getattr(current_user, "id", "") or "") or None,
                 email=getattr(current_user, "email", None),
+                project_id=project_id,
+                project_name=project_name,
+                trigger="ui",
                 status="running",
             )
         )
@@ -427,17 +532,13 @@ def _write_table_upload(
     frames.extend(new_dfs)
     combined_df = _align_and_concat(frames)
 
-    combined_df.write_delta(
-        delta_loc,
-        storage_options=polars_s3_config,
-        delta_write_options={"schema_mode": "overwrite"},
-        mode="overwrite",
+    new_version, _ = commit_table_frame(
+        data_collection_id=data_collection_id,
+        frame=combined_df,
+        current_user=current_user,
+        write_mode="append" if mode == "append" else "overwrite",
+        trigger="ui",
     )
-
-    new_version = _bump_table_dc_aggregation(
-        data_collection_id, current_user, delta_loc, combined_df
-    )
-    _invalidate_table_caches_for_dc(data_collection_id)
 
     rows_added = combined_df.height - rows_before
     return {
@@ -504,9 +605,7 @@ def clear_table_data(*, data_collection_id: str, current_user) -> dict:
             {"Key": obj["Key"]} for page in pages for obj in page.get("Contents", []) or []
         ]
         if objects_to_delete:
-            for i in range(0, len(objects_to_delete), 1000):
-                batch = objects_to_delete[i : i + 1000]
-                s3_client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+            delete_keys(s3_client, bucket, (o["Key"] for o in objects_to_delete))
             deleted_s3_count = len(objects_to_delete)
             logger.info(f"Cleared {deleted_s3_count} S3 object(s) under {delta_loc}")
         else:

@@ -1,0 +1,20 @@
+id: stableexpression_score_components
+name: Stability score components
+mode: expression/stability-components
+description: >-
+  The stability score of every candidate gene split into its parts, one row per
+  gene and part: each of the four normalised measures (Normfinder, geNorm M,
+  coefficient of variation, robust CV) times its weight, and the penalty for
+  the samples where the gene was not measured. A gene's parts add up to its
+  score.
+find:
+  path_glob: "**/reporting/all_genes_summary.csv"
+recipe: stableexpression/score_components.py
+fixture: score_components.tsv
+renders_as:
+  # The mean part per section, stacked: the height is the section's mean score
+  # and the segments say what drives it.
+  - { id: components_by_section, component: figure, visu_type: histogram,
+      dict_kwargs: { x: section, y: contribution, color: component, histfunc: avg } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: component }
+  - { component: table }

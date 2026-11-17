@@ -1,0 +1,8 @@
+case_id	individual	father	mother	sex	status	proband
+CASE_A	A_dad	0	0	1	1	0
+CASE_A	A_mum	0	0	2	1	0
+CASE_A	A_kid	A_dad	A_mum	2	2	1
+CASE_B	B_dad	0	0	1	1	0
+CASE_B	B_mum	0	0	2	1	0
+CASE_B	B_kid	B_dad	B_mum	1	2	1
+CASE_B	B_sis	B_dad	B_mum	2	1	0

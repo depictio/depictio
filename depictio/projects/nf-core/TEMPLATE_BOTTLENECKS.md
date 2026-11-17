@@ -804,6 +804,33 @@ worked around in the template and recorded in its `VALIDATION_REPORT.md`:
   of another pipeline's run as an mhcquant table. The run-directory match that would scope it
   is not wired into ingestion yet.
 
+## 33. Wave 4: viewers that do not exist yet, and cohort-level tables
+
+Found while building the wave 4 templates (2026-10); each is worked around in the template and
+recorded in its `VALIDATION_REPORT.md`:
+
+- **No JBrowse2 collection and no bioimage viewer.** rnavar, nascent and viralmetagenome draw
+  their tracks with `indexed_file` + `genome_view`, or a table-backed `genome_view` where the
+  files cannot be range-read (viralmetagenome publishes filtered VCFs next to the index of a
+  different file). mcmicro shows its OME-TIFFs as PNG previews written at fetch time by
+  `scripts/make_previews.py`, because a recipe cannot write files. Every such tile carries a
+  `TODO(jbrowse)` or `TODO(bioimage)` comment for the swap.
+- **The Image collection is unproven on an nf-core template.** mcmicro is the first to declare
+  one (`optional: true`), and the `spatial_cells` underlay reads it; neither has been ingested on
+  a stack yet.
+- **Cohort statistics do not follow sample filters.** stableexpression's stability scores are
+  computed over the whole cohort, so the persistent sample filters move its dataset tabs and the
+  per-sample violins only. genomeqc's orthogroup rows have no genome column, so its genome filter
+  does not narrow the UpSet.
+- **Whole tables served to hand-drawn kinds.** The `ideogram` never samples, so genomeqc's
+  75,704 tidk windows reach the browser whole; the load has not been measured live.
+- **More route flags set by hand** (section 31): stableexpression has no flag for a
+  `--skip_genorm` run, whose geNorm tiles render empty instead of being pruned; genomeqc's
+  genome-only route leaves the proteins tiles of Completeness empty.
+- **Runs that stop early.** nascent 2.3.0 aborted at transcript identification and
+  stableexpression's only run failed MULTIQC, so neither template has a MultiQC tab; rnavar's
+  release sync holds no calls, and the template is pinned to a 1.3.0dev run.
+
 ## Pipelines considered and not templated in this lot
 
 | pipeline | why not |
@@ -815,3 +842,6 @@ worked around in the template and recorded in its `VALIDATION_REPORT.md`:
 | raredisease, quantms, bacass | no usable megatest run at all |
 | methylseq | no usable megatest on a recent release. Templated in lot 2 on the complete 2.3.0 run |
 | rnasplice | wave 3, pending: the 1.0.4 megatest is a truncated sync with no MultiQC and no splicing output, so the template waits for an EMBL cluster `test_full` run. Fallback if that run fails twice: seqinspector 1.1.2, whose megatest is complete |
+| seqinspector | wave 4 reserve, left out to keep the wave at eight: QC only, its 1.1.2 megatest is complete |
+| molkart, sopa, spatialvi, spatialaxe | wave 4: no usable megatest, or a single sample; `spatial_cells` is ready for them |
+| scdownstream, circrna, pathogensurveillance, detaxizer, nanostring, pangenome | wave 4: no usable megatest at a recent major version, or a single sample |

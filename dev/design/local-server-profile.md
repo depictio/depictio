@@ -34,7 +34,7 @@ models). Only the configuration differs, and only through the existing
 
 | Component | Docker | Local (`depictio local up`) |
 |---|---|---|
-| MongoDB | image `mongo:8.0.14` | `mongodb 8.0.*` from conda-forge (8.0.23, the only 8.0 build there) |
+| MongoDB | image `mongo:8.0.34` (older 8.0 images refuse Linux 6.19+) | `mongodb 8.0.*` from conda-forge (8.0.23, the only 8.0 build there) |
 | Redis | image `redis:8.2.1` | `redis-server 8.*` from conda-forge (no 8.0, 8.2 or 8.4 build there) |
 | S3 | SeaweedFS (`weed mini`), image `chrislusf/seaweedfs:4.46` | `seaweedfs 4.*` from conda-forge, same `weed mini` |
 | Binaries | images | installed once by **py-rattler** (the library pixi is built on, a PyPI wheel) into `~/.depictio/local/env` |

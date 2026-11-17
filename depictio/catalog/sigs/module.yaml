@@ -2,6 +2,7 @@
 # signatures. nf-core/oncoanalyser publishes <group_id>/sigs/<tumor_id>.sig.*.
 id: sigs
 name: SIGS
+version: "1.0.0"
 description: >-
   Fits a tumor's 96-context SNV counts to COSMIC mutational signatures.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/sig-analyser

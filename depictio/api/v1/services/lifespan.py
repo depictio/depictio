@@ -18,6 +18,7 @@ from pymongo import AsyncMongoClient
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db_init import wipe_database
+from depictio.api.v1.endpoints.auth_endpoints.oidc import check_legacy_sso_env
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.services.background_tasks import delayed_process_data_collections
 from depictio.api.v1.services.branding import migrate_legacy_logo_files
@@ -37,8 +38,9 @@ from depictio.api.v1.tasks.backup_tasks import start_backup_tasks
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
+from depictio.models.models.dashboard_annotations import DashboardAnnotationsBeanie
 from depictio.models.models.dashboard_filter_state import DashboardFilterStateBeanie
-from depictio.models.models.google_oauth import OAuthStateBeanie
+from depictio.models.models.oauth_state import OAuthStateBeanie
 from depictio.models.models.projects import ProjectBeanie
 from depictio.models.models.users import (
     GroupBeanie,
@@ -80,6 +82,7 @@ async def init_pymongo_beanie() -> AsyncMongoClient:
             UserSession,
             UserActivity,
             DashboardFilterStateBeanie,
+            DashboardAnnotationsBeanie,
         ],
     )
     return client
@@ -212,7 +215,10 @@ async def start_event_services(should_initialize: bool) -> None:
     """
     Start real-time event services if enabled.
 
-    Only starts on the initializing worker to avoid duplicate MongoDB watchers.
+    Runs on every worker: a WebSocket client is held by the worker that accepted
+    it, and only that worker can push to it, so each one needs its own Redis
+    listener and heartbeat. Only the initializing worker also watches MongoDB,
+    to avoid announcing each change once per worker.
 
     Args:
         should_initialize: Whether this worker performed initialization
@@ -220,10 +226,8 @@ async def start_event_services(should_initialize: bool) -> None:
     if not settings.events.enabled:
         return
 
-    # Only start on the initializing worker (similar to YAML watcher pattern)
-    if should_initialize:
-        logger.info(f"Worker {WORKER_ID}: Starting real-time event service")
-        await event_service.start()
+    logger.info(f"Worker {WORKER_ID}: Starting real-time event service")
+    await event_service.start(watch_mongodb=should_initialize)
 
 
 async def stop_event_services() -> None:
@@ -251,6 +255,25 @@ def start_core_indexes(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")
 
 
+def start_migration_recovery(should_initialize: bool) -> None:
+    """Fail pushes and imports a restart cut short (#1303). Never fails boot.
+
+    Their background job lived in the process that died, so their status would
+    otherwise say "in progress" forever (and an in-flight push would block the
+    next push of its project).
+    """
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.services.migration_import import recover_interrupted_requests
+        from depictio.api.v1.services.migration_push import recover_interrupted_pushes
+
+        recover_interrupted_pushes()
+        recover_interrupted_requests()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: migration recovery failed: {exc}")
+
+
 def start_dashboard_version_storage(should_initialize: bool) -> None:
     """Create the dashboard version-ledger indexes. Never fails boot."""
     if not (settings.dashboard_versions.enabled and should_initialize):
@@ -264,6 +287,18 @@ def start_dashboard_version_storage(should_initialize: bool) -> None:
         logger.info(f"Worker {WORKER_ID}: Dashboard version storage ready")
     except Exception as exc:
         logger.warning(f"Worker {WORKER_ID}: Dashboard version storage setup failed: {exc}")
+
+
+def start_reader_marks_storage(should_initialize: bool) -> None:
+    """Create the reader-marks indexes (#1397). Never fails boot."""
+    if not (settings.dashboard_versions.changes_since_enabled and should_initialize):
+        return
+    try:
+        from depictio.api.v1.services.changes.store import ensure_reader_marks_storage
+
+        ensure_reader_marks_storage()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Reader marks storage setup failed: {exc}")
 
 
 def start_monitoring_storage(should_initialize: bool) -> None:
@@ -437,6 +472,8 @@ async def lifespan(_app: FastAPI):
     - Real-time event services
     """
     # Startup
+    # Removed SAML / deprecated Google OAuth variables must not fail silently.
+    check_legacy_sso_env()
     should_initialize, mongo_client = await handle_initialization()
     # Deliberately outside the `should_initialize` branch: an already-initialised
     # deployment never re-runs initialization, and it is exactly the deployment
@@ -446,7 +483,9 @@ async def lifespan(_app: FastAPI):
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
     start_core_indexes(should_initialize)
+    start_migration_recovery(should_initialize)
     start_dashboard_version_storage(should_initialize)
+    start_reader_marks_storage(should_initialize)
     start_monitoring_storage(should_initialize)
     start_comment_indexes(should_initialize)
     start_multiqc_prewarm(should_initialize)

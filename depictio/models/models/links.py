@@ -126,9 +126,10 @@ class DCLink(BaseModel):
     Phase 1 supports:
     - table: Direct column mapping or link-based filtering
     - multiqc: Sample name resolution via sample_mappings
+    - genomic_tracks: filters a track manifest (the jbrowse component then shows
+      the matching tracks); resolved like a table
 
     Future phases will add:
-    - jbrowse2: Track visibility based on sample patterns
     - images: Image selection based on metadata patterns
     - geomap: Marker/region filtering
 
@@ -171,11 +172,11 @@ class DCLink(BaseModel):
         description="Data collection tag for the target (used in templates, resolved to ID at instantiation)",
     )
 
-    target_type: Literal["table", "multiqc", "image"] = Field(
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"] = Field(
         ...,
         description="Type of the target DC. Determines which resolver strategies are valid. "
-        "Supported: 'table', 'multiqc', 'image'. "
-        "Future: 'jbrowse2', 'geomap'",
+        "Supported: 'table', 'multiqc', 'image', 'genomic_tracks'. "
+        "Future: 'geomap'",
     )
 
     link_config: LinkConfig = Field(
@@ -240,6 +241,18 @@ class DCLink(BaseModel):
         return self
 
 
+class TextMatchSpec(BaseModel):
+    """How a ``TextInput`` pattern is matched (mirrors the component's own options)."""
+
+    case_sensitive: bool = Field(default=False, description="Match letter case exactly")
+    match_mode: Literal["regex", "contains"] = Field(
+        default="regex",
+        description="regex: the pattern is a regular expression; contains: literal text",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class LinkResolutionRequest(BaseModel):
     """Request to resolve filtered values via a link.
 
@@ -293,6 +306,16 @@ class LinkResolutionRequest(BaseModel):
             "values. The rows inside the range are translated to the link's join column "
             "before resolving, so a position or q-value slider reaches the linked "
             "collection as the ids it selects, not as two ids that do not exist."
+        ),
+    )
+
+    text_match: TextMatchSpec | None = Field(
+        default=None,
+        description=(
+            "filter_values is the single pattern of a TextInput on source_column, to be "
+            "matched against that column rather than compared to it. The rows whose text "
+            "matches are translated to the link's join column before resolving, so a "
+            "sequence pattern reaches the linked collection as the ids it selects."
         ),
     )
 
@@ -372,7 +395,9 @@ class LinkCreateRequest(BaseModel):
     source_dc_id: str = Field(..., description="Source data collection ID")
     source_column: str = Field(..., description="Column name in source DC")
     target_dc_id: str = Field(..., description="Target data collection ID")
-    target_type: Literal["table", "multiqc", "image"] = Field(..., description="Target DC type")
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"] = Field(
+        ..., description="Target DC type"
+    )
     link_config: LinkConfig = Field(default_factory=LinkConfig)
     description: str | None = Field(default=None)
     enabled: bool = Field(default=True)
@@ -389,7 +414,7 @@ class LinkUpdateRequest(BaseModel):
     source_dc_id: str | None = Field(default=None)
     source_column: str | None = Field(default=None)
     target_dc_id: str | None = Field(default=None)
-    target_type: Literal["table", "multiqc", "image"] | None = Field(default=None)
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"] | None = Field(default=None)
     link_config: LinkConfig | None = Field(default=None)
     description: str | None = Field(default=None)
     enabled: bool | None = Field(default=None)
@@ -503,3 +528,26 @@ def resolve_link_tag_refs(project: dict) -> dict:
             if (not raw or raw.startswith("tag:")) and tag and tag in tag_to_id:
                 link[id_field] = tag_to_id[tag]
     return project
+
+
+class LinkValueExample(BaseModel):
+    """One source value and what a link would reach with it (nothing: not found)."""
+
+    source: str
+    targets: list[str] = Field(default_factory=list)
+
+
+class LinkSuggestion(BaseModel):
+    """A link worth proposing: a source column whose values the target holds."""
+
+    source_dc_id: str
+    source_dc_tag: str
+    source_column: str
+    target_dc_id: str
+    target_dc_tag: str
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"]
+    resolver: Literal["direct", "sample_mapping"]
+    target_field: str | None = None
+    matched: int = Field(..., description="Distinct source values found in the target")
+    total: int = Field(..., description="Distinct source values read")
+    examples: list[LinkValueExample] = Field(default_factory=list)

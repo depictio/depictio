@@ -9,6 +9,7 @@ import React from 'react';
 import { Button, Group, Loader, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { useBrandAccents } from 'depictio-react-core';
 import type { FolderInspection, RunStorageIn, RunTemplateMatch } from 'depictio-react-core';
 
 import { RunChecks } from './RunChecks';
@@ -67,7 +68,8 @@ const DetectedChecks: React.FC<{
   match: RunTemplateMatch | null;
   storage: RunStorageIn | null;
 }> = ({ result, templateId, templateTitle, templateEngine, match, storage }) => {
-  const plan = useRunPlan(result.location, templateId, storage);
+  const childRuns = result.looks_like_run ? null : (result.child_runs ?? null);
+  const plan = useRunPlan(result.location, templateId, storage, childRuns);
   return (
     <RunChecks
       location={result.location}
@@ -96,6 +98,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
   errorHint,
   errorMessage,
 }) => {
+  const accent = useBrandAccents();
   if (state.status === 'idle') return null;
 
   let body: React.ReactNode;
@@ -118,14 +121,36 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           {errorMessage || state.error}
         </Text>
         <Text size="xs" c="dimmed" data-testid="run-detection-error-hint">
-          {errorHint || 'You can still pick the pipeline below and preview the folder.'}
+          {errorHint || 'Check the path, or use Browse to pick a folder this server can read.'}
         </Text>
       </Line>
     );
   } else {
     const { result } = state;
     const detected = result.detected;
-    if (!detected?.pipeline) {
+    if (!detected?.pipeline && templateId) {
+      // Nothing in the folder names a pipeline, but one was chosen: the
+      // checks are those of the chosen pipeline, as for a detected one.
+      body = (
+        <Stack gap="sm">
+          <Text size="sm" c="dimmed" data-testid="run-detection-chosen">
+            Not recognised from the folder: checked against{' '}
+            <Text span size="sm" fw={600} c="inherit">
+              {templateTitle ?? templateId}
+            </Text>
+            , as you chose.
+          </Text>
+          <DetectedChecks
+            result={result}
+            templateId={templateId}
+            templateTitle={templateTitle}
+            templateEngine={templateEngine}
+            match={match}
+            storage={storage}
+          />
+        </Stack>
+      );
+    } else if (!detected?.pipeline) {
       body = (
         <Line icon="mdi:folder-question-outline" color="gray">
           <Text size="sm" fw={600}>
@@ -133,7 +158,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           </Text>
           <Text size="sm" c="dimmed">
             {result.looks_like_run
-              ? 'The folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio has a template for. Pick the pipeline below.'
+              ? 'The folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio knows. Pick the pipeline below.'
               : 'The folder holds no pipeline_info folder or MultiQC report, so it does not look like the output of a run. Check the folder, or pick the pipeline below.'}
           </Text>
         </Line>
@@ -153,13 +178,14 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           {onUseDetected && detectedId && templateId && templateId !== detectedId && (
             <Group>
               <Button
-                size="xs"
+                color={accent.secondary}
+                size="sm"
                 variant="light"
                 leftSection={<Icon icon="mdi:auto-fix" width={14} />}
                 onClick={onUseDetected}
                 data-testid="run-use-detected"
               >
-                Use the detected template
+                Use the detected pipeline
               </Button>
             </Group>
           )}

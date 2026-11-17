@@ -7,7 +7,6 @@ client-side. No Dash UI dependencies.
 import hashlib
 import os
 import tempfile
-import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -27,9 +26,11 @@ from depictio.cli.cli.utils.multiqc_figures import (
     build_multiqc_figure,
     multiqc_figure_cache_key,
 )
+from depictio.cli.cli.utils.multiqc_state import MULTIQC_STATE_LOCK
 
-# Global lock to prevent concurrent MultiQC operations (MultiQC global state is not thread-safe)
-_multiqc_lock = threading.RLock()
+# MultiQC's state is the module's: the one lock every reader in the process
+# takes (ingestion, prerender and the run-folder checks too).
+_multiqc_lock = MULTIQC_STATE_LOCK
 
 
 # Tracks which DC's report (keyed by ``_generate_cache_key(s3_locations)``) is

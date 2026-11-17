@@ -418,6 +418,39 @@ RUNS: list[RunSpec] = [
         inject_samplesheet=False,
         note="phylogenetic placement, a route none of the four ampliseq scenarios takes",
     ),
+    # --- somatic -----------------------------------------------------------------
+    RunSpec(
+        key="sarek-somatic",
+        pipeline="sarek",
+        version="3.10.0",
+        profile="test",
+        revision="3.10.0",
+        nxf_ver="25.10.7",
+        # The test pair (normal + tumour of one patient), so the run publishes the
+        # paired `<tumour>_vs_<normal>` calls next to the per-sample germline ones.
+        extra_args=[
+            "--input",
+            "https://raw.githubusercontent.com/nf-core/sarek/3.10.0/tests/csv/3.0/fastq_pair.csv",
+            # No manta: its GetAlignmentStats fails on the test CRAMs (too few reads).
+            "--tools",
+            "strelka,mutect2,cnvkit,msisensorpro",
+        ],
+        samples=2,
+        note="tumour/normal pair: germline per sample plus the paired somatic calls",
+    ),
+    RunSpec(
+        key="sarek-full",
+        pipeline="sarek",
+        version="3.10.0",
+        profile="test_full",
+        revision="3.10.0",
+        nxf_ver="25.10.7",
+        # The profile reads its target BED and the iGenomes references from public
+        # S3 buckets, which the cluster reaches without credentials only this way.
+        extra_args=["-c", f"{HPC_ROOT}/aws_anonymous.config"],
+        samples=2,
+        note="HCC1395 WXS tumour/normal on GRCh38: real somatic SNVs, SVs, copy number and MSI",
+    ),
     RunSpec(
         key="rnaseq-full",
         pipeline="rnaseq",
@@ -452,6 +485,16 @@ RSYNC_EXCLUDES = [
     "*.bw",
     "*.bedGraph",
     "*.bedgraph",
+    # mosdepth's per-base coverage: ~500 MB per sample on a WXS run, and no
+    # template scans it (sarek reads the .regions.bed.gz and the summary).
+    "*.per-base.bed.gz",
+    "*.per-base.bed.gz.csi",
+    # CNVkit intermediates (bin coverages, references, capture beds) and MuSE's
+    # raw call table: ~180 MB each on WXS, none scanned. The .cnr/.cns stay.
+    "*.cnn",
+    "*.target.bed",
+    "*.antitarget.bed",
+    "*.MuSE.txt",
     "*.2bit",
     "*.ht2",
     "*.bt2",

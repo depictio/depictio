@@ -1,0 +1,15 @@
+sample	checkv_run	contig_id	contig_length	provirus	proviral_length	gene_count	viral_genes	host_genes	checkv_quality	miuvig_quality	completeness	completeness_method	contamination	kmer_freq	warnings
+SRR11140744	SRR11140744_BA2-CONSTRAINT	SRR11140744_BA2-CONSTRAINT_itvariant-calling.consensus_ivar	29900	No		11	0	0	High-quality	Genome-fragment	99.62	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140744	SRR11140744_BA24-CONSTRAINT	SRR11140744_BA24-CONSTRAINT_itvariant-calling.consensus_ivar	29866	No		11	0	0	High-quality	Genome-fragment	99.71	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140744	SRR11140744_MN908947-CONSTRAINT	SRR11140744_MN908947-CONSTRAINT_itvariant-calling.consensus_ivar	29900	No		11	0	0	High-quality	Genome-fragment	99.71	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140744	SRR11140744_cl0	SRR11140744_cl0_consensus	29902	No		9	0	0	High-quality	Genome-fragment	98.4	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140744	SRR11140744_cl0	SRR11140744_cl0_it1.consensus_bcftools	29900	No		11	0	0	High-quality	Genome-fragment	99.7	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140744	SRR11140744_cl0	SRR11140744_cl0_itvariant-calling.consensus_ivar	29900	No		11	0	0	High-quality	Genome-fragment	99.7	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140746	SRR11140746_BA24-CONSTRAINT	SRR11140746_BA24-CONSTRAINT_itvariant-calling.consensus_ivar	29866	No		11	0	0	High-quality	Genome-fragment	99.68	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140746	SRR11140746_cl0	SRR11140746_cl0_consensus	29900	No		9	0	0	High-quality	Genome-fragment	98.1	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140746	SRR11140746_cl0	SRR11140746_cl0_it1.consensus_bcftools	29900	No		9	0	0	High-quality	Genome-fragment	99.7	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140746	SRR11140746_cl0	SRR11140746_cl0_itvariant-calling.consensus_ivar	29900	No		11	0	0	High-quality	Genome-fragment	99.7	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140748	SRR11140748_BA24-CONSTRAINT	SRR11140748_BA24-CONSTRAINT_itvariant-calling.consensus_ivar	29866	No		8	0	0	High-quality	Genome-fragment	99.68	AAI-based (high-confidence)	0.0	1.0	no viral genes detected
+SRR11140748	SRR11140748_MN908947-CONSTRAINT	SRR11140748_MN908947-CONSTRAINT_itvariant-calling.consensus_ivar	29900	No		8	0	0	High-quality	Genome-fragment	99.71	AAI-based (high-confidence)	0.0	1.0	no viral genes detected
+SRR11140748	SRR11140748_cl0	SRR11140748_cl0_consensus	29900	No		8	0	0	High-quality	Genome-fragment	98.3	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR
+SRR11140748	SRR11140748_cl0	SRR11140748_cl0_it1.consensus_bcftools	29900	No		8	0	0	High-quality	Genome-fragment	99.7	AAI-based (high-confidence)	0.0	1.0	no viral genes detected; low-confidence DTR

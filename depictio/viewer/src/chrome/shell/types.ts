@@ -53,6 +53,9 @@ export interface DashboardShellProps {
     desktopOpened: boolean;
     toggleMobile: () => void;
     toggleDesktop: () => void;
+    /** Folds or unfolds the sidebar without remembering it: the room a right
+     *  panel borrows. Absent where the layout keeps its own sidebar state. */
+    fold?: (open: boolean) => void;
   };
   /** The version-preview and ingestion banners, the boot splash and load
    *  errors. Drawn above the canvas whether or not the page is ready. */
@@ -61,6 +64,9 @@ export interface DashboardShellProps {
   canvas: React.ReactNode;
   /** The full-width strip of `placement: top` controls (Timeline), or null. */
   topStrip: React.ReactNode | null;
+  /** The canvas opens on the tab's own heading (`TabIntro`). A chrome style may
+   *  then drop the tab's icon from the top bar. */
+  tabIntro?: boolean;
   filters: {
     /** The panel's filter components (the docked column's members). */
     members: StoredMetadata[];
@@ -75,6 +81,8 @@ export interface DashboardShellProps {
     docked: {
       opened: boolean;
       toggle: () => void;
+      /** Like `toggle` but to a given state and not remembered (see `nav.fold`). */
+      fold?: (open: boolean) => void;
       /** Resizable width, px, and the CSS variable the grid track reads. */
       width: number;
       widthVar: string;

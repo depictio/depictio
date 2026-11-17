@@ -32,6 +32,7 @@ from depictio.api.v1.endpoints.dashboards_endpoints import (
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     sync_tab_family_permissions,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_dashboard_unlocked
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboard_versions import TAB_IDENTITY_FIELDS, TabSnapshot
@@ -435,6 +436,8 @@ async def delete_dashboard_version(
     deliberately rather than by a mis-click.
     """
     record = _guarded_version(version_id, current_user, "owner")
+    # A release's history is part of what was published.
+    assert_dashboard_unlocked(record["family_id"])
 
     if record.get("pinned") and not force:
         raise HTTPException(
@@ -517,6 +520,7 @@ async def restore_dashboard_version(
     main = dashboards_collection.find_one({"dashboard_id": family_id})
     if not main:
         raise HTTPException(status_code=404, detail="Dashboard family's main tab not found.")
+    assert_dashboard_unlocked(main)
 
     snapshot_tabs = record.get("tabs") or []
     if not snapshot_tabs:
@@ -663,6 +667,7 @@ async def restore_component_from_version(
     main = dashboards_collection.find_one({"dashboard_id": family_id})
     if not main:
         raise HTTPException(status_code=404, detail="Dashboard family's main tab not found.")
+    assert_dashboard_unlocked(main)
 
     # Locate the component in the snapshot by tab and index: a component
     # restored into the wrong tab would be as good as lost.

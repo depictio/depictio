@@ -34,6 +34,11 @@ export interface GeneAnnotation {
   genes: GeneRow[];
 }
 
+/** Assemblies a bundled gene table exists for (`public/assets/genomes/`). Any
+ *  other asks for nothing rather than 404ing on a file that is not there. Add
+ *  one here when `build_genome_gene_assets.py` has produced it. */
+export const GENE_ASSET_ASSEMBLIES: readonly string[] = ['hg38', 'hg19', 'mm10'];
+
 /** Where the assets live, relative to the app's base URL. */
 export const GENE_ASSET_DIR = 'assets/genomes';
 
@@ -87,10 +92,11 @@ const cache = new Map<string, Promise<GeneAnnotation | null>>();
 
 /**
  * Fetch and decode the gene table for `assembly`, or resolve to `null` when
- * the asset is missing or malformed. `'none'` short-circuits without a fetch.
+ * the asset is missing or malformed. `'none'` and an assembly with no bundled
+ * table (hg18, dm6, a data-derived axis) short-circuit without a fetch.
  */
 export function loadGeneAnnotation(assembly: string | null | undefined): Promise<GeneAnnotation | null> {
-  if (!assembly || assembly === 'none') return Promise.resolve(null);
+  if (!assembly || !GENE_ASSET_ASSEMBLIES.includes(assembly)) return Promise.resolve(null);
   const hit = cache.get(assembly);
   if (hit) return hit;
   const pending = fetch(geneAssetUrl(assembly))

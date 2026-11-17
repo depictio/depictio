@@ -93,7 +93,10 @@ jobs:
       # What a codespace start runs: the binaries and the examples must already be there.
       - name: Test
         run: |
-          docker run -d --name try "$IMAGE:$TAG" sleep infinity
+          # CI=true does not cross into the container, and `docker exec` below inherits
+          # this container's environment: the opt-out has to be set here. `local up`
+          # passes DEPICTIO_TELEMETRY_* on to the server it starts.
+          docker run -d --name try -e DEPICTIO_TELEMETRY_ENABLED=false "$IMAGE:$TAG" sleep infinity
           docker exec try test -f /home/vscode/.depictio/local/env/.depictio-specs.json
           # Polars falls back to its default runtime once the compat one is removed.
           docker exec try /home/vscode/.local/share/uv/tools/depictio/bin/python -c \

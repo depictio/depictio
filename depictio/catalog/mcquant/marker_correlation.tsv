@@ -1,0 +1,15 @@
+marker_row	segmenter	marker	marker_role	DNA_6	ELANE	CD57	CD45	DNA_7	CD577	CD457
+DNA_6 (Cellpose)	Cellpose	DNA_6	Nuclear stain	1.0	-0.4174	-0.1392	0.3553	-0.2368	-0.1074	-0.2835
+ELANE (Cellpose)	Cellpose	ELANE	Marker	-0.4174	1.0	0.2069	-0.087	-0.0628	0.0516	0.059
+CD57 (Cellpose)	Cellpose	CD57	Marker	-0.1392	0.2069	1.0	0.46	-0.4465	-0.2576	-0.2517
+CD45 (Cellpose)	Cellpose	CD45	Marker	0.3553	-0.087	0.46	1.0	-0.9197	-0.2732	-0.7788
+DNA_7 (Cellpose)	Cellpose	DNA_7	Nuclear stain	-0.2368	-0.0628	-0.4465	-0.9197	1.0	0.2001	0.8644
+CD577 (Cellpose)	Cellpose	CD577	Marker	-0.1074	0.0516	-0.2576	-0.2732	0.2001	1.0	0.1538
+CD457 (Cellpose)	Cellpose	CD457	Marker	-0.2835	0.059	-0.2517	-0.7788	0.8644	0.1538	1.0
+DNA_6 (Mesmer)	Mesmer	DNA_6	Nuclear stain	1.0	-0.2513	0.0102	0.2306	-0.1143	-0.0843	-0.169
+ELANE (Mesmer)	Mesmer	ELANE	Marker	-0.2513	1.0	0.2018	0.2146	-0.2376	0.2	-0.0271
+CD57 (Mesmer)	Mesmer	CD57	Marker	0.0102	0.2018	1.0	0.4147	-0.319	-0.0743	-0.107
+CD45 (Mesmer)	Mesmer	CD45	Marker	0.2306	0.2146	0.4147	1.0	-0.7928	-0.1328	-0.5506
+DNA_7 (Mesmer)	Mesmer	DNA_7	Nuclear stain	-0.1143	-0.2376	-0.319	-0.7928	1.0	0.155	0.7708
+CD577 (Mesmer)	Mesmer	CD577	Marker	-0.0843	0.2	-0.0743	-0.1328	0.155	1.0	0.2427
+CD457 (Mesmer)	Mesmer	CD457	Marker	-0.169	-0.0271	-0.107	-0.5506	0.7708	0.2427	1.0

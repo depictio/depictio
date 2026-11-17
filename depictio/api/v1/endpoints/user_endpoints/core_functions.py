@@ -15,6 +15,9 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
     claim_pending_pi_groups,
 )
+from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
+    claim_pending_project_ownership_quietly,
+)
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
@@ -295,6 +298,12 @@ async def _cleanup_expired_temporary_users() -> dict:
                         )
 
                         delete_threads_for_dashboards([dashboard.get("dashboard_id")])
+                        from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+                            delete_annotations_for_dashboards,
+                        )
+
+                        # Other viewers' annotations on it would be unreachable.
+                        delete_annotations_for_dashboards([dashboard.get("dashboard_id")])
                         # A main tab takes its family's version ledger with it,
                         # as the dashboard delete route does; a child tab's
                         # versions belong to a family that may outlive it.
@@ -328,7 +337,12 @@ async def _cleanup_expired_temporary_users() -> dict:
                 await token.delete()
                 tokens_deleted += 1
 
-            # 6. Delete the user
+            # 6. Delete the user, and anything it annotated on other dashboards
+            from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+                delete_annotations_for_user,
+            )
+
+            delete_annotations_for_user(user.id)
             await user.delete()
             users_deleted += 1
 
@@ -786,6 +800,7 @@ async def _create_user_in_db(
     is_anonymous: bool = False,
     id: PyObjectId = None,  # type: ignore[invalid-parameter-default]
     group: str | None = None,
+    claim_pending_owner: bool = False,
 ) -> dict[str, bool | str | UserBeanie | None] | None:
     """
     Helper function to create a user in the database using Beanie.
@@ -795,6 +810,8 @@ async def _create_user_in_db(
         password: Raw password (will be hashed)
         group: User's group (optional)
         is_admin: Whether user is admin
+        claim_pending_owner: Hand over projects parked on this email (#1303). Only
+            for accounts an admin creates: a self-registered address is unverified.
 
     Returns:
         The created UserBeanie object if successful
@@ -837,6 +854,8 @@ async def _create_user_in_db(
             logger.error(
                 f"Pending P.I. claim failed for {email} (designation stays parked): {claim_error}"
             )
+        if claim_pending_owner:
+            await claim_pending_project_ownership_quietly(user_beanie)
         return {
             "success": True,
             "message": "User created successfully",

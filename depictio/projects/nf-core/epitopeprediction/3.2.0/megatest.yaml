@@ -1,0 +1,86 @@
+# Megatest manifest for nf-core/epitopeprediction 3.2.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline epitopeprediction --version 3.2.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored samplesheet
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# test_full profile: eleven samplesheet rows exercising every input route on
+# synthetic test data, not a cohort: six VCF rows (one class II, one gzipped,
+# one with a germline VCF, one with nearby variants, one Strelka-style), one
+# protein FASTA and four peptide tables, two of them predicted against every
+# supported allele (HLA-all). Tools mhcflurry, mhcnuggets and mhcnuggetsii,
+# --wide_format_output and --wild_type. The run prefix holds three runs of the
+# release (2026-10-15 and twice 2026-10-17); `pipeline_info/params_*.json` is
+# taken as the latest, and the outputs are those of the last run.
+#
+# The pipeline does not publish the samplesheet it ran on; the template ships it
+# under input/ (METADATA_FILE) and download_test_data.sh copies it into
+# {dest}/input/. It is the test-datasets sheet the run's params.json names
+# (testdata/sample_sheets/sample_sheet_full_test.csv), unchanged.
+pipeline: epitopeprediction
+version: "3.2.0"
+# s3://nf-core-awsmegatests/epitopeprediction/results-<results_sha>/ == the 3.2.0 release tag_sha.
+results_sha: "e637bc7c49e6e05a09f5207501a142ec68d8570b"
+run_root: ""
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet: the binding-prediction custom content and bcftools stats.
+  - multiqc/multiqc_data/multiqc.parquet
+  # The merged predictions, one table per sample (wide format in this run: one
+  # sample screened against every allele has some 35,000 columns, 3.4 MB).
+  - predictions/*.tsv
+  # The candidate peptides of the VCF rows, one table per sample and length.
+  - variant_peptides/*.tsv
+  #
+  # Deliberately NOT fetched:
+  #   mhcflurry/, mhcnuggets/: the per-tool, per-chunk raw predictions; the
+  #     merged predictions/ tables hold the same scores (and the class II tool
+  #     writes no per-tool directory here).
+  #   variant_fasta/: the wild-type and mutant protein context around each
+  #     variant, a search database for proteogenomics, not a table.
+  #   multiqc_report.html, multiqc_plots/: the rendered report.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - variants_gz
+  - variants_classII
+  - germline
+  - proximal
+  - strelka
+  - sample3
+  - sample4
+  - sample5
+  - sample6
+  - sample7
+  - TUMOR
+  - CEBPA
+  - FGFR3
+  - APLP1
+  - HLA-A*01:01
+  - HLA-A*02:01
+  - HLA-DRB1*01:01
+  - chr4_chr19
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not published by the pipeline: the template reads
+  # {dest}/input/samplesheet.csv (download_test_data.sh copies the vendored one
+  # there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/epitopeprediction/3.2.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/epitopeprediction/3.2.0 --data-root {dest}

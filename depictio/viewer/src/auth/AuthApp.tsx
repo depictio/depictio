@@ -5,13 +5,14 @@ import { createTemporaryUser, getAnonymousSession, persistSession } from 'depict
 
 import AuthBackground from './components/AuthBackground';
 import AuthCard from './components/AuthCard';
-import GoogleOAuthCallback from './components/GoogleOAuthCallback';
+import LegacyOAuthCallbackForwarder from './components/LegacyOAuthCallbackForwarder';
 import MagicLinkCallback from './components/MagicLinkCallback';
 import LoginForm from './components/LoginForm';
 import PublicAccessGate from './components/PublicAccessGate';
 import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
 import { withAuthPreview } from './preview';
+import { readSsoErrorCode, ssoErrorMessage } from './ssoErrors';
 import './styles/auth.css';
 
 import { SIGN_IN_PATH } from './guestSignIn';
@@ -42,6 +43,8 @@ export default function AuthApp() {
   const status = useMemo(() => withAuthPreview(served), [served]);
   const [autoSessionError, setAutoSessionError] = useState<string | null>(null);
   const glass = useGlassPages();
+  // A failed single sign-on comes back as `/auth?error=<code>`.
+  const ssoError = useMemo(() => ssoErrorMessage(readSsoErrorCode()), []);
   const branding = useBranding();
   // `/auth/login` is an explicit request to sign in. On a public instance
   // `/auth` mints a guest session and moves on; here the form is shown
@@ -102,16 +105,18 @@ export default function AuthApp() {
     return () => { cancelled = true; };
   }, [loading, status, view, wantsSignIn]);
 
+  const providers = status?.sso_providers ?? [];
+
   const handleSuccess = () => window.location.assign(postAuthDestination());
 
   if (glass) {
     const appName = branding?.app_name || 'depictio';
-    // The password form goes only when another door is open (Google or SSO).
+    // The password form goes only when another door is open (an SSO provider).
     const showCredentials =
       !(status?.password_login_disabled ?? false) ||
-      !(status?.google_oauth_enabled || status?.saml_enabled);
+      !(providers.length > 0);
     let card: React.ReactNode;
-    if (view === 'oauth-callback') card = <GoogleOAuthCallback />;
+    if (view === 'oauth-callback') card = <LegacyOAuthCallbackForwarder />;
     else if (view === 'magic-callback') card = <MagicLinkCallback />;
     else if (loading) {
       card = (
@@ -180,9 +185,8 @@ export default function AuthApp() {
           }
         >
           <LoginForm
-            googleEnabled={status?.google_oauth_enabled ?? false}
-            samlEnabled={status?.saml_enabled ?? false}
-            samlLabel={status?.saml_login_label}
+            providers={providers}
+            ssoError={ssoError}
             passwordLoginDisabled={status?.password_login_disabled ?? false}
             onSuccess={handleSuccess}
           />
@@ -219,7 +223,7 @@ export default function AuthApp() {
       <AuthBackground />
       <div className="auth-page-content">
         {view === 'oauth-callback' ? (
-          <GoogleOAuthCallback />
+          <LegacyOAuthCallbackForwarder />
         ) : view === 'magic-callback' ? (
           <MagicLinkCallback />
         ) : loading ? (
@@ -264,7 +268,8 @@ export default function AuthApp() {
         ) : (
           <AuthCard heading="Welcome to Depictio :">
             <LoginForm
-              googleEnabled={status?.google_oauth_enabled ?? false}
+              providers={providers}
+              ssoError={ssoError}
               passwordLoginDisabled={status?.password_login_disabled ?? false}
               onSwitchToRegister={
                 status?.registration_disabled ? undefined : () => setView('register')

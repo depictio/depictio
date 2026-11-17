@@ -5,6 +5,7 @@
 # the dashboard.
 id: cmaple
 name: CMAPLE
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cmaple
 homepage: https://github.com/iqtree/cmaple
 biotools_url: null  # no bio.tools entry for this tool

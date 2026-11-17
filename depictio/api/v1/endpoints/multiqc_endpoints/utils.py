@@ -8,12 +8,14 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import multiqc_collection
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.s3 import s3_client
 
 # Import build_sample_mapping from CLI utils to avoid code duplication
 # This function is now shared between API and CLI without circular dependencies
 from depictio.cli.cli.utils.sample_mapping import build_sample_mapping
 from depictio.models.models.multiqc_reports import MultiQCReport, general_stats_available
+from depictio.models.s3_utils import delete_keys
 
 # Re-export for backward compatibility
 __all__ = ["build_sample_mapping"]
@@ -446,11 +448,7 @@ async def delete_multiqc_report_by_id(report_id: str, delete_s3_file: bool = Fal
                                 objects_to_delete.append({"Key": obj["Key"]})
 
                     if objects_to_delete:
-                        # Delete in batches of 1000 (S3 limit)
-                        batch_size = 1000
-                        for i in range(0, len(objects_to_delete), batch_size):
-                            batch = objects_to_delete[i : i + batch_size]
-                            s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
+                        delete_keys(s3_client, bucket_name, (o["Key"] for o in objects_to_delete))
 
                         logger.info(
                             f"Deleted {len(objects_to_delete)} S3 objects from: {report.s3_location}"
@@ -527,10 +525,7 @@ async def delete_all_multiqc_reports_for_dc(
                 if not objects_to_delete:
                     logger.warning(f"No S3 objects found at: {s3_location}")
                     continue
-                batch_size = 1000
-                for i in range(0, len(objects_to_delete), batch_size):
-                    batch = objects_to_delete[i : i + batch_size]
-                    s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
+                delete_keys(s3_client, bucket_name, (o["Key"] for o in objects_to_delete))
                 logger.info(f"Deleted {len(objects_to_delete)} S3 objects from: {s3_location}")
                 deleted_s3_count += 1
             except Exception as s3_error:
@@ -744,6 +739,7 @@ def _replace_multiqc_dc_uploads(
         raise HTTPException(
             status_code=404, detail=f"Data collection {data_collection_id} not found."
         )
+    assert_project_unlocked(project_doc)
 
     workflow, dc = _load_workflow_and_dc(project_doc, data_collection_id)
     if workflow is None or dc is None:
@@ -817,6 +813,22 @@ def _replace_multiqc_dc_uploads(
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def _reports_replacing(merged_reports: list[dict], old_report_ids: set[str]) -> list[dict]:
+    """The reports an append leaves behind: the reprocessed set, without the old rows.
+
+    An append reprocesses every existing report alongside the new uploads, so
+    the new rows already hold the old reports' samples, and the old rows are
+    deleted right after. Validating old and new together compared each report
+    with its own copy: it passed only when the reprocess numbered the files
+    in the same order ("MultiQC Report N" matched), which the directory
+    listing does not promise, and failed with "Sample ... appears in multiple
+    reports" otherwise. Before the reprocess writes anything (no new rows),
+    the old set is what stays, and is returned as is.
+    """
+    new = [r for r in merged_reports if str(r.get("_id")) not in old_report_ids]
+    return new or merged_reports
+
+
 def _append_multiqc_dc_uploads(
     *,
     data_collection_id: str,
@@ -857,6 +869,7 @@ def _append_multiqc_dc_uploads(
         raise HTTPException(
             status_code=404, detail=f"Data collection {data_collection_id} not found."
         )
+    assert_project_unlocked(project_doc)
 
     workflow, dc = _load_workflow_and_dc(project_doc, data_collection_id)
     if workflow is None or dc is None:
@@ -942,7 +955,7 @@ def _append_multiqc_dc_uploads(
             str(r.get("_id")) for r in merged_reports if str(r.get("_id")) not in old_id_set
         ]
         try:
-            validate_multiqc_reports_uniform(merged_reports)
+            validate_multiqc_reports_uniform(_reports_replacing(merged_reports, old_id_set))
         except HTTPException:
             _rollback_reports(new_report_ids, context="append uniformity rollback")
             raise

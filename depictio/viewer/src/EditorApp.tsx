@@ -48,6 +48,7 @@ import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import TabLinkProvider from './chrome/TabLinkProvider';
+import GenomeBrowserTargetProvider from './chrome/GenomeBrowserTargetProvider';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
@@ -107,6 +108,10 @@ import {
   readEditorFilters,
   writeEditorFilters,
   useSelectionGroups,
+  withShared,
+  emptyAnnotations,
+  annotationColumnBudget,
+  labelScope,
   useCategoricalColumns,
   useColorByColumnRender,
   resolveGroupRender,
@@ -116,6 +121,7 @@ import {
   buildGuideModel,
   resolveGuideSettings,
   CategoryColorsContext,
+  TabColorContext,
   barSectionNames,
   filtersInScope,
   hasSectionBar,
@@ -128,9 +134,12 @@ import {
   AdvancedVizConfigDraftProvider,
   AdvancedVizPlacementDefaultProvider,
   DataVersionProvider,
+  HttpStatusError,
   dataVersionBody,
   dataPinBody,
   fetchDashboardVersion,
+  fetchDashboardChanges,
+  panelsFromGroups,
   isCurrentDataOnlyType,
   isHttpStatus,
   DATA_VERSION_GONE_EVENT,
@@ -153,6 +162,7 @@ import type {
   RealtimeJournalEntry,
   GroupRenderState,
   ControlsPlacement,
+  BulkComputeOptions,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -160,12 +170,26 @@ import SectionModal from './components/sections/SectionModal';
 import GroupingHeaderControl, {
   ANALYSIS_PANEL_WIDTH_PX,
 } from './components/GroupingHeaderControl';
+import AnnotationPanel from './components/annotations/AnnotationPanel';
+import MetadataHeaderControl, {
+  useMetadataPanelWidth,
+} from './components/annotations/MetadataHeaderControl';
+import { useAnnotationTables } from './components/annotations/useAnnotationTables';
+import {
+  defaultAnnotationTable,
+  warmAnnotationTable,
+} from './components/annotations/annotationTableRead';
+import {
+  type AnnotationStorage,
+  useDashboardAnnotations,
+} from './components/annotations/useDashboardAnnotations';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
-import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
+import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal, tabIntroShown } from './chrome';
 import type { HeaderAction } from './chrome/Header';
 import ShellHost from './chrome/shell/ShellHost';
+import DashboardLoadError from './chrome/DashboardLoadError';
 import type { FilterPanelOptions } from './chrome/shell/types';
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import { useChromeVariant } from './chrome/variants';
@@ -174,6 +198,10 @@ import ComponentVersionModal from './versions/ComponentVersionModal';
 import DataVersionPanel from './versions/DataVersionPanel';
 import VersionHistoryPanel, { type RestoreOutcome } from './versions/VersionHistoryPanel';
 import { useVersionHistory } from './versions/useVersionHistory';
+import { useChangesSinceEnabled } from './hooks/useChangesSinceEnabled';
+import ChangeMarksProvider from './changes/ChangeMarksProvider';
+import ChangesHeaderButton from './changes/ChangesHeaderButton';
+import type { NewsSplit } from './changes/newsSplit';
 import DataVersionBanner from './versions/DataVersionBanner';
 import type { PinnedLabel } from './versions/dataVersionStatus';
 import { useDataVersionStatus } from './versions/useDataVersionStatus';
@@ -190,6 +218,10 @@ import { focusComponent } from './lib/focusComponent';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
+
+/** Analysis and Metadata share the right edge: the Drawer slide (250 ms) and a
+ *  margin, before the second one opens. */
+const RIGHT_PANEL_SWAP_MS = 280;
 
 /**
  * Dash app base — the component add/edit pages live in the Dash editor on a
@@ -276,6 +308,11 @@ const EditorApp: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // What the dashboard fetch threw, kept as thrown so the error page can tell a
+  // missing dashboard from a refused one from a server that is down.
+  const [loadFailure, setLoadFailure] = useState<{ error: unknown } | null>(null);
+  // Bumped by "Try again": the load effect depends on it.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   // Seed synchronously from the per-tab store so a builder round-trip (add or
   // edit a component — a full page navigation) comes back with the filters
@@ -321,7 +358,12 @@ const EditorApp: React.FC = () => {
     target: FilterSectionSpec | null;
     fromManager: boolean;
   }>({ open: false, kind: 'grid', target: null, fromManager: false });
-  const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
+  const {
+    user: currentUser,
+    loading: userLoading,
+    inspectorEnabled,
+    isSingleUserMode,
+  } = useCurrentUser();
   // `control` is null while the flag is off, so no provider value reaches the
   // component chrome and no inspect action is rendered anywhere.
   const { control: inspectorControl, aside: inspectorAside } =
@@ -351,10 +393,32 @@ const EditorApp: React.FC = () => {
     return id ? String(id) : undefined;
   }, [dashboard, dashboardId]);
   const groupsApi = useSelectionGroups(groupingScopeId);
+  // "What's new" views (#1397), as in App.tsx: virtual New / Seen before
+  // groups that stand in for the author's own while Split / Overlay is on.
+  // Display state only, never stored: it reaches the figures and cards through
+  // `groupRender`, `bulkOptions` and `combinedFilters`, and none of those is
+  // part of the saved document (`filters` and `groupsApi` stay as they were).
+  const [newsSplit, setNewsSplit] = useState<NewsSplit | null>(null);
+  const runNews = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
+  const runSplit = runNews?.mode === 'split' ? runNews : null;
+  const runOverlay = runNews?.mode === 'overlay' ? runNews : null;
+  const newOnlyFilters = useMemo(
+    () => (runNews?.mode === 'new' ? panelsFromGroups(runNews.groups)[0]?.constraints ?? [] : []),
+    [runNews],
+  );
+  const bulkOptions = useMemo<BulkComputeOptions | undefined>(
+    () =>
+      runSplit
+        ? { groups: runSplit.groups, compareGroups: true, showOther: runSplit.showOther, showOverall: true }
+        : groupsApi.bulkOptions,
+    [runSplit, groupsApi.bulkOptions],
+  );
   const combinedFilters = useMemo(
     () =>
-      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
-    [filters, groupsApi.groupFilters],
+      groupsApi.groupFilters.length > 0 || newOnlyFilters.length > 0
+        ? [...filters, ...groupsApi.groupFilters, ...newOnlyFilters]
+        : filters,
+    [filters, groupsApi.groupFilters, newOnlyFilters],
   );
   // Authors see the panel as viewers will. Cross-tab (floating) filter
   // persistence is deliberately viewer-only: an editing session's filter state
@@ -368,7 +432,7 @@ const EditorApp: React.FC = () => {
   const panelScopeId = crossTab.familyId ?? dashboardId;
 
   // Tab sidebar: same per-family key as the viewer, so both agree.
-  const [desktopOpened, toggleDesktop] = useSidebarOpen(panelScopeId);
+  const [desktopOpened, toggleDesktop, foldDesktop] = useSidebarOpen(panelScopeId);
 
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
@@ -382,7 +446,7 @@ const EditorApp: React.FC = () => {
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
-  const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
+  const [filterPanelOpened, toggleFilterPanel, foldFilterPanel] = useFilterPanelOpen(
     panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
   );
@@ -403,6 +467,50 @@ const EditorApp: React.FC = () => {
   // or change a version.
   const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
   const versionHistory = useVersionHistory(dashboardId, Boolean(dashboardId));
+  // `?settings=history&at=<version_id>`: a link from the viewer's "Changed
+  // since your last visit" panel. Read once on load (the initializer is a pure
+  // read), open History on that version, then drop the params so a reload or a
+  // copied address does not reopen it.
+  // The version this user saw on their last visit to the viewer (#1397), for
+  // History's "Last viewed" mark. A read: the editor never moves a mark.
+  const changesSinceEnabled = useChangesSinceEnabled();
+  const [lastViewedVersionId, setLastViewedVersionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!changesSinceEnabled || !dashboardId) return;
+    let live = true;
+    fetchDashboardChanges(dashboardId)
+      .then((cs) => {
+        if (live) setLastViewedVersionId(cs.first_visit ? null : cs.baseline_version_id);
+      })
+      .catch(() => {
+        /* History simply shows no mark */
+      });
+    return () => {
+      live = false;
+    };
+  }, [changesSinceEnabled, dashboardId]);
+  const [focusVersionId] = useState<string | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('settings') === 'history' ? params.get('at')?.trim() || null : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (!focusVersionId) return;
+    openSettingsAt('history');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('settings');
+      url.searchParams.delete('at');
+      window.history.replaceState(window.history.state, '', url.toString());
+    } catch {
+      // The address stays as it was; harmless.
+    }
+    // Once, on load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const {
     versions: familyVersions,
     loading: versionsLoading,
@@ -598,6 +706,16 @@ const EditorApp: React.FC = () => {
     if (!dashboard || !dashboardId) return;
     if (!isOwner) {
       window.location.replace(`/dashboard/${dashboardId}`);
+      return;
+    }
+    // Published read-only (#1303): the editor is closed to everyone.
+    if (dashboard.published_lock) {
+      notifications.show({
+        color: 'orange',
+        title: 'Read-only',
+        message: 'Editing of this dashboard is locked. An administrator must unlock it to edit.',
+      });
+      window.location.replace(`/dashboard/${dashboardId}`);
     }
   }, [userLoading, dashboard, dashboardId, isOwner]);
 
@@ -608,6 +726,9 @@ const EditorApp: React.FC = () => {
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>/edit.');
+      setLoadFailure({
+        error: new HttpStatusError('No dashboard ID in URL. Expected /dashboard/<id>/edit.', 404),
+      });
       setLoading(false);
       return;
     }
@@ -627,9 +748,17 @@ const EditorApp: React.FC = () => {
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
+        setLoadFailure({ error: err });
       })
       .finally(() => setLoading(false));
-  }, [dashboardId]);
+  }, [dashboardId, loadAttempt]);
+
+  const retryLoad = useCallback(() => {
+    setError(null);
+    setLoadFailure(null);
+    setLoading(true);
+    setLoadAttempt((n) => n + 1);
+  }, []);
 
   // Section-bar scopes, as the viewer builds them (App.tsx): which filters
   // reach only their own section's components.
@@ -677,7 +806,7 @@ const EditorApp: React.FC = () => {
             dashboardId,
             req.filters,
             req.ids,
-            groupsApi.bulkOptions,
+            bulkOptions,
             // See App.tsx: prevents a slow superseded compare-on response from
             // overwriting a newer one.
             signal,
@@ -713,7 +842,7 @@ const EditorApp: React.FC = () => {
     stableFilterKey(combinedFilters),
     filterScopes,
     // Undefined while compare is off, so group edits don't refire the fetch.
-    JSON.stringify(groupsApi.bulkOptions ?? null),
+    JSON.stringify(bulkOptions ?? null),
     versionKey,
   ]);
 
@@ -747,18 +876,119 @@ const EditorApp: React.FC = () => {
   // arrival would be worse than closing it.
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const { analysisArmed, setAnalysisArmed } = groupsApi;
+  // The Metadata panel shares the right edge with Analysis: opening one closes
+  // the other first, and opens once that slide is over (mirrors App.tsx).
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [metadataWidth, setMetadataWidth] = useMetadataPanelWidth();
+  const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (swapTimer.current) clearTimeout(swapTimer.current);
+    },
+    [],
+  );
+  const openAfter = useCallback((otherWasOpen: boolean, open: () => void) => {
+    if (swapTimer.current) clearTimeout(swapTimer.current);
+    swapTimer.current = null;
+    if (otherWasOpen) swapTimer.current = setTimeout(open, RIGHT_PANEL_SWAP_MS);
+    else open();
+  }, []);
   const handleAnalysisOpenChange = useCallback(
     (next: boolean) => {
-      setAnalysisOpen(next);
-      if (next) setAnalysisArmed(true);
+      if (next) {
+        setMetadataOpen(false);
+        openAfter(metadataOpen, () => setAnalysisOpen(true));
+        setAnalysisArmed(true);
+      } else {
+        setAnalysisOpen(false);
+      }
     },
-    [setAnalysisArmed],
+    [setAnalysisArmed, metadataOpen, openAfter],
   );
   const handleAnalysisToggle = useCallback(() => {
     const next = !analysisOpen;
-    setAnalysisOpen(next);
+    handleAnalysisOpenChange(next);
     setAnalysisArmed(next);
-  }, [analysisOpen, setAnalysisArmed]);
+  }, [analysisOpen, handleAnalysisOpenChange, setAnalysisArmed]);
+  const handleMetadataOpenChange = useCallback(
+    (next: boolean) => {
+      if (next) {
+        setAnalysisOpen(false);
+        openAfter(analysisOpen, () => setMetadataOpen(true));
+      } else {
+        setMetadataOpen(false);
+      }
+    },
+    [analysisOpen, openAfter],
+  );
+
+  // Session labels on a metadata table, as in the viewer (see App.tsx): kept on
+  // the account for a signed-in account, in the browser otherwise; each label of
+  // the active column becomes a group.
+  const annotationStorage: AnnotationStorage | null = userLoading
+    ? null
+    : isSingleUserMode || (currentUser && !currentUser.is_temporary)
+      ? 'account'
+      : 'browser';
+  const annotationsState = useDashboardAnnotations(groupingScopeId, annotationStorage);
+  const annotationTablesState = useAnnotationTables(
+    dashboard && dashboardId ? dashboardId : undefined,
+    asOfVersionId ?? null,
+  );
+  const annotationTables = annotationTablesState.tables;
+  const hasMetadataTable = annotationTables.some((t) => t.eligible);
+  const annotationView = useMemo(
+    () => withShared(annotationsState.annotations, annotationTablesState.shared),
+    [annotationsState.annotations, annotationTablesState.shared],
+  );
+  const { syncAnnotationGroups } = groupsApi;
+  useEffect(() => {
+    if (annotationsState.loaded) syncAnnotationGroups(annotationView);
+  }, [annotationsState.loaded, annotationView, syncAnnotationGroups]);
+  const annotationPins = useMemo(
+    () => (timeTravelling ? dataPinBody({ asOfVersionId, pins: dataPins }) : null),
+    [timeTravelling, asOfVersionId, dataPins],
+  );
+  // The panel's table is read once the page is idle, not when it opens.
+  useEffect(() => {
+    if (!dashboardId || !hasMetadataTable || annotationPins) return;
+    const warm = () =>
+      warmAnnotationTable(
+        dashboardId,
+        defaultAnnotationTable(
+          annotationTables,
+          annotationView?.columns,
+          annotationView?.activeColumnId,
+        ),
+      );
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(warm, 1500);
+    return () => window.clearTimeout(timer);
+  }, [dashboardId, hasMetadataTable, annotationPins, annotationTables, annotationView]);
+  const labelColumnChoices = useMemo(
+    () =>
+      (annotationView?.columns ?? []).map((c) => {
+        const budget = annotationColumnBudget(c, groupsApi.groups);
+        return {
+          id: c.id,
+          name: c.name,
+          active: c.id === annotationView?.activeColumnId,
+          blocked: budget.ok ? null : budget.reason,
+          scope: labelScope(c, annotationStorage ?? 'browser'),
+        };
+      }),
+    [annotationView, groupsApi.groups, annotationStorage],
+  );
+  const { setAnnotations: setOwnAnnotations, annotations: ownAnnotations } = annotationsState;
+  const pickLabelColumn = useCallback(
+    (id: string | null) => {
+      setOwnAnnotations({ ...(ownAnnotations ?? emptyAnnotations()), activeColumnId: id });
+    },
+    [ownAnnotations, setOwnAnnotations],
+  );
 
   const saveGroupApi = useMemo(
     () => ({
@@ -814,7 +1044,8 @@ const EditorApp: React.FC = () => {
   // ever entering its editable grid. Rendered through the grid's
   // `beforeSections` slot so it sits after this tab's own unsectioned
   // components (title / intro text), exactly as the viewer draws it.
-  // One panel per kind of thing that can float: maps, and 3D structures.
+  // One panel per kind of thing that can float: maps, 3D structures and genome
+  // browsers.
   const floatingByKind = useMemo(() => partitionFloating(crossTab.floating), [crossTab.floating]);
   const mapPanel = useMapPanel({
     components: floatingByKind.map,
@@ -825,6 +1056,13 @@ const EditorApp: React.FC = () => {
   const structurePanel = useMapPanel({
     kind: 'structure',
     components: floatingByKind.structure,
+    familyId: crossTab.familyId,
+    filters,
+    onFilterChange: handleFilterChange,
+  });
+  const genomePanel = useMapPanel({
+    kind: 'genome',
+    components: floatingByKind.genome,
     familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
@@ -1343,7 +1581,7 @@ const EditorApp: React.FC = () => {
 
   /**
    * The same Edit / Delete menu a grid tile carries, for the component in a
-   * floating panel (a map, or a 3D structure).
+   * floating panel (a map, a 3D structure or a genome browser).
    *
    * A component with `placement: floating` claims no grid cell, so it never
    * gets a `renderItemOverlay`, so without this there is no way to edit or delete
@@ -1378,6 +1616,11 @@ const EditorApp: React.FC = () => {
   const renderStructurePanelEditActions = useCallback(
     (componentId: string, ownerDashboardId: string) =>
       panelEditActions('advanced_viz', componentId, ownerDashboardId),
+    [panelEditActions],
+  );
+  const renderGenomePanelEditActions = useCallback(
+    (componentId: string, ownerDashboardId: string) =>
+      panelEditActions('jbrowse', componentId, ownerDashboardId),
     [panelEditActions],
   );
 
@@ -1800,21 +2043,54 @@ const EditorApp: React.FC = () => {
   // Memoised for the grid's per-item render memo (mirrors App.tsx).
   const groupRender = useMemo(
     () =>
-      resolveGroupRender(
-        groupsApi.colorBy,
-        groupsApi.renderGroups,
-        colorByColumnRender,
-        groupsApi.displayMode,
-        groupsApi.showOther,
-      ),
+      runSplit
+        ? {
+            groups: runSplit.groups,
+            colorByGroup: true,
+            display: 'facet' as const,
+            showOther: runSplit.showOther,
+            keepColor: true,
+            // "All" first, then each new run, then the runs seen before.
+            showOverall: true,
+          }
+        : runOverlay
+          ? {
+              // One panel: the new runs in the dashboard's colour, the runs
+              // seen before in grey (mirrors App.tsx).
+              groups: runOverlay.groups,
+              colorByGroup: true,
+              display: 'color' as const,
+              showOther: runOverlay.showOther,
+              keepColor: false,
+            }
+          : resolveGroupRender(
+              groupsApi.colorBy,
+              groupsApi.renderGroups,
+              colorByColumnRender,
+              groupsApi.displayMode,
+              groupsApi.showOther,
+            ),
     [
       groupsApi.colorBy,
       groupsApi.renderGroups,
       colorByColumnRender,
       groupsApi.displayMode,
       groupsApi.showOther,
+      runSplit,
+      runOverlay,
     ],
   );
+  // A view that redraws the canvas is no edit. The click that turned it on
+  // armed `userActedRef`, and a grid re-measuring what it now draws would
+  // report a layout that gets saved: disarm it, as for a server copy. The
+  // next click or key press arms it again. Done during render, like the fetch
+  // generation in App.tsx: the grid's layout callbacks run in the same commit,
+  // before any effect of this component could.
+  const lastRunNewsRef = useRef(runNews);
+  if (lastRunNewsRef.current !== runNews) {
+    lastRunNewsRef.current = runNews;
+    userActedRef.current = false;
+  }
 
   // The Grouping panel's body, mounted in the header popover (mirrors App.tsx).
   const groupsSection = (
@@ -1839,6 +2115,8 @@ const EditorApp: React.FC = () => {
       showOverall={groupsApi.showOverall}
       onShowOverallChange={groupsApi.setShowOverall}
       onResetAnalysis={groupsApi.resetAnalysis}
+      labelColumns={labelColumnChoices}
+      onPickLabelColumn={pickLabelColumn}
     />
   );
 
@@ -2262,7 +2540,7 @@ const EditorApp: React.FC = () => {
           onResetBarFilters={handleResetFilterIndices}
           onFilterChange={handleFilterChange}
           groupRender={groupRender}
-          bulkOptions={groupsApi.bulkOptions}
+          bulkOptions={bulkOptions}
           renderSectionActions={renderPersistentSectionAction}
           autofit={dashboard?.autofit !== false}
         />
@@ -2562,6 +2840,10 @@ const EditorApp: React.FC = () => {
   const ready = Boolean(dashboard) && !loading && !error;
   const headerActions: HeaderAction[] = [];
   if (dashboard) {
+    // "What's new" (#1397): a read of what changed since the author's last
+    // visit. Renders nothing on a first visit, when nothing changed, or with
+    // the feature off.
+    headerActions.push({ id: 'changes', group: 'read', node: <ChangesHeaderButton /> });
     headerActions.push({
       id: 'analysis',
       group: 'read',
@@ -2577,6 +2859,33 @@ const EditorApp: React.FC = () => {
         >
           {groupsSection}
         </GroupingHeaderControl>
+      ),
+    });
+  }
+  if (dashboard && dashboardId && hasMetadataTable) {
+    headerActions.push({
+      id: 'metadata',
+      group: 'read',
+      node: (
+        <MetadataHeaderControl
+          labelCount={annotationView?.columns.length ?? 0}
+          opened={metadataOpen}
+          onOpenedChange={handleMetadataOpenChange}
+          pushesContent={!isNarrow}
+          width={metadataWidth}
+          onWidthChange={setMetadataWidth}
+        >
+          <AnnotationPanel
+            dashboardId={dashboardId}
+            projectId={dashboard?.project_id}
+            tables={annotationTables}
+            sharing={annotationTablesState}
+            pins={annotationPins}
+            state={annotationsState}
+            groups={groupsApi.groups}
+            onDataWritten={() => setPlotThemeTick((t) => t + 1)}
+          />
+        </MetadataHeaderControl>
       ),
     });
   }
@@ -2637,6 +2946,7 @@ const EditorApp: React.FC = () => {
           <>
             <MapPanelControl panel={mapPanel} />
             <MapPanelControl panel={structurePanel} />
+            <MapPanelControl panel={genomePanel} />
           </>
         }
         // No refreshTick: the editor threads no realtime refresh
@@ -2657,13 +2967,20 @@ const EditorApp: React.FC = () => {
               filters={tabFilters}
               onFilterChange={handleFilterChange}
               renderEditActions={renderMapPanelEditActions}
-              followedByDock={structurePanel.docked}
+              followedByDock={structurePanel.docked || genomePanel.docked}
             />
             <MapPanelDock
               panel={structurePanel}
               filters={tabFilters}
               onFilterChange={handleFilterChange}
               renderEditActions={renderStructurePanelEditActions}
+              followedByDock={genomePanel.docked}
+            />
+            <MapPanelDock
+              panel={genomePanel}
+              filters={tabFilters}
+              onFilterChange={handleFilterChange}
+              renderEditActions={renderGenomePanelEditActions}
             />
           </>
         }
@@ -2684,6 +3001,7 @@ const EditorApp: React.FC = () => {
           <>
             <MapPanelControl panel={mapPanel} />
             <MapPanelControl panel={structurePanel} />
+            <MapPanelControl panel={genomePanel} />
           </>
         }
       />
@@ -2712,11 +3030,6 @@ const EditorApp: React.FC = () => {
           <Text>Loading dashboard…</Text>
         </Group>
       )}
-      {error && (
-        <Text c="red" p="lg">
-          {error}
-        </Text>
-      )}
     </>
   );
   const canvas =
@@ -2724,6 +3037,9 @@ const EditorApp: React.FC = () => {
       <Box
         data-tour-id="editor-grid"
         data-testid="dashboard-content"
+        // A strip or the scope banner leads the canvas (layout.css trims the
+        // canvas's top padding under it).
+        data-lead={topComponents.length > 0 || scope.length > 0 ? '' : undefined}
         // Under the Guide: kept mounted for when it closes; the filter
         // panel stays beside it (see App.tsx).
         aria-hidden={guide.open || undefined}
@@ -2799,7 +3115,7 @@ const EditorApp: React.FC = () => {
               onResetBarFilters={handleResetFilterIndices}
               onFilterChange={handleFilterChange}
               groupRender={groupRender}
-              bulkOptions={groupsApi.bulkOptions}
+              bulkOptions={bulkOptions}
               renderSectionActions={renderPersistentSectionAction}
               autofit={dashboard?.autofit !== false}
             />
@@ -2861,6 +3177,14 @@ const EditorApp: React.FC = () => {
             renderEditActions={renderStructurePanelEditActions}
           />
         )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={genomePanel}
+            filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            renderEditActions={renderGenomePanelEditActions}
+          />
+        )}
       </div>
       {guide.open && guideModel && dashboard && dashboardId && (
         <DashboardGuide
@@ -2876,6 +3200,24 @@ const EditorApp: React.FC = () => {
           mode="edit"
           onClose={guide.closeGuide}
           onOpenYourView={() => openSettingsAt('view')}
+          metadata={
+            hasMetadataTable
+              ? {
+                  // A past view keeps the part but not the live rows.
+                  table: annotationPins
+                    ? null
+                    : (defaultAnnotationTable(
+                        annotationTables,
+                        annotationView?.columns,
+                        annotationView?.activeColumnId,
+                      ) ?? null),
+                  open: () => {
+                    guide.closeGuide();
+                    handleMetadataOpenChange(true);
+                  },
+                }
+              : undefined
+          }
         />
       )}
     </>
@@ -2910,6 +3252,9 @@ const EditorApp: React.FC = () => {
               history={versionHistory}
               canDelete={isOwner}
               dataVersionId={asOfVersionId}
+              focusVersionId={focusVersionId}
+              lastViewedVersionId={lastViewedVersionId}
+              selfId={currentUser?.id ?? null}
               onRestored={handleRestored}
             />
           ) : undefined
@@ -3002,6 +3347,18 @@ const EditorApp: React.FC = () => {
     </>
   );
 
+  // The dashboard could not be loaded: nothing to edit, so none of the editor
+  // chrome (title, tab list, filter panel) is drawn around it.
+  if (loadFailure) {
+    return (
+      <DashboardLoadError
+        error={loadFailure.error}
+        resourceId={dashboardId}
+        onRetry={retryLoad}
+      />
+    );
+  }
+
   return (
     <>
     {/* One hover bus for the whole view: pinned sections rendered outside
@@ -3029,9 +3386,28 @@ const EditorApp: React.FC = () => {
     {/* The viewer's `category_colors` scope, so a filter bar's chips take the
         colours readers will see. */}
     <CategoryColorsContext.Provider value={dashboard}>
+    <TabColorContext.Provider value={typeof dashboard?.tab_icon_color === 'string' ? dashboard.tab_icon_color : null}>
     {/* Tab links in text resolve here too, so the canvas shows them as the
         viewer does rather than as plain text. */}
     <TabLinkProvider tabs={tabSiblings} mode="edit">
+      <GenomeBrowserTargetProvider dashboardId={dashboardId ?? null} dashboard={dashboard} tabs={tabSiblings}>
+    {/* "What's new" (#1397): the change set, the marks on the canvas and the
+        Overlay / Split views. Looks only: `recordVisits` is off, so an editor
+        open never counts as a visit nor moves the author's mark, and what it
+        draws stays out of the saved document. */}
+    <ChangeMarksProvider
+      dashboardId={dashboardId ?? null}
+      familyId={groupingScopeId}
+      projectId={dashboard?.project_id ? String(dashboard.project_id) : null}
+      previewVersionId={null}
+      userLoading={userLoading}
+      readerId={currentUser?.id ?? currentUser?.email ?? null}
+      canEdit
+      components={summaryMetadata}
+      filters={combinedFilters}
+      onSplitChange={setNewsSplit}
+      recordVisits={false}
+    >
     <ShellHost
       mode="edit"
       isNarrow={Boolean(isNarrow)}
@@ -3084,10 +3460,12 @@ const EditorApp: React.FC = () => {
         desktopOpened,
         toggleMobile,
         toggleDesktop,
+        fold: foldDesktop,
       }}
       boot={boot}
       canvas={canvas}
       topStrip={topStrip}
+      tabIntro={ready && tabIntroShown(dashboard, activeTab)}
       filters={{
         members: leftComponents,
         values: filters,
@@ -3098,6 +3476,7 @@ const EditorApp: React.FC = () => {
         docked: {
           opened: filterPanelOpened,
           toggle: toggleFilterPanel,
+          fold: foldFilterPanel,
           width: filterPanelWidth,
           widthVar: FILTER_PANEL_WIDTH_VAR,
           layoutRef: filterPanelLayoutRef,
@@ -3114,10 +3493,16 @@ const EditorApp: React.FC = () => {
         node: <Inspector dashboard={dashboard} dashboardId={dashboardId} onNotesSaved={reloadVersions} />,
         aside: inspectorAside,
       }}
-      analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
+      analysis={{
+        open: analysisOpen || metadataOpen,
+        widthPx: metadataOpen ? metadataWidth : ANALYSIS_PANEL_WIDTH_PX,
+      }}
       guideOpen={guide.open}
     />
+    </ChangeMarksProvider>
+      </GenomeBrowserTargetProvider>
     </TabLinkProvider>
+    </TabColorContext.Provider>
     </CategoryColorsContext.Provider>
     </BrandScope>
     </SaveGroupContext.Provider>

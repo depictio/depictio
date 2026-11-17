@@ -8,6 +8,7 @@
 # `openms` tool folder.
 id: mhcquant
 name: nf-core/mhcquant
+version: "1.0.0"
 description: >-
   Immunopeptidomics summary tables of nf-core/mhcquant: the FDR-filtered
   peptides of every sample with their scores, retention-time prediction,

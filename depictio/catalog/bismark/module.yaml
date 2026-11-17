@@ -6,6 +6,7 @@
 # `depictio/catalog/multiqc/qualimap.yaml` (owned by nf-core/eager) for that.
 id: bismark
 name: Bismark
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bismark/align
 homepage: https://github.com/FelixKrueger/Bismark
 description: >-

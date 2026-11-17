@@ -1,0 +1,200 @@
+/* The two right-hand panels each get a colour of their own, so one is never
+   mistaken for the other: Analysis (groups, colouring, comparing) is grape,
+   Metadata (the samples' table and their labels) is teal. Native Mantine
+   palette variables, so both follow the light and dark schemes. */
+.dc-panel--analysis {
+  --dc-panel-accent: var(--mantine-color-grape-6);
+  --dc-panel-accent-soft: var(--mantine-color-grape-light);
+  --dc-panel-accent-ink: var(--mantine-color-grape-light-color);
+  /* Everything inside the panel that would have been the app's blue (the
+     Split switch, step checks, links, focus rings) takes the panel's colour,
+     for Mantine components and for the glass chrome's own variables. */
+  --mantine-primary-color-filled: var(--mantine-color-grape-filled);
+  --mantine-primary-color-filled-hover: var(--mantine-color-grape-filled-hover);
+  --mantine-primary-color-light: var(--mantine-color-grape-light);
+  --mantine-primary-color-light-hover: var(--mantine-color-grape-light-hover);
+  --mantine-primary-color-light-color: var(--mantine-color-grape-light-color);
+  --gl-accent: var(--mantine-color-grape-6);
+  --gl-accent-soft: var(--mantine-color-grape-light);
+  --gl-accent-fg: var(--mantine-color-grape-light-color);
+  --gl-ring: color-mix(in srgb, var(--mantine-color-grape-6) 55%, transparent);
+}
+.dc-panel--metadata {
+  --dc-panel-accent: var(--mantine-color-teal-6);
+  --dc-panel-accent-soft: var(--mantine-color-teal-light);
+  --dc-panel-accent-ink: var(--mantine-color-teal-light-color);
+  /* Everything inside the panel that would have been the app's blue (the
+     Split switch, step checks, links, focus rings) takes the panel's colour,
+     for Mantine components and for the glass chrome's own variables. */
+  --mantine-primary-color-filled: var(--mantine-color-teal-filled);
+  --mantine-primary-color-filled-hover: var(--mantine-color-teal-filled-hover);
+  --mantine-primary-color-light: var(--mantine-color-teal-light);
+  --mantine-primary-color-light-hover: var(--mantine-color-teal-light-hover);
+  --mantine-primary-color-light-color: var(--mantine-color-teal-light-color);
+  --gl-accent: var(--mantine-color-teal-6);
+  --gl-accent-soft: var(--mantine-color-teal-light);
+  --gl-accent-fg: var(--mantine-color-teal-light-color);
+  --gl-ring: color-mix(in srgb, var(--mantine-color-teal-6) 55%, transparent);
+}
+
+/* A colour bar along the top edge, fading out to the right. */
+.dc-analysis-panel[class*='dc-panel--']::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--dc-panel-accent),
+    color-mix(in srgb, var(--dc-panel-accent) 15%, transparent)
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------ the header
+   A tile in the panel's colour, the name over a one-line purpose, a count
+   pill. The wash behind it fades out so the head reads as part of the panel. */
+.dc-analysis-panel[class*='dc-panel--'] .mantine-Drawer-header {
+  align-items: center;
+  padding-block: 14px;
+  margin-bottom: 4px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dc-panel-accent) 9%, transparent),
+    transparent
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--dc-panel-accent) 18%, transparent);
+}
+.dc-analysis-panel[class*='dc-panel--'] .mantine-Drawer-title {
+  flex: 1;
+  min-width: 0;
+}
+.dc-ph {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.dc-ph-tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: var(--mantine-color-white);
+  background: linear-gradient(
+    145deg,
+    var(--dc-panel-accent),
+    color-mix(in srgb, var(--dc-panel-accent) 70%, black)
+  );
+  box-shadow: 0 6px 14px -8px var(--dc-panel-accent);
+}
+.dc-ph-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.dc-ph-name {
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-gray-0));
+}
+.dc-ph-sub {
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dc-ph-pill {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--dc-panel-accent-ink);
+  background: var(--dc-panel-accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dc-panel-accent) 25%, transparent);
+}
+
+/* ------------------------------------------------------------ the dock
+   Each panel's button wears its colour: label, glyph, lit well and count.
+   The glass stylesheet resolves `--gl-on-fg` and `--gl-badge-*` on :root, so
+   setting `--gl-accent-fg` on the button is not enough: every variable the
+   lit state reads is set here, `!important` because the button sets its tone
+   inline. */
+.dc-dock--analysis {
+  --dc-dock-soft: var(--mantine-color-grape-light);
+  --dc-dock-ink: var(--mantine-color-grape-light-color);
+  --gl-tone: var(--mantine-color-grape-6) !important;
+  --gl-accent-fg: light-dark(var(--mantine-color-grape-8), var(--mantine-color-grape-2)) !important;
+  --gl-on-fg: light-dark(var(--mantine-color-grape-8), var(--mantine-color-grape-2)) !important;
+  /* Flat: one tint of the colour over the bar, a hairline, no glow. The glass
+     chrome reads these two, so they are set here rather than overridden. */
+  --gl-on-bg: color-mix(in srgb, var(--mantine-color-grape-6) 14%, var(--mantine-color-body)) !important;
+  --gl-on-ring: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-grape-6) 32%, transparent) !important;
+  --gl-badge-bg: var(--mantine-color-grape-6) !important;
+  --gl-badge-fg: var(--mantine-color-white) !important;
+}
+.dc-dock--metadata {
+  --dc-dock-soft: var(--mantine-color-teal-light);
+  --dc-dock-ink: var(--mantine-color-teal-light-color);
+  --gl-tone: var(--mantine-color-teal-6) !important;
+  --gl-accent-fg: light-dark(var(--mantine-color-teal-8), var(--mantine-color-teal-2)) !important;
+  --gl-on-fg: light-dark(var(--mantine-color-teal-8), var(--mantine-color-teal-2)) !important;
+  /* Flat: one tint of the colour over the bar, a hairline, no glow. The glass
+     chrome reads these two, so they are set here rather than overridden. */
+  --gl-on-bg: color-mix(in srgb, var(--mantine-color-teal-6) 14%, var(--mantine-color-body)) !important;
+  --gl-on-ring: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-teal-6) 32%, transparent) !important;
+  --gl-badge-bg: var(--mantine-color-teal-6) !important;
+  --gl-badge-fg: var(--mantine-color-white) !important;
+}
+.dc-action.dc-dock--analysis[data-active],
+.dc-action.dc-dock--metadata[data-active] {
+  --button-bg: var(--dc-dock-soft);
+  --button-hover: var(--dc-dock-soft);
+  --button-color: var(--dc-dock-ink);
+  --button-bd: 1px solid color-mix(in srgb, var(--dc-dock-ink) 35%, transparent);
+}
+.hy-dock .dc-dock--analysis.hy-key--on,
+.hy-dock .dc-dock--metadata.hy-key--on,
+.dc-dock--analysis.hy-key--on,
+.dc-dock--metadata.hy-key--on {
+  color: var(--gl-on-fg) !important;
+}
+.dc-dock--analysis .hy-bubble,
+.dc-dock--metadata .hy-bubble {
+  background: var(--gl-badge-bg);
+  color: var(--gl-badge-fg);
+}
+
+/* The lit state's label and glyph take the ink of the same hue. */
+.dc-dock--analysis.hy-key--on .hy-well,
+.dc-dock--metadata.hy-key--on .hy-well {
+  background: none !important;
+  box-shadow: none !important;
+}
+.dc-dock--analysis.hy-key--on .hy-key-label,
+.dc-dock--metadata.hy-key--on .hy-key-label,
+.dc-dock--analysis.hy-key--on svg,
+.dc-dock--metadata.hy-key--on svg {
+  color: var(--gl-on-fg) !important;
+}
+.dc-dock--analysis.hy-key--on .hy-key-label,
+.dc-dock--metadata.hy-key--on .hy-key-label {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.dc-dock--analysis .hy-dot,
+.dc-dock--metadata .hy-dot {
+  background: var(--gl-tone) !important;
+}

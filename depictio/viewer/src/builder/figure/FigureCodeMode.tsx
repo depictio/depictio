@@ -31,6 +31,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import Editor from '@monaco-editor/react';
+import './monacoSetup';
 import { Icon } from '@iconify/react';
 import { previewFigure } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';

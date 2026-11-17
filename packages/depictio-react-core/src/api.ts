@@ -7,10 +7,17 @@
  * recovery. Do not attach the bearer by hand — see its docstring for why.
  */
 
+import {
+  type AnnotationColumn,
+  type DashboardAnnotations,
+  parseAnnotations,
+  parseSharedColumns,
+} from './sessionAnnotations';
 import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
 import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
+import { canonicalizeVizKinds } from './vizKindAliases';
 import type {
   Annotation,
   AnnotationColor,
@@ -18,6 +25,16 @@ import type {
   AnnotationStyle,
   Geometry,
 } from './annotations/types';
+import type { VariantLegendPayload } from './components/jbrowse/trackLegend';
+import type {
+  BuilderDcDraft,
+  BuilderDcType,
+  BuilderProjectDraft,
+  BuilderRootSpec,
+  BuilderScanMode,
+  BuilderWildcard,
+  BuilderWorkflowStructure,
+} from './projectBuilder';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -522,15 +539,30 @@ export interface StoredMetadata {
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
   /** Slider only: comparison with the value (gte when absent). */
   slider_mode?: string;
+  /** TextInput only: hint shown in the empty box. */
+  placeholder?: string;
+  /** TextInput only: match letter case exactly (off when absent). */
+  case_sensitive?: boolean;
+  /** TextInput only: `regex` (default) reads the text as a regular expression,
+   *  `contains` as literal text. */
+  match_mode?: 'regex' | 'contains';
   /** Select only: the filter always holds one value, the first option of its
    *  list when empty, and cannot be cleared (see
    *  `components/interactive/alwaysSelected.ts`). */
   always_selected?: boolean;
+  /** `always_selected` only: the filter may hold several values, never none (it still
+   *  starts on the first option and takes it back when emptied). */
+  multiple?: boolean;
   /** `always_selected` only: a numeric column of the same collection that ranks
    *  the options, so the filter starts on the one with the largest value of it
    *  (`default_order` "asc": the smallest) rather than the first of the list. */
   default_by?: string;
   default_order?: 'asc' | 'desc';
+  /** Select / MultiSelect / SegmentedControl: a column of the same collection
+   *  that orders the options (a `time_order` beside a `time_point`); the server
+   *  returns them in that order and the panel keeps it. Unset: natural order,
+   *  or by duration when every option is one (`30min`, `2h`). */
+  order_by?: string;
   /** `always_selected` only: facts the tab's scope banner shows about the
    *  picked value, each read from the first row of the filter's own collection
    *  that holds it. `format` is the cards' number vocabulary. */
@@ -609,6 +641,74 @@ export interface StoredMetadata {
   /** Grid placement. `y` doubles as the render-queue priority so components
    *  nearer the top of the dashboard are fetched first (see `fetchQueue`). */
   layout?: { x?: number; y?: number; w?: number; h?: number };
+  // Genome browser (`component_type: jbrowse`). `placement` and
+  // `floating_initial_state` above also apply to it (a floating genome panel).
+  /** Where the browser opens: a data collection's genomic regions, optionally
+   *  ordered (the "first call") and with a second region (the mate). */
+  locus_from?: JBrowseLocusFrom | JBrowseLocusFrom[] | null;
+  /** Region density strip under the header: unset = offered in the view menu,
+   *  hidden; true = shown on opening; false = not offered. */
+  show_density?: boolean;
+  /** Manifest column the tracks are coloured by (a condition). */
+  color_by?: string;
+  /** Colour the tracks along a sequential ramp over a manifest column
+   *  (`{column, order_by?, scheme?}`); replaces `color_by`. */
+  color_scale?: { column: string; order_by?: string | null; scheme?: string } | null;
+  /** Draw splice junction arcs (sashimi) on the RNA alignment tracks. */
+  show_junctions?: boolean;
+  /** Previous / next through the calls of `locus_from` (default on). */
+  call_stepper?: boolean;
+  /** Follow the genomic window of the other genome tiles (default on). */
+  follow_window?: boolean;
+  /** The tile's height follows its open tracks instead of the stored grid
+   *  height (off by default; see `autofit.ts`). */
+  auto_height?: boolean;
+  /** Extra views the tile can open in a large dialog. */
+  views?: Array<'breakpoint' | 'circular'>;
+  /** Initial display of the DNA alignment tracks. */
+  read_pairs_display?: 'pileup' | 'arcs' | 'cloud';
+  /** Track categories the circular view draws (default `["sv"]`). */
+  circular_categories?: string[];
+  [key: string]: unknown;
+}
+
+/** `locus_from` of a genome browser tile: mirrors `JBrowseLocusSource`. */
+export interface JBrowseLocusFrom {
+  data_collection_tag?: string;
+  chrom_column?: string;
+  start_column?: string;
+  end_column?: string | null;
+  /** Bases added on each side of the rows a filter narrows it to. */
+  padding?: number;
+  /** A filter frames the rows only when at most this many match. */
+  max_rows?: number;
+  /** Column the calls are ordered by (the first one is where the browser opens). */
+  sort_by?: string | null;
+  /** Sort direction of `sort_by`; default true. */
+  descending?: boolean;
+  /** Open on the span of the first N calls when they sit within `max_span`. */
+  span_top?: number | null;
+  /** With `span_top`: the widest span (bases) the opening view covers; default 1 Mb. */
+  max_span?: number;
+  /** Column naming a call in the stepper. */
+  label_column?: string | null;
+  /** Columns of the second region of a fusion or SV. */
+  mate?: { chrom_column: string; start_column: string; end_column?: string | null } | null;
+  /** Name of the source in a list of `locus_from` (defaults to the
+   *  collection tag); unique within the tile. */
+  name?: string | null;
+  /** Mantine palette name the source is drawn with. */
+  color?: string | null;
+  /** Workflow holding the collection, when several workflows have the tag. */
+  workflow_tag?: string | null;
+  /** Column naming the sample (library) a region belongs to. */
+  sample_column?: string | null;
+  /** Column naming the run a region belongs to. */
+  run_column?: string | null;
+  /** Extra columns shown in the region picker. */
+  columns?: string[] | null;
+  /** Columns the picker's search box matches, besides `label_column`. */
+  search_columns?: string[] | null;
   [key: string]: unknown;
 }
 
@@ -661,6 +761,8 @@ export interface FilterSectionSpec {
 export type CategoryColors = Record<string, Record<string, string>>;
 
 export interface DashboardData {
+  /** Set while the owning project is published read-only (no edits allowed). */
+  published_lock?: { locked_at: string; reason: string | null; source: 'migration' | 'admin' } | null;
   _id?: string;
   dashboard_id?: string;
   title?: string;
@@ -716,10 +818,23 @@ export interface DashboardData {
   advanced_viz_controls?: 'popover' | 'rail' | 'header';
   /** Content-aware tile heights (autofit v2). Absent means on. */
   autofit?: boolean;
+  /** The template revision this dashboard was last imported from (provenance,
+   *  not content: never saved from the viewer, never in a version). Absent on a
+   *  dashboard built in the viewer or imported from a plain file. */
+  template_origin?: DashboardTemplateOrigin | null;
   /** Present only when a past version was requested. Carries everything the
    *  read-only banner needs, so previewing costs one request, not two. */
   preview?: DashboardPreviewInfo;
   [key: string]: unknown;
+}
+
+/** `template_origin` of a dashboard the template import wrote. `template_version`
+ *  is the template's own revision (`template.version`), not the pipeline's. */
+export interface DashboardTemplateOrigin {
+  template_id: string;
+  template_version: string;
+  /** Naive UTC `YYYY-MM-DD HH:MM:SS`. */
+  imported_at?: string;
 }
 
 export interface DashboardPreviewInfo {
@@ -751,7 +866,7 @@ export async function fetchDashboard(
   if (!res.ok) {
     throw new HttpError(`Failed to fetch dashboard: ${res.status}`, res.status);
   }
-  return res.json();
+  return canonicalizeVizKinds(await res.json());
 }
 
 /** A component lifted out of the grid into the floating panel, paired with the
@@ -787,7 +902,7 @@ export async function fetchFloatingComponents(
       `${API_BASE}/dashboards/floating_components/${dashboardId}`,
     );
     if (!res.ok) return empty;
-    const data = await res.json();
+    const data = canonicalizeVizKinds(await res.json());
     if (!Array.isArray(data?.components)) return empty;
     return {
       parent_dashboard_id: data.parent_dashboard_id ?? null,
@@ -851,7 +966,7 @@ export async function fetchCrossTabComponents(
       `${API_BASE}/dashboards/cross_tab_components/${dashboardId}${qs}`,
     );
     if (!res.ok) return empty;
-    const data = await res.json();
+    const data = canonicalizeVizKinds(await res.json());
     if (!Array.isArray(data?.floating)) return empty;
     return {
       parent_dashboard_id: data.parent_dashboard_id ?? null,
@@ -918,18 +1033,37 @@ export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>>
  *  with the supplied Polars expression so the returned options reflect only
  *  the rows matching that scope.
  */
-export async function fetchUniqueValues(
+export function fetchUniqueValues(
   dcId: string,
   columnName: string,
   filterExpr?: string | null,
+  orderBy?: string | null,
 ): Promise<string[]> {
-  const params = new URLSearchParams({ column: columnName });
-  if (filterExpr) params.set('filter_expr', filterExpr);
-  const res = await authFetch(`${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`);
-  if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
-  const body = (await res.json()) as { values?: string[] };
-  return body.values || [];
+  // One request per (collection, column, scope) while one is in flight: a
+  // dashboard mounts several filters on the same column (the filter panel, the
+  // viz controls, a card), and a page load sent ~45 requests for ~20 lists.
+  // Nothing is kept once it settles, so a later call still sees fresh data.
+  const key = `${dcId}|${columnName}|${filterExpr ?? ''}|${orderBy ?? ''}`;
+  const pending = UNIQUE_VALUES_IN_FLIGHT.get(key);
+  // A copy per caller, so one caller sorting its list cannot reorder another's.
+  if (pending) return pending.then((values) => values.slice());
+  const request = (async () => {
+    const params = new URLSearchParams({ column: columnName });
+    if (filterExpr) params.set('filter_expr', filterExpr);
+    // The server orders the values by this companion column.
+    if (orderBy) params.set('order_by', orderBy);
+    const res = await authFetch(
+      `${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`,
+    );
+    if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
+    const body = (await res.json()) as { values?: string[] };
+    return body.values || [];
+  })().finally(() => UNIQUE_VALUES_IN_FLIGHT.delete(key));
+  UNIQUE_VALUES_IN_FLIGHT.set(key, request);
+  return request;
 }
+
+const UNIQUE_VALUES_IN_FLIGHT = new Map<string, Promise<string[]>>();
 
 /** The distinct values of a column, ranked by the largest value of another
  *  column each one carries (``default_by`` of an ``always_selected`` Select). */
@@ -1179,6 +1313,8 @@ export interface ColumnRange {
 export interface DataPinFields {
   as_of_version?: string;
   data_versions?: Record<string, number | null>;
+  /** MultiQC: report ids to read per collection (`null` keeps it live). */
+  report_sets?: Record<string, string[] | null>;
 }
 
 export interface FilterOptionsRequest extends DataPinFields {
@@ -1186,6 +1322,8 @@ export interface FilterOptionsRequest extends DataPinFields {
   column: string;
   kind: 'unique' | 'range';
   filter_expr?: string | null;
+  /** `unique` only: the companion column ordering the values. */
+  order_by?: string | null;
 }
 
 /**
@@ -1210,6 +1348,74 @@ async function fetchFilterOptions(
   return res.json();
 }
 
+/** What a TextInput pattern catches: see `POST /dashboards/text_filter_matches`. */
+export interface TextFilterMatchesResult {
+  column: string;
+  /** Distinct values of the column in the whole collection. */
+  total: number;
+  /** Of those, the ones the pattern keeps. */
+  matching: number;
+  /** The first of them, sorted; `truncated` says there are more. */
+  values: string[];
+  truncated: boolean;
+  /** The pattern does not compile server side: nothing was filtered. */
+  invalid: boolean;
+}
+
+export async function fetchTextFilterMatches(
+  dashboardId: string,
+  request: {
+    dc_id: string;
+    column: string;
+    value: string;
+    case_sensitive?: boolean;
+    match_mode?: string;
+    filter_expr?: string | null;
+    limit?: number;
+  } & DataPinFields,
+  signal?: AbortSignal,
+): Promise<TextFilterMatchesResult> {
+  const res = await authFetch(`${API_BASE}/dashboards/text_filter_matches/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+    signal,
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to read the text filter matches', { ...request });
+  return res.json();
+}
+
+/** Selection groups pointed at one data collection (`POST /resolve_groups`). */
+export interface ResolvedGroupsResult {
+  /** The groups that reach the collection, rewritten to its column and values. */
+  groups: Array<{
+    name: string;
+    column_name: string;
+    values: string[];
+    color: string;
+    dc_id?: string;
+  }>;
+  /** One verdict per group sent, reached or not. */
+  status: Array<{ name: string; status: string; applied: boolean; matched_values: number }>;
+}
+
+export async function fetchResolvedGroups(
+  dashboardId: string,
+  dcId: string,
+  groups: Array<{ name: string; column_name: string; values: string[]; color: string; dc_id?: string }>,
+  signal?: AbortSignal,
+  /** The component the groups are for: groups of runs are then rewritten to
+   *  the ids it matches its marks by (its samples, its features). */
+  componentId?: string,
+): Promise<ResolvedGroupsResult> {
+  const res = await authFetch(`${API_BASE}/dashboards/resolve_groups/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({ dc_id: dcId, groups, ...(componentId ? { component_id: componentId } : {}) }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to resolve the groups: ${res.status}`);
+  return res.json();
+}
+
 /** `fetchUniqueValues` at a data version (see `fetchFilterOptions`). */
 export async function fetchUniqueValuesAt(
   dashboardId: string,
@@ -1217,12 +1423,14 @@ export async function fetchUniqueValuesAt(
   columnName: string,
   pins: DataPinFields,
   filterExpr?: string | null,
+  orderBy?: string | null,
 ): Promise<string[]> {
   const body = await fetchFilterOptions(dashboardId, {
     dc_id: dcId,
     column: columnName,
     kind: 'unique',
     ...(filterExpr ? { filter_expr: filterExpr } : {}),
+    ...(orderBy ? { order_by: orderBy } : {}),
     ...pins,
   });
   const values = body.values;
@@ -1261,6 +1469,8 @@ export interface DataVersionCollectionStatus {
   status: DataVersionCollectionState;
   /** The commit read, for a pinned collection. */
   delta_version?: number | null;
+  /** Reports read, for a pinned MultiQC collection. */
+  report_count?: number | null;
   /** Why a collection is live or not versioned, in the server's words. */
   reason?: string | null;
 }
@@ -1344,6 +1554,8 @@ export type InteractiveFilterSource =
   /** A range brushed on one axis of a `parallel_coordinates` tile. Emits an
    *  ordinary RangeSlider entry on that axis's column. */
   | 'axis_selection'
+  /** Tracks picked in the genome browser (feature click / visible tracks). */
+  | 'jbrowse_selection'
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
@@ -1379,6 +1591,10 @@ export interface InteractiveFilter {
     filter_expr?: string;
     /** Slider comparison (gte, gt, lte, lt, eq, ne); the server defaults to gte. */
     slider_mode?: string;
+    /** TextInput options, present only when they differ from the default
+     *  (case-insensitive regex); the server reads them with the value. */
+    case_sensitive?: boolean;
+    match_mode?: string;
   };
 }
 
@@ -1509,6 +1725,11 @@ export interface RenderFigureOptions {
   display?: GroupingDisplay;
   /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
   showOther?: boolean;
+  /** Groups in "facet": split into one panel per group but keep the figure's
+   *  own colours (the "what's new" split, #1397). */
+  keepColor?: boolean;
+  /** With `keepColor`: an "All" panel of every row first. */
+  showOverall?: boolean;
   /** Draw the figure in this style rather than its own (a highlight showing a
    *  figure from another tab). Sent only when set. */
   style?: FigureStyleRequest;
@@ -1550,6 +1771,10 @@ export async function renderFigure(
   }
   if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
     groupBody.grouping_display = 'facet';
+    if (options.keepColor && groupBody.color_by_group) {
+      groupBody.group_keep_color = true;
+      if (options.showOverall) groupBody.group_overall = true;
+    }
   }
   if (options?.style) groupBody.style = options.style;
   const res = await authFetch(
@@ -1578,6 +1803,7 @@ export type AdvancedVizKind =
   | 'volcano'
   | 'embedding'
   | 'manhattan'
+  | 'stacked_bar'
   | 'stacked_taxonomy'
   | 'phylogenetic'
   | 'rarefaction'
@@ -1612,6 +1838,7 @@ export type AdvancedVizKind =
   | 'transcript_structure'
   | 'cnv_profile'
   | 'genome_chord'
+  | 'ideogram'
   | 'record_card'
   | 'parallel_coordinates'
   | 'molecule_3d'
@@ -1621,7 +1848,12 @@ export type AdvancedVizKind =
   | 'secondary_structure'
   | 'domain_architecture'
   | 'pae_matrix'
-  | 'ramachandran';
+  | 'ramachandran'
+  | 'ranked_distribution'
+  | 'spatial_cells'
+  | 'allele_grid'
+  | 'pedigree'
+  | 'ranked_table';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -1775,6 +2007,10 @@ export interface AdvancedVizDataRequest {
    *  needs (e.g. which column carries significance). */
   roles?: Record<string, string>;
   tail?: AdvancedVizTailSpec;
+  /** Sum `sum` per distinct `group_by` combination on the server, for a renderer
+   *  that only adds the rows up (the sunburst). One row per lineage instead of
+   *  one per lineage and sample. */
+  aggregate?: { group_by: string[]; sum: string };
 }
 
 /** Project a column subset from a DC + apply global filters. Rendering is
@@ -1801,6 +2037,7 @@ export async function fetchAdvancedVizData(
         viz_kind: req.vizKind,
         roles: req.roles,
         tail: req.tail,
+        aggregate: req.aggregate,
       }),
       signal,
     });
@@ -2295,6 +2532,23 @@ export async function pollGroupCompare(jobId: string): Promise<GroupCompareJob> 
 }
 
 
+export interface GeoJsonFeature {
+  geometry?: { type?: string; coordinates?: unknown } | null;
+  properties?: Record<string, unknown> | null;
+}
+
+export interface GeoJsonCollection {
+  type: string;
+  features: GeoJsonFeature[];
+}
+
+/** Fetch the file of a GeoJSON-type DC. */
+export async function fetchGeojson(dcId: string): Promise<GeoJsonCollection> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/geojson/${dcId}`);
+  if (!res.ok) throw new Error(`Failed to fetch GeoJSON: ${res.status}`);
+  return (await res.json()) as GeoJsonCollection;
+}
+
 /** Fetch the raw Newick string for a phylogeny-type DC. */
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   const res = await authFetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`);
@@ -2461,29 +2715,433 @@ export async function fetchMapData(
  *  narrow the visible tracks via existing /jbrowse/* internal endpoints. If
  *  any of those services are unreachable, the backend returns 503.
  */
+/** One track of the render payload, as the viewer needs it to map a click
+ *  back to a dashboard filter. */
+export interface JBrowseTrackRow {
+  track_id: string;
+  name: string;
+  format: string;
+  sample: string | null;
+  /** Value of the component's selection column for this track. */
+  selection_value: string | null;
+  /** Manifest grouping (e.g. assay / mark) the track menu groups rows by. */
+  category?: string | null;
+  /** Display colour (any CSS colour) from the manifest, when it declares one. */
+  color?: string | null;
+  /** The group that colour stands for: the tile's `color_by` value, else the
+   *  manifest's `group` column. Labels the legend. */
+  group?: string | null;
+  /** Where the track comes from: a manifest row, the assembly's annotation,
+   *  a UCSC track, a `config_overrides.extra_tracks` entry or the rank track
+   *  of `locus_from.rank_track`. Absent on an older backend: read as `manifest`. */
+  source?: 'manifest' | 'annotation' | 'ucsc' | 'extra' | 'ranking';
+  /** Display-only, sanitized (no query, userinfo or bucket key) location of the
+   *  track's file; manifest tracks only. Never what the browser fetches. */
+  uri?: string | null;
+  /** Display-only location of the track's index, when it has one. */
+  index_uri?: string | null;
+  /** How the file is read: in place from remote storage, straight by the
+   *  browser (`direct_access`), or from files Depictio ingested. */
+  storage?: 'remote' | 'direct' | 'depictio';
+}
+
+/** `POST /dashboards/render_jbrowse` — everything the embedded linear genome
+ *  view is built from. File locations are signed, short-lived API URLs (or the
+ *  raw https URL for `direct_access` collections). */
+/** The `locus_from` rows a genome browser points at (see `picked_from_rows`). */
+export interface JBrowsePicked {
+  /** One unpadded `chrom:start-end` per row, 1-based inclusive. */
+  loci: string[];
+  /** Names a feature matches by (a transcript id, else the row's label). */
+  names: string[];
+  /** Per row, the `locus_from` columns that identify it, for a table of the
+   *  same collection. */
+  keys: Array<Record<string, unknown>>;
+  /** The best calls of the opening, best first: the star and name of the
+   *  first three wear a medal (gold, silver, bronze), their box keeps its colour. */
+  medals?: boolean;
+  /** With a transcript pick: the gene symbols it sits under, starred but not
+   *  coloured, so the view finds the gene among its neighbours. */
+  genes?: string[];
+}
+
 export interface JBrowseSessionResponse {
-  iframe_url: string;
-  assembly: string;
-  location: string;
-  tracks?: string[];
-  metadata?: { filter_applied?: boolean };
+  assembly: Record<string, unknown>;
+  tracks: Array<Record<string, unknown> & { trackId: string }>;
+  shown_track_ids: string[];
+  location: string | null;
+  view: { hideHeader?: boolean; hideHeaderOverview?: boolean; trackLabels?: string } & Record<
+    string,
+    unknown
+  >;
+  configuration: Record<string, unknown>;
+  track_rows: JBrowseTrackRow[];
+  selection_column: string | null;
+  tracks_dc_id: string;
+  filter_applied: boolean;
+  total_tracks: number;
+  matched_tracks: number;
+  truncated: boolean;
+  /** Default of the viewer's "Force load" toggle (component `force_load`). */
+  force_load?: boolean;
+  /** The component's `max_tracks` cap on `shown_track_ids`. */
+  max_tracks?: number;
+  /** Requested UCSC track names the backend could not resolve. */
+  ucsc_missing?: string[];
+  /** Manifest commit a pinned view reads, null when it reads live data. */
+  data_version?: number | null;
+  /** Sanitized host + prefix of the DC's `remote_base_uri`; null when there is
+   *  none or the viewer is anonymous. */
+  remote_base?: string | null;
+  /** Whether the assembly is a built-in preset or a custom one. */
+  assembly_kind?: 'preset' | 'custom';
+  /** Where `location` came from: the filters narrowed `locus_from` (`filter`),
+   *  the component's YAML `location` (`yaml`), the first call by `sort_by`
+   *  (`first_call`), the first region holding data in the first track (`data`)
+   *  or the assembly's preset view (`preset`). Absent on an older backend. */
+  opening?: 'filter' | 'yaml' | 'first_call' | 'data' | 'preset';
+  /** Locus of the second side of the call `location` was taken from, when
+   *  `locus_from.mate` is declared. */
+  mate_location?: string | null;
+  /** The rows the view points at (the pick, else the best call): the viewer
+   *  paints them, and the table rows they name, in the selection colour. */
+  picked?: JBrowsePicked | null;
+  /** Ids of the tracks the circular view can draw (SV VCF, BEDPE). */
+  sv_track_ids?: string[];
+  /** Colour key of `variant_color_by`, for the status-bar legend. */
+  variant_legend?: VariantLegendPayload | null;
+  /** Initial display of the alignment tracks, echoed from the component. */
+  read_pairs_display?: 'pileup' | 'arcs' | 'cloud';
+  /** The collection and columns a region taken on the browser is expressed in
+   *  (`locus_from`, resolved server-side). Null without `locus_from`: the tile
+   *  has nothing to filter a region on, so it offers no "Use this region". */
+  locus_source?: JBrowseLocusSource | null;
+  /** The component's `display:` block, the YAML defaults of the display menu. */
+  display?: JBrowseDisplaySettings | null;
+}
+
+/** Where a region of the genome browser lands in the dashboard's data. */
+export interface JBrowseLocusSource {
+  dc_id: string;
+  chrom_column: string;
+  start_column: string;
+  end_column: string | null;
+}
+
+/** The `display:` block of a genome browser tile: every setting optional, the
+ *  values the display menu opens on (a viewer's own choice wins, see
+ *  components/jbrowse/displaySettings.ts). */
+export interface JBrowseDisplaySettings {
+  // view
+  center_line?: boolean;
+  gridlines?: boolean;
+  cytobands?: boolean;
+  track_outlines?: boolean;
+  color_by_cds?: boolean;
+  track_labels?: 'overlapping' | 'offset' | 'hidden';
+  // alignments
+  color_scheme?: string;
+  color_tag?: string;
+  soft_clipping?: boolean;
+  mismatch_alpha?: boolean;
+  read_height?: 'normal' | 'compact' | 'super_compact';
+  hide_small_indels?: boolean;
+  hide_mismatches?: boolean;
+  lower_panel?: 'pileup' | 'arcs' | 'cloud';
+  coverage_height?: number;
+  sashimi_arcs?: boolean;
+  min_arc_score?: number;
+  // coverage (wiggle and SNP coverage)
+  scale?: 'linear' | 'log';
+  autoscale?: 'local' | 'global' | 'globalsd' | 'localsd';
+  /** One y scale for every quantitative track, or each its own. */
+  y_scale?: 'per_track' | 'shared';
+  renderer?: 'xyplot' | 'density' | 'line';
+  fill?: 'filled' | 'line' | 'emphasis';
+  summary?: 'min' | 'max' | 'avg' | 'whiskers';
+  // features
+  feature_mode?: 'normal' | 'compact' | 'reducedRepresentation' | 'collapse';
+  feature_labels?: boolean;
+  feature_descriptions?: boolean;
+  gene_glyph?: 'all' | 'longest' | 'longestCoding';
+  // variants
+  variant_row_height?: number;
+  phased?: boolean;
+}
+
+/** One call (a row of `locus_from`) of the stepper. */
+export interface JBrowseCall {
+  /** Null when the row's coordinates are unreadable: it still counts in `total`
+   *  but there is nowhere to navigate to. */
+  locus: string | null;
+  mate_locus: string | null;
+  label: string | null;
+  /** The row's own coordinates (1-based start), null when unreadable. */
+  chrom?: string | null;
+  start?: number | null;
+  end?: number | null;
+  /** The `sort_by` cell, null without `sort_by`. */
+  score?: number | string | null;
+  /** The `locus_from.columns` cells, by column name. */
+  extra?: Record<string, unknown>;
+  /** Name of the source (a `locus_from` entry) the row comes from. */
+  source?: string;
+  /** The `sample_column` / `run_column` cells. */
+  sample?: string | null;
+  run?: string | null;
+  /** Merged rows only (`merge: true`): how many rows, samples and sources the
+   *  overlapping regions joined, with up to 10 sample names. `score` is the
+   *  best score among them. */
+  n_rows?: number;
+  n_samples?: number;
+  samples?: string[];
+  sources?: string[];
+}
+
+/** `POST /dashboards/jbrowse_calls`: one page of the calls, in `sort_by` order. */
+export interface JBrowseCallsResponse {
+  total: number;
+  rows: JBrowseCall[];
+}
+
+/** The region next to a position: the first whose start is past `pos`
+ *  (direction 1) or whose end is before it (-1) on `chrom`, else the first on
+ *  the next / previous chromosome of `chrom_order`. */
+export interface JBrowseNearQuery {
+  chrom: string;
+  pos: number;
+  direction: 1 | -1;
+  /** The assembly's refNames, in order. */
+  chrom_order: string[];
+}
+
+/** One column filter of the region picker; `column` takes the names a sort takes. */
+export interface JBrowseColumnFilter {
+  column: string;
+  kind: 'text' | 'number';
+  op: string;
+  value: string | number;
+  value_to?: number | null;
+}
+
+export interface JBrowseCallsBody {
+  filters: InteractiveFilter[];
+  start?: number;
+  /** At most 200. */
+  limit?: number;
+  /** Overrides `locus_from.sort_by`; the column must be one the calls read. */
+  sort?: { column: string; descending: boolean } | null;
+  /** Case-insensitive substring over `label_column` and `search_columns`. */
+  search?: string | null;
+  /** The region picker's per-column filters (AG Grid's ops), all applied. */
+  column_filters?: JBrowseColumnFilter[];
+  /** Spatial step: at most one row comes back (`total` is still the full count). */
+  near?: JBrowseNearQuery | null;
+  /** Names of the sources to read; null or absent = all. */
+  sources?: string[] | null;
+  /** Overlapping regions of one source (across samples and runs) merged into
+   *  one row; sources stay apart. `total` then counts merged regions. */
+  merge?: boolean;
+  as_of_version?: string | null;
+  data_versions?: Record<string, unknown> | null;
+}
+
+/** `POST /dashboards/jbrowse_call_density`: how many calls fall in each bin. */
+export interface JBrowseCallDensityBody {
+  filters: InteractiveFilter[];
+  /** The assembly's regions, in order. */
+  regions: { refName: string; length: number }[];
+  /** Total bins over the genome, at most 2000. */
+  bins: number;
+  /** Names of the sources to read; null or absent = all. */
+  sources?: string[] | null;
+  /** One track per source, per sample or per run (default `source`). A source
+   *  without the column falls back to one track. */
+  group?: 'source' | 'sample' | 'run';
+  as_of_version?: string | null;
+  data_versions?: Record<string, unknown> | null;
+}
+
+export interface JBrowseCallDensity {
+  /** One bin size (bp) shared by every chromosome. */
+  bin_size: number;
+  /** The largest count of any bin. */
+  max: number;
+  /** One row of the heatmap per source / sample / run, at most 64 (the
+   *  busiest kept, in source then first-seen order). */
+  tracks: JBrowseDensityTrack[];
+  /** Tracks dropped past the cap. */
+  truncated: number;
+}
+
+export interface JBrowseDensityTrack {
+  source: string;
+  /** The source name, the sample or the run. */
+  label: string;
+  /** The run of a sample track, when the source has `run_column`. */
+  run?: string | null;
+  /** One entry per requested region, in order; `counts[i]` covers
+   *  [i * bin_size, (i + 1) * bin_size). */
+  chroms: { refName: string; counts: number[] }[];
+}
+
+export async function fetchJBrowseCallDensity(
+  dashboardId: string,
+  componentIndex: string,
+  body: JBrowseCallDensityBody,
+  signal?: AbortSignal,
+): Promise<JBrowseCallDensity> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/jbrowse_call_density/${dashboardId}/${componentIndex}`,
+    { method: 'POST', body: JSON.stringify(body), signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the region density');
+  const json = (await res.json()) as Partial<JBrowseCallDensity>;
+  return {
+    bin_size: typeof json?.bin_size === 'number' ? json.bin_size : 0,
+    max: typeof json?.max === 'number' ? json.max : 0,
+    tracks: Array.isArray(json?.tracks) ? json.tracks : [],
+    truncated: typeof json?.truncated === 'number' ? json.truncated : 0,
+  };
+}
+
+export async function fetchJBrowseCalls(
+  dashboardId: string,
+  componentIndex: string,
+  body: JBrowseCallsBody,
+  signal?: AbortSignal,
+): Promise<JBrowseCallsResponse> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/jbrowse_calls/${dashboardId}/${componentIndex}`,
+    { method: 'POST', body: JSON.stringify(body), signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list genome calls');
+  const json = (await res.json()) as Partial<JBrowseCallsResponse>;
+  const rows = Array.isArray(json?.rows) ? json.rows : [];
+  return { total: typeof json?.total === 'number' ? json.total : rows.length, rows };
+}
+
+/** One gene-name match of the locus box. */
+export interface JBrowseGeneHit {
+  label: string;
+  /** A locus string ("chr22:23180509-23318037"). */
+  locus: string;
+}
+
+/** `GET /jbrowse/preset/{name}/search`: gene names matching `q` in a preset
+ *  assembly (hgnc and MANE first). */
+export async function searchJBrowseGenes(
+  assembly: string,
+  q: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<JBrowseGeneHit[]> {
+  const params = new URLSearchParams({ q, limit: String(limit) });
+  const res = await authFetch(
+    `${API_BASE}/jbrowse/preset/${encodeURIComponent(assembly)}/search?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to search genes');
+  const json = (await res.json()) as unknown;
+  return Array.isArray(json)
+    ? json.filter(
+        (h): h is JBrowseGeneHit =>
+          !!h && typeof (h as JBrowseGeneHit).label === 'string' && typeof (h as JBrowseGeneHit).locus === 'string',
+      )
+    : [];
 }
 
 export async function fetchJBrowseSession(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[],
-  theme: 'light' | 'dark' = 'light',
+  dataVersions?: Record<string, unknown>,
+  region?: { chrom: string; start: number; end: number } | null,
 ): Promise<JBrowseSessionResponse> {
+  // The genome selection in force never filters: when the filters leave
+  // several `locus_from` rows, it says which frames the view. A whole contig
+  // has an infinite end, sent as null.
+  const regionBody = region
+    ? { region: { ...region, end: Number.isFinite(region.end) ? region.end : null } }
+    : {};
   const res = await authFetch(
     `${API_BASE}/dashboards/render_jbrowse/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, ...regionBody, ...(dataVersions ?? {}) }),
     },
   );
-  if (!res.ok) await throwHttpDetailError(res, 'Failed to render JBrowse');
+  if (!res.ok) await throwRenderError(res, 'Failed to render JBrowse', dataVersions);
   return res.json();
+}
+
+/** Genome view of a `genomic_tracks` collection alone, for its project page. */
+export async function fetchTracksPreview(dcId: string): Promise<JBrowseSessionResponse> {
+  const res = await authFetch(`${API_BASE}/jbrowse/preview/${dcId}`);
+  if (!res.ok) await throwHttpError(res, 'Failed to preview the tracks');
+  return res.json();
+}
+
+/** One UCSC Genome Browser track offered by the builder's track picker. */
+export interface UcscTrackOption {
+  name: string;
+  label: string;
+  type: string;
+  /** UCSC group id (`genes`, `varRep`...), null when UCSC sets none. */
+  group: string | null;
+  /** Label of the composite or super track the track sits under. */
+  collection?: string | null;
+}
+
+/** Matches per UCSC group; `id` is '' for the tracks without a group. */
+export interface UcscTrackGroup {
+  id: string;
+  label: string;
+  count: number;
+}
+
+/** `GET /jbrowse/ucsc/{assembly}/tracks`: one page of the matches. `genome`
+ *  is the UCSC genome the assembly (preset name or alias) maps to, null when
+ *  it has none; `total` counts every match; `fetched_at` (naive UTC) is when
+ *  the catalogue was read from UCSC. */
+export interface UcscTracksResponse {
+  genome: string | null;
+  tracks: UcscTrackOption[];
+  total: number;
+  groups: UcscTrackGroup[];
+  fetched_at: string | null;
+}
+
+export interface UcscTracksQuery {
+  q?: string;
+  limit?: number;
+  offset?: number;
+  /** A group id, '' for the ungrouped tracks; omitted for every group. */
+  group?: string | null;
+}
+
+export async function fetchUcscTracks(
+  assembly: string,
+  { q = '', limit = 50, offset = 0, group = null }: UcscTracksQuery = {},
+  signal?: AbortSignal,
+): Promise<UcscTracksResponse> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (q) params.set('q', q);
+  if (group != null) params.set('group', group);
+  const res = await authFetch(
+    `${API_BASE}/jbrowse/ucsc/${encodeURIComponent(assembly)}/tracks?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list UCSC tracks');
+  const body = (await res.json()) as Partial<UcscTracksResponse>;
+  const tracks = Array.isArray(body?.tracks) ? body.tracks : [];
+  return {
+    genome: body?.genome ?? null,
+    tracks,
+    total: typeof body?.total === 'number' ? body.total : tracks.length,
+    groups: Array.isArray(body?.groups) ? body.groups : [],
+    fetched_at: body?.fetched_at ?? null,
+  };
 }
 
 /** Backend signals "figure cache is being warmed" via HTTP 202. The viewer
@@ -2510,19 +3168,27 @@ export async function renderMultiQC(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  /** Data time travel: `as_of_version` / `report_sets` / `definition_version`,
+   *  from `dataVersionBody`. Empty for a live read. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<MultiQCRenderResult> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_multiqc/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
   if (res.status === 202) {
     const body = (await res.json()) as MultiQCPreparingResponse;
     return { ...body, status: 'preparing' };
   }
-  if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC');
+  if (!res.ok) {
+    if (dataVersions && Object.keys(dataVersions).length > 0) {
+      await throwRenderError(res, 'Failed to render MultiQC', dataVersions);
+    }
+    await throwHttpDetailError(res, 'Failed to render MultiQC');
+  }
   const body = (await res.json()) as FigureResponse;
   return { ...body, status: 'ready' };
 }
@@ -2576,15 +3242,22 @@ export async function renderMultiQCGeneralStats(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[] = [],
+  /** Data time travel; see `renderMultiQC`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<GeneralStatsPayload> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_multiqc_general_stats/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ filters, ...(dataVersions ?? {}) }),
     },
   );
-  if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC General Stats');
+  if (!res.ok) {
+    if (dataVersions && Object.keys(dataVersions).length > 0) {
+      await throwRenderError(res, 'Failed to render MultiQC General Stats', dataVersions);
+    }
+    await throwHttpDetailError(res, 'Failed to render MultiQC General Stats');
+  }
   return res.json();
 }
 
@@ -2625,6 +3298,8 @@ export interface ServerInfo {
   release_notes_url: string;
   docs_url: string;
   version_check: VersionCheckBlock | null;
+  /** UI switches from the server's settings; absent on older servers. */
+  features?: { migration?: boolean; changes_since?: boolean };
 }
 
 /** Optional-auth: the bearer goes along when there is one (it is what makes
@@ -2867,6 +3542,14 @@ export async function createTab(
 // These back the React component-creation stepper and edit page. They wrap
 // existing FastAPI endpoints used by the Dash editor; no schema changes.
 
+/** Where a data collection's data came from, recorded by the creating route.
+ *  Absent on CLI-made and older collections. `added_at` is naive UTC. */
+export interface DataOrigin {
+  kind: 'upload' | 'url' | 'folder' | 'run' | 'manifest';
+  location?: string | null;
+  added_at?: string | null;
+}
+
 export interface WorkflowEntry {
   _id: string;
   name?: string;
@@ -2875,7 +3558,7 @@ export interface WorkflowEntry {
   data_collections?: Array<{
     _id: string;
     data_collection_tag?: string;
-    config?: { type?: string; [k: string]: unknown };
+    config?: { type?: string; origin?: DataOrigin | null; [k: string]: unknown };
     [k: string]: unknown;
   }>;
   project_id?: string;
@@ -3321,6 +4004,10 @@ export function defaultLayoutForType(
       return { x: 0, y, w: 4, h: 4 };
     case 'map':
       return { x: 0, y, w: 4, h: 4 };
+    case 'jbrowse':
+      // A genome browser needs the width for the locus and the height for a
+      // few stacked tracks.
+      return { x: 0, y, w: 8, h: 8 };
     case 'text':
       // Section heading / banner — wide and short.
       return { x: 0, y, w: 8, h: 3 };
@@ -3606,6 +4293,137 @@ export async function deleteDashboardFilterState(dashboardId: string): Promise<v
   }
 }
 
+// ---- Per-user session annotations -----------------------------------------
+//
+// One document per (user, dashboard family). Unlike filter state a failure is
+// reported, not swallowed: the panel keeps its state and warns rather than let
+// a reader believe their labels were kept. A temporary or anonymous account is
+// refused (403) outside single-user mode and keeps its labels in the browser.
+
+export type AnnotationsLoad =
+  | { ok: true; annotations: DashboardAnnotations | null }
+  | { ok: false; status: number; detail: string | null };
+
+export async function fetchDashboardAnnotations(dashboardId: string): Promise<AnnotationsLoad> {
+  try {
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}`);
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const body = (await res.json()) as { annotations: unknown };
+    return { ok: true, annotations: parseAnnotations(body.annotations) };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
+/** A project table, and whether a reader can put labels on it
+ *  (`GET /dashboards/annotations/{id}/tables`). */
+export interface AnnotationTable {
+  dc_id: string;
+  tag: string;
+  workflow_name: string | null;
+  /** The link source columns labels may be keyed on, first one by default. */
+  key_columns: string[];
+  /** How many collections this table's labels reach through links. */
+  link_targets?: number;
+  row_count: number | null;
+  eligible: boolean;
+  code: string | null;
+  reason: string | null;
+}
+
+export type AnnotationTablesLoad =
+  | {
+      ok: true;
+      tables: AnnotationTable[];
+      /** Label columns shared on the dashboard (as `versionId` held them, when given). */
+      shared: AnnotationColumn[];
+      /** Whether the caller may change the shared labels (never on a past version). */
+      canShare: boolean;
+    }
+  | { ok: false; status: number; detail: string | null };
+
+export async function fetchAnnotationTables(
+  dashboardId: string,
+  versionId?: string | null,
+): Promise<AnnotationTablesLoad> {
+  try {
+    const query = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/tables${query}`);
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const body = (await res.json()) as {
+      tables: AnnotationTable[];
+      shared?: unknown;
+      can_share?: boolean;
+    };
+    return {
+      ok: true,
+      tables: body.tables ?? [],
+      shared: parseSharedColumns(body.shared ?? []),
+      canShare: body.can_share === true,
+    };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
+export type SharedLabelsSave =
+  | { ok: true; shared: AnnotationColumn[] }
+  | { ok: false; status: number; detail: string | null };
+
+/** Replace the label columns shared on a dashboard. */
+export async function saveSharedLabels(
+  dashboardId: string,
+  columns: AnnotationColumn[],
+): Promise<SharedLabelsSave> {
+  try {
+    const body = {
+      columns: columns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        dcId: c.dcId,
+        keyColumn: c.keyColumn,
+        values: c.values,
+      })),
+    };
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/shared`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const out = (await res.json()) as { shared?: unknown };
+    return { ok: true, shared: parseSharedColumns(out.shared ?? []) };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
+export type AnnotationsSave = { ok: true } | { ok: false; status: number; detail: string | null };
+
+export async function saveDashboardAnnotations(
+  dashboardId: string,
+  annotations: DashboardAnnotations | null,
+  opts?: { keepalive?: boolean },
+): Promise<AnnotationsSave> {
+  try {
+    const url = `${API_BASE}/dashboards/annotations/${dashboardId}`;
+    // `keepalive` lets a save started on pagehide outlive the page (tab
+    // switches are full navigations). Browsers cap such a body at 64 KB, so a
+    // large set can still be lost there; the debounced save is the real path.
+    const keep = opts?.keepalive ? { keepalive: true } : {};
+    const res =
+      // A set with no column of the reader's own still holds their choice of
+      // a shared column to compare by; only an empty one is deleted.
+      annotations === null || (annotations.columns.length === 0 && !annotations.activeColumnId)
+        ? await authFetch(url, { method: 'DELETE', ...keep })
+        : await authFetch(url, { method: 'PUT', body: JSON.stringify(annotations), ...keep });
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    return { ok: true };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const res = await authFetch(`${API_BASE}/auth/me/optional`);
   if (!res.ok) return null;
@@ -3629,10 +4447,17 @@ export async function fetchCurrentUser(): Promise<CurrentUser | null> {
 // ---- Auth helpers (React /auth page) ------------------------------------
 //
 // Thin wrappers around the FastAPI auth endpoints. These back the React
-// /auth route — login form, register form, public-mode modal, and Google
-// OAuth callback. The returned session payloads share the same JSON shape
-// the Dash app writes into localStorage[`local-store`], so the still-Dash
-// /dashboards page picks up the React-issued session without changes.
+// /auth route — login form, register form, public-mode modal, and the
+// OpenID Connect sign-in buttons. The returned session payloads are written
+// into localStorage[`local-store`] by `persistSession`.
+
+/** An enabled OpenID Connect provider, as listed in /auth/me/optional. */
+export interface SsoProvider {
+  /** URL-safe provider id (`[a-z0-9][a-z0-9_-]*`). */
+  id: string;
+  /** Button text, e.g. "Sign in with SSO". */
+  label: string;
+}
 
 /** Auth mode + flags returned by /auth/me/optional. */
 export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
@@ -3672,19 +4497,17 @@ export interface AuthStatusResponse {
    *  treat absent as `false`. */
   registration_disabled?: boolean;
   /** Email + password sign-in is disabled — hide the credentials form and
-   *  leave Google OAuth as the only way in. Already accounts for whether
-   *  Google OAuth is actually configured. Older backends omit this — treat
+   *  leave single sign-on as the only way in. Already accounts for whether
+   *  an OpenID Connect provider is actually configured. Older backends omit this — treat
    *  absent as `false`. */
   password_login_disabled?: boolean;
   /** Public mode is gated by a shared access code — do not auto-mint a
    *  temporary session, ask for the code first. Older backends omit this —
    *  treat absent as `false`. */
   public_access_code_required?: boolean;
-  google_oauth_enabled: boolean;
-  /** SAML SSO login enabled. Older backends omit this — treat absent as `false`. */
-  saml_enabled?: boolean;
-  /** Label for the SAML login button (e.g. "Sign in with EMBL"). */
-  saml_login_label?: string;
+  /** Enabled OpenID Connect providers, in display order. Older backends omit
+   *  this — treat absent as `[]`. */
+  sso_providers?: SsoProvider[];
   /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
   is_dev_mode?: boolean;
   /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
@@ -3714,6 +4537,7 @@ export interface AuthStatusResponse {
    *  every tile offers "Export / embed". Older backends omit it: treat absent
    *  as `false`. */
   embed_enabled?: boolean;
+  code_figures_locked?: boolean;
   /** At least one site may frame an embed (a non-empty
    *  `DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS`). The origins themselves are not
    *  sent. False means an `<iframe>` of an embed is refused by its own CSP. */
@@ -3772,7 +4596,7 @@ export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
       user: null,
       is_public_mode: false,
       is_single_user_mode: false,
-      google_oauth_enabled: false,
+      sso_providers: [],
     };
   }
   return (await res.json()) as AuthStatusResponse;
@@ -3870,68 +4694,20 @@ export async function getAnonymousSession(): Promise<SessionPayload> {
   return (await res.json()) as SessionPayload;
 }
 
-/** Initiate Google OAuth — caller redirects to the returned authorization_url. */
-export async function startGoogleOAuth(): Promise<{ authorization_url: string; state: string }> {
-  const res = await fetch(`${API_BASE}/auth/google/login`);
-  if (!res.ok) await throwHttpError(res, 'Failed to start Google OAuth');
-  return (await res.json()) as { authorization_url: string; state: string };
+/** URL starting the OpenID Connect login for one provider. Use as a full-page
+ *  navigation (window.location.assign), NOT a fetch — the backend 302s to the
+ *  identity provider. `next` must be a same-origin path; the backend
+ *  re-validates it. */
+export function oidcLoginUrl(providerId: string, next: string = '/dashboards'): string {
+  return `${API_BASE}/auth/oidc/${encodeURIComponent(providerId)}/login?next=${encodeURIComponent(next)}`;
 }
 
-/** URL starting the SAML SP-initiated login. Use as a full-page navigation
- *  (window.location.assign), NOT a fetch — the backend 302s to the IdP.
- *  `next` must be a same-origin path; the backend re-validates it. */
-export function samlLoginUrl(next: string = '/dashboards'): string {
-  return `${API_BASE}/auth/saml/login?next=${encodeURIComponent(next)}`;
-}
-
-/** Complete the Google OAuth flow with the code/state from the redirect URL. */
-export interface GoogleCallbackResult {
-  success: boolean;
-  message?: string;
-  session: SessionPayload | null;
-  redirect_url?: string;
-}
-
-export async function handleGoogleCallback(code: string, state: string): Promise<GoogleCallbackResult> {
-  const params = new URLSearchParams({ code, state });
-  const res = await fetch(`${API_BASE}/auth/google/callback?${params.toString()}`);
-  if (!res.ok) {
-    // The API answers with a `{detail}` envelope; show its text, not the JSON.
-    const detail = await readErrorDetail(res);
-    return { success: false, message: detail || `OAuth failed: ${res.status}`, session: null };
-  }
-  const body = (await res.json()) as {
-    success?: boolean;
-    message?: string;
-    user?: { id: string; email: string };
-    token?: {
-      access_token: string;
-      refresh_token: string;
-      token_type?: string;
-      expire_datetime: string;
-      refresh_expire_datetime: string;
-      user_id: string;
-    };
-    redirect_url?: string;
-  };
-  if (!body.success || !body.token || !body.user) {
-    return { success: false, message: body.message, session: null };
-  }
-  return {
-    success: true,
-    message: body.message,
-    redirect_url: body.redirect_url,
-    session: {
-      logged_in: true,
-      email: body.user.email,
-      user_id: String(body.token.user_id),
-      access_token: body.token.access_token,
-      refresh_token: body.token.refresh_token,
-      expire_datetime: body.token.expire_datetime,
-      refresh_expire_datetime: body.token.refresh_expire_datetime,
-      token_type: body.token.token_type ?? 'bearer',
-    },
-  };
+/** URL of a provider's API callback, with the identity provider's query string
+ *  (`?code=..&state=..`) carried over verbatim. Full-page navigation only: the
+ *  legacy `/auth/google/callback` viewer route forwards the browser here. */
+export function oidcCallbackUrl(providerId: string, search: string = ''): string {
+  const query = search && !search.startsWith('?') ? `?${search}` : search;
+  return `${API_BASE}/auth/oidc/${encodeURIComponent(providerId)}/callback${query}`;
 }
 
 /** Redeem a single-use magic-link ticket for a browser session.
@@ -4114,8 +4890,10 @@ export interface DashboardListEntry extends DashboardSummary {
   workflow_system?: string;
   last_saved_ts?: string;
   permissions?: DashboardPermissions;
-  /** Some endpoints stamp this; matches the YAML/seed origin. */
-  template_origin?: string;
+  /** Which template revision this dashboard was last imported from; absent on
+   *  one built in the viewer or imported from a plain file. A listing's project
+   *  `template_origin` is a different thing (see `DashboardData`). */
+  template_origin?: DashboardTemplateOrigin | null;
   /** Shape can drift slightly per backend version — keep it permissive. */
   [key: string]: unknown;
 }
@@ -4138,6 +4916,8 @@ export interface ProjectListEntry {
   id?: string;
   name: string;
   project_type?: 'basic' | 'advanced';
+  /** User override of the detected layout; null/absent = detect. */
+  layout?: 'runs' | 'pipeline' | 'tables' | null;
   is_public?: boolean;
   /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
@@ -4147,7 +4927,41 @@ export interface ProjectListEntry {
   data_management_platform_project_url?: string | null;
   permissions?: DashboardPermissions;
   workflows?: WorkflowEntry[];
+  /** Which Depictio version produced the project, and where it was imported from. */
+  provenance?: ProjectProvenance | null;
+  /** Set while a migration/admin has frozen the published dashboards. */
+  published_lock?: PublishedLock | null;
+  pending_owner_email?: string | null;
   [key: string]: unknown;
+}
+
+/** One import of a project bundle into an instance. */
+export interface ImportHop {
+  source_instance: string;
+  source_depictio_version: string | null;
+  bundle_format_version: number | null;
+  exported_at: string | null;
+  imported_at: string;
+  target_depictio_version: string;
+  bundle_sha256: string | null;
+  migration_request_id: string | null;
+  via: 'push' | 'cli' | 'zip';
+}
+
+export interface ProjectProvenance {
+  /** Null/absent on projects created before version tracking. */
+  created_with_version: string | null;
+  imported_from: ImportHop[];
+}
+
+export interface PublishedLock {
+  locked_at: string;
+  locked_by_id: string | null;
+  locked_by_email: string | null;
+  reason: string | null;
+  source: 'migration' | 'admin';
+  migration_request_id: string | null;
+  dashboard_ids: string[];
 }
 
 export async function listProjects(): Promise<ProjectListEntry[]> {
@@ -4204,6 +5018,17 @@ export interface IngestionDataCollection {
   recipe: string | null;
   /** GitHub link to the recipe source file. */
   recipe_url: string | null;
+  /** What the recipe computes: its docstring's title and first paragraph. */
+  recipe_summary?: string | null;
+  recipe_description?: string | null;
+  /** The recipe's inputs: collections by tag, files by name and location. */
+  recipe_inputs?: RecipeInput[];
+}
+
+export interface RecipeInput {
+  kind: 'collection' | 'file' | string;
+  name: string;
+  path?: string | null;
 }
 
 export interface IngestionRun {
@@ -4291,6 +5116,102 @@ export async function fetchIngestionReport(
   return (await res.json()) as IngestionReport;
 }
 
+export interface RunScan {
+  scan_time: string | null;
+  files_total: number;
+  files_new: number;
+  files_updated: number;
+  files_skipped: number;
+  files_failed: number;
+}
+
+/** One pipeline run of a project. `status`: `ok`, `incomplete` (a collection
+ *  found nothing in it), `partial` (files failed) or `no_scan`. */
+export interface ProjectRun {
+  run_tag: string;
+  workflow: string | null;
+  run_location: string | null;
+  folder_created: string | null;
+  folder_modified: string | null;
+  registered: string | null;
+  run_hash: string | null;
+  status: 'ok' | 'incomplete' | 'partial' | 'no_scan' | string;
+  files: number;
+  dc_files: Record<string, number>;
+  scans: RunScan[];
+  /** The recipe collections computed from the run, each with how it relates
+   *  to the runs: `run` (from this run alone), `aggregate` (recomputed over
+   *  every run) or `pipeline` (the pipeline's statistic for this run). */
+  dc_outputs?: Record<string, 'run' | 'aggregate' | 'pipeline' | string>;
+}
+
+/** The project's runs, their scans and the files each collection found in
+ *  each. Backend: GET /projects/project-runs/{id}. */
+export async function fetchProjectRuns(projectId: string): Promise<{ runs: ProjectRun[] }> {
+  const res = await authFetch(`${API_BASE}/projects/project-runs/${projectId}`);
+  if (!res.ok) await throwHttpError(res, `Failed to fetch the runs of project ${projectId}`);
+  return (await res.json()) as { runs: ProjectRun[] };
+}
+
+/** What one scan found changed in a file: `[before, after]` of each. */
+export interface RunFileChange {
+  scan: number;
+  size: [number | null, number | null] | null;
+  modified: [string | null, string | null] | null;
+}
+
+/** The samples and modules a MultiQC report's last overwrite added or removed. */
+export interface RunReportChange {
+  samples_added: string[];
+  samples_removed: string[];
+  modules_added: string[];
+  modules_removed: string[];
+}
+
+/** One file of a run: the scans that brought it (`added_in`), found it
+ *  changed or failed to read it, as indexes into `RunFiles.scans`. */
+export interface RunFile {
+  id: string;
+  dc_id: string;
+  dc_tag: string | null;
+  filename: string;
+  location: string;
+  size: number | null;
+  modified: string | null;
+  registered: string | null;
+  added_in: number | null;
+  changed_in: number[];
+  failed_in: number[];
+  changes: RunFileChange[];
+  /** A MultiQC report's: brought by the newest scan of `changed_in`. */
+  report_change: RunReportChange | null;
+}
+
+export interface RunScanFiles {
+  scan_time: string | null;
+  new: number;
+  changed: number;
+  failed: number;
+}
+
+export interface RunFiles {
+  run_tag: string;
+  /** Oldest first, as `ProjectRun.scans`. */
+  scans: RunScanFiles[];
+  files: RunFile[];
+  truncated: boolean;
+}
+
+/** The files of one run of a project, with what each scan did to them.
+ *  Backend: GET /projects/project-runs/{id}/files?run_tag=. */
+export async function fetchProjectRunFiles(projectId: string, runTag: string): Promise<RunFiles> {
+  const res = await authFetch(
+    `${API_BASE}/projects/project-runs/${projectId}/files?run_tag=${encodeURIComponent(runTag)}`,
+  );
+  if (!res.ok) await throwHttpError(res, `Failed to fetch the files of run ${runTag}`);
+  return (await res.json()) as RunFiles;
+}
+
 /** Lightweight ingestion-health summary for the dashboard banner. Backend:
  *  GET /projects/ingestion-health/{id}. */
 export async function fetchIngestionHealth(
@@ -4307,6 +5228,8 @@ export interface RegisteredFile {
   file_location?: string;
   filesize?: number;
   run_tag?: string | null;
+  /** When the file itself last changed (server's local time). */
+  modification_time?: string | null;
 }
 
 /** List the files registered for a data collection. Backend:
@@ -4330,6 +5253,7 @@ export interface CreateProjectInput {
   is_public: boolean;
   data_collections?: string[];
   yaml_config_path?: string | null;
+  description?: string | null;
   data_management_platform_project_url?: string | null;
 }
 
@@ -4357,6 +5281,7 @@ export async function createProject(
     project_type: input.project_type,
     is_public: input.is_public,
     yaml_config_path: input.yaml_config_path ?? null,
+    description: input.description ?? null,
     data_management_platform_project_url:
       input.data_management_platform_project_url ?? null,
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
@@ -4509,6 +5434,7 @@ export interface FromRunRequest {
    *  folder it cannot recognise is a 422 with code `template_not_detected`. */
   templateId?: string | null;
   projectName?: string | null;
+  description?: string | null;
   variables?: Record<string, string>;
   dryRun?: boolean;
   /** Connection settings of the private bucket `dataRoot` is in. The run
@@ -4516,6 +5442,31 @@ export interface FromRunRequest {
    *  project's storage settings (`FromRunReport.storage_saved`), a dry run
    *  stores nothing. */
   storage?: RunStorageIn | null;
+  /** Visibility of the new project. Private (false) unless set: the template
+   *  never decides it. */
+  isPublic?: boolean;
+  /** An inline template (the `template` of `builderTemplate`), in place of
+   *  `templateId`: the two are mutually exclusive, so `template_id` is not
+   *  sent alongside it. */
+  template?: Record<string, unknown> | null;
+  /** `templateId` edited in the Project Builder (needs `templateId`). */
+  edits?: FromRunTemplateEdits | null;
+  /** A local `dataRoot` that holds several runs: the names of its
+   *  sub-folders that are runs (`FolderInspection.child_runs`), two or more.
+   *  The project is previewed and created from the first; the others are
+   *  added as runs before the one ingestion that reads them all. */
+  runs?: string[] | null;
+}
+
+/** Samples one MultiQC collection finds in more than one run
+ *  (`FromRunReport.shared_samples`). */
+export interface SharedRunSamples {
+  data_collection_tag: string;
+  /** The runs naming them, in the request's order. */
+  runs: string[];
+  count: number;
+  /** The first few, sorted. */
+  samples: string[];
 }
 
 /** Connection settings typed in for a private bucket, before the project
@@ -4573,6 +5524,13 @@ export interface FromRunReport {
   detected_template?: DetectedTemplate | null;
   data_root: string;
   detected_runs: string[];
+  /** The sub-folders read as runs when the request named several; the
+   *  preview is the first one's. Older backends omit it. */
+  runs?: string[] | null;
+  /** MultiQC samples named in more than one of `runs`: one collection would
+   *  merge them, so a creation is refused (`runs_share_samples`). Empty for
+   *  one run; older backends omit it. */
+  shared_samples?: SharedRunSamples[];
   resolved_variables: Record<string, string>;
   data_collections: FromRunDCPreview[];
   /** Empty on a dry run. */
@@ -4623,11 +5581,17 @@ export async function createProjectFromRun(
     method: 'POST',
     body: JSON.stringify({
       data_root: input.dataRoot,
-      template_id: input.templateId ?? null,
+      ...(input.template
+        ? { template: input.template }
+        : { template_id: input.templateId ?? null }),
+      ...(input.edits && !input.template ? { edits: input.edits } : {}),
       project_name: input.projectName ?? null,
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
+      is_public: Boolean(input.isPublic),
+      description: input.description ?? null,
       ...(input.storage ? { storage: input.storage } : {}),
+      ...(input.runs && input.runs.length > 1 ? { runs: input.runs } : {}),
     }),
     signal: options.signal,
   });
@@ -4813,6 +5777,9 @@ export interface RunFilePreview {
   /** Rows, columns or text were cut. */
   truncated: boolean;
   reason: string | null;
+  /** column → inferred dtype, when the request asked for it (`inferTypes`)
+   *  and the file is a table. Older backends omit it. */
+  dtypes?: Record<string, string> | null;
 }
 
 /** Read the start of one file of a run folder: its first rows as a table, or
@@ -4824,6 +5791,8 @@ export async function previewRunFile(
     location: string;
     storage?: RunStorageIn | null;
     maxRows?: number;
+    /** Ask for each column's dtype (`RunFilePreview.dtypes`). */
+    inferTypes?: boolean;
   },
   options: { signal?: AbortSignal } = {},
 ): Promise<RunFilePreview> {
@@ -4834,10 +5803,27 @@ export async function previewRunFile(
       location: input.location,
       max_rows: input.maxRows ?? 20,
       ...(input.storage ? { storage: input.storage } : {}),
+      ...(input.inferTypes ? { infer_types: true } : {}),
     }),
     signal: options.signal,
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the file');
+  return (await res.json()) as RunFilePreview;
+}
+
+/** Read the start of the file at a remote `s3://` or `https://` URL, before a
+ *  table is made from it. The server fetches it through the same gateway as
+ *  `createDataCollectionFromUrl`, so a refused host is refused here first. */
+export async function previewRemoteUrl(
+  url: string,
+  options: { signal?: AbortSignal; maxRows?: number } = {},
+): Promise<RunFilePreview> {
+  const res = await authFetch(`${API_BASE}/datacollections/url_preview`, {
+    method: 'POST',
+    body: JSON.stringify({ url, max_rows: options.maxRows ?? 10 }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the URL');
   return (await res.json()) as RunFilePreview;
 }
 
@@ -4860,6 +5846,9 @@ export interface FolderInspection {
   /** The run's own records, read with the detection. Null when no engine
    *  recognised the folder; older backends omit it. */
   run_info?: RunInfoSummary | null;
+  /** A local folder that is not a run itself: its sub-folders that are, by
+   *  name. Empty otherwise; older backends omit it. */
+  child_runs?: string[];
 }
 
 /** Inspect one folder: its direct contents, its run markers and, unless
@@ -4951,6 +5940,594 @@ export async function testRunStorage(
   return (await res.json()) as ProjectStorageTestResult;
 }
 
+// ── Project Builder ─────────────────────────────────────────────────────────
+//
+// `/projects/builder/*`: read a folder one level at a time, suggest a data
+// collection for a file, list the files a collection would ingest, and turn
+// the assembled draft into a template. Served by the API (authenticated, like
+// the run-folder calls) and by `depictio project-builder <dir>`, a thin local
+// server without auth where `/context`, `/plan` and `/write` stand in for
+// project creation. The draft shapes live in `projectBuilder.ts`.
+
+/** GET /projects/builder/capabilities: what this instance can build. A kind
+ *  it does not have is listed unavailable with a reason; the page shows it
+ *  disabled and never sends it. */
+export interface BuilderCapabilities {
+  mode: 'server' | 'standalone';
+  dc_types: { type: BuilderDcType; available: boolean; reason: string | null }[];
+  /** e.g. csv, tsv, parquet, feather, xls, xlsx (+ spatialdata). */
+  table_formats: string[];
+  /** The reader (polars) options allowed for csv/tsv tables. */
+  reader_options: string[];
+  /** The collection types a link may target. */
+  link_target_types: string[];
+  /** `events_enabled` null: unknown (standalone). */
+  realtime: { events_enabled: boolean | null; reason: string | null };
+  genomic_tracks: { assemblies: string[]; track_formats: string[] } | null;
+  bioimage: { formats: string[] } | null;
+}
+
+/** One entry of a builder folder listing. */
+export interface BuilderTreeEntry {
+  name: string;
+  /** Relative to the data root (POSIX). */
+  path: string;
+  is_dir: boolean;
+  /** Bytes; null for a folder or when unknown. */
+  size: number | null;
+  /** A `*.zarr` folder: one pickable leaf, never opened. */
+  store?: 'zarr' | null;
+}
+
+/** Response of POST /projects/builder/tree: one folder level. */
+export interface BuilderTreeListing {
+  /** The folder listed, relative to the data root (`''` at its top). */
+  path: string;
+  entries: BuilderTreeEntry[];
+  /** More entries exist than the server lists. */
+  truncated: boolean;
+  /** The data root is an `s3://` location. */
+  is_remote: boolean;
+  /** How to name the data root to a reader. */
+  root_label: string;
+}
+
+/** A catalog output the suggested file is recognised as. */
+export interface BuilderCatalogMatch {
+  tool_id: string;
+  output_id: string;
+  renders: string[];
+}
+
+/** Response of POST /projects/builder/suggest: a data collection for a file,
+ *  generalised over the other example files given. */
+export interface BuilderSuggestion {
+  /** The file sits under a run of a sequencing-runs workflow: the pattern is read inside each run. */
+  in_run?: boolean;
+  path: string;
+  tag: string;
+  type: BuilderDcType;
+  mode: BuilderScanMode;
+  glob: string | null;
+  regex: string | null;
+  format: string | null;
+  separator: string | null;
+  catalog: BuilderCatalogMatch[];
+  /** The file is a MultiQC parquet. */
+  multiqc: boolean;
+  /** What a `*.zarr` store holds; null for anything else. */
+  store?: BuilderStoreSummary | null;
+  /** A track file: its format and the index found next to it. */
+  tracks?: { format: string; index: string | null } | null;
+  /** A scan whose examples differ in ONE folder: the regex with that folder
+   *  as a `{sample}` placeholder, and the wildcard that reads it. */
+  path_wildcard?: { pattern: string; wildcards: BuilderWildcard[] } | null;
+  /** What the reader should know about the file, e.g. why its suggested
+   *  type is not available on this server. */
+  warnings?: string[];
+}
+
+/** What `/suggest` reads of a store: its format, NGFF version and elements. */
+export interface BuilderStoreSummary {
+  format: 'ome-zarr' | 'spatialdata';
+  ngff_version: '0.4' | '0.5' | null;
+  /** `images/<name>`. */
+  images: string[];
+  /** `tables/<name>`. */
+  tables: string[];
+}
+
+/** `/match`'s checks of a genomic tracks manifest. */
+export interface BuilderTracksCheck {
+  rows: number;
+  columns: string[];
+  missing_uri_column: boolean;
+  unknown_format: string[];
+  duplicate_uris: string[];
+  missing_files: string[];
+  missing_indexes: string[];
+  /** Only part of the manifest was checked. */
+  truncated?: boolean;
+  /** Absolute or file:// uris, which ingestion does not confine to the data
+   *  root. */
+  absolute_uris?: string[];
+}
+
+/** How one matched file's columns differ from the first file's. */
+export interface BuilderSchemaMismatch {
+  file: string;
+  missing: string[];
+  extra: string[];
+  /** column → [first file's dtype, this file's dtype]. */
+  changed: Record<string, [string, string]>;
+}
+
+/** Response of POST /projects/builder/match: exactly the files ingestion
+ *  would scan for the collection (same walk, same regex rule, same bounds). */
+export interface BuilderMatchResult {
+  /** The regex the scan uses; null in single mode. */
+  regex: string | null;
+  /** Relative to the data root, the first 500. */
+  files: string[];
+  count: number;
+  /** The run folders, for a sequencing-runs workflow. */
+  runs: string[];
+  truncated: boolean;
+  /** column → dtype of the first file; null when it could not be read. */
+  schema: Record<string, string> | null;
+  /** Every file read shares the schema; null when not checked. */
+  consistent: boolean | null;
+  mismatches: BuilderSchemaMismatch[];
+  /** Columns read as several numeric types, which ingestion widens (no conflict). */
+  widened?: Record<string, { types: string[]; as: string }>;
+  /** Indexed files whose index was not found next to them. */
+  missing_indexes: string[];
+  warnings: string[];
+  /** The matches are stores (`*.zarr` folders), not files. */
+  stores?: boolean;
+  /** Genomic tracks only: the manifest's checks. */
+  tracks?: BuilderTracksCheck | null;
+}
+
+/** Response of POST /projects/builder/template. */
+export interface BuilderTemplateResult {
+  /** The inline template: what `from_run`, `/plan` and `/write` take. When
+   *  the draft edits a shipped template, its own collections and links only
+   *  (null when it adds none). */
+  template: Record<string, unknown> | null;
+  /** The template; for an edit, the shipped template with every edit applied. */
+  yaml: string;
+  /** `custom/<slug>`, or the shipped template's id. */
+  template_id: string;
+  warnings: string[];
+  /** Collections the edits take out, with why (a dependant of one removed). */
+  removed?: Record<string, string>;
+}
+
+/** How a collection of a shipped template is read: one file, a folder scan,
+ *  a recipe built from files and other collections, or derived otherwise
+ *  (a join). */
+export type BuilderBaseCollectionKind = 'file' | 'scan' | 'recipe' | 'derived' | 'other';
+
+/** One input of a recipe, as the template points it. */
+export interface BuilderBaseSource {
+  ref: string;
+  path: string | null;
+  glob_pattern: string | null;
+  /** The input is another collection, by tag. */
+  dc_ref: string | null;
+  optional: boolean;
+  /** A file or glob input: it may be repointed. */
+  editable: boolean;
+}
+
+/** One collection of a shipped template, read-only. */
+export interface BuilderBaseCollection {
+  tag: string;
+  /** `table`, `multiqc`...; lowercase. */
+  type: string;
+  description: string | null;
+  optional: boolean;
+  kind: BuilderBaseCollectionKind;
+  /** The file (relative to the data root) or the scan's regex, as written. */
+  location: string | null;
+  /** The `{name}` wildcards a scan's regex must keep. */
+  wildcards: string[];
+  /** The template variables its location reads. */
+  variables: string[];
+  /** What may be edited of its location: a path, a regex, or nothing (a
+   *  location that is a variable is set through the variable). */
+  edit: 'path' | 'regex' | null;
+  recipe: string | null;
+  sources: BuilderBaseSource[];
+  /** The collections it is built from and cannot do without. */
+  needs: string[];
+}
+
+export interface BuilderBaseWorkflow {
+  name: string;
+  engine: string | null;
+  engine_version: string | null;
+  version: string | null;
+  repository_url: string | null;
+  catalog: { name: string; url: string } | null;
+  structure: BuilderWorkflowStructure;
+  runs_regex: string | null;
+  collections: BuilderBaseCollection[];
+}
+
+export interface BuilderBaseVariable {
+  name: string;
+  description: string | null;
+  required: boolean;
+  default: string | null;
+}
+
+/** Response of POST /projects/builder/from_template: a shipped template as
+ *  the builder shows it, to be edited as a list of changes. */
+export interface BuilderTemplateDescription {
+  template_id: string;
+  title: string | null;
+  version: string | null;
+  description: string | null;
+  workflows: BuilderBaseWorkflow[];
+  links: { source_tag: string; target_tag: string }[];
+  /** The dashboard files it imports, relative to the template. */
+  dashboards: string[];
+  variables: BuilderBaseVariable[];
+  /** How many conditional rules it carries. */
+  conditionals: number;
+}
+
+/** A new location for a file or a folder scan of a shipped template. */
+export interface BuilderScanEdit {
+  path?: string;
+  regex?: string;
+}
+
+/** A recipe input pointed at another file or files. */
+export interface BuilderSourceEdit {
+  path?: string;
+  glob_pattern?: string;
+}
+
+/** What the reader changed of a template's workflow. A new `name` is the
+ *  workflow's name in the project (its dashboards follow); an empty
+ *  `catalog_name` / `catalog_url` / `repository_url` drops it. */
+export interface BuilderWorkflowEdit {
+  name?: string;
+  version?: string;
+  catalog_name?: string;
+  catalog_url?: string;
+  repository_url?: string;
+  engine_version?: string;
+}
+
+/** The shipped template a draft edits, and the edits (`POST
+ *  /builder/template`'s `base`). */
+export interface BuilderTemplateBaseEdits {
+  template_id: string;
+  remove: string[];
+  scans: Record<string, BuilderScanEdit>;
+  sources: Record<string, Record<string, BuilderSourceEdit>>;
+  /** By workflow name. */
+  workflows: Record<string, BuilderWorkflowEdit>;
+}
+
+/** `edits` of POST /projects/from_run: the base's edits and the draft's own
+ *  collections (the `template` of `builderTemplate`). */
+export interface FromRunTemplateEdits extends Omit<BuilderTemplateBaseEdits, 'template_id'> {
+  additions: Record<string, unknown> | null;
+}
+
+/** Response of POST /projects/builder/metadata: what a workflow's repository
+ *  says about it. `sources` names where each piece came from; `blocked` means
+ *  the server may not fetch that URL. */
+export interface BuilderRepoMetadata {
+  name?: string | null;
+  engine?: string | null;
+  version?: string | null;
+  catalog?: { name: string; url: string } | null;
+  description?: string | null;
+  author?: string | null;
+  license?: string | null;
+  homepage?: string | null;
+  repository_url: string;
+  /** Data URIs. */
+  logo_light?: string | null;
+  logo_dark?: string | null;
+  sources: string[];
+  blocked?: boolean;
+}
+
+/** Response of GET /projects/builder/context (standalone server only). */
+export interface BuilderContext {
+  mode: 'standalone';
+  /** The folder the builder was launched on, absolute. */
+  data_root: string;
+  /** Where `/write` puts the template bundle. */
+  out_dir: string;
+  writable: boolean;
+  /** `depictio ingest <dir> --template <bundle>`. */
+  ingest_command?: string | null;
+  /** `depictio watch <dir> --template <bundle>`: keeps a realtime project fed. */
+  watch_command?: string | null;
+}
+
+/** Response of POST /projects/builder/write (standalone server only). */
+export interface BuilderWriteResult {
+  path: string;
+  yaml: string;
+  /** e.g. `depictio ingest <dir> --template <bundle>`. */
+  ingest_command: string;
+  /** e.g. `depictio watch <dir> --template <bundle>`. */
+  watch_command?: string | null;
+}
+
+/** Response of POST /projects/builder/tracks_manifest: a manifest for track
+ *  files (`track_id, sample, format, uri, index_uri, name`), uris relative to
+ *  the data root. */
+export interface BuilderTracksManifest {
+  columns: string[];
+  rows: Record<string, string>[];
+  tsv: string;
+  warnings: string[];
+}
+
+/** Request settings shared by the builder calls. */
+export interface BuilderRequestOptions {
+  signal?: AbortSignal;
+}
+
+async function postBuilder<T>(
+  route: string,
+  body: Record<string, unknown>,
+  fallback: string,
+  options: BuilderRequestOptions,
+): Promise<T> {
+  const res = await authFetch(`${API_BASE}/projects/builder/${route}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, fallback);
+  return (await res.json()) as T;
+}
+
+/** The root as the builder routes take it: connection details only for an
+ *  `s3://` location, never an empty object. */
+function builderRoot(root: BuilderRootSpec): BuilderRootSpec {
+  return root.storage ? { data_root: root.data_root, storage: root.storage } : { data_root: root.data_root };
+}
+
+/** What this instance can build (both modes). */
+export async function builderCapabilities(
+  options: BuilderRequestOptions = {},
+): Promise<BuilderCapabilities> {
+  const res = await authFetch(`${API_BASE}/projects/builder/capabilities`, { signal: options.signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read what the builder supports');
+  return (await res.json()) as BuilderCapabilities;
+}
+
+/** List one folder level of the data root (`path` relative to it, `''` for
+ *  its top). A private bucket refused for want of its details throws an
+ *  `ApiDetailError` with an S3 code (`s3_refused`, `s3_access_denied`). */
+export function builderTree(
+  root: BuilderRootSpec,
+  path: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTreeListing> {
+  return postBuilder('tree', { root: builderRoot(root), path }, 'Failed to list the folder', options);
+}
+
+/** Suggest a data collection for `path`, generalised over `examples` (other
+ *  files of the same collection, relative to the data root). */
+export function builderSuggest(
+  root: BuilderRootSpec,
+  path: string,
+  examples: string[] = [],
+  options: BuilderRequestOptions = {},
+  workflow: { structure: BuilderWorkflowStructure; runs_regex?: string | null } = { structure: 'flat' },
+): Promise<BuilderSuggestion> {
+  return postBuilder(
+    'suggest',
+    {
+      root: builderRoot(root),
+      path,
+      ...(examples.length ? { examples } : {}),
+      ...(workflow.structure === 'sequencing-runs'
+        ? { structure: workflow.structure, ...(workflow.runs_regex?.trim() ? { runs_regex: workflow.runs_regex } : {}) }
+        : {}),
+    },
+    'Failed to read the file',
+    options,
+  );
+}
+
+/** Response of POST /projects/builder/runs_regex. */
+export interface BuilderRunsRegex {
+  /** The regex read off the first-level folders; null when they share no shape. */
+  regex: string | null;
+  /** The folders it matches, sorted. */
+  runs: string[];
+  /** First-level folders the root holds. */
+  folders: number;
+  /** Folders it leaves out (a few, by name). */
+  skipped: string[];
+  truncated: boolean;
+}
+
+/** Guess the runs regex of a `sequencing-runs` workflow from the data root's
+ *  first-level folders. */
+export function builderRunsRegex(
+  root: BuilderRootSpec,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRunsRegex> {
+  return postBuilder('runs_regex', { root: builderRoot(root) }, 'Failed to read the folders', options);
+}
+
+/** Response of POST /projects/builder/runs_overview. */
+export interface BuilderRunsOverview {
+  regex: string;
+  /** Folders of the data root the regex takes as runs. */
+  runs_total: number;
+  /** The first of them, by name. */
+  runs: string[];
+  /** How many runs were read for the layout (capped). */
+  runs_read: number;
+  /** First-level folders the regex leaves out. */
+  skipped: string[];
+  /** Files seen in the runs read. */
+  files: number;
+  /** The shapes of the files the runs hold (`*` for a name that belongs to
+   *  one run), with how many runs hold each. */
+  layout: { shape: string; runs: number }[];
+  /** Runs that hold the whole layout. */
+  consistent: number;
+  deviating: { run: string; files: number; missing: string[]; extra: string[] }[];
+  deviating_total: number;
+  /** Something was left unread (many runs, many files, a capped listing). */
+  truncated: boolean;
+}
+
+/** What a runs regex takes in: the runs, the layout their files share and the
+ *  runs that depart from it. */
+export function builderRunsOverview(
+  root: BuilderRootSpec,
+  runsRegex: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRunsOverview> {
+  return postBuilder(
+    'runs_overview',
+    { root: builderRoot(root), runs_regex: runsRegex },
+    'Failed to read the runs',
+    options,
+  );
+}
+
+/** The files `collection` would ingest under `workflow`'s structure. */
+export function builderMatch(
+  root: BuilderRootSpec,
+  workflow: { structure: BuilderWorkflowStructure; runs_regex?: string | null },
+  collection: BuilderDcDraft,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderMatchResult> {
+  return postBuilder(
+    'match',
+    {
+      root: builderRoot(root),
+      workflow:
+        workflow.structure === 'sequencing-runs'
+          ? { structure: workflow.structure, runs_regex: workflow.runs_regex ?? null }
+          : { structure: workflow.structure },
+      collection,
+    },
+    'Failed to match the files',
+    options,
+  );
+}
+
+/** Turn the draft into a template. `remote` is true for an `s3://` root. A
+ *  draft breaking a rule is a 422 with code `inline_template_invalid`. */
+export function builderTemplate(
+  draft: BuilderProjectDraft,
+  remote: boolean,
+  options: BuilderRequestOptions = {},
+  base: BuilderTemplateBaseEdits | null = null,
+): Promise<BuilderTemplateResult> {
+  return postBuilder(
+    'template',
+    { draft, remote, ...(base ? { base } : {}) },
+    'Failed to build the template',
+    options,
+  );
+}
+
+/** A shipped template (`nf-core/viralrecon/3.0.0`, `latest` aliases
+ *  included) as the builder shows it: its collections read-only, to remove,
+ *  repoint or add to. */
+export function builderFromTemplate(
+  templateId: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTemplateDescription> {
+  return postBuilder(
+    'from_template',
+    { template_id: templateId },
+    'Failed to read the template',
+    options,
+  );
+}
+
+/** What a workflow repository says about the workflow. */
+export function builderMetadata(
+  repoUrl: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRepoMetadata> {
+  return postBuilder('metadata', { repo_url: repoUrl }, 'Failed to fetch the metadata', options);
+}
+
+/** The folder a standalone builder was launched on (`depictio
+ *  project-builder <dir>`). */
+export async function builderContext(options: BuilderRequestOptions = {}): Promise<BuilderContext> {
+  const res = await authFetch(`${API_BASE}/projects/builder/context`, { signal: options.signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the builder context');
+  return (await res.json()) as BuilderContext;
+}
+
+/** Standalone only: what ingesting the folder with `template` would find, as
+ *  a dry-run `FromRunReport` (no project id). */
+export function builderPlan(
+  template: Record<string, unknown>,
+  options: BuilderRequestOptions = {},
+): Promise<FromRunReport> {
+  return postBuilder('plan', { template }, 'Failed to plan the ingestion', options);
+}
+
+/** A manifest for `files` (track files, relative to the data root); the
+ *  sample is read with `sampleRegex` when given. Refusals: 422 `tracks_none`,
+ *  `tracks_too_many`, `sample_regex_invalid`; 404 `file_missing`. */
+export function builderTracksManifest(
+  root: BuilderRootSpec,
+  files: string[],
+  sampleRegex: string | null = null,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTracksManifest> {
+  return postBuilder(
+    'tracks_manifest',
+    { root: builderRoot(root), files, ...(sampleRegex ? { sample_regex: sampleRegex } : {}) },
+    'Failed to build the manifest',
+    options,
+  );
+}
+
+/** Standalone only: write a manifest as `<bundle dir>/<name>.tsv`; answers
+ *  its path relative to the data root. 409 `manifest_exists` unless
+ *  `overwrite`; 409 `manifest_outside_root` when the bundle folder is not
+ *  inside the data root (download it instead). */
+export function builderWriteManifest(
+  name: string,
+  tsv: string,
+  overwrite = false,
+  options: BuilderRequestOptions = {},
+): Promise<{ path: string }> {
+  return postBuilder(
+    'write_manifest',
+    { name, tsv, ...(overwrite ? { overwrite: true } : {}) },
+    'Failed to write the manifest',
+    options,
+  );
+}
+
+/** Standalone only: write the template bundle next to the data. An existing
+ *  bundle is a 409 with code `bundle_exists` unless `overwrite`. */
+export function builderWrite(
+  template: Record<string, unknown>,
+  overwrite: boolean,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderWriteResult> {
+  return postBuilder('write', { template, overwrite }, 'Failed to write the template', options);
+}
+
 /** Per-DC status of a manifest refresh. A synchronous refresh reports
  *  `ingested` / `failed` (or `planned` under `dry_run`); a polled async run
  *  additionally passes through `dispatched` (queued for a worker) and
@@ -4999,6 +6576,10 @@ export interface RefreshManifestInput {
   dataCollectionTag?: string | null;
   dryRun?: boolean;
   asyncRun?: boolean;
+  /** Read every file again and rebuild every collection. By default only new
+   *  or changed files are read, and a collection none of whose files moved is
+   *  left as it is. */
+  full?: boolean;
 }
 
 /** Re-read and re-ingest the data collections whose source this server can
@@ -5015,6 +6596,7 @@ export async function refreshManifest(
       data_collection_tag: input.dataCollectionTag ?? null,
       dry_run: Boolean(input.dryRun),
       async_run: Boolean(input.asyncRun),
+      full: Boolean(input.full),
     }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh data');
@@ -5111,6 +6693,478 @@ export async function deleteProject(projectId: string): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete project');
+}
+
+/** Admin-only: freeze a project's dashboards (published read-only). */
+export async function lockProject(
+  projectId: string,
+  reason?: string,
+): Promise<{ success: boolean; published_lock: PublishedLock | null }> {
+  const res = await authFetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/lock`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to lock project');
+  return res.json();
+}
+
+/** Admin-only: lift the published read-only lock. */
+export async function unlockProject(
+  projectId: string,
+  reason?: string,
+): Promise<{ success: boolean; published_lock: null }> {
+  const res = await authFetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/unlock`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to unlock project');
+  return res.json();
+}
+
+// ── Server-to-server project push (issue #1303) ────────────────────────────
+
+const MIGRATE_BASE = `${API_BASE}/migrate`;
+
+export type MigrationRequestStatus =
+  | 'pending'
+  | 'importing'
+  | 'imported'
+  | 'rejected'
+  | 'failed'
+  | 'superseded'
+  | (string & {});
+
+export type MigrationTransferMode = 'inline' | 'server_side_copy';
+
+export interface MigrationRequestSummary {
+  id: string;
+  status: MigrationRequestStatus;
+  source_name: string;
+  source_instance: string | null;
+  /** The sender's public URL as its bundle states it (absent on older senders). */
+  source_url?: string | null;
+  source_depictio_version: string | null;
+  requester: { email: string | null; name: string | null };
+  project_id: string;
+  project_name: string;
+  transfer_mode: MigrationTransferMode;
+  bundle_bytes: number | null;
+  created_at: string;
+  updated_at: string;
+  conflict: 'none' | 're_push' | 'foreign' | (string & {});
+  existing_locked: boolean;
+  error_count: number;
+  warning_count: number;
+  /** How the sender authenticated: a pairing key (reviewed here) or an invite code. */
+  credential_type?: 'pairing_key' | 'invite_code' | (string & {});
+  invite_id?: string | null;
+  /** A failed import the admin may start again. */
+  retryable?: boolean;
+  /** Why it failed (failed requests only). */
+  error?: string | null;
+}
+
+export interface MigrationDashboardSummary {
+  id: string;
+  title: string | null;
+  icon: string | null;
+  icon_color: string | null;
+  /** Set on a child tab: the id of the dashboard it belongs to. */
+  parent_dashboard_id: string | null;
+}
+
+export interface MigrationDcSummary {
+  id: string | null;
+  tag: string | null;
+  type: string | null;
+  description: string | null;
+  workflow: string | null;
+}
+
+/** Full request document. `report` is a BundleReport dump recomputed against
+ *  the current state; its inner shape is loosely typed on purpose. */
+export interface MigrationRequestDetail extends Omit<MigrationRequestSummary, 'requester'> {
+  requester?: { email: string | null; name: string | null; source_user_id?: string | null };
+  message?: string | null;
+  report?: {
+    errors?: string[];
+    warnings?: string[];
+    document_counts?: Record<string, number>;
+    dashboards_added?: unknown[];
+    dashboards_replaced?: unknown[];
+    dashboards_removed?: unknown[];
+    total_bytes?: number;
+    object_count?: number;
+    /** The bundle's dashboards, as an admin recognises them. */
+    dashboards?: MigrationDashboardSummary[];
+    /** The project's data collections, as an admin recognises them. */
+    data_collections?: MigrationDcSummary[];
+    [k: string]: unknown;
+  } | null;
+  /** The note typed when the invite was issued (invite pushes only). */
+  invite_note?: string | null;
+  /** Last characters of the invite code, never the code. */
+  invite_code_hint?: string | null;
+  requester_has_account: boolean;
+  target_depictio_version: string | null;
+  lock_imported_default: boolean;
+  decision?: { action: string; at: string; reason: string | null } | null;
+  result?: { project_id: string; locked: boolean; made_public: boolean } | null;
+  error?: string | null;
+  superseded_by?: string | null;
+  [k: string]: unknown;
+}
+
+export async function listMigrationRequests(status?: string): Promise<MigrationRequestSummary[]> {
+  const qs = status ? `?${new URLSearchParams({ status })}` : '';
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${qs}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list migration requests');
+  const body = (await res.json()) as { requests?: MigrationRequestSummary[] };
+  return body.requests ?? [];
+}
+
+/** Queue new thumbnails for the dashboards an imported request brought in. */
+export async function regenerateMigrationThumbnails(
+  id: string,
+): Promise<{ queued: number; dashboards: number }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/thumbnails`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to queue thumbnails');
+  return res.json();
+}
+
+export async function getMigrationRequest(id: string): Promise<MigrationRequestDetail> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load migration request');
+  return res.json();
+}
+
+export async function approveMigrationRequest(
+  id: string,
+  body: { lock: boolean; make_public: boolean },
+): Promise<{ id: string; status: MigrationRequestStatus }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to approve migration request');
+  return res.json();
+}
+
+export async function rejectMigrationRequest(
+  id: string,
+  reason: string,
+): Promise<{ id: string; status: MigrationRequestStatus }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to reject migration request');
+  return res.json();
+}
+
+export async function revalidateMigrationRequest(
+  id: string,
+): Promise<{ id: string; report: NonNullable<MigrationRequestDetail['report']> }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/revalidate`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to revalidate migration request');
+  return res.json();
+}
+
+export interface MigrationTarget {
+  id: string;
+  name: string;
+  url: string;
+  source: 'env' | 'ui';
+  credential_type?: string;
+  /** Admin listing only. */
+  key_fingerprint?: string;
+}
+
+export interface MigrationTargetList {
+  targets: MigrationTarget[];
+  allow_ui_targets: boolean;
+}
+
+export async function listMigrationTargets(): Promise<MigrationTargetList> {
+  const res = await authFetch(`${MIGRATE_BASE}/targets/`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list push targets');
+  const body = (await res.json()) as Partial<MigrationTargetList>;
+  return { targets: body.targets ?? [], allow_ui_targets: !!body.allow_ui_targets };
+}
+
+export async function createMigrationTarget(input: {
+  name: string;
+  url: string;
+  pairing_key: string;
+}): Promise<MigrationTarget> {
+  const res = await authFetch(`${MIGRATE_BASE}/targets/`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to add push target');
+  return res.json();
+}
+
+export async function deleteMigrationTarget(id: string): Promise<{ deleted: boolean }> {
+  const res = await authFetch(`${MIGRATE_BASE}/targets/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete push target');
+  return res.json();
+}
+
+/** Targets any signed-in user may push to (no fingerprint). */
+export async function listPushTargets(): Promise<MigrationTarget[]> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/targets`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list push targets');
+  const body = (await res.json()) as { targets?: MigrationTarget[] };
+  return body.targets ?? [];
+}
+
+export type PushRemoteStatus =
+  | 'pending'
+  | 'importing'
+  | 'imported'
+  | 'rejected'
+  | 'failed'
+  | 'expired'
+  | 'superseded'
+  | (string & {});
+
+/** Where a push goes: a registered target, or a destination URL + invite code
+ *  (the code is sent once and never stored by the source). */
+export type PushDestination =
+  | { target_id: string }
+  | { destination_url: string; invite_code: string };
+
+export interface PushInviteInfo {
+  lock_on_import: boolean;
+  expires_at: string | null;
+  /** The project this code already brought, once it has brought one. */
+  project_id?: string | null;
+  project_name: string | null;
+  imports_immediately: boolean;
+}
+
+export interface PushPreflightResult {
+  target: { id: string; name: string; url?: string };
+  remote_info: {
+    credential_type?: 'pairing_key' | 'invite_code' | (string & {});
+    invite?: PushInviteInfo | null;
+    [k: string]: unknown;
+  };
+  preflight: {
+    ok?: boolean;
+    conflict?: 'none' | 're_push' | 'foreign' | (string & {});
+    existing_project_name?: string | null;
+    existing_locked?: boolean;
+    requester_has_account?: boolean;
+    pending_requests?: number;
+    remaining_today?: number;
+    max_bundle_bytes?: number;
+    transfer_mode?: MigrationTransferMode;
+    errors?: string[];
+    warnings?: string[];
+    [k: string]: unknown;
+  };
+  transfer_mode: MigrationTransferMode;
+  total_bytes: number;
+  object_count: number;
+  can_push: boolean;
+  /** A push of this project is already building or uploading. */
+  in_flight?: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+/** Dry-run a push: validates the destination and reports what would happen. */
+export async function checkPush(
+  projectId: string,
+  destination: PushDestination,
+): Promise<PushPreflightResult> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/check`, {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, ...destination }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Push pre-flight failed');
+  return res.json();
+}
+
+export interface PushDestinations {
+  /** Whether ad-hoc destination URL + invite code pushes are allowed. */
+  enabled: boolean;
+  /** Allowed destination domains (empty: any). */
+  domains: string[];
+  /** Destination URLs this user pushed to recently (codes are never stored). */
+  recent: string[];
+}
+
+export async function getPushDestinations(): Promise<PushDestinations> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/destinations`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load push destinations');
+  const body = (await res.json()) as Partial<PushDestinations>;
+  return {
+    enabled: !!body.enabled,
+    domains: body.domains ?? [],
+    recent: body.recent ?? [],
+  };
+}
+
+export type MigrationPushStatus = 'building' | 'uploading' | 'submitted' | 'failed';
+
+export interface MigrationPush {
+  id: string;
+  status: MigrationPushStatus | (string & {});
+  project_id: string;
+  project_name?: string;
+  /** `env:x`, a UI target id, or `adhoc` (destination URL + invite code). */
+  target_id?: string;
+  target_name?: string;
+  target_url?: string;
+  credential_type?: 'pairing_key' | 'invite_code' | (string & {});
+  retry_of?: string | null;
+  requested_by_email?: string | null;
+  message?: string | null;
+  transfer_mode?: MigrationTransferMode;
+  bundle_bytes?: number | null;
+  remote_request_id?: string | null;
+  remote_status?: PushRemoteStatus | null;
+  remote_result?: { project_id: string; locked: boolean; made_public: boolean } | null;
+  error?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function startPush(
+  projectId: string,
+  destination: PushDestination,
+  message?: string,
+): Promise<{ push_id: string; status: string }> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: projectId,
+      ...destination,
+      ...(message ? { message } : {}),
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start push');
+  return res.json();
+}
+
+export async function listPushes(projectId?: string): Promise<MigrationPush[]> {
+  const qs = projectId ? `?${new URLSearchParams({ project_id: projectId })}` : '';
+  const res = await authFetch(`${MIGRATE_BASE}/push/${qs}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list pushes');
+  const body = (await res.json()) as { pushes?: MigrationPush[] };
+  return body.pushes ?? [];
+}
+
+export async function getPush(pushId: string): Promise<MigrationPush> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/${encodeURIComponent(pushId)}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load push');
+  return res.json();
+}
+
+/** Start a failed push again. An ad-hoc push needs its invite code re-entered. */
+export async function retryPush(
+  pushId: string,
+  inviteCode?: string,
+): Promise<{ push_id: string; status: string }> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/${encodeURIComponent(pushId)}/retry`, {
+    method: 'POST',
+    body: JSON.stringify(inviteCode ? { invite_code: inviteCode } : {}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to retry push');
+  return res.json();
+}
+
+// ── Invite codes (target side, admin only) ──
+
+export type MigrationInviteState = 'active' | 'expired' | 'revoked';
+
+export interface MigrationInvite {
+  id: string;
+  state: MigrationInviteState;
+  lock_on_import: boolean;
+  note: string | null;
+  /** Last 4 characters of the code. */
+  code_hint: string;
+  created_at: string;
+  created_by_email: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  used_at: string | null;
+  last_used_at: string | null;
+  use_count: number;
+  request_ids: string[];
+  /** Set by the first accepted push: the code then carries only this project. */
+  project_id: string | null;
+  project_name: string | null;
+}
+
+export interface MigrationInviteDefaults {
+  ttl_days: number;
+  max_ttl_days: number;
+  lock_on_import: boolean;
+}
+
+export interface MigrationInviteList {
+  invites: MigrationInvite[];
+  inbound_enabled: boolean;
+  defaults: MigrationInviteDefaults;
+}
+
+export async function listMigrationInvites(): Promise<MigrationInviteList> {
+  const res = await authFetch(`${MIGRATE_BASE}/invites`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list invitations');
+  const body = (await res.json()) as Partial<MigrationInviteList>;
+  return {
+    invites: body.invites ?? [],
+    inbound_enabled: !!body.inbound_enabled,
+    defaults: body.defaults ?? {
+      ttl_days: 30,
+      max_ttl_days: 365,
+      lock_on_import: true,
+    },
+  };
+}
+
+/** The only answer that ever carries the plain code. */
+export async function createMigrationInvite(input: {
+  lock_on_import: boolean;
+  expires_in_hours?: number;
+  note?: string;
+}): Promise<MigrationInvite & { code: string }> {
+  const res = await authFetch(`${MIGRATE_BASE}/invites`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create invitation');
+  return res.json();
+}
+
+export async function revokeMigrationInvite(id: string): Promise<MigrationInvite> {
+  const res = await authFetch(`${MIGRATE_BASE}/invites/${encodeURIComponent(id)}/revoke`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to revoke invitation');
+  return res.json();
+}
+
+/** Start a failed import again (target side, admin only). */
+export async function retryMigrationRequest(
+  id: string,
+): Promise<{ id: string; status: MigrationRequestStatus }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to retry the import');
+  return res.json();
 }
 
 export async function toggleProjectVisibility(
@@ -5341,6 +7395,31 @@ export async function previewGroupMembers(
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load the group members');
   return res.json();
+}
+
+/** A person a project could be shared with: only what the dialog needs. */
+export interface ShareCandidate {
+  id: string;
+  email: string;
+  display_name?: string | null;
+}
+
+/** Fewer characters than this are never searched (the server returns nothing). */
+export const SHARE_CANDIDATE_MIN_QUERY = 3;
+
+/** People matching part of an email, name or login, for the sharing dialog.
+ *  Open to whoever manages the project's sharing, unlike the admin-only user
+ *  list, so a non-admin owner or P.I. can find someone in another group. */
+export async function searchShareCandidates(
+  projectId: string,
+  query: string,
+): Promise<ShareCandidate[]> {
+  const res = await authFetch(
+    `${API_BASE}/projects/share_candidates/${projectId}?q=${encodeURIComponent(query)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to search users');
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 export async function createGroup(input: {
@@ -5603,6 +7682,278 @@ export async function deleteDataCollection(dcId: string): Promise<void> {
   if (!res.ok) await throwHttpError(res, 'Failed to delete data collection');
 }
 
+// ── Editing a table a user added ─────────────────────────────────────────
+
+/** Whether a table can be edited in place, and whether the caller may. */
+export interface TableEditStatus {
+  data_collection_id: string;
+  /** The table is one a user added (an upload or a plain table from a folder). */
+  table_editable: boolean;
+  /** `table_editable`, the caller is an owner or editor, and the project is not published. */
+  can_edit: boolean;
+  /** The caller is an owner or editor of the project: worth showing a disabled control with `reason`. */
+  role_can_edit: boolean;
+  /** Why the table cannot be edited now, as a machine-readable code (`pipeline_table`, `url_table`, `published_lock`, …). */
+  code: string | null;
+  /** Why the table is read-only, for the user. */
+  reason: string | null;
+  max_rows: number;
+  /** Cell edits are unlocked: the table is metadata the project maintains by hand. */
+  unlocked: boolean;
+  /** The caller may lock or unlock it: an owner or editor, an editable kind of
+   *  table, a project that is not published. */
+  can_toggle_lock: boolean;
+}
+
+export type TableColumnKind =
+  | 'string'
+  | 'integer'
+  | 'float'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'time'
+  | 'other';
+
+export interface TableEditColumn {
+  name: string;
+  dtype: string;
+  kind: TableColumnKind;
+  /** False for a column of a type that is shown but cannot be edited. */
+  editable: boolean;
+}
+
+/** The whole table with the Delta version it was read at. */
+export interface TableEditData {
+  data_collection_id: string;
+  delta_version: number;
+  row_count: number;
+  max_rows: number;
+  columns: TableEditColumn[];
+  rows: Record<string, unknown>[];
+}
+
+/** One edited cell. `row` is the 0-based position in the version that was read;
+ *  a null or blank `value` clears the cell. */
+export interface TableCellEdit {
+  row: number;
+  column: string;
+  value: string | number | boolean | null;
+}
+
+export interface TableCellError {
+  row: number;
+  column: string;
+  message: string;
+}
+
+export interface TableEditResult {
+  success: boolean;
+  data_collection_id: string;
+  changed_cells: number;
+  delta_version: number;
+  aggregation_version: number | null;
+  row_count: number;
+}
+
+/** A refused table edit. `code` is `stale_version` (409, someone else saved
+ *  first), `invalid_cells` (422, see `cellErrors`), `table_too_large` (413) or
+ *  one of the read-only codes (403). */
+export class TableEditError extends ApiDetailError {
+  readonly cellErrors: TableCellError[];
+  /** The table's current Delta version, on `stale_version`. */
+  readonly currentVersion: number | null;
+
+  constructor(
+    message: string,
+    status: number,
+    code: string | null,
+    cellErrors: TableCellError[] = [],
+    currentVersion: number | null = null,
+  ) {
+    super(message, status, code, message);
+    this.name = 'TableEditError';
+    this.cellErrors = cellErrors;
+    this.currentVersion = currentVersion;
+  }
+}
+
+async function throwTableEditError(res: Response, prefix: string): Promise<never> {
+  let detail: unknown = null;
+  try {
+    detail = (await res.json())?.detail;
+  } catch {
+    // non-JSON body
+  }
+  const body = (detail && typeof detail === 'object' ? detail : {}) as {
+    code?: unknown;
+    message?: unknown;
+    errors?: unknown;
+    current_version?: unknown;
+  };
+  const message =
+    typeof detail === 'string'
+      ? detail
+      : typeof body.message === 'string'
+        ? body.message
+        : `${prefix}: ${res.status}`;
+  throw new TableEditError(
+    message,
+    res.status,
+    typeof body.code === 'string' ? body.code : null,
+    Array.isArray(body.errors) ? (body.errors as TableCellError[]) : [],
+    typeof body.current_version === 'number' ? body.current_version : null,
+  );
+}
+
+/** Can this table be edited in place, and may the caller? Cheap (no table read). */
+export async function fetchTableEditStatus(dcId: string): Promise<TableEditStatus> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_status`);
+  if (!res.ok) await throwTableEditError(res, 'Failed to read the table edit state');
+  return res.json();
+}
+
+/** Lock or unlock cell edits on a table a user added (locked by default).
+ *  Answers the new edit status. Throws `TableEditError`. */
+export async function setTableEditLock(dcId: string, unlocked: boolean): Promise<TableEditStatus> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_lock`, {
+    method: 'PATCH',
+    body: JSON.stringify({ unlocked }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to change the table lock');
+  return res.json();
+}
+
+export interface TableCoordinates {
+  lat_column: string | null;
+  lon_column: string | null;
+}
+
+/** Mark the latitude/longitude columns that make a table a Map source, or
+ *  clear them (both null). Throws `TableEditError` (422 codes: `incomplete_pair`,
+ *  `same_column`, `unknown_column`, `not_numeric`, `out_of_range`, `not_a_table`). */
+export async function setTableCoordinates(
+  dcId: string,
+  latColumn: string | null,
+  lonColumn: string | null,
+): Promise<TableCoordinates> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/coordinates`, {
+    method: 'PATCH',
+    body: JSON.stringify({ lat_column: latColumn, lon_column: lonColumn }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to save the map coordinates');
+  return res.json();
+}
+
+/** The whole table, with the Delta version that `patchTableCells` must be given. */
+export async function fetchTableForEdit(dcId: string): Promise<TableEditData> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_data`);
+  if (!res.ok) await throwTableEditError(res, 'Failed to load the table');
+  return res.json();
+}
+
+/** Save cell edits in one new table version, or none. Throws `TableEditError`. */
+export async function patchTableCells(
+  dcId: string,
+  baseVersion: number,
+  edits: TableCellEdit[],
+): Promise<TableEditResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/cells`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_version: baseVersion, edits }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to save the changes');
+  return res.json();
+}
+
+export interface TableRestoreResult {
+  restored_version: number;
+  delta_version: number | null;
+  row_count: number;
+}
+
+/** Bring past version `version` back as a new version of the table. Throws `TableEditError`. */
+export async function restoreTableVersion(
+  dcId: string,
+  version: number,
+  baseVersion: number,
+): Promise<TableRestoreResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/restore_version`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version, base_version: baseVersion }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to restore this version');
+  return res.json();
+}
+
+export type TableMergeMode = 'replace' | 'fill_missing' | 'add_columns';
+
+export interface TableMergeColumn extends TableEditColumn {
+  is_new: boolean;
+}
+
+export interface TableMergeKeyCandidate {
+  column: string;
+  matched_rows: number;
+  unique_in_table: boolean;
+}
+
+/** What a file does to a table: the same report for a preview and for an apply. */
+export interface TableMergeReport {
+  dry_run: boolean;
+  mode: TableMergeMode;
+  suggested_mode: TableMergeMode;
+  key: string | null;
+  key_candidates: TableMergeKeyCandidate[];
+  delta_version: number;
+  table_rows: number;
+  file_rows: number;
+  row_count: number;
+  matched_rows: number;
+  unmatched_file_rows: number;
+  unmatched_file_sample: string[];
+  filled_cells: number;
+  conflicts: number;
+  new_columns: string[];
+  ignored_columns: string[];
+  removed_columns: string[];
+  warnings: string[];
+  can_apply: boolean;
+  reason: string | null;
+  changed: { row: number; column: string }[];
+  columns: TableMergeColumn[];
+  rows: Record<string, unknown>[];
+}
+
+/** Preview (`dryRun`, the default) or apply a file on a table. Throws `TableEditError`. */
+export async function mergeTableFile(
+  dcId: string,
+  file: File,
+  options: {
+    mode?: TableMergeMode | 'auto';
+    key?: string | null;
+    /** The Delta version the caller read. Required to apply; a dry run without
+     *  it previews against the current table (its report names that version). */
+    baseVersion?: number;
+    dryRun?: boolean;
+  },
+): Promise<TableMergeReport> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('mode', options.mode ?? 'auto');
+  if (options.key) form.append('key', options.key);
+  if (options.baseVersion != null) form.append('base_version', String(options.baseVersion));
+  form.append('dry_run', String(options.dryRun ?? true));
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/merge_file`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to read the file');
+  return res.json();
+}
+
 export interface CreateDataCollectionUploadInput {
   projectId: string;
   name: string;
@@ -5706,6 +8057,131 @@ export async function createDataCollectionFromUrl(
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to create data collection from URL');
   return res.json();
+}
+
+/** One file of a folder read by `addTablesFromFolder`. */
+export interface FolderTableFile {
+  /** Relative to the folder. */
+  path: string;
+  /** Suggested collection name, unique within the project. */
+  name: string;
+  format: string | null;
+  size: number | null;
+  /** False for a file that cannot become a table; `reason` says why. */
+  table: boolean;
+  reason: string | null;
+  compression: string | null;
+  /** The project's collection already made from this same file, if any. */
+  existing?: { data_collection_id: string; data_collection_tag: string } | null;
+}
+
+/** One collection created by a real `addTablesFromFolder`. */
+export interface FolderTableCreated {
+  path: string;
+  data_collection_id: string | null;
+  data_collection_tag: string | null;
+  /** `skipped`: the file is already a collection of the project
+   *  (`error` is "Already in this project", `data_collection_id` the existing one). */
+  status: 'ingested' | 'failed' | 'skipped';
+  error: string | null;
+}
+
+/** Response of POST /projects/{id}/add_tables_from_folder. */
+export interface FolderTablesReport {
+  location: string;
+  source: 'local' | 's3';
+  files: FolderTableFile[];
+  truncated: boolean;
+  /** Empty on a dry run. */
+  created: FolderTableCreated[];
+  dry_run: boolean;
+  storage_saved?: boolean;
+}
+
+/** List the table files of a folder (dry run), or create one table
+ *  collection per listed `files` path in an existing project. The folder is
+ *  read with the same rules as a run folder: an `s3://` prefix, or an allowed
+ *  folder on the server's own disk; `storage` for a private bucket. */
+export async function addTablesFromFolder(
+  projectId: string,
+  input: {
+    location: string;
+    files?: string[] | null;
+    dryRun: boolean;
+    storage?: RunStorageIn | null;
+    recursive?: boolean;
+  },
+  options: { signal?: AbortSignal } = {},
+): Promise<FolderTablesReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/${encodeURIComponent(projectId)}/add_tables_from_folder`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        location: input.location,
+        files: input.files ?? null,
+        dry_run: input.dryRun,
+        storage: input.storage ?? null,
+        recursive: input.recursive ?? false,
+      }),
+      signal: options.signal,
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the folder');
+  return (await res.json()) as FolderTablesReport;
+}
+
+/** How a run folder relates to the pipeline of the project it is added to. */
+export type AttachRunMatch = 'exact' | 'closest' | 'none' | 'other_pipeline';
+
+/** Response of POST /projects/{id}/attach_run. */
+export interface AttachRunReport {
+  project_id: string;
+  data_root: string;
+  /** The project's own pipeline version. */
+  template_id: string;
+  detected: DetectedTemplate | null;
+  match: AttachRunMatch;
+  new_runs: string[];
+  existing_runs: string[];
+  /** What each collection would get from the new folder. */
+  data_collections: Array<{
+    tag: string;
+    matched: number;
+    status: 'ok' | 'kept' | 'empty' | 'missing' | 'pruned' | string;
+  }>;
+  /** Per MultiQC collection, the samples of the new run a report already in
+   *  the project names; a real call refuses them (`runs_share_samples`). */
+  shared_samples?: SharedRunSamples[];
+  /** Ingestion to poll with `getManifestRefreshRun`; null on a dry run. */
+  run_id: string | null;
+  dry_run: boolean;
+  warnings: string[];
+}
+
+/** Check (dry run) or add another run folder of the project's pipeline to a
+ *  project made from a pipeline. Refusals come back as `{detail, code}`
+ *  (`not_a_pipeline_project`, `other_pipeline`, `already_attached`,
+ *  `cannot_attach`, `run_name_clash`); read the code with `apiErrorCode`. */
+export async function attachRun(
+  projectId: string,
+  input: { dataRoot: string; dryRun: boolean; storage?: RunStorageIn | null },
+  options: { signal?: AbortSignal } = {},
+): Promise<AttachRunReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/${encodeURIComponent(projectId)}/attach_run`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        data_root: input.dataRoot,
+        dry_run: input.dryRun,
+        storage: input.storage ?? null,
+      }),
+      signal: options.signal,
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to add the run');
+  return (await res.json()) as AttachRunReport;
 }
 
 /** Fields the management Create-modal collects. Matches the allowlist on
@@ -5958,6 +8434,10 @@ export interface AdminUser {
   is_verified?: boolean;
   registration_date?: string | null;
   last_login?: string | null;
+  display_name?: string | null;
+  login?: string | null;
+  sso_provider?: string | null;
+  must_change_password?: boolean;
   [key: string]: unknown;
 }
 
@@ -6026,6 +8506,13 @@ export interface AdminProject {
   is_public?: boolean;
   workflow_system?: string;
   permissions?: DashboardPermissions;
+  /** Creation time, UTC, "YYYY-MM-DD HH:MM:SS". */
+  registration_time?: string;
+  /** Last edit, UTC; empty when never edited since creation. */
+  last_modified?: string;
+  data_management_platform_project_url?: string | null;
+  /** Set while a migration/admin has frozen the published dashboards. */
+  published_lock?: PublishedLock | null;
   [key: string]: unknown;
 }
 
@@ -6041,12 +8528,18 @@ export interface AdminDashboard {
   _id?: string;
   dashboard_id: string;
   title?: string;
+  subtitle?: string;
+  icon?: string;
+  icon_color?: string;
   is_public?: boolean;
   is_main_tab?: boolean;
   parent_dashboard_id?: string | null;
   main_tab_name?: string;
   project_id?: string;
   last_saved_ts?: string;
+  creation_time?: string;
+  version?: number;
+  workflow_system?: string;
   permissions?: DashboardPermissions;
   stored_metadata?: unknown[];
   [key: string]: unknown;
@@ -6284,8 +8777,12 @@ export async function restoreBackup(
 
 // ---- Admin "Log & Task" monitoring (/monitoring) ------------------------
 //
-// Back the admin Monitoring tab. All read endpoints are admin-gated server
-// side and 404 in public/demo mode; the SPA hides the tab in those modes too.
+// Back the admin Monitoring tab and the Activity page. The task, ingestion and
+// agent reads are scoped server side: an admin gets everything, any other real
+// user the rows of the projects they can access (redacted, and flagged
+// `redacted`, unless they can edit the project). Logs and health are
+// admin-only. All of it is refused in public/demo mode, where the SPA hides
+// these views too.
 
 /** A persisted Celery task lifecycle record. */
 export interface MonitoringTaskEvent {
@@ -6296,6 +8793,12 @@ export interface MonitoringTaskEvent {
   args_repr?: string;
   dashboard_id?: string | null;
   dc_id?: string | null;
+  project_id?: string | null;
+  run_id?: string | null;
+  user_id?: string | null;
+  /** True when the reader is only a viewer of the task's project: arguments,
+   *  result, logs, traceback and worker are left out. */
+  redacted?: boolean;
   queue?: string | null;
   worker?: string | null;
   started_at?: string | null;
@@ -6326,6 +8829,12 @@ export interface MonitoringIngestionRun {
   project_config_path?: string | null;
   data_root?: string | null;
   data_collections?: MonitoringIngestionDataCollection[];
+  /** Run tags (run folders) this ingestion brought in, e.g. the new runs of
+   *  an attach_run. Absent on runs recorded before this existed. */
+  run_tags?: string[];
+  /** True when the reader is only a viewer of the run's project: commands,
+   *  local paths, user details and step messages are left out. */
+  redacted?: boolean;
   /** `abandoned`: still `running` when no write arrived within the stale threshold. */
   status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted' | 'abandoned';
   steps?: MonitoringIngestionStep[];
@@ -6713,7 +9222,7 @@ export interface ProfileUser {
   registration_date?: string | null;
   last_login?: string | null;
   /** SSO-provided profile attributes (UserBaseUI.display_name/title) —
-   *  present only when populated by sso_sync on SAML/OAuth login. */
+   *  present only when populated by sso_sync on OpenID Connect login. */
   display_name?: string | null;
   title?: string | null;
 }
@@ -6900,7 +9409,7 @@ export interface DCLinkConfig {
   case_sensitive?: boolean;
 }
 
-export type LinkTargetType = 'table' | 'multiqc' | 'image';
+export type LinkTargetType = 'table' | 'multiqc' | 'image' | 'genomic_tracks';
 
 export interface DCLink {
   id: string;
@@ -7030,6 +9539,33 @@ export async function listLinkResolvers(projectId: string): Promise<ResolverInfo
 
 /** Aggregated canonical → variants map for a MultiQC DC's reports. Used to
  *  populate the ``sample_mapping`` resolver editor. */
+export interface LinkSuggestion {
+  source_dc_id: string;
+  source_dc_tag: string;
+  source_column: string;
+  target_dc_id: string;
+  target_dc_tag: string;
+  target_type: LinkTargetType;
+  resolver: LinkResolverName;
+  target_field?: string | null;
+  /** Distinct source values found in the target, out of `total`. */
+  matched: number;
+  total: number;
+  /** A few source values and what the link reaches with each; empty: missed. */
+  examples?: Array<{ source: string; targets: string[] }>;
+}
+
+/** Links the given tables could have, from the values they share. */
+export async function fetchLinkSuggestions(
+  projectId: string,
+  sourceDcIds: string[],
+): Promise<LinkSuggestion[]> {
+  const params = new URLSearchParams(sourceDcIds.map((id) => ['source', id]));
+  const res = await authFetch(`${API_BASE}/links/${projectId}/suggestions?${params}`);
+  if (!res.ok) await throwHttpError(res, 'Failed to suggest links');
+  return (await res.json()) as LinkSuggestion[];
+}
+
 export async function fetchMultiQCSampleMappings(
   projectId: string,
   dcId: string,
@@ -7122,6 +9658,31 @@ async function postMultiQCUpload(
   const res = await authFetch(url, { method: 'POST', body: fd });
   if (!res.ok) await throwHttpDetailError(res, 'MultiQC upload failed');
   return (await res.json()) as MultiQCMutationResult;
+}
+
+export interface CreateAssetDCInput {
+  projectId: string;
+  name: string;
+  /** One file for a map or a tree; any number of images make one collection. */
+  kind: 'geojson' | 'phylogeny' | 'image';
+  files: File[];
+}
+
+/** Create a GeoJSON, phylogeny or image collection from uploaded files. */
+export async function createAssetDataCollection(
+  input: CreateAssetDCInput,
+): Promise<{ data_collection_id?: string }> {
+  const fd = new FormData();
+  fd.append('project_id', input.projectId);
+  fd.append('name', input.name);
+  fd.append('kind', input.kind);
+  for (const file of input.files) fd.append('files', file, file.name);
+  const res = await authFetch(`${API_BASE}/datacollections/create_asset_from_upload`, {
+    method: 'POST',
+    body: fd,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Upload failed');
+  return (await res.json()) as { data_collection_id?: string };
 }
 
 export async function createMultiQCDataCollection(
@@ -7280,6 +9841,8 @@ export interface CatalogRender {
   filterable?: boolean;
   row_selection_enabled?: boolean;
   row_selection_column?: string;
+  /** `single`: a click replaces the picked row instead of adding to it. */
+  row_selection_mode?: 'multiple' | 'single';
   /** advanced_viz only: the pre-computed config blob (role bindings + data-derived
    *  viz-control defaults like manhattan `score_threshold`) the catalog preview
    *  rendered with. Persisting it verbatim makes the added component match its
@@ -8032,4 +10595,436 @@ export function componentExportPath(
     `${API_BASE}/export/dashboards/${encodeURIComponent(dashboardId)}` +
     `/components/${encodeURIComponent(componentId)}?${query}`
   );
+}
+
+// ── What changed since the reader's last visit (#1397) ─────────────────────
+//
+// A signed-in reader's mark lives on the server. An anonymous or temporary
+// reader's lives in the browser: the server returns `current_baseline` and
+// reads it back from the request body. `since` / `beforeRun` ask for a
+// read-only view that never moves a mark.
+
+export type MarkMode = 'sticky' | 'previous_visit';
+
+/** Opaque to the client: stored and sent back as is. */
+export type ReaderBaseline = Record<string, unknown> & { seen_at: string };
+export type DismissedComponents = Record<string, { fingerprint: string | null; data_token: string | null }>;
+
+export interface DataChange {
+  dc_id: string;
+  dc_type: string;
+  workflow_tag: string;
+  data_collection_tag: string;
+  kind: 'refreshed' | 'emptied';
+  new_run_tags: string[];
+  touched_run_tags: string[];
+  /** A recipe collection's relation to the runs (see ProjectRun.dc_outputs). */
+  run_scope?: string | null;
+  /** Runs the reader had seen whose rows a recomputation over every run
+   *  rewrote: "seen before" holds new values for them. */
+  recomputed_run_tags?: string[];
+  /** Delta collections: the runs the reader had seen (absent on MultiQC). */
+  seen_run_tags?: string[];
+  /** Delta collections: when, and by whom, each new run was written. `at` is
+   *  the last commit's, a later run's when several arrived since the mark. */
+  run_at?: Record<string, string | null>;
+  run_by?: Record<string, string[]>;
+  rows_before?: number | null;
+  rows_after?: number | null;
+  rows_added?: number;
+  commits?: number;
+  delta_from?: number | null;
+  delta_to?: number | null;
+  reports_added?: number;
+  reports_refreshed?: number;
+  reports_removed?: number;
+  new_samples?: string[];
+  new_sample_count?: number;
+  /** MultiQC collections: the new samples of each new run. A sample that
+   *  reports of several runs name is under none. */
+  new_samples_by_run?: Record<string, string[]>;
+  /** MultiQC collections: the samples the reader had seen that are still
+   *  there, the other side of the split. Null when either side is too long
+   *  to list in full. */
+  seen_samples?: string[] | null;
+  ingestion_run_ids: string[];
+  by: string[];
+  at: string | null;
+}
+
+export interface FailedIngestion {
+  run_id: string;
+  status: string;
+  run_tags: string[];
+  data_collection_tags: string[];
+  at: string | null;
+}
+
+export interface DashboardChange {
+  kind:
+    | 'component_added'
+    | 'component_edited'
+    | 'component_removed'
+    | 'tab_added'
+    | 'tab_removed'
+    | 'tab_renamed';
+  tab_id: string;
+  tab_title: string;
+  component_index?: string;
+  component_type?: string | null;
+  component_title?: string;
+  key?: string;
+  authors: string[];
+  version_id: string | null;
+  seq: number | null;
+  at: string | null;
+}
+
+export interface CommentChange {
+  thread_id: string;
+  tab_id: string | null;
+  component_index: string | null;
+  component_title: string | null;
+  number: number | null;
+  kind: 'thread' | 'reply';
+  author: string | null;
+  at: string | null;
+  excerpt: string;
+}
+
+export interface DashboardChangeSet {
+  family_id: string;
+  first_visit: boolean;
+  since: string | null;
+  approximate: boolean;
+  data: DataChange[];
+  failed_ingestions: FailedIngestion[];
+  dashboard: DashboardChange[];
+  comments: CommentChange[];
+  /** `tabId:componentIndex` -> why it is marked. */
+  changed_components: Record<string, Array<'definition' | 'data'>>;
+  baseline_version_id: string | null;
+  /** Runs that are one group of the dashboard's pinned colours, in that
+   *  group's colour (epic #1399). Other runs take a colour of the palette. */
+  run_colors?: Record<string, string>;
+  server_held: boolean;
+  mark_mode: MarkMode;
+  current_baseline?: ReaderBaseline;
+}
+
+export interface ProjectRunChange {
+  workflow_id: string;
+  run_tag: string;
+  run_location: string | null;
+  registered: string | null;
+}
+
+export interface ProjectDashboardChange {
+  family_id: string;
+  title: string;
+  versions: number;
+  authors: string[];
+  seq?: number;
+  version_id?: string;
+}
+
+export interface ProjectChangeSet {
+  project_id: string;
+  first_visit: boolean;
+  since: string | null;
+  data: DataChange[];
+  new_runs: ProjectRunChange[];
+  failed_ingestions: FailedIngestion[];
+  dashboards: ProjectDashboardChange[];
+  server_held: boolean;
+  current_baseline?: ReaderBaseline;
+}
+
+export interface ChangesQuery {
+  baseline?: ReaderBaseline | null;
+  dismissed?: DismissedComponents | null;
+  since?: string | null;
+  beforeRun?: string | null;
+}
+
+function changesBody(q: ChangesQuery): string {
+  const body: Record<string, unknown> = {};
+  if (q.baseline) body.baseline = q.baseline;
+  if (q.dismissed && Object.keys(q.dismissed).length) body.dismissed = q.dismissed;
+  if (q.since) body.since = q.since;
+  if (q.beforeRun) body.before_run = q.beforeRun;
+  return JSON.stringify(body);
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+export async function fetchDashboardChanges(
+  dashboardId: string,
+  q: ChangesQuery = {},
+): Promise<DashboardChangeSet> {
+  const res = await authFetch(`${API_BASE}/changes/dashboard/${dashboardId}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: changesBody(q),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch changes');
+  return (await res.json()) as DashboardChangeSet;
+}
+
+export async function recordDashboardVisit(
+  dashboardId: string,
+): Promise<{ persisted: boolean; moved?: boolean }> {
+  const res = await authFetch(`${API_BASE}/changes/dashboard/${dashboardId}/visit`, { method: 'PUT' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to record the visit');
+  return res.json();
+}
+
+/** No keys: everything is seen (the mark moves to now). Keys: only those components. */
+export async function markDashboardSeen(
+  dashboardId: string,
+  componentKeys?: string[],
+): Promise<{ persisted: boolean; baseline?: ReaderBaseline; dismissed?: DismissedComponents }> {
+  const res = await authFetch(`${API_BASE}/changes/dashboard/${dashboardId}/seen`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(componentKeys ? { component_keys: componentKeys } : {}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to mark as seen');
+  return res.json();
+}
+
+export async function fetchProjectChanges(
+  projectId: string,
+  q: ChangesQuery = {},
+): Promise<ProjectChangeSet> {
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: changesBody(q),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch project changes');
+  return (await res.json()) as ProjectChangeSet;
+}
+
+export async function recordProjectVisit(projectId: string): Promise<{ persisted: boolean }> {
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}/visit`, { method: 'PUT' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to record the visit');
+  return res.json();
+}
+
+export async function markProjectSeen(
+  projectId: string,
+): Promise<{ persisted: boolean; baseline?: ReaderBaseline }> {
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}/seen`, { method: 'PUT' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to mark as seen');
+  return res.json();
+}
+
+export interface TimelineEvent {
+  type: 'ingestion' | 'version' | 'comment';
+  at: string;
+  id: string;
+  by?: string | null;
+  // ingestion
+  status?: string;
+  command?: string | null;
+  trigger?: string | null;
+  run_tags?: string[];
+  collections?: string[];
+  rows_written?: number;
+  // version / comment
+  family_id?: string;
+  dashboard_title?: string;
+  seq?: number;
+  kind?: string;
+  label?: string | null;
+  component_count?: number;
+  tab_id?: string | null;
+  component_title?: string | null;
+  excerpt?: string;
+}
+
+export async function fetchProjectTimeline(
+  projectId: string,
+  opts: { before?: string | null; types?: Array<TimelineEvent['type']>; limit?: number } = {},
+): Promise<{ events: TimelineEvent[]; next_before: string | null }> {
+  const params = new URLSearchParams();
+  if (opts.before) params.set('before', opts.before);
+  if (opts.types?.length) params.set('types', opts.types.join(','));
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}/timeline${qs ? `?${qs}` : ''}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch the project timeline');
+  return res.json();
+}
+
+export async function fetchChangesPrefs(): Promise<{
+  mark_mode: MarkMode;
+  default_mark_mode: MarkMode;
+  server_held: boolean;
+}> {
+  const res = await authFetch(`${API_BASE}/changes/prefs`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch preferences');
+  return res.json();
+}
+
+export async function saveChangesPrefs(markMode: MarkMode): Promise<{ persisted: boolean; mark_mode: MarkMode }> {
+  const res = await authFetch(`${API_BASE}/changes/prefs`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ mark_mode: markMode }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save preferences');
+  return res.json();
+}
+
+export interface InboxItem {
+  scope_kind: 'dashboard' | 'project';
+  scope_id: string;
+  title: string;
+  new_run_tags: string[];
+  /** As `DashboardChangeSet.run_colors`, for the new runs. */
+  run_colors?: Record<string, string>;
+  refreshed: string[];
+  dashboard_versions: number;
+  at: string | null;
+}
+
+export async function fetchChangesInbox(): Promise<{
+  items: InboxItem[];
+  server_held: boolean;
+  /** The projects of every mark, news or not: whose ingestions the bell listens for. */
+  followed_project_ids?: string[];
+}> {
+  const res = await authFetch(`${API_BASE}/changes/inbox`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch notifications');
+  return res.json();
+}
+
+// ── One component, before and after (#1397) ────────────────────────────────
+
+/** Fields every `component_diff` answer carries. */
+export interface ComponentDiffMeta {
+  component_key?: string;
+  /** The dashboard version the baseline saw; the 'before' definition renders from it. */
+  baseline_version_id?: string | null;
+  /** The reader saw another definition of this component than the live one. */
+  definition_changed?: boolean;
+  since?: string;
+  /** Delta commits compared (figure and advanced viz). */
+  delta_from?: number;
+  delta_to?: number;
+  /** The collection did not move between the two commits. */
+  unchanged?: boolean;
+  truncated?: boolean;
+}
+
+export interface DiffPoint {
+  key: string | null;
+  x: unknown;
+  y: unknown;
+  color?: unknown;
+}
+
+export interface DiffPointsMove {
+  key: string;
+  before: DiffPoint;
+  after: DiffPoint;
+}
+
+export interface DiffPoints extends ComponentDiffMeta {
+  supported: true;
+  shape: 'points';
+  key_column: string | null;
+  x: string;
+  y: string;
+  color: string | null;
+  counts: { added: number; removed: number; changed: number; before: number; after: number };
+  added: DiffPoint[];
+  removed: DiffPoint[];
+  changed: DiffPointsMove[];
+}
+
+export interface DiffGroup {
+  /** Column -> value, for the x column and the colour column when present. */
+  group: Record<string, unknown>;
+  before: number | null;
+  after: number | null;
+  status: 'added' | 'removed' | 'changed';
+}
+
+export interface DiffGroups extends ComponentDiffMeta {
+  supported: true;
+  shape: 'groups';
+  group_columns: string[];
+  x: string | null;
+  color: string | null;
+  metric: 'sum' | 'count' | 'median';
+  value_column: string | null;
+  counts: { added: number; removed: number; changed: number; same: number };
+  groups: DiffGroup[];
+}
+
+export interface DiffSamples extends ComponentDiffMeta {
+  supported: true;
+  shape: 'samples';
+  counts: { added: number; removed: number; before: number; after: number };
+  added: string[];
+  removed: string[];
+  /** The reports the reader saw that still exist: the Before pane's `report_sets`. */
+  report_ids_before?: string[];
+}
+
+export interface DiffRow {
+  key: string | null;
+  values: Record<string, unknown>;
+}
+
+export interface DiffRowChange {
+  key: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+}
+
+export interface DiffRows extends ComponentDiffMeta {
+  supported: true;
+  shape: 'rows';
+  key_column: string | null;
+  value_columns: string[];
+  counts: { added: number; removed: number; changed: number; before: number; after: number };
+  added: DiffRow[];
+  removed: DiffRow[];
+  changed: DiffRowChange[];
+  viz_kind?: string;
+}
+
+export interface DiffUnsupported extends ComponentDiffMeta {
+  supported: false;
+  reason: string;
+}
+
+export type ComponentDiff = DiffPoints | DiffGroups | DiffSamples | DiffRows | DiffUnsupported;
+
+export type SupportedComponentDiff = Exclude<ComponentDiff, DiffUnsupported>;
+
+/**
+ * Which points, bars, samples or rows of one component changed since the
+ * reader's baseline. The body carries the same baseline fields as the change
+ * set (a signed-in reader sends none), plus the filters the figure is drawn
+ * with so the comparison covers the same slice.
+ */
+export async function fetchComponentDiff(
+  dashboardId: string,
+  componentId: string,
+  query: ChangesQuery & { filters?: InteractiveFilter[] | Array<Record<string, unknown>> } = {},
+  signal?: AbortSignal,
+): Promise<ComponentDiff> {
+  const body = JSON.parse(changesBody(query)) as Record<string, unknown>;
+  if (query.filters && query.filters.length) body.filters = query.filters;
+  const res = await authFetch(
+    `${API_BASE}/changes/component_diff/${encodeURIComponent(dashboardId)}/${encodeURIComponent(componentId)}`,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body), signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to compare with your last visit');
+  return (await res.json()) as ComponentDiff;
 }

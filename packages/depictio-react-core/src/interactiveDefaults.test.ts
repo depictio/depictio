@@ -32,6 +32,15 @@ describe('defaultFilterValue', () => {
     expect(defaultFilterValue(control('r', 'RangeSlider', { default_range: [1] }))).toBeUndefined();
   });
 
+  it('seeds a TextInput with its pattern, trimmed, unless it cannot compile', () => {
+    expect(defaultFilterValue(control('t', 'TextInput', { default_value: ' ^ACG ' }))).toBe('^ACG');
+    expect(defaultFilterValue(control('t', 'TextInput', { default_value: '(' }))).toBeUndefined();
+    expect(defaultFilterValue(control('t', 'TextInput', { default_value: '   ' }))).toBeUndefined();
+    expect(
+      defaultFilterValue({ ...control('t', 'TextInput', { default_value: '(' }), match_mode: 'contains' }),
+    ).toBe('(');
+  });
+
   it('handles Slider, SegmentedControl and Switch', () => {
     expect(defaultFilterValue(control('s', 'Slider', { default_value: 3 }))).toBe(3);
     expect(defaultFilterValue(control('g', 'SegmentedControl', { default_value: 'stage1' }))).toBe(

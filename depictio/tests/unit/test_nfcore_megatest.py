@@ -651,6 +651,8 @@ def test_manifest_from_dict_accepts_valid_and_normalizes(mt: ModuleType) -> None
         ({"multiqc": {"bogus": 1}}, "'multiqc' must be a mapping with keys"),
         ({"renames": {"a/*": "/abs"}}, "'renames' must map key globs to relative paths"),
         ({"typo_field": 1}, "unknown field"),
+        ({"subsets": ["a"]}, "'subsets' must map a name to a list of keys"),
+        ({"subsets": {"s": ["/abs.csv"]}}, "must be a relative path"),
     ],
 )
 def test_manifest_from_dict_rejects_invalid(mt: ModuleType, patch: dict, message: str) -> None:
@@ -658,6 +660,18 @@ def test_manifest_from_dict_rejects_invalid(mt: ModuleType, patch: dict, message
         mt.manifest_from_dict({**_VALID, **patch})
     with pytest.raises(ValueError, match="top level must be a mapping"):
         mt.manifest_from_dict(["not", "a", "mapping"])
+
+
+def test_manifest_subsets_are_named_lists_of_keys(mt: ModuleType) -> None:
+    manifest = mt.manifest_from_dict({**_VALID, "subsets": {"mapping_only": ["csv/*.csv"]}})
+    assert manifest.subsets == {"mapping_only": ["csv/*.csv"]}
+    assert mt.manifest_from_dict(_VALID).subsets == {}
+    shipped = mt.load_manifest(
+        Path(__file__).resolve().parents[2] / "projects/nf-core/sarek/3.10.0/megatest.yaml"
+    )
+    # A subset only narrows the manifest: each of its keys falls under one the full fetch lists.
+    for key in shipped.subsets["mapping_only"]:
+        assert any(fnmatchcase(key, listed) for listed in shipped.keys), key
 
 
 def test_simple_yaml_parser_covers_manifest_subset(mt: ModuleType) -> None:

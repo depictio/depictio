@@ -1,0 +1,25 @@
+id: viralmetagenome_mapping_overview
+name: Consensus genomes against the mapping constraints
+mode: per-genome/consensus
+description: >-
+  One row per sample and constraint reference of the mapping constraint
+  sheet: the consensus built from the reads mapped to it, with its closest
+  annotated reference, ambiguous bases and CheckV call, the share of reads
+  mapped and duplicated, the depth and breadth, the variant counts and, for a
+  reference Mash picked from a pool, the screen of the one picked.
+find:
+  path_glob: "**/overview-tables/*mapping_overview.tsv"
+recipe: viralmetagenome/mapping_overview.py
+fixture: mapping_overview.tsv
+renders_as:
+  - { id: constraint_breadth, component: card, column: cov_10x_pct, aggregation: median,
+      secondary_layout: threshold, threshold_value: 90, threshold_warn: 50, headline: true }
+  - { id: constraint_depth, component: card, column: mean_depth, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # Depth against breadth: a deep but narrow mapping is a partial genome, a
+  # broad but shallow one is a genome the consensus masks in places.
+  - id: depth_vs_breadth
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: mean_depth, y: cov_10x_pct, label: genome_id, color: reference, size: mapped_reads }
+  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }

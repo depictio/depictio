@@ -10,6 +10,13 @@ libraries were classified.
 Medians rather than means: a guide's libraries are replicates or cell pools
 whose editing can differ by an order of magnitude, and one failed library
 should not move the guide's number.
+
+``edit_quartile`` ranks the guides of the run by their median edited share. No
+tool or paper publishes a cut-off between high and low editing, so the classes
+are the quartiles of the guides in this run: a reference the data defines, not
+a threshold. The first and third quartile of a guide's own libraries
+(``q1_edited_pct``, ``q3_edited_pct``) and their difference are kept beside the
+median, which is how far a guide's libraries agree.
 """
 
 from __future__ import annotations
@@ -63,9 +70,12 @@ SOURCES: list[RecipeSource] = [
 # table's: the guide, its editing level and the key rates first.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "guide": pl.Utf8,
-    "edit_class": pl.Utf8,
+    "edit_quartile": pl.Utf8,
     "libraries": pl.Int64,
     "median_edited_pct": pl.Float64,
+    "q1_edited_pct": pl.Float64,
+    "q3_edited_pct": pl.Float64,
+    "iqr_edited_pct": pl.Float64,
     "median_frameshift_of_indels_pct": pl.Float64,
     "median_frameshift_pct": pl.Float64,
     "median_inframe_pct": pl.Float64,
@@ -78,15 +88,46 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "classified_reads": pl.Int64,
 }
 
-# Median editing above these (percent of classified reads) labels the guide.
-_EDIT_CLASSES = ((50.0, "High editing"), (10.0, "Moderate editing"), (1.0, "Low editing"))
+# Quartiles of the guides' median edited share, highest first. A run with fewer
+# than MIN_GUIDES guides (or a guide whose libraries classified nothing) is not ranked:
+# a quartile of three values says nothing.
+QUARTILE_LABELS = (
+    "Highest quartile",
+    "Upper-middle quartile",
+    "Lower-middle quartile",
+    "Lowest quartile",
+)
+NOT_RANKED = "Not ranked"
+MIN_GUIDES = 4
 
 
-def _edit_class(expr: pl.Expr) -> pl.Expr:
-    out = pl.lit("Unedited")
-    for bound, label in reversed(_EDIT_CLASSES):
-        out = pl.when(expr >= bound).then(pl.lit(label)).otherwise(out)
-    return out
+def _edit_quartile(medians: pl.Series) -> pl.Series:
+    """Quartile class of each guide's median edited share among the guides of the run."""
+    known = medians.drop_nulls()
+    if known.len() < MIN_GUIDES:
+        return pl.Series("edit_quartile", [NOT_RANKED] * medians.len(), dtype=pl.Utf8)
+    q1, q2, q3 = (known.quantile(q, interpolation="linear") for q in (0.25, 0.5, 0.75))
+    if q1 == q3:
+        # No spread (every guide unedited, say): a quartile of ties ranks nothing.
+        return pl.Series("edit_quartile", [NOT_RANKED] * medians.len(), dtype=pl.Utf8)
+    high, upper, lower, low = QUARTILE_LABELS
+    m = pl.col("m")
+    return (
+        medians.to_frame("m")
+        .select(
+            pl.when(m.is_null())
+            .then(pl.lit(NOT_RANKED))
+            .when(m >= q3)
+            .then(pl.lit(high))
+            .when(m >= q2)
+            .then(pl.lit(upper))
+            .when(m >= q1)
+            .then(pl.lit(lower))
+            .otherwise(pl.lit(low))
+            .alias("edit_quartile")
+        )
+        .to_series()
+    )
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -97,6 +138,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("sample").n_unique().cast(pl.Int64).alias("libraries"),
         pl.col("classified_reads").sum().cast(pl.Int64),
         pl.col("edited_pct").median().alias("median_edited_pct"),
+        pl.col("edited_pct").quantile(0.25, interpolation="linear").alias("q1_edited_pct"),
+        pl.col("edited_pct").quantile(0.75, interpolation="linear").alias("q3_edited_pct"),
         pl.col("frameshift_pct").median().alias("median_frameshift_pct"),
         pl.col("inframe_pct").median().alias("median_inframe_pct"),
         pl.col("template_based_pct").median().alias("median_template_based_pct"),
@@ -138,8 +181,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         out = out.with_columns(pl.lit(None, dtype=pl.Utf8).alias("classification_mix"))
     rates = [c for c, t in OUTPUT_SCHEMA.items() if t == pl.Float64]
     out = (
-        out.with_columns([pl.col(c).cast(pl.Float64) for c in rates])
-        .with_columns(_edit_class(pl.col("median_edited_pct")).alias("edit_class"))
+        out.with_columns([pl.col(c).cast(pl.Float64) for c in rates if c != "iqr_edited_pct"])
+        .with_columns(
+            (pl.col("q3_edited_pct") - pl.col("q1_edited_pct")).alias("iqr_edited_pct"),
+        )
+        .with_columns(_edit_quartile(out["median_edited_pct"]).alias("edit_quartile"))
         .with_columns(rounded(*rates))
     )
     return out.select(list(OUTPUT_SCHEMA)).sort(

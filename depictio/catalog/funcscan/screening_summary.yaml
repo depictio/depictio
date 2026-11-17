@@ -4,7 +4,7 @@ mode: screening/summary
 description: >-
   One row per sample with the headline count of every nf-core/funcscan screen
   that produced a result: resistance-gene hits and distinct genes, antimicrobial
-  peptide candidates and how many reach high confidence, biosynthetic gene
+  peptide candidates and how many reach the AMPcombi probability cut-off (0.6, the pipeline default), biosynthetic gene
   cluster regions and product classes, CAZyme genes and families. The four
   screens share no table of their own, so this is the collection every sample
   filter and every cross-screen comparison hangs off.

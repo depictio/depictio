@@ -22,8 +22,8 @@ _BOX_SIZE = 0.08
 _VIOLIN_SIZE = 0.08
 _BAR_SIZE = 0.06
 _SCATTER_SIZE = 0.06
-_CATEGORICAL_SIZE = 0.06
-_STACKED_BAR_SIZE = 0.08
+_CATEGORICAL_SIZE = 0.13
+_STACKED_BAR_SIZE = 0.13
 
 # Aggregation function registry
 _AGG_FUNCS: dict[str, Any] = {

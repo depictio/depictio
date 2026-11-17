@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/ampliseq/2.16.0"
   description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
-  version: "1.1.0"
+  version: "1.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing ampliseq pipeline output (multiqc/, qiime2/)"

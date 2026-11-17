@@ -53,3 +53,59 @@ export function useRevealComponent(onReveal: (index: string) => void): void {
     return () => window.removeEventListener(REVEAL_COMPONENT_EVENT, listener);
   }, []);
 }
+
+/**
+ * The same request for a whole section, by its name: a text tile's
+ * `[label](section:Sample sheet)` link. Names compare without case or outer
+ * spaces, as authors write them.
+ */
+export const REVEAL_SECTION_EVENT = 'depictio:reveal-section';
+
+export const sameSectionName = (a: string | null | undefined, b: string): boolean =>
+  typeof a === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Answer section requests: `onReveal` unfolds the named section if it draws one. */
+export function useRevealSection(onReveal: (name: string) => void): void {
+  const handlerRef = useRef(onReveal);
+  handlerRef.current = onReveal;
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const name = (event as CustomEvent<{ name: string }>).detail?.name;
+      if (typeof name === 'string' && name.trim()) handlerRef.current(name);
+    };
+    window.addEventListener(REVEAL_SECTION_EVENT, listener);
+    return () => window.removeEventListener(REVEAL_SECTION_EVENT, listener);
+  }, []);
+}
+
+/**
+ * Unfold section `name` wherever it is drawn (the tab's grid, or the sections
+ * pinned from a sibling tab) and scroll to its top. Resolves to whether it was
+ * found on the page.
+ */
+export async function revealSection(name: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  window.dispatchEvent(new CustomEvent(REVEAL_SECTION_EVENT, { detail: { name } }));
+  const find = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-section-name]')).find((el) =>
+      sameSectionName(el.dataset.sectionName, name),
+    );
+  // A fold that has just opened mounts its tiles a render later, and they grow
+  // as their data lands: scroll once the section has held its height for a quarter second
+  // (at most 1.5 s), or the page is still too short to bring it up.
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+  await frame();
+  const el = find();
+  if (!el) return false;
+  const until = performance.now() + 1500;
+  let last = el.offsetHeight;
+  let still = 0;
+  while (performance.now() < until && still < 15) {
+    await frame();
+    still = el.offsetHeight === last ? still + 1 : 0;
+    last = el.offsetHeight;
+  }
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+  return true;
+}

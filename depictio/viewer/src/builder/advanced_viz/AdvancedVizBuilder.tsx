@@ -77,6 +77,7 @@ import {
 } from './PhylogeneticSections';
 import RecordCardLinkSettings from './RecordCardLinkSettings';
 import ProteinBindingSettings, { isProteinKind } from './ProteinBindingSettings';
+import SpatialCellsSettings from './SpatialCellsSettings';
 
 /** Acceptable polars dtype names per canonical role (mirrors
  *  depictio/models/components/advanced_viz/schemas.py). */
@@ -257,6 +258,35 @@ const ROLE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     accession: 'Accession',
   },
   pae_matrix: { value: 'pLDDT (axis strips)' },
+  // One row per allele call (OptiType melted long, LILAC as written).
+  allele_grid: {
+    sample_id: 'Sample',
+    locus: 'Locus (HLA gene)',
+    allele: 'Allele call',
+    haplotype: 'Haplotype (1 / 2)',
+    category: 'Locus class',
+    value: 'Per-sample score',
+    reads: 'Read support',
+  },
+  // One row per individual of a PED-like table.
+  pedigree: {
+    individual: 'Individual',
+    father: 'Father',
+    mother: 'Mother',
+    sex: 'Sex',
+    status: 'Affected status',
+    family: 'Family',
+    label: 'Label',
+    deceased: 'Deceased flag',
+    proband: 'Proband flag',
+  },
+  // One row per candidate; the other columns are set under `columns` in YAML.
+  ranked_table: {
+    title: 'Name (bold)',
+    score: 'Score (orders the rows)',
+    subtitle: 'Subtitle (monospace)',
+    rank: 'Precomputed rank',
+  },
   ramachandran: {
     value: 'Colour value',
     category: 'Colour category',
@@ -1052,6 +1082,29 @@ const AdvancedVizBuilder: React.FC = () => {
           />
         </>
       ) : null}
+      {/* Spatial cells: an mcquant / Xenium table is wide, one column per
+          marker. The markers listed here are what the tile's colour picker
+          offers, so a reader switches marker without rebinding. */}
+      {selectedKind === 'spatial_cells' ? (
+        <MultiSelect
+          label={roleBindingLabel(
+            'marker columns',
+            NUMERIC_ANY,
+            'Numeric columns the tile offers in its Marker picker (one per channel). Leave empty to offer the value column alone, or name them by pattern in the YAML (value_columns_pattern).',
+            false,
+          )}
+          placeholder="Pick the marker intensity columns"
+          value={
+            Array.isArray(columnMapping.value_columns)
+              ? (columnMapping.value_columns as string[])
+              : []
+          }
+          onChange={(v) => setRole('value_columns', v)}
+          data={columnOptions(NUMERIC_ANY)}
+          searchable
+          clearable
+        />
+      ) : null}
       {/* Embedding live-compute mode: surface compute_method Select
           in place of dim_1/dim_2 pickers. Renderer dispatches the
           chosen reduction as a Celery task. */}
@@ -1417,6 +1470,10 @@ const AdvancedVizBuilder: React.FC = () => {
           idCol={typeof columnMapping.id === 'string' ? columnMapping.id : null}
           onChange={setOverrideFields}
         />
+      ) : null}
+
+      {selectedKind === 'spatial_cells' ? (
+        <SpatialCellsSettings config={effectiveConfig} onChange={setOverrideFields} />
       ) : null}
 
       {selectedKind && isProteinKind(selectedKind) ? (

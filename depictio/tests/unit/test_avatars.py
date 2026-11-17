@@ -187,8 +187,8 @@ class TestProviderHook:
 
     async def test_raw_bytes_need_no_download(self, store, downloads):
         user_id = ObjectId()
-        assert await avatars.set_provider_avatar(user_id, provider="saml", raw=_image_bytes())
-        assert avatars.get_avatar(user_id)["provider"] == "saml"
+        assert await avatars.set_provider_avatar(user_id, provider="idp", raw=_image_bytes())
+        assert avatars.get_avatar(user_id)["provider"] == "idp"
         assert downloads == []
 
     async def test_upload_always_wins(self, store, downloads):

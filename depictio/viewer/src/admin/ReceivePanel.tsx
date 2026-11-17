@@ -1,0 +1,243 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Collapse,
+  CopyButton,
+  Group,
+  Loader,
+  SegmentedControl,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
+import { Icon } from '@iconify/react';
+
+import { createMigrationInvite, listMigrationInvites } from 'depictio-react-core';
+import { formatDateTime } from '../lib/datetime';
+import type {
+  MigrationInvite,
+} from 'depictio-react-core';
+
+const VALIDITY: { value: string; label: string; hours: number }[] = [
+  { value: '1', label: '1 day', hours: 24 },
+  { value: '30', label: '30 days', hours: 720 },
+  { value: '365', label: '1 year', hours: 8760 },
+];
+
+const CopyRow: React.FC<{ label: string; value: string; testId: string }> = ({
+  label,
+  value,
+  testId,
+}) => (
+  <TextInput
+    label={label}
+    value={value}
+    readOnly
+    ff="monospace"
+    onFocus={(e) => e.currentTarget.select()}
+    data-testid={testId}
+    rightSection={
+      <CopyButton value={value} timeout={1500}>
+        {({ copied, copy }) => (
+          <Tooltip label={copied ? 'Copied' : 'Copy'} withinPortal>
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color={copied ? 'teal' : 'gray'}
+              onClick={copy}
+              aria-label={`Copy ${label.toLowerCase()}`}
+            >
+              <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={14} />
+            </Button>
+          </Tooltip>
+        )}
+      </CopyButton>
+    }
+    rightSectionWidth={44}
+  />
+);
+
+export interface ReceivePanelProps {
+  /** Close the dialog that holds the panel. */
+  onClose: () => void;
+  /** Called after an invite was created, so a listing behind the dialog refreshes. */
+  onCreated?: (invite: MigrationInvite) => void;
+}
+
+/**
+ * Admin of the receiving instance: issue an invite code. The owner of a project
+ * on another instance pastes this instance's URL and the code into "Send to
+ * another instance": the import starts right away, with no review. The code
+ * is shown once and lives in this panel's state only, so it goes with the
+ * dialog. Defaults fit most cases, so the three settings (lifetime, read-only,
+ * note) sit in a folded Options block.
+ */
+export const ReceivePanel: React.FC<ReceivePanelProps> = ({ onClose, onCreated }) => {
+  const [loading, setLoading] = useState(false);
+  const [inboundEnabled, setInboundEnabled] = useState(true);
+  const [lock, setLock] = useState(true);
+  const [validity, setValidity] = useState('30');
+  const [note, setNote] = useState('');
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<(MigrationInvite & { code: string }) | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    listMigrationInvites()
+      .then((r) => {
+        if (!live) return;
+        setInboundEnabled(r.inbound_enabled);
+        setLock(r.defaults.lock_on_import);
+        // The default lifetime, when it is one of the choices.
+        const days = String(r.defaults.ttl_days);
+        setValidity(VALIDITY.some((v) => v.value === days) ? days : '30');
+      })
+      .catch((err) => live && setError(err instanceof Error ? err.message : 'Failed to load.'))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const handleCreate = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const invite = await createMigrationInvite({
+        lock_on_import: lock,
+        expires_in_hours: VALIDITY.find((v) => v.value === validity)?.hours ?? 720,
+        ...(note.trim() ? { note: note.trim() } : {}),
+      });
+      setCreated(invite);
+      onCreated?.(invite);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create the invitation.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+      <Stack gap="md" data-testid="receive-panel">
+        {loading ? (
+          <Group gap="xs">
+            <Loader size="xs" />
+            <Text size="sm" c="dimmed">
+              Loading…
+            </Text>
+          </Group>
+        ) : !inboundEnabled ? (
+          <Alert color="yellow" variant="light" data-testid="receive-disabled">
+            This instance does not accept pushed projects. Set
+            DEPICTIO_MIGRATION_INBOUND_ENABLED to allow it.
+          </Alert>
+        ) : created ? (
+          <Stack gap="sm" data-testid="receive-created">
+            <Text size="sm">
+              Send these two values to the owner of the project. In the project's settings,
+              under Send, they choose Send to another instance and paste both.
+            </Text>
+            <CopyRow
+              label="Instance URL"
+              value={window.location.origin}
+              testId="receive-url"
+            />
+            <CopyRow label="Code" value={created.code} testId="receive-code" />
+            <Text size="xs" c="dimmed">
+              The first project sent with this code is imported. The same code then publishes
+              that project's updates until{' '}
+              {created.expires_at ? formatDateTime(created.expires_at) : 'it is revoked'}. It is
+              shown only once.
+            </Text>
+          </Stack>
+        ) : (
+          <>
+            <Text size="sm">
+              Create a code so the owner of a project on another instance can send it here.
+              Nothing is imported until they use it.
+            </Text>
+            <Alert
+              color="gray"
+              variant="light"
+              icon={<Icon icon="mdi:information-outline" width={16} />}
+              data-testid="receive-summary"
+            >
+              The code works for {VALIDITY.find((v) => v.value === validity)?.label ?? validity}.
+              The imported project will be {lock ? 'read-only' : 'editable'} here.
+            </Alert>
+            <UnstyledButton
+              onClick={() => setOptionsOpen((o) => !o)}
+              aria-expanded={optionsOpen}
+              data-testid="receive-options-toggle"
+            >
+              <Group gap={6}>
+                <Icon icon={optionsOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={18} />
+                <Text size="sm" fw={600}>
+                  Options
+                </Text>
+              </Group>
+            </UnstyledButton>
+            <Collapse in={optionsOpen}>
+              <Stack gap="md" pl="md">
+                <Stack gap={6}>
+                  <Text size="sm" fw={500}>
+                    Code expires after
+                  </Text>
+                  <SegmentedControl
+                    fullWidth
+                    value={validity}
+                    onChange={setValidity}
+                    data={VALIDITY.map(({ value, label }) => ({ value, label }))}
+                    data-testid="receive-validity"
+                  />
+                </Stack>
+                <Switch
+                  label="Imported project is read-only"
+                  description="Nobody can edit it here, owners included, until an administrator unlocks it."
+                  checked={lock}
+                  onChange={(e) => setLock(e.currentTarget.checked)}
+                  data-testid="receive-lock"
+                />
+                <TextInput
+                  label="Note (optional)"
+                  description="Who this code is for. Shown in the list of invitations."
+                  maxLength={200}
+                  value={note}
+                  onChange={(e) => setNote(e.currentTarget.value)}
+                  data-testid="receive-note"
+                />
+              </Stack>
+            </Collapse>
+          </>
+        )}
+        {error && (
+          <Alert color="red" variant="light" data-testid="receive-error">
+            {error}
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="subtle" color="gray" onClick={onClose}>
+            {created ? 'Done' : 'Cancel'}
+          </Button>
+          {!created && inboundEnabled && (
+            <Button
+              loading={creating}
+              disabled={loading}
+              onClick={() => void handleCreate()}
+              leftSection={<Icon icon="mdi:key-plus" width={16} />}
+              data-testid="receive-create"
+            >
+              Create code
+            </Button>
+          )}
+        </Group>
+      </Stack>
+  );
+};

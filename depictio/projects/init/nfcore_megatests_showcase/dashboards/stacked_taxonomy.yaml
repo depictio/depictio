@@ -57,9 +57,9 @@ components:
     title: 'Stacked taxonomy — QIIME2 feature-table'
     description: 'Per-sample ASV abundances from nf-core/ampliseq. Single-rank stub (real multi-rank lineage would need a taxonkit join).'
     section: 'Community composition'
-    viz_kind: 'stacked_taxonomy'
+    viz_kind: 'stacked_bar'
     config:
-      viz_kind: "stacked_taxonomy"
+      viz_kind: "stacked_bar"
       sample_id_col: "sample_id"
       taxon_col: "taxon"
       rank_col: "rank"

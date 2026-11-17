@@ -8,17 +8,14 @@ import {
   replaceListingParams,
 } from '../../lib/listingUrl';
 
-export type ProjectTypeFilter = 'basic' | 'advanced';
 /** Row height for the projects table. Mirrors the dashboards table's setting
  *  so both listings offer the same compact/cozy choice. */
 export type Density = 'compact' | 'cozy';
 export type VisibilityFilter = 'all' | 'public' | 'private';
 
-const PROJECT_TYPES: readonly ProjectTypeFilter[] = ['basic', 'advanced'];
 const VISIBILITIES: readonly VisibilityFilter[] = ['all', 'public', 'private'];
 
 export interface ProjectFilters {
-  types: ProjectTypeFilter[];
   visibility: VisibilityFilter;
   /** Pipeline templates, as `source` (`nf-core`) or `source/repo`
    *  (`nf-core/rnaseq`). Superseded the source-only `templateSources`, which
@@ -39,7 +36,6 @@ const STORAGE_KEY = 'depictio.projects.viewPrefs.v1';
  *  all" and `clearFilters` both need one, and a shared object would hand them
  *  the same arrays to hold. */
 export const emptyProjectFilters = (): ProjectFilters => ({
-  types: [],
   visibility: 'all',
   templates: [],
 });
@@ -49,7 +45,6 @@ export const emptyProjectFilters = (): ProjectFilters => ({
 export const PROJECT_SCOPE_PARAMS = [
   'q',
   'template',
-  'type',
   'visibility',
   'pinned',
 ] as const;
@@ -77,6 +72,8 @@ function loadPrefs(): ProjectViewPrefs {
       filters.templates = parsed.filters.templateSources;
     }
     delete (filters as { templateSources?: unknown }).templateSources;
+    // The Basic/Advanced type filter no longer exists; a stored one is dropped.
+    delete (filters as { types?: unknown }).types;
     return { ...DEFAULT_PREFS, ...parsed, filters };
   } catch {
     return DEFAULT_PREFS;
@@ -92,15 +89,11 @@ function applyUrlParams(base: ProjectViewPrefs): ProjectViewPrefs {
   const scoped = PROJECT_SCOPE_PARAMS.some((key) => (params[key]?.length ?? 0) > 0);
   if (!scoped) return base;
 
-  const types = asList(params.type).filter((t): t is ProjectTypeFilter =>
-    (PROJECT_TYPES as readonly string[]).includes(t),
-  );
   return {
     ...base,
     search: asScalar(params.q) ?? '',
     onlyPinned: asScalar(params.pinned) === '1',
     filters: {
-      types,
       visibility: asEnum(params.visibility, VISIBILITIES) ?? 'all',
       templates: asList(params.template),
     },
@@ -112,7 +105,6 @@ function toUrlParams(prefs: ProjectViewPrefs) {
   return {
     q: prefs.search.trim(),
     template: prefs.filters.templates,
-    type: prefs.filters.types,
     visibility: prefs.filters.visibility === 'all' ? '' : prefs.filters.visibility,
     pinned: prefs.onlyPinned,
   };

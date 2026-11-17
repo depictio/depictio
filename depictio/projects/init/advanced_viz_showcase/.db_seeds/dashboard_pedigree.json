@@ -1,0 +1,344 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f60"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f60"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "ped-text",
+      "component_type": "text",
+      "title": "Pedigrees",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Family trees",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One row per individual with its father, mother, sex and affected status, as a PED file or an nf-core samplesheet writes them. A square is a male, a circle a female and a diamond a person of unknown sex; a filled symbol is affected, an open one unaffected and a hatched one of unknown status; a slash marks a death. The third family has no father in the table, so its children hang from the mother alone. Click an individual to narrow the table below to them. Input: the samplesheet of nf-core/raredisease or a PED file.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ped-tree",
+      "component_type": "advanced_viz",
+      "title": "Family trees",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "pedigree_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f61"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Three families in the PED coding (18 individuals): a three-generation family with a couple married in, a trio with a sibling, and a mother with no father in the table",
+        "data_collection_tag": "pedigree_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f61"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Each family on its own tree: founders on top, children under their parents; the outlined symbol is the individual picked.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Family trees",
+      "viz_kind": "pedigree",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "pedigree",
+        "individual_col": "individual",
+        "father_col": "father",
+        "mother_col": "mother",
+        "sex_col": "sex",
+        "status_col": "status",
+        "family_col": "family",
+        "label_col": "label",
+        "deceased_col": "deceased",
+        "show_labels": true,
+        "max_individuals": 300,
+        "max_families": 12,
+        "selection_enabled": true,
+        "selection_column": "individual"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ped-table",
+      "component_type": "table",
+      "title": "Individuals",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "pedigree_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f61"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Three families in the PED coding (18 individuals): a three-generation family with a couple married in, a trio with a sibling, and a mother with no father in the table",
+        "data_collection_tag": "pedigree_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f61"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Individuals",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ped-f-family",
+      "component_type": "interactive",
+      "title": "Family",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "pedigree_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f61"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Three families in the PED coding (18 individuals): a three-generation family with a couple married in, a trio with a sibling, and a mother with no father in the table",
+        "data_collection_tag": "pedigree_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f61"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Family scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "family",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Family filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:family-tree",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ped-f-family",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ped-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ped-tree",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ped-table",
+      "x": 0,
+      "y": 8,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Pedigrees",
+  "subtitle": "Three families in the PED coding drawn as family trees: sex as the shape, affected status as the fill, a slash for a death.",
+  "icon": "mdi:family-tree",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 53,
+  "main_tab_name": null,
+  "tab_icon": "mdi:family-tree",
+  "tab_icon_color": "grape",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Family scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which families the trees and the table carry",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Family trees",
+      "icon": "mdi:family-tree",
+      "color": "grape",
+      "description": "Generations top to bottom, couples joined by a line, children hung from a sibship bar",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Individuals",
+      "icon": "mdi:table",
+      "color": "grape",
+      "description": "The rows behind the trees, narrowed by the individuals picked on them",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

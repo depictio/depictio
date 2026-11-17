@@ -4,6 +4,7 @@
 # at the pipeline module that writes the diffSplice tables read here.
 id: suppa
 name: SUPPA2
+version: "1.0.0"
 description: >-
   Fast, alignment-free differential splicing: PSI per local event and per
   isoform from transcript TPMs, and the delta PSI between two conditions with

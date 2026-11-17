@@ -1,0 +1,4 @@
+genome	sequences	total_length	length_excl_n	gc_pct	masked_bp	masked_pct	interspersed_pct	retroelements_pct	dna_transposons_pct	unclassified_pct	simple_repeats_pct
+Apis_mellifera	177	225250884	223937270	32.53	38935182	17.29	12.29	1.24	3.54	7.49	3.78
+Bombus_impatiens	5460	246856484	241993441	37.76	52893408	21.43	19.39	5.18	4.82	9.37	1.46
+Polistes_canadensis	3836	211202212	197103996	32.15	61927359	29.32	21.99	4.38	4.98	12.43	5.44

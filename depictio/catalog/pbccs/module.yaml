@@ -9,6 +9,7 @@
 # chunks back into libraries so the dashboard can filter and compose them.
 id: pbccs
 name: PacBio ccs
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pbccs
 homepage: https://github.com/PacificBiosciences/ccs
 biotools_url: null  # no bio.tools entry for this tool

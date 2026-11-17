@@ -28,6 +28,9 @@ import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
 import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
 import { openRunParameters } from '../utils/runParameters';
+import { revealSection } from '../reveal';
+import { useGenomeBrowserTarget } from './jbrowse/browserTarget';
+import { OPEN_IN_BROWSER_ACTION, openInGenomeBrowser } from './jbrowse/openAction';
 import StepFlow from './StepFlow';
 import TabTiles from './TabTiles';
 import {
@@ -39,6 +42,9 @@ import {
 } from './tabLinks';
 import { formatTextValue, splitPlaceholders, withStandIns } from './textValues';
 import { textLogoSrc } from './textLogo';
+import { LEGEND_MAX, legendColumnOf, legendEntries } from './textLegend';
+import type { LegendEntry } from './textLegend';
+import { useCategoryColorSource } from '../hooks/useCategoryColors';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
@@ -56,7 +62,9 @@ interface TextRendererProps {
 }
 
 /** Draws a run of plain text, its live values filled in (see textValues.ts). */
-type Fill = (text: string) => React.ReactNode;
+/** Fills a text's placeholders as nodes; `text` fills them as a plain string
+ *  (a link's target), null while a value is loading or missing. */
+type Fill = ((text: string) => React.ReactNode) & { text?: (text: string) => string | null };
 const plainFill: Fill = (text) => text;
 
 /**
@@ -102,7 +110,7 @@ function makeFill(
   loading: boolean,
   chips: boolean,
 ): Fill {
-  return (text) => {
+  const fill: Fill = (text) => {
     if (!text.includes('{{')) return text;
     const parts = splitPlaceholders(text);
     if (!parts.some((p) => p.type === 'value')) return text;
@@ -116,7 +124,44 @@ function makeFill(
       return <LiveValue key={i} text={shown} loading={loading} />;
     });
   };
+  fill.text = (text) => {
+    if (!text.includes('{{')) return text;
+    let missing = false;
+    const out = splitPlaceholders(text)
+      .map((part) => {
+        if (part.type === 'text') return part.value;
+        const v = live?.[part.key];
+        if (v === null || v === undefined || v === '') missing = true;
+        return missing ? '' : formatTextValue(v, specs?.[part.key]?.format);
+      })
+      .join('');
+    return missing ? null : out;
+  };
+  return fill;
 }
+
+/** A `locus:` link: the family's genome browser, on its own tab, at the gene or
+ *  region. Plain text without a browser to go to or a locus to go with. */
+const LocusLink: React.FC<{ locus: string | null; children: React.ReactNode }> = ({
+  locus,
+  children,
+}) => {
+  const target = useGenomeBrowserTarget();
+  if (!target || !locus) return <>{children}</>;
+  return (
+    <Anchor
+      component="button"
+      type="button"
+      inherit
+      fw={600}
+      onClick={() => openInGenomeBrowser(target, locus)}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+    >
+      <Glyph icon={OPEN_IN_BROWSER_ACTION.icon} color="currentColor" size={16} />
+      {children}
+    </Anchor>
+  );
+};
 
 /**
  * Maps the body's inline-markdown tokens to React nodes. The grammar itself
@@ -157,9 +202,7 @@ const renderInlineMarkdown = (
               width: '0.6em',
               height: '0.6em',
               borderRadius: '50%',
-              background: /^[a-z]+\.[0-9]$/.test(token.color)
-                ? `var(--mantine-color-${token.color.replace('.', '-')})`
-                : glyphColorVar(token.color),
+              background: glyphColorVar(token.color),
               marginRight: '0.3em',
               verticalAlign: '0.02em',
             }}
@@ -198,6 +241,33 @@ const renderInlineMarkdown = (
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
             >
               {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
+              {fill(token.value)}
+            </Anchor>
+          );
+        }
+        if (token.href.startsWith('locus:')) {
+          const raw = token.href.slice('locus:'.length);
+          return (
+            <LocusLink key={idx} locus={fill.text ? fill.text(raw) : raw.includes('{{') ? null : raw}>
+              {fill(token.value)}
+            </LocusLink>
+          );
+        }
+        if (token.href.startsWith('section:')) {
+          // A section of this tab, or one pinned from a sibling: unfolded and
+          // scrolled to, never navigated to.
+          const name = token.href.slice('section:'.length);
+          return (
+            <Anchor
+              key={idx}
+              component="button"
+              type="button"
+              inherit
+              fw={600}
+              onClick={() => void revealSection(name)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+            >
+              <Glyph icon="mdi:arrow-down-circle-outline" color="currentColor" size={16} />
               {fill(token.value)}
             </Anchor>
           );
@@ -336,7 +406,7 @@ const BODY_TEXT_STYLE: React.CSSProperties = {
 /**
  * Prose stops at a reading measure. A full-width tile on a wide screen ran
  * paragraphs to ~180 characters a line, where the eye loses the next line's
- * start. Tables, tiles and strips keep the tile's width.
+ * start. Lists, tables, tiles and strips keep the tile's width.
  */
 const PROSE_MEASURE = '80ch';
 function proseWidth(alignment: 'left' | 'center' | 'right'): React.CSSProperties {
@@ -345,6 +415,59 @@ function proseWidth(alignment: 'left' | 'center' | 'right'): React.CSSProperties
     marginInline: alignment === 'center' ? 'auto' : alignment === 'right' ? 'auto 0' : undefined,
   };
 }
+
+/** The colour key a fact line draws for `{{legend:column}}`: a dot in each
+ *  colour the dashboard pins to the column and the value it stands for, one per
+ *  line. */
+const LegendKey: React.FC<{ entries: LegendEntry[]; column: string }> = ({ entries, column }) => {
+  // A column the run gave no colours to (an optional design column): a dash,
+  // as a value the run lacks prints.
+  if (entries.length === 0) return <span>–</span>;
+  const shown = entries.slice(0, LEGEND_MAX);
+  const more = entries.length - shown.length;
+  return (
+    <ul
+      aria-label={`Colours of ${column}`}
+      data-testid="text-legend"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        listStyle: 'none',
+        margin: 0,
+        padding: 0,
+      }}
+    >
+      {shown.map((e) => (
+        <li
+          key={e.label}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}
+        >
+          <span
+            aria-hidden
+            style={{
+              flex: '0 0 auto',
+              width: 9,
+              height: 9,
+              borderRadius: '50%',
+              background: e.color,
+            }}
+          />
+          <Text size="sm" fw={700} span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {e.label}
+          </Text>
+        </li>
+      ))}
+      {more > 0 ? (
+        <li>
+          <Text size="sm" c="dimmed" span>
+            +{more} more
+          </Text>
+        </li>
+      ) : null}
+    </ul>
+  );
+};
 
 /**
  * A list of `![](icon:…) **Label** value` items, drawn as one line of
@@ -357,7 +480,9 @@ const FactLine: React.FC<{
   facts: Fact[];
   inline: (text: string) => React.ReactNode[];
   fill: Fill;
-}> = ({ facts, inline, fill }) => (
+}> = ({ facts, inline, fill }) => {
+  const source = useCategoryColorSource();
+  return (
   <div
     style={{
       display: 'flex',
@@ -378,11 +503,19 @@ const FactLine: React.FC<{
           <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
         ) : null}
         <span style={{ color: 'var(--mantine-color-dimmed)' }}>{fill(fact.label)}</span>
-        <span style={{ fontWeight: 600 }}>{inline(fact.value)}</span>
+        {legendColumnOf(fact.value) ? (
+          <LegendKey
+            entries={legendEntries(source, legendColumnOf(fact.value))}
+            column={legendColumnOf(fact.value) ?? ''}
+          />
+        ) : (
+          <span style={{ fontWeight: 600 }}>{inline(fact.value)}</span>
+        )}
       </span>
     ))}
   </div>
-);
+  );
+};
 
 /**
  * The same facts on a framed tile: a two-column table, labels over a hairline
@@ -393,7 +526,9 @@ const FactTable: React.FC<{
   facts: Fact[];
   inline: (text: string) => React.ReactNode[];
   fill: Fill;
-}> = ({ facts, inline, fill }) => (
+}> = ({ facts, inline, fill }) => {
+  const source = useCategoryColorSource();
+  return (
   <div
     style={{
       display: 'grid',
@@ -425,12 +560,22 @@ const FactTable: React.FC<{
             ) : null}
             {fill(fact.label)}
           </span>
-          <span style={{ ...cell, fontWeight: 600, minWidth: 0 }}>{inline(fact.value)}</span>
+          {legendColumnOf(fact.value) ? (
+            <div style={{ ...cell, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+              <LegendKey
+                entries={legendEntries(source, legendColumnOf(fact.value))}
+                column={legendColumnOf(fact.value) ?? ''}
+              />
+            </div>
+          ) : (
+            <span style={{ ...cell, fontWeight: 600, minWidth: 0 }}>{inline(fact.value)}</span>
+          )}
         </React.Fragment>
       );
     })}
   </div>
-);
+  );
+};
 
 /**
  * A list of `**41%** Claim — context [Tab](tab:Name)` items, drawn as result
@@ -440,44 +585,86 @@ const FactTable: React.FC<{
  * not what was found), and as one panel it takes the height its rows need
  * instead of a card's worth of grid rows each.
  */
+/** Width of the stat column of a stat list, in px. */
+const STAT_COLUMN_PX = 150;
+
+/** Whether a filled-in stat is short enough to set at the large size: a
+ *  number with its unit, not a name. */
+/**
+ * The stat of a stat-list row. A number reads big; a name (a gene and its
+ * change) would wrap mid-word at that size, so once filled in it drops a step.
+ * Measured off the rendered text, since a value arrives after the first paint.
+ */
+const StatCell: React.FC<{
+  style: React.CSSProperties;
+  color?: string;
+  children: React.ReactNode;
+}> = ({ style, color, children }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const check = () => setLong((el.textContent ?? '').trim().length > SHORT_STAT_CHARS);
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <span
+      ref={ref}
+      style={{
+        ...style,
+        fontSize: long ? 18 : 28,
+        fontWeight: 800,
+        lineHeight: 1.1,
+        letterSpacing: '-0.02em',
+        fontVariantNumeric: 'tabular-nums',
+        color,
+      }}
+    >
+      {children}
+    </span>
+  );
+};
+
+/** Longest stat, in characters, set at the large size. */
+const SHORT_STAT_CHARS = 7;
+
 const StatList: React.FC<{
   rows: StatRow[];
   inline: (text: string) => React.ReactNode[];
   resolveTab: TabLinkResolver | null;
   fill: Fill;
 }> = ({ rows, inline, resolveTab, fill }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+  // One grid for every row, so the claims line up on a common edge whatever
+  // the length of the stat beside them.
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: `minmax(0, ${STAT_COLUMN_PX}px) minmax(0, 1fr) auto`,
+      width: '100%',
+    }}
+  >
     {rows.map((row, i) => {
       const tabName = row.link ? /\]\(tab:(.+)\)$/.exec(row.link)?.[1] ?? null : null;
       const color = tabName ? resolveTab?.(tabName)?.color ?? null : null;
+      const stat = fill(row.stat);
+      const cell: React.CSSProperties = {
+        padding: '12px 0',
+        borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
+        alignSelf: 'stretch',
+        display: 'flex',
+        alignItems: 'center',
+      };
       return (
-        <div
-          key={i}
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            columnGap: 20,
-            rowGap: 4,
-            padding: '12px 0',
-            borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
-          }}
-        >
-          <span
-            style={{
-              flex: '0 0 auto',
-              minWidth: 92,
-              fontSize: 28,
-              fontWeight: 800,
-              lineHeight: 1.05,
-              letterSpacing: '-0.02em',
-              fontVariantNumeric: 'tabular-nums',
-              color: color ? glyphColorVar(color) : undefined,
-            }}
-          >
-            {fill(row.stat)}
-          </span>
-          <span style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <React.Fragment key={i}>
+          {/* The gutter is padding, not a grid gap, so each row's rule runs unbroken. */}
+          <StatCell style={{ ...cell, paddingRight: 20 }} color={color ? glyphColorVar(color) : undefined}>
+            {stat}
+          </StatCell>
+          <span style={{ ...cell, paddingRight: 20, minWidth: 0, flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
             <Text size="sm" fw={700} lh={1.35}>
               {inline(row.claim)}
             </Text>
@@ -487,12 +674,10 @@ const StatList: React.FC<{
               </Text>
             ) : null}
           </span>
-          {row.link ? (
-            <Text size="sm" style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
-              {inline(row.link)}
-            </Text>
-          ) : null}
-        </div>
+          <span style={{ ...cell, justifyContent: 'flex-end' }}>
+            {row.link ? <Text size="sm">{inline(row.link)}</Text> : null}
+          </span>
+        </React.Fragment>
       );
     })}
   </div>
@@ -687,11 +872,13 @@ const MarkdownBody: React.FC<{
                 // sizes to its text instead of the tile: long items ran past
                 // the edge and were clipped. Inline flow wraps them.
                 styles={{ itemWrapper: { display: 'inline' }, itemLabel: { display: 'inline' } }}
+                // No reading measure: an item is one finding and its tab
+                // link, and a capped list pushed the link alone onto a
+                // second line beside free space.
                 style={{
                   lineHeight: 1.45,
                   textAlign: 'left',
                   paddingRight: 4,
-                  ...proseWidth(alignment),
                 }}
               >
                 {block.items.map((item, i) => (

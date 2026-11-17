@@ -231,3 +231,47 @@ def test_the_wording_of_a_detail_decides_nothing(db):
     )
     assert failed == [("joined", "id-j", old_wording)]
     assert [tag for tag, _dc_id, _detail in skipped] == ["a", "other"]
+
+
+def test_a_multiqc_collection_with_no_report_is_skipped_not_failed(db):
+    """The scan promised an empty collection until its files exist; no worker fails it."""
+    user = UserBase(id=ObjectId(), email="owner@example.com", is_admin=False)
+    ids = {"multiqc_data": str(ObjectId()), "counts": str(ObjectId())}
+    project = {
+        "_id": ObjectId(),
+        "name": "run42",
+        "permissions": {"owners": [{"_id": user.id}]},
+        "workflows": [
+            {
+                "data_collections": [
+                    {
+                        "_id": ids["multiqc_data"],
+                        "data_collection_tag": "multiqc_data",
+                        "config": {"type": "MultiQC"},
+                    },
+                    {
+                        "_id": ids["counts"],
+                        "data_collection_tag": "counts",
+                        "config": {"type": "table"},
+                    },
+                ]
+            }
+        ],
+    }
+    rows = [
+        DataCollectionPreview(
+            tag=tag, kind="scan", mode="recursive", location="", matched=0, status="empty"
+        )
+        for tag in ids
+    ]
+    preflight = from_run._preflight_split(project, rows)
+    assert [t for t, *_ in preflight.to_dispatch] == ["counts"]
+    assert preflight.failed == []
+    assert [(t, d) for t, _id, d in preflight.skipped] == [
+        ("multiqc_data", from_run._NO_MULTIQC_REPORT)
+    ]
+
+    # With a report found, it is dispatched as before.
+    rows[0].matched, rows[0].status = 1, "ok"
+    preflight = from_run._preflight_split(project, rows)
+    assert {t for t, *_ in preflight.to_dispatch} == {"multiqc_data", "counts"}

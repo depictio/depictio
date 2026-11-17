@@ -48,6 +48,7 @@ def test_gene_lane_accepts_genome_variable_values() -> None:
     from depictio.models.components.advanced_viz.configs import _coerce_gene_lane
 
     assert _coerce_gene_lane("GRCh38") == "hg38"
+    assert _coerce_gene_lane("GRCh37") == "hg19"
     assert _coerce_gene_lane("mm10") == "mm10"
     assert _coerce_gene_lane("{GENOME}") == "none"
     assert _coerce_gene_lane("TAIR10") == "none"

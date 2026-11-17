@@ -1,0 +1,21 @@
+id: viralmetagenome_clusters
+name: Contig clusters per sample
+mode: per-cluster/summary
+description: >-
+  One row per contig cluster: its taxon, its centroid and whether that
+  centroid is a reference-pool sequence or one of the sample's own contigs,
+  the member contigs and their summed length, the share of the sample's
+  contig read depth the cluster holds, and whether a consensus was refined
+  from it or it was filtered out.
+find:
+  path_glob: "**/polishing/intermediate/cluster/*/*.clusters.tsv"
+recipe: viralmetagenome/clusters.py
+fixture: clusters.tsv
+renders_as:
+  - { id: clusters_by_status, component: card, column: cluster, aggregation: count,
+      secondary_layout: composition, breakdown_col: status }
+  - { component: card, column: read_depth_pct, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: cluster_type, top_n_count: 2 }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: sample, y: read_depth_pct, color: status, title: Read depth share per cluster} }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

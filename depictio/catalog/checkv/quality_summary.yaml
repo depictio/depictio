@@ -1,0 +1,25 @@
+id: checkv_quality_summary
+name: Viral genome quality
+mode: quality-report
+description: >-
+  CheckV's verdict on every viral sequence: length, provirus call, viral and
+  host genes, estimated completeness and contamination, and the quality tier
+  those give. Completeness against contamination is the plane a viral genome
+  is read on: complete genomes sit top left, proviruses with host flanks to
+  the right.
+find:
+  path_glob: "**/checkv/**/quality_summary.tsv"
+recipe: checkv/quality_summary.py
+fixture: quality_summary.tsv
+renders_as:
+  - { id: quality_tiers, component: card, column: contig_id, aggregation: count,
+      secondary_layout: composition, breakdown_col: checkv_quality, headline: true }
+  - { id: completeness, component: card, column: completeness, aggregation: median,
+      secondary_layout: threshold, threshold_value: 90, threshold_warn: 50 }
+  - { id: contamination, component: card, column: contamination, aggregation: max,
+      secondary_layout: threshold, threshold_value: 5, threshold_direction: max }
+  - id: completeness_vs_contamination
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: completeness, y: contamination, label: contig_id, color: checkv_quality, size: contig_length }
+  - { component: table }

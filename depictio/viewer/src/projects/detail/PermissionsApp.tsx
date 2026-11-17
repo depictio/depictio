@@ -21,7 +21,8 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import type { OptionsFilter } from '@mantine/core';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { AgGridReact } from 'ag-grid-react';
@@ -35,6 +36,8 @@ import {
   Database,
   Globe,
   Lock,
+  PenLine,
+  PenOff,
   ShieldCheck,
   TriangleAlert,
   UserMinus,
@@ -50,6 +53,8 @@ import {
   listAllUsers,
   listGroups,
   listMyGroups,
+  SHARE_CANDIDATE_MIN_QUERY,
+  searchShareCandidates,
   toggleProjectVisibility,
   updateProjectPermissions,
   useBrandAccents,
@@ -60,12 +65,15 @@ import type {
   MyGroup,
   PermissionsGroup,
   ProjectListEntry,
+  ShareCandidate,
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
-import { AppSidebar } from '../../chrome';
+import { AppSidebar, LoadErrorCard } from '../../chrome';
 import { usePageTitle } from '../../branding';
 import { AccessOverview, GroupMembersPreview, useEffectiveAccess } from './AccessOverview';
+import { PublishedLockModal } from './PublishedLockControl';
+import { useMigrationUi } from '../../hooks/useMigrationUi';
 
 type Role = 'Owner' | 'Editor' | 'Viewer';
 const ROLES: Role[] = ['Owner', 'Editor', 'Viewer'];
@@ -260,6 +268,7 @@ const PermissionsApp: React.FC = () => {
   const accent = useBrandAccents();
   const projectId = readProjectIdFromPath();
   const { user } = useCurrentUser();
+  const migrationUi = useMigrationUi();
   const { colorScheme } = useMantineColorScheme();
   const primary = useMantineTheme().primaryColor;
   const isDark = colorScheme === 'dark';
@@ -268,7 +277,7 @@ const PermissionsApp: React.FC = () => {
   const [rows, setRows] = useState<UserRow[]>([]);
   const [groupRows, setGroupRows] = useState<GroupRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [emailInput, setEmailInput] = useState('');
   const [adding, setAdding] = useState(false);
@@ -292,6 +301,8 @@ const PermissionsApp: React.FC = () => {
   // the modal; the API call fires on confirm.
   const [pendingPublic, setPendingPublic] = useState<boolean | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
+  // Lock / unlock editing (admins): the switch only opens the confirmation.
+  const [lockModalOpen, setLockModalOpen] = useState(false);
 
   usePageTitle('Project Permissions');
   const glass = useGlassPages();
@@ -340,7 +351,7 @@ const PermissionsApp: React.FC = () => {
 
   useEffect(() => {
     if (!projectId) {
-      setLoadError('No project ID in URL.');
+      setLoadError({ error: Object.assign(new Error('No project ID in URL.'), { status: 404 }) });
       setLoading(false);
       return;
     }
@@ -352,9 +363,7 @@ const PermissionsApp: React.FC = () => {
         setRows(buildRows(project));
         setGroupRows(buildGroupRows(project));
       })
-      .catch((err: Error) =>
-        setLoadError(err.message || 'Failed to load project.'),
-      )
+      .catch((err: unknown) => setLoadError({ error: err }))
       .finally(() => setLoading(false));
   }, [projectId, refreshKey]);
 
@@ -377,6 +386,55 @@ const PermissionsApp: React.FC = () => {
     );
     return myGroups.some((g) => g.is_group_admin && ownerGroupIds.has(g.id));
   }, [user, project, myGroups]);
+
+  // The full user list is admin-only, so anyone else gets suggestions from a
+  // search scoped to this project's sharing: a P.I. can find a person from
+  // another group by name or email.
+  const [candidates, setCandidates] = useState<ShareCandidate[]>([]);
+  const [debouncedInput] = useDebouncedValue(emailInput.trim(), 250);
+  const searchesCandidates = canManage && allUsers.length === 0;
+  useEffect(() => {
+    if (
+      !searchesCandidates ||
+      !projectId ||
+      debouncedInput === '*' ||
+      debouncedInput.length < SHARE_CANDIDATE_MIN_QUERY
+    ) {
+      setCandidates([]);
+      return;
+    }
+    let cancelled = false;
+    searchShareCandidates(projectId, debouncedInput)
+      .then((found) => {
+        if (!cancelled) setCandidates(found);
+      })
+      .catch(() => {
+        if (!cancelled) setCandidates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchesCandidates, projectId, debouncedInput]);
+
+  /** Emails offered by the add-member field: not already on the project. */
+  const suggestionEmails = useMemo(() => {
+    const emails =
+      allUsers.length > 0 ? allUsers.map((u) => u.email) : candidates.map((c) => c.email);
+    return emails.filter((e) => e && !rows.some((r) => r.email === e));
+  }, [allUsers, candidates, rows]);
+
+  // Admins get every address and let Mantine narrow it by what is typed. The
+  // search has already narrowed everyone else's by name or email, so Mantine
+  // must not filter those again by email alone.
+  const listFiltersLocally = allUsers.length > 0;
+  const suggestionData = useMemo(() => {
+    const typed = emailInput.trim();
+    const wildcard = listFiltersLocally || typed === '' || typed === '*' ? ['*'] : [];
+    return [...wildcard, ...suggestionEmails];
+  }, [listFiltersLocally, emailInput, suggestionEmails]);
+  const suggestionFilter: OptionsFilter | undefined = listFiltersLocally
+    ? undefined
+    : ({ options }) => options;
 
   const { access: effectiveAccess, error: effectiveAccessError } = useEffectiveAccess(
     projectId,
@@ -461,29 +519,36 @@ const PermissionsApp: React.FC = () => {
           Viewer: true, // wildcard makes sense as a viewer default
         };
       } else {
-        // Resolve via the locally cached `allUsers` list. The auth endpoint
-        // `/auth/fetch_user/from_email` requires an internal api-key header
-        // that browser clients don't carry, so we look up by email in the
-        // admin-listed set we loaded on mount instead.
-        const u = allUsers.find(
-          (x) => (x.email || '').toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (!u) {
+        // Admins resolve against the full list loaded on mount. The list is
+        // admin-only, so everyone else asks the server for exactly this
+        // address (`/auth/fetch_user/from_email` needs an internal api-key
+        // header that browser clients don't carry).
+        const wanted = trimmed.toLowerCase();
+        const listed = allUsers.find((x) => (x.email || '').toLowerCase() === wanted);
+        let found: { id?: string; email: string; is_admin?: boolean } | undefined = listed && {
+          id: (listed._id ?? listed.id) as string | undefined,
+          email: listed.email,
+          is_admin: listed.is_admin,
+        };
+        if (!found && allUsers.length === 0 && projectId) {
+          const hits = await searchShareCandidates(projectId, trimmed);
+          found = hits.find((c) => c.email.toLowerCase() === wanted);
+        }
+        if (!found) {
           throw new Error(
-            `No user with email "${trimmed}". Pick one from the suggestions or ask an admin to invite them first.`,
+            `No account with the email "${trimmed}". They need to sign in to Depictio once before you can share with them.`,
           );
         }
-        const id = (u._id ?? u.id) as string | undefined;
-        if (!id) {
+        if (!found.id) {
           throw new Error('User record has no id; cannot add.');
         }
         row = {
-          _id: id,
-          email: u.email,
+          _id: found.id,
+          email: found.email,
           Owner: false,
           Editor: false,
           Viewer: true, // default newly-added users to Viewer
-          is_admin: Boolean(u.is_admin),
+          is_admin: Boolean(found.is_admin),
         };
       }
       if (rows.some((r) => r._id === row._id || r.email === row.email)) {
@@ -830,6 +895,24 @@ const PermissionsApp: React.FC = () => {
   const shownPublic = pendingPublic !== null ? pendingPublic : Boolean(project?.is_public);
   const VisMark = shownPublic ? Globe : Lock;
 
+  // Editing lock (#1303), beside visibility: visibility says who may view,
+  // the lock whether anyone, owners included, may change the content.
+  const isAdmin = !!user?.is_admin;
+  const editingLocked = !!project?.published_lock;
+  // Hidden with the rest of migration, except on a project already locked,
+  // so an admin can still unlock it.
+  const showEditing = migrationUi || editingLocked;
+  const EditMark = editingLocked ? PenOff : PenLine;
+  const editingTitle = editingLocked ? 'Editing locked' : 'Editable';
+  const editingText = [
+    editingLocked
+      ? 'Read-only: nobody can change its dashboards or data, owners included. Who can view it is unchanged.'
+      : 'Owners and editors can change its dashboards and data.',
+    isAdmin ? null : 'Only an administrator can lock or unlock editing.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   // Glass: visibility as a row, members as a list with the role on each row.
   const glassBody = project && (
     <div className="pm-page" data-testid="permissions-page">
@@ -839,7 +922,7 @@ const PermissionsApp: React.FC = () => {
         </Alert>
       )}
 
-      <section aria-label="Visibility">
+      <section aria-label="Visibility and editing" className="pm-access">
         <div className="pm-visibility" data-public={shownPublic ? '' : undefined}>
           <span className="pm-chip">
             <VisMark size={20} strokeWidth={STROKE} aria-hidden />
@@ -860,6 +943,24 @@ const PermissionsApp: React.FC = () => {
             data-testid="project-visibility-switch"
           />
         </div>
+        {showEditing && (
+        <div className="pm-visibility" data-testid="project-editing-row">
+          <span className="pm-chip">
+            <EditMark size={20} strokeWidth={STROKE} aria-hidden />
+          </span>
+          <div className="pm-visibility-body">
+            <div className="pm-visibility-title">{editingTitle}</div>
+            <div className="pm-visibility-text">{editingText}</div>
+          </div>
+          <Switch
+            checked={editingLocked}
+            onChange={() => setLockModalOpen(true)}
+            disabled={!isAdmin}
+            aria-label="Lock editing"
+            data-testid="project-editing-switch"
+          />
+        </div>
+        )}
       </section>
 
       <section aria-label="Members">
@@ -947,11 +1048,7 @@ const PermissionsApp: React.FC = () => {
             <li className="pm-add">
               <Autocomplete
                 flex={1}
-                placeholder={
-                  allUsers.length > 0
-                    ? 'Search users, or * for all signed-in users'
-                    : 'user@example.com, or * for all signed-in users'
-                }
+                placeholder="Search by name or email, or * for all signed-in users"
                 value={emailInput}
                 onChange={setEmailInput}
                 onKeyDown={(e) => {
@@ -959,10 +1056,8 @@ const PermissionsApp: React.FC = () => {
                 }}
                 disabled={adding}
                 leftSection={<UserPlus size={16} strokeWidth={STROKE} />}
-                data={[
-                  '*',
-                  ...allUsers.map((u) => u.email).filter((e) => e && !rows.some((r) => r.email === e)),
-                ]}
+                data={suggestionData}
+                filter={suggestionFilter}
                 limit={20}
                 comboboxProps={{ withinPortal: true }}
                 data-testid="permissions-add-user-input"
@@ -1101,22 +1196,13 @@ const PermissionsApp: React.FC = () => {
           <Loader />
         </Center>
       ) : loadError ? (
-        <Center mih={300}>
-          <Stack align="center" gap="xs">
-            {glass ? (
-              <TriangleAlert size={32} strokeWidth={STROKE} color="var(--mantine-color-red-6)" aria-hidden />
-            ) : (
-              <Icon
-                icon="mdi:alert-circle"
-                width={32}
-                color="var(--mantine-color-red-6)"
-              />
-            )}
-            <Text c="red">{loadError}</Text>
-            <Button component="a" href="/projects" variant={glass ? 'default' : 'light'}>
-              Back to projects
-            </Button>
-          </Stack>
+        <Center mih={300} py="xl">
+          <LoadErrorCard
+            subject="project"
+            resourceId={projectId}
+            error={loadError.error}
+            onRetry={refresh}
+          />
         </Center>
       ) : !project ? null : glass ? (
         glassBody
@@ -1169,6 +1255,17 @@ const PermissionsApp: React.FC = () => {
               <Text size="sm" c="dimmed">
                 {project.name}
               </Text>
+              {showEditing && (
+              <Switch
+                mt="xs"
+                label={editingTitle}
+                description={editingText}
+                checked={editingLocked}
+                onChange={() => setLockModalOpen(true)}
+                disabled={!isAdmin}
+                data-testid="project-editing-switch"
+              />
+              )}
             </Stack>
           </Paper>
 
@@ -1225,11 +1322,7 @@ const PermissionsApp: React.FC = () => {
                     flex={1}
                     size="sm"
                     label={undefined}
-                    placeholder={
-                      allUsers.length > 0
-                        ? 'Type to search users…  (or * for all signed-in users)'
-                        : 'user@example.com  (or * for all signed-in users)'
-                    }
+                    placeholder="Search by name or email  (or * for all signed-in users)"
                     value={emailInput}
                     onChange={setEmailInput}
                     onKeyDown={(e) => {
@@ -1237,17 +1330,8 @@ const PermissionsApp: React.FC = () => {
                     }}
                     disabled={adding}
                     leftSection={<Icon icon="mdi:account-plus-outline" width={16} />}
-                    // Suggestions: every known user that isn't already a
-                    // project member, plus the wildcard. Mantine filters
-                    // by the current input value on its own.
-                    data={[
-                      '*',
-                      ...allUsers
-                        .map((u) => u.email)
-                        .filter(
-                          (e) => e && !rows.some((r) => r.email === e),
-                        ),
-                    ]}
+                    data={suggestionData}
+                    filter={suggestionFilter}
                     limit={20}
                     comboboxProps={{ withinPortal: true }}
                     data-testid="permissions-add-user-input"
@@ -1425,6 +1509,15 @@ const PermissionsApp: React.FC = () => {
           </Group>
         </Stack>
       </Modal>
+      {isAdmin && projectId && (
+        <PublishedLockModal
+          opened={lockModalOpen}
+          onClose={() => setLockModalOpen(false)}
+          projectId={projectId}
+          locked={editingLocked}
+          onChanged={refresh}
+        />
+      )}
     </>
   );
 

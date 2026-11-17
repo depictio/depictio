@@ -10,6 +10,11 @@ import {
   hasPinnedColors,
   pinnedCategoryColor,
   pinnedCategoryDots,
+  readColorScale,
+  sequentialColor,
+  sequentialColorMap,
+  sequentialOrder,
+  sequentialRamp,
   sortCategoryValues,
   type CategoryColorSource,
 } from './categoryColors';
@@ -236,5 +241,63 @@ describe('chipCategoryDots (filter bar chips)', () => {
     expect(chipCategoryDots(trec, 'season', ['Spring', 'Summer'], null, 9)).toBeNull();
     expect(chipCategoryDots(trec, undefined, ['Spring'], colorway, 9)).toBeNull();
     expect(chipCategoryDots(trec, 'season', ['Spring', 'Summer'], colorway, 0)).toBeNull();
+  });
+});
+
+describe('sequential scales', () => {
+  it('walks a ramp from its first to its last stop', () => {
+    expect(sequentialColor('blues', 0)).toBe('#c6dbef');
+    expect(sequentialColor('blues', 1)).toBe('#08306b');
+    expect(sequentialColor('blues', 7)).toBe('#08306b');
+    expect(sequentialColor('nope', 0)).toBe(sequentialColor('viridis', 0));
+  });
+
+  it('interpolates between stops', () => {
+    expect(sequentialColor('viridis', 0.5)).toBe('#21918c');
+    const mid = sequentialColor('blues', 1 / 12);
+    expect(mid).not.toBe('#c6dbef');
+    expect(mid).not.toBe('#9ecae1');
+  });
+
+  it('builds a ramp of n colours', () => {
+    const ramp = sequentialRamp('greens', 5);
+    expect(ramp).toHaveLength(5);
+    expect(ramp[0]).toBe(sequentialColor('greens', 0));
+    expect(ramp[4]).toBe(sequentialColor('greens', 1));
+  });
+
+  it('orders by a numeric key, not by the values', () => {
+    const day = new Map<string, string | number>([['late', 14], ['early', 0], ['mid', 3]]);
+    expect(sequentialOrder(['late', 'early', 'mid'], day)).toEqual(['early', 'mid', 'late']);
+  });
+
+  it('orders numeric keys as numbers (10 after 2)', () => {
+    const key = new Map<string, string | number>([['a', '10'], ['b', '2']]);
+    expect(sequentialOrder(['a', 'b'], key)).toEqual(['b', 'a']);
+  });
+
+  it('puts values with no key last and falls back to natural order', () => {
+    const key = (v: string) => (v === 'x' ? null : v);
+    expect(sequentialOrder(['x', 'b', 'a'], key)).toEqual(['a', 'b', 'x']);
+    expect(sequentialOrder(['T10', 'T2', 'T1'])).toEqual(['T1', 'T2', 'T10']);
+  });
+
+  it('spreads distinct values evenly over the ramp', () => {
+    const map = sequentialColorMap(['d0', 'd1', 'd14', 'd0', null, ''], null, 'viridis');
+    expect([...map.keys()]).toEqual(['d0', 'd1', 'd14']);
+    expect(map.get('d0')).toBe(sequentialColor('viridis', 0));
+    expect(map.get('d1')).toBe(sequentialColor('viridis', 0.5));
+    expect(map.get('d14')).toBe(sequentialColor('viridis', 1));
+  });
+
+  it('gives a lone value the middle of the ramp', () => {
+    expect(sequentialColorMap(['only'], null, 'blues').get('only')).toBe(sequentialColor('blues', 0.5));
+  });
+
+  it('reads a color_scale spec only when it names a column', () => {
+    expect(readColorScale({ column: 'day', scheme: 'blues' })).toEqual({ column: 'day', scheme: 'blues' });
+    expect(readColorScale({ scheme: 'blues' })).toBeNull();
+    expect(readColorScale(null)).toBeNull();
+    expect(readColorScale({ column: '' })).toBeNull();
   });
 });

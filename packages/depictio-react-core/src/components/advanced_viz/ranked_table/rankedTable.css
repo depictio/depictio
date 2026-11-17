@@ -1,0 +1,276 @@
+/* Ranked table (see RankedTableRenderer.tsx). Colours are Mantine tokens only,
+   so the table follows the theme's primary colour and both colour schemes: the
+   `-light` / `-light-color` pairs are the scheme-aware tint and ink of a hue. */
+
+.dpx-rt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dpx-rt__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dpx-rt__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--mantine-font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.dpx-rt__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dpx-rt__table th.is-end,
+.dpx-rt__table td.is-end {
+  text-align: right;
+}
+
+.dpx-rt__table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  vertical-align: middle;
+  white-space: nowrap;
+  /* The selection ring: a hairline above and below every cell of a picked row */
+  box-shadow:
+    inset 0 1px 0 var(--rt-ring),
+    inset 0 -1px 0 var(--rt-ring);
+}
+
+/* The first cell carries the medal stripe, then the left edge of the ring;
+   the last cell closes the ring on the right. */
+.dpx-rt__table td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--rt-stripe),
+    inset 2px 0 0 var(--rt-ring),
+    inset 0 1px 0 var(--rt-ring),
+    inset 0 -1px 0 var(--rt-ring);
+}
+.dpx-rt__table td:last-child {
+  box-shadow:
+    inset -2px 0 0 var(--rt-ring),
+    inset 0 1px 0 var(--rt-ring),
+    inset 0 -1px 0 var(--rt-ring);
+}
+.dpx-rt__table td:first-child:last-child {
+  box-shadow:
+    inset 3px 0 0 var(--rt-stripe),
+    inset 2px 0 0 var(--rt-ring),
+    inset -2px 0 0 var(--rt-ring),
+    inset 0 1px 0 var(--rt-ring),
+    inset 0 -1px 0 var(--rt-ring);
+}
+
+.dpx-rt__row {
+  --rt-stripe: transparent;
+  --rt-ring: transparent;
+  outline: none;
+}
+.dpx-rt__row--selectable {
+  cursor: pointer;
+}
+.dpx-rt__row:hover td,
+.dpx-rt__row:focus-visible td {
+  background: var(--mantine-color-default-hover);
+}
+.dpx-rt__row:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+}
+.dpx-rt__row.is-selected {
+  --rt-ring: var(--mantine-primary-color-filled);
+}
+.dpx-rt__row.is-selected td {
+  background: var(--mantine-primary-color-light);
+}
+.dpx-rt__row.is-selected:hover td {
+  background: var(--mantine-primary-color-light-hover);
+}
+
+.dpx-rt__row--tier-1 {
+  --rt-stripe: var(--mantine-color-yellow-filled);
+}
+.dpx-rt__row--tier-2 {
+  --rt-stripe: var(--mantine-color-gray-5);
+}
+.dpx-rt__row--tier-3 {
+  --rt-stripe: var(--mantine-color-orange-7);
+}
+
+/* Rank cell: a circle (a pill once the rank has three digits) */
+.dpx-rt__medal {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 13px;
+  background: var(--mantine-color-gray-light);
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+}
+.dpx-rt__medal--1 {
+  background: var(--mantine-color-yellow-light);
+  color: var(--mantine-color-yellow-light-color);
+  box-shadow: inset 0 0 0 2px var(--mantine-color-yellow-filled);
+}
+.dpx-rt__medal--2 {
+  background: var(--mantine-color-gray-light);
+  color: var(--mantine-color-gray-light-color);
+  box-shadow: inset 0 0 0 2px var(--mantine-color-gray-5);
+}
+.dpx-rt__medal--3 {
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+  box-shadow: inset 0 0 0 2px var(--mantine-color-orange-7);
+}
+.dpx-rt__medal--plain {
+  background: none;
+  min-width: 0;
+  padding: 0;
+}
+
+.dpx-rt__title {
+  font-weight: 600;
+}
+.dpx-rt__mono,
+.dpx-rt__number {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+}
+.dpx-rt__mono {
+  color: var(--mantine-color-dimmed);
+}
+.dpx-rt__empty {
+  color: var(--mantine-color-dimmed);
+}
+
+/* Score: a bar and its value */
+.dpx-rt__score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+.dpx-rt__track {
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--mantine-primary-color-light);
+}
+.dpx-rt__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--mantine-primary-color-filled);
+}
+.dpx-rt__value {
+  min-width: 38px;
+  text-align: right;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+}
+
+/* Compact rows (the Display control): about 10px less per row */
+.dpx-rt--compact .dpx-rt__table th,
+.dpx-rt--compact .dpx-rt__table td {
+  padding-block: 2px;
+}
+.dpx-rt--compact .dpx-rt__medal {
+  min-width: 22px;
+  height: 20px;
+  border-radius: 10px;
+}
+.dpx-rt--compact .dpx-rt__table {
+  font-size: var(--mantine-font-size-xs);
+}
+
+.dpx-rt__foot {
+  flex: 0 0 auto;
+  padding-top: 4px;
+}
+
+/* Hover popover: fixed to the viewport so the tile's scroll box cannot clip it */
+.dpx-rt__pop {
+  position: fixed;
+  z-index: var(--mantine-z-index-popover, 300);
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-md);
+  font-size: var(--mantine-font-size-sm);
+  pointer-events: none;
+}
+.dpx-rt__pop-title {
+  margin: 0;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+}
+.dpx-rt__pop-sub {
+  margin-bottom: 8px;
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+}
+.dpx-rt__pop-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+.dpx-rt__pop-list dt {
+  color: var(--mantine-color-dimmed);
+}
+.dpx-rt__pop-list dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+}
+.dpx-rt__pop-grid {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.dpx-rt__pop-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 4px 0;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-default-hover);
+  font-size: 11px;
+  text-align: center;
+}
+.dpx-rt__pop-cell b {
+  display: block;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+}

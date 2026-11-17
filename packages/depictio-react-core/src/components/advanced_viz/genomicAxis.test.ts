@@ -41,6 +41,11 @@ describe('genomicRoles', () => {
       end: 'end',
     });
     expect(genomicRoles('contact_map', {})).toEqual({ chrom: 'chrom1', start: 'start1' });
+    // A karyotype bound to BUSCO's own column names.
+    expect(
+      genomicRoles('ideogram', { chrom_col: 'sequence', start_col: 'gene_start', end_col: 'gene_end' }),
+    ).toEqual({ chrom: 'sequence', start: 'gene_start', end: 'gene_end' });
+    expect(genomicRoles('ideogram', {})).toEqual({ chrom: 'chrom', start: 'start', end: 'end' });
   });
 
   it('prefers the bound columns over the model defaults', () => {

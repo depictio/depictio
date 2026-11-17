@@ -99,6 +99,9 @@ _STYLE = """<style>
 .gtd-links .col{opacity:.7;font-size:.92em;}
 .gtd-links code{background:none;padding:0;overflow-wrap:anywhere;}
 .gtd-links tbody tr:nth-child(even){background:var(--md-default-fg-color--lightest,#f6f8fa);}
+.gtd-versions{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .8rem;}
+.gtd-pipeline-ver{background:#eaf2ff;color:#2563c9;}
+.gtd-template-ver{background:#e6f7f5;color:#2a8c82;}
 </style>"""
 
 
@@ -471,6 +474,25 @@ def _render_recipes(refs: list[str], pipeline_version: str) -> list[str]:
     return lines
 
 
+def _render_versions(meta: TemplateMetadata, pipeline_version: str) -> list[str]:
+    """The two version numbers a reader must not confuse, side by side.
+
+    The pipeline version is the release whose outputs the template reads (its
+    directory); the template version is the template's own revision
+    (``template.version``). The docs page's version picker reads
+    ``data-template-version`` from the visible partial to show it beside the
+    pipeline version.
+    """
+    pipeline = meta.template_id.rsplit("/", 1)[0]
+    return [
+        f'<div class="gtd-versions" data-template-version="{_esc(meta.version)}">',
+        f'<span class="gtd-badge gtd-pipeline-ver">Pipeline {_esc(pipeline)} {_esc(pipeline_version)}</span>',
+        f'<span class="gtd-badge gtd-template-ver">Template {_esc(meta.version)}</span>',
+        "</div>",
+        "",
+    ]
+
+
 def render_template(template_path: Path) -> str:
     """Render the full Markdown reference partial for one template.yaml."""
     raw = _load_yaml(str(template_path))
@@ -487,6 +509,7 @@ def render_template(template_path: Path) -> str:
         "",
         _STYLE,
         "",
+        *_render_versions(meta, pipeline_version),
         *_render_variables(meta),
         *_render_data_collections(dcs, pipeline_version),
         *_render_conditionals(meta, [dc["data_collection_tag"] for dc in dcs]),
@@ -580,7 +603,7 @@ def main(argv: list[str] | None = None) -> int:
         versioned_slug = _output_slug(template_path, templates_root)
         content = (
             f"<!-- Alias of {versioned_slug}.md — always tracks the newest "
-            f"template version. -->\n" + rendered[template_path]
+            f"pipeline version. -->\n" + rendered[template_path]
         )
         out_path = out_dir / f"{alias_slug}.md"
         existing = out_path.read_text() if out_path.is_file() else None

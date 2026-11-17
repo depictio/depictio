@@ -1,0 +1,27 @@
+id: star_log_final
+name: Alignment summary
+mode: alignment/summary
+description: >-
+  One row per sample from STAR's Log.final.out: input reads, uniquely mapped,
+  multi-mapped and unmapped reads with their shares, the splices STAR crossed
+  (annotated, canonical motifs, non-canonical) and the per-base mismatch,
+  deletion and insertion rates. The splice shares are derived, so a card can
+  say how much of the splicing matches the annotation.
+find:
+  path_glob: "**/*.Log.final.out"
+recipe: star/log_final.py
+fixture: log_final.tsv
+renders_as:
+  - { id: unique_mapped, component: card, column: uniquely_mapped_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
+  - { id: input_reads, component: card, column: input_reads, aggregation: sum,
+      secondary_layout: histogram }
+  - { id: multimapped, component: card, column: multimapped_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: mismatch_rate, component: card, column: mismatch_rate_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: annotated_splices, component: card, column: splices_annotated_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: unique_vs_mismatch, component: advanced_viz, kind: scatter_xy,
+      roles: {x: mismatch_rate_pct, y: uniquely_mapped_pct, label: sample} }
+  - { component: table }

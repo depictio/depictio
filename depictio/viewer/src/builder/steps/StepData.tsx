@@ -34,6 +34,7 @@ import { useGlassPages } from '../../chrome/variants/glass/pages';
 import { useBuilderStore } from '../store/useBuilderStore';
 import MultiQCLogo from '../shared/MultiQCLogo';
 import type { ColumnSpec } from '../store/useBuilderStore';
+import { isRealWorkflow } from '../../projects/layout';
 import { getComponentTypeMeta } from '../componentTypes';
 import DataCollectionInfoCard from '../data/DataCollectionInfoCard';
 import DataPreviewTable from '../data/DataPreviewTable';
@@ -65,11 +66,16 @@ const StepData: React.FC = () => {
   const [projectJoins, setProjectJoins] = useState<ProjectJoin[]>([]);
   const [loadingWorkflows, setLoadingWorkflows] = useState(true);
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
-  // Basic projects synthesize one workflow per uploaded DC (named
-  // `{tag}_workflow_{ts}`). Showing that picker is noise — for basic projects
-  // we render a flat DC select and stamp wfId under the hood. Mirrors the
-  // pattern used in projects/detail/ProjectDetailApp.tsx.
-  const [projectType, setProjectType] = useState<'basic' | 'advanced'>('basic');
+  // Hand-added collections are each wrapped in a synthetic workflow
+  // (`{tag}_workflow_{ts}`); asking for that is noise. The two-step workflow
+  // picker only appears once a project has more than one real workflow (a
+  // pipeline engine or catalog); otherwise one flat DC select is shown and the
+  // workflow id is stamped under the hood.
+  const realWorkflowCount = useMemo(
+    () => workflows.filter(isRealWorkflow).length,
+    [workflows],
+  );
+  const twoStep = realWorkflowCount > 1;
 
   const [shape, setShape] = useState<{
     num_rows?: number;
@@ -85,9 +91,12 @@ const StepData: React.FC = () => {
     switch (componentType) {
       case 'figure':
       case 'card':
+        return ['table'];
       case 'interactive':
       case 'table':
-        return ['table'];
+        // A genomic_tracks manifest is a Delta table too, so it can be listed
+        // and filtered next to the genome browser.
+        return ['table', 'genomic_tracks'];
       case 'map':
         // Map binds to a table DC; the further coord requirement is enforced
         // by `dcHasCoordinates` below, since a "table with lat/lon" is still
@@ -97,6 +106,9 @@ const StepData: React.FC = () => {
         return ['multiqc'];
       case 'image':
         return ['image'];
+      case 'jbrowse':
+        // The track manifest; `jbrowse2` is the legacy session-backed DC.
+        return ['genomic_tracks', 'jbrowse2'];
       case 'advanced_viz':
         // Advanced viz consumes tabular DCs whose schema matches one of the
         // canonical viz schemas (volcano / embedding / manhattan / stacked
@@ -139,8 +151,6 @@ const StepData: React.FC = () => {
         const joinsRaw = (project as { joins?: unknown }).joins;
         setProjectJoins(Array.isArray(joinsRaw) ? (joinsRaw as ProjectJoin[]) : []);
         setWorkflowsError(null);
-        const rawType = project.project_type;
-        setProjectType(rawType === 'advanced' ? 'advanced' : 'basic');
         if (!wfId && wfs.length > 0) {
           // Pick the first workflow that has at least one DC compatible with
           // the chosen componentType, then auto-select that compatible DC.
@@ -175,10 +185,14 @@ const StepData: React.FC = () => {
 
   const wfOptions = useMemo(
     () =>
-      workflows.map((w) => ({
-        value: w._id,
-        label: w.workflow_tag || w.name || w._id,
-      })),
+      // Real workflows first; the synthetic ones stay reachable so tables
+      // added by hand are still pickable next to a pipeline's.
+      [...workflows]
+        .sort((a, b) => Number(isRealWorkflow(b)) - Number(isRealWorkflow(a)))
+        .map((w) => ({
+          value: w._id,
+          label: w.workflow_tag || w.name || w._id,
+        })),
     [workflows],
   );
 
@@ -524,7 +538,7 @@ const StepData: React.FC = () => {
         </Alert>
       )}
 
-      {projectType === 'advanced' ? (
+      {twoStep ? (
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
           <Select
             label="Workflow"

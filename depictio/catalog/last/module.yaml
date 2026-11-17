@@ -6,6 +6,7 @@
 # (up to gigabytes per pair) are not read.
 id: last
 name: LAST
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/last/split
 homepage: https://gitlab.com/mcfrith/last
 biotools_url: https://bio.tools/last # nf-core meta.yml leaves the identifier empty

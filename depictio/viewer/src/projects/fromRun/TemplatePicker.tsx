@@ -23,7 +23,7 @@ import { FlowBadge } from './FlowBadge';
 import { plural } from './plural';
 
 const VERSION_DESCRIPTION =
-  "The pipeline version the Depictio template was written for. The run's own version is shown above.";
+  "The pipeline version Depictio's definition was written for. The run's own version is shown above.";
 
 interface TemplatePickerProps {
   groups: RunPipelineGroup[];
@@ -73,7 +73,7 @@ const VersionMarks: React.FC<{
       {!matches && closestTemplateId === version.templateId && (
         <FlowBadge
           status="closest-to-run"
-          tooltip="No template exists for the run's own version: this one is the nearest."
+          tooltip="No version exists for the run's own version: this one is the nearest."
         />
       )}
       {version.latest && <FlowBadge status="latest" />}
@@ -146,14 +146,14 @@ const VersionField: React.FC<VersionFieldProps> = ({
     onDropdownOpen: () => combobox.updateSelectedOptionIndex('active'),
   });
   const label = (
-    <FieldLabel text="Template version" detected={versionDetected} testId="run-version-detected" />
+    <FieldLabel text="Version" detected={versionDetected} testId="run-version-detected" />
   );
 
   if (!pipeline) {
     return (
       <Input.Wrapper label={label} description={VERSION_DESCRIPTION}>
         <Text size="sm" c="dimmed" mt={6} data-testid="run-version-empty">
-          Pick a pipeline first, or leave both empty and Depictio picks the template that
+          Pick a pipeline first, or leave both empty and Depictio picks the one that
           matches the folder.
         </Text>
       </Input.Wrapper>
@@ -201,7 +201,7 @@ const VersionField: React.FC<VersionFieldProps> = ({
         </InputBase>
       </Combobox.Target>
       <Combobox.Dropdown>
-        <Combobox.Options mah={340} style={{ overflowY: 'auto' }} aria-label="Template versions">
+        <Combobox.Options mah={340} style={{ overflowY: 'auto' }} aria-label="Pipeline versions">
           {versions.map((v) => {
             const active = v.templateId === selected?.templateId;
             return (
@@ -231,7 +231,7 @@ const VersionField: React.FC<VersionFieldProps> = ({
         </Combobox.Options>
         <Combobox.Footer>
           <Text size="xs" c="dimmed">
-            {plural(versions.length, 'template version')} of {pipeline.title}, newest first.
+            {plural(versions.length, 'version')} of {pipeline.title}, newest first.
           </Text>
         </Combobox.Footer>
       </Combobox.Dropdown>

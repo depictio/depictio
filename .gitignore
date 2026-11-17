@@ -155,6 +155,8 @@ dump.rdb
 # generated from stub logs so the e2e suite can exercise the MultiQC catalog
 # outputs without vendoring a reference pipeline's 24 MB parquet)
 !depictio/projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+# e2e fixture of #1397: two runs, then a third attached (three small MultiQC reports)
+!depictio/tests/e2e-playwright/fixtures/data/changes_since/**/multiqc.parquet
 *.gz
 *.csv
 *.tsv
@@ -212,6 +214,16 @@ dump.rdb
 !depictio/projects/nf-core/methylseq/*/input/*.csv
 !depictio/projects/nf-core/hic/*/input/*.csv
 !depictio/projects/nf-core/crisprseq/*/input/*.csv
+# Wave 4 templates (vendored designs, samplesheets and marker sheets).
+!depictio/projects/nf-core/rnavar/*/input/*.tsv
+!depictio/projects/nf-core/epitopeprediction/*/input/*.csv
+!depictio/projects/nf-core/hlatyping/*/input/*.csv
+!depictio/projects/nf-core/viralmetagenome/*/input/*.csv
+!depictio/projects/nf-core/viralmetagenome/*/input/*.tsv
+!depictio/projects/nf-core/nascent/*/input/*.csv
+!depictio/projects/nf-core/nascent/*/input/*.tsv
+!depictio/projects/nf-core/mcmicro/*/input/*.csv
+!depictio/projects/nf-core/genomeqc/*/input/*.tsv
 # chipseq is pre-DSL2 and publishes its software versions as CSV, not YAML.
 !depictio/projects/nf-core/chipseq/*/pipeline_info/*.csv
 # atacseq 1.2.2 is pre-DSL2 too and publishes the same CSV shape.
@@ -220,6 +232,9 @@ dump.rdb
 !depictio/projects/nf-core/eager/*/pipeline_info/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
+# Genome tracks showcase: manifests/tables and the Strand-seq SV BEDs (bgzip + tabix)
+!depictio/projects/init/genome_tracks_examples/data/**/*.tsv
+!depictio/projects/init/genome_tracks_examples/data/strandseq/sv_calls/**/*.bed.gz
 # Allow the catalog conformance project's generated data. Every file here is a
 # copy of a catalog fixture, staged either as a recipe seed at the project root
 # or inside the fake run tree — see scripts/generate_project.py.
@@ -337,13 +352,6 @@ seaweedfs_backup_data/
 delta_dev/
 
 # Software Specific
-## JBrowse2
-jbrowse2/
-depictio/jbrowse2_configs/
-jbrowse-watcher-plugin/jbrowse2_sessions/
-jbrowse2_sessions/
-jbrowse2_configs/
-jbrowse-watcher-plugin/
 
 ## PyBuilder
 .pybuilder/
@@ -385,7 +393,7 @@ depictio/tests/e2e-tests/cypress/screenshots/
 # pnpm workspace root — `pnpm install` at the repo root creates a top-level
 # node_modules alongside the per-package ones already ignored in each
 # workspace member's own .gitignore.
-/node_modules/
+/node_modules
 
 # Backups
 depictio/backups/
@@ -456,7 +464,7 @@ depictio/dashboards_yaml/
 dev/advanced_viz_docs_screenshots/fixtures/
 
 # Node modules (any package directory)
-**/node_modules/
+**/node_modules
 
 # IDE / editor settings
 **/.vscode/

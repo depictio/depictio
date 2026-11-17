@@ -7,7 +7,7 @@ Two illustrated diagrams, built on the shared sketch toolkit:
   project folder (lock, direct and group permission blocks) in the middle, the
   one permissions gate and the resources behind it on the right, plus bob's
   role ladder, the live membership lookup, the floors and the bypasses.
-- ``user-groups_saml_sync`` - a SAML assertion through the SAML ACS into
+- ``user-groups_oidc_sync`` - OIDC claims through the OIDC callback into
   ``sync_sso_user`` (groups re-synced both ways, profile, pending P.I. claim),
   then who runs a group and where it happens in the UI.
 
@@ -520,7 +520,7 @@ def build_sharing_model() -> Sketch:
 # 2. SSO sync, governance and the screens.
 # --------------------------------------------------------------------------
 
-SAML_W, SAML_H = 1760, 1700
+OIDC_W, OIDC_H = 1760, 1700
 
 
 def _group_row(
@@ -695,17 +695,17 @@ def _mock_profile(s: Sketch, x: float, y: float, w: float, h: float) -> None:
     pill(s, x + 196, gy, 100, "new-lab", WHITE, h=24, size=12)
 
 
-def build_saml_sync() -> Sketch:
-    s = Sketch(SAML_W, SAML_H, seed=968)
+def build_oidc_sync() -> Sketch:
+    s = Sketch(OIDC_W, OIDC_H, seed=968)
     s.heading(
         40,
         52,
         "SSO sync and who runs a group",
-        "every SAML login re-syncs the user's groups and profile; people, not code, "
+        "every OpenID Connect login re-syncs the user's groups and profile; people, not code, "
         "decide who administers them",
     )
 
-    # -- 1. the login and the assertion ----------------------------------
+    # -- 1. the login and the claims ----------------------------------
     s.text(40, 126, "a login through the identity provider", size=13, anchor="start", colour=GREY)
     browser(s, 40, 140, 250, 190)
     s.text(165, 159, "company login", size=11, colour=DIM)
@@ -722,13 +722,13 @@ def build_saml_sync() -> Sketch:
     card = Box(356, 140, 300, 262, WHITE, "", ())
     s.rect(card)
     s.rect(Box(356, 140, 300, 34, VIOLET, "", ()))
-    s.text(372, 163, "SAML assertion", size=16, weight="bold", anchor="start")
-    s.text(640, 163, "attributes", size=11.5, colour=DIM, anchor="end")
+    s.text(372, 163, "ID token claims", size=16, weight="bold", anchor="start")
+    s.text(640, 163, "claims", size=11.5, colour=DIM, anchor="end")
     attrs = (
-        ("groups", "korbel-lab, new-lab", "`DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS`"),
-        ("title", "group leader", "`..._ATTRIBUTE_TITLE`"),
-        ("display name", "Ada L.", "`..._ATTRIBUTE_DISPLAY_NAME`"),
-        ("login", "ada", "`..._ATTRIBUTE_LOGIN`"),
+        ("groups", "korbel-lab, new-lab", "provider key `claims.groups`"),
+        ("title", "group leader", "`claims.title`"),
+        ("display name", "Ada L.", "`claims.display_name`"),
+        ("login", "ada", "`claims.login`"),
     )
     for i, (name, value, env) in enumerate(attrs):
         ay = 196 + i * 46
@@ -743,29 +743,35 @@ def build_saml_sync() -> Sketch:
 
     acs = Box(722, 140, 250, 190, WHITE, "", ())
     s.rect(acs)
-    sticker(s, 738, 124, 84, "SAML", ORANGE)
-    s.text(acs.cx, 176, "ACS callback", size=18, weight="bold")
+    sticker(s, 738, 124, 84, "OIDC", ORANGE)
+    s.text(acs.cx, 176, "OIDC callback", size=18, weight="bold")
     s.text(acs.cx, 204, "`create_or_get_sso_user`", size=12.5, colour=DIM)
     s.text(acs.cx, 232, "then a magic-link ticket", size=13, colour=DIM)
     s.text(acs.cx, 252, "and the user lands in", size=13, colour=DIM)
     s.text(acs.cx, 272, "the viewer", size=13, colour=DIM)
 
-    # the hook, called in the ACS handler
+    # the hook, called in the callback handler
     s.arrow(978, 235, 1060, 235)
     s.rect(Box(1060, 140, 671, 190, WHITE, "", ()))
-    sticker(s, 1076, 124, 200, "called by the ACS", ORANGE)
+    sticker(s, 1076, 124, 200, "called by the callback", ORANGE)
     s.text(
         1080,
         176,
-        "the hook in the ACS handler",
+        "the last step of `provision_sso_login`",
         size=15,
         weight="bold",
         anchor="start",
     )
     for n, ny in (("1", 208), ("2", 235), ("3", 262)):
         s.text(1086, ny, f"`{n}`", size=12, colour=GREY, anchor="end")
-    s.text(1100, 208, "`from ...sso_sync import sync_sso_user`", size=14, anchor="start")
-    s.text(1100, 262, "`await sync_sso_user(user, auth.get_attributes())`", size=14, anchor="start")
+    s.text(
+        1100,
+        208,
+        "`user, created = await create_or_get_sso_user(email, …)`",
+        size=14,
+        anchor="start",
+    )
+    s.text(1100, 262, "`await sync_sso_user(user, claims, provider)`", size=14, anchor="start")
     s.text(
         1080,
         296,
@@ -787,12 +793,12 @@ def build_saml_sync() -> Sketch:
     s.arrow(1395, 334, 1395, 412)
     _shift(s, 30)
     s.rect(Box(40, 386, 1691, 108, YELLOW, "", ()))
-    s.text(60, 412, "sync_sso_user(user, attributes)", size=18, weight="bold", anchor="start")
+    s.text(60, 412, "sync_sso_user(user, claims, provider)", size=18, weight="bold", anchor="start")
     s.text(380, 412, "`auth_endpoints/sso_sync.py`", size=12.5, colour=DIM, anchor="start")
     s.text(
         1711,
         412,
-        "idempotent - no attributes in the assertion = a no-op, nothing is wiped",
+        "idempotent - no claims in the login = a no-op, nothing is wiped",
         size=13,
         colour=DIM,
         anchor="end",
@@ -831,7 +837,7 @@ def build_saml_sync() -> Sketch:
     _group_row(s, ax, ys[3], "journal-club", [(*A, "")], sso=False)
     # the verbs, in the gap
     s.arrow(354, 698, 462, 698)
-    s.text(408, 650, "assertion:", size=12, colour=DIM)
+    s.text(408, 650, "claim:", size=12, colour=DIM)
     s.text(408, 666, "korbel-lab,", size=12, colour=DIM)
     s.text(408, 682, "new-lab", size=12, colour=DIM)
     for cy, kind in ((ys[0] + 25, "+"), (ys[1] + 25, "-"), (ys[2] + 25, "+")):
@@ -850,7 +856,9 @@ def build_saml_sync() -> Sketch:
     s.text(828, 558, "the profile is refreshed", size=16, weight="bold", anchor="start")
     _mock_profile(s, 826, 580, 338, 190)
     s.text(995, 794, "title, display name and login are written when they", size=12.5, colour=DIM)
-    s.text(995, 814, "change; `sso_provider` is stamped saml", size=12.5, colour=DIM)
+    s.text(
+        995, 814, "change; `sso_provider` is stamped with the provider id", size=12.5, colour=DIM
+    )
 
     # -- 3c. pending P.I. --------------------------------------------------
     s.rect(Box(1210, 530, 521, 312, WHITE, "", ()), colour=GREY, dashed=True)
@@ -880,7 +888,7 @@ def build_saml_sync() -> Sketch:
     s.text(
         1470,
         824,
-        "on an sso_managed group the IdP must assert her membership first",
+        "on an sso_managed group the IdP must send her membership first",
         size=12,
         colour=DIM,
     )
@@ -996,7 +1004,7 @@ def main() -> int:
     args = parser.parse_args()
 
     write(build_sharing_model(), args.out, "sharing_model", png=not args.no_png)
-    write(build_saml_sync(), args.out, "saml_sync", png=not args.no_png)
+    write(build_oidc_sync(), args.out, "oidc_sync", png=not args.no_png)
     return 0
 
 

@@ -30,7 +30,7 @@ renders_as:
   - { id: top20_share_filter, component: interactive, interactive_type: RangeSlider, column_name: pct_top20 }
   - { component: card, column: n_umi, aggregation: median, secondary_layout: histogram }
   - { component: card, column: n_genes, aggregation: median, secondary_layout: histogram }
-  - { component: card, column: pct_mito, aggregation: median, secondary_layout: threshold, threshold_value: 8.0 }
+  - { component: card, column: pct_mito, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
   - { component: card, column: qc_flagged, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
   - { component: card, column: pct_top20, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
   - { component: card, column: pct_ribo, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }

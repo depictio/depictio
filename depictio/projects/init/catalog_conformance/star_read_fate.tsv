@@ -1,0 +1,25 @@
+sample	fate	fate_order	reads	reads_pct
+GM12878_REP1	Uniquely mapped	1	82418023	88.1
+GM12878_REP1	Multi-mapped	2	8059578	8.61
+GM12878_REP1	Too many loci	3	120251	0.13
+GM12878_REP1	Unmapped: too short	4	2925877	3.13
+GM12878_REP1	Unmapped: other	5	31855	0.03
+GM12878_REP1	Unmapped: too many mismatches	6	0	0.0
+H1_REP1	Uniquely mapped	1	110105119	87.81
+H1_REP1	Multi-mapped	2	9314564	7.43
+H1_REP1	Too many loci	3	91791	0.07
+H1_REP1	Unmapped: too short	4	5815633	4.64
+H1_REP1	Unmapped: other	5	68089	0.05
+H1_REP1	Unmapped: too many mismatches	6	0	0.0
+K562_REP1	Uniquely mapped	1	75588908	82.01
+K562_REP1	Multi-mapped	2	12066032	13.09
+K562_REP1	Too many loci	3	145035	0.16
+K562_REP1	Unmapped: too short	4	4251814	4.61
+K562_REP1	Unmapped: other	5	120578	0.13
+K562_REP1	Unmapped: too many mismatches	6	0	0.0
+MCF7_REP1	Uniquely mapped	1	111660515	87.11
+MCF7_REP1	Multi-mapped	2	9793284	7.64
+MCF7_REP1	Too many loci	3	217965	0.17
+MCF7_REP1	Unmapped: too short	4	6368083	4.97
+MCF7_REP1	Unmapped: other	5	138263	0.11
+MCF7_REP1	Unmapped: too many mismatches	6	0	0.0

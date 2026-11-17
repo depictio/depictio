@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from pydantic import (
     AliasChoices,
+    BaseModel,
     Field,
     SecretStr,
     computed_field,
@@ -95,6 +96,21 @@ def _warn_legacy_s3_env() -> None:
         f"Rename them to {S3_ENV_PREFIX}* (for example {S3_ENV_PREFIX}ROOT_PASSWORD); "
         f"the {S3_ENV_PREFIX}* value wins when both are set."
     )
+
+
+def default_s3_checksums_when_required() -> None:
+    """Make every boto3/aiobotocore client send checksums only when an API requires them.
+
+    boto3 >= 1.36 adds CRC checksums to every upload by default, which Google Cloud
+    Storage's S3 API and several on-premise gateways reject. ``when_required`` is the
+    pre-1.36 behaviour and still works on AWS. Set in the environment, so it also
+    reaches the s3fs clients; an explicit ``AWS_*`` value wins.
+    """
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
+    os.environ.setdefault("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required")
+
+
+default_s3_checksums_when_required()
 
 
 # ── Core Services ─────────────────────────────────────────────────────────────
@@ -246,6 +262,14 @@ class ViewerConfig(ServiceConfig):
         "popovers and drawers they live in today.",
     )
 
+    code_figures_locked: bool = Field(
+        default=False,
+        description="Refuse new figure code from non-admin users: Code Mode is off in "
+        "the builder and the API refuses code it does not already trust. The code "
+        "figures a dashboard already has keep rendering, and so do catalogue figures. "
+        "For a deployment open to people it does not know.",
+    )
+
     dashboards_default_view: Literal["thumbnails", "table"] = Field(
         default="table",
         description="Which view /dashboards opens in for someone who has never "
@@ -326,6 +350,15 @@ class MongoDBConfig(ServiceConfig):
         comment_threads_collection: str = Field(default="comment_threads")
         cli_agents_collection: str = Field(default="cli_agents")
         jobs_collection: str = Field(default="jobs")
+        # Server-to-server push (#1303). Target side: inbound requests waiting
+        # for an admin decision. Source side: UI-added targets (keys encrypted)
+        # and the log of outbound pushes.
+        migration_requests_collection: str = Field(default="migration_requests")
+        migration_targets_collection: str = Field(default="migration_targets")
+        migration_pushes_collection: str = Field(default="migration_pushes")
+        # Target side: invite codes an admin issued so a source can push without
+        # a pre-shared pairing key. Only the sha256 of each code is stored.
+        migration_invites_collection: str = Field(default="migration_invites")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -409,6 +442,174 @@ class S3DepictioCLIConfig(ServiceConfig):
         return pw.get_secret_value() if isinstance(pw, SecretStr) else pw
 
 
+#: Public OIDC discovery document of Google accounts, used by the legacy
+#: ``DEPICTIO_AUTH_GOOGLE_OAUTH_*`` mapping (Google is a plain OIDC provider).
+GOOGLE_OIDC_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+
+_OIDC_PROVIDER_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+
+
+class OIDCClaimMapping(BaseModel):
+    """Which ``id_token`` / userinfo claims feed a Depictio account.
+
+    Every value is a claim name. A dotted name (``realm_access.roles``) is read
+    as a path into nested objects when no top-level claim carries the whole
+    name. Claim values may be a string or a list of strings. A mapping left
+    unset disables that part of the sync (see ``sso_sync.sync_sso_user``).
+    """
+
+    model_config = {"extra": "forbid"}
+
+    email: str = Field(default="email", description="Claim carrying the email address")
+    groups: Optional[str] = Field(
+        default=None,
+        description="Claim carrying group memberships. When set, sso_managed groups are "
+        "mirrored from it on every login, and a login without it leaves every SSO group.",
+    )
+    display_name: Optional[str] = Field(default=None, description="e.g. 'name'")
+    login: Optional[str] = Field(default=None, description="e.g. 'preferred_username'")
+    title: Optional[str] = Field(default=None, description="Claim carrying the user's title")
+    picture: Optional[str] = Field(
+        default="picture", description="Claim carrying a profile picture URL"
+    )
+
+    @field_validator("groups", "display_name", "login", "title", "picture", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
+class OIDCProviderConfig(BaseModel):
+    """One OpenID Connect identity provider (Keycloak, Google, Entra ID, ...).
+
+    Declared in ``DEPICTIO_AUTH_OIDC_PROVIDERS`` as a JSON list. ``client_id``
+    and ``client_secret`` may be left out of the list and supplied instead as
+    ``DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID`` / ``DEPICTIO_AUTH_OIDC_<ID>_CLIENT_SECRET``
+    (``<ID>`` upper-cased, ``-`` as ``_``), so credentials can come from a
+    secret store while the rest stays in plain configuration.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    id: str = Field(description="Stable identifier, used in URLs: [a-z0-9_-], max 32 chars")
+    label: Optional[str] = Field(default=None, description="Sign-in button text")
+    enabled: bool = True
+    issuer: Optional[str] = Field(
+        default=None,
+        description="Expected issuer, e.g. https://idp.example.org/realms/example. "
+        "Discovery defaults to <issuer>/.well-known/openid-configuration",
+    )
+    discovery_url: Optional[str] = Field(
+        default=None, description="Explicit discovery document URL (overrides the issuer default)"
+    )
+    client_id: Optional[str] = None
+    client_secret: Optional[SecretStr] = None
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "email", "profile"])
+    redirect_uri: Optional[str] = Field(
+        default=None,
+        description="Callback URL registered at the provider. Defaults to "
+        "<fastapi external url>/depictio/api/v1/auth/oidc/<id>/callback. Never taken "
+        "from the request.",
+    )
+    claims: OIDCClaimMapping = Field(default_factory=OIDCClaimMapping)
+    sso_provider: Optional[str] = Field(
+        default=None, description="Value stored as user.sso_provider; defaults to the id"
+    )
+    assume_email_verified: bool = Field(
+        default=False,
+        description="Trust the email claim even without email_verified=true. Only for "
+        "providers that assert verified emails and never send the claim.",
+    )
+    token_endpoint_auth_method: Literal["client_secret_basic", "client_secret_post", "none"] = (
+        "client_secret_basic"
+    )
+    authorize_params: dict[str, str] = Field(
+        default_factory=dict,
+        description="Extra authorization request parameters (e.g. prompt, hd, acr_values)",
+    )
+    fetch_userinfo: bool = Field(
+        default=True, description="Also read the userinfo endpoint (claims merged under the token)"
+    )
+
+    @field_validator("id")
+    @classmethod
+    def _valid_id(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _OIDC_PROVIDER_ID_RE.match(v):
+            raise ValueError("OIDC provider id must match [a-z0-9][a-z0-9_-]{0,31}")
+        return v
+
+    @field_validator("scopes", mode="before")
+    @classmethod
+    def _split_scopes(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return [s for s in v.replace(",", " ").split() if s]
+        return v
+
+    @field_validator("scopes")
+    @classmethod
+    def _openid_scope(cls, v: list[str]) -> list[str]:
+        if "openid" not in v:
+            v = ["openid", *v]
+        return v
+
+    @field_validator(
+        "label",
+        "issuer",
+        "discovery_url",
+        "client_id",
+        "redirect_uri",
+        "sso_provider",
+        mode="before",
+    )
+    @classmethod
+    def _empty_str_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("client_secret", mode="before")
+    @classmethod
+    def _empty_secret_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @property
+    def env_prefix(self) -> str:
+        """Prefix of this provider's credential env vars."""
+        return f"DEPICTIO_AUTH_OIDC_{self.id.upper().replace('-', '_')}_"
+
+    @property
+    def display_label(self) -> str:
+        return self.label or f"Sign in with {self.id}"
+
+    @property
+    def stored_provider_name(self) -> str:
+        return self.sso_provider or self.id
+
+    @property
+    def resolved_discovery_url(self) -> Optional[str]:
+        if self.discovery_url:
+            return self.discovery_url
+        if self.issuer:
+            return f"{self.issuer.rstrip('/')}/.well-known/openid-configuration"
+        return None
+
+    def missing_settings(self) -> list[str]:
+        """Names of the settings this provider still needs before it can be used."""
+        missing = []
+        if not self.client_id:
+            missing.append("client_id")
+        if not self.resolved_discovery_url:
+            missing.append("issuer or discovery_url")
+        if self.token_endpoint_auth_method != "none" and not self.client_secret:
+            missing.append("client_secret")
+        return missing
+
+
 class AuthConfig(BaseSettings):
     """Authentication and authorisation configuration."""
 
@@ -463,12 +664,12 @@ class AuthConfig(BaseSettings):
     password_login_disabled: bool = Field(
         default=False,
         description="Block email + password sign-in. When True the /auth/login "
-        "endpoint returns 403 and the password form is hidden, leaving Google "
-        "OAuth and/or SAML as the only door in. /auth/register is refused too: "
+        "endpoint returns 403 and the password form is hidden, leaving the "
+        "OIDC providers as the only door in. /auth/register is refused too: "
         "a password account could never sign in, while SSO still creates "
         "accounts on first login (unlike registration_disabled, which stops "
-        "that as well). Ignored unless google_oauth_enabled or saml_enabled is "
-        "set, so a half-done configuration cannot lock every user out.",
+        "that as well). Ignored unless at least one OIDC provider is enabled "
+        "and configured, so a half-done configuration cannot lock every user out.",
     )
     public_access_code: Optional[SecretStr] = Field(
         default=None,
@@ -492,100 +693,35 @@ class AuthConfig(BaseSettings):
         description="Number of minutes until temporary users expire",
     )
 
-    # Google OAuth
+    # OpenID Connect SSO: one or more providers, one sign-in button each.
+    oidc_providers: list[OIDCProviderConfig] = Field(
+        default_factory=list,
+        description="OIDC identity providers, JSON list in DEPICTIO_AUTH_OIDC_PROVIDERS. "
+        "See OIDCProviderConfig for the keys.",
+    )
+
+    # Google OAuth (DEPRECATED): still read for one release and mapped onto an
+    # OIDC provider with id "google" (see _resolve_oidc_providers). Declare
+    # Google in oidc_providers instead.
     google_oauth_enabled: bool = Field(
-        default=False, description="Enable Google OAuth authentication"
+        default=False, description="Deprecated: declare Google in oidc_providers"
     )
     google_oauth_client_id: Optional[str] = Field(
-        default=None, description="Google OAuth client ID"
+        default=None, description="Deprecated: see google_oauth_enabled"
     )
     google_oauth_client_secret: Optional[str] = Field(
-        default=None, description="Google OAuth client secret"
+        default=None, description="Deprecated: see google_oauth_enabled"
     )
     google_oauth_redirect_uri: Optional[str] = Field(
-        default=None, description="Google OAuth redirect URI"
+        default=None, description="Deprecated: see google_oauth_enabled"
     )
 
-    # SAML 2.0 SSO (SP-initiated, python3-saml). Provider-agnostic: validated
-    # against a Keycloak realm, but nothing here is specific to it.
-    saml_enabled: bool = Field(default=False, description="Enable SAML SSO authentication")
-    saml_idp_entity_id: Optional[str] = Field(
-        default=None,
-        description="IdP entityID, e.g. https://sso.example.org/realms/myrealm",
-    )
-    saml_idp_sso_url: Optional[str] = Field(
-        default=None,
-        description="IdP SSO endpoint (HTTP-Redirect binding), "
-        "e.g. https://sso.example.org/realms/myrealm/protocol/saml",
-    )
-    saml_idp_cert: Optional[str] = Field(
-        default=None,
-        description="IdP X.509 signing certificate: inline PEM "
-        "(-----BEGIN CERTIFICATE-----...) or a path to a PEM file",
-    )
-    saml_sp_entity_id: Optional[str] = Field(
-        default=None,
-        description="SP entityID / issuer registered with the IdP",
-    )
-    saml_sp_base_url: Optional[str] = Field(
-        default=None,
-        description="Public base URL of the API used to build the ACS URL; "
-        "defaults to the FastAPI service external URL",
-    )
-    saml_name_id_format: str = Field(
-        default="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
-        description="Requested NameID format",
-    )
-    saml_attribute_email: Optional[str] = Field(
-        default=None,
-        description="SAML attribute name carrying the email; unset → use NameID",
-    )
-    saml_attribute_username: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the username (informational)"
-    )
-    saml_login_label: str = Field(
-        default="Sign in with SSO",
-        description="Label for the SSO button in the login form (e.g. 'Sign in with your institution')",
-    )
-
-    # --- SAML attribute mappings (SSO attribute sync) -------------------------
-    # Which assertion attributes sso_sync.sync_sso_user reads, beside the SAML
-    # connection fields above.
-    saml_attribute_groups: Optional[str] = Field(
-        default=None,
-        description="SAML attribute name carrying group memberships (e.g. 'memberOf'). "
-        "When set, sso_managed groups are mirrored from the assertion on every login.",
-    )
-    saml_attribute_title: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the user's title"
-    )
-    saml_attribute_display_name: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the user's display name"
-    )
-    saml_attribute_login: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the user's login/username"
-    )
-    # --- end SAML attribute mappings ------------------------------------------
-
-    @field_validator(
-        "saml_idp_entity_id",
-        "saml_idp_sso_url",
-        "saml_idp_cert",
-        "saml_sp_entity_id",
-        "saml_sp_base_url",
-        "saml_attribute_email",
-        "saml_attribute_username",
-        "saml_attribute_groups",
-        "saml_attribute_title",
-        "saml_attribute_display_name",
-        "saml_attribute_login",
-        mode="before",
-    )
+    @field_validator("oidc_providers", mode="after")
     @classmethod
-    def _empty_saml_str_to_none(cls, v: Any) -> Any:
-        # Helm/compose render unset values as empty strings; treat them as unset.
-        if isinstance(v, str) and not v.strip():
-            return None
+    def _unique_provider_ids(cls, v: list[OIDCProviderConfig]) -> list[OIDCProviderConfig]:
+        ids = [p.id for p in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("oidc_providers ids must be unique")
         return v
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
@@ -628,6 +764,69 @@ class AuthConfig(BaseSettings):
         env_password_login_disabled = os.getenv("DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED", "").lower()
         if env_password_login_disabled in ("true", "1", "yes"):
             object.__setattr__(self, "password_login_disabled", True)
+
+        object.__setattr__(self, "oidc_providers", self._resolve_oidc_providers())
+
+    def _resolve_oidc_providers(self) -> list[OIDCProviderConfig]:
+        """Apply per-provider credential env vars and the legacy Google mapping.
+
+        ``DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID`` / ``_CLIENT_SECRET`` win over the
+        values in the JSON list, so credentials can live in a secret store.
+
+        The deprecated ``DEPICTIO_AUTH_GOOGLE_OAUTH_*`` variables become a
+        provider with id ``google`` unless the list already declares one. Its
+        redirect URI is kept as configured: it is the one registered at Google
+        (historically the viewer's ``/auth/google/callback``, which forwards to
+        the OIDC callback), so an existing deployment keeps working unchanged.
+        """
+        import os
+
+        resolved: list[OIDCProviderConfig] = []
+        for provider in self.oidc_providers:
+            updates: dict[str, Any] = {}
+            env_id = os.getenv(f"{provider.env_prefix}CLIENT_ID", "").strip()
+            if env_id:
+                updates["client_id"] = env_id
+            env_secret = os.getenv(f"{provider.env_prefix}CLIENT_SECRET", "").strip()
+            if env_secret:
+                updates["client_secret"] = SecretStr(env_secret)
+            resolved.append(provider.model_copy(update=updates) if updates else provider)
+
+        if self.google_oauth_enabled and not any(p.id == "google" for p in resolved):
+            resolved.append(
+                OIDCProviderConfig(
+                    id="google",
+                    label="Sign in with Google",
+                    issuer="https://accounts.google.com",
+                    discovery_url=GOOGLE_OIDC_DISCOVERY_URL,
+                    client_id=self.google_oauth_client_id or None,
+                    client_secret=(
+                        SecretStr(self.google_oauth_client_secret)
+                        if self.google_oauth_client_secret
+                        else None
+                    ),
+                    redirect_uri=self.google_oauth_redirect_uri or None,
+                    sso_provider="google",
+                )
+            )
+        return resolved
+
+    @property
+    def enabled_oidc_providers(self) -> list[OIDCProviderConfig]:
+        """Providers that are switched on and fully configured, in declared order."""
+        return [p for p in self.oidc_providers if p.enabled and not p.missing_settings()]
+
+    def get_oidc_provider(self, provider_id: str) -> Optional[OIDCProviderConfig]:
+        """An enabled, fully configured provider by id, or None."""
+        for provider in self.enabled_oidc_providers:
+            if provider.id == provider_id:
+                return provider
+        return None
+
+    @property
+    def sso_enabled(self) -> bool:
+        """True when at least one OIDC provider can be used to sign in."""
+        return bool(self.enabled_oidc_providers)
 
     @computed_field
     @property
@@ -688,13 +887,13 @@ class AuthConfig(BaseSettings):
     def is_password_login_disabled(self) -> bool:
         """Returns True if email + password sign-in should be refused.
 
-        Conditioned on an SSO door (Google OAuth or SAML) actually being
-        configured: the flag on its own would leave a deployment with no way in
+        Conditioned on an SSO door (an enabled, configured OIDC provider)
+        actually existing: the flag on its own would leave a deployment with no way in
         at all, and an operator who sets it while forgetting the SSO vars should
         get their password form back rather than a locked front door. Read this,
         not the raw flag.
         """
-        return self.password_login_disabled and (self.google_oauth_enabled or self.saml_enabled)
+        return self.password_login_disabled and self.sso_enabled
 
     @computed_field
     @property
@@ -1230,11 +1429,88 @@ def _local_data_policy_for(_env: tuple[str | None, ...]) -> "LocalDataPolicy | N
 
 
 class JBrowseConfig(BaseSettings):
-    """JBrowse genomics viewer integration configuration."""
+    """JBrowse genome browser (``jbrowse`` component, ``genomic_tracks`` DCs).
 
-    enabled: bool = Field(default=False, description="Enable JBrowse genomics viewer integration")
+    The browser is embedded in the viewer and every track byte goes through the
+    API's Range proxy, so there is no JBrowse server to deploy. Tracks stored
+    in Depictio's own bucket are always served; tracks *read in place* from a
+    remote ``https://`` host or ``s3://`` bucket are refused unless that host or
+    bucket is allow-listed here.
+    """
+
+    enabled: bool = Field(default=True, description="Enable the genome browser component")
+    # The nf-core AWS megatest bucket is public, anonymous and read-only: the
+    # shipped examples and the nf-core templates' TRACKS_URI read it in place.
+    remote_https_hosts: str = Field(
+        default="nf-core-awsmegatests.s3-eu-west-1.amazonaws.com",
+        description="Comma-separated hostnames the track proxy may read https:// tracks "
+        "from (exact match, e.g. 'nf-core-awsmegatests.s3-eu-west-1.amazonaws.com')",
+    )
+    remote_s3_buckets: str = Field(
+        default="nf-core-awsmegatests",
+        description="Comma-separated S3 buckets the track proxy may read s3:// tracks from "
+        "with the server's credentials. Any user who can open a DC pointing at a listed "
+        "bucket can read it; Depictio's own data bucket is never readable by URL.",
+    )
+    remote_s3_endpoint_url: str | None = Field(
+        default=None,
+        description="Endpoint for remote s3:// tracks (default: AWS). Public buckets are "
+        "read anonymously when no credentials are configured for them.",
+    )
+    remote_s3_region: str = Field(default="eu-west-1", description="Region for remote s3://")
+    remote_s3_access_key: str | None = Field(
+        default=None, description="Access key for remote s3:// buckets (anonymous if unset)"
+    )
+    remote_s3_secret_key: SecretStr | None = Field(
+        default=None, description="Secret key for remote s3:// buckets"
+    )
+    preset_access: Literal["proxy", "direct"] = Field(
+        default="proxy",
+        description="How the browser reads the built-in assemblies' UCSC files: 'proxy' "
+        "through the API (one origin, works behind browser-side firewalls, small files "
+        "cached), or 'direct' from hgdownload.soe.ucsc.edu (CORS + Range, no API load)",
+    )
+    ucsc_tracks_enabled: bool = Field(
+        default=True,
+        description="Resolve components' `ucsc_tracks` through the UCSC REST API",
+    )
+    ucsc_api_url: str = Field(
+        default="https://api.genome.ucsc.edu",
+        description="UCSC REST API the UCSC track catalogue is read from",
+    )
+    ucsc_catalog_ttl_s: int = Field(
+        default=24 * 3600,
+        ge=60,
+        description="How long a genome's UCSC track catalogue is cached in the API process",
+    )
+    remote_timeout_s: float = Field(default=30.0, gt=0, description="Remote read timeout")
+    max_range_mb: int = Field(
+        default=64,
+        ge=1,
+        description="Largest byte range served in one request (JBrowse reads in small "
+        "blocks; this caps an open-ended 'bytes=0-' on a large BAM)",
+    )
+    max_full_read_mb: int = Field(
+        default=256,
+        ge=1,
+        description="Largest file served whole when the browser sends no Range header "
+        "(plain BED/GFF/VCF are read whole; index them for larger files)",
+    )
+    url_ttl_s: int = Field(
+        default=6 * 3600,
+        ge=60,
+        description="Lifetime of the signed track URLs handed to the browser",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+
+    @property
+    def https_hosts(self) -> frozenset[str]:
+        return frozenset(h.strip().lower() for h in self.remote_https_hosts.split(",") if h.strip())
+
+    @property
+    def s3_buckets(self) -> frozenset[str]:
+        return frozenset(b.strip() for b in self.remote_s3_buckets.split(",") if b.strip())
 
 
 class StructureResolverSettings(BaseSettings):
@@ -1537,6 +1813,18 @@ class DashboardVersionsConfig(BaseSettings):
         description="Skip (and log) a capture larger than this rather than risk the "
         "16 MB BSON document limit. A version must never break a save.",
     )
+    changes_since_enabled: bool = Field(
+        default=False,
+        description="Show readers what changed since their last visit: the viewer pill "
+        "and panel, the marks on changed components, the figure before/after, the "
+        "project's new runs and timeline, and the notifications bell. Off by default.",
+    )
+    changes_since_mark_mode: Literal["sticky", "previous_visit"] = Field(
+        default="sticky",
+        description="Default for readers who have not chosen: 'sticky' keeps the marks "
+        "until the reader marks them as seen, 'previous_visit' shows what changed "
+        "since the visit before this one.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
 
@@ -1622,6 +1910,167 @@ class IngestionConfig(BaseSettings):
                 [r.strip() for r in self.allowed_data_roots.split(",") if r.strip()],
             )
         return self
+
+
+class MigrationTargetConfig(BaseModel):
+    """An instance this one may push projects to (source side, #1303).
+
+    Targets declared in ``DEPICTIO_MIGRATION_TARGETS`` are trusted by the
+    operator: ``http://`` and private addresses are allowed. Targets added in
+    the admin UI (``allow_ui_targets``) go through the SSRF guard instead.
+    """
+
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(description="Base URL of the target's API, e.g. https://depictio.example.org")
+    pairing_key: SecretStr
+    #: Only ``pairing_key`` exists today. Kept so a personal token can be added
+    #: later without changing the registry's shape.
+    credential_type: Literal["pairing_key"] = "pairing_key"
+
+    @field_validator("pairing_key")
+    @classmethod
+    def _long_enough(cls, v: SecretStr) -> SecretStr:
+        if len(v.get_secret_value()) < 32:
+            raise ValueError("pairing_key must be at least 32 characters")
+        return v
+
+
+class MigrationInboundSource(BaseModel):
+    """An instance allowed to push projects here (target side, #1303).
+
+    The source is identified by its key alone: ``name`` comes from this entry,
+    never from what the source sends.
+    """
+
+    name: str = Field(min_length=1, max_length=100)
+    pairing_key: SecretStr
+    #: Buckets on this instance's S3 endpoint the source's data may be copied
+    #: from (``server_side_copy``). Empty: data must travel inline.
+    allowed_source_buckets: list[str] = Field(default_factory=list)
+    max_pending: int = Field(default=5, ge=1)
+    max_per_day: int = Field(default=20, ge=1)
+    #: Overrides ``MigrationConfig.max_bundle_bytes`` for this source.
+    max_bundle_bytes: Optional[int] = Field(default=None, ge=1)
+
+    @field_validator("pairing_key")
+    @classmethod
+    def _long_enough(cls, v: SecretStr) -> SecretStr:
+        if len(v.get_secret_value()) < 32:
+            raise ValueError("pairing_key must be at least 32 characters")
+        return v
+
+
+class MigrationConfig(BaseSettings):
+    """Server-to-server project push with admin approval (#1303).
+
+    Lists are JSON in the environment, e.g.
+    ``DEPICTIO_MIGRATION_TARGETS='[{"name": "public", "url": "https://...", "pairing_key": "..."}]'``.
+    Both directions are off until configured: no target, no push; inbound
+    routes answer 404 unless ``inbound_enabled``.
+    """
+
+    ui_enabled: bool = Field(
+        default=False,
+        description=(
+            "Show the migration controls in the UI (Migrate, Admin > Migrations, push"
+            " targets, the editing lock switch). Off hides them only: the API routes"
+            " keep following the settings below"
+        ),
+    )
+    instance_label: Optional[str] = Field(
+        default=None, description="How this instance names itself in bundles and import hops"
+    )
+    targets: list[MigrationTargetConfig] = Field(default_factory=list)
+    allow_ui_targets: bool = Field(
+        default=False, description="Let admins add push targets in the UI"
+    )
+    ui_target_host_allowlist: list[str] = Field(
+        default_factory=list,
+        description="Hosts a UI-added target may use over http or on a private address (LAN)",
+    )
+    inbound_enabled: bool = Field(
+        default=False,
+        description=(
+            "Accept pushes from inbound_sources and from holders of a valid invite code."
+            " On with no source and no invite accepts nothing"
+        ),
+    )
+    inbound_sources: list[MigrationInboundSource] = Field(default_factory=list)
+    lock_imported_default: bool = Field(
+        default=True, description="Approval publishes the project read-only unless unticked"
+    )
+    destination_domains: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Source side: domain suffixes a project owner may publish to with a URL and an"
+            ' invite code (e.g. ["serve.scilifelab.se"]); "*" allows any public https host.'
+            " Empty: no ad-hoc destination"
+        ),
+    )
+    invite_ttl_days: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "Default lifetime of an invite code: it brings one project, then that"
+            " project's updates, until it expires"
+        ),
+    )
+    invite_max_ttl_days: int = Field(
+        default=365, ge=1, description="Longest lifetime an admin may give an invite code"
+    )
+    interrupted_after_minutes: int = Field(
+        default=60,
+        ge=1,
+        description=(
+            "On startup, a push still building/uploading or a request still importing whose"
+            " last update is older than this is marked failed (interrupted by a restart)"
+        ),
+    )
+    max_bundle_bytes: int = Field(default=10 * 1024**3, ge=1)
+    staging_prefix: str = Field(default="_migration_staging")
+    pending_ttl_days: int = Field(default=14, ge=1)
+    spool_dir: Optional[str] = Field(default=None)
+    http_timeout_s: float = Field(default=60.0, gt=0)
+    upload_timeout_s: float = Field(
+        default=1800.0,
+        gt=0,
+        description=(
+            "How long the source waits for the target's answer after sending a bundle."
+            " The target stages the whole bundle on S3 before it answers, so a multi-GB"
+            " push needs far more than http_timeout_s"
+        ),
+    )
+
+    @field_validator("staging_prefix")
+    @classmethod
+    def _not_an_object_id(cls, v: str) -> str:
+        v = v.strip().strip("/")
+        if not v or re.fullmatch(r"[0-9a-fA-F]{24}", v):
+            # The orphan sweep deletes every top-level prefix that looks like a
+            # data collection id and is unknown to Mongo.
+            raise ValueError("staging_prefix must be non-empty and must not look like an ObjectId")
+        if "/" in v:
+            raise ValueError("staging_prefix must be a single path segment")
+        return v
+
+    @field_validator("destination_domains")
+    @classmethod
+    def _clean_domains(cls, v: list[str]) -> list[str]:
+        # "serve.scilifelab.se" and ".serve.scilifelab.se" mean the same suffix.
+        return [d.strip().lower().strip(".") for d in v if d.strip().strip(".")]
+
+    @model_validator(mode="after")
+    def _unique_names(self) -> "MigrationConfig":
+        for label, items in (("targets", self.targets), ("inbound_sources", self.inbound_sources)):
+            names = [i.name for i in items]
+            if len(names) != len(set(names)):
+                raise ValueError(f"{label} names must be unique")
+        keys = [s.pairing_key.get_secret_value() for s in self.inbound_sources]
+        if len(keys) != len(set(keys)):
+            raise ValueError("inbound_sources pairing keys must be unique")
+        return self
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MIGRATION_")
 
 
 class JobsConfig(BaseSettings):
@@ -2450,6 +2899,7 @@ class Settings(BaseSettings):
     comments: CommentsConfig = Field(default_factory=CommentsConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     jobs: JobsConfig = Field(default_factory=JobsConfig)
+    migration: MigrationConfig = Field(default_factory=MigrationConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
     structure_resolver: StructureResolverSettings = Field(default_factory=StructureResolverSettings)
 

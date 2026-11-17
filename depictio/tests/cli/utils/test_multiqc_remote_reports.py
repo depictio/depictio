@@ -100,7 +100,19 @@ def _env(monkeypatch, tmp_path):
 def ingest(monkeypatch, _env):
     """Run the processor over ``files``; returns what it said and did."""
 
-    def _run(files, bodies, *, denied=frozenset(), existing=None, overwrite=False):
+    def _run(
+        files,
+        bodies,
+        *,
+        denied=frozenset(),
+        existing=None,
+        overwrite=False,
+        mode=None,
+        keep_unchanged=False,
+        update_status=200,
+        workflow=None,
+        ingestion_run_id=None,
+    ):
         client = install_s3_client(monkeypatch, _Client(bodies, frozenset(denied)))
         instance = _InstanceBucket()
         said: list[tuple[str, str]] = []
@@ -120,7 +132,7 @@ def ingest(monkeypatch, _env):
 
         def _update(report_id, report_data, _config):
             updated.append((report_id, report_data))
-            return MagicMock(status_code=200)
+            return MagicMock(status_code=update_status, text="boom")
 
         monkeypatch.setattr(deltatables, "fetch_file_data", lambda _dc_id, _config: files)
         monkeypatch.setattr(
@@ -145,6 +157,8 @@ def ingest(monkeypatch, _env):
         data_collection = MagicMock()
         data_collection.id = DC_ID
         data_collection.data_collection_tag = DC_TAG
+        if mode is not None:
+            data_collection.config.scan.mode = mode
         cli_config = SimpleNamespace(
             api_base_url="http://depictio-backend:8058",
             remote_storage_options=None,
@@ -156,8 +170,14 @@ def ingest(monkeypatch, _env):
                 verify_tls=True,
             ),
         )
+        extra = {"ingestion_run_id": ingestion_run_id} if ingestion_run_id else {}
         result = mp.process_multiqc_data_collection(
-            data_collection, cli_config, overwrite=overwrite
+            data_collection,
+            cli_config,
+            overwrite=overwrite,
+            keep_unchanged=keep_unchanged,
+            workflow=workflow,
+            **extra,
         )
         return SimpleNamespace(
             result=result,
@@ -301,6 +321,60 @@ def test_parallel_parse_maps_each_copy_back_to_its_url(ingest, fake_parse, monke
     assert by_url == {_url("run_01"): ["S1"], _url("run_03"): ["S3"]}
 
 
+# ── which run, which ingestion ───────────────────────────────────────────────
+
+
+def test_a_report_records_the_run_of_its_file_and_the_ingestion(ingest, fake_parse):
+    files = _files("run_01", "run_02")
+    for file, run in zip(files, ("run_01", "run_02")):
+        file.run_tag = run
+    out = ingest(
+        files,
+        {_key("run_01"): b"S1", _key("run_02"): b"S2"},
+        ingestion_run_id="ing-1",
+    )
+
+    assert out.result["result"] == "success"
+    assert {r["original_file_path"]: r["run_tag"] for r in out.created} == {
+        _url("run_01"): "run_01",
+        _url("run_02"): "run_02",
+    }
+    assert {r["ingestion_run_id"] for r in out.created} == {"ing-1"}
+
+
+def test_a_file_without_a_run_tag_falls_back_on_its_path(ingest, fake_parse):
+    workflow = SimpleNamespace(
+        data_location=SimpleNamespace(
+            locations=[f"s3://{BUCKET}/{PREFIX}"], structure="sequencing-runs"
+        )
+    )
+    out = ingest(_files("run_01"), {_key("run_01"): b"S1"}, workflow=workflow)
+
+    assert [r["run_tag"] for r in out.created] == ["run_01"]
+    assert [r["ingestion_run_id"] for r in out.created] == [None]
+
+
+def test_an_overwritten_report_is_restamped(ingest, fake_parse):
+    existing = {
+        _url("run_01"): {
+            "id": "existing-1",
+            "s3_location": f"s3://depictio-bucket/{DC_ID}/abc/multiqc.parquet",
+        }
+    }
+    files = _files("run_01")
+    files[0].run_tag = "run_01"
+    out = ingest(
+        files,
+        {_key("run_01"): b"S1-v2"},
+        existing=existing,
+        overwrite=True,
+        ingestion_run_id="ing-2",
+    )
+
+    [(_report_id, report)] = out.updated
+    assert (report["run_tag"], report["ingestion_run_id"]) == ("run_01", "ing-2")
+
+
 # ── re-ingest ────────────────────────────────────────────────────────────────
 
 
@@ -339,6 +413,107 @@ def test_reingest_with_overwrite_updates_the_report_of_that_url(ingest, fake_par
     assert report_id == "existing-1"
     assert report["original_file_path"] == _url("run_01")
     assert out.instance.uploads[f"{DC_ID}/abc/multiqc.parquet"]["body"] == b"S1-v2"
+
+
+def _hashed(run: str, file_hash: str):
+    [f] = _files(run)
+    f.file_hash = file_hash
+    return f
+
+
+def _stored(source_file_hash: str, samples: list[str]) -> dict:
+    return {
+        _url("run_01"): {
+            "id": "existing-1",
+            "s3_location": f"s3://depictio-bucket/{DC_ID}/abc/multiqc.parquet",
+            "file_size_bytes": 2,
+            "source_file_hash": source_file_hash,
+            "metadata": {"samples": samples, "modules": ["fastqc"], "plots": {}},
+        }
+    }
+
+
+def test_a_report_whose_file_has_not_moved_is_kept_without_reading_it(ingest, fake_parse):
+    out = ingest(
+        [_hashed("run_01", "etag-1")],
+        {_key("run_01"): b"S1"},
+        existing=_stored("etag-1", ["S1"]),
+        overwrite=True,
+        mode="s3_prefix",
+        keep_unchanged=True,
+    )
+
+    assert out.result["result"] == "success"
+    assert fake_parse == []
+    assert out.instance.uploads == {}
+    assert (out.created, out.updated) == ([], [])
+    assert out.result["metadata"]["created_reports"] == ["existing-1"]
+
+
+def test_a_report_whose_file_moved_is_read_again_and_says_what_changed(ingest, fake_parse):
+    out = ingest(
+        [_hashed("run_01", "etag-2")],
+        {_key("run_01"): b"S1-v2"},
+        existing=_stored("etag-1", ["S1"]),
+        overwrite=True,
+        mode="s3_prefix",
+        keep_unchanged=True,
+    )
+
+    [(report_id, report)] = out.updated
+    assert report_id == "existing-1"
+    assert report["source_file_hash"] == "etag-2"
+    assert report["last_change"] == {
+        "samples_added": ["S1-v2"],
+        "samples_removed": ["S1"],
+        "modules_added": [],
+        "modules_removed": [],
+    }
+
+
+def test_a_manifest_report_is_read_again_whatever_its_hash(ingest, fake_parse):
+    # A manifest entry's hash is url|id: it does not follow the bytes.
+    out = ingest(
+        [_hashed("run_01", "etag-1")],
+        {_key("run_01"): b"S1"},
+        existing=_stored("etag-1", ["S1"]),
+        overwrite=True,
+        mode="manifest",
+        keep_unchanged=True,
+    )
+
+    assert len(fake_parse) == 1
+    assert [r for r, _ in out.updated] == ["existing-1"]
+
+
+def test_without_keep_unchanged_every_report_is_read_again(ingest, fake_parse):
+    # A full refresh, or `depictio ingest --overwrite`: rebuild, whatever the hash.
+    out = ingest(
+        [_hashed("run_01", "etag-1")],
+        {_key("run_01"): b"S1"},
+        existing=_stored("etag-1", ["S1"]),
+        overwrite=True,
+        mode="s3_prefix",
+    )
+
+    assert len(fake_parse) == 1
+    assert [r for r, _ in out.updated] == ["existing-1"]
+
+
+def test_a_report_that_could_not_be_stored_fails_the_collection(ingest, fake_parse):
+    # Recorded as a success, the next refresh would leave it alone for good.
+    out = ingest(
+        [_hashed("run_01", "etag-2")],
+        {_key("run_01"): b"S1-v2"},
+        existing=_stored("etag-1", ["S1"]),
+        overwrite=True,
+        mode="s3_prefix",
+        keep_unchanged=True,
+        update_status=500,
+    )
+
+    assert out.result["result"] == "error"
+    assert "run_01" in out.result["message"]
 
 
 # ── the download budget ──────────────────────────────────────────────────────

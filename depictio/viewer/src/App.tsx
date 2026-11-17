@@ -24,6 +24,8 @@ import {
   scopeUnits,
   AvailableFilterValuesProvider,
   DataVersionProvider,
+  HttpStatusError,
+  dataPinBody,
   dataVersionBody,
   isCurrentDataOnlyType,
   DashboardGrid,
@@ -32,6 +34,10 @@ import {
   TopPanel,
   mergeFiltersBySource,
   withInteractiveDefaults,
+  withShared,
+  emptyAnnotations,
+  annotationColumnBudget,
+  labelScope,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
@@ -56,6 +62,7 @@ import {
   readFiltersFromLocation,
   syncFiltersToLocation,
   sanitizeRestoredFilters,
+  filterComponentIndex,
   fetchDashboardFilterState,
   saveDashboardFilterState,
   FILTER_PANEL_RAIL_WIDTH,
@@ -71,6 +78,7 @@ import {
   buildGuideModel,
   resolveGuideSettings,
   CategoryColorsContext,
+  TabColorContext,
   barSectionNames,
   filtersInScope,
   hasSectionBar,
@@ -81,6 +89,7 @@ import {
   sectionFilterScopes,
   AdvancedVizPlacementDefaultProvider,
   HighlightProvider,
+  GenomeDebugPanel,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -114,13 +123,18 @@ const FILTER_DEBOUNCE_MS = 250;
  *  fetch debounce: persistence has no visible latency to hide, so it can wait
  *  out a whole burst of interaction. */
 const SAVE_FILTER_STATE_DEBOUNCE_MS = 800;
+
+/** Analysis and Metadata share the right edge: the Drawer slide (250 ms) and a
+ *  margin, before the second one opens. */
+const RIGHT_PANEL_SWAP_MS = 280;
 import { notifications } from '@mantine/notifications';
-import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro } from './chrome';
+import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, tabIntroShown } from './chrome';
 import type { HeaderAction } from './chrome/Header';
 import ShellHost from './chrome/shell/ShellHost';
 import type { FilterPanelOptions } from './chrome/shell/types';
 import { useChromeVariant } from './chrome/variants';
 import TabLinkProvider from './chrome/TabLinkProvider';
+import GenomeBrowserTargetProvider from './chrome/GenomeBrowserTargetProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
@@ -136,25 +150,40 @@ import {
   writeRememberToggle,
 } from './lib/filterStateStorage';
 import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
-import GroupingHeaderControl, {
-  ANALYSIS_PANEL_WIDTH_PX,
-} from './components/GroupingHeaderControl';
+import GroupingHeaderControl, { ANALYSIS_PANEL_WIDTH_PX } from './components/GroupingHeaderControl';
+import AnnotationPanel from './components/annotations/AnnotationPanel';
+import MetadataHeaderControl, {
+  useMetadataPanelWidth,
+} from './components/annotations/MetadataHeaderControl';
+import { useAnnotationTables } from './components/annotations/useAnnotationTables';
+import { defaultAnnotationTable, warmAnnotationTable } from './components/annotations/annotationTableRead';
+import {
+  type AnnotationStorage,
+  useDashboardAnnotations,
+} from './components/annotations/useDashboardAnnotations';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
 import { CommentsHeaderButton, CommentsProvider } from './components/comments';
+import DashboardLoadError from './chrome/DashboardLoadError';
 import ComponentExportProvider from './components/export/ComponentExportProvider';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
-import { LandingHint, useLandingHint } from './landing';
+import { shouldSuppressWalkthrough } from './coach';
+import { LandingHost } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
+import ChangeMarksProvider from './changes/ChangeMarksProvider';
+import ChangesHeaderButton from './changes/ChangesHeaderButton';
+import type { NewsSplit } from './changes/newsSplit';
+import type { BulkComputeOptions } from 'depictio-react-core';
+import { panelsFromGroups } from 'depictio-react-core';
 
 /**
  * Top-level SPA. Layout:
@@ -175,6 +204,11 @@ const App: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // What the dashboard fetch threw, kept as thrown so the error page can tell a
+  // missing dashboard from a refused one from a server that is down.
+  const [loadFailure, setLoadFailure] = useState<{ error: unknown } | null>(null);
+  // Bumped by "Try again": the load effect depends on it.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   // Seed synchronously from three sources merged per (index, source) key, in
   // ascending priority: this dashboard's remembered filters (localStorage, when
@@ -219,10 +253,35 @@ const App: React.FC = () => {
     return id ? String(id) : undefined;
   }, [dashboard]);
   const groupsApi = useSelectionGroups(groupingScopeId);
+  // "What's new" in Split view (#1397): virtual New / Seen before groups that
+  // stand in for the reader's own groups while it is on, never stored.
+  const [newsSplit, setNewsSplit] = useState<NewsSplit | null>(null);
+  // Only a split on runs reaches the Delta figures and cards. MultiQC splits
+  // on its own samples, read from the change marks by its renderer; a split
+  // with nothing on runs leaves the rest of the canvas as it was.
+  const runNews = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
+  // "New only" is a filter on the new runs, not a split: the reader's own
+  // grouping stays as it was. "Overlay" colours the runs in one panel and
+  // leaves the cards alone.
+  const runSplit = runNews?.mode === 'split' ? runNews : null;
+  const runOverlay = runNews?.mode === 'overlay' ? runNews : null;
+  const newOnlyFilters = useMemo(
+    () => (runNews?.mode === 'new' ? panelsFromGroups(runNews.groups)[0]?.constraints ?? [] : []),
+    [runNews],
+  );
+  const bulkOptions = useMemo<BulkComputeOptions | undefined>(
+    () =>
+      runSplit
+        ? { groups: runSplit.groups, compareGroups: true, showOther: runSplit.showOther, showOverall: true }
+        : groupsApi.bulkOptions,
+    [runSplit, groupsApi.bulkOptions],
+  );
   const combinedFilters = useMemo(
     () =>
-      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
-    [filters, groupsApi.groupFilters],
+      groupsApi.groupFilters.length > 0 || newOnlyFilters.length > 0
+        ? [...filters, ...groupsApi.groupFilters, ...newOnlyFilters]
+        : filters,
+    [filters, groupsApi.groupFilters, newOnlyFilters],
   );
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays
@@ -283,6 +342,9 @@ const App: React.FC = () => {
     embedFramingEnabled,
     isPublicMode,
     isDemoMode,
+    isSingleUserMode,
+    isDevMode,
+    walkthroughDisabled,
     loading: userLoading,
   } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
@@ -299,7 +361,7 @@ const App: React.FC = () => {
   // version makes no sense, and the editor would autosave it over the live
   // dashboard. House style is visible-but-disabled, which the Header's
   // existing tooltip already handles.
-  const canEditNow = isOwner && !previewVersionId;
+  const canEditNow = isOwner && !previewVersionId && !dashboard?.published_lock;
 
   // ---- Cross-tab components: validate the hydrated filters -----------------
   // Runs once the family's floating maps and persistent sections are known.
@@ -365,7 +427,7 @@ const App: React.FC = () => {
   const panelScopeId = crossTab.familyId ?? dashboardId;
 
   // Tab sidebar (desktop): open by default, remembered per dashboard family.
-  const [desktopOpened, toggleDesktop] = useSidebarOpen(panelScopeId);
+  const [desktopOpened, toggleDesktop, foldDesktop] = useSidebarOpen(panelScopeId);
 
   // Left filter panel chrome. Width first: the collapse swing is the width the
   // content column reclaims, which is everything but the icon rail.
@@ -379,7 +441,7 @@ const App: React.FC = () => {
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
-  const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
+  const [filterPanelOpened, toggleFilterPanel, foldFilterPanel] = useFilterPanelOpen(
     panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
     dashboard?.filter_panel_default === 'collapsed',
@@ -436,6 +498,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>.');
+      setLoadFailure({
+        error: new HttpStatusError('No dashboard ID in URL. Expected /dashboard/<id>.', 404),
+      });
       setLoading(false);
       return;
     }
@@ -467,9 +532,17 @@ const App: React.FC = () => {
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
+        setLoadFailure({ error: err });
       })
       .finally(() => setLoading(false));
-  }, [dashboardId, previewVersionId]);
+  }, [dashboardId, previewVersionId, loadAttempt]);
+
+  const retryLoad = useCallback(() => {
+    setError(null);
+    setLoadFailure(null);
+    setLoading(true);
+    setLoadAttempt((n) => n + 1);
+  }, []);
 
   // Resolve the parent project and its ingestion health (template projects only).
   useEffect(() => {
@@ -572,7 +645,7 @@ const App: React.FC = () => {
           dashboardId,
           req.filters,
           req.ids,
-          groupsApi.bulkOptions,
+          bulkOptions,
           // Wired to the abort above: without it a slow superseded response
           // (e.g. compare-on forces real Delta loads) could land after a fast
           // newer one and resurrect stale card strips.
@@ -607,7 +680,7 @@ const App: React.FC = () => {
     filterScopes,
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
-    JSON.stringify(groupsApi.bulkOptions ?? null),
+    JSON.stringify(bulkOptions ?? null),
     versionKey,
   ]);
 
@@ -834,7 +907,8 @@ const App: React.FC = () => {
   }, [groupsApi.deactivateAllGroupFilters, dashboard?.stored_metadata]);
 
   // The dashboard-wide floating panels, one per kind of thing that can float:
-  // the family's floating maps, and its floating 3D structures. Each has its own
+  // the family's floating maps, its floating 3D structures and its floating
+  // genome browsers. Each has its own
   // hidden/floating/docked state, shared by its header control and the panel
   // itself.
   const floatingByKind = useMemo(() => partitionFloating(crossTab.floating), [crossTab.floating]);
@@ -849,6 +923,13 @@ const App: React.FC = () => {
   const structurePanel = useMapPanel({
     kind: 'structure',
     components: floatingByKind.structure,
+    familyId: crossTab.familyId,
+    filters,
+    onFilterChange: handleFilterChange,
+  });
+  const genomePanel = useMapPanel({
+    kind: 'genome',
+    components: floatingByKind.genome,
     familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
@@ -916,7 +997,9 @@ const App: React.FC = () => {
     setFilters((prev) =>
       prev.filter(
         (f) =>
-          !restored.has(f.index) || hydratedIndicesRef.current?.has(f.index) || known.has(f.index),
+          !restored.has(f.index) ||
+          hydratedIndicesRef.current?.has(f.index) ||
+          known.has(filterComponentIndex(f.index)),
       ),
     );
   }, [dashboard, crossTab.resolved, summaryMetadata]);
@@ -1236,7 +1319,27 @@ const App: React.FC = () => {
   // identity, so a fresh one per render would rebuild every cell.
   const groupRender = useMemo(
     () =>
-      resolveGroupRender(
+      runSplit
+        ? {
+            groups: runSplit.groups,
+            colorByGroup: true,
+            display: 'facet' as const,
+            showOther: runSplit.showOther,
+            keepColor: true,
+            // "All" first, then each new run, then the runs seen before.
+            showOverall: true,
+          }
+        : runOverlay
+          ? {
+              // One panel: the new runs in the dashboard's colour, the runs
+              // seen before in grey.
+              groups: runOverlay.groups,
+              colorByGroup: true,
+              display: 'color' as const,
+              showOther: runOverlay.showOther,
+              keepColor: false,
+            }
+          : resolveGroupRender(
         groupsApi.colorBy,
         groupsApi.renderGroups,
         colorByColumnRender,
@@ -1249,6 +1352,8 @@ const App: React.FC = () => {
       colorByColumnRender,
       groupsApi.displayMode,
       groupsApi.showOther,
+      runSplit,
+      runOverlay,
     ],
   );
 
@@ -1270,7 +1375,7 @@ const App: React.FC = () => {
           onFilterChange={handleFilterChange}
           refreshTick={refreshTick}
           groupRender={groupRender}
-          bulkOptions={groupsApi.bulkOptions}
+          bulkOptions={bulkOptions}
           onResetFilters={handleResetAllFilters}
           onResetBarFilters={handleResetFilterIndices}
           autofit={dashboard?.autofit !== false}
@@ -1278,33 +1383,6 @@ const App: React.FC = () => {
       </div>
     ) : null;
 
-  // The Grouping panel's body. Mounted once, inside the header "Analysis"
-  // popover (GroupingHeaderControl) — the panel is dashboard-family state and
-  // has to stay reachable when the per-tab filter panel is collapsed.
-  const groupsSection = (
-    <SelectionGroupsPanel
-      filters={filters}
-      components={summaryMetadata}
-      groups={groupsApi.groups}
-      colorBy={groupsApi.colorBy}
-      colorByColumns={colorByColumns}
-      compareInCards={groupsApi.compareInCards}
-      onCreateGroup={groupsApi.createGroupFromFilter}
-      onClearSelection={handleFilterChange}
-      onUpdateGroup={groupsApi.updateGroup}
-      onDeleteGroup={groupsApi.deleteGroup}
-      onToggleGroupFilter={groupsApi.toggleGroupFilter}
-      onColorByChange={groupsApi.setColorBy}
-      onCompareInCardsChange={groupsApi.setCompareInCards}
-      displayMode={groupsApi.displayMode}
-      onDisplayModeChange={groupsApi.setDisplayMode}
-      showOther={groupsApi.showOther}
-      onShowOtherChange={groupsApi.setShowOther}
-      showOverall={groupsApi.showOverall}
-      onShowOverallChange={groupsApi.setShowOverall}
-      onResetAnalysis={groupsApi.resetAnalysis}
-    />
-  );
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -1367,18 +1445,157 @@ const App: React.FC = () => {
   // arrival would be worse than closing it.
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const { analysisArmed, setAnalysisArmed } = groupsApi;
+  // The Metadata panel (session labels on a metadata table) shares the right
+  // edge with Analysis: opening one closes the other first, and opens once
+  // that slide is over, so the grid sees one width change at a time.
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [metadataWidth, setMetadataWidth] = useMetadataPanelWidth();
+  const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (swapTimer.current) clearTimeout(swapTimer.current);
+  }, []);
+  const openAfter = useCallback((otherWasOpen: boolean, open: () => void) => {
+    if (swapTimer.current) clearTimeout(swapTimer.current);
+    swapTimer.current = null;
+    if (otherWasOpen) swapTimer.current = setTimeout(open, RIGHT_PANEL_SWAP_MS);
+    else open();
+  }, []);
   const handleAnalysisOpenChange = useCallback(
     (next: boolean) => {
-      setAnalysisOpen(next);
-      if (next) setAnalysisArmed(true);
+      if (next) {
+        setMetadataOpen(false);
+        openAfter(metadataOpen, () => setAnalysisOpen(true));
+        setAnalysisArmed(true);
+      } else {
+        setAnalysisOpen(false);
+      }
     },
-    [setAnalysisArmed],
+    [setAnalysisArmed, metadataOpen, openAfter],
   );
   const handleAnalysisToggle = useCallback(() => {
     const next = !analysisOpen;
-    setAnalysisOpen(next);
+    handleAnalysisOpenChange(next);
     setAnalysisArmed(next);
-  }, [analysisOpen, setAnalysisArmed]);
+  }, [analysisOpen, handleAnalysisOpenChange, setAnalysisArmed]);
+  const handleMetadataOpenChange = useCallback(
+    (next: boolean) => {
+      if (next) {
+        setAnalysisOpen(false);
+        openAfter(analysisOpen, () => setMetadataOpen(true));
+      } else {
+        setMetadataOpen(false);
+      }
+    },
+    [analysisOpen, openAfter],
+  );
+
+  // Session annotations: kept on the account for a signed-in account (and the
+  // single user), in the browser for a temporary or anonymous one. Each label
+  // of the active annotation becomes a group; groups follow the annotations,
+  // never the other way round.
+  const annotationStorage: AnnotationStorage | null = userLoading
+    ? null
+    : isSingleUserMode || (currentUser && !currentUser.is_temporary)
+      ? 'account'
+      : 'browser';
+  const annotationsState = useDashboardAnnotations(groupingScopeId, annotationStorage);
+  // Only a metadata table linked to the data can carry labels: no such table,
+  // no Metadata button. The same call brings the labels shared on the
+  // dashboard (as the previewed version held them, on a `?version=` view).
+  const annotationTablesState = useAnnotationTables(
+    dashboard && dashboardId ? dashboardId : undefined,
+    previewVersionId,
+  );
+  const annotationTables = annotationTablesState.tables;
+  const hasMetadataTable = annotationTables.some((t) => t.eligible);
+  // What the reader sees and compares by: their own labels and the shared ones.
+  const annotationView = useMemo(
+    () => withShared(annotationsState.annotations, annotationTablesState.shared),
+    [annotationsState.annotations, annotationTablesState.shared],
+  );
+  const { syncAnnotationGroups } = groupsApi;
+  useEffect(() => {
+    if (annotationsState.loaded) syncAnnotationGroups(annotationView);
+  }, [annotationsState.loaded, annotationView, syncAnnotationGroups]);
+  const annotationPins = useMemo(
+    () => (previewRequest ? dataPinBody(previewRequest) : null),
+    [previewRequest],
+  );
+  // The Metadata panel's table is read once the page is idle, not when the panel
+  // opens: the grid then fills as the dashboard makes room for it, rather than
+  // after a round trip that ends in the middle of that re-flow.
+  useEffect(() => {
+    if (!dashboardId || !hasMetadataTable || annotationPins) return;
+    const warm = () =>
+      warmAnnotationTable(
+        dashboardId,
+        defaultAnnotationTable(
+          annotationTables,
+          annotationView?.columns,
+          annotationView?.activeColumnId,
+        ),
+      );
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(warm, 1500);
+    return () => window.clearTimeout(timer);
+  }, [dashboardId, hasMetadataTable, annotationPins, annotationTables, annotationView]);
+
+  // The reader's label columns, offered in the Analysis next to the data's own
+  // columns: a column added by hand is only worth having if it can be compared.
+  const labelColumnChoices = useMemo(
+    () =>
+      (annotationView?.columns ?? []).map((c) => {
+        const budget = annotationColumnBudget(c, groupsApi.groups);
+        return {
+          id: c.id,
+          name: c.name,
+          active: c.id === annotationView?.activeColumnId,
+          blocked: budget.ok ? null : budget.reason,
+          scope: labelScope(c, annotationStorage ?? 'browser'),
+        };
+      }),
+    [annotationView, groupsApi.groups, annotationStorage],
+  );
+  const { setAnnotations: setOwnAnnotations, annotations: ownAnnotations } = annotationsState;
+  const pickLabelColumn = useCallback(
+    (id: string | null) => {
+      setOwnAnnotations({ ...(ownAnnotations ?? emptyAnnotations()), activeColumnId: id });
+    },
+    [ownAnnotations, setOwnAnnotations],
+  );
+
+  // The Grouping panel's body. Mounted once, inside the header "Analysis"
+  // popover (GroupingHeaderControl) — the panel is dashboard-family state and
+  // has to stay reachable when the per-tab filter panel is collapsed.
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={summaryMetadata}
+      groups={groupsApi.groups}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onUpdateGroup={groupsApi.updateGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
+      labelColumns={labelColumnChoices}
+      onPickLabelColumn={pickLabelColumn}
+    />
+  );
 
   const saveGroupApi = useMemo(
     () => ({
@@ -1439,26 +1656,27 @@ const App: React.FC = () => {
       inspectorControl,
     ],
   );
-  // ---- Landing hint -------------------------------------------------------
-  // A guest on a public instance (the demo keeps its tour) lands on the Overview
-  // with one small callout beside the Guide. Opening the Guide, by the hint or
-  // the sidebar, is the answer to it: it is dismissed for good.
-  const landingEligible =
+  // ---- Landing card -------------------------------------------------------
+  // A reader who does not own this dashboard (a public guest or a signed-in
+  // colleague) is introduced to it once, on its Overview, by one card beside
+  // the Guide. The demo keeps its tour of the dashboards list. Opening the
+  // Guide answers the introduction. Anyone returning to news since their last
+  // visit gets the same card with the "What's new" line (`LandingHost`). The
+  // coach's gates hold it too, so no capture or e2e run ever meets it.
+  const landingReady =
     Boolean(dashboard) &&
     !loading &&
     !error &&
     !userLoading &&
-    isPublicMode &&
-    !isDemoMode &&
-    Boolean(currentUser?.is_temporary) &&
-    !(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id) &&
     !previewVersionId &&
-    guideSettings.enabled;
-  const landing = useLandingHint(landingEligible && !guide.open);
-  const dismissLanding = landing.dismiss;
-  useEffect(() => {
-    if (guide.open && landingEligible) dismissLanding();
-  }, [guide.open, landingEligible, dismissLanding]);
+    guideSettings.enabled &&
+    !shouldSuppressWalkthrough(isDevMode, walkthroughDisabled);
+  const landingGuest = isPublicMode && Boolean(currentUser?.is_temporary);
+  const landingIntro =
+    landingReady &&
+    !isDemoMode &&
+    !isOwner &&
+    !(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id);
   // The dashboard's own line (the main tab's `subtitle` is its identity line,
   // as on the listing card), else its name.
   const landingDescription =
@@ -1477,7 +1695,10 @@ const App: React.FC = () => {
   }, [guide, isNarrow, mobileOpened, toggleMobile]);
   // The Analysis panel is docked beside the canvas: the Guide takes its place.
   useEffect(() => {
-    if (guide.open) setAnalysisOpen(false);
+    if (guide.open) {
+      setAnalysisOpen(false);
+      setMetadataOpen(false);
+    }
   }, [guide.open]);
   // Before the dashboard search lands on something of this tab: the Guide and,
   // on a phone, the tab list both cover the canvas, and a filter lives in a
@@ -1503,6 +1724,8 @@ const App: React.FC = () => {
   const ready = Boolean(dashboard) && !loading && !error;
   const headerActions: HeaderAction[] = [];
   if (dashboard) {
+    // Renders nothing on a first visit, when nothing changed and in a preview.
+    headerActions.push({ id: 'changes', group: 'read', node: <ChangesHeaderButton /> });
     headerActions.push({ id: 'comments', group: 'read', node: <CommentsHeaderButton /> });
     headerActions.push({
       id: 'analysis',
@@ -1519,6 +1742,33 @@ const App: React.FC = () => {
         >
           {groupsSection}
         </GroupingHeaderControl>
+      ),
+    });
+  }
+  if (dashboard && dashboardId && hasMetadataTable) {
+    headerActions.push({
+      id: 'metadata',
+      group: 'read',
+      node: (
+        <MetadataHeaderControl
+          labelCount={annotationView?.columns.length ?? 0}
+          opened={metadataOpen}
+          onOpenedChange={handleMetadataOpenChange}
+          pushesContent={!isNarrow}
+          width={metadataWidth}
+          onWidthChange={setMetadataWidth}
+        >
+          <AnnotationPanel
+            dashboardId={dashboardId}
+            projectId={dashboard?.project_id}
+            tables={annotationTables}
+            sharing={annotationTablesState}
+            pins={annotationPins}
+            state={annotationsState}
+            groups={groupsApi.groups}
+            onDataWritten={triggerRefresh}
+          />
+        </MetadataHeaderControl>
       ),
     });
   }
@@ -1575,6 +1825,7 @@ const App: React.FC = () => {
           <>
             <MapPanelControl panel={mapPanel} />
             <MapPanelControl panel={structurePanel} />
+            <MapPanelControl panel={genomePanel} />
           </>
         }
         refreshTick={refreshTick}
@@ -1598,12 +1849,21 @@ const App: React.FC = () => {
                 filters={tabFilters}
                 onFilterChange={handleFilterChange}
                 refreshTick={refreshTick}
-                followedByDock={structurePanel.docked}
+                followedByDock={structurePanel.docked || genomePanel.docked}
               />
               <MapPanelDock
                 panel={structurePanel}
                 // A structure fetches its residue table like any tile, so it
                 // follows the settled filters the grid does, the tab's only.
+                filters={tabDeferredFilters}
+                onFilterChange={handleFilterChange}
+                refreshTick={refreshTick}
+                followedByDock={genomePanel.docked}
+              />
+              <MapPanelDock
+                panel={genomePanel}
+                // A genome browser follows the settled filters the grid does
+                // (its opening locus tracks them), the tab's only.
                 filters={tabDeferredFilters}
                 onFilterChange={handleFilterChange}
                 refreshTick={refreshTick}
@@ -1621,7 +1881,7 @@ const App: React.FC = () => {
           dashboardId={dashboardId}
           // Restoring is a write, so it lives in the editor's History; an
           // owner gets the way there. The editor route is owner-only.
-          editHref={isOwner && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
+          editHref={isOwner && !dashboard?.published_lock && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
           currentDataOnly={currentDataOnlyCount}
         />
       )}
@@ -1701,13 +1961,15 @@ const App: React.FC = () => {
           for the header indicator to count. No prose — the title is already on
           screen, so naming the phase adds nothing. */}
       {loading && <BootSplash />}
-      {error && <Text c="red" p="lg">{error}</Text>}
     </>
   );
   const canvas =
     ready && dashboard ? (
       <Box
         data-testid="dashboard-content"
+        // A strip or the scope banner leads the canvas (layout.css trims the
+        // canvas's top padding under it).
+        data-lead={topComponents.length > 0 || scope.length > 0 ? '' : undefined}
         // Under the Guide: kept mounted (and its figures loaded) for when
         // the Guide closes, but neither painted nor in the focus order.
         // Only the canvas: the filter panel stays on screen beside the
@@ -1735,11 +1997,14 @@ const App: React.FC = () => {
           ...contentScaleStyle,
         }}
       >
-        {landing.visible && (
-          <LandingHint
+        {landingReady && (
+          <LandingHost
+            familyId={crossTab.familyId ?? null}
+            introEligible={landingIntro}
+            audience={landingGuest ? 'guest' : 'reader'}
             description={landingDescription}
+            guideOpen={guide.open}
             onOpenGuide={guide.openGuide}
-            onDismiss={landing.dismiss}
           />
         )}
         {/* The tab's own description, ahead of everything the canvas
@@ -1854,7 +2119,7 @@ const App: React.FC = () => {
               onFilterChange={handleFilterChange}
               refreshTick={refreshTick}
               groupRender={groupRender}
-              bulkOptions={groupsApi.bulkOptions}
+              bulkOptions={bulkOptions}
               onResetFilters={handleResetAllFilters}
               autofit={dashboard?.autofit !== false}
             />
@@ -1931,6 +2196,15 @@ const App: React.FC = () => {
             refreshTick={refreshTick}
           />
         )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={genomePanel}
+            // The same settled, tab-wide filters the docked genome browser reads.
+            filters={tabDeferredFilters}
+            onFilterChange={handleFilterChange}
+            refreshTick={refreshTick}
+          />
+        )}
       </div>
       {guide.open && guideModel && dashboard && dashboardId && (
         <DashboardGuide
@@ -1947,6 +2221,24 @@ const App: React.FC = () => {
           canEdit={canEditNow}
           onClose={guide.closeGuide}
           onOpenYourView={() => openSettingsAt('view')}
+          metadata={
+            hasMetadataTable
+              ? {
+                  // A past view keeps the part but not the live rows.
+                  table: annotationPins
+                    ? null
+                    : (defaultAnnotationTable(
+                        annotationTables,
+                        annotationView?.columns,
+                        annotationView?.activeColumnId,
+                      ) ?? null),
+                  open: () => {
+                    guide.closeGuide();
+                    handleMetadataOpenChange(true);
+                  },
+                }
+              : undefined
+          }
         />
       )}
     </>
@@ -1985,6 +2277,18 @@ const App: React.FC = () => {
       />
     </>
   );
+
+  // The dashboard could not be loaded: nothing to lay out, so none of the
+  // dashboard chrome (title, tab list, filter panel) is drawn around it.
+  if (loadFailure) {
+    return (
+      <DashboardLoadError
+        error={loadFailure.error}
+        resourceId={dashboardId}
+        onRetry={retryLoad}
+      />
+    );
+  }
 
   return (
     // Every renderer reads its pin from here rather than taking it as a prop:
@@ -2029,7 +2333,9 @@ const App: React.FC = () => {
       {/* `category_colors` for the filter bar's chips and anything else that
           colours a category: one value, one colour, on every surface. */}
       <CategoryColorsContext.Provider value={dashboard}>
+      <TabColorContext.Provider value={typeof dashboard?.tab_icon_color === 'string' ? dashboard.tab_icon_color : null}>
       <TabLinkProvider tabs={tabSiblings}>
+      <GenomeBrowserTargetProvider dashboardId={dashboardId ?? null} dashboard={dashboard} tabs={tabSiblings}>
       {/* Only while the server's export API is on: otherwise the provider
           renders its children alone and no tile shows "Export / embed". */}
       <ComponentExportProvider
@@ -2039,6 +2345,22 @@ const App: React.FC = () => {
       >
       {/* Editors and owners only: for anyone else the provider renders its
           children alone, so no comment badge, button or drawer appears. */}
+      {/* "Changed since your last visit" (#1397): the change set, the marks on
+          the canvas and what the header pill reads. Always mounted so the tree
+          never remounts when the flag arrives; inert until it does. Never
+          active in a `?version=` preview. */}
+      <ChangeMarksProvider
+        dashboardId={dashboardId}
+        familyId={groupingScopeId}
+        projectId={dashboard?.project_id ? String(dashboard.project_id) : null}
+        previewVersionId={previewVersionId}
+        userLoading={userLoading}
+        readerId={currentUser?.id ?? currentUser?.email ?? null}
+        canEdit={canEditNow}
+        components={summaryMetadata}
+        filters={deferredFilters}
+        onSplitChange={setNewsSplit}
+      >
       <CommentsProvider
         dashboardId={dashboardId}
         metadata={summaryMetadata}
@@ -2067,7 +2389,9 @@ const App: React.FC = () => {
           isOwner: canEditNow,
           titleExtras:
             dashboard && !loading && !error ? (
-              <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+              <>
+                <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+              </>
             ) : undefined,
           extraActions: headerActions,
         }}
@@ -2089,10 +2413,12 @@ const App: React.FC = () => {
           desktopOpened,
           toggleMobile,
           toggleDesktop,
+          fold: foldDesktop,
         }}
         boot={boot}
         canvas={canvas}
         topStrip={topStrip}
+        tabIntro={ready && tabIntroShown(dashboard, activeTab)}
         filters={{
           members: leftComponents,
           values: filters,
@@ -2103,6 +2429,7 @@ const App: React.FC = () => {
           docked: {
             opened: filterPanelOpened,
             toggle: toggleFilterPanel,
+            fold: foldFilterPanel,
             width: filterPanelWidth,
             widthVar: FILTER_PANEL_WIDTH_VAR,
             layoutRef: filterPanelLayoutRef,
@@ -2119,17 +2446,25 @@ const App: React.FC = () => {
           node: <Inspector dashboard={dashboard} dashboardId={dashboardId} />,
           aside: inspectorAside,
         }}
-        analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
+        analysis={{
+          open: analysisOpen || metadataOpen,
+          widthPx: metadataOpen ? metadataWidth : ANALYSIS_PANEL_WIDTH_PX,
+        }}
         guideOpen={guide.open}
       />
       </CommentsProvider>
+      </ChangeMarksProvider>
       </ComponentExportProvider>
+      </GenomeBrowserTargetProvider>
       </TabLinkProvider>
+      </TabColorContext.Provider>
       </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>
       </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
+      {/* Off unless `?debug=genome`: the trace of the genome tiles. */}
+      <GenomeDebugPanel />
       </HighlightProvider>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

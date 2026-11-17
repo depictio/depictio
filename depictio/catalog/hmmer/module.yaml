@@ -6,6 +6,7 @@
 # as whole lines and split on runs of spaces (depictio/catalog/hmmer/*.py).
 id: hmmer
 name: HMMER
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/hmmer/hmmsearch
 homepage: http://hmmer.org/
 biotools_url: https://bio.tools/hmmer3 # nf-core meta.yml says biotools:hmmer, which has no record

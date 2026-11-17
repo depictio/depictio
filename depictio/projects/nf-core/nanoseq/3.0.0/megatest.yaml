@@ -53,6 +53,9 @@ keys:
   # comparison, not a per-contrast set).
   - bambu/counts_gene.txt
   - bambu/counts_transcript.txt
+  # Bambu's extended annotation (known + novel transcripts, with coordinates): the
+  # genome tiles and the Locus tab read their transcript structures from it.
+  - bambu/extended_annotations.gtf
   - bambu/deseq2/deseq2.results.txt
   - bambu/dexseq/dexseq.results.txt
 prefix_keys: []

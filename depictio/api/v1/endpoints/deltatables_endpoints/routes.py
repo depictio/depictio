@@ -30,6 +30,10 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
     precompute_columns_specs,
     previous_column_types,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
+    assert_dc_project_unlocked,
+    assert_project_unlocked,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.api.v1.s3 import polars_s3_config
@@ -44,6 +48,7 @@ from depictio.models.models.deltatables import (
     latest_complete_aggregation,
 )
 from depictio.models.models.users import User
+from depictio.models.s3_utils import delete_keys
 
 deltatables_endpoint_router = APIRouter()
 
@@ -62,10 +67,21 @@ def sanitize_for_json(obj):
     return obj
 
 
-def _upsert_hash(delta_table_location: str, is_multiqc: bool) -> str:
+# Collection types stored without a Delta table: MultiQC is raw parquet, GeoJSON
+# one opaque blob under a fixed key. Nothing to read a Delta log or column specs
+# from, and nothing worth deferring to a worker.
+_NO_DELTA_TYPES = frozenset({"multiqc", "geojson"})
+
+
+def stores_delta_table(dc_type: str) -> bool:
+    """Whether a collection of this type is written as a Delta table."""
+    return (dc_type or "").lower() not in _NO_DELTA_TYPES
+
+
+def _upsert_hash(delta_table_location: str, no_delta_table: bool) -> str:
     """The aggregation hash for this write. Reads the Delta log, never the rows."""
-    if is_multiqc:
-        # MultiQC is stored as raw parquet, not a Delta table: no log to read.
+    if no_delta_table:
+        # Stored as raw parquet or a blob, not a Delta table: no log to read.
         return new_aggregation_hash(delta_table_location)
     return new_aggregation_hash(
         delta_table_location, delta_identity_hash(delta_table_location, polars_s3_config)
@@ -75,7 +91,7 @@ def _upsert_hash(delta_table_location: str, is_multiqc: bool) -> str:
 def _compute_upsert_artifacts(
     delta_table_location: str,
     dc_data: dict,
-    is_multiqc: bool,
+    no_delta_table: bool,
     previous_types: dict[str, str] | None = None,
 ) -> tuple[str, list]:
     """Aggregation hash and column specs for a data collection's table.
@@ -86,8 +102,8 @@ def _compute_upsert_artifacts(
     table, so it lives outside the request coroutine and is called via
     ``asyncio.to_thread``.
     """
-    final_hash = _upsert_hash(delta_table_location, is_multiqc)
-    if is_multiqc:
+    final_hash = _upsert_hash(delta_table_location, no_delta_table)
+    if no_delta_table:
         # Column specs are not computed for MultiQC (empty list required by Pydantic).
         return final_hash, []
 
@@ -97,7 +113,7 @@ def _compute_upsert_artifacts(
     )
 
 
-def _should_offload(requested: bool, is_multiqc: bool) -> bool:
+def _should_offload(requested: bool, no_delta_table: bool) -> bool:
     """Whether to defer the expensive half of an upsert to a Celery task.
 
     Three conditions, all required. The client asks (``async_mode``), the
@@ -109,7 +125,7 @@ def _should_offload(requested: bool, is_multiqc: bool) -> bool:
     job document *is* the client's only handle on deferred work, so offloading
     without it would hand back a job_id pointing at nothing.
     """
-    if not requested or is_multiqc:
+    if not requested or no_delta_table:
         return False
     if not settings.ingestion.async_deltatable_upsert:
         return False
@@ -231,6 +247,7 @@ async def upsert_deltatable(
             status_code=404,
             detail=f"No projects containing Data Collection id {data_collection_oid} found for the current user.",
         )
+    assert_dc_project_unlocked(data_collection_oid)
 
     dc_data = None
     for workflow in project.get("workflows", []):
@@ -251,16 +268,16 @@ async def upsert_deltatable(
             detail=f"Data collection with ID {data_collection_oid} not found in any project workflow.",
         )
 
-    # Check if this is a MultiQC data collection (stored as parquet, not delta table)
+    # MultiQC (parquet) and GeoJSON (a blob) have no Delta table to read.
     dc_type = dc_data.get("config", {}).get("type", "")
-    is_multiqc = dc_type.lower() == "multiqc"
+    no_delta_table = not stores_delta_table(dc_type)
 
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     previous_types = previous_column_types(query_dt)
 
     # MultiQC has no Delta table to read, so offloading it would cost a broker
     # round-trip to save nothing: it always runs inline.
-    offload = _should_offload(payload.async_mode, is_multiqc)
+    offload = _should_offload(payload.async_mode, no_delta_table)
 
     if offload:
         # Record the aggregation now with no column specs; a Celery task fills
@@ -271,7 +288,9 @@ async def upsert_deltatable(
         # stay synchronous regardless: it is the salt for every DataFrame cache
         # key (`_generate_cache_keys`), so deferring it would let readers keep
         # serving pre-write data under an unchanged key.
-        final_hash = await asyncio.to_thread(_upsert_hash, payload.delta_table_location, is_multiqc)
+        final_hash = await asyncio.to_thread(
+            _upsert_hash, payload.delta_table_location, no_delta_table
+        )
         results = []
     else:
         # Off the event loop: the column specs scan the whole Delta table. Run
@@ -283,7 +302,7 @@ async def upsert_deltatable(
             _compute_upsert_artifacts,
             payload.delta_table_location,
             dc_data,
-            is_multiqc,
+            no_delta_table,
             previous_types,
         )
 
@@ -318,14 +337,18 @@ async def upsert_deltatable(
             rows_total=payload.rows_total,
             rows_added=payload.rows_added,
             files_added=payload.files_added,
+            content_digest=payload.content_digest,
             aggregation_status="pending" if offload else "complete",
             run_tags=payload.run_tags,
             ingestion_run_id=payload.ingestion_run_id,
             trigger=payload.trigger,
+            run_scope=payload.run_scope,
+            computed_from_runs=payload.computed_from_runs,
+            inputs=payload.inputs,
         )
     )
 
-    if payload.deltatable_size_bytes is not None and not is_multiqc:
+    if payload.deltatable_size_bytes is not None and not no_delta_table:
         projects_collection.update_one(
             {
                 "workflows.data_collections._id": data_collection_oid,
@@ -357,7 +380,7 @@ async def upsert_deltatable(
 
     if payload.update:
         # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
-        if payload.deltatable_size_bytes is not None and not is_multiqc:
+        if payload.deltatable_size_bytes is not None and not no_delta_table:
             deltatables_collection.update_one(
                 {"data_collection_id": data_collection_oid, "flexible_metadata": None},
                 {"$set": {"flexible_metadata": {}}},
@@ -370,7 +393,7 @@ async def upsert_deltatable(
             }
         }
         # Add size to deltatable's flexible_metadata if provided
-        if payload.deltatable_size_bytes is not None and not is_multiqc:
+        if payload.deltatable_size_bytes is not None and not no_delta_table:
             update_doc["$set"]["flexible_metadata.deltatable_size_bytes"] = (
                 payload.deltatable_size_bytes
             )
@@ -412,7 +435,7 @@ async def upsert_deltatable(
         logger.warning(f"upsert_deltatable: cache invalidation failed: {e}")
 
         # Add size to deltatable's flexible_metadata if provided
-        if payload.deltatable_size_bytes is not None and not is_multiqc:
+        if payload.deltatable_size_bytes is not None and not no_delta_table:
             # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
             deltatables_collection.update_one(
                 {"data_collection_id": data_collection_oid, "flexible_metadata": None},
@@ -465,7 +488,7 @@ async def upsert_deltatable(
             _compute_upsert_artifacts,
             payload.delta_table_location,
             dc_data,
-            is_multiqc,
+            no_delta_table,
             previous_types,
         )
         deltatables_collection.update_one(
@@ -893,14 +916,19 @@ async def specs(
 
 
 @deltatables_endpoint_router.get("/unique_values/{data_collection_id}")
-async def get_unique_values(
+def get_unique_values(
     data_collection_id: PyObjectId,
     column: str,
     limit: int = 1000,
     filter_expr: str | None = None,
+    order_by: str | None = None,
     current_user: str = Depends(get_user_or_anonymous),
 ):
     """Return the sorted unique values of ``column`` within a data collection.
+
+    Synchronous on purpose: the work is blocking (Mongo, S3, Polars), so FastAPI runs
+    it in the thread pool instead of on the event loop, where ~20 option lists
+    requested together used to queue behind each other and stall every other request.
 
     Backs the React viewer's MultiSelect options fetch. Mirrors the code path
     Dash uses via ``load_deltatable_lite(..., load_for_options=True)`` so both
@@ -914,6 +942,11 @@ async def get_unique_values(
         filter_expr: Optional Polars filter expression (string) applied before
             collecting unique values. Validated through the safe-eval pipeline
             in ``depictio.models.components.filter_expr``.
+        order_by: Optional companion column giving the order of the values (a
+            ``time_order`` next to a ``time_point``): each value follows the
+            smallest key it carries, numerically when every key is a number. Unset,
+            values that all end in a duration (``30min``, ``2h``) follow it, and
+            the rest sort as strings. See ``depictio.models.components.value_order``.
         current_user: Authenticated or anonymous user (permission-checked).
 
     Returns:
@@ -1004,12 +1037,17 @@ async def get_unique_values(
     # mount of every MultiSelect, on every dashboard load, for a list that only
     # changes when the data does. The aggregation version salt is part of the key,
     # so an ingest invalidates it for free (same contract as the frame cache).
-    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+    from depictio.api.v1.deltatables_utils import (
+        _base_delta_scan,
+        _get_aggregation_version,
+        _get_cached_schema,
+    )
 
     dc_id_str = str(data_collection_id)
     agg_version = _get_aggregation_version(dc_id_str)
     cache_key = (
-        f"unique_values_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
+        f"unique_values_o1_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
+        + (f"_by_{order_by}" if order_by else "")
     )
     # Negative entry: "this DC (at this version) has no such column". Keyed
     # without limit/filter because absence does not depend on them. Without it
@@ -1043,10 +1081,16 @@ async def get_unique_values(
             logger.debug(f"unique_values: cache write failed for {missing_key}: {exc}")
 
     try:
-        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # The base scan and the schema are reused per aggregation version: a dashboard
+        # load asks for ~20 option lists at once, and each used to open the Delta
+        # table twice (schema, then data), ~200 ms apiece.
+        lazy = _base_delta_scan(delta_table_location, None, None, agg_version)
         # Schema comes from the Delta log alone: answer "no such column" before
         # any data scan, and cache it.
-        if column not in lazy.collect_schema().names():
+        columns = _get_cached_schema(lazy, dc_id_str, agg_version)
+        if columns is None:
+            columns = frozenset(lazy.collect_schema().names())
+        if column not in columns:
             _remember_missing()
             raise column_missing_exc
 
@@ -1066,14 +1110,40 @@ async def get_unique_values(
                 )
             lazy = lazy.filter(expr)
 
+        if order_by and order_by not in lazy.collect_schema().names():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column '{order_by}' not found in data collection {data_collection_id}.",
+            )
         try:
-            df = lazy.select(column).unique().limit(limit).collect()
+            if order_by and order_by != column:
+                # Each value takes the smallest key it carries; the ordering
+                # itself (numeric or natural) is `order_values`.
+                pairs = (
+                    lazy.select(column, order_by)
+                    .group_by(column)
+                    .agg(pl.col(order_by).min().alias("_order_key"))
+                    .limit(limit)
+                    .collect()
+                )
+                keys = {
+                    str(v): k
+                    for v, k in zip(pairs[column].to_list(), pairs["_order_key"].to_list())
+                    if v is not None
+                }
+                values = list(keys)
+            else:
+                keys = None
+                df = lazy.select(column).unique().limit(limit).collect()
+                values = df[column].drop_nulls().to_list()
         except pl.exceptions.ColumnNotFoundError:
             raise column_missing_exc
 
-        values = df[column].drop_nulls().to_list()
-        # Stable ordering — MultiSelect UX expects sorted strings.
-        values_str = sorted({str(v) for v in values})
+        # Stable ordering: the companion column's, else a duration's, else the
+        # plain string sort a MultiSelect has always had.
+        from depictio.models.components.value_order import order_values
+
+        values_str = order_values(values, keys)
         try:
             from depictio.api.cache import get_cache
 
@@ -1763,6 +1833,20 @@ async def get_preview_filtered(
         raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
 
 
+def _s3_prefix_of(location: str, bucket_name: str) -> str:
+    """The object-key prefix of a ``s3://bucket/key`` (or bare key) location."""
+    loc = location.strip()
+    scheme = "s3://"
+    if loc.startswith(scheme):
+        loc = loc[len(scheme) :]
+        if loc == bucket_name or loc.startswith(bucket_name + "/"):
+            loc = loc[len(bucket_name) :]
+        else:
+            # A different bucket's URL: drop its bucket segment all the same.
+            loc = loc.partition("/")[2]
+    return loc.lstrip("/")
+
+
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")
 async def delete_deltatable(
     deltatable_id: str,
@@ -1795,33 +1879,47 @@ async def delete_deltatable(
         )
 
     data_collection_oid = ObjectId(deltatable["data_collection_id"])
-    deltatable_location = deltatable["delta_table_location"].lstrip("/")
+
+    # Ownership first: nothing under the S3 prefix may be touched by a caller
+    # who does not own the data collection's project.
+    project = projects_collection.find_one(
+        {
+            "$and": [
+                _owned_or_admin_query(current_user, {}),
+                {
+                    "$or": [
+                        {"workflows.data_collections._id": data_collection_oid},
+                        {"data_collections._id": data_collection_oid},
+                    ]
+                },
+            ]
+        }
+    )
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No deltatable with id {deltatable_oid} found for the current user.",
+        )
+    assert_project_unlocked(project)
+
     bucket_name = settings.s3.bucket
+    deltatable_location = _s3_prefix_of(deltatable["delta_table_location"], bucket_name)
 
     s3_client = boto3.client(
         "s3",
-        endpoint_url=settings.s3.endpoint,  # type: ignore[possibly-unbound-attribute]
-        aws_access_key_id=settings.s3.access_key,  # type: ignore[possibly-unbound-attribute]
-        aws_secret_access_key=settings.s3.secret_key,  # type: ignore[possibly-unbound-attribute]
+        endpoint_url=settings.s3.endpoint_url,
+        aws_access_key_id=settings.s3.aws_access_key_id,
+        aws_secret_access_key=settings.s3.aws_secret_access_key,
         region_name="us-east-1",
     )
 
     try:
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=deltatable_location)
         if "Contents" in response:
-            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
-            s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
+            delete_keys(s3_client, bucket_name, (obj["Key"] for obj in response["Contents"]))
     except ClientError as e:
         logger.error(f"Failed to delete S3 objects: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete S3 objects.")
-
-    if not projects_collection.find_one(
-        _owned_or_admin_query(current_user, {"data_collections._id": data_collection_oid})
-    ):
-        raise HTTPException(
-            status_code=404,
-            detail=f"No workflows with id {deltatable_oid} found for the current user.",
-        )
 
     deltatables_collection.delete_one({"_id": deltatable_oid})
     return {"message": f"DeltaTableAggregated with id {deltatable_oid} deleted successfully."}

@@ -1,0 +1,140 @@
+# Ideogram: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Karyotypes'
+subtitle: 'Whole genomes as bars: BUSCO genes on three assemblies coloured by status, and the small-variant density of a GRCh38 sample in 2 Mb heat bands.'
+icon: 'mdi:format-align-left'
+icon_color: 'grape'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8da6'
+is_main_tab: false
+tab_order: 44
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:format-align-left'
+tab_icon_color: 'grape'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'BUSCO scope'
+    icon: 'mdi:filter-variant'
+    color: 'grape'
+    description: 'Restricts which assemblies and which BUSCO statuses the karyotypes carry'
+
+grid_sections:
+  - name: 'Genome completeness'
+    icon: 'mdi:dna'
+    color: 'grape'
+    description: 'Where the conserved single-copy genes of each assembly sit, and which are duplicated or fragmented'
+  - name: 'Variant density'
+    icon: 'mdi:chart-bar'
+    color: 'grape'
+    description: 'Variants called per 2 Mb bin along the reference genome'
+
+components:
+  - tag: text-ideogram
+    index: ideo-text
+    component_type: text
+    title: 'Karyotypes'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Genome completeness'
+    body: >
+      One bar per chromosome or scaffold, all from the same origin and drawn to its length, so
+      the three assemblies compare by size first. Each tick is a BUSCO gene coloured by status:
+      genome_C, the draft, is short of Complete genes and splits two chromosomes over four
+      scaffolds. Click a bar to open that sequence and zoom along it (Ctrl or Cmd + scroll, the
+      buttons, or shift-drag), then filter the tab to it from the detail view; switch marks,
+      density or automatic level of detail from the toolbar, and hide a status from the legend.
+      Input: BUSCO full tables
+      from nf-core/genomeqc; the density below reads binned VCF counts from nf-core/sarek.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-ideogram-busco
+    index: 'ideo-busco'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'ideogram_busco_demo'
+    title: 'BUSCO genes per assembly'
+    description: '770 BUSCO hits (eukaryota_odb10) on three assemblies, one karyotype each, coloured by status.'
+    section: 'Genome completeness'
+    viz_kind: 'ideogram'
+    config:
+      viz_kind: "ideogram"
+      chrom_col: "sequence"
+      start_col: "gene_start"
+      end_col: "gene_end"
+      category_col: "status"
+      sample_col: "genome"
+      label_col: "busco_id"
+      chrom_length_col: "sequence_length"
+      mode: "marks"
+      orientation: "horizontal"
+      facet_by_sample: true
+      max_facets: 6
+    layout: { x: 0, y: 2, w: 8, h: 5 }
+
+  - tag: viz-ideogram-density
+    index: 'ideo-density'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'ideogram_density_demo'
+    title: 'Variant density'
+    description: 'Variants per 2 Mb bin on the 24 GRCh38 chromosomes; pick the sample in the controls.'
+    section: 'Variant density'
+    viz_kind: 'ideogram'
+    config:
+      viz_kind: "ideogram"
+      chrom_col: "chrom"
+      start_col: "start"
+      end_col: "end"
+      value_col: "variant_count"
+      sample_col: "sample"
+      assembly: "hg38"
+      mode: "density"
+      orientation: "vertical"
+      facet_by_sample: false
+      colour_scale: "Viridis"
+    layout: { x: 0, y: 7, w: 8, h: 5 }
+
+  - tag: filter-ideogram-genome
+    index: ideo-f-genome
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'ideogram_busco_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'genome'
+    column_type: 'object'
+    title: 'Assembly'
+    placement: left
+    section: 'BUSCO scope'
+    group: 'BUSCO filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-ideogram-status
+    index: ideo-f-status
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'ideogram_busco_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'status'
+    column_type: 'object'
+    title: 'BUSCO status'
+    placement: left
+    section: 'BUSCO scope'
+    group: 'BUSCO filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:check-decagram-outline'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

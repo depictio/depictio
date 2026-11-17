@@ -1,0 +1,18 @@
+CAT_FASTQ:
+  cat: 9.5
+CHECK_PAIRED:
+  samtools: 1.16.1
+FASTQC:
+  fastqc: 0.12.1
+OPTITYPE:
+  optitype: 1.3.1
+SAMTOOLS_COLLATEFASTQ:
+  samtools: 1.21
+Workflow:
+    nf-core/hlatyping: v2.2.0-g3237d20
+    Nextflow: 25.10.2
+YARA_INDEX:
+  yara: 1.0.2
+YARA_MAPPER:
+  yara: 1.0.2
+  samtools: 1.16.1

@@ -7,7 +7,9 @@ description: >-
   dataset, plus the contiguity BUSCO measures on the way. Complete single-copy is
   the headline; a high duplicated share on a haploid target points at retained
   haplotigs, a high fragmented share at a base-level error rate high enough to
-  break gene models.
+  break gene models. A pipeline that runs BUSCO on both the assembly and its
+  annotated proteins (nf-core/genomeqc) names the mode in the run, read into
+  busco_mode, so the two scores of one assembly stay two rows.
 find:
   path_glob: "**/*-busco.batch_summary.txt"
   path_glob_alt:

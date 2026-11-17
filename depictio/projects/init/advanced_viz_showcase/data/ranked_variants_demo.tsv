@@ -1,0 +1,14 @@
+variant_key	case_id	gene	hgvs_p	model_class	impact	clinvar	rank_score	cadd	gnomad_af	chrom	pos	gt_proband	gt_mother	gt_father
+21:47410740	CASE_A	COL6A1	p.Gly284Arg	AD de novo	HIGH	Pathogenic	23	32.0	absent	21	47410740	0/1	0/0	0/0
+21:44483184	CASE_A	CBS	p.Ile278Thr	AR hom	MODERATE	Pathogenic	21	27.4	0.0004	21	44483184	1/1	0/1	0/1
+21:47783920	CASE_A	PCNT	c.3465-2A>G	AR comp-het	HIGH	Likely pathogenic	19	29.1	2e-05	21	47783920	0/1	0/1	0/0
+21:47836711	CASE_A	PCNT	p.Arg2213*	AR comp-het	HIGH	Likely pathogenic	18	38.0	absent	21	47836711	0/1	0/0	0/1
+21:33039603	CASE_A	SOD1	p.Asp91Ala	AD inherited	MODERATE	Uncertain	14	24.8	0.0011	21	33039603	0/1	0/1	0/0
+21:35821680	CASE_A	KCNE1	p.Ser38Gly	AD inherited	LOW	Benign	9	12.3	0.31	21	35821680	0/1	0/0	0/1
+21:37499845	CASE_A	DYRK1A	p.Arg205*	AD de novo	HIGH	Pathogenic	17	41.0	absent	21	37499845	0/1	0/0	0/0
+21:37152033	CASE_A	TTC3	p.Pro1004Leu	AR hom	MODERATE	Uncertain	12	22.0	0.0021	21	37152033	1/1	0/1	./.
+2:165310406	CASE_B	SCN2A	p.Arg853Gln	AD de novo	MODERATE	Pathogenic	22	31.2	absent	2	165310406	0/1	0/0	0/0
+2:165393017	CASE_B	SCN2A	p.Ala1773Thr	AD inherited	LOW	Benign	8	8.9	0.12	2	165393017	0/1	0/0	0/1
+15:93544210	CASE_B	CHD2	c.4173+1G>A	AD de novo	HIGH	Likely pathogenic	20	33.4	absent	15	93544210	0/1	0/0	0/0
+15:93551822	CASE_B	CHD2	p.Val1203Ile	AD inherited	LOW	Uncertain	7	14.6	0.04	15	93551822	0/1	0/1	0/0
+1:155238105	CASE_B	GBA1	p.Leu483Pro	AR hom	MODERATE	Pathogenic	16	26.5	0.0003	1	155238105	1/1	0/1	0/1

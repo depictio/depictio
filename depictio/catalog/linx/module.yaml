@@ -5,6 +5,7 @@
 # linx/germline_annotations/, named <tumor_id>.linx.*.
 id: linx
 name: LINX
+version: "1.0.0"
 description: >-
   Clusters structural variants into events, chains them, and annotates the genes they disrupt and the fusions they create.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/linx

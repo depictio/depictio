@@ -13,7 +13,15 @@
  */
 import type { WorkflowEntry } from 'depictio-react-core';
 
-export type CompanionBase = 'structure' | 'msa' | 'domains' | 'variants' | 'hits' | 'pae';
+export type CompanionBase =
+  | 'structure'
+  | 'msa'
+  | 'domains'
+  | 'variants'
+  | 'hits'
+  | 'pae'
+  // A spatial_cells tile's image underlay: an Image DC of previews.
+  | 'background';
 
 export interface CompanionOption {
   value: string;
@@ -44,6 +52,7 @@ function dcFormat(dc: Dc): string {
 export function isCompanionCandidate(base: CompanionBase, dc: Dc): boolean {
   if (base === 'structure') return dcType(dc) === 'indexed_file' && STRUCTURE_FORMATS.has(dcFormat(dc));
   if (base === 'pae') return dcType(dc) === 'indexed_file' && dcFormat(dc) === PAE_FORMAT;
+  if (base === 'background') return dcType(dc) === 'image';
   return dcType(dc) === 'table';
 }
 

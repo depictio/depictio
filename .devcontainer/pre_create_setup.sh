@@ -84,7 +84,11 @@ DEPICTIO_S3_ROOT_PASSWORD=minio123
 DEPICTIO_MONGODB_WIPE=false
 DEV_MODE=true
 DEPICTIO_PLAYWRIGHT_DEV_MODE=false
-DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED=false
+# SSO (OpenID Connect), disabled by default. Example:
+# DEPICTIO_AUTH_OIDC_PROVIDERS='[{"id":"keycloak","label":"Sign in with SSO","issuer":"https://idp.example.org/realms/example"}]'
+# DEPICTIO_AUTH_OIDC_KEYCLOAK_CLIENT_ID=...
+# DEPICTIO_AUTH_OIDC_KEYCLOAK_CLIENT_SECRET=...
+# (the legacy DEPICTIO_AUTH_GOOGLE_OAUTH_* variables still work but are deprecated)
 ENVEOF
     echo "✅ Created default docker-compose/.env"
 else

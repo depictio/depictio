@@ -125,20 +125,40 @@ def fold_into_version(version_id: str, updates: dict[str, Any]) -> bool:
 
     The caller decided to fold on a read taken before it built the snapshot.
     Between that read and this write, another worker may have pinned, named or
-    sealed the version, so the filter checks again: only an unpinned, unnamed
-    autosave takes a fold. An empty label counts as unnamed, as it does for the
-    caller's own check.
+    sealed the version, or a reader's mark may have closed its window
+    (``close_window``), so the filter checks again: only an unpinned, unnamed
+    autosave whose window is still open takes a fold. An empty label counts as
+    unnamed, as it does for the caller's own check.
     """
+    query: dict[str, Any] = {
+        "version_id": version_id,
+        "kind": "auto",
+        "pinned": {"$ne": True},
+        "label": {"$in": [None, ""]},
+    }
+    if isinstance(updates.get("updated_at"), datetime):
+        query["coalesce_until"] = {"$gte": updates["updated_at"]}
     result = dashboard_versions_collection.update_one(
-        {
-            "version_id": version_id,
-            "kind": "auto",
-            "pinned": {"$ne": True},
-            "label": {"$in": [None, ""]},
-        },
+        query,
         {"$set": updates, "$inc": {"save_count": 1}},
     )
     return result.matched_count > 0
+
+
+def close_window(version_id: str, now: datetime) -> bool:
+    """End an autosave's coalescing window without changing anything else.
+
+    For a state a reader has seen (#1397): their mark points at this version,
+    so a later autosave must open a new one rather than fold into it, or the
+    mark would point at content the reader never saw and the change would
+    vanish from "what's new". The version stays an autosave; only the next
+    save's fold is refused. No-op when the window is already closed.
+    """
+    result = dashboard_versions_collection.update_one(
+        {"version_id": version_id, "kind": "auto", "coalesce_until": {"$gt": now}},
+        {"$set": {"coalesce_until": now}},
+    )
+    return result.modified_count > 0
 
 
 def touch_version(version_id: str, now: datetime) -> None:

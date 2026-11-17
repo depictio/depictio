@@ -464,6 +464,11 @@ test.describe("Browse for a run folder", () => {
     await expect(card.locator("[data-testid='run-detected-pipeline']")).toHaveText(
       "nf-core/ampliseq",
     );
+    // The pipeline line says what was recognised; the picker is one click away.
+    const pipelineLine = page.locator("[data-testid='folder-pipeline-line']");
+    await expect(pipelineLine).toContainText("nf-core/ampliseq");
+    await expect(pipelineLine).toContainText("Detected");
+    await page.locator("[data-testid='folder-change-pipeline']").click();
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toBeVisible();
   });
 
@@ -662,7 +667,7 @@ test.describe("Browse for a run folder", () => {
     );
 
     const expand = page.locator("[data-testid='browse-expand']");
-    const dialog = page.getByRole("dialog", { name: "Choose the run folder" });
+    const dialog = page.getByRole("dialog", { name: "Choose a folder to read in place" });
     const before = (await dialog.boundingBox())?.width ?? 0;
     await expand.click();
     await expect(expand).toHaveAttribute("aria-pressed", "true");

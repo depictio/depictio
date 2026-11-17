@@ -24,11 +24,13 @@ import type {
   DCLink,
   DCLinkConfig,
   LinkResolverName,
+  LinkSuggestion,
   LinkTargetType,
   ResolverInfo,
   UpdateLinkInput,
 } from 'depictio-react-core';
 
+import { LinkExamples } from './LinkExamples';
 import { LinkMappingInspector } from './LinkMappingInspector';
 
 interface DataCollectionOption {
@@ -43,6 +45,8 @@ interface LinkEditModalProps {
   projectId: string;
   /** When set, modal is in edit mode. When null, it's create mode. */
   link: DCLink | null;
+  /** Create mode: what the form starts from, e.g. a suggested link. */
+  initial?: Partial<LinkSuggestion> | null;
   /** All DCs in the project — populates the source/target dropdowns. */
   dataCollections: DataCollectionOption[];
   /** Resolver catalog from `listLinkResolvers`. Falls back to a static list
@@ -77,10 +81,16 @@ const RESOLVER_FALLBACK: ResolverInfo[] = [
   },
 ];
 
-const inferTargetType = (dc: DataCollectionOption | undefined): LinkTargetType => {
+/** `LinkTargetType` from depictio-react-core predates the genomic_tracks
+ *  target (DCLink.target_type in depictio/models/models/links.py accepts it). */
+type TargetType = LinkTargetType | 'genomic_tracks';
+
+const inferTargetType = (dc: DataCollectionOption | undefined): TargetType => {
   if (!dc) return 'table';
   if (dc.type === 'multiqc') return 'multiqc';
   if (dc.type === 'image') return 'image';
+  // Filters the track manifest; the genome browser then shows the matching tracks.
+  if (dc.type === 'genomic_tracks') return 'genomic_tracks';
   return 'table';
 };
 
@@ -88,6 +98,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
   opened,
   projectId,
   link,
+  initial = null,
   dataCollections,
   resolvers,
   onClose,
@@ -135,18 +146,18 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       setDescription(link.description || '');
       setEnabled(link.enabled);
     } else {
-      setSourceDcId('');
-      setSourceColumn('');
-      setTargetDcId('');
-      setResolver('direct');
-      setTargetField('');
+      setSourceDcId(initial?.source_dc_id ?? '');
+      setSourceColumn(initial?.source_column ?? '');
+      setTargetDcId(initial?.target_dc_id ?? '');
+      setResolver(initial?.resolver ?? 'direct');
+      setTargetField(initial?.target_field ?? '');
       setPattern('');
       setMappingsJson('');
       setCaseSensitive(true);
       setDescription('');
       setEnabled(true);
     }
-  }, [opened, link]);
+  }, [opened, link, initial]);
 
   const targetDc = useMemo(
     () => dataCollections.find((d) => d.id === targetDcId),
@@ -328,7 +339,8 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       source_dc_id: sourceDcId,
       source_column: sourceColumn.trim(),
       target_dc_id: targetDcId,
-      target_type: targetType,
+      // Widened locally (see TargetType); the backend validates the literal.
+      target_type: targetType as LinkTargetType,
       link_config,
       description: description.trim() || undefined,
       enabled,
@@ -366,7 +378,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       withCloseButton={!submitting}
     >
       <Stack gap="md" data-testid="link-edit-modal">
-        {/* Header mirrors CreateDataCollectionModal / ManageDataCollectionModal:
+        {/* Header mirrors ManageDataCollectionModal:
             no native title, custom centered icon + Title inside the Stack so
             the visual language stays consistent across the project's modals. */}
         <Group justify="center" gap="sm">
@@ -519,6 +531,12 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           <LinkMappingInspector projectId={projectId} linkId={link.id} />
         )}
 
+        {initial?.examples &&
+          initial.source_column === sourceColumn &&
+          initial.target_dc_id === targetDcId &&
+          (initial.target_field ?? '') === targetField && (
+            <LinkExamples suggestion={initial as LinkSuggestion} />
+          )}
         <Textarea
           label="Description (optional)"
           value={description}
@@ -555,7 +573,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
 };
 
 interface SampleMappingEditorProps {
-  targetType: LinkTargetType;
+  targetType: TargetType;
   autoMappings: Record<string, string[]> | null;
   autoMappingsLoading: boolean;
   mappingsJson: string;

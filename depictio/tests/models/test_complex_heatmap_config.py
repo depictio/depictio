@@ -49,3 +49,23 @@ def test_pattern_survives_the_viz_config_union() -> None:
     )
     assert isinstance(cfg, ComplexHeatmapConfig)
     assert cfg.value_columns_pattern == r"_R\d+$"
+
+
+def test_height_caps_are_opt_in() -> None:
+    cfg = ComplexHeatmapConfig()
+    assert cfg.min_cell_px is None
+    assert cfg.max_rows is None
+
+
+def test_height_caps_survive_the_viz_config_union() -> None:
+    cfg = TypeAdapter(VizConfig).validate_python(
+        {"viz_kind": "complex_heatmap", "min_cell_px": 6, "max_rows": 8}
+    )
+    assert isinstance(cfg, ComplexHeatmapConfig)
+    assert (cfg.min_cell_px, cfg.max_rows) == (6, 8)
+
+
+@pytest.mark.parametrize("field, value", [("min_cell_px", 1), ("max_rows", 2), ("max_rows", 17)])
+def test_height_caps_are_bounded(field: str, value: int) -> None:
+    with pytest.raises(ValidationError):
+        ComplexHeatmapConfig(**{field: value})

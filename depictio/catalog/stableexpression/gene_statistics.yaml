@@ -1,0 +1,29 @@
+id: stableexpression_gene_statistics
+name: Gene expression statistics
+mode: expression/gene-statistics
+description: >-
+  One row per gene of the merged expression matrix: mean, median, standard
+  deviation, MAD and both coefficients of variation over the samples that
+  measured it, the share of samples that measured it and the share that read
+  zero, its expression section, percentile and level, whether it was a
+  candidate, which platforms measured it, the per-platform mean and CV, and how
+  many source ids (probes, transcripts) map onto it.
+find:
+  path_glob: "**/reporting/all_genes_summary.csv"
+recipe: stableexpression/gene_statistics.py
+fixture: gene_statistics.tsv
+renders_as:
+  # Spread against level, every gene: the candidates sit on the lower edge of
+  # each section's band.
+  - id: expression_plane
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: mean, y: cv, label: gene_name, color: candidate }
+  - { id: gene_count, component: card, column: gene_id, aggregation: count, secondary_layout: donut, breakdown_col: candidate, headline: true }
+  - { id: gene_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }
+  - { id: level_composition, component: card, column: gene_id, aggregation: count, secondary_layout: composition, breakdown_col: expression_level }
+  - { id: cv_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: cv, color: candidate } }
+  - { component: figure, visu_type: histogram, dict_kwargs: { x: source_ids } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }
+  - { component: interactive, interactive_type: MultiSelect, column_name: platforms }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

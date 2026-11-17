@@ -1,0 +1,5 @@
+pair_key	sample	segmenter	other_segmenter	pair	n_cells	other_cells	count_ratio	cells_holding_other	matched_share	median_held
+TEST1|Cellpose|Mesmer	TEST1	Cellpose	Mesmer	Cellpose cells holding a Mesmer cell	72	2114	0.0341	72	1.0	2.0
+TEST1|Mesmer|Cellpose	TEST1	Mesmer	Cellpose	Mesmer cells holding a Cellpose cell	2114	72	29.3611	80	0.0378	0.0
+TEST2|Cellpose|Mesmer	TEST2	Cellpose	Mesmer	Cellpose cells holding a Mesmer cell	32	2085	0.0153	32	1.0	3.0
+TEST2|Mesmer|Cellpose	TEST2	Mesmer	Cellpose	Mesmer cells holding a Cellpose cell	2085	32	65.1562	36	0.0173	0.0

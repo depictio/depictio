@@ -34,16 +34,41 @@ def test_regulation_mode_follows_anota2seq_priority():
     raw = _results(
         {
             # G1: translation wins even though total and translated both move.
-            "translation": {"G1": (1.0, 0.5, 0.01), "G2": (1.0, 3.0, 0.01), "G3": ns, "G4": ns},
+            "translation": {
+                "G1": (1.0, 0.5, 0.01),
+                "G2": (1.0, 3.0, 0.01),
+                "G3": ns,
+                "G4": ns,
+                "G5": ns,
+                "G6": ns,
+            },
             # G2: translation slope outside [-1, 2], so buffering decides.
-            "buffering": {"G1": ns, "G2": (-0.8, 0.0, 0.01), "G3": ns, "G4": ns},
+            # G6: buffering is also significant, but mRNA abundance outranks it.
+            "buffering": {
+                "G1": ns,
+                "G2": (-0.8, 0.0, 0.01),
+                "G3": ns,
+                "G4": ns,
+                "G5": ns,
+                "G6": (1.0, 0.0, 0.01),
+            },
             # G3: both mRNA levels change in the same direction.
-            "total_mRNA": {"G1": (1.0, 0.0, 0.01), "G2": ns, "G3": (-1.0, 0.0, 0.01), "G4": ns},
+            # G5: the same with effects below log2(1.2): the mRNA analyses have no effect cut.
+            "total_mRNA": {
+                "G1": (1.0, 0.0, 0.01),
+                "G2": ns,
+                "G3": (-1.0, 0.0, 0.01),
+                "G4": ns,
+                "G5": (0.1, 0.0, 0.01),
+                "G6": (1.0, 0.0, 0.01),
+            },
             "translated_mRNA": {
                 "G1": (1.0, 0.0, 0.01),
                 "G2": ns,
                 "G3": (-1.2, 0.0, 0.01),
                 "G4": (1.0, 0.0, 0.01),
+                "G5": (0.05, 0.0, 0.01),
+                "G6": (0.8, 0.0, 0.01),
             },
         }
     )
@@ -62,6 +87,11 @@ def test_regulation_mode_follows_anota2seq_priority():
     # Only the ribosome-bound level moves and translation is not called.
     assert rows["G4"]["regulation_mode"] == "not regulated"
     assert rows["G4"]["direction"] == "none"
+    # No effect cut on the mRNA analyses (deltaP and deltaT are NULL in anota2seqRun).
+    assert rows["G5"]["regulation_mode"] == "mRNA abundance"
+    assert rows["G5"]["direction"] == "up"
+    # anota2seqRegModes priority: translation > mRNA abundance > buffering.
+    assert rows["G6"]["regulation_mode"] == "mRNA abundance"
     assert rows["G1"]["gene_name"] == "ONE"
     assert rows["G3"]["gene_name"] == "G3"  # no symbol: falls back to the id
     assert set(out["contrast"]) == {"b_vs_a"}
@@ -72,7 +102,7 @@ def test_results_long_form_labels_analyses_and_caps_zero_padj():
     raw = _results(
         {
             "translation": {"G1": (1.0, 0.5, 0.0), "G2": (0.1, 0.5, 0.01)},
-            "total_mRNA": {"G1": (-1.0, 0.0, 0.5)},
+            "total_mRNA": {"G1": (-1.0, 0.0, 0.5), "G3": (0.1, 0.0, 0.01)},
         }
     )
     module = load_recipe("anota2seq/results.py")
@@ -89,6 +119,12 @@ def test_results_long_form_labels_analyses_and_caps_zero_padj():
     g2 = out.filter(pl.col("gene_id") == "G2").row(0, named=True)
     assert g2["significant"] is False
     assert g2["direction"] == "not significant"
+    # The mRNA analyses have no effect floor (deltaP and deltaT are NULL): padj alone decides.
+    g3 = out.filter((pl.col("gene_id") == "G3") & (pl.col("analysis") == "Total mRNA")).row(
+        0, named=True
+    )
+    assert g3["significant"] is True
+    assert g3["direction"] == "up"
 
 
 def _tish(rows: list[tuple[str, str, str, str, str]]) -> pl.DataFrame:

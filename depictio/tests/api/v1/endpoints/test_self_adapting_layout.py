@@ -364,3 +364,15 @@ def test_tab_with_no_own_filter_survives_on_a_family_filter():
     dc_meta = {"taxonomy": {"metatype": "Aggregate"}}
     assert _tab_meets_minimum(tab, dc_meta) is False
     assert _tab_meets_minimum(tab, dc_meta, family_fans_out_a_filter=True) is True
+
+
+# ---------------------------------------------------------------------------
+# _component_has_data — an optional table queued for ingestion
+# ---------------------------------------------------------------------------
+
+
+def test_an_optional_table_being_ingested_is_kept_without_any_lookup():
+    component = {"data_collection_tag": "alpha", "dc_id": "646b0f3c1e4a2d7f8e5b8cc6"}
+    meta = {"alpha": {"type": "table", "optional": True, "ingesting": True}}
+
+    assert _component_has_data(component, meta) is True

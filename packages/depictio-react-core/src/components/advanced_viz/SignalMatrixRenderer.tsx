@@ -11,6 +11,7 @@ import {
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { VizFullRow, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
+import { plotlyColorscale } from '../../utils/colorScale';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -458,7 +459,7 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         z: panel.rows.map((r) => r.values),
         xaxis: 'x',
         yaxis: axisRef(i),
-        colorscale: colourScale,
+        colorscale: plotlyColorscale(colourScale),
         zmin,
         zmax,
         zsmooth: false,

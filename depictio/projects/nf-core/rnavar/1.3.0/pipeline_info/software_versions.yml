@@ -1,0 +1,53 @@
+CAT_FASTQ:
+  cat: '9.5'
+FASTQC:
+  fastqc: 0.12.1
+GATK4_BEDTOINTERVALLIST:
+  gatk4: 4.6.2.0
+GATK4_CREATESEQUENCEDICTIONARY:
+  gatk4: 4.6.2.0
+GATK4_HAPLOTYPECALLER:
+  gatk4: 4.6.2.0
+GATK4_INTERVALLISTTOOLS:
+  gatk4: 4.6.2.0
+GATK4_MERGEVCFS:
+  gatk4: 4.6.2.0
+GATK4_SPLITNCIGARREADS:
+  gatk4: 4.6.2.0
+GATK4_VARIANTFILTRATION:
+  gatk4: 4.6.2.0
+GTF2BED:
+  Rscript: 3.5.1 (2018-07-02)
+PICARD_MARKDUPLICATES:
+  picard: 3.4.0
+REMOVEUNKNOWNREGIONS:
+  python: 3.8.3
+SAMTOOLS_FAIDX:
+  samtools: 1.23.1
+SAMTOOLS_FLAGSTAT:
+  samtools: 1.23.1
+SAMTOOLS_IDXSTATS:
+  samtools: 1.23.1
+SAMTOOLS_INDEX:
+  samtools: 1.23.1
+SAMTOOLS_MERGE:
+  samtools: 1.23.1
+SAMTOOLS_SORT:
+  samtools: 1.23.1
+SAMTOOLS_STATS:
+  samtools: 1.23.1
+STAR_ALIGN:
+  gawk: 5.1.0
+  samtools: '1.21'
+  star: 2.7.11b
+STAR_GENOMEGENERATE:
+  gawk: 5.1.0
+  samtools: '1.21'
+  star: 2.7.11b
+STAR_INDEXVERSION:
+  star: 2.7.11b
+TABIX:
+  tabix: '1.21'
+Workflow:
+    nf-core/rnavar: v1.3.0dev
+    Nextflow: 26.04.3

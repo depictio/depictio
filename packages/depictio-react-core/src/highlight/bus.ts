@@ -28,6 +28,7 @@ import {
 } from 'react';
 
 import { createOpeningEntityStore, OpeningEntityContext } from './openingEntity';
+import { createViewWindowStore, ViewWindowContext } from './viewWindow';
 import { createZoomSyncStore, ZoomSyncContext } from './zoomSync';
 
 export type HighlightEvent = {
@@ -35,6 +36,10 @@ export type HighlightEvent = {
   sourceIndex: string;
   /** The protein (or family) the residues belong to, when the source knows. */
   entity?: string;
+  /** Other names of the contig `entity` names (a genome browser's aliases for
+   *  its canonical reference name), so a plot whose rows spell the contig
+   *  another way still recognises it. Unset: `entity` is the only name. */
+  entityAliases?: string[];
   /** Chain of a multi-chain structure the positions are numbered in (residue
    *  tables number a complex per chain). Unset: single chain, or unknown. */
   chain?: string;
@@ -48,6 +53,19 @@ export type HighlightEvent = {
    *  profile's x column). Consumers that only draw on a matching axis (the
    *  profile) compare it to their own column; unset means residue numbers. */
   positionColumn?: string;
+  /** The colour of the hovered mark, so a band or line drawn elsewhere wears
+   *  it. Unset: subscribers fall back to their theme colour. */
+  color?: string;
+  /** The genomic interval of the hovered feature (1-based, inclusive), when
+   *  the source is a genome browser or a plot of intervals. `refName` is the
+   *  browser's canonical contig name and `aliases` its other spellings. A
+   *  subscriber on a genomic axis draws it whatever column names it binds. */
+  genomic?: { refName: string; start: number; end: number; aliases?: string[] };
+  /** The hovered table row, or a column -> value map. It carries no schema:
+   *  each subscriber reads the columns it binds from it (a plot its chrom and
+   *  position, a table the columns it shares) and ignores the rest, so a
+   *  dashboard names no extra field to link two tiles. */
+  record?: Record<string, unknown>;
 };
 
 /** A publish call without the source, when the hook binds it. */
@@ -81,6 +99,25 @@ const frameScheduler: HighlightScheduler = {
   },
 };
 
+function sameGenomic(a: HighlightEvent['genomic'], b: HighlightEvent['genomic']): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.refName === b.refName &&
+    a.start === b.start &&
+    a.end === b.end &&
+    sameKeys(a.aliases, b.aliases)
+  );
+}
+
+function sameRecord(a?: Record<string, unknown>, b?: Record<string, unknown>): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((k) => Object.prototype.hasOwnProperty.call(b, k) && Object.is(a[k], b[k]));
+}
+
 function sameKeys(a?: string[], b?: string[]): boolean {
   if (a === b) return true;
   if (!a || !b || a.length !== b.length) return false;
@@ -94,11 +131,15 @@ export function sameHighlight(a: HighlightEvent | null, b: HighlightEvent | null
   return (
     a.sourceIndex === b.sourceIndex &&
     a.entity === b.entity &&
+    sameKeys(a.entityAliases, b.entityAliases) &&
     a.chain === b.chain &&
     a.start === b.start &&
     (a.end ?? a.start) === (b.end ?? b.start) &&
     a.positionColumn === b.positionColumn &&
-    sameKeys(a.rowKeys, b.rowKeys)
+    a.color === b.color &&
+    sameKeys(a.rowKeys, b.rowKeys) &&
+    sameGenomic(a.genomic, b.genomic) &&
+    sameRecord(a.record, b.record)
   );
 }
 
@@ -182,13 +223,21 @@ export function HighlightProvider({ children }: { children?: ReactNode }) {
   useEffect(() => () => own?.dispose(), [own]);
   useEffect(() => () => ownOpening?.dispose(), [ownOpening]);
   useEffect(() => () => ownZoom?.dispose(), [ownZoom]);
+  // And the genome browser's visible window, which genomic plots follow.
+  const parentWindow = useContext(ViewWindowContext);
+  const [ownWindow] = useState(() => (parentWindow ? null : createViewWindowStore()));
+  useEffect(() => () => ownWindow?.dispose(), [ownWindow]);
   return createElement(
     HighlightContext.Provider,
     { value: parent ?? own },
     createElement(
       OpeningEntityContext.Provider,
       { value: parentOpening ?? ownOpening },
-      createElement(ZoomSyncContext.Provider, { value: parentZoom ?? ownZoom }, children),
+      createElement(
+        ZoomSyncContext.Provider,
+        { value: parentZoom ?? ownZoom },
+        createElement(ViewWindowContext.Provider, { value: parentWindow ?? ownWindow }, children),
+      ),
     ),
   );
 }

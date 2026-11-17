@@ -20,6 +20,7 @@ import {
   VizSwitch,
 } from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
+import { plotlyColorscale } from '../../utils/colorScale';
 import {
   chooseResolution,
   coarsenBins,
@@ -588,7 +589,7 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
             x: positionIndex.map(positionAt),
             y: separations.map((sep) => sep * binWidth),
             z: rotated.map((row) => row.map((v) => scaled(v))),
-            colorscale: colourScale,
+            colorscale: plotlyColorscale(colourScale),
             showscale: true,
             colorbar: { thickness: 10, len: 0.75, title: { text: colourbarTitle } },
             hovertemplate: `${effectiveChrom}:%{x}<br>separation: %{y}<br>value: %{z:.3g}<extra></extra>`,
@@ -625,7 +626,7 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           x: labels,
           y: labels,
           z,
-          colorscale: colourScale,
+          colorscale: plotlyColorscale(colourScale),
           showscale: true,
           colorbar: { thickness: 10, len: 0.75, title: { text: colourbarTitle } },
           hovertemplate: '%{x} × %{y}<br>value: %{z:.3g}<extra></extra>',

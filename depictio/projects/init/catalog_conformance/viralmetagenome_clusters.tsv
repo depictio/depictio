@@ -1,0 +1,10 @@
+sample	cluster	taxid	centroid	cluster_type	members	member_bp	read_depth_pct	member_ids	status
+SRR11140744	cl0	2697049	Iceland-3124-2020	Reference-anchored	3	30477	100.0	megahit_scaffold1|size23354,megahit_scaffold2|size6647,megahit_scaffold3|size476	Refined
+SRR11140746	cl0	2697049	Iceland-3124-2020	Reference-anchored	1	29682	100.0	megahit_scaffold1|size29682	Refined
+SRR11140748	cl0	2697049	Iceland-3124-2020	Reference-anchored	1	29849	100.0	megahit_scaffold1|size29849	Refined
+SRR11140750	cl0	2697049	England-ALDP-20A77A6-2021	Reference-anchored	17	20222	94.25	megahit_scaffold10|size596,megahit_scaffold11|size489,megahit_scaffold12|size474,megahit_scaffold14|size425,megahit_scaffold17|size369,megahit_scaffold18|size367,megahit_scaffold1|size3563,megahit_scaffold20|size339,megahit_scaffold21|size316,megahit_scaffold2|size3486,megahit_scaffold3|size2321,megahit_scaffold4|size2114,megahit_scaffold5|size1642,megahit_scaffold6|size1156,megahit_scaffold7|size1131,megahit_scaffold8|size737,megahit_scaffold9|size697	Refined
+SRR11140750	cl1	2697049	megahit_scaffold13|size431	Contig-only	0		0.55		Filtered out
+SRR11140750	cl2	2697049	megahit_scaffold15|size378	Contig-only	0		2.05		Filtered out
+SRR11140750	cl3	2697049	megahit_scaffold16|size376	Contig-only	0		0.55		Filtered out
+SRR11140750	cl4	2697049	megahit_scaffold19|size355	Contig-only	0		1.23		Filtered out
+SRR11140750	cl5	0	megahit_scaffold22|size212	Contig-only	0		1.37		Filtered out

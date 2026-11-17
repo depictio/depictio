@@ -7,6 +7,7 @@ import {
   fetchIndexedFileManifest,
   fileTrackOptions,
   infoFieldTransforms,
+  laneColour,
   laneSpecFor,
   lazyDataFor,
   needsIndexUrl,
@@ -246,6 +247,24 @@ describe('buildFileGenomeSpec', () => {
     expect(without.params).toBeUndefined();
   });
 
+  it('brushes on the drag the interaction mode names', () => {
+    const on = (interactionMode?: 'pointer' | 'pan' | 'select') =>
+      (
+        buildFileGenomeSpec({
+          manifest: manifest(),
+          colors,
+          assemblyContigs: contigs,
+          regionBrushEnabled: true,
+          interactionMode,
+        }).spec as any
+      ).params[0].select.on;
+    // No mode: GenomeSpy's own default (shift + drag on a zoomable axis).
+    expect(on()).toBeUndefined();
+    expect(on('select')).toBe('mousedown');
+    expect(on('pan')).toEqual({ type: 'mousedown', filter: 'event.shiftKey' });
+    expect(on('pointer')).toEqual({ type: 'mousedown', filter: 'false' });
+  });
+
   it('lets the tile override the assembly the collection declares', () => {
     const built = buildFileGenomeSpec({
       manifest: manifest({ assembly: null }),
@@ -317,5 +336,23 @@ describe('fetchIndexedFileManifest', () => {
     await expect(
       fetchIndexedFileManifest('dc1', async () => ({ ok: false, status: 404 }) as Response),
     ).rejects.toThrow(/404/);
+  });
+});
+
+describe('lane colours shared with the genome browser', () => {
+  it('wear the colour of the sample\'s tracks, then of its group, then the first hue', () => {
+    expect(laneColour(entry({ sample: 'S1' }), { ...colors, laneColors: { S1: '#aa0000' } })).toBe('#aa0000');
+    expect(laneColour(entry({ sample: 'S1' }), { ...colors, groupColors: { S1: '#00aa00' } })).toBe('#00aa00');
+    expect(laneColour(entry({ sample: 'S1' }), colors)).toBe('#1f77b4');
+  });
+
+  it('colours a bigwig lane with it', () => {
+    const lane = laneSpecFor('bigwig', entry({ sample: 'S1' }), {}, { ...colors, laneColors: { S1: '#aa0000' } }) as any;
+    expect(lane.mark.color).toBe('#aa0000');
+  });
+
+  it('colours a plain vcf lane with it', () => {
+    const lane = laneSpecFor('vcf', entry({ sample: 'S1' }), {}, { ...colors, laneColors: { S1: '#aa0000' } }) as any;
+    expect(JSON.stringify(lane)).toContain('#aa0000');
   });
 });

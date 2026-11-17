@@ -30,7 +30,14 @@ import React from 'react';
 import { Drawer, MantineThemeContext, Tooltip, useMantineTheme } from '@mantine/core';
 import type { MantineTheme } from '@mantine/core';
 import { useReducedMotion } from 'motion/react';
-import { ArrowLeft, BookOpenText, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpenText,
+  ChevronDown,
+  ChevronUp,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import {
   ChromeButton,
   ChromeButtonGroup,
@@ -43,7 +50,9 @@ import type { HeaderAction } from '../../Header';
 import type { DashboardShellProps } from '../../shell/types';
 import { Dock } from './Dock';
 import { STROKE } from './icons';
+import { useScrollOverflow } from '../../useScrollOverflow';
 import {
+  BellTile,
   DrawerHead,
   ProfileRows,
   ProfileTile,
@@ -55,6 +64,7 @@ import {
   ThemeTile,
   TopBar,
 } from './parts';
+import { usePanelRoom } from '../../shell/usePanelRoom';
 import { useDockAnchor } from './useDockPlacement';
 import './layout.css';
 
@@ -119,10 +129,7 @@ const SURFACES: [string, string][] = [
   ['analysis', '.dc-analysis-panel'],
   ['search', '[data-testid="dashboard-spotlight"]'],
   ['settings', '[data-testid="settings-modal"]'],
-  [
-    'notes',
-    '.mantine-Drawer-root:has([aria-label="Expand notes to fullscreen"], [aria-label="Restore notes drawer"])',
-  ],
+  ['notes', '.mantine-Drawer-root.dc-notes-drawer'],
 ];
 function useOpenSurfaces(): string {
   const [open, setOpen] = React.useState('');
@@ -269,7 +276,9 @@ const Slot: React.FC<{ action: HeaderAction; named?: boolean }> = ({ action, nam
 };
 
 /** The dock's clusters: find | read | author + mode (the primary last). */
-const OFF_DOCK = new Set(['filters', 'settings', 'feedback']);
+// "What's new" (#1397) is news about the page, not a way of reading it: it
+// sits in the top bar with the bell, never in the dock.
+const OFF_DOCK = new Set(['filters', 'settings', 'feedback', 'changes']);
 function dockClusters(actions: HeaderAction[]) {
   const rank = (a: HeaderAction) =>
     a.group === 'find' ? 0 : a.group === 'author' || a.group === 'mode' ? 2 : 1;
@@ -297,6 +306,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   boot,
   canvas,
   topStrip,
+  tabIntro,
   filters,
   overlays,
   outside,
@@ -341,14 +351,21 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   // the drawer is open keeps it open, folding it by hand keeps it folded.
   const [sideChoice, setSideChoice] = React.useState(() => readFlag(SIDE_KEY, true));
   const [keepSide, setKeepSide] = React.useState(false);
+  // A right panel (Analysis, Metadata) takes room the same way: the filters
+  // drawer closes for it and the sidebar folds to its rail, both coming back
+  // when it closes.
+  usePanelRoom(analysis.open, { filters: { opened: filters.docked.opened, fold: filters.docked.fold } });
+  const sideCrowded = filtersOpen || analysis.open;
   React.useEffect(() => {
-    if (!filtersOpen) setKeepSide(false);
-  }, [filtersOpen]);
-  const autoFold = filtersOpen && !keepSide;
+    if (!sideCrowded) setKeepSide(false);
+  }, [sideCrowded]);
+  const autoFold = sideCrowded && !keepSide;
   const sideOpen = sideChoice && !autoFold;
+  // The tab list hides its scrollbar: this tells a reader when tabs lie out of view.
+  const side = useScrollOverflow<HTMLDivElement>([sideOpen, mode]);
   const toggleSide = () => {
     const next = !sideOpen;
-    if (next && filtersOpen) setKeepSide(true);
+    if (next && sideCrowded) setKeepSide(true);
     setSideChoice(next);
     writeFlag(SIDE_KEY, next, 'local');
   };
@@ -394,7 +411,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   const topH = TOP_H - (dense ? DENSE.top : 0);
 
   const byId = (id: string) => header.model.actions.find((a) => a.id === id);
-  const topKeys = ['feedback', 'settings'].map(byId).filter(Boolean) as HeaderAction[];
+  const topKeys = ['changes', 'feedback', 'settings'].map(byId).filter(Boolean) as HeaderAction[];
   const clusters = dockClusters(header.model.actions);
 
   const aside = inspector.aside as { width?: unknown } | undefined;
@@ -404,7 +421,13 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   const padR = analysis.open ? analysis.widthPx + 12 : 0;
   const navOffset = `calc(${sideW}px + ${drawerCol})`;
 
-  useRootOffsets({ '--gl-top-offset': `${topH}px`, '--gl-nav-offset': navOffset });
+  // `--gl-pad-r` is also on the root: the notes button is fixed outside the shell
+  // and reads it to stay clear of the open Analysis / Metadata panel.
+  useRootOffsets({
+    '--gl-top-offset': `${topH}px`,
+    '--gl-nav-offset': navOffset,
+    '--gl-pad-r': `${padR}px`,
+  });
 
   const shellStyle = {
     '--gl-pad-r': `${padR}px`,
@@ -430,6 +453,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
       data-density={dense ? 'compact' : undefined}
       data-dock={dockAt}
       data-panel={filtersOpen ? 'filters' : undefined}
+      data-intro={tabIntro || undefined}
       data-hy-showing={showing || undefined}
       style={shellStyle}
     >
@@ -447,6 +471,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
                 ))}
               </ChromeButtonGroup>
               <ThemeTile place="top" />
+              <BellTile />
               <ProfileTile />
             </div>
           }
@@ -481,7 +506,23 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
               </button>
             </Tooltip>
           </div>
-          <div className="hy-side-scroll">
+          <div className="hy-side-scroll-host">
+            {sideOpen && side.above && (
+              <button
+                type="button"
+                className="hy-side-more hy-side-more--above"
+                aria-label="Show earlier tabs"
+                onClick={() => side.scrollBy(-1)}
+              >
+                <ChevronUp size={16} aria-hidden />
+              </button>
+            )}
+          <div
+            className="hy-side-scroll"
+            ref={side.ref}
+            data-more-above={(sideOpen && side.above) || undefined}
+            data-more-below={(sideOpen && side.below) || undefined}
+          >
             {sideOpen ? (
               mode === 'edit' ? (
                 // The editor's own tab list: rename, move, add, the group menus.
@@ -493,6 +534,17 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
               <div className="hy-rail-tabs">
                 <RailTabs nav={nav.model} />
               </div>
+            )}
+          </div>
+            {sideOpen && side.below && (
+              <button
+                type="button"
+                className="hy-side-more hy-side-more--below"
+                aria-label="Show more tabs"
+                onClick={() => side.scrollBy(1)}
+              >
+                <ChevronDown size={16} aria-hidden />
+              </button>
             )}
           </div>
           <div className="hy-rule" role="separator" />
@@ -544,6 +596,9 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
       <aside
         className="hy-drawer"
         aria-label="Filters"
+        // The panel's tool row shows while the panel is open (a closed one is
+        // the icon rail): layout.css lets the head and that row share a hairline.
+        data-tools={(ready && filters.docked.opened) || undefined}
         aria-hidden={!filtersOpen || undefined}
         {...({ inert: filtersOpen ? undefined : '' } as Record<string, string | undefined>)}
       >
@@ -619,6 +674,7 @@ const PhoneLayout: React.FC<DashboardShellProps> = ({
   boot,
   canvas,
   topStrip,
+  tabIntro,
   filters,
   overlays,
   outside,
@@ -650,6 +706,7 @@ const PhoneLayout: React.FC<DashboardShellProps> = ({
       className="hy-shell hy-shell--phone"
       data-testid="app-shell"
       data-mode={mode}
+      data-intro={tabIntro || undefined}
       data-hy-showing={showing || undefined}
       style={
         {
@@ -779,6 +836,9 @@ const Sheet: React.FC<{
     opened={opened}
     onClose={onClose}
     position="bottom"
+    // The rows hold the panels they open (Analysis, Metadata): unmounted with
+    // the sheet, they closed the moment the sheet did.
+    keepMounted
     size={tall ? '88dvh' : 'auto'}
     offset={8}
     zIndex={Z_LAYERS.overlay}

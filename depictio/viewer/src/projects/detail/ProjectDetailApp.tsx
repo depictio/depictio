@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -21,7 +21,6 @@ import {
   Tabs,
   Text,
   Title,
-  Tooltip,
   UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -35,14 +34,14 @@ import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pa
 import '../../chrome/variants/glass/pages/project-detail.css';
 import {
   Check,
-  ClipboardCheck,
   Database,
   GitBranch,
   HardDrive,
   Layers,
   Settings,
   ShieldCheck,
-  Table2,
+  FolderGit,
+  History as HistoryIcon,
   Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -50,41 +49,86 @@ import type { LucideIcon } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import {
   Alert,
-  Anchor,
   Modal,
+  Popover,
   Select,
   Switch,
-  Textarea,
   TextInput,
+  Tooltip,
 } from '@mantine/core';
 
-import { checkMultiQCUniformity, createDataCollectionFromUpload, createDataCollectionFromUrl, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchDeltaHistory, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
+import {
+  deleteDataCollection,
+  fetchDataCollectionPreview,
+  fetchDeltaHistory,
+  fetchMultiQCByDataCollection,
+  fetchProject,
+  fetchTableEditStatus,
+  setTableEditLock,
+  restoreTableVersion,
+  fetchIngestionReport,
+  fetchVizSuggestions,
+  listLinkResolvers,
+  renameDataCollection,
+  useBrandAccents,
+} from 'depictio-react-core';
 import type {
+  TableEditStatus,
   ProjectListEntry,
   PreviewResult,
   MultiQCReportSummary,
   DCLink,
+  IngestionDataCollection,
+  ResolverInfo,
   VizSuggestionsResponse,
 } from 'depictio-react-core';
 import LinksSection from './LinksSection';
+import LinkEditModal from './LinkEditModal';
+import { LinkMappingInspector } from './LinkMappingInspector';
+import {
+  CopyId,
+  DcColumnsTable,
+  DcDetailsGrid,
+  DcFacts,
+  DcLinksTable,
+  DcSuggestedCharts,
+  SortableTh,
+  userColumns,
+  dcColumns,
+  dcOrigin,
+  dcShape,
+  formatTimestamp,
+  lastAggregation,
+  scanSource,
+  typeDetails,
+} from './DcViewerParts';
+import type { DcLinkRow, DetailItem, Fact } from './DcViewerParts';
 import type { ProjectJoin } from './ConnectionsMap';
 import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
 import MultiQCViewerPreview from './MultiQCViewerPreview';
+import NewRowsPreview, { readNewRunsFromQuery } from '../../changes/NewRowsPreview';
 import CoordinatesMapPreview from './CoordinatesMapPreview';
+import MapCoordinatesModal from './coordinates/MapCoordinatesModal';
 import { detectCoordinatesColumns } from './extendedTableCategories';
-import { UnstyledDropZone } from '../../components/UnstyledDropZone';
-import { useFolderDropzone } from '../../hooks/useFolderDropzone';
+import {
+  GeoJsonPreview,
+  ImagesPreview,
+  LegacyTracksNotice,
+  TracksPreview,
+  TreePreview,
+} from './AssetPreviews';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
-import { AppSidebar } from '../../chrome';
+import { AppSidebar, LoadErrorCard } from '../../chrome';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
-import ProjectSettingsModal from './ProjectSettingsModal';
-import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
+import TableEditor from './TableEditor';
+import ProjectSettingsModal, { type ProjectSettingsSectionKey } from './ProjectSettingsModal';
+import { parseTemplate } from '../template';
 import {
   DcTypeBadges,
   DcTypeIcon,
@@ -101,6 +145,19 @@ import {
 } from '../dcMetatype';
 import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
+import { ProvenanceBadge } from './ProvenanceBadge';
+import { PublishedLockBadge } from './PublishedLockBadge';
+import { ProjectDashboardsPanel } from './ProjectDashboardsPanel';
+import { ProjectPart } from './ProjectPart';
+import { ProjectSummary } from './ProjectSummary';
+import AddDataButton from './addData/AddDataButton';
+import { isRealWorkflow } from '../layout';
+import RunsPanel from './RunsPanel';
+import { ProjectChangesPill } from './ProjectChangesPill';
+import { ProjectTimelinePanel } from './ProjectTimelinePanel';
+import { readTabRequest, resolveTab, type ActivityView } from './projectChanges';
+import { useProjectChanges } from './useProjectChanges';
+import DerivedLineage from './DerivedLineage';
 
 interface DataCollectionShape {
   _id?: string;
@@ -161,8 +218,9 @@ function formatBytes(bytes?: number | null): string {
   return `${value.toFixed(value >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-/** Pick the right storage size for a DC. Tables come from the delta-table
- *  size field; MultiQC DCs come from one of the file-size aliases. */
+/** Pick the right storage size for a DC. Tables (and genomic_tracks
+ *  manifests, which are Delta tables too) come from the delta-table size
+ *  field; MultiQC DCs come from one of the file-size aliases. */
 function getDcSizeBytes(dc: DataCollectionShape): number {
   const flex = dc.flexible_metadata || {};
   const type = (dc.config?.type as string | undefined)?.toLowerCase();
@@ -175,6 +233,27 @@ function getDcSizeBytes(dc: DataCollectionShape): number {
     );
   }
   return (flex.deltatable_size_bytes as number | undefined) ?? 0;
+}
+
+/** The genomic_tracks settings the DC viewer lists. The assembly is a preset
+ *  name or a custom-assembly object named by `name`. */
+function readTracksProps(props: Record<string, unknown> | undefined): {
+  assembly: string;
+  uriColumn: string;
+  sampleColumn: string;
+} {
+  const assembly = props?.assembly;
+  const assemblyName =
+    typeof assembly === 'string'
+      ? assembly
+      : assembly && typeof assembly === 'object'
+        ? `${String((assembly as { name?: unknown }).name ?? 'custom')} (custom)`
+        : 'hg38';
+  return {
+    assembly: assemblyName,
+    uriColumn: (props?.uri_column as string | undefined) || 'uri',
+    sampleColumn: (props?.sample_column as string | undefined) || '—',
+  };
 }
 
 /** Pick the right "where is this data stored" string for a DC. */
@@ -271,8 +350,24 @@ function readProjectIdFromPath(): string | null {
   return m?.[1] || null;
 }
 
-/** Flatten DCs across all workflows. For Basic projects there's typically a
- *  single workflow with all DCs; for Advanced, multiple workflows. */
+/** `?table={dc_id}`: the data collection a link asks the page to open. */
+function readTableFromQuery(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('table') || null;
+}
+
+/** `?tab=runs&run=run_c`: the project tab (and run) a link asks the page to open. */
+function readTabRequestFromQuery() {
+  if (typeof window === 'undefined') return { tab: null, view: null, run: null };
+  const fromQuery = readTabRequest(window.location.search);
+  if (fromQuery.tab) return fromQuery;
+  // `#ingestion`, `#ingestion-history`, `#runs`: the older hash links.
+  const fromHash = resolveTab(window.location.hash);
+  return fromHash ? { ...fromHash, run: null } : fromQuery;
+}
+
+/** Flatten DCs across all workflows. The workflows are the project's own
+ *  (a pipeline's, plus one wrapped around each hand-added collection). */
 function flattenDataCollections(
   workflows: WorkflowShape[] | undefined,
 ): DataCollectionShape[] {
@@ -285,25 +380,43 @@ const ProjectDetailApp: React.FC = () => {
   const [project, setProject] = useState<ProjectListEntry | null>(null);
   const [deltaLocations, setDeltaLocations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [selectedDcId, setSelectedDcId] = useState<string | null>(null);
-  // Active project-detail tab. Honors `#ingestion` deep links (e.g. from the
-  // dashboard banner / settings drawer) and is controlled so the ingestion
-  // report can switch back to Overview when previewing a data collection.
-  const [activeTab, setActiveTab] = useState<string | null>(
-    typeof window !== 'undefined' &&
-      ['#ingestion', '#ingestion-history'].includes(window.location.hash)
-      ? 'ingestion'
-      : 'overview',
+  // `/projects/{id}?table={dc_id}` opens that table: the Data part unfolds, the
+  // collection is selected and its rows load. Applied once per visit.
+  const requestedTableId = useMemo(readTableFromQuery, []);
+  const requestedTableHandled = useRef(false);
+  // `&new_runs=run_c`: the What's new panel's link, the rows those runs added.
+  const [requestedNewRuns, setRequestedNewRuns] = useState(() =>
+    readNewRunsFromQuery(window.location.search),
   );
-  // Which half of the Ingestion tab is showing. `#ingestion-history` deep-links
-  // straight to the run history, which is what a "your ingestion failed" link
-  // should open.
-  const [ingestionView, setIngestionView] = useState<'report' | 'history'>(
-    typeof window !== 'undefined' && window.location.hash === '#ingestion-history'
-      ? 'history'
-      : 'report',
-  );
+  // "Clear": back to the plain table, and a reload does not bring the marking back.
+  const clearNewRuns = useCallback(() => {
+    setRequestedNewRuns([]);
+    const params = new URLSearchParams(window.location.search);
+    params.delete('new_runs');
+    const rest = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`,
+    );
+  }, []);
+  // Active project-detail tab, controlled so the ingestion report can switch
+  // back to Overview when previewing a data collection. `?tab=` (overview |
+  // runs | activity, plus the older ingestion | timeline) and `?run=<run_tag>`
+  // open a tab, and a run in it, from a link (the notifications, the
+  // timeline); `#ingestion` / `#ingestion-history` (the dashboard banner, the
+  // settings drawer, a failed ingestion) open Activity.
+  const tabRequest = useMemo(readTabRequestFromQuery, []);
+  const [activeTab, setActiveTab] = useState<string | null>(tabRequest.tab ?? 'overview');
+  // The run the Runs tab opens on, when another part of the page asked for one.
+  const [focusRun, setFocusRun] = useState<string | null>(tabRequest.run);
+  // Which view of the Activity tab is showing: the latest ingestion's report,
+  // or the history (the timeline when changes-since is on, else the ingestion
+  // runs). `#ingestion-history` opens the history, which is what a "your
+  // ingestion failed" link should open.
+  const [ingestionView, setIngestionView] = useState<ActivityView>(tabRequest.view ?? 'report');
   const [refreshKey, setRefreshKey] = useState(0);
   // Nudges the history panel off its idle 30s cadence when a browser-triggered
   // ingestion finishes, so the completed run shows up straight away.
@@ -316,12 +429,30 @@ const ProjectDetailApp: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<DataCollectionShape | null>(null);
   const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
-  const [createDcOpened, setCreateDcOpened] = useState(false);
   const [settingsOpened, setSettingsOpened] = useState(false);
+  // `?settings=send` opens the project settings on that section: the project
+  // list's menu links here instead of carrying a dialog of its own.
+  const [settingsSection, setSettingsSection] = useState<ProjectSettingsSectionKey | undefined>();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get('settings');
+    if (wanted !== 'send') return;
+    setSettingsSection('send');
+    setSettingsOpened(true);
+    params.delete('settings');
+    const rest = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`,
+    );
+  }, []);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
    *  Links section. */
   const [projectLinks, setProjectLinks] = useState<DCLink[]>([]);
+  // Bumped when the collection viewer saved a link, so the links section reloads.
+  const [linksReload, setLinksReload] = useState(0);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
@@ -333,13 +464,16 @@ const ProjectDetailApp: React.FC = () => {
 
   const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
+  // "Changed since your last visit" and the Activity timeline (#1397): inert
+  // unless the server turns the feature on.
+  const changes = useProjectChanges(projectId);
 
   usePageTitle('Project Data Collections');
   const glass = useGlassPages();
 
   useEffect(() => {
     if (!projectId) {
-      setLoadError('No project ID in URL.');
+      setLoadError({ error: Object.assign(new Error('No project ID in URL.'), { status: 404 }) });
       setLoading(false);
       return;
     }
@@ -350,24 +484,71 @@ const ProjectDetailApp: React.FC = () => {
         setProject(project);
         setDeltaLocations(delta_locations || {});
       })
-      .catch((err: Error) => {
-        setLoadError(err.message || 'Failed to load project.');
+      .catch((err: unknown) => {
+        setLoadError({ error: err });
       })
       .finally(() => setLoading(false));
   }, [projectId, refreshKey]);
 
   const refresh = () => setRefreshKey((k) => k + 1);
+  // Re-read the project without the loader, so the page keeps its place (the
+  // selected collection stays open). Falls back to a full refresh on error.
+  const refreshQuietly = () => {
+    if (!projectId) return;
+    fetchProject(projectId)
+      .then(({ project, delta_locations }) => {
+        setProject(project);
+        setDeltaLocations(delta_locations || {});
+      })
+      .catch(refresh);
+  };
+  // Open the ingestion report (latest run) and bring the Data part into view.
+  const showIngestion = () => {
+    setActiveTab('activity');
+    setIngestionView('report');
+    window.setTimeout(() => {
+      const toggle = document.querySelector<HTMLElement>('[data-testid="project-part-data-toggle"]');
+      if (toggle?.getAttribute('aria-expanded') === 'false') toggle.click();
+      document
+        .querySelector('[data-testid="project-part-data"]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  // Open the Runs tab, on one run when given, and bring the Data part into view.
+  const showRuns = (run?: string) => {
+    setFocusRun(run ?? null);
+    setActiveTab('runs');
+    window.setTimeout(() => {
+      const toggle = document.querySelector<HTMLElement>('[data-testid="project-part-data-toggle"]');
+      if (toggle?.getAttribute('aria-expanded') === 'false') toggle.click();
+      document
+        .querySelector('[data-testid="project-part-data"]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
 
   // Permission check: owners, editors, or admins may mutate DCs. Storage
   // credentials are owners-only (stricter than canMutate), mirroring the
   // backend's owner gate on /storage.
   const { canMutate, isOwner } = useMemo(() => {
     if (!user || !project) return { canMutate: false, isOwner: false };
+    // Published read-only: nobody mutates until an admin unlocks.
+    if (project.published_lock) return { canMutate: false, isOwner: false };
     if (user.is_admin) return { canMutate: true, isOwner: true };
     const matchUser = (list?: Array<{ _id?: string; id?: string }>) =>
       !!list?.some((u) => (u._id ?? u.id) === user.id);
     const owner = matchUser(project.permissions?.owners);
     return { canMutate: owner || matchUser(project.permissions?.editors), isOwner: owner };
+  }, [user, project]);
+
+  // Pushing to another instance is for owners and admins, locked or not.
+  const canPushProject = useMemo(() => {
+    if (!user || !project) return false;
+    if (user.is_admin) return true;
+    return !!project.permissions?.owners?.some(
+      (u: { _id?: string; id?: string }) => (u._id ?? u.id) === user.id,
+    );
   }, [user, project]);
 
   // Refresh and export are refused to non-admins on a public/demo deployment.
@@ -399,14 +580,43 @@ const ProjectDetailApp: React.FC = () => {
     return wf?.data_collections || [];
   }, [allDataCollections, selectedWorkflowId, workflows]);
 
+  useEffect(() => {
+    if (!requestedTableId || requestedTableHandled.current || !project) return;
+    requestedTableHandled.current = true;
+    const known = allDataCollections.some((dc) => (dc._id ?? dc.id) === requestedTableId);
+    if (!known) {
+      notifications.show({
+        color: 'yellow',
+        message: 'The table in this link is not in this project (it may have been deleted).',
+      });
+      return;
+    }
+    setSelectedWorkflowId(null);
+    setActiveTab('overview');
+    scrollToDcRef.current = true;
+    setSelectedDcId(requestedTableId);
+  }, [requestedTableId, project, allDataCollections]);
+
   const selectedDc = useMemo(
     () =>
       dataCollections.find((dc) => (dc._id ?? dc.id) === selectedDcId) || null,
     [dataCollections, selectedDcId],
   );
 
-  const projectType: 'basic' | 'advanced' =
-    project?.project_type === 'advanced' ? 'advanced' : 'basic';
+  // Only workflows that name a pipeline engine or catalog count; the one
+  // made around hand-added collections is bookkeeping, not something to list.
+  const realWorkflows = useMemo(() => workflows.filter(isRealWorkflow), [workflows]);
+  // Ids of the collections a pipeline made (they are the "Aggregate" ones).
+  const pipelineDcIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const wf of realWorkflows) {
+      for (const dc of wf.data_collections ?? []) {
+        const id = (dc._id ?? dc.id) as string | undefined;
+        if (id) ids.add(id);
+      }
+    }
+    return ids;
+  }, [realWorkflows]);
 
   // Tag → DC id, so identified ingestion rows can lazily list their files.
   const dcIdByTag = useMemo(() => {
@@ -418,6 +628,38 @@ const ProjectDetailApp: React.FC = () => {
     }
     return map;
   }, [allDataCollections]);
+  const dcTypeByTag = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const d of allDataCollections) {
+      const type = (d.config?.type as string | undefined)?.toLowerCase();
+      if (d.data_collection_tag && type) map[d.data_collection_tag] = type;
+    }
+    return map;
+  }, [allDataCollections]);
+  const shapeByTag = useMemo(() => {
+    const map: Record<string, { rows: number | null; columns: number | null }> = {};
+    for (const d of allDataCollections) {
+      if (d.data_collection_tag) map[d.data_collection_tag] = dcShape(d as unknown as Record<string, unknown>);
+    }
+    return map;
+  }, [allDataCollections]);
+  // A project made from a pipeline has runs: it gets the Runs tab.
+  const hasRuns = realWorkflows.length > 0;
+  // A link may ask for a tab this project does not have (no runs): show the
+  // overview rather than an empty panel.
+  const tabValue = activeTab === 'runs' && !hasRuns ? 'overview' : activeTab;
+  const activityMeta = changes.enabled
+    ? 'What happened, and when'
+    : 'What each ingestion found';
+  const newRunTags = useMemo(
+    () => new Set((changes.changeSet?.new_runs ?? []).map((r) => r.run_tag)),
+    [changes.changeSet],
+  );
+  // Open the ingestion history (a failed ingestion's link).
+  const showIngestionHistory = () => {
+    setActiveTab('activity');
+    setIngestionView('history');
+  };
 
   // After an ingestion-report "preview" jumps to Overview with a DC selected,
   // scroll the DC viewer (which renders the table preview) into view.
@@ -455,30 +697,25 @@ const ProjectDetailApp: React.FC = () => {
           <Loader />
         </Center>
       ) : loadError ? (
-        <Center mih={300}>
-          <Stack align="center" gap="xs">
-            <Icon
-              icon="mdi:alert-circle"
-              width={32}
-              color="var(--mantine-color-red-6)"
-            />
-            <Text c="red">{loadError}</Text>
-            <Button component="a" href="/projects" variant="light">
-              Back to projects
-            </Button>
-          </Stack>
+        <Center mih={300} py="xl">
+          <LoadErrorCard
+            subject="project"
+            resourceId={projectId}
+            error={loadError.error}
+            onRetry={refresh}
+          />
         </Center>
       ) : !project ? null : (
         (() => {
           // The workflows come first and scope everything below them, so the
           // tabs sit under the panel rather than the panel inside a tab.
           const workflowsPanel =
-            projectType === 'advanced' && workflows.length > 0 ? (
+            realWorkflows.length > 0 ? (
               <WorkflowsPanel
-                workflows={workflows}
+                workflows={realWorkflows}
                 templateSource={parseTemplate(project)?.source.toLowerCase() || null}
                 selectedWorkflowId={selectedWorkflowId}
-                scope={workflowScope(workflows, selectedWorkflowId)}
+                scope={workflowScope(realWorkflows, selectedWorkflowId)}
                 onSelect={(id) => {
                   setSelectedWorkflowId(id);
                   setSelectedDcId(null);
@@ -488,10 +725,12 @@ const ProjectDetailApp: React.FC = () => {
           const overviewSections = (
             <Stack gap="lg">
               <DataCollectionsManagerSection
-                projectType={projectType}
+                projectId={projectId}
+                project={project}
+                pipelineDcIds={pipelineDcIds}
                 scopeLabel={
-                  projectType === 'advanced'
-                    ? (workflowScope(workflows, selectedWorkflowId)?.label ?? null)
+                  realWorkflows.length > 0
+                    ? (workflowScope(realWorkflows, selectedWorkflowId)?.label ?? null)
                     : null
                 }
                 stats={stats}
@@ -504,7 +743,7 @@ const ProjectDetailApp: React.FC = () => {
                 onRename={setRenameTarget}
                 onDelete={setDeleteTarget}
                 onManage={setManageTarget}
-                onCreate={() => setCreateDcOpened(true)}
+                onAdded={refresh}
               />
               <UnrecognisedFilesPanel
                 templateOrigin={(project as Record<string, unknown>).template_origin}
@@ -519,6 +758,7 @@ const ProjectDetailApp: React.FC = () => {
                   }))}
                   canMutate={canMutate}
                   onLinksChange={setProjectLinks}
+                  reloadKey={linksReload}
                   joins={
                     ((project as Record<string, unknown>).joins as ProjectJoin[] | undefined) || []
                   }
@@ -528,7 +768,7 @@ const ProjectDetailApp: React.FC = () => {
                 {selectedDc && (
                   <DataCollectionViewer
                     dc={selectedDc}
-                    projectType={projectType}
+                    fromPipeline={pipelineDcIds.has((selectedDc._id ?? selectedDc.id) as string)}
                     allDataCollections={dataCollections}
                     joins={
                       ((project as Record<string, unknown>).joins as
@@ -540,123 +780,222 @@ const ProjectDetailApp: React.FC = () => {
                         | undefined) || []
                     }
                     links={projectLinks}
+                    projectId={projectId}
+                    canMutate={canMutate}
+                    published={!!project?.published_lock}
+                    onLinkSaved={() => setLinksReload((k) => k + 1)}
+                    onDcChanged={refreshQuietly}
+                    onShowRuns={hasRuns ? () => showRuns() : undefined}
+                    onOpenDc={(id) => {
+                      scrollToDcRef.current = true;
+                      setSelectedDcId(id);
+                    }}
+                    autoLoadPreview={requestedTableId === selectedDcId}
+                    highlightRuns={requestedTableId === selectedDcId ? requestedNewRuns : undefined}
+                    onClearHighlight={clearNewRuns}
                   />
                 )}
               </Box>
             </Stack>
           );
+          // The page's second major part, beside Dashboards: what the
+          // dashboards read (workflows, collections, ingestion runs).
+          const dataSummary = [
+            realWorkflows.length > 0
+              ? `${realWorkflows.length} workflow${realWorkflows.length === 1 ? '' : 's'}`
+              : null,
+            `${stats.total} collection${stats.total === 1 ? '' : 's'}`,
+            stats.totalBytes > 0 ? formatBytes(stats.totalBytes) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
           return (
-            <Stack gap="lg">
-              <ProjectHeader project={project} projectType={projectType} />
-              {workflowsPanel}
-              {projectId ? (
-                <Tabs
-                  value={activeTab}
-                  onChange={setActiveTab}
-                  keepMounted={false}
-                  variant="pills"
-                  className="dc-project-tabs"
-                >
-                  {glass ? (
-                    // Glass: the page's switch, two equal halves across the
-                    // content width, each saying what it holds.
-                    <Tabs.List mb="xl">
-                      <Tabs.Tab
-                        value="overview"
-                        className="dc-project-tab"
-                        leftSection={
-                          <span className="dc-project-tab-icon">
-                            <Database size={20} strokeWidth={STROKE} aria-hidden />
-                          </span>
-                        }
-                      >
-                        <span className="dc-project-tab-label">Data collections</span>
-                        <span className="dc-project-tab-meta">
-                          {stats.total} collection{stats.total === 1 ? '' : 's'}
-                          {stats.totalBytes > 0 ? ` · ${formatBytes(stats.totalBytes)}` : ''}
-                        </span>
-                      </Tabs.Tab>
-                      <Tabs.Tab
-                        value="ingestion"
-                        className="dc-project-tab"
-                        leftSection={
-                          <span className="dc-project-tab-icon">
-                            <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
-                          </span>
-                        }
-                      >
-                        <span className="dc-project-tab-label">Ingestion report</span>
-                        <span className="dc-project-tab-meta">What each run found, and when</span>
-                      </Tabs.Tab>
-                    </Tabs.List>
-                  ) : (
-                    <Tabs.List mb="md">
-                      <Tabs.Tab
-                        value="overview"
-                        fz="md"
-                        px="lg"
-                        leftSection={<Icon icon="mdi:table-cog" width={18} />}
-                      >
-                        Data collections
-                      </Tabs.Tab>
-                      <Tabs.Tab
-                        value="ingestion"
-                        fz="md"
-                        px="lg"
-                        leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
-                      >
-                        Ingestion report
-                      </Tabs.Tab>
-                    </Tabs.List>
-                  )}
-                  <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
-                  <Tabs.Panel value="ingestion">
-                    <Stack gap="md">
-                      <Group justify="space-between" wrap="wrap" gap="sm">
-                        <SegmentedControl
-                          size="xs"
-                          w="fit-content"
-                          value={ingestionView}
-                          onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
-                          data={[
-                            { value: 'report', label: 'Latest run' },
-                            { value: 'history', label: 'History' },
-                          ]}
-                        />
-                        <ProjectIngestionTrigger
-                          projectId={projectId}
-                          // Switch to History as soon as a run starts —
-                          // that is where its progress is visible.
-                          onStarted={() => setIngestionView('history')}
-                          onFinished={() => setIngestionHistorySignal((n) => n + 1)}
-                        />
-                      </Group>
-                      {ingestionView === 'report' ? (
-                        <IngestionReportPanel
-                          projectId={projectId}
-                          dcIdByTag={dcIdByTag}
-                          onPreviewDc={(dcId) => {
-                            // Jump to the Overview tab with this DC selected so
-                            // its table/preview shows in the DataCollectionViewer,
-                            // then scroll it into view (see the effect above).
-                            scrollToDcRef.current = true;
-                            setSelectedWorkflowId(null);
-                            setSelectedDcId(dcId);
-                            setActiveTab('overview');
-                          }}
-                        />
+            <Stack gap="xl">
+              <ProjectHeader
+                project={project}
+                projectId={projectId}
+                onShowIngestion={showIngestion}
+                onShowRuns={showRuns}
+                refreshKey={refreshKey}
+              />
+              {projectId && <ProjectDashboardsPanel projectId={projectId} />}
+              <ProjectPart
+                id="data"
+                icon={Database}
+                title="Data"
+                summary={dataSummary}
+                forceOpen={requestedTableId != null || tabRequest.tab != null}
+              >
+                <Stack gap="lg">
+                  {workflowsPanel}
+                  {projectId ? (
+                    <Tabs
+                      value={tabValue}
+                      onChange={setActiveTab}
+                      keepMounted={false}
+                      variant="pills"
+                      className="dc-project-tabs"
+                    >
+                      {glass ? (
+                        // Glass: the page's switch, two equal halves across the
+                        // content width, each saying what it holds.
+                        <Tabs.List mb="xl">
+                          <Tabs.Tab
+                            value="overview"
+                            className="dc-project-tab"
+                            leftSection={
+                              <span className="dc-project-tab-icon">
+                                <Database size={20} strokeWidth={STROKE} aria-hidden />
+                              </span>
+                            }
+                          >
+                            <span className="dc-project-tab-label">Data collections</span>
+                            <span className="dc-project-tab-meta">
+                              {stats.total} collection{stats.total === 1 ? '' : 's'}
+                              {stats.totalBytes > 0 ? ` · ${formatBytes(stats.totalBytes)}` : ''}
+                            </span>
+                          </Tabs.Tab>
+                          {hasRuns && (
+                            <Tabs.Tab
+                              value="runs"
+                              className="dc-project-tab"
+                              data-testid="project-tab-runs"
+                              leftSection={
+                                <span className="dc-project-tab-icon">
+                                  <FolderGit size={20} strokeWidth={STROKE} aria-hidden />
+                                </span>
+                              }
+                            >
+                              <span className="dc-project-tab-label">Runs</span>
+                              <span className="dc-project-tab-meta">Each run and what it holds</span>
+                            </Tabs.Tab>
+                          )}
+                          <Tabs.Tab
+                            value="activity"
+                            className="dc-project-tab"
+                            data-testid="project-tab-activity"
+                            leftSection={
+                              <span className="dc-project-tab-icon">
+                                <HistoryIcon size={20} strokeWidth={STROKE} aria-hidden />
+                              </span>
+                            }
+                          >
+                            <span className="dc-project-tab-label">Activity</span>
+                            <span className="dc-project-tab-meta">{activityMeta}</span>
+                          </Tabs.Tab>
+                        </Tabs.List>
                       ) : (
-                        <ProjectIngestionHistoryPanel
-                          projectId={projectId}
-                          refreshSignal={ingestionHistorySignal}
-                        />
+                        <Tabs.List mb="md">
+                          <Tabs.Tab
+                            value="overview"
+                            fz="md"
+                            px="lg"
+                            leftSection={<Icon icon="mdi:table-cog" width={18} />}
+                          >
+                            Data collections
+                          </Tabs.Tab>
+                          {hasRuns && (
+                            <Tabs.Tab
+                              value="runs"
+                              fz="md"
+                              px="lg"
+                              data-testid="project-tab-runs"
+                              leftSection={<Icon icon="mdi:folder-play-outline" width={18} />}
+                            >
+                              Runs
+                            </Tabs.Tab>
+                          )}
+                          <Tabs.Tab
+                            value="activity"
+                            fz="md"
+                            px="lg"
+                            data-testid="project-tab-activity"
+                            leftSection={<Icon icon="mdi:timeline-clock-outline" width={18} />}
+                          >
+                            Activity
+                          </Tabs.Tab>
+                        </Tabs.List>
                       )}
-                    </Stack>
-                  </Tabs.Panel>
-                </Tabs>
-              ) : (
-                overviewSections
-              )}
+                      <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
+                      {hasRuns && (
+                        <Tabs.Panel value="runs">
+                          <RunsPanel
+                            projectId={projectId}
+                            refreshKey={refreshKey}
+                            focusRun={focusRun}
+                            newRunTags={newRunTags}
+                            dcIdByTag={dcIdByTag}
+                            dcTypeByTag={dcTypeByTag}
+                            onOpenDc={(dcId) => {
+                              scrollToDcRef.current = true;
+                              setSelectedWorkflowId(null);
+                              setSelectedDcId(dcId);
+                              setActiveTab('overview');
+                            }}
+                          />
+                        </Tabs.Panel>
+                      )}
+                      <Tabs.Panel value="activity">
+                        <Stack gap="md">
+                          <Group justify="space-between" wrap="wrap" gap="sm">
+                            <SegmentedControl
+                              size="xs"
+                              w="fit-content"
+                              value={ingestionView}
+                              onChange={(v: string) => setIngestionView(v as ActivityView)}
+                              data={[
+                                { value: 'report', label: 'Latest ingestion' },
+                                { value: 'history', label: 'History' },
+                              ]}
+                              data-testid="activity-view"
+                            />
+                            <ProjectIngestionTrigger
+                              projectId={projectId}
+                              // Switch to History as soon as a run starts —
+                              // that is where its progress is visible.
+                              onStarted={() => setIngestionView('history')}
+                              onFinished={() => setIngestionHistorySignal((n) => n + 1)}
+                            />
+                          </Group>
+                          {ingestionView === 'report' ? (
+                            <IngestionReportPanel
+                              projectId={projectId}
+                              dcIdByTag={dcIdByTag}
+                              onPreviewDc={(dcId) => {
+                                // Jump to the Overview tab with this DC selected so
+                                // its table/preview shows in the DataCollectionViewer,
+                                // then scroll it into view (see the effect above).
+                                scrollToDcRef.current = true;
+                                setSelectedWorkflowId(null);
+                                setSelectedDcId(dcId);
+                                setActiveTab('overview');
+                              }}
+                              onShowRuns={hasRuns ? () => showRuns() : undefined}
+                              shapeByTag={shapeByTag}
+                            />
+                          ) : changes.enabled ? (
+                            // The timeline holds the ingestions too, with the
+                            // dashboard versions and comments around them.
+                            <ProjectTimelinePanel
+                              projectId={projectId}
+                              since={changes.changeSet?.since ?? null}
+                              onShowRuns={hasRuns ? (run) => showRuns(run) : undefined}
+                              refreshSignal={ingestionHistorySignal}
+                            />
+                          ) : (
+                            <ProjectIngestionHistoryPanel
+                              projectId={projectId}
+                              refreshSignal={ingestionHistorySignal}
+                            />
+                          )}
+                        </Stack>
+                      </Tabs.Panel>
+                    </Tabs>
+                  ) : (
+                    overviewSections
+                  )}
+                </Stack>
+              </ProjectPart>
             </Stack>
           );
         })()
@@ -678,18 +1017,13 @@ const ProjectDetailApp: React.FC = () => {
           canMutate={canMutate}
           publicModeReason={publicModeReason}
           dataCollections={allDataCollections}
+          canPush={canPushProject}
+          publishedLock={project?.published_lock}
+          isAdmin={!!user?.is_admin}
+          initialSection={settingsSection}
           onReloadProject={refresh}
         />
       )}
-      <CreateDataCollectionModal
-        opened={createDcOpened}
-        projectId={projectId}
-        onClose={() => setCreateDcOpened(false)}
-        onSuccess={() => {
-          setCreateDcOpened(false);
-          refresh();
-        }}
-      />
       <RenameDataCollectionModal
         target={renameTarget}
         onClose={() => setRenameTarget(null)}
@@ -733,6 +1067,32 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
+  // What changed since the reader's last visit (#1397); renders nothing when
+  // there is nothing new.
+  const changesButton = (variant: 'default' | 'light') =>
+    projectId ? (
+      <ProjectChangesPill
+        projectId={projectId}
+        changes={changes}
+        onShowRuns={(run) => showRuns(run)}
+        onShowHistory={showIngestionHistory}
+        variant={variant}
+      />
+    ) : null;
+
+  // After adding data the next thing to do: open the dialog on this project.
+  const createDashboardButton = (
+    <Button
+      component="a"
+      href={`/dashboards?create_for_project=${encodeURIComponent(projectId ?? '')}`}
+      leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+      data-disabled={!project ? true : undefined}
+      data-testid="project-create-dashboard"
+    >
+      Create a dashboard
+    </Button>
+  );
+
   if (glass) {
     const name = project?.name || 'Project';
     return (
@@ -744,6 +1104,8 @@ const ProjectDetailApp: React.FC = () => {
           crumbs={[{ label: name }]}
           actions={
             <Group gap="xs">
+              {changesButton('default')}
+              {createDashboardButton}
               {/* Open to every reader once the project has loaded: the sections
                   inside disable what the reader may not change and say why. */}
               <Button
@@ -818,6 +1180,8 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
+            {changesButton('light')}
+            {createDashboardButton}
             {/* Open to every reader once the project has loaded: the sections
                 inside disable what the reader may not change and say why. */}
             <Button
@@ -863,1190 +1227,6 @@ const ProjectDetailApp: React.FC = () => {
       </AppShell.Main>
       {modals}
     </AppShell>
-  );
-};
-
-const FORMAT_OPTIONS = [
-  { value: 'csv', label: 'CSV' },
-  { value: 'tsv', label: 'TSV' },
-  { value: 'parquet', label: 'Parquet' },
-  { value: 'feather', label: 'Feather' },
-];
-
-const SEPARATOR_OPTIONS = [
-  { value: ',', label: 'Comma (,)' },
-  { value: '\t', label: 'Tab (\\t)' },
-  { value: ';', label: 'Semicolon (;)' },
-  { value: '|', label: 'Pipe (|)' },
-  { value: 'custom', label: 'Custom…' },
-];
-
-const COMPRESSION_OPTIONS = [
-  { value: 'none', label: 'None' },
-  { value: 'gzip', label: 'gzip' },
-  { value: 'zip', label: 'zip' },
-  { value: 'bz2', label: 'bz2' },
-];
-
-type MultiQCMismatchKind = 'modules' | 'plots' | 'version' | 'samples';
-type MultiQCMismatch = {
-  code: 'multiqc_report_mismatch';
-  kind: MultiQCMismatchKind;
-  summary: string;
-  details: Record<string, unknown>;
-};
-
-/** Try to recover the structured 422 detail the server raised from a
- *  `multiqc_report_mismatch`. `throwHttpDetailError` JSON-stringifies the
- *  detail into the Error message, so we parse it back out here. */
-function tryParseMultiQCMismatch(message: string): MultiQCMismatch | null {
-  try {
-    const parsed = JSON.parse(message);
-    if (parsed && parsed.code === 'multiqc_report_mismatch') {
-      return parsed as MultiQCMismatch;
-    }
-  } catch {
-    /* not JSON; not a structured mismatch */
-  }
-  return null;
-}
-
-const MULTIQC_CHECKS: ReadonlyArray<{
-  kind: MultiQCMismatchKind;
-  label: string;
-  desc: string;
-}> = [
-  {
-    kind: 'modules',
-    label: 'Modules',
-    desc: 'All reports include the same MultiQC modules.',
-  },
-  {
-    kind: 'plots',
-    label: 'Plot keys',
-    desc: 'All reports expose the same set of plots.',
-  },
-  {
-    kind: 'version',
-    label: 'MultiQC version',
-    desc: 'All reports share the same major.minor version.',
-  },
-  {
-    kind: 'samples',
-    label: 'Sample uniqueness',
-    desc: 'No sample name appears in more than one report.',
-  },
-];
-
-const MultiQCMismatchDetails: React.FC<{ mismatch: MultiQCMismatch }> = ({
-  mismatch,
-}) => {
-  const d = mismatch.details || {};
-  const list = (xs: unknown): string[] => (Array.isArray(xs) ? (xs as string[]) : []);
-  const added = list(d.added_in_compared);
-  const removed = list(d.removed_in_compared);
-  const dupes =
-    mismatch.kind === 'samples' && d.duplicate_samples
-      ? (d.duplicate_samples as Record<string, string[]>)
-      : {};
-  const dupeEntries = Object.entries(dupes);
-  return (
-    <Paper
-      withBorder
-      p={8}
-      radius="xs"
-      ml={26}
-      bg="var(--mantine-color-red-0)"
-    >
-      <Text size="xs" c="red" mb={4}>
-        {mismatch.summary}
-      </Text>
-      {(mismatch.kind === 'modules' || mismatch.kind === 'plots') && (
-        <Stack gap={2}>
-          {added.length > 0 && (
-            <Text size="xs" c="dimmed">
-              Added in <code>{String(d.compared_report ?? '?')}</code>:{' '}
-              {added.join(', ')}
-            </Text>
-          )}
-          {removed.length > 0 && (
-            <Text size="xs" c="dimmed">
-              Missing in <code>{String(d.compared_report ?? '?')}</code>:{' '}
-              {removed.join(', ')}
-            </Text>
-          )}
-        </Stack>
-      )}
-      {mismatch.kind === 'version' && (
-        <Text size="xs" c="dimmed">
-          <code>{String(d.baseline_report ?? '?')}</code> ={' '}
-          {String(d.baseline_version ?? '?')} ·{' '}
-          <code>{String(d.compared_report ?? '?')}</code> ={' '}
-          {String(d.compared_version ?? '?')}
-        </Text>
-      )}
-      {mismatch.kind === 'samples' && dupeEntries.length > 0 && (
-        <Stack gap={2}>
-          {dupeEntries.slice(0, 5).map(([sample, reports]) => (
-            <Text key={sample} size="xs" c="dimmed">
-              <code>{sample}</code> in {reports.join(', ')}
-            </Text>
-          ))}
-          {dupeEntries.length > 5 && (
-            <Text size="xs" c="dimmed">
-              …and {dupeEntries.length - 5} more
-            </Text>
-          )}
-        </Stack>
-      )}
-    </Paper>
-  );
-};
-
-const MultiQCUniformityChecklist: React.FC<{
-  fileCount: number;
-  submitting: boolean;
-  validating: boolean;
-  lastCheckPassed: boolean;
-  mismatch: MultiQCMismatch | null;
-  onCheck: () => void;
-}> = ({ fileCount, submitting, validating, lastCheckPassed, mismatch, onCheck }) => {
-  const accent = useBrandAccents();
-  const hasMultiple = fileCount >= 2;
-  const busy = submitting || validating;
-  const statusText = !hasMultiple
-    ? 'activated with 2+ reports'
-    : submitting
-      ? 'running on Create…'
-      : validating
-        ? 'checking…'
-        : mismatch
-          ? 'failed'
-          : lastCheckPassed
-            ? 'all uniform'
-            : 'not checked yet';
-  return (
-    <Paper withBorder p="sm" radius="sm">
-      <Group justify="space-between" mb={6} wrap="nowrap">
-        <Group gap={6} wrap="nowrap">
-          <Icon
-            icon="mdi:clipboard-check-outline"
-            width={16}
-            color="var(--mantine-color-teal-6)"
-          />
-          <Text size="sm" fw={500}>
-            Uniformity checks
-          </Text>
-        </Group>
-        <Group gap={8} wrap="nowrap">
-          <Text size="xs" c="dimmed">
-            {statusText}
-          </Text>
-          <Button
-            size="compact-xs"
-            variant="light"
-            color={accent.secondary}
-            onClick={onCheck}
-            disabled={!hasMultiple || busy}
-            loading={validating}
-            leftSection={<Icon icon="mdi:check-decagram-outline" width={14} />}
-          >
-            Check now
-          </Button>
-        </Group>
-      </Group>
-      <Stack gap={4}>
-        {MULTIQC_CHECKS.map((c) => {
-          // 1) red X if this row is the failing kind in mismatch
-          // 2) animated dots while validating or submitting
-          // 3) green check if the last check passed (and no mismatch since)
-          // 4) gray pending dot otherwise (never checked, files just staged)
-          const failed = mismatch?.kind === c.kind;
-          const iconName = failed
-            ? 'mdi:close-circle'
-            : busy && hasMultiple
-              ? 'mdi:dots-horizontal-circle-outline'
-              : lastCheckPassed && hasMultiple
-                ? 'mdi:check-circle'
-                : 'mdi:circle-outline';
-          const iconColor = failed
-            ? 'var(--mantine-color-red-6)'
-            : busy && hasMultiple
-              ? 'var(--mantine-color-teal-6)'
-              : lastCheckPassed && hasMultiple
-                ? 'var(--mantine-color-teal-6)'
-                : 'var(--mantine-color-gray-5)';
-          return (
-            <Stack gap={2} key={c.kind}>
-              <Group gap="xs" wrap="nowrap" align="flex-start">
-                <Icon icon={iconName} width={18} color={iconColor} />
-                <Text
-                  size="sm"
-                  c={failed ? 'red' : undefined}
-                  fw={failed ? 500 : 400}
-                  style={{ minWidth: 140 }}
-                >
-                  {c.label}
-                </Text>
-                <Text size="xs" c="dimmed" style={{ flex: 1 }}>
-                  {c.desc}
-                </Text>
-              </Group>
-              {failed && mismatch && <MultiQCMismatchDetails mismatch={mismatch} />}
-            </Stack>
-          );
-        })}
-      </Stack>
-    </Paper>
-  );
-};
-
-/** Guess the file format from extension. Lets the user override afterwards. */
-function guessFormat(name: string | undefined): string | null {
-  if (!name) return null;
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.csv')) return 'csv';
-  if (lower.endsWith('.tsv') || lower.endsWith('.tab')) return 'tsv';
-  if (lower.endsWith('.parquet') || lower.endsWith('.pq')) return 'parquet';
-  if (lower.endsWith('.feather') || lower.endsWith('.arrow')) return 'feather';
-  return null;
-}
-
-/** Single-file dropzone + selected-file chip for the Table tab of the
- *  create-DC modal. */
-const TableFileDropZone: React.FC<{
-  dropzone: ReturnType<typeof useFolderDropzone>;
-  file: File | null;
-  submitting: boolean;
-  icon: string;
-  title: string;
-  onRemove: () => void;
-}> = ({ dropzone, file, submitting, icon, title, onRemove }) => (
-  <>
-    <Text size="sm" fw={500}>
-      File <span style={{ color: 'var(--mantine-color-red-6)' }}>*</span>
-    </Text>
-    <div ref={dropzone.rootRef}>
-      <UnstyledDropZone
-        onClick={() => !submitting && dropzone.openPicker()}
-        disabled={submitting}
-        active={dropzone.isDragOver}
-      >
-        <Stack gap={4} align="center">
-          <Icon icon={icon} width={28} />
-          <Text fw={500}>{title}</Text>
-          <Text size="xs" c="dimmed">
-            or click to pick · max 50 MB
-          </Text>
-        </Stack>
-      </UnstyledDropZone>
-      <input
-        ref={dropzone.inputRef}
-        type="file"
-        accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
-        style={{ display: 'none' }}
-        onChange={dropzone.onInputChange}
-      />
-    </div>
-    {dropzone.error && (
-      <Alert
-        color="orange"
-        variant="light"
-        icon={<Icon icon="mdi:alert" width={16} />}
-      >
-        {dropzone.error}
-      </Alert>
-    )}
-    {file && (
-      <Paper withBorder p="xs" radius="sm">
-        <Group justify="space-between" wrap="nowrap" gap="xs">
-          <Group gap="xs" wrap="nowrap">
-            <Icon icon="mdi:file-outline" width={16} />
-            <Text size="sm" ff="monospace" lineClamp={1}>
-              {file.name}
-            </Text>
-          </Group>
-          <Group gap={4} wrap="nowrap">
-            <Text size="xs" c="dimmed">
-              {(file.size / (1024 * 1024)).toFixed(1)} MB
-            </Text>
-            <ActionIcon
-              size="xs"
-              variant="subtle"
-              color="red"
-              onClick={onRemove}
-              disabled={submitting}
-              aria-label="Remove file"
-            >
-              <Icon icon="mdi:close" width={14} />
-            </ActionIcon>
-          </Group>
-        </Group>
-      </Paper>
-    )}
-  </>
-);
-
-/** Two-column lat/lon picker for the coordinates DC fallback. CSV/TSV gets
- *  Selects bound to the parsed header; non-delimited formats (Parquet) fall
- *  back to free-text TextInputs since we can't peek the header client-side. */
-const CoordColumnPickers: React.FC<{
-  isDelimited: boolean;
-  csvColumns: string[];
-  parsingHeader: boolean;
-  latColumn: string | null;
-  lonColumn: string | null;
-  onLatChange: (col: string | null) => void;
-  onLonChange: (col: string | null) => void;
-  disabled: boolean;
-}> = ({
-  isDelimited,
-  csvColumns,
-  parsingHeader,
-  latColumn,
-  lonColumn,
-  onLatChange,
-  onLonChange,
-  disabled,
-}) => {
-  if (!isDelimited) {
-    return (
-      <SimpleGrid cols={2} spacing="sm">
-        <TextInput
-          label="Latitude column"
-          placeholder="e.g. latitude"
-          value={latColumn ?? ''}
-          onChange={(e) => onLatChange(e.currentTarget.value || null)}
-          disabled={disabled}
-          required
-        />
-        <TextInput
-          label="Longitude column"
-          placeholder="e.g. longitude"
-          value={lonColumn ?? ''}
-          onChange={(e) => onLonChange(e.currentTarget.value || null)}
-          disabled={disabled}
-          required
-        />
-      </SimpleGrid>
-    );
-  }
-  let placeholder: string;
-  if (parsingHeader) placeholder = 'Reading header…';
-  else if (csvColumns.length) placeholder = 'Pick column';
-  else placeholder = 'No columns found';
-  const colsDisabled = disabled || parsingHeader || csvColumns.length === 0;
-  return (
-    <SimpleGrid cols={2} spacing="sm">
-      <Select
-        label="Latitude column"
-        placeholder={placeholder}
-        data={csvColumns}
-        value={latColumn}
-        onChange={onLatChange}
-        disabled={colsDisabled}
-        required
-        leftSection={parsingHeader ? <Loader size="xs" /> : undefined}
-        searchable
-        nothingFoundMessage="No matching columns"
-      />
-      <Select
-        label="Longitude column"
-        placeholder={placeholder}
-        data={csvColumns}
-        value={lonColumn}
-        onChange={onLonChange}
-        disabled={colsDisabled}
-        required
-        searchable
-        nothingFoundMessage="No matching columns"
-      />
-    </SimpleGrid>
-  );
-};
-
-const CreateDataCollectionModal: React.FC<{
-  opened: boolean;
-  projectId: string | null;
-  onClose: () => void;
-  onSuccess: () => void;
-}> = ({ opened, projectId, onClose, onSuccess }) => {
-  const accent = useBrandAccents();
-  const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
-  // Where the table comes from. 'upload' pushes bytes through the browser;
-  // 'url' hands the server a location to fetch itself, which is the only
-  // workable route for files too large to upload or buckets the browser
-  // cannot reach.
-  const [tableSource, setTableSource] = useState<'upload' | 'url'>('upload');
-  const [remoteUrl, setRemoteUrl] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [fileFormat, setFileFormat] = useState<string>('csv');
-  const [separator, setSeparator] = useState<string>(',');
-  const [customSeparator, setCustomSeparator] = useState('');
-  const [compression, setCompression] = useState<string>('none');
-  const [hasHeader, setHasHeader] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const [lastCheckPassed, setLastCheckPassed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mismatch, setMismatch] = useState<MultiQCMismatch | null>(null);
-  // Header columns parsed client-side from the dropped CSV/TSV file. Used both
-  // to surface coordinates auto-detection (see detectCoordinatesColumns) and
-  // to back the lat/lon Select dropdowns when the user opts into a coordinates
-  // table on the Table tab.
-  const [csvColumns, setCsvColumns] = useState<string[]>([]);
-  const [parsingHeader, setParsingHeader] = useState(false);
-  const [latColumn, setLatColumn] = useState<string | null>(null);
-  const [lonColumn, setLonColumn] = useState<string | null>(null);
-  // True when the user wants the table persisted as a coordinates DC
-  // (DCTableCoordinatesConfig). Auto-flips on when detection succeeds; can be
-  // toggled manually for non-delimited formats where we can't peek the header.
-  const [coordsConfirmed, setCoordsConfirmed] = useState(false);
-
-  // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
-  const multiqcDropzone = useFolderDropzone({
-    filterFilename: 'multiqc.parquet',
-    maxPerFile: 50 * 1024 * 1024,
-    maxTotal: 500 * 1024 * 1024,
-  });
-
-  // Single-file dropzone for the table DC flow. Same drag-anywhere UX as the
-  // MultiQC dropzone — we just take the first file and pipe it into `file`.
-  const tableDropzone = useFolderDropzone({
-    maxPerFile: 50 * 1024 * 1024,
-  });
-  // Sync the first dropped/picked file into the existing `file` state so the
-  // rest of the table flow (auto-fill, submit) keeps working unchanged.
-  useEffect(() => {
-    if (dcType !== 'table') return;
-    const first = tableDropzone.files[0];
-    if (!first) return;
-    if (file && first === file) return;
-    setFile(first);
-  }, [dcType, tableDropzone.files, file]);
-
-  // Parse the dropped file's header (CSV/TSV only) so the coordinates
-  // detection + lat/lon Select dropdowns can populate. Reads the first ~64KB
-  // client-side — enough for any reasonable single-line header without paying
-  // the cost of the whole file. Parquet/feather headers aren't accessible
-  // without a wasm parser; for those the user opts in manually and the API
-  // validates column names server-side via `_validate_coord_columns_in_file`.
-  useEffect(() => {
-    if (dcType !== 'table' || !file || !hasHeader) {
-      setCsvColumns([]);
-      return;
-    }
-    const fmt = fileFormat.toLowerCase();
-    if (fmt !== 'csv' && fmt !== 'tsv') {
-      setCsvColumns([]);
-      return;
-    }
-    let cancelled = false;
-    setParsingHeader(true);
-    const sep = separator === 'custom' ? customSeparator || ',' : separator;
-    file
-      .slice(0, 65536)
-      .text()
-      .then((text) => {
-        if (cancelled) return;
-        const firstLine = text.split(/\r?\n/).find((l) => l.length > 0) ?? '';
-        const cols = firstLine.split(sep).map((c) => c.trim()).filter(Boolean);
-        setCsvColumns(cols);
-      })
-      .catch(() => {
-        if (!cancelled) setCsvColumns([]);
-      })
-      .finally(() => {
-        if (!cancelled) setParsingHeader(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dcType, file, fileFormat, separator, customSeparator, hasHeader]);
-
-  // Detect an extended category from the parsed header. When coordinates land,
-  // pre-fill lat/lon and flip the coordsConfirmed switch on. The auto-fill is
-  // gated by a per-file ref so a user who explicitly toggles the switch off
-  // doesn't immediately have it flipped back on by this effect.
-  const coordsGuess = useMemo(
-    () => detectCoordinatesColumns(csvColumns),
-    [csvColumns],
-  );
-
-  // Prefill lat/lon pickers on header detection — a SUGGESTION only. The
-  // "Save as a coordinates table" switch stays off until the user flips it:
-  // silently opting a table in used to turn every metadata table carrying
-  // latitude/longitude columns into a "Coordinates" table, hiding its
-  // Metadata nature. Gated by a per-file ref so it fires once per file.
-  const prefilledForFileRef = useRef<File | null>(null);
-  useEffect(() => {
-    if (!file) {
-      prefilledForFileRef.current = null;
-      return;
-    }
-    if (!coordsGuess) return;
-    if (prefilledForFileRef.current === file) return;
-    prefilledForFileRef.current = file;
-    setLatColumn(coordsGuess.latColumn);
-    setLonColumn(coordsGuess.lonColumn);
-  }, [file, coordsGuess]);
-
-  // The name last filled in from a picked file or a typed URL. While the name
-  // field still holds it, a newer file or URL replaces it; once the user
-  // edits the name, it is theirs and stays.
-  const autoNameRef = useRef('');
-  const autoFillName = (next: string) => {
-    if (name.trim() && name !== autoNameRef.current) return;
-    autoNameRef.current = next;
-    setName(next);
-  };
-
-  // Reset everything when the modal closes — otherwise re-opening shows stale
-  // state from the previous attempt.
-  useEffect(() => {
-    if (!opened) {
-      setDcType('table');
-      setFile(null);
-      setName('');
-      autoNameRef.current = '';
-      setDescription('');
-      setFileFormat('csv');
-      setSeparator(',');
-      setCustomSeparator('');
-      setCompression('none');
-      setHasHeader(true);
-      setError(null);
-      setSubmitting(false);
-      setCsvColumns([]);
-      setLatColumn(null);
-      setLonColumn(null);
-      setCoordsConfirmed(false);
-      setParsingHeader(false);
-      setTableSource('upload');
-      setRemoteUrl('');
-      multiqcDropzone.clear();
-      tableDropzone.clear();
-    }
-    // multiqcDropzone is recreated on each render but its `clear` is stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened]);
-
-  // Auto-fill format + name from picked filename. Don't clobber a name the
-  // user already typed (see autoFillName); do clobber the format because
-  // picking a new file means a new format. Runs per file only: re-running on
-  // every keystroke of the name field would reset a separator or format the
-  // user picked since.
-  useEffect(() => {
-    if (!file) return;
-    const guessed = guessFormat(file.name);
-    if (guessed) {
-      setFileFormat(guessed);
-      setSeparator(guessed === 'tsv' ? '\t' : ',');
-    }
-    autoFillName(file.name.replace(/\.[^.]+$/, ''));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file]);
-
-  // Same auto-fill for the remote-URL source: the last path segment plays the
-  // role the picked filename plays above. It follows the URL as it is typed
-  // ("https://e" first gives "e") until the user edits the name.
-  useEffect(() => {
-    if (tableSource !== 'url') return;
-    const basename = remoteUrl.trim().split('?')[0].split('/').pop();
-    if (!basename) return;
-    const guessed = guessFormat(basename);
-    if (guessed) {
-      setFileFormat(guessed);
-      setSeparator(guessed === 'tsv' ? '\t' : ',');
-    }
-    autoFillName(basename.replace(/\.[^.]+$/, ''));
-    // `name` is intentionally read but not depended on: re-running on every
-    // keystroke of the name field would fight the user's own edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remoteUrl, tableSource]);
-
-  // Clear any prior uniformity mismatch (and stale pass state) when the user
-  // changes the dropped file set — both refer to a different set of reports.
-  useEffect(() => {
-    setMismatch(null);
-    setLastCheckPassed(false);
-  }, [multiqcDropzone.files, dcType]);
-
-  // Auto-fill name when the user drops MultiQC files, so the Create button
-  // doesn't sit silently disabled. Picks the deepest shared parent directory
-  // across all dropped files so multi-run drops get a representative name.
-  useEffect(() => {
-    if (dcType !== 'multiqc') return;
-    if (name.trim()) return;
-    if (multiqcDropzone.files.length === 0) return;
-
-    const splitPaths = multiqcDropzone.files.map((f) =>
-      f.name.replace(/\\/g, '/').split('/').filter(Boolean),
-    );
-    // Drop the trailing filename segment so we compare directories only.
-    const dirPaths = splitPaths.map((p) => p.slice(0, -1));
-    const common: string[] = [];
-    const minLen = Math.min(...dirPaths.map((p) => p.length));
-    for (let i = 0; i < minLen; i++) {
-      const seg = dirPaths[0][i];
-      if (dirPaths.every((p) => p[i] === seg)) common.push(seg);
-      else break;
-    }
-    // The deepest shared dir is usually wrapper-ish (e.g. `multiqc_data`)
-    // when only one run was dropped; prefer its parent for >1 run so the
-    // wrapper folder (`mysamples`) wins over the per-run `multiqc_data`.
-    const deepest =
-      common.length > 0 && common[common.length - 1] === 'multiqc_data'
-        ? common[common.length - 2]
-        : common[common.length - 1];
-    setName(deepest || 'multiqc_reports');
-  }, [dcType, multiqcDropzone.files, name]);
-
-  const handleCheckUniformity = async () => {
-    if (multiqcDropzone.files.length < 2) return;
-    setValidating(true);
-    setError(null);
-    setMismatch(null);
-    setLastCheckPassed(false);
-    try {
-      await checkMultiQCUniformity(multiqcDropzone.files);
-      setLastCheckPassed(true);
-    } catch (err) {
-      const raw = (err as Error).message || 'Uniformity check failed.';
-      const parsed = tryParseMultiQCMismatch(raw);
-      if (parsed) {
-        setMismatch(parsed);
-        setError(parsed.summary);
-      } else {
-        setError(raw);
-      }
-    } finally {
-      setValidating(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!projectId) {
-      setError('Project ID missing from URL.');
-      return;
-    }
-    if (!name.trim()) {
-      setError('Data collection name is required.');
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-    setMismatch(null);
-    try {
-      if (dcType === 'multiqc') {
-        if (multiqcDropzone.files.length === 0) {
-          setError('Drop one or more folders containing multiqc.parquet.');
-          setSubmitting(false);
-          return;
-        }
-        const result = await createMultiQCDataCollection({
-          projectId,
-          name: name.trim(),
-          description: description.trim(),
-          files: multiqcDropzone.files,
-        });
-        notifications.show({
-          color: 'teal',
-          title: 'MultiQC data collection created',
-          message: result.message || `"${name.trim()}" is ready.`,
-          autoClose: 4000,
-        });
-      } else if (tableSource === 'url') {
-        const url = remoteUrl.trim();
-        if (!url) {
-          setError('Enter the URL of the file.');
-          setSubmitting(false);
-          return;
-        }
-        if (!/^(https?|s3):\/\//i.test(url)) {
-          // http:// passes here; whether the server accepts it depends on
-          // DEPICTIO_REMOTE_ALLOW_HTTP.
-          setError(
-            'The URL must start with https://, s3:// or http:// ' +
-              '(plain http:// is only accepted when the server allows it).',
-          );
-          setSubmitting(false);
-          return;
-        }
-        if (separator === 'custom' && !customSeparator) {
-          setError('Custom separator cannot be empty.');
-          setSubmitting(false);
-          return;
-        }
-        const result = await createDataCollectionFromUrl({
-          projectId,
-          name: name.trim(),
-          description: description.trim(),
-          dataType: 'table',
-          fileFormat,
-          separator,
-          customSeparator: separator === 'custom' ? customSeparator : null,
-          compression,
-          hasHeader,
-          url,
-        });
-        notifications.show({
-          color: 'teal',
-          title: 'Data collection created',
-          message: result.message || `"${name.trim()}" is ready.`,
-          autoClose: 2500,
-        });
-      } else {
-        if (!file) {
-          setError('Pick a file to upload.');
-          setSubmitting(false);
-          return;
-        }
-        if (separator === 'custom' && !customSeparator) {
-          setError('Custom separator cannot be empty.');
-          setSubmitting(false);
-          return;
-        }
-        if (coordsConfirmed) {
-          if (!latColumn || !lonColumn) {
-            setError('Pick the latitude and longitude columns.');
-            setSubmitting(false);
-            return;
-          }
-          if (latColumn === lonColumn) {
-            setError('Latitude and longitude columns must differ.');
-            setSubmitting(false);
-            return;
-          }
-        }
-        const result = await createDataCollectionFromUpload({
-          projectId,
-          name: name.trim(),
-          description: description.trim(),
-          dataType: 'table',
-          fileFormat,
-          separator,
-          customSeparator: separator === 'custom' ? customSeparator : null,
-          compression,
-          hasHeader,
-          file,
-          latColumn: coordsConfirmed ? latColumn : null,
-          lonColumn: coordsConfirmed ? lonColumn : null,
-        });
-        notifications.show({
-          color: 'teal',
-          title: 'Data collection created',
-          message: result.message || `"${name.trim()}" is ready.`,
-          autoClose: 2500,
-        });
-      }
-      onSuccess();
-    } catch (err) {
-      const rawMessage = (err as Error).message || 'Upload failed.';
-      const parsed = tryParseMultiQCMismatch(rawMessage);
-      if (parsed) {
-        setMismatch(parsed);
-        setError(parsed.summary);
-      } else {
-        setError(rawMessage);
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const isDelimited = fileFormat === 'csv' || fileFormat === 'tsv';
-
-  /** True while the chosen source still lacks an input the Create button needs. */
-  const isMissingInput = (): boolean => {
-    if (!name.trim()) return true;
-    if (dcType === 'multiqc') return multiqcDropzone.files.length === 0;
-    if (tableSource === 'url') return !remoteUrl.trim();
-    return !file || (coordsConfirmed && (!latColumn || !lonColumn));
-  };
-
-  return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={null}
-      centered
-      size="lg"
-      closeOnClickOutside={!submitting}
-      withCloseButton={!submitting}
-    >
-      <Stack gap="md" data-testid="create-dc-modal">
-        <Group justify="center" gap="sm">
-          <Icon
-            icon="mdi:database-plus-outline"
-            width={32}
-            color={`var(--mantine-color-${accent.secondary}-6)`}
-          />
-          <Title order={3} c={accent.secondary} m={0}>
-            Create a Data Collection
-          </Title>
-        </Group>
-
-        <Tabs
-          value={dcType}
-          onChange={(v) => v && setDcType(v as 'table' | 'multiqc')}
-          variant="default"
-        >
-          <Tabs.List grow>
-            {/* Same glyphs the manager and the ingestion report use, so the
-                type you pick here is the type you recognise later. */}
-            <Tabs.Tab
-              value="table"
-              leftSection={<DcTypeIcon type="table" size={18} withTooltip={false} />}
-              disabled={submitting}
-            >
-              Table (CSV / TSV / Parquet)
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="multiqc"
-              leftSection={<DcTypeIcon type="multiqc" size={18} withTooltip={false} />}
-              disabled={submitting}
-            >
-              MultiQC report(s)
-            </Tabs.Tab>
-          </Tabs.List>
-
-          <Tabs.Panel value="table" pt="md">
-            <Stack gap="xs">
-              <SegmentedControl
-                fullWidth
-                value={tableSource}
-                onChange={(value) => setTableSource(value as 'upload' | 'url')}
-                disabled={submitting}
-                data={[
-                  { label: 'Upload a file', value: 'upload' },
-                  { label: 'Remote URL', value: 'url' },
-                ]}
-              />
-              {tableSource === 'url' ? (
-                <TextInput
-                  label="File URL"
-                  placeholder="https://example.org/data.csv or s3://bucket/key.csv"
-                  description="Fetched by the server, so the file never travels through your browser. Private buckets use this project's storage credentials; a bucket the administrator marked public is read without any."
-                  value={remoteUrl}
-                  onChange={(e) => setRemoteUrl(e.currentTarget.value)}
-                  disabled={submitting}
-                />
-              ) : (
-                <TableFileDropZone
-                  dropzone={tableDropzone}
-                  file={file}
-                  submitting={submitting}
-                  icon="mdi:file-upload-outline"
-                  title="Drop a CSV, TSV, Parquet, or Feather file"
-                  onRemove={() => {
-                    setFile(null);
-                    setCsvColumns([]);
-                    setLatColumn(null);
-                    setLonColumn(null);
-                    setCoordsConfirmed(false);
-                    tableDropzone.clear();
-                  }}
-                />
-              )}
-              {/* The URL source sends no coordinates, so a file picked before
-                  switching to it must not keep offering them. */}
-              {tableSource === 'upload' && file && (
-                <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
-                  <Stack gap="xs">
-                    {coordsGuess && !coordsConfirmed && (
-                      <Alert
-                        color={GEO_COLOR}
-                        variant="light"
-                        icon={<Icon icon={GEO_ICON} />}
-                        data-testid="coords-detected-alert"
-                      >
-                        Geographic columns detected ({coordsGuess.latColumn} /{' '}
-                        {coordsGuess.lonColumn}). Turn on the switch below to make this
-                        table available to Map components.
-                      </Alert>
-                    )}
-                    <Switch
-                      label="Save as a coordinates table"
-                      description="Adds latitude / longitude column metadata so the data collection can power Map components."
-                      checked={coordsConfirmed}
-                      disabled={submitting}
-                      onChange={(e) => {
-                        const next = e.currentTarget.checked;
-                        setCoordsConfirmed(next);
-                        if (!next) {
-                          setLatColumn(null);
-                          setLonColumn(null);
-                        } else if (coordsGuess) {
-                          setLatColumn((prev) => prev ?? coordsGuess.latColumn);
-                          setLonColumn((prev) => prev ?? coordsGuess.lonColumn);
-                        }
-                      }}
-                    />
-                    {coordsConfirmed && (
-                      <CoordColumnPickers
-                        isDelimited={fileFormat === 'csv' || fileFormat === 'tsv'}
-                        csvColumns={csvColumns}
-                        parsingHeader={parsingHeader}
-                        latColumn={latColumn}
-                        lonColumn={lonColumn}
-                        onLatChange={setLatColumn}
-                        onLonChange={setLonColumn}
-                        disabled={submitting}
-                      />
-                    )}
-                  </Stack>
-                </Paper>
-              )}
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="multiqc" pt="md">
-            <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              MultiQC reports
-            </Text>
-            <div ref={multiqcDropzone.rootRef}>
-              <UnstyledDropZone
-                onClick={() => !submitting && multiqcDropzone.openPicker()}
-                disabled={submitting}
-                active={multiqcDropzone.isDragOver}
-              >
-                <Stack gap={4} align="center">
-                  <Icon icon="mdi:folder-upload" width={28} />
-                  <Text fw={500}>
-                    Drop a multiqc.parquet file or a folder of runs
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    Only multiqc.parquet files are kept · run folder name is preserved
-                  </Text>
-                </Stack>
-              </UnstyledDropZone>
-              <input
-                ref={multiqcDropzone.inputRef}
-                type="file"
-                multiple
-                style={{ display: 'none' }}
-                // Click-to-pick must open a *folder* picker so the run-folder
-                // structure (<run>/multiqc_data/multiqc.parquet) reaches the
-                // hook via webkitRelativePath — parity with drag-drop. Without
-                // it, click-selected files carry no path and the upload silently
-                // does nothing (#847). `accept` is dropped because browsers
-                // ignore it for directory selection; the hook's
-                // filterFilename:'multiqc.parquet' does the real filtering.
-                // @ts-expect-error — webkitdirectory is non-standard but widely supported.
-                webkitdirectory=""
-                onChange={multiqcDropzone.onInputChange}
-              />
-            </div>
-            {multiqcDropzone.error && (
-              <Alert
-                color="orange"
-                variant="light"
-                icon={<Icon icon="mdi:alert" width={16} />}
-              >
-                {multiqcDropzone.error}
-              </Alert>
-            )}
-            {multiqcDropzone.files.length > 0 && (
-              <Paper withBorder p="xs" radius="sm">
-                <Group justify="space-between" mb={6}>
-                  <Text size="sm" fw={500}>
-                    {multiqcDropzone.files.length} file
-                    {multiqcDropzone.files.length === 1 ? '' : 's'} ·{' '}
-                    {(multiqcDropzone.totalBytes / (1024 * 1024)).toFixed(1)} MB
-                  </Text>
-                  <Button
-                    size="xs"
-                    variant="subtle"
-                    onClick={multiqcDropzone.clear}
-                    disabled={submitting}
-                  >
-                    Clear list
-                  </Button>
-                </Group>
-                <ScrollArea h={Math.min(multiqcDropzone.files.length * 28 + 8, 200)}>
-                  <Stack gap={2}>
-                    {multiqcDropzone.files.map((f, i) => (
-                      <Group
-                        key={`${f.name}-${i}`}
-                        justify="space-between"
-                        wrap="nowrap"
-                        gap="xs"
-                      >
-                        <Text size="xs" ff="monospace" lineClamp={1}>
-                          {f.name}
-                        </Text>
-                        <Group gap={4} wrap="nowrap">
-                          <Text size="xs" c="dimmed">
-                            {(f.size / (1024 * 1024)).toFixed(1)} MB
-                          </Text>
-                          <ActionIcon
-                            size="xs"
-                            variant="subtle"
-                            color="red"
-                            onClick={() => multiqcDropzone.removeFile(f)}
-                            disabled={submitting}
-                            aria-label="Remove file"
-                          >
-                            <Icon icon="mdi:close" width={14} />
-                          </ActionIcon>
-                        </Group>
-                      </Group>
-                    ))}
-                  </Stack>
-                </ScrollArea>
-                {multiqcDropzone.skipped.length > 0 && (
-                  <Text size="xs" c="dimmed" mt={6}>
-                    Skipped {multiqcDropzone.skipped.length} non-multiqc file
-                    {multiqcDropzone.skipped.length === 1 ? '' : 's'}.
-                  </Text>
-                )}
-              </Paper>
-            )}
-            {multiqcDropzone.files.length > 0 && (
-              <MultiQCUniformityChecklist
-                fileCount={multiqcDropzone.files.length}
-                submitting={submitting}
-                validating={validating}
-                lastCheckPassed={lastCheckPassed}
-                mismatch={mismatch}
-                onCheck={handleCheckUniformity}
-              />
-            )}
-            </Stack>
-          </Tabs.Panel>
-        </Tabs>
-
-        <TextInput
-          label="Name"
-          placeholder={
-            dcType === 'multiqc' ? 'e.g. multiqc_qc' : 'e.g. samples_metadata'
-          }
-          required
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          disabled={submitting}
-        />
-
-        <Textarea
-          label="Description"
-          placeholder="What does this data collection contain? (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.currentTarget.value)}
-          autosize
-          minRows={2}
-          maxRows={4}
-          disabled={submitting}
-        />
-
-        {dcType === 'table' && (
-          <>
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              <Select
-                label="Format"
-                data={FORMAT_OPTIONS}
-                value={fileFormat}
-                onChange={(v) => v && setFileFormat(v)}
-                allowDeselect={false}
-                disabled={submitting}
-              />
-              {isDelimited && (
-                <Select
-                  label="Separator"
-                  data={SEPARATOR_OPTIONS}
-                  value={separator}
-                  onChange={(v) => v && setSeparator(v)}
-                  allowDeselect={false}
-                  disabled={submitting}
-                />
-              )}
-            </SimpleGrid>
-
-            {isDelimited && separator === 'custom' && (
-              <TextInput
-                label="Custom separator"
-                placeholder="e.g. ::"
-                value={customSeparator}
-                onChange={(e) => setCustomSeparator(e.currentTarget.value)}
-                required
-                disabled={submitting}
-              />
-            )}
-
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              <Select
-                label="Compression"
-                data={COMPRESSION_OPTIONS}
-                value={compression}
-                onChange={(v) => v && setCompression(v)}
-                allowDeselect={false}
-                disabled={submitting}
-              />
-              {isDelimited && (
-                <Switch
-                  mt="lg"
-                  label="File has header row"
-                  checked={hasHeader}
-                  onChange={(e) => setHasHeader(e.currentTarget.checked)}
-                  disabled={submitting}
-                />
-              )}
-            </SimpleGrid>
-          </>
-        )}
-
-        {error && (
-          <Alert
-            color="red"
-            variant="light"
-            icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
-          >
-            {error}
-          </Alert>
-        )}
-
-        <Alert
-          color="blue"
-          variant="light"
-          icon={<Icon icon="mdi:information-outline" width={18} />}
-        >
-          <Text size="xs">
-            {dcType === 'table' && tableSource === 'url'
-              ? 'The server fetches the URL itself and aggregates it to a Delta table. The address is screened before any request is made, so private and internal addresses are refused. '
-              : 'The file will be scanned and aggregated to a Delta table on the server. '}
-            Larger files take longer: keep this dialog open until you see the
-            success notification. Need the legacy flow?{' '}
-            <Anchor
-              href={`/project/${readProjectIdFromPath()}/data`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open in Dash
-            </Anchor>
-            .
-          </Text>
-        </Alert>
-
-        <Group justify="flex-end" gap="sm">
-          <Button variant="default" onClick={onClose} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button
-            color={accent.secondary}
-            onClick={handleSubmit}
-            loading={submitting}
-            disabled={isMissingInput()}
-            leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
-          >
-            Create
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
   );
 };
 
@@ -2179,8 +1359,10 @@ const DeleteDataCollectionModal: React.FC<{
           icon={<Icon icon="mdi:alert" width={18} />}
           variant="light"
         >
-          This deletes the registered files, delta tables, runs, and MultiQC
-          metadata associated with this collection. Cannot be undone.
+          The collection, the data Depictio stored for it and its links to other
+          collections are deleted. Dashboard components that read it will have no
+          data left to show. Your original file or folder is not touched. This
+          cannot be undone.
         </Alert>
         {error && (
           <Alert color="red" variant="light">
@@ -2200,59 +1382,38 @@ const DeleteDataCollectionModal: React.FC<{
   );
 };
 
-/** Basic / Advanced as one calm tag: the kind is the icon, never a hue. */
-const ProjectTypeTag: React.FC<{
-  projectType: 'basic' | 'advanced';
-  size?: 'sm' | 'md';
-}> = ({ projectType, size = 'sm' }) => {
-  const Glyph = projectType === 'advanced' ? Workflow : Table2;
-  return (
-    <Badge
-      variant="light"
-      color="gray"
-      size={size}
-      leftSection={<Glyph size={12} strokeWidth={2} aria-hidden />}
-    >
-      {projectType === 'advanced' ? 'Advanced' : 'Basic'}
-    </Badge>
-  );
-};
-
 const ProjectHeader: React.FC<{
   project: ProjectListEntry;
-  projectType: 'basic' | 'advanced';
-}> = ({ project, projectType }) => {
+  projectId: string | null;
+  onShowIngestion: () => void;
+  onShowRuns: (run?: string) => void;
+  refreshKey: number;
+}> = ({ project, projectId, onShowIngestion, onShowRuns, refreshKey }) => {
   const accent = useBrandAccents();
-  const tmpl = parseTemplate(project);
   const glass = useGlassPages();
+  const summary = (
+    <ProjectSummary
+      project={project}
+      projectId={projectId}
+      onShowIngestion={onShowIngestion}
+      onShowRuns={onShowRuns}
+      refreshKey={refreshKey}
+    />
+  );
+  const badges = (
+    <Group gap="xs" wrap="wrap">
+      <ProvenanceBadge provenance={project.provenance} />
+      <PublishedLockBadge lock={project.published_lock} />
+    </Group>
+  );
   // Glass: the page head already names the project, so the card keeps only
-  // its facts, on one row.
+  // its facts.
   if (glass) {
     return (
       <Paper withBorder radius="md" px="lg" py="md">
-        <Group gap="lg" wrap="wrap" align="center">
-          <Group gap="xs" wrap="nowrap">
-            <Text size="sm" c="dimmed" fw={600}>
-              Type
-            </Text>
-            <ProjectTypeTag projectType={projectType} size="md" />
-            <Text size="sm" c="dimmed" visibleFrom="sm">
-              {projectType === 'advanced'
-                ? 'CLI-driven, with workflows and pipelines'
-                : 'Data collections managed here directly'}
-            </Text>
-          </Group>
-          {tmpl && (
-            <Group gap="xs" wrap="wrap">
-              <Text size="sm" c="dimmed" fw={600}>
-                Template
-              </Text>
-              <TemplateChip parsed={tmpl} verbose plain />
-              <Anchor href={templateDocsUrl(tmpl)} target="_blank" rel="noreferrer" size="sm" fw={600}>
-                Documentation
-              </Anchor>
-            </Group>
-          )}
+        <Group gap="lg" wrap="wrap" align="flex-start" justify="space-between">
+          {summary}
+          {badges}
         </Group>
       </Paper>
     );
@@ -2270,55 +1431,10 @@ const ProjectHeader: React.FC<{
             Project Data Manager
           </Title>
         </Group>
-        <Text size="sm" c="dimmed">
-          Manage workflows and data collections for your project
-        </Text>
-        <Group justify="space-between" mt="xs">
-          <Group gap="xs">
-            <Icon
-              icon="mdi:source-branch"
-              width={18}
-              color="var(--mantine-color-teal-6)"
-            />
-            <Text fw={600} size="sm">
-              Project Type:
-            </Text>
-            <Badge
-              color={projectType === 'advanced' ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="md"
-            >
-              {projectType === 'advanced' ? 'Advanced' : 'Basic'}
-            </Badge>
-          </Group>
-          <Text size="sm" c="dimmed">
-            {projectType === 'advanced'
-              ? 'CLI-driven project with workflows and pipelines'
-              : 'Simple project with direct data collection management'}
-          </Text>
+        <Group justify="space-between" align="flex-start" mt="xs">
+          {summary}
+          {badges}
         </Group>
-        {tmpl && (
-          <Group gap="xs" mt="xs" wrap="nowrap">
-            <Icon
-              icon="mdi:puzzle-outline"
-              width={18}
-              color="var(--mantine-color-grape-6)"
-            />
-            <Text fw={600} size="sm">
-              Template:
-            </Text>
-            <TemplateChip parsed={tmpl} verbose />
-            <Anchor
-              href={templateDocsUrl(tmpl)}
-              target="_blank"
-              rel="noreferrer"
-              size="sm"
-            >
-              View documentation →
-            </Anchor>
-          </Group>
-        )}
         {project.name && (
           <Text size="xs" c="dimmed" mt={4}>
             {project.name}
@@ -2571,8 +1687,10 @@ const WorkflowsPanel: React.FC<{
 };
 
 const DataCollectionsManagerSection: React.FC<{
-  projectType: 'basic' | 'advanced';
-  /** The workflow the list is scoped to (advanced projects), named in the
+  projectId: string | null;
+  project: ProjectListEntry;
+  pipelineDcIds: Set<string>;
+  /** The workflow the list is scoped to (pipeline projects), named in the
    *  Glass header. */
   scopeLabel?: string | null;
   stats: DcStats;
@@ -2591,9 +1709,12 @@ const DataCollectionsManagerSection: React.FC<{
   /** Open the manage-data modal for a MultiQC DC. Optional so non-MultiQC
    *  callers don't have to wire it. */
   onManage?: (dc: DataCollectionShape) => void;
-  onCreate: () => void;
+  /** Called after data was added through the Add data menu. */
+  onAdded: () => void;
 }> = ({
-  projectType,
+  projectId,
+  project,
+  pipelineDcIds,
   scopeLabel,
   stats,
   dataCollections,
@@ -2605,7 +1726,7 @@ const DataCollectionsManagerSection: React.FC<{
   onRename,
   onDelete,
   onManage,
-  onCreate,
+  onAdded,
 }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
@@ -2630,21 +1751,15 @@ const DataCollectionsManagerSection: React.FC<{
             </div>
           </UnstyledButton>
           <Group gap="xs" wrap="nowrap">
-            <Button
-              data-testid="create-dc-btn"
-              size="xs"
-              leftSection={<Icon icon="mdi:plus" width={16} />}
-              disabled={!canMutate}
-              onClick={() => {
+            <AddDataButton
+              projectId={projectId}
+              project={project}
+              canMutate={canMutate}
+              onAdded={onAdded}
+              onOpen={() => {
                 if (!opened) onToggle();
-                onCreate();
               }}
-              title={
-                canMutate ? 'Create a new data collection' : 'Owner permission required'
-              }
-            >
-              Create Data Collection
-            </Button>
+            />
             <ActionIcon
               variant="subtle"
               color="gray"
@@ -2685,7 +1800,7 @@ const DataCollectionsManagerSection: React.FC<{
                   <span className="pd-count">{n}</span>
                 </Group>
                 <DataCollectionsTable
-                  projectType={projectType}
+          pipelineDcIds={pipelineDcIds}
                   dataCollections={dataCollections}
                   selectedDcId={selectedDcId}
                   canMutate={canMutate}
@@ -2717,39 +1832,23 @@ const DataCollectionsManagerSection: React.FC<{
               color="var(--mantine-color-dark-6)"
             />
             <Title order={4}>Data Collections Manager</Title>
-            <Badge
-              color={projectType === 'advanced' ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="sm"
-            >
-              {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
-            </Badge>
             <Badge variant="light" color="dark" size="sm">
               {dataCollections.length}
             </Badge>
           </Group>
         </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
-          <Button
-            data-testid="create-dc-btn"
+          <AddDataButton
+            projectId={projectId}
+            project={project}
+            canMutate={canMutate}
             color={accent.secondary}
-            size="xs"
-            leftSection={<Icon icon="mdi:plus" width={16} />}
-            disabled={!canMutate}
-            onClick={() => {
+            onAdded={onAdded}
+            onOpen={() => {
               // Expand the section too, so the new DC lands in view.
               if (!opened) onToggle();
-              onCreate();
             }}
-            title={
-              canMutate
-                ? 'Create a new data collection'
-                : 'Owner permission required'
-            }
-          >
-            Create Data Collection
-          </Button>
+          />
           <ActionIcon
             variant="subtle"
             color="gray"
@@ -2765,7 +1864,7 @@ const DataCollectionsManagerSection: React.FC<{
         <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="sm">
           <Stack gap="md" pr="sm">
             <Text size="sm" c="dimmed">
-              Managing data collections for this {projectType} project
+              Managing data collections for this project
             </Text>
 
             <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
@@ -2808,7 +1907,7 @@ const DataCollectionsManagerSection: React.FC<{
           </Badge>
         </Group>
         <DataCollectionsTable
-          projectType={projectType}
+          pipelineDcIds={pipelineDcIds}
           dataCollections={dataCollections}
           selectedDcId={selectedDcId}
           canMutate={canMutate}
@@ -2894,45 +1993,12 @@ const StatCard: React.FC<{
   </Card>
 );
 
-/** Sortable column header — click to toggle asc/desc; shows the active arrow. */
-const SortableTh: React.FC<{
-  label: string;
-  sortKey: string;
-  activeKey: string;
-  dir: 'asc' | 'desc';
-  onSort: (k: string) => void;
-  w?: number | string;
-}> = ({ label, sortKey, activeKey, dir, onSort, w }) => (
-  <Table.Th
-    w={w}
-    style={{ cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}
-    onClick={() => onSort(sortKey)}
-  >
-    <Group gap={2} wrap="nowrap">
-      <Text size="sm" fw={600}>
-        {label}
-      </Text>
-      <Icon
-        icon={
-          activeKey === sortKey
-            ? dir === 'asc'
-              ? 'mdi:menu-up'
-              : 'mdi:menu-down'
-            : 'mdi:unfold-more-horizontal'
-        }
-        width={14}
-        color={activeKey === sortKey ? undefined : 'var(--mantine-color-gray-5)'}
-      />
-    </Group>
-  </Table.Th>
-);
-
 type DcSortKey = 'tag' | 'type' | 'size' | 'updated';
 
 /** Sortable + filterable table of a project's data collections. Replaces the
  *  former card list; row click selects the DC (drives the detail viewer). */
 const DataCollectionsTable: React.FC<{
-  projectType: 'basic' | 'advanced';
+  pipelineDcIds: Set<string>;
   dataCollections: DataCollectionShape[];
   selectedDcId: string | null;
   canMutate: boolean;
@@ -2941,7 +2007,7 @@ const DataCollectionsTable: React.FC<{
   onDelete: (dc: DataCollectionShape) => void;
   onManage?: (dc: DataCollectionShape) => void;
 }> = ({
-  projectType,
+  pipelineDcIds,
   dataCollections,
   selectedDcId,
   canMutate,
@@ -3076,7 +2142,7 @@ const DataCollectionsTable: React.FC<{
             const sizeBytes = getDcSizeBytes(dc);
             // The two axes come from their own modules, so the row, the DC
             // viewer and the ingestion report name a collection the same way.
-            const metatypeMeta = dcMetatypeMeta(dc, projectType);
+            const metatypeMeta = dcMetatypeMeta(dc, pipelineDcIds.has(id));
             return (
               <Table.Tr
                 key={id}
@@ -3104,7 +2170,7 @@ const DataCollectionsTable: React.FC<{
                 </Table.Td>
                 <Table.Td>
                   {metatypeMeta ? (
-                    <DcMetatypeBadge dc={dc} projectType={projectType} />
+                    <DcMetatypeBadge dc={dc} fromPipeline={pipelineDcIds.has(id)} />
                   ) : (
                     <Text size="xs" c="dimmed">
                       —
@@ -3174,7 +2240,7 @@ const DataCollectionsTable: React.FC<{
 
 const DataCollectionViewer: React.FC<{
   dc: DataCollectionShape;
-  projectType: 'basic' | 'advanced';
+  fromPipeline: boolean;
   allDataCollections: DataCollectionShape[];
   joins: Array<{
     dc1?: string;
@@ -3183,22 +2249,83 @@ const DataCollectionViewer: React.FC<{
     dc_tag2?: string;
     on_columns?: string[];
   }>;
-  links: Array<{
-    source_dc_id?: string;
-    target_dc_id?: string;
-    source_column?: string;
-    target_field?: string;
-    enabled?: boolean;
-  }>;
-}> = ({ dc, projectType, allDataCollections, joins, links }) => {
+  links: DCLink[];
+  projectId: string | null;
+  canMutate: boolean;
+  /** The project is published (read-only): says why mutations are disabled. */
+  published: boolean;
+  /** A link was edited from here: the page reloads its links. */
+  onLinkSaved: () => void;
+  /** The collection itself changed (map coordinates): the page reloads the project. */
+  onDcChanged: () => void;
+  /** Open the project's Runs tab; absent for a project without runs. */
+  onShowRuns?: () => void;
+  /** Select another collection (an input of this one). */
+  onOpenDc?: (dcId: string) => void;
+  /** Open on the rows (a table the URL asked for). */
+  autoLoadPreview?: boolean;
+  /** `&new_runs=`: the Data table puts these runs' rows first and marks them. */
+  highlightRuns?: string[];
+  onClearHighlight?: () => void;
+}> = ({
+  dc,
+  fromPipeline,
+  allDataCollections,
+  joins,
+  links,
+  projectId,
+  canMutate,
+  published,
+  onLinkSaved,
+  onDcChanged,
+  onShowRuns,
+  onOpenDc,
+  autoLoadPreview = false,
+  highlightRuns,
+  onClearHighlight,
+}) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const format =
     (dc.config?.dc_specific_properties?.format as string | undefined) || null;
   const isMultiQC = type.toLowerCase() === 'multiqc';
   const isTable = type.toLowerCase() === 'table';
+  // A genomic_tracks DC is a track manifest stored as a Delta table: it previews
+  // like a table, but isn't scored for advanced viz.
+  const isTracks = type.toLowerCase() === 'genomic_tracks';
+  const tracksProps = isTracks
+    ? readTracksProps(dc.config?.dc_specific_properties as Record<string, unknown> | undefined)
+    : null;
   const isCoordTable = dcHasCoordinates(dc);
+  const isGeoJson = type.toLowerCase() === 'geojson';
+  const isMapPreview = isCoordTable || isGeoJson;
+  let previewBody: React.ReactNode = null;
+  if (isMultiQC) previewBody = <MultiQCViewerPreview dcId={dcId} />;
+  else if (isGeoJson) previewBody = <GeoJsonPreview dc={dc} />;
+  else if (isCoordTable) previewBody = <CoordinatesMapPreview dc={dc} />;
+  else if (type.toLowerCase() === 'image') previewBody = <ImagesPreview dc={dc} />;
+  else if (type.toLowerCase() === 'phylogeny') previewBody = <TreePreview dcId={dcId} />;
+  else if (isTracks) previewBody = <TracksPreview dcId={dcId} />;
+  else if (type.toLowerCase() === 'jbrowse2') previewBody = <LegacyTracksNotice />;
   const deltaVersion = getDcDeltaVersion(dc);
+  // Bumped when the table is edited, so the version history reloads.
+  const [editTick, setEditTick] = useState(0);
+  // The project document is not reloaded after an edit or a restore: read the
+  // new version from the table itself, or the "Version" fact stays behind.
+  const [editedVersion, setEditedVersion] = useState<number | null>(null);
+  useEffect(() => {
+    if (editTick === 0) return;
+    let cancelled = false;
+    fetchDeltaHistory(dcId, 1)
+      .then((h) => {
+        if (!cancelled && typeof h.current_version === 'number') setEditedVersion(h.current_version);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [dcId, editTick]);
+  const shownVersion = editedVersion ?? deltaVersion;
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -3226,224 +2353,383 @@ const DataCollectionViewer: React.FC<{
   // recommended threshold (RECOMMENDED_SCORE in schemas.py).
   const detectedVizKinds = (vizSuggestions?.viz_kinds ?? []).filter((v) => v.score >= 0.8);
 
+  const doc = dc as unknown as Record<string, unknown>;
+  const lowerType = type.toLowerCase();
+  const agg = lastAggregation(doc);
+  const columns = dcColumns(doc);
+  const origin = dcOrigin(doc);
+  const sizeBytes = getDcSizeBytes(dc);
+  const rows = typeof agg?.rows_total === 'number' ? agg.rows_total : null;
+  const updated = formatTimestamp(agg?.aggregation_time, { utc: false });
+  const description = typeof dc.description === 'string' && dc.description ? dc.description : null;
+
+  const facts: Fact[] = [];
+  const shownColumns = userColumns(columns);
+  if (rows != null)
+    facts.push({ label: 'Rows', icon: 'mdi:table-row', value: rows.toLocaleString(), testId: 'dc-fact-rows' });
+  if (shownColumns.length > 0)
+    facts.push({ label: 'Columns', icon: 'mdi:table-column', value: shownColumns.length, testId: 'dc-fact-columns' });
+  if (sizeBytes > 0) facts.push({ label: 'Size', icon: 'mdi:harddisk', value: formatBytes(sizeBytes) });
+  if (format) facts.push({ label: 'Format', icon: 'mdi:file-document-outline', value: format.toUpperCase() });
+  if (tracksProps?.assembly) facts.push({ label: 'Assembly', icon: 'mdi:dna', value: tracksProps.assembly });
+  if (shownVersion != null) facts.push({ label: 'Version', icon: 'mdi:source-commit', value: `v${shownVersion}` });
+  // Real runs only: a one-file scan records a tag of its own, not a run.
+  const runs = (Array.isArray(agg?.run_tags) ? (agg?.run_tags as unknown[]) : [])
+    .filter((t): t is string => typeof t === 'string' && !t.endsWith('-single-file-scan'))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  // The runs themselves belong to the project: the tile opens its Runs tab.
+  if (runs.length > 0)
+    facts.push({
+      label: runs.length === 1 ? 'Run' : 'Runs',
+      icon: 'mdi:folder-play-outline',
+      value: runs.length === 1 ? runs[0] : runs.length,
+      hint: onShowRuns ? 'Open the project’s runs' : null,
+      onClick: onShowRuns,
+      testId: 'dc-fact-runs',
+    });
+  if (updated) facts.push({ label: 'Updated', icon: 'mdi:clock-outline', value: updated });
+  if (origin) facts.push({ label: 'Source', icon: origin.icon, value: origin.label, hint: origin.location });
+
+  const otherOf = (id?: string) => {
+    const d = allDataCollections.find((x) => (x._id ?? x.id) === id);
+    return {
+      tag: d?.data_collection_tag || id || '?',
+      type: ((d?.config?.type as string | undefined) || 'unknown').toLowerCase(),
+    };
+  };
+  const linkRows: DcLinkRow[] = [
+    ...links
+      .filter((l) => l.source_dc_id === dcId || l.target_dc_id === dcId)
+      .map((l, i): DcLinkRow => {
+        const out = l.source_dc_id === dcId;
+        return {
+          key: `link-${i}`,
+          linkId: l.id,
+          kind: out ? 'out' : 'in',
+          enabled: l.enabled !== false,
+          here: out ? (l.source_column ?? null) : (l.link_config?.target_field ?? null),
+          other: otherOf(out ? l.target_dc_id : l.source_dc_id),
+          otherField: out ? (l.link_config?.target_field ?? null) : (l.source_column ?? null),
+        };
+      }),
+    ...joins
+      .filter((j) => j.dc1 === dcId || j.dc2 === dcId)
+      .map((j, i): DcLinkRow => {
+        const cols = j.on_columns?.join(', ') || '?';
+        const other = otherOf(j.dc1 === dcId ? j.dc2 : j.dc1);
+        const tag = j.dc1 === dcId ? j.dc_tag2 : j.dc_tag1;
+        return {
+          key: `join-${i}`,
+          kind: 'join',
+          enabled: true,
+          here: cols,
+          other: tag ? { ...other, tag } : other,
+          otherField: cols,
+        };
+      }),
+  ];
+
+  // A derived collection says where it comes from: the recipe and its
+  // inputs live in the ingestion report, read once it is selected.
+  const isDerived = (dc.config as { source?: string } | undefined)?.source === 'transformed';
+  const [lineage, setLineage] = useState<{
+    entry: IngestionDataCollection;
+    typeByTag: Record<string, string>;
+    emptyTags: Set<string>;
+  } | null>(null);
+  useEffect(() => {
+    setLineage(null);
+    if (!isDerived || !projectId) return undefined;
+    let cancelled = false;
+    fetchIngestionReport(projectId)
+      .then((report) => {
+        const entry = report.data_collections.find((d) => d.data_collection_tag === dc.data_collection_tag);
+        if (cancelled || !entry) return;
+        setLineage({
+          entry,
+          typeByTag: Object.fromEntries(
+            report.data_collections.map((d) => [d.data_collection_tag, (d.type ?? 'table').toLowerCase()]),
+          ),
+          emptyTags: new Set(
+            report.data_collections
+              .filter((d) => d.status === 'found_zero' || d.status === 'gated_out')
+              .map((d) => d.data_collection_tag),
+          ),
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [dcId, isDerived, projectId, dc.data_collection_tag]);
+  const [coordsOpen, setCoordsOpen] = useState(false);
+  // A table not yet marked whose column names look like a lat/lon pair: offer
+  // the marking, never apply it (a column called "lat" may mean something else).
+  // Map coordinates only where it means something: a table already marked,
+  // or one whose columns look like a lat/lon pair.
+  const showCoordsButton =
+    isTable && (isCoordTable || detectCoordinatesColumns(shownColumns.map((c) => c.name)) != null);
+  const coordsGuess =
+    isTable && !isCoordTable && canMutate
+      ? detectCoordinatesColumns(shownColumns.map((c) => c.name))
+      : null;
+  const [inspecting, setInspecting] = useState<string | null>(null);
+  const [editingLink, setEditingLink] = useState<DCLink | null>(null);
+  const [resolvers, setResolvers] = useState<ResolverInfo[]>([]);
+  const openLinkEdit = (id: string) => {
+    const link = links.find((l) => l.id === id);
+    if (!link || !projectId) return;
+    // The modal falls back to its own list if this fails.
+    if (resolvers.length === 0) listLinkResolvers(projectId).then(setResolvers).catch(() => undefined);
+    setEditingLink(link);
+  };
+
+  const by = (agg?.aggregation_by as { email?: string } | undefined)?.email;
+  const details: DetailItem[] = [
+    { label: 'Collection id', value: dcId, mono: true },
+    { label: 'Stored at', value: getDcStorageLocation(dc), mono: true },
+    { label: 'Read from', value: scanSource(doc), mono: true },
+    { label: origin?.label === 'Upload' ? 'Uploaded file' : 'Origin', value: origin?.location },
+    { label: 'Added', value: origin?.addedAt },
+    { label: 'Last ingestion by', value: by },
+    { label: 'Write mode', value: typeof agg?.write_mode === 'string' ? agg.write_mode : null },
+    { label: 'Ingestion', value: typeof agg?.aggregation_status === 'string' ? agg.aggregation_status : null },
+    { label: 'Registered', value: formatTimestamp(dc.registration_time, { utc: false }) },
+    { label: 'Optional in the pipeline', value: (dc as { optional?: boolean }).optional ? 'Yes' : null },
+    ...typeDetails(doc, lowerType),
+  ];
+
+  const hasData = !isMultiQC && (isTable || isTracks);
+  const [opened, setOpened] = useState<string[]>([]);
+  // A newly selected collection opens on what it shows.
+  useEffect(() => {
+    const first = [
+      ...(isDerived ? ['lineage'] : []),
+      ...(previewBody ? ['preview'] : hasData ? ['data'] : []),
+    ];
+    // A table asked for by the URL opens on its rows.
+    setOpened(autoLoadPreview && hasData && !first.includes('data') ? [...first, 'data'] : first);
+    // Only on a change of collection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId]);
+  const section = (value: string, icon: string, title: string, body: React.ReactNode, extra?: React.ReactNode) => (
+    <Accordion.Item value={value} data-testid={`dc-section-${value}`}>
+      <Accordion.Control icon={<Icon icon={icon} width={18} />}>
+        <Group gap={8}>
+          <Text fw={600} size="sm">
+            {title}
+          </Text>
+          {extra}
+        </Group>
+      </Accordion.Control>
+      <Accordion.Panel>{body}</Accordion.Panel>
+    </Accordion.Item>
+  );
+  const count = (n: number) => (
+    <Text size="xs" c="dimmed">
+      {n}
+    </Text>
+  );
+
   return (
-    <Paper withBorder radius="md" p="lg">
+    <Paper withBorder radius="md" p="md" data-testid="dc-viewer">
       <Stack gap="md">
-        <Group gap="xs">
-          <Icon
-            icon="mdi:eye-outline"
-            width={22}
-            color="var(--mantine-color-blue-6)"
-          />
-          <Title order={4}>Data Collection Viewer</Title>
+        <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+          <Group gap="sm" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
+            <DcTypeIcon type={lowerType} size={28} withTooltip={false} />
+            <Stack gap={4} style={{ minWidth: 0 }}>
+              <Group gap="xs" wrap="wrap">
+                <Title order={4} style={{ wordBreak: 'break-word' }}>
+                  {dc.data_collection_tag || dcId}
+                </Title>
+                {/* The same badges the manager row carries, in the same order. */}
+                <DcTypeBadges dc={dc} />
+                <DcMetatypeBadge dc={dc} fromPipeline={fromPipeline} />
+              </Group>
+              {description && (
+                <Text size="sm" c="dimmed" lineClamp={2} title={description} data-testid="dc-viewer-description">
+                  {description}
+                </Text>
+              )}
+            </Stack>
+          </Group>
+          <Group gap="xs" wrap="nowrap">
+            {showCoordsButton && (
+              <Tooltip
+                label={
+                  !canMutate
+                    ? published
+                      ? 'This project is published and read-only.'
+                      : 'Only project owners and editors can mark map coordinates.'
+                    : fromPipeline
+                      ? 'Pick the latitude and longitude columns. Syncing the pipeline’s project.yaml again may rewrite them.'
+                      : 'Pick the latitude and longitude columns, so this table can feed a Map.'
+                }
+                multiline
+                w={260}
+                withArrow
+                withinPortal
+              >
+                {/* A span: a disabled button fires no hover, so the tooltip needs a host. */}
+                <span>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color={GEO_COLOR}
+                    leftSection={<Icon icon={GEO_ICON} width={16} />}
+                    disabled={!canMutate}
+                    onClick={() => setCoordsOpen(true)}
+                    data-testid="table-coordinates-open"
+                  >
+                    Map coordinates…
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+            <CopyId id={dcId} />
+          </Group>
         </Group>
-        <Group gap="sm">
-          <Title order={4}>{dc.data_collection_tag || dcId}</Title>
-          {/* The same badges the manager row carries, in the same order. Three
-              coexisting facts, never alternatives: a table carrying coordinates
-              can be a metadata table and a geomap at once. */}
-          <DcTypeBadges dc={dc} />
-          <DcMetatypeBadge dc={dc} projectType={projectType} />
-        </Group>
-        {detectedVizKinds.length > 0 && (
+
+        {/* A report's figures come from the report itself, not the collection. */}
+        {isMultiQC ? <MultiQCSummaryCard dc={dc} bare /> : facts.length > 0 && <DcFacts facts={facts} />}
+
+        {coordsGuess && (
           <Alert
-            color="violet"
+            color={GEO_COLOR}
             variant="light"
-            icon={<Icon icon="mdi:chart-scatter-plot" width={18} />}
-            title="Compatible advanced visualizations"
+            icon={<Icon icon={GEO_ICON} width={18} />}
+            data-testid="table-coordinates-suggestion"
           >
-            <Group gap={4}>
-              {detectedVizKinds.slice(0, 6).map((v) => (
-                <Badge
-                  key={v.viz_kind}
-                  color="violet"
-                  variant="outline"
-                  size="sm"
-                  radius="sm"
-                >
-                  {v.viz_kind}
-                </Badge>
-              ))}
+            <Group justify="space-between" gap="sm" wrap="nowrap">
+              <Text size="sm">
+                <code>{coordsGuess.latColumn}</code> and <code>{coordsGuess.lonColumn}</code> look
+                like coordinates. Use them to place this table on a Map?
+              </Text>
+              <Button
+                size="xs"
+                variant="light"
+                color={GEO_COLOR}
+                onClick={() => setCoordsOpen(true)}
+                data-testid="table-coordinates-suggestion-open"
+              >
+                Review…
+              </Button>
             </Group>
           </Alert>
         )}
 
-        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-          <Card withBorder radius="md" p="md">
-            <Group gap="xs" mb="xs">
-              <Icon
-                icon="mdi:cog-outline"
-                width={20}
-                color="var(--mantine-color-blue-6)"
-              />
-              <Text fw={600}>Configuration</Text>
-            </Group>
-            <Stack gap={4}>
-              <DetailRow label="Data Collection ID" value={dcId} mono />
-              <DetailRow label="Type" badge={<DcTypeBadges dc={dc} />} />
-              {/* Metatype is what the collection IS within its project; the
-               *  Type row above is what it holds. A geomap can be metadata or
-               *  aggregate, so the two rows never merge. */}
-              {dcMetatypeMeta(dc, projectType) && (
-                <DetailRow
-                  label="Metatype"
-                  badge={<DcMetatypeBadge dc={dc} projectType={projectType} />}
-                />
-              )}
-              {isCoordTable && (
-                <>
-                  <DetailRow
-                    label="Latitude column"
-                    value={
-                      ((dc.config?.dc_specific_properties as
-                        | Record<string, unknown>
-                        | undefined)?.lat_column as string | undefined) || '—'
-                    }
-                    mono
-                  />
-                  <DetailRow
-                    label="Longitude column"
-                    value={
-                      ((dc.config?.dc_specific_properties as
-                        | Record<string, unknown>
-                        | undefined)?.lon_column as string | undefined) || '—'
-                    }
-                    mono
-                  />
-                </>
-              )}
-            </Stack>
-          </Card>
-          {isMultiQC ? (
-            <MultiQCSummaryCard dc={dc} />
-          ) : (
-            <Card withBorder radius="md" p="md">
-              <Group gap="xs" mb="xs">
-                <Icon
-                  icon="mdi:delta"
-                  width={20}
-                  color="var(--mantine-color-green-6)"
-                />
-                <Text fw={600}>Delta Table Details</Text>
-              </Group>
-              <Stack gap={4}>
-                <DetailRow
-                  label="Delta Location"
-                  value={getDcStorageLocation(dc)}
-                  mono
-                  wrap
-                />
-                <DetailRow
-                  label="Last Aggregated"
-                  value={getDcLastAggregated(dc)}
-                />
-                <DetailRow
-                  label="Delta version"
-                  badge={
-                    deltaVersion != null ? (
-                      <Badge color="green" size="sm" radius="sm" variant="light">
-                        v{deltaVersion}
-                      </Badge>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        Not recorded
-                      </Text>
-                    )
-                  }
-                />
-                {format && (
-                  <DetailRow
-                    label="Format"
-                    badge={
-                      <Badge color="cyan" size="sm" radius="sm">
-                        {format.toUpperCase()}
-                      </Badge>
-                    }
-                  />
-                )}
-                <DetailRow
-                  label="Size"
-                  value={formatBytes(getDcSizeBytes(dc))}
-                  mono
-                />
-              </Stack>
-            </Card>
-          )}
-        </SimpleGrid>
+        {detectedVizKinds.length > 0 && (
+          <DcSuggestedCharts kinds={detectedVizKinds.slice(0, 6).map((v) => v.viz_kind)} />
+        )}
 
-        {(isMultiQC || isCoordTable) && (
-          <Accordion variant="separated" radius="md" defaultValue="preview">
-            <Accordion.Item value="preview">
-              <Accordion.Control
-                icon={
-                  <Icon
-                    icon={isCoordTable ? GEO_ICON : 'mdi:eye-outline'}
-                    width={18}
-                    color={`var(--mantine-color-${isCoordTable ? GEO_COLOR : 'blue'}-6)`}
-                  />
+        <Accordion
+          multiple
+          variant="separated"
+          radius="md"
+          chevronPosition="right"
+          value={opened}
+          onChange={setOpened}
+          styles={{ control: { paddingBlock: 2 }, content: { paddingTop: 0 } }}
+        >
+          {isDerived &&
+            section(
+              'lineage',
+              'mdi:source-branch',
+              'Lineage',
+              lineage ? (
+                <DerivedLineage
+                  inputs={lineage.entry.recipe_inputs ?? []}
+                  recipe={lineage.entry.recipe}
+                  recipeUrl={lineage.entry.recipe_url}
+                  summary={lineage.entry.recipe_summary}
+                  description={lineage.entry.recipe_description}
+                  result={{
+                    tag: dc.data_collection_tag || dcId,
+                    type: lowerType,
+                    rows,
+                    columns: shownColumns.length || null,
+                    location: getDcStorageLocation(dc),
+                  }}
+                  typeByTag={lineage.typeByTag}
+                  emptyInputs={lineage.emptyTags}
+                  idByTag={Object.fromEntries(
+                    allDataCollections.map((d) => [d.data_collection_tag ?? '', (d._id ?? d.id) as string]),
+                  )}
+                  onOpenDc={onOpenDc}
+                />
+              ) : (
+                <Loader size="xs" />
+              ),
+            )}
+          {previewBody &&
+            section('preview', isMapPreview ? GEO_ICON : 'mdi:eye-outline', isMapPreview ? 'Map' : 'Preview', previewBody)}
+          {hasData &&
+            section(
+              'data',
+              'mdi:table',
+              'Data',
+              // Read the rows once the section is open, not on every selection.
+              opened.includes('data') ? (
+                <TableDataSection
+                  key={dcId}
+                  dcId={dcId}
+                  checkEditable={isTable}
+                  autoLoad
+                  highlightRuns={highlightRuns}
+                  onClearHighlight={onClearHighlight}
+                  onEdited={() => setEditTick((n) => n + 1)}
+                />
+              ) : null,
+              rows != null ? count(rows) : undefined,
+            )}
+          {isMultiQC &&
+            section('samples', 'mdi:format-list-bulleted', 'Samples, modules and plots', <MultiQCReportsCard dcId={dcId} bare />)}
+          {shownColumns.length > 0 &&
+            section('columns', 'mdi:table-column', 'Columns', <DcColumnsTable columns={columns} rows={rows} />, count(shownColumns.length))}
+          {linkRows.length > 0 &&
+            section('links', 'mdi:link-variant', 'Links', <DcLinksTable
+                rows={linkRows}
+                inspecting={inspecting}
+                onInspect={setInspecting}
+                mapping={(id) =>
+                  projectId ? <LinkMappingInspector projectId={projectId} linkId={id} collapsible={false} /> : null
                 }
-              >
-                <Text fw={600}>{isCoordTable ? 'Map preview' : 'Preview'}</Text>
-              </Accordion.Control>
-              <Accordion.Panel>
-                {isMultiQC ? (
-                  <MultiQCViewerPreview dcId={dcId} />
-                ) : (
-                  <CoordinatesMapPreview dc={dc} />
-                )}
-              </Accordion.Panel>
-            </Accordion.Item>
-          </Accordion>
-        )}
+                onEdit={projectId ? openLinkEdit : undefined}
+                canEdit={canMutate}
+              />, count(linkRows.length))}
+          {section('details', 'mdi:information-outline', 'Details', <DcDetailsGrid items={details} />)}
+        </Accordion>
 
-        <Card withBorder radius="md" p="md">
-          <Group gap="xs" mb="xs">
-            <Icon
-              icon="mdi:information-outline"
-              width={20}
-              color="var(--mantine-color-orange-6)"
-            />
-            <Text fw={600}>Additional Information</Text>
-          </Group>
-          <Stack gap={4}>
-            <DetailRow
-              label="Description"
-              value={
-                typeof dc.description === 'string' && dc.description
-                  ? dc.description
-                  : 'Not defined'
-              }
-            />
-            <DetailRow
-              label="Created"
-              value={dc.registration_time || 'N/A'}
-            />
-          </Stack>
-        </Card>
-
-        {/* Tabular preview only makes sense for table-type DCs. MultiQC has
-         *  its own per-module preview elsewhere; image and JBrowse types
-         *  don't fit a row/column grid. */}
-        {!isMultiQC && type === 'table' && (
-          <>
-            <Card withBorder radius="md" p="md">
-              <Group gap="xs" mb="md">
-                <Icon
-                  icon="mdi:table"
-                  width={20}
-                  color="var(--mantine-color-teal-6)"
-                />
-                <Text fw={600}>Data Preview</Text>
-              </Group>
-              <DataPreviewPanel key={dcId} dcId={dcId} />
-            </Card>
-            <DeltaVersionHistory key={`history-${dcId}`} dcId={dcId} />
-          </>
-        )}
-
-        {isMultiQC && <MultiQCReportsCard dcId={dcId} />}
-
+        {hasData && <DeltaVersionHistory key={`history-${dcId}-${editTick}`} dcId={dcId} />}
       </Stack>
+      {isTable && (
+        <MapCoordinatesModal
+          opened={coordsOpen}
+          onClose={() => setCoordsOpen(false)}
+          dc={dc}
+          columns={shownColumns.map((c) => c.name)}
+          onChanged={onDcChanged}
+        />
+      )}
+      {projectId && (
+        <LinkEditModal
+          key={editingLink?.id ?? 'none'}
+          opened={!!editingLink}
+          projectId={projectId}
+          link={editingLink}
+          dataCollections={allDataCollections.map((d) => ({
+            id: (d._id ?? d.id) as string,
+            tag: d.data_collection_tag || ((d._id ?? d.id) as string),
+            type: (d.config?.type as string | undefined) || 'unknown',
+          }))}
+          resolvers={resolvers}
+          onClose={() => setEditingLink(null)}
+          onSaved={() => {
+            setEditingLink(null);
+            onLinkSaved();
+          }}
+        />
+      )}
     </Paper>
   );
 };
@@ -3501,7 +2787,7 @@ function flattenPlotEntries(entry: unknown): string[] {
 /** Right-side card on the DC viewer when type === 'multiqc'. Replaces the
  *  Delta Table Details card (which has no meaning for a MultiQC DC). Shows
  *  sample / module / plot counts pulled from the first report's metadata. */
-const MultiQCSummaryCard: React.FC<{ dc: DataCollectionShape }> = ({ dc }) => {
+const MultiQCSummaryCard: React.FC<{ dc: DataCollectionShape; bare?: boolean }> = ({ dc, bare = false }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const [data, setData] = useState<MultiQCReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -3541,16 +2827,29 @@ const MultiQCSummaryCard: React.FC<{ dc: DataCollectionShape }> = ({ dc }) => {
     (r?.file_size_bytes as number | undefined) ?? getDcSizeBytes(dc);
   const s3Location = r?.s3_location || getDcStorageLocation(dc);
 
+  if (bare) {
+    if (loading || error || !hasReport) return null;
+    const processed = formatTimestamp(r?.processed_at || r?.creation_date, { utc: false });
+    const facts: Fact[] = [
+      { label: 'Samples', icon: 'mdi:test-tube', value: sampleCount },
+      { label: 'Modules', icon: 'mdi:puzzle-outline', value: moduleCount },
+      { label: 'Plots', icon: 'mdi:chart-box-outline', value: plotCount },
+    ];
+    if (sizeBytes > 0) facts.push({ label: 'Size', icon: 'mdi:harddisk', value: formatBytes(sizeBytes) });
+    if (r?.multiqc_version)
+      facts.push({ label: 'MultiQC', icon: 'mdi:tag-outline', value: `v${r.multiqc_version}` });
+    if (processed) facts.push({ label: 'Processed', icon: 'mdi:clock-outline', value: processed });
+    return <DcFacts facts={facts} />;
+  }
+
   return (
-    <Card withBorder radius="md" p="md">
-      <Group gap="xs" mb="xs">
-        <Icon
-          icon="mdi:cloud"
-          width={20}
-          color="var(--mantine-color-blue-6)"
-        />
-        <Text fw={600}>Reports & S3 Storage Details</Text>
-      </Group>
+    <Card withBorder={!bare} radius="md" p={bare ? 0 : 'md'}>
+      {!bare && (
+        <Group gap="xs" mb="xs">
+          <Icon icon="mdi:cloud" width={20} color="var(--mantine-color-blue-6)" />
+          <Text fw={600}>Reports & S3 Storage Details</Text>
+        </Group>
+      )}
       {loading ? (
         <Center py="md">
           <Loader size="sm" />
@@ -3783,7 +3082,7 @@ const MultiQCReportBlock: React.FC<{
  *  `_build_multiqc_section` (project_data_collections.py L3308+) which uses
  *  a `dmc.Select` to keep the panel scannable when the DC has many reports.
  *  When there's only a single report the dropdown is hidden. */
-const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
+const MultiQCReportsCard: React.FC<{ dcId: string; bare?: boolean }> = ({ dcId, bare = false }) => {
   const [reports, setReports] = useState<MultiQCReportSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -3829,8 +3128,8 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
   const activeReport = reports[activeIdx];
 
   return (
-    <Card withBorder radius="md" p="md">
-      <Group gap="xs" mb="xs">
+    <Card withBorder={!bare} radius="md" p={bare ? 0 : 'md'}>
+      <Group gap="xs" mb="xs" display={bare ? 'none' : undefined}>
         <DcTypeIcon type="multiqc" size={20} withTooltip={false} />
         <Text fw={600}>MultiQC Report Metadata</Text>
         <Text size="sm" c="dimmed">
@@ -3907,7 +3206,206 @@ const DetailRow: React.FC<{
   </Group>
 );
 
-const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
+/** The table card's body. Owners and editors of a table a user added get one
+ *  editable grid straight away, with the read-only view behind "Past versions".
+ *  Everyone else gets the read-only view; someone who could edit the project is
+ *  also told why this table cannot be edited. */
+const TableDataSection: React.FC<{
+  dcId: string;
+  /** Only tables can be edited; other Delta-backed types skip the lookup. */
+  checkEditable: boolean;
+  autoLoad: boolean;
+  /** Runs whose rows come first and stand out (the What's new and Runs links). */
+  highlightRuns?: string[];
+  onClearHighlight?: () => void;
+  onEdited: () => void;
+}> = ({ dcId, checkEditable, autoLoad, highlightRuns, onClearHighlight, onEdited }) => {
+  const accent = useBrandAccents();
+  const glass = useGlassPages();
+  const [status, setStatus] = useState<TableEditStatus | null>(null);
+  // Until the answer is in, neither grid: one would flash and give way to the other.
+  const [statusKnown, setStatusKnown] = useState(!checkEditable);
+  // Opened on a run's rows (the What's new and Runs links): read, not edit.
+  const [readOnlyView, setReadOnlyView] = useState(Boolean(highlightRuns?.length));
+  // Bumped after an edit: remounts the preview, which then reloads its rows.
+  const [previewKey, setPreviewKey] = useState(0);
+
+  useEffect(() => {
+    setStatus(null);
+    setStatusKnown(!checkEditable);
+    if (!checkEditable) return;
+    let cancelled = false;
+    fetchTableEditStatus(dcId)
+      .then((s) => {
+        if (!cancelled) setStatus(s);
+      })
+      .catch(() => {
+        // No edit control rather than a broken one.
+        if (!cancelled) setStatus(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStatusKnown(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dcId, checkEditable]);
+
+  const editing = !!status?.can_edit && !readOnlyView;
+  const [toggling, setToggling] = useState(false);
+  const toggleLock = async (unlocked: boolean) => {
+    setToggling(true);
+    try {
+      setStatus(await setTableEditLock(dcId, unlocked));
+      // Unlocking opens the editor; locking shows the table read-only.
+      setReadOnlyView(false);
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: unlocked ? 'Could not unlock the table' : 'Could not lock the table',
+        message: (err as Error).message,
+      });
+    } finally {
+      setToggling(false);
+    }
+  };
+  // The lock is shown to whoever could flip it, and, read-only, to an owner or
+  // editor of a published project, so the state is never a mystery.
+  const showLock = !!status?.table_editable && !!status?.role_can_edit;
+
+  if (!statusKnown) {
+    return (
+      <Center py="md">
+        <Loader size="sm" />
+      </Center>
+    );
+  }
+
+  return (
+    <Box
+      className="dc-table-section"
+      data-mode={editing ? 'editing' : 'locked'}
+      data-testid="table-data-section"
+    >
+      {showLock && status && (
+        <TableEditLock
+          status={status}
+          busy={toggling}
+          onToggle={toggleLock}
+          editing={editing}
+        />
+      )}
+      {/* The viewer's "Data" section names it; editing shows only when allowed. */}
+      {!editing && status?.can_edit && (
+        <Group justify="flex-end" mb="xs">
+          <Button
+            size="xs"
+            variant="light"
+            color={glass ? undefined : accent.secondary}
+            onClick={() => setReadOnlyView(false)}
+            leftSection={<Icon icon="mdi:table-edit" width={16} />}
+            data-testid="table-edit-button"
+          >
+            Edit table
+          </Button>
+        </Group>
+      )}
+      {editing ? (
+        <TableEditor
+          dcId={dcId}
+          onSaved={() => {
+            setPreviewKey((k) => k + 1);
+            onEdited();
+          }}
+          onShowReadOnly={() => setReadOnlyView(true)}
+        />
+      ) : highlightRuns && highlightRuns.length > 0 ? (
+        <NewRowsPreview dcId={dcId} runs={highlightRuns} onClear={onClearHighlight} />
+      ) : (
+        <DataPreviewPanel
+          key={`${dcId}-${previewKey}`}
+          dcId={dcId}
+          autoLoad={autoLoad || previewKey > 0 || readOnlyView}
+          restore={
+            status?.can_edit
+              ? {
+                  onRestored: () => {
+                    setPreviewKey((k) => k + 1);
+                    setReadOnlyView(false);
+                    onEdited();
+                  },
+                }
+              : showLock
+                ? { blockedReason: 'Unlock the table to restore a past version.' }
+                : undefined
+          }
+        />
+      )}
+    </Box>
+  );
+};
+
+/** Whether cells of this table may be edited by hand: locked by default,
+ *  unlocked to keep it as metadata (a sample sheet) maintained in Depictio.
+ *  One quiet line; the explanation sits in the tooltip. */
+const TableEditLock: React.FC<{
+  status: TableEditStatus;
+  busy: boolean;
+  onToggle: (unlocked: boolean) => void;
+  /** The editor is open (unlocked, and not showing past versions). */
+  editing: boolean;
+}> = ({ status, busy, onToggle, editing }) => {
+  const { unlocked } = status;
+  const published = status.code === 'published_lock';
+  const explanation = published
+    ? status.reason
+    : unlocked
+      ? 'Click a cell to change it; every save is a new version. Columns marked ✎ can be edited.'
+      : 'Unlock to maintain this table by hand, like a sample sheet.';
+  return (
+    <Group
+      justify="flex-end"
+      wrap="nowrap"
+      gap="xs"
+      mb={6}
+      data-testid="table-edit-lock"
+      data-unlocked={unlocked ? 'true' : 'false'}
+    >
+      <Tooltip label={explanation} multiline w={280} withArrow withinPortal>
+        <Group gap={4} wrap="nowrap" style={{ cursor: 'help' }}>
+          <Icon
+            icon={unlocked ? 'mdi:pencil-outline' : 'mdi:lock-outline'}
+            width={14}
+            color={
+              unlocked ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-dimmed)'
+            }
+          />
+          <Text size="xs" c="dimmed">
+            {unlocked ? (editing ? 'Editable' : 'Editable · past version shown') : 'Read-only'}
+          </Text>
+        </Group>
+      </Tooltip>
+      <Switch
+        size="xs"
+        checked={unlocked}
+        onChange={(e) => onToggle(e.currentTarget.checked)}
+        disabled={busy || !status.can_toggle_lock}
+        aria-label={unlocked ? 'Lock cell edits' : 'Unlock cell edits'}
+        data-testid="table-edit-lock-switch"
+      />
+    </Group>
+  );
+};
+
+/** Restoring a past version from the preview: allowed (with what to do after),
+ *  or shown disabled with the reason. */
+type RestoreControl = { onRestored: () => void } | { blockedReason: string };
+
+const DataPreviewPanel: React.FC<{
+  dcId: string;
+  autoLoad?: boolean;
+  restore?: RestoreControl;
+}> = ({ dcId, autoLoad = false, restore }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -3950,6 +3448,12 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
       .catch(() => undefined);
     await load(null);
   };
+
+  useEffect(() => {
+    if (autoLoad) void handleLoad();
+    // Once, on mount: `autoLoad` only says whether the rows were asked for up front.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Pre-first-load states replace the whole panel. Once a preview exists the
   // panel keeps its chrome (version picker, staleness warning) while a
@@ -4050,7 +3554,17 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
           icon={<Icon icon="mdi:history" width={16} />}
           py={6}
         >
-          Viewing v{selectedVersion}: this is not the current data.
+          <Group justify="space-between" wrap="nowrap" gap="sm">
+            <Text size="sm">Viewing v{selectedVersion}: this is not the current data.</Text>
+            {restore && selectedVersion != null && currentVersion != null && (
+              <RestoreVersionButton
+                dcId={dcId}
+                version={selectedVersion}
+                baseVersion={currentVersion}
+                control={restore}
+              />
+            )}
+          </Group>
         </Alert>
       )}
       {error && (
@@ -4072,6 +3586,77 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
         />
       </Box>
     </Stack>
+  );
+};
+
+/** "Restore v{N}": confirms, then writes that version back as a new one. */
+const RestoreVersionButton: React.FC<{
+  dcId: string;
+  version: number;
+  baseVersion: number;
+  control: RestoreControl;
+}> = ({ dcId, version, baseVersion, control }) => {
+  const [opened, setOpened] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if ('blockedReason' in control) {
+    return (
+      <Tooltip label={control.blockedReason} withArrow withinPortal>
+        <Button size="xs" variant="default" disabled data-testid="table-restore-version">
+          Restore v{version}
+        </Button>
+      </Tooltip>
+    );
+  }
+  const run = async () => {
+    setBusy(true);
+    try {
+      const result = await restoreTableVersion(dcId, version, baseVersion);
+      notifications.show({
+        color: 'teal',
+        title: `v${version} restored`,
+        message: `Saved as v${result.delta_version ?? '?'}; the versions in between stay in the history.`,
+      });
+      setOpened(false);
+      control.onRestored();
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not restore this version',
+        message: (err as Error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Popover opened={opened} onChange={setOpened} position="bottom-end" withArrow shadow="md">
+      <Popover.Target>
+        <Button
+          size="xs"
+          variant="default"
+          leftSection={<Icon icon="mdi:restore" width={14} />}
+          onClick={() => setOpened((o) => !o)}
+          data-testid="table-restore-version"
+        >
+          Restore v{version}
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown maw={300}>
+        <Stack gap="xs">
+          <Text size="sm">
+            Make v{version} the current data? It is saved as a new version, so nothing is lost.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button size="xs" variant="subtle" onClick={() => setOpened(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button size="xs" onClick={run} loading={busy} data-testid="table-restore-confirm">
+              Restore
+            </Button>
+          </Group>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
   );
 };
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   clearGeneAnnotationCache,
+  GENE_ASSET_ASSEMBLIES,
   decodeGeneAsset,
   geneAssetUrl,
   loadGeneAnnotation,
@@ -66,6 +67,16 @@ describe('loadGeneAnnotation', () => {
     await expect(loadGeneAnnotation('none')).resolves.toBeNull();
     await expect(loadGeneAnnotation(null)).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch for an assembly with no bundled table (no 404 spam)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    for (const asm of ['hg18', 'dm6', 'mm9', 'data']) {
+      await expect(loadGeneAnnotation(asm)).resolves.toBeNull();
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(GENE_ASSET_ASSEMBLIES).toEqual(['hg38', 'hg19', 'mm10']);
   });
 
   it('fetches once per assembly and memoises the decoded table', async () => {

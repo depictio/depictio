@@ -1,0 +1,14 @@
+sample	gene	signal	status	expression	splicing	mae	neg_log10_p	pvalue	padj	z_score	delta_psi
+MUC1365	TIMMDC1	Expression down	Called	yes	yes	no	7.4	4.1e-8	0.0003	-6.2	0.41
+MUC1365	MCOLN1	Splicing	Called	no	yes	no	5.9	1.2e-6	0.004	-1.1	0.38
+MUC1365	ALDH18A1	Expression down	Called	yes	no	yes	5.1	7.5e-6	0.02	-4.8	0.02
+MUC1365	CLPP	Expression up	Candidate	yes	no	no	3.8	1.6e-4	0.21	4.1	0.01
+MUC1365	NDUFS4	Splicing	Not called	no	no	no	2.6	2.4e-3	1	-0.8	0.22
+MUC1365	ACAD9	Expression down	Not called	no	no	no	2.1	7.9e-3	1	-2.9	0.0
+MUC1370	NDUFAF6	Expression down	Called	yes	no	no	6.8	1.6e-7	0.0008	-5.7	0.03
+MUC1370	TMEM70	Splicing	Called	no	yes	no	6.1	7.9e-7	0.002	-0.9	0.52
+MUC1370	SURF1	Expression down	Candidate	yes	no	yes	4.4	4.0e-5	0.06	-3.9	0.04
+MUC1370	COX15	Expression up	Not called	no	no	no	2.3	5.0e-3	1	2.6	0.0
+MUC1384	POLG	Splicing	Called	no	yes	yes	7.9	1.3e-8	0.0001	-1.4	0.61
+MUC1384	TWNK	Expression down	Candidate	yes	no	no	3.5	3.2e-4	0.3	-3.1	0.0
+MUC1384	MPV17	Expression down	Not called	no	no	no	1.9	1.3e-2	1	-2.2	0.01

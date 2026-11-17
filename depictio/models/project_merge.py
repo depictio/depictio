@@ -46,6 +46,25 @@ def _merge_by_identity(stored: list[dict], incoming: list[dict]) -> list[dict]:
     return [*incoming, *preserved]
 
 
+def _keep_stored_origin(stored: list[dict], incoming: list[dict]) -> None:
+    """Carry a stored ``config.origin`` onto the incoming data collection that drops it.
+
+    The origin is recorded server-side by the route that created the collection;
+    a CLI that predates the field round-trips the collection without it (or as
+    null), which says nothing about where the data came from. Same rule as the
+    rest of this module: what the payload does not mention is kept.
+    """
+    stored_by_id = {ident: dc for dc in stored if (ident := _identity(dc))}
+    for dc in incoming:
+        counterpart = stored_by_id.get(_identity(dc) or "")
+        if counterpart is None:
+            continue
+        stored_origin = (counterpart.get("config") or {}).get("origin")
+        config = dc.get("config")
+        if stored_origin and isinstance(config, dict) and not config.get("origin"):
+            dc["config"] = {**config, "origin": stored_origin}
+
+
 def merge_project_workflows(
     stored_workflows: list[dict] | None,
     incoming_workflows: list[dict] | None,
@@ -67,9 +86,11 @@ def merge_project_workflows(
         counterpart = stored_by_id.get(_identity(workflow) or "")
         if counterpart is None:
             continue
+        incoming_dcs = [dict(dc) for dc in (workflow.get("data_collections") or [])]
+        _keep_stored_origin(counterpart.get("data_collections") or [], incoming_dcs)
         workflow["data_collections"] = _merge_by_identity(
             counterpart.get("data_collections") or [],
-            workflow.get("data_collections") or [],
+            incoming_dcs,
         )
 
     return _merge_by_identity(stored, incoming)

@@ -289,6 +289,8 @@ def _tail_predicate(column: str, direction: str, threshold: float) -> Any:
         return col <= threshold
     if direction == "high":
         return col >= threshold
+    # "both" and "top" both keep the large |x| end; they differ in where the
+    # threshold comes from (a convention, or the k-th largest value).
     return col.abs() >= threshold
 
 
@@ -298,6 +300,7 @@ def _resolve_tail(
     roles: dict[str, str],
     tail: dict | None,
     available: set[str],
+    cap: int = 10_000,
 ) -> tuple[str, str, float] | None:
     """Settle ``(column, direction, threshold)`` for a ``tail`` reduction.
 
@@ -342,6 +345,19 @@ def _resolve_tail(
             role,
         )
         return None
+
+    if declared == "top":
+        # The cut-off is the k-th largest |score|, k being half the row budget:
+        # the strongest rows stay whole and the other half of the budget goes to
+        # a uniform sample of the rest. No convention is involved, so a score in
+        # [0, 1] (a change in usage) is kept at its large end like any other.
+        import polars as pl
+
+        k = max(1, cap // 2)
+        cutoff = scan.select(pl.col(column).abs().top_k(k).min().alias("cut")).collect()["cut"][0]
+        if cutoff is None:
+            return None
+        return column, "top", float(cutoff)
 
     direction: str = declared
     if declared == "auto":
@@ -453,6 +469,69 @@ def _log_rank_sample(scan: Any, roles: dict[str, str], available: set[str], cap:
     return scan.filter(pl.col(rank_col).is_in(keep)).collect()
 
 
+def _match_spelling(available_cols, column: str) -> str | None:
+    """The one column of ``available_cols`` that is ``column`` spelled differently.
+
+    Case first (`habitat` / `Habitat`), then ignoring separators as well
+    (`sampleID` / `sample_id`). None unless exactly one column matches, so an
+    ambiguous name never picks a column for the user.
+    """
+    import re
+
+    def squash(name: str) -> str:
+        return re.sub(r"[^0-9a-z]", "", str(name).lower())
+
+    for key in (lambda n: str(n).lower(), squash):
+        matches = [c for c in available_cols if key(c) == key(column)]
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            return None
+    return None
+
+
+def _with_column(filter_dict: dict, column: str) -> dict:
+    """A copy of ``filter_dict`` pointing at ``column``, top level and nested."""
+    out = dict(filter_dict)
+    if "column_name" in out:
+        out["column_name"] = column
+    nested = out.get("metadata")
+    if isinstance(nested, dict):
+        out["metadata"] = {**nested, "column_name": column}
+    return out
+
+
+def _aggregate_frame(df, aggregate: Any):
+    """Sum ``aggregate["sum"]`` per distinct ``aggregate["group_by"]`` combination.
+
+    For a renderer that only ever adds up the rows it is handed (the sunburst
+    walks each row's lineage and accumulates its abundance into every prefix),
+    this is lossless and ships one row per lineage instead of one per lineage
+    and sample. Null keys stay a group of their own: a row whose lineage stops
+    early is still a leaf at that depth.
+    """
+    import polars as pl
+
+    group_by = aggregate.get("group_by") if isinstance(aggregate, dict) else None
+    sum_col = aggregate.get("sum") if isinstance(aggregate, dict) else None
+    if (
+        not isinstance(group_by, list)
+        or not group_by
+        or not all(isinstance(c, str) for c in group_by)
+        or not isinstance(sum_col, str)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="aggregate must be {group_by: [column, ...], sum: column}",
+        )
+    missing = [c for c in [*group_by, sum_col] if c not in df.columns]
+    if missing:
+        raise HTTPException(
+            status_code=400, detail=f"aggregate names columns not in the frame: {missing}"
+        )
+    return df.group_by(group_by, maintain_order=True).agg(pl.col(sum_col).sum())
+
+
 def _load_reduced(
     wf_oid,
     dc_oid,
@@ -464,6 +543,7 @@ def _load_reduced(
     viz_kind: str | None = None,
     roles: dict[str, str] | None = None,
     tail: dict | None = None,
+    delta_version: int | None = None,
 ) -> tuple[Any | None, int | None, dict | None]:
     """Read the filtered frame, reduced the way ``policy`` allows.
 
@@ -501,6 +581,7 @@ def _load_reduced(
             metadata=filter_metadata or None,
             init_data=init_data,
             select_columns=projection,
+            delta_version=delta_version,
         )
         if scan is None:
             return None, None, None
@@ -529,7 +610,7 @@ def _load_reduced(
             return _exact(scan.collect(), total, policy)
 
         if policy == "tail":
-            spec = _resolve_tail(scan, viz_kind, roles or {}, tail, set(projection))
+            spec = _resolve_tail(scan, viz_kind, roles or {}, tail, set(projection), cap)
             frame = _tail_sample(scan, projection, total, cap, spec) if spec else None
             if frame is not None:
                 return _reduced(frame, total, "tail")
@@ -631,6 +712,15 @@ def fetch_advanced_viz_data(
     viz_kind = payload.get("viz_kind")
     roles = payload.get("roles") or {}
     tail = payload.get("tail") or None
+    aggregate = payload.get("aggregate") or None
+    # A past commit of the collection, for a before/after comparison (#1397).
+    # Read through the same pinned path as every other render: the frame cache
+    # is salted with it and the local mirror is skipped.
+    delta_version = payload.get("delta_version")
+    if delta_version is not None and (
+        isinstance(delta_version, bool) or not isinstance(delta_version, int) or delta_version < 0
+    ):
+        raise HTTPException(status_code=400, detail="delta_version must be an integer >= 0")
 
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -728,13 +818,19 @@ def fetch_advanced_viz_data(
     # the metadata list and (b) avoid passing missing columns to .select(),
     # which would otherwise fail at collect() with ColumnNotFoundError.
     try:
-        from depictio.api.v1.deltatables_utils import _create_delta_scan
+        from depictio.api.v1.deltatables_utils import _create_delta_scan, get_cached_column_names
 
-        _scan = _create_delta_scan(
-            init_data[str(dc_id)]["delta_location"],
-            init_data[str(dc_id)].get("dc_type"),
+        # Cached per (collection, aggregation version): building the scan reads
+        # the Delta log from S3, which cost ~200 ms on every request, and the
+        # load below opens the table again.
+        _cols = get_cached_column_names(
+            str(dc_id),
+            lambda: _create_delta_scan(
+                init_data[str(dc_id)]["delta_location"],
+                init_data[str(dc_id)].get("dc_type"),
+            ),
         )
-        available_cols = set(_scan.collect_schema().names())
+        available_cols = set(_cols) if _cols is not None else None
     except Exception as _exc:
         logger.warning("advanced_viz/data: schema introspection failed: %s", _exc)
         available_cols = None
@@ -762,6 +858,21 @@ def fetch_advanced_viz_data(
                     dc_id,
                 )
                 continue
+            if available_cols is not None and col not in available_cols and isinstance(f, dict):
+                # A Split/Colour-by group names the dashboard's column as the
+                # first collection spells it (`habitat`); a canonical recipe
+                # often capitalises it (`Habitat`). The user picked the concept,
+                # not the spelling, so a single match ignoring case and
+                # separators (`sampleID` / `sample_id`) is the same column. Scoped to group filters: a hand-set filter that
+                # misses the column still drops, as before.
+                match = (
+                    _match_spelling(available_cols, col)
+                    if f.get("source") == "group_filter"
+                    else None
+                )
+                if match:
+                    f = _with_column(f, match)
+                    col = match
             if available_cols is not None and col not in available_cols:
                 logger.info(
                     "advanced_viz/data: dropping cross-DC filter on column %r — not in DC %s",
@@ -793,6 +904,7 @@ def fetch_advanced_viz_data(
             viz_kind=viz_kind,
             roles=roles,
             tail=tail,
+            delta_version=delta_version,
         )
     if df is None:
         try:
@@ -803,6 +915,7 @@ def fetch_advanced_viz_data(
                 limit_rows=limit_rows,
                 select_columns=projection,
                 init_data=init_data,
+                delta_version=delta_version,
             )
         except Exception as exc:
             logger.warning(
@@ -842,6 +955,11 @@ def fetch_advanced_viz_data(
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
     # decides what to do with missing optional columns.
+    # After the counts above, so ``total_rows`` still says how many rows the
+    # table held, and before the column build, so it measures what is shipped.
+    if aggregate:
+        df = _aggregate_frame(df, aggregate)
+
     _t_build = _time.perf_counter()
     present = [c for c in columns if c in df.columns]
 
@@ -877,7 +995,7 @@ def fetch_advanced_viz_data(
     response.headers["X-Rows-Loaded"] = str(total_rows)
     response.headers["X-Rows-Displayed"] = str(int(df.height))
     response.headers["X-Frame-Bytes"] = str(int(df.estimated_size()))
-    response.headers["X-Aggregated"] = "0"
+    response.headers["X-Aggregated"] = "1" if aggregate else "0"
     response.headers["X-Sampling-Policy"] = str(sampling["policy"])
     response.headers["X-Total-Ms"] = f"{(_time.perf_counter() - _t0) * 1000:.1f}"
     return result
@@ -892,7 +1010,21 @@ _CACHE_KEY_VERSION = "v3"
 _FAILED_RETRY_AFTER_S = 60
 
 
-def _find_reusable_cache_entry(cache, cache_key: str) -> dict | None:
+def _entry_age_s(doc: dict, *fields: str) -> float | None:
+    """Seconds since the first of ``fields`` the doc carries, or None."""
+    from datetime import datetime, timezone
+
+    stamp = next((doc.get(f) for f in fields if doc.get(f)), None)
+    if not isinstance(stamp, datetime):
+        return None
+    if stamp.tzinfo is None:  # pymongo returns naive UTC by default
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - stamp).total_seconds()
+
+
+def _find_reusable_cache_entry(
+    cache, cache_key: str, stale_after_s: float | None = None
+) -> dict | None:
     """Return the cached compute doc for ``cache_key``, or None on a miss.
 
     ``done`` and ``pending`` entries are reused as-is. A ``failed`` entry is
@@ -900,19 +1032,29 @@ def _find_reusable_cache_entry(cache, cache_key: str) -> dict | None:
     ``_FAILED_RETRY_AFTER_S`` it is deleted and the caller re-enqueues the
     computation. A younger failed entry is still returned so rapid re-renders
     see the error instead of spawning a task per render.
-    """
-    from datetime import datetime, timezone
 
+    A ``pending`` entry older than twice ``stale_after_s`` (the task's hard
+    time limit) is gone the same way: its result was lost (a Redis restarted
+    without persistence, as under ``depictio local up``, keeps no result) and
+    the tile would poll forever. The limit counts from when a worker starts
+    the task and the entry is stamped at enqueue, so the second limit leaves
+    the task as long again to wait in the queue.
+    """
     existing = cache.find_one({"_id": cache_key})
+    if existing and existing.get("status") == "pending" and stale_after_s:
+        age_s = _entry_age_s(existing, "created_at")
+        if age_s is not None and age_s > 2 * stale_after_s:
+            # Only the entry read: a concurrent request may already have
+            # replaced it with a fresh pending one.
+            cache.delete_one(
+                {"_id": cache_key, "status": "pending", "created_at": existing.get("created_at")}
+            )
+            return None
     if not existing or existing.get("status") != "failed":
         return existing
-    stamp = existing.get("completed_at") or existing.get("created_at")
-    if isinstance(stamp, datetime):
-        if stamp.tzinfo is None:  # pymongo returns naive UTC by default
-            stamp = stamp.replace(tzinfo=timezone.utc)
-        age_s = (datetime.now(timezone.utc) - stamp).total_seconds()
-        if age_s < _FAILED_RETRY_AFTER_S:
-            return existing
+    age_s = _entry_age_s(existing, "completed_at", "created_at")
+    if age_s is not None and age_s < _FAILED_RETRY_AFTER_S:
+        return existing
     # Only drop it if it is still the failed doc we read (a concurrent retry may
     # already have replaced it with a fresh pending entry).
     cache.delete_one({"_id": cache_key, "status": "failed"})
@@ -990,7 +1132,9 @@ def dispatch_compute_embedding(
 
     cache = db["compute_results"]
     cache_key = _compute_cache_key(payload, current_user.id)
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
 
     # Cache hit (done or pending).
     if existing:
@@ -1150,7 +1294,9 @@ def dispatch_compute_complex_heatmap(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "complex_heatmap")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
     if existing:
         return {
             "job_id": cache_key,
@@ -1285,7 +1431,9 @@ def dispatch_compute_upset(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "upset_plot")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
     if existing:
         return {
             "job_id": cache_key,
@@ -1428,7 +1576,9 @@ def _dispatch_compute(
             "from_cache": True,
         }
 
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
     if existing:
         return _from_cache(existing)
 
@@ -1710,6 +1860,36 @@ def _phylogeny_s3_client():
         verify=settings.s3.verify_tls,
         config=Config(connect_timeout=3, retries={"total_max_attempts": 2}),
     )
+
+
+@advanced_viz_endpoint_router.get("/geojson/{data_collection_id}")
+def get_geojson(
+    data_collection_id: PyObjectId,
+    current_user=Depends(get_user_or_anonymous),
+) -> Response:
+    """Return the file of a GeoJSON DC, for its preview on the project page.
+
+    Reads only the fixed key ingest writes in the instance bucket, never a
+    stored location, so no project content can steer what is read.
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.geojson import geojson_s3_key
+
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    _assert_dc_access(dc_oid, current_user)
+
+    key = geojson_s3_key(str(dc_oid))
+    try:
+        obj = _phylogeny_s3_client().get_object(Bucket=settings.s3.bucket, Key=key)
+        body = obj["Body"].read()
+    except Exception as exc:
+        logger.warning("geojson not read from s3://%s/%s (%s)", settings.s3.bucket, key, exc)
+        raise HTTPException(status_code=404, detail="GeoJSON file not found.") from exc
+    return Response(content=body, media_type="application/geo+json")
 
 
 @advanced_viz_endpoint_router.get(

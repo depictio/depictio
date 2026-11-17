@@ -1,9 +1,12 @@
+import csv
+import json
 import os
 import shutil
 import tempfile
 import time
 from types import SimpleNamespace
 from typing import Any
+from uuid import uuid4
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -11,9 +14,13 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, tokens_collection
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.data_collections import DataOrigin
 from depictio.models.s3_access import ProjectS3Config
+from depictio.models.s3_utils import delete_keys
+from depictio.models.timestamps import utc_now_naive
 
 
 def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str, dict[str, dict]]:
@@ -151,12 +158,21 @@ async def _get_data_collection_polars_schema(
     # Auth + existence: reuse the existing specs path to enforce permissions.
     await _get_data_collection_specs(data_collection_id, current_user)
 
-    from depictio.api.v1.db import deltatables_collection
-
     try:
         dc_oid = ObjectId(data_collection_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    # The Mongo lookup and the Delta log read block for ~170 ms against S3; on
+    # the event loop they stall every other request, and a dashboard asks for
+    # one schema per collection when a view on runs is on.
+    import asyncio
+
+    return await asyncio.to_thread(_read_polars_schema, dc_oid)
+
+
+def _read_polars_schema(dc_oid: ObjectId) -> dict[str, str]:
+    from depictio.api.v1.db import deltatables_collection
 
     dt_doc = deltatables_collection.find_one({"data_collection_id": dc_oid})
     if not dt_doc:
@@ -257,6 +273,8 @@ def _project_with_dc_access(dc_oid: ObjectId, current_user, required: str) -> di
     )
     if not project or not has_permission(project, current_user, required, group_ids):
         raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+    if required != "viewer":
+        assert_project_unlocked(project)
     return project
 
 
@@ -434,7 +452,7 @@ async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
         if "Contents" in response:
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
             if objects_to_delete:
-                s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
+                delete_keys(s3_client, bucket_name, (o["Key"] for o in objects_to_delete))
                 logger.info(
                     f"Deleted {len(objects_to_delete)} Delta table objects for data collection {data_collection_id}"
                 )
@@ -568,12 +586,27 @@ def _editable_project_and_token(project_id: str, current_user) -> tuple[ObjectId
             status_code=403,
             detail="You don't have edit permission on this project.",
         )
+    assert_project_unlocked(project_dict)
 
     # Any active token for this user will do (the dash flow does the same).
     full_token = tokens_collection.find_one({"user_id": current_user.id})
     if not full_token:
         raise HTTPException(status_code=401, detail="No API token on file for this user.")
     return project_oid, full_token
+
+
+def origin_now(kind: str, location: str | None = None) -> DataOrigin:
+    """Build a ``DataOrigin`` stamped with the current naive-UTC time.
+
+    Shared by every route that creates a data collection, so ``added_at`` is
+    always set the same way. ``kind`` is one of ``upload``, ``url``,
+    ``folder``, ``run`` or ``manifest`` (validated by the model).
+    """
+    return DataOrigin(
+        kind=kind,  # type: ignore[arg-type]
+        location=location,
+        added_at=utc_now_naive(),
+    )
 
 
 def _build_table_workflow(
@@ -587,8 +620,11 @@ def _build_table_workflow(
     lon_column: str | None,
     scan,
     location: str,
+    origin: DataOrigin | None = None,
 ):
     """Construct a single-DC Workflow wrapping a table DC read through ``scan``.
+
+    ``origin`` records where the data came from (see ``origin_now``).
 
     ``lat_column`` and ``lon_column`` together make it a coordinates table.
     Returns ``(workflow, data_collection)``.
@@ -597,12 +633,6 @@ def _build_table_workflow(
     from depictio.models.models.data_collections_types.table import DCTableConfig
     from depictio.models.models.data_collections_types.table_coordinates import (
         DCTableCoordinatesConfig,
-    )
-    from depictio.models.models.workflows import (
-        Workflow,
-        WorkflowConfig,
-        WorkflowDataLocation,
-        WorkflowEngine,
     )
 
     if lat_column and lon_column:
@@ -626,6 +656,7 @@ def _build_table_workflow(
         metatype="metadata",
         scan=scan,
         dc_specific_properties=dc_table_config,
+        origin=origin,
     )
     data_collection = DataCollection(
         data_collection_tag=name.strip(),
@@ -633,12 +664,25 @@ def _build_table_workflow(
         config=dc_config,
     )
 
-    # Basic projects can have many DCs in unique workflows; advanced
-    # projects have a real upstream pipeline so we still wrap in one
-    # workflow per DC for parity with the existing Dash code path.
+    return _wrap_in_workflow(name, location, data_collection), data_collection
+
+
+def _wrap_in_workflow(name: str, location: str, data_collection):
+    """A workflow holding ``data_collection`` alone.
+
+    Basic projects can have many DCs in unique workflows; advanced projects
+    have a real upstream pipeline so we still wrap in one workflow per DC.
+    """
+    from depictio.models.models.workflows import (
+        Workflow,
+        WorkflowConfig,
+        WorkflowDataLocation,
+        WorkflowEngine,
+    )
+
     timestamp_ms = int(time.time() * 1000)
     workflow_tag = f"{name.strip()}_workflow_{timestamp_ms}"
-    workflow = Workflow(
+    return Workflow(
         name=workflow_tag,
         workflow_tag=workflow_tag,
         engine=WorkflowEngine(name="python", version="3.12"),
@@ -646,7 +690,6 @@ def _build_table_workflow(
         data_location=WorkflowDataLocation(structure="flat", locations=[location]),
         data_collections=[data_collection],
     )
-    return workflow, data_collection
 
 
 def _push_workflow_and_ingest(
@@ -734,6 +777,16 @@ def _push_workflow_and_ingest(
     }
 
 
+def _upload_basename(filename: str | None, fallback: str = "upload.dat") -> str:
+    """The last segment of an upload's name, safe to join under a temp folder.
+
+    A dropped folder sends ``run_1/table.csv`` as the file name, and the name is
+    whatever the client says, so it is never used as a path.
+    """
+    name = os.path.basename((filename or "").replace("\\", "/"))
+    return name if name not in ("", ".", "..") and "\x00" not in name else fallback
+
+
 def _create_dc_from_upload(
     *,
     project_id: str,
@@ -776,7 +829,7 @@ def _create_dc_from_upload(
 
     temp_dir = tempfile.mkdtemp(prefix="depictio_upload_")
     try:
-        temp_file_path = os.path.join(temp_dir, filename or "upload.dat")
+        temp_file_path = os.path.join(temp_dir, _upload_basename(filename))
         with open(temp_file_path, "wb") as fh:
             fh.write(file_bytes)
         logger.debug(f"Wrote {len(file_bytes)} bytes to {temp_file_path}")
@@ -799,6 +852,8 @@ def _create_dc_from_upload(
             lon_column=lon_column,
             scan=Scan(mode="single", scan_parameters=ScanSingle(filename=temp_file_path)),
             location=temp_dir,
+            # The original name, never the temp path the bytes were written to.
+            origin=origin_now("upload", _upload_basename(filename, "") or None),
         )
 
         return _push_workflow_and_ingest(
@@ -809,6 +864,189 @@ def _create_dc_from_upload(
             current_user=current_user,
             full_token=full_token,
         )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+ASSET_KINDS = ("geojson", "phylogeny", "image")
+_ASSET_MAX_PER_FILE_BYTES = 50 * 1024 * 1024
+_IMAGE_COLUMN = "image_path"
+
+
+def _phylogeny_format(text: str) -> str | None:
+    """``"newick"`` or ``"nexus"`` from a tree file's text, None for anything else."""
+    head = text.lstrip()
+    if head[:6].upper() == "#NEXUS":
+        return "nexus"
+    return "newick" if head.startswith("(") and head.rstrip().endswith(";") else None
+
+
+def _validate_geojson_bytes(body: bytes) -> None:
+    try:
+        document = json.loads(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Not valid JSON: {exc}") from exc
+    if not isinstance(document, dict) or document.get("type") != "FeatureCollection":
+        raise HTTPException(status_code=400, detail="A GeoJSON file must be a FeatureCollection.")
+
+
+def _unique_image_names(files: list[tuple[bytes, str]], extensions: list[str]) -> list[str]:
+    """Each image's file name, made unique; 400 for a file that is not an image."""
+    used: set[str] = set()
+    names: list[str] = []
+    for _, filename in files:
+        base = _upload_basename(filename)
+        stem, ext = os.path.splitext(base)
+        if ext.lower() not in extensions:
+            raise HTTPException(status_code=400, detail=f"'{base}' is not a supported image.")
+        candidate, n = base, 1
+        while candidate.lower() in used:
+            n += 1
+            candidate = f"{stem}_{n}{ext}"
+        used.add(candidate.lower())
+        names.append(candidate)
+    return names
+
+
+def _create_asset_dc_from_uploads(
+    *,
+    project_id: str,
+    name: str,
+    description: str,
+    kind: str,
+    files: list[tuple[bytes, str]],
+    current_user,
+) -> dict:
+    """Create a GeoJSON, phylogeny or image collection from uploaded files.
+
+    The file-backed types the CLI ingests, for a browser that has only the bytes.
+    One file for a map or a tree; for images, any number in one collection, with
+    a generated manifest of one row per image.
+
+    Synchronous, like the other create-DC flows: callers use ``asyncio.to_thread``.
+    """
+    from depictio.cli.cli.utils.deltatables import _s3_client
+    from depictio.models.models.data_collections import (
+        DataCollection,
+        DataCollectionConfig,
+        Scan,
+        ScanSingle,
+    )
+    from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
+    from depictio.models.models.data_collections_types.image import (
+        DEFAULT_IMAGE_EXTENSIONS,
+        DCImageConfig,
+    )
+    from depictio.models.models.data_collections_types.phylogeny import (
+        DCPhylogenyConfig,
+        phylogeny_s3_key,
+    )
+
+    if kind not in ASSET_KINDS:
+        raise HTTPException(status_code=400, detail=f"Unknown kind '{kind}'.")
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Data collection name is required.")
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+    if kind != "image" and len(files) != 1:
+        raise HTTPException(status_code=400, detail=f"A {kind} collection takes one file.")
+    for body, filename in files:
+        if not body:
+            raise HTTPException(status_code=400, detail=f"File '{filename}' is empty.")
+        if len(body) > _ASSET_MAX_PER_FILE_BYTES:
+            raise HTTPException(status_code=413, detail=f"File '{filename}' is over 50 MB.")
+
+    properties: Any
+    tree_format: str | None = None
+    if kind == "geojson":
+        _validate_geojson_bytes(files[0][0])
+        properties = DCGeoJSONConfig()
+    elif kind == "phylogeny":
+        tree_format = _phylogeny_format(files[0][0].decode("utf-8", errors="replace"))
+        if tree_format is None:
+            raise HTTPException(status_code=400, detail="Not a Newick or Nexus tree.")
+        properties = DCPhylogenyConfig(format=tree_format)  # type: ignore[arg-type]
+
+    project_oid, full_token = _editable_project_and_token(project_id, current_user)
+    cli_config = _cli_config_with_token(current_user, full_token, None)
+    bucket = cli_config.s3_storage.bucket
+    origin_name = _upload_basename(files[0][1]) if len(files) == 1 else f"{len(files)} files"
+
+    temp_dir = tempfile.mkdtemp(prefix="depictio_asset_upload_")
+    written_keys: list[str] = []
+    client = None
+    try:
+        if kind == "image":
+            extensions = [*DEFAULT_IMAGE_EXTENSIONS, ".tif"]
+            image_names = _unique_image_names(files, extensions)
+            prefix = f"images/{uuid4().hex}"
+            client = _s3_client(cli_config)
+            for (body, _), image_name in zip(files, image_names, strict=True):
+                key = f"{prefix}/{image_name}"
+                client.put_object(Bucket=bucket, Key=key, Body=body)
+                written_keys.append(key)
+            local_path = os.path.join(temp_dir, "images.csv")
+            with open(local_path, "w", encoding="utf-8", newline="") as fh:
+                writer = csv.writer(fh)
+                writer.writerow([_IMAGE_COLUMN, "name"])
+                writer.writerows((n, os.path.splitext(n)[0]) for n in image_names)
+            properties = DCImageConfig(
+                format="csv",
+                polars_kwargs={"separator": ","},
+                image_column=_IMAGE_COLUMN,
+                s3_base_folder=f"s3://{bucket}/{prefix}/",
+                supported_formats=extensions,
+            )
+        else:
+            local_path = os.path.join(temp_dir, _upload_basename(files[0][1]))
+            with open(local_path, "wb") as fh:
+                fh.write(files[0][0])
+
+        data_collection = DataCollection(
+            data_collection_tag=name.strip(),
+            description=description or "",
+            config=DataCollectionConfig(
+                type=kind,
+                metatype="metadata",
+                scan=Scan(mode="single", scan_parameters=ScanSingle(filename=local_path)),
+                dc_specific_properties=properties,
+                origin=origin_now("upload", origin_name),
+            ),
+        )
+        workflow = _wrap_in_workflow(name, temp_dir, data_collection)
+
+        if kind == "phylogeny":
+            # The processor refuses a server path outside the data policy, and
+            # a temp folder is one: the bytes go straight to the key the Newick
+            # endpoint reads.
+            key = phylogeny_s3_key(str(data_collection.id))
+            client = _s3_client(cli_config)
+            client.put_object(Bucket=bucket, Key=key, Body=files[0][0])
+            written_keys.append(key)
+            pushed = projects_collection.update_one(
+                {"_id": project_oid}, {"$push": {"workflows": workflow.mongo()}}
+            )
+            if pushed.modified_count == 0:
+                raise HTTPException(status_code=500, detail="Failed to attach workflow to project.")
+            return {
+                "success": True,
+                "message": f"Data collection '{name.strip()}' created.",
+                "data_collection_id": str(data_collection.id),
+                "workflow_id": str(workflow.id),
+            }
+
+        return _push_workflow_and_ingest(
+            project_oid=project_oid,
+            workflow=workflow,
+            data_collection=data_collection,
+            name=name,
+            current_user=current_user,
+            full_token=full_token,
+        )
+    except Exception:
+        if client is not None and written_keys:
+            delete_keys(client, bucket, written_keys)
+        raise
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -882,6 +1120,7 @@ def _create_dc_from_url(
         lon_column=lon_column,
         scan=Scan(mode="url", scan_parameters=ScanURL(url=url)),
         location=url,
+        origin=origin_now("url", url),
     )
 
     return _push_workflow_and_ingest(
@@ -990,7 +1229,9 @@ def _save_multiqc_uploads_to_temp_dir(
     return folder_assignments, skipped_names
 
 
-def _build_multiqc_workflow(name: str, description: str, temp_dir: str):
+def _build_multiqc_workflow(
+    name: str, description: str, temp_dir: str, origin: DataOrigin | None = None
+):
     """Construct a single-DC Workflow wrapping a MultiQC DC pointed at temp_dir."""
     from depictio.models.models.data_collections import (
         DataCollection,
@@ -1008,6 +1249,7 @@ def _build_multiqc_workflow(name: str, description: str, temp_dir: str):
         type="multiqc",
         metatype="metadata",
         dc_specific_properties=DCMultiQC(),
+        origin=origin,
     )
     data_collection = DataCollection(
         data_collection_tag=name.strip(),
@@ -1191,6 +1433,7 @@ def _create_multiqc_dc_from_uploads(
             status_code=403,
             detail="You don't have edit permission on this project.",
         )
+    assert_project_unlocked(project_dict)
 
     cli_config = _build_cli_config_for_user(current_user)
 
@@ -1199,7 +1442,15 @@ def _create_multiqc_dc_from_uploads(
         folder_assignments, skipped_names = _save_multiqc_uploads_to_temp_dir(
             decoded_files, temp_dir
         )
-        workflow, data_collection = _build_multiqc_workflow(name, description, temp_dir)
+        # One upload: its file name; several: a short count, since the
+        # per-report names are folder paths of no use as a single location.
+        upload_names = [fname for _, fname in decoded_files]
+        multiqc_location = (
+            upload_names[0] if len(upload_names) == 1 else f"{len(upload_names)} files"
+        )
+        workflow, data_collection = _build_multiqc_workflow(
+            name, description, temp_dir, origin=origin_now("upload", multiqc_location)
+        )
 
         # Atomically attach the new workflow before processing so the API can
         # locate the DC via its $push'd entry. Roll back on processor failure.

@@ -82,11 +82,14 @@ def _definition_fallback(dashboard_doc: dict) -> str:
     definition.
     """
     from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        SNAPSHOT_PROVENANCE_FIELDS,
         SNAPSHOT_VOLATILE_FIELDS,
     )
 
+    # Provenance moves on every template import, whether or not the content did.
+    skipped = SNAPSHOT_VOLATILE_FIELDS | SNAPSHOT_PROVENANCE_FIELDS
     return _digest(
-        {k: v for k, v in dashboard_doc.items() if k not in SNAPSHOT_VOLATILE_FIELDS},
+        {k: v for k, v in dashboard_doc.items() if k not in skipped},
         length=32,
     )
 

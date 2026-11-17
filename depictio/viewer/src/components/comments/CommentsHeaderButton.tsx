@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChromeButton, useCommentsControl } from 'depictio-react-core';
+import { useUiStore } from '../../store/useUiStore';
 
 const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
 
@@ -8,6 +9,8 @@ const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a +
  *  by signing in (the button then says so and asks them to). */
 const CommentsHeaderButton: React.FC = () => {
   const control = useCommentsControl();
+  const drawerOpen = useUiStore((s) => s.commentsOpen);
+  const closeComments = useUiStore((s) => s.closeComments);
   if (!control) return null;
   const open = sum(control.openCounts);
   const proposed = sum(control.proposedCounts);
@@ -27,7 +30,8 @@ const CommentsHeaderButton: React.FC = () => {
       label="Comments"
       tooltip={tooltip}
       badge={open > 0 ? open : proposed}
-      onClick={() => control.openDrawer(null)}
+      // The same key opens and closes the drawer, like the other docked panels.
+      onClick={() => (drawerOpen ? closeComments() : control.openDrawer(null))}
       data-tour-id="comments-header"
     />
   );

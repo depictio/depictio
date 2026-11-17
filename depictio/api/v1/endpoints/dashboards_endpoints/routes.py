@@ -4,7 +4,9 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -23,6 +25,10 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_dashboards
 from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
+from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+    delete_annotations_for_dashboards,
+)
+from depictio.api.v1.endpoints.dashboards_endpoints.code_figures import refuse_new_figure_code
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     effective_category_colors,
     family_brand_theme,
@@ -41,6 +47,11 @@ from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
 )
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_cascade import (
     delete_filter_states_for_dashboards,
+)
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
+    assert_dashboard_creation_allowed,
+    assert_dashboard_unlocked,
+    dashboard_lock,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
@@ -82,6 +93,7 @@ from depictio.api.v1.services.figure.figure_builder import (
     merge_dashboard_brand_theme,
 )
 from depictio.api.v1.services.figure.style_presets import figure_style_payload
+from depictio.api.v1.services.multiqc.dc_lookup import report_set_digest
 from depictio.models.components.category_palette import assign_category_colors
 from depictio.models.components.constants import FLOATING_ADVANCED_VIZ_KINDS
 from depictio.models.components.lite import (
@@ -105,6 +117,7 @@ from depictio.models.models.dashboards import (
 )
 from depictio.models.models.deltatables import latest_complete_aggregation
 from depictio.models.models.multiqc_reports import general_stats_available
+from depictio.models.models.templates import DashboardTemplateOrigin
 from depictio.models.models.users import User
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
@@ -706,6 +719,18 @@ def _overlay_version(
     return merged, main_tab
 
 
+def _public_lock(dashboard_doc: dict) -> dict | None:
+    """The published lock freezing this dashboard, trimmed for the client, or None."""
+    lock = dashboard_lock(dashboard_doc)
+    if lock is None:
+        return None
+    return {
+        "locked_at": lock.get("locked_at"),
+        "reason": lock.get("reason"),
+        "source": lock.get("source"),
+    }
+
+
 @dashboards_endpoint_router.get("/get/{dashboard_id}")
 async def get_dashboard(
     dashboard_id: PyObjectId,
@@ -809,6 +834,8 @@ async def get_dashboard(
         except Exception as e:
             logger.warning(f"get_dashboard: prewarm dispatch failed for {dashboard_id}: {e}")
 
+    dashboard_dict["published_lock"] = _public_lock(dashboard_data)
+
     return convert_objectid_to_str(dashboard_dict)
 
 
@@ -895,13 +922,19 @@ async def init_dashboard(
     # own so a save never freezes a copy of them here.
     dashboard_dict["inherited_category_colors"] = family_category_colors(dashboard_dict)
 
+    # A published dashboard is read-only for everyone: the role stays as it is,
+    # but the client is told it can neither edit nor delete.
+    published_lock = _public_lock(dashboard_data)
+    is_frozen = published_lock is not None
+
     response = {
         "dashboard": dashboard_dict,
         "project_id": str(project_id),
+        "published_lock": published_lock,
         "user_permissions": {
             "level": user_permission_level,
-            "can_edit": user_permission_level in ["owner", "editor"],
-            "can_delete": user_permission_level == "owner",
+            "can_edit": user_permission_level in ["owner", "editor"] and not is_frozen,
+            "can_delete": user_permission_level == "owner" and not is_frozen,
         },
     }
 
@@ -1010,6 +1043,8 @@ async def edit_dashboard(
             status_code=403, detail="You don't have permission to edit this dashboard."
         )
 
+    assert_dashboard_unlocked(dashboard)
+
     # Before the write, and only now that the caller is known to be an editor.
     _ensure_baseline_quietly(dashboard_id, current_user)
 
@@ -1057,6 +1092,7 @@ async def save_dashboard(
     # browsers then keep showing the stale thumbnail PNG. (The Dash save path
     # bumps the same field; see dashboards_endpoints/routes.py:3705 etc.)
     save_payload = data.mongo()
+    refuse_new_figure_code(save_payload.get("stored_metadata"), current_user)
     save_payload["last_saved_ts"] = utc_now_str()
 
     # `_id` is immutable in MongoDB, and `MongoModel.ensure_id` mints a fresh
@@ -1072,6 +1108,13 @@ async def save_dashboard(
     # Stored, it would freeze a copy that later changes to the main tab miss.
     save_payload.pop("inherited_brand_theme", None)
     save_payload.pop("inherited_category_colors", None)
+    # Read-time only too: the lock lives on the project, and a save must never
+    # write one (or clear one) onto the dashboard.
+    save_payload.pop("published_lock", None)
+    # Written only by the shared-labels route: the editor round-trips the
+    # whole document, so saving it here would undo labels shared since the
+    # editor loaded the dashboard.
+    save_payload.pop("shared_labels", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the
@@ -1093,6 +1136,9 @@ async def save_dashboard(
     # save None over it, and a duplicate round-trips its source's key, which would
     # make the next refresh of that source pick either copy.
     save_payload.pop("source_key", None)
+    # `template_origin` is provenance the template import writes; a client that
+    # never loaded it would blank it, and one that did could forge it.
+    save_payload.pop("template_origin", None)
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -1105,6 +1151,8 @@ async def save_dashboard(
             raise HTTPException(
                 status_code=403, detail="You don't have permission to update this dashboard."
             )
+
+        assert_dashboard_unlocked(existing_dashboard)
 
         # Visibility, permissions and project binding all have dedicated,
         # owner-gated paths (project visibility toggle, creation-time
@@ -1141,6 +1189,10 @@ async def save_dashboard(
                 status_code=403,
                 detail="You don't have permission to create a dashboard in this project.",
             )
+        # In a published project only a visitor's own copy may be created.
+        assert_dashboard_creation_allowed(
+            project_id, current_user, save_payload.get("parent_dashboard_id")
+        )
         # Visibility is project-driven: dashboards are born with their
         # project's flag, whatever the client sent.
         save_payload["is_public"] = get_project_visibility(project_id)
@@ -1251,6 +1303,17 @@ def _require_dashboard_editor(dashboard_id: PyObjectId, current_user: User) -> d
     return dashboard
 
 
+def _require_dashboard_content_editor(dashboard_id: PyObjectId, current_user: User) -> dict:
+    """`_require_dashboard_editor`, plus a 409 when the dashboard is published.
+
+    For routes that change what the dashboard shows. Comments reuse the plain
+    editor check, since discussing a published dashboard stays allowed.
+    """
+    dashboard = _require_dashboard_editor(dashboard_id, current_user)
+    assert_dashboard_unlocked(dashboard)
+    return dashboard
+
+
 @dashboards_endpoint_router.patch("/appearance/{dashboard_id}")
 async def update_dashboard_appearance(
     dashboard_id: PyObjectId,
@@ -1265,7 +1328,7 @@ async def update_dashboard_appearance(
     can't fight. An empty theme clears the override (the dashboard inherits
     the instance branding again).
     """
-    _require_dashboard_editor(dashboard_id, current_user)
+    _require_dashboard_content_editor(dashboard_id, current_user)
 
     payload = brand_theme.model_dump(exclude_none=True)
     update = {"$set": {"brand_theme": payload}} if payload else {"$unset": {"brand_theme": ""}}
@@ -1298,7 +1361,7 @@ async def upload_dashboard_logo(
     WebP + magic-byte + 2MB rules as the instance logo, deliberately not a
     second copy that can drift.
     """
-    dashboard = _require_dashboard_editor(dashboard_id, current_user)
+    dashboard = _require_dashboard_content_editor(dashboard_id, current_user)
 
     content = await file.read()
     try:
@@ -1373,6 +1436,8 @@ async def delete_dashboard(
             detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
         )
 
+    assert_dashboard_unlocked(dashboard)
+
     # A child tab deleted through this route is the same change as DELETE /tab,
     # so it seeds the family's baseline the same way: on the parent, and before
     # the delete, since a baseline seeded afterwards would not hold the tab.
@@ -1404,6 +1469,7 @@ async def delete_dashboard(
         delete_logo_asset(dashboard_logo_key(dashboard_id))
         delete_threads_for_dashboards(tab_ids_for_threads)
         delete_filter_states_for_dashboards(tab_ids_for_threads)
+        delete_annotations_for_dashboards(tab_ids_for_threads)
         # Drop the version ledger with the dashboard. Versions are keyed on the
         # family id, so without this every deleted dashboard leaves its whole
         # history — and its sequence counter — behind with nothing able to
@@ -1489,6 +1555,8 @@ async def update_tab(
 
     if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to edit this tab.")
+
+    assert_dashboard_unlocked(dashboard)
 
     # Build update fields based on what was provided
     update_fields: dict[str, Any] = {}
@@ -1600,6 +1668,8 @@ async def delete_tab(
     if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to delete this tab.")
 
+    assert_dashboard_unlocked(dashboard)
+
     # Store parent dashboard ID for navigation after delete
     parent_dashboard_id = dashboard.get("parent_dashboard_id")
     tab_title = dashboard.get("title", "Untitled")
@@ -1615,6 +1685,7 @@ async def delete_tab(
     if result.deleted_count > 0:
         delete_threads_for_dashboards([dashboard_id])
         delete_filter_states_for_dashboards([dashboard_id])
+        delete_annotations_for_dashboards([dashboard_id])
         # Anchored on the *parent*: the tab is gone, so it can no longer resolve
         # its own family, and a capture addressed to it would find nothing.
         #
@@ -1690,6 +1761,8 @@ async def reorder_tabs(
 
     if not check_dashboard_mutation_permission(parent_dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to reorder tabs.")
+
+    assert_dashboard_unlocked(parent_dashboard)
 
     _ensure_baseline_quietly(parent_dashboard_id, current_user)
 
@@ -2331,6 +2404,10 @@ def _resolve_link_filters(
                 "interactive_component_type": meta.get("interactive_component_type")
                 or f.get("interactive_component_type"),
                 "selection_column": meta.get("selection_column"),
+                # TextInput options: the pattern is resolved on the origin
+                # collection with the same rules the component filters by.
+                "case_sensitive": meta.get("case_sensitive", f.get("case_sensitive")),
+                "match_mode": meta.get("match_mode", f.get("match_mode")),
             },
         }
         filters_by_dc.setdefault(dc_id, []).append(entry)
@@ -2426,6 +2503,9 @@ def _link_filter_key(
                 str((f.get("metadata") or {}).get("dc_id") or f.get("dc_id") or ""),
                 str((f.get("metadata") or {}).get("column_name") or f.get("column_name") or ""),
                 json.dumps(f.get("value"), sort_keys=True, default=str),
+                # TextInput options change what a pattern resolves to.
+                str((f.get("metadata") or {}).get("case_sensitive", f.get("case_sensitive"))),
+                str((f.get("metadata") or {}).get("match_mode", f.get("match_mode"))),
             )
             for f in filters
         ),
@@ -3106,6 +3186,8 @@ def bulk_compute_cards(
                     str(fm.get("column_name")),
                     str(fm.get("interactive_component_type")),
                     repr(fm.get("value")),
+                    repr(fm.get("case_sensitive")),
+                    repr(fm.get("match_mode")),
                 )
                 for fm in card_filters
             )
@@ -3798,6 +3880,8 @@ async def render_figure_endpoint(
          "groups": [{name, column_name, values, color}], "color_by_group": bool,
          "color_by_column": {"column_name": str, "color_map": {value: "#rrggbb"}},
          "grouping_display": "color" | "facet",
+         "group_keep_color": bool,  # facet by group, keep the figure's colours
+         "group_overall": bool,  # with it, an "All" panel of every row first
          "include_other": bool,
          "style": {"figure_style": "default" | "minimal",
                    "header_title": bool, "hide_legend": bool}}
@@ -3956,6 +4040,10 @@ async def render_figure_endpoint(
         payload["color_by_column"] = color_by_column
     if (color_by_group or color_by_column) and grouping_display == "facet":
         payload["grouping_display"] = "facet"
+        if color_by_group and request.get("group_keep_color") is True:
+            payload["group_keep_color"] = True
+            if request.get("group_overall") is True:
+                payload["group_overall"] = True
     import time as _time
 
     _t0 = _time.perf_counter()
@@ -4762,7 +4850,7 @@ def _resolve_tab_family(
 def _is_floating_component(meta: dict[str, Any]) -> bool:
     """Whether a stored component is lifted out of the grid into the floating panel.
 
-    A map floats whenever it says so. An advanced viz does only when it is one
+    A map or a genome browser floats whenever it says so. An advanced viz does only when it is one
     of the kinds a panel can hold (`FLOATING_ADVANCED_VIZ_KINDS`): stored
     metadata never went through the lite model's own check, and the viewer takes
     whatever floats off the grid, so a tile of any other kind has to stay on it.
@@ -4770,13 +4858,13 @@ def _is_floating_component(meta: dict[str, Any]) -> bool:
     if meta.get("placement") != "floating":
         return False
     component_type = meta.get("component_type")
-    if component_type == "map":
+    if component_type in ("map", "jbrowse"):
         return True
     return component_type == "advanced_viz" and meta.get("viz_kind") in FLOATING_ADVANCED_VIZ_KINDS
 
 
 def _floating_components_of(tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The family's floating components (maps and 3D structures), each paired with its owning tab."""
+    """The family's floating components (maps, genome browsers and 3D structures), each paired with its owning tab."""
     components: list[dict[str, Any]] = []
     for tab in tabs:
         for meta in tab.get("stored_metadata") or []:
@@ -4982,31 +5070,564 @@ def get_cross_tab_components(
 
 
 # ============================================================================
-# React viewer: JBrowse session URL
+# React viewer: JBrowse genome browser
 # ============================================================================
 
 
+# The collections a project creation has just queued for ingestion: an import
+# running before the workers finds them empty, and must not read that as "this
+# run has no such data".
+_dc_tags_being_ingested: ContextVar[frozenset[str]] = ContextVar(
+    "_dc_tags_being_ingested", default=frozenset()
+)
+
+
+@contextmanager
+def dcs_being_ingested(tags: Collection[str]) -> Iterator[None]:
+    """Import dashboards as if the collections tagged ``tags`` were already populated."""
+    token = _dc_tags_being_ingested.set(frozenset(tags))
+    try:
+        yield
+    finally:
+        _dc_tags_being_ingested.reset(token)
+
+
+def _is_unpopulated_optional_dc(dc: dict) -> bool:
+    """An optional, delta-backed table that holds no data: the run lacked its inputs.
+
+    The rule `_component_has_data` hides a card on. The project keeps such a DC
+    (skipped at ingestion, not removed), so a reader that looks a DC up by tag
+    must pass over it, or a `locus_from` naming it reads a table that is not there.
+    """
+    if not dc.get("optional") or str((dc.get("config") or {}).get("type") or "").lower() != "table":
+        return False
+    if dc.get("data_collection_tag") in _dc_tags_being_ingested.get():
+        return False
+    from depictio.api.v1.db import deltatables_collection
+
+    return deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc["_id"]))}) is None
+
+
+def _find_project_dc(
+    project_id: Any, dc_tag: str, workflow_tag: str | None = None
+) -> tuple[str, str] | None:
+    """(wf_id, dc_id) of the DC tagged ``dc_tag`` in the project, if any.
+
+    ``workflow_tag`` prefers the DC of the workflow with that tag (or name), for a
+    project whose workflows share a collection tag; without a match the first
+    workflow holding the tag answers. An optional DC no ingestion populated is
+    not in the project for this purpose (see `_is_unpopulated_optional_dc`).
+    """
+    project = projects_collection.find_one(
+        {"_id": ObjectId(str(project_id))},
+        {
+            "workflows._id": 1,
+            "workflows.name": 1,
+            "workflows.workflow_tag": 1,
+            "workflows.data_collections": 1,
+        },
+    )
+    first: tuple[str, str] | None = None
+    for wf in (project or {}).get("workflows", []) or []:
+        for dc in wf.get("data_collections", []) or []:
+            if dc.get("data_collection_tag") != dc_tag or _is_unpopulated_optional_dc(dc):
+                continue
+            found = (str(wf.get("_id")), str(dc.get("_id")))
+            if not workflow_tag or workflow_tag in (wf.get("workflow_tag"), wf.get("name")):
+                return found
+            first = first or found
+    return first
+
+
+def _jbrowse_find_dc(project_id: Any, spec: dict) -> tuple[str, str] | None:
+    """(wf_id, dc_id) of the collection a ``locus_from`` source reads, if it is in the project."""
+    tag = spec.get("data_collection_tag", "")
+    if spec.get("workflow_tag"):
+        return _find_project_dc(project_id, tag, workflow_tag=spec["workflow_tag"])
+    return _find_project_dc(project_id, tag)
+
+
+def _jbrowse_resolve_source(
+    spec: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+) -> tuple[dict, str, str, list[dict]] | None:
+    """``(source, wf_id, dc_id, filter metadata)`` of one ``locus_from`` source, if readable.
+
+    The filters are extended over DC links onto the source's collection, like the
+    track manifest's; ``None`` when the collection is not in the project.
+    """
+    found = _jbrowse_find_dc(project_id, spec)
+    if not found:
+        return None
+    wf_id, dc_id = found
+    merged = _resolve_link_filters_cached(
+        filters=filters,
+        target_dc_id=dc_id,
+        project_id=project_id,
+        access_token=access_token,
+        component_type="jbrowse",
+    )
+    return spec, wf_id, dc_id, _build_filter_metadata(merged)
+
+
+def _jbrowse_calls_source(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+) -> tuple[dict, str, str, list[dict]] | None:
+    """``(locus_from, wf_id, dc_id, filter metadata)`` of the primary source's calls, if any.
+
+    ``None`` when the component declares no ``locus_from`` or the primary
+    source's collection is not in the project. It frames the view and carries the
+    mate, so it is the primary source (the first of a list) alone.
+    """
+    from depictio.api.v1.services.jbrowse.render import primary_locus_source
+
+    spec = primary_locus_source(component)
+    if not spec:
+        return None
+    return _jbrowse_resolve_source(spec, filters, project_id, access_token)
+
+
+def _jbrowse_calls_sources(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+) -> list[tuple[dict, str, str, list[dict]]]:
+    """Every readable ``locus_from`` source (see ``_jbrowse_resolve_source``), in declared order."""
+    from depictio.api.v1.services.jbrowse.render import locus_sources
+
+    resolved = (
+        _jbrowse_resolve_source(spec, filters, project_id, access_token)
+        for spec in locus_sources(component)
+    )
+    return [r for r in resolved if r is not None]
+
+
+def _jbrowse_locus_source(component: dict, project_id: Any) -> dict[str, str | None] | None:
+    """The primary ``locus_from`` collection and columns a region selection filters on, if any.
+
+    ``None`` without ``locus_from`` or when its collection is not in the project.
+    """
+    from depictio.api.v1.services.jbrowse.render import primary_locus_source
+
+    spec = primary_locus_source(component)
+    if not spec:
+        return None
+    found = _jbrowse_find_dc(project_id, spec)
+    if not found:
+        return None
+    return {
+        "dc_id": found[1],
+        "chrom_column": spec.get("chrom_column"),
+        "start_column": spec.get("start_column"),
+        "end_column": spec.get("end_column"),
+    }
+
+
+def _jbrowse_filter_rows(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+    pins: DataVersionPins,
+) -> tuple[dict, list[dict]] | None:
+    """``(locus_from, rows)`` when the filters narrow ``locus_from`` to a few rows.
+
+    Between 1 and ``max_rows`` rows (see ``locus_from_rows`` for how they are
+    framed); above, the view does not jump. The ``locus_from`` collection is
+    read at its pinned commit, like the tracks.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    if not filters:
+        return None
+    source = _jbrowse_calls_source(component, filters, project_id, access_token)
+    if source is None:
+        return None
+    spec, wf_id, dc_id, metadata = source
+    if not metadata:
+        return None
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(wf_id),
+            data_collection_id=dc_id,
+            metadata=metadata,
+            delta_version=pins.for_dc(dc_id),
+        )
+    except Exception as e:  # noqa: BLE001 - a missing locus must not fail the view
+        logger.warning(f"render_jbrowse: locus lookup failed: {e}")
+        return None
+    if df.height == 0 or df.height > int(spec.get("max_rows", 20)):
+        return None
+    return spec, df.to_dicts()
+
+
+def _jbrowse_call_columns(spec: dict) -> list[str]:
+    """The ``locus_from`` columns a call reads, each once."""
+    mate = spec.get("mate") or {}
+    columns = [
+        spec.get("chrom_column"),
+        spec.get("start_column"),
+        spec.get("end_column"),
+        spec.get("sort_by"),
+        spec.get("label_column"),
+        spec.get("locate_column"),
+        spec.get("rank_color_by"),
+        spec.get("sample_column"),
+        spec.get("run_column"),
+        *(spec.get("columns") or []),
+        *(spec.get("search_columns") or []),
+        mate.get("chrom_column"),
+        mate.get("start_column"),
+        mate.get("end_column"),
+    ]
+    return list(dict.fromkeys(c for c in columns if c))
+
+
+def _jbrowse_calls_page_frame(
+    source: tuple[dict, str, str, list[dict]],
+    pins: DataVersionPins,
+    start: int,
+    limit: int,
+):
+    """``limit`` rows of the calls from ``start``, ordered by ``sort_by`` (else natural order).
+
+    A sorted read is the table's (memoised sorted frame, lazy page past the
+    memo cap), an unsorted one pushes the window into the Delta scan.
+    """
+    from depictio.api.v1.deltatables_utils import load_sorted_deltatable_lite
+
+    spec, wf_id, dc_id, metadata = source
+    wf_oid = ObjectId(wf_id)
+    columns = _jbrowse_call_columns(spec)
+    delta_version = pins.for_dc(dc_id)
+    if spec.get("sort_by"):
+        return load_sorted_deltatable_lite(
+            workflow_id=wf_oid,
+            data_collection_id=dc_id,
+            sort_by=spec["sort_by"],
+            descending=bool(spec.get("descending", True)),
+            metadata=metadata or None,
+            select_columns=columns,
+            page=(start, limit),
+            delta_version=delta_version,
+        )
+    return _load_natural_page(
+        wf_oid, dc_id, metadata, None, columns, start, limit, delta_version=delta_version
+    )
+
+
+def _jbrowse_calls_page(
+    source: tuple[dict, str, str, list[dict]],
+    pins: DataVersionPins,
+    start: int,
+    limit: int,
+) -> list[dict]:
+    """``_jbrowse_calls_page_frame`` as raw rows (the collection's own columns)."""
+    return _jbrowse_calls_page_frame(source, pins, start, limit).to_dicts()
+
+
+class _FrameLRU:
+    """A few frames kept by key, built once even when several requests ask together.
+
+    The region picker pages, sorts and searches the same (filtered) regions again
+    and again; the per-key lock makes concurrent first requests (the picker and
+    the density strip) share one read of the collections.
+    """
+
+    def __init__(self, size: int) -> None:
+        self._size = size
+        self._data: dict[tuple, Any] = {}
+        self._locks: dict[tuple, threading.Lock] = {}
+        self._guard = threading.Lock()
+
+    def clear(self) -> None:
+        with self._guard:
+            self._data.clear()
+            self._locks.clear()
+
+    def get_or_build(self, key: tuple, build: Callable[[], Any]) -> Any:
+        with self._guard:
+            if key in self._data:
+                self._data[key] = self._data.pop(key)
+                return self._data[key]
+            lock = self._locks.setdefault(key, threading.Lock())
+        with lock:
+            with self._guard:
+                if key in self._data:
+                    return self._data[key]
+            value = build()
+            with self._guard:
+                self._data[key] = value
+                while len(self._data) > self._size:
+                    self._data.pop(next(iter(self._data)))
+                self._locks.pop(key, None)
+            return value
+
+
+# Region frames of the genome browser's picker and density: one per source, their
+# union, and the union merged. Keys carry the filters, the pinned commit and the
+# collection's aggregation version, so an ingest or a pin never reads a stale frame.
+_JBROWSE_SOURCE_FRAMES = _FrameLRU(8)
+_JBROWSE_UNION_FRAMES = _FrameLRU(4)
+_JBROWSE_MERGED_FRAMES = _FrameLRU(4)
+
+
+def _jbrowse_source_key(
+    source: tuple[dict, str, str, list[dict]], pins: DataVersionPins, is_primary: bool
+) -> tuple:
+    from depictio.api.v1 import deltatables_utils
+
+    spec, _wf_id, dc_id, metadata = source
+    version = pins.for_dc(dc_id)
+    try:
+        salt = deltatables_utils._version_salt_for(dc_id, version)
+    except Exception:  # noqa: BLE001 - a salt that cannot be read must not fail the listing
+        salt = None
+    return (
+        dc_id,
+        json.dumps(metadata, sort_keys=True, default=str),
+        version,
+        salt,
+        json.dumps(spec, sort_keys=True, default=str),
+        is_primary,
+    )
+
+
+def _jbrowse_union_frame(
+    sources: list[tuple[dict, str, str, list[dict]]],
+    pins: DataVersionPins,
+    primary_name: str,
+) -> tuple[Any, tuple]:
+    """``(frame, key)``: the regions of ``sources`` in the common shape, one under the other.
+
+    Each source is read once (filters and pinned commit applied, only the
+    columns the calls need) and memoised, see ``_JBROWSE_SOURCE_FRAMES``.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.jbrowse import regions
+
+    keys = tuple(
+        _jbrowse_source_key(src, pins, src[0].get("name") == primary_name) for src in sources
+    )
+
+    def one(src: tuple[dict, str, str, list[dict]], key: tuple):
+        spec, wf_id, dc_id, metadata = src
+
+        def build():
+            df = load_deltatable_lite(
+                workflow_id=ObjectId(wf_id),
+                data_collection_id=dc_id,
+                metadata=metadata or None,
+                select_columns=_jbrowse_call_columns(spec),
+                delta_version=pins.for_dc(dc_id),
+            )
+            return regions.source_frame(df, spec, is_primary=key[-1])
+
+        return _JBROWSE_SOURCE_FRAMES.get_or_build(key, build)
+
+    frame = _JBROWSE_UNION_FRAMES.get_or_build(
+        keys, lambda: regions.union_frames([one(src, k) for src, k in zip(sources, keys)])
+    )
+    return frame, keys
+
+
+def _json_cell(value: Any) -> Any:
+    """A frame cell as JSON: non-finite floats become null, dates text."""
+    if isinstance(value, float) and value - value != 0:  # nan and inf
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _jbrowse_call_rows(rows: list[dict], declared: list[dict]) -> list[dict]:
+    """The response rows for rows of the common shape (see ``regions.source_frame``).
+
+    ``declared`` are the component's sources (the first one is the primary): a
+    row's locus is padded as its own source says, and only a row of the primary
+    source has a mate locus.
+    """
+    from depictio.api.v1.services.jbrowse import regions
+    from depictio.api.v1.services.jbrowse.render import locus_from_rows
+
+    by_name = {s["name"]: s for s in declared}
+    primary = declared[0]
+    out = []
+    for row in rows:
+        spec = by_name.get(row.get("source")) or primary
+        cells = {"chrom_column": "chrom", "start_column": "start", "end_column": "end"}
+        locus = locus_from_rows([row], {**cells, "padding": spec.get("padding", 5000)})
+        mate_locus = None
+        if spec is primary and row.get("_mchrom") is not None:
+            mate_locus = locus_from_rows(
+                [
+                    {
+                        "chrom": row.get("_mchrom"),
+                        "start": row.get("_mstart"),
+                        "end": row.get("_mend"),
+                    }
+                ],
+                {**cells, "padding": primary.get("padding", 5000)},
+            )
+        start = row.get("start")
+        item: dict[str, Any] = {
+            "locus": locus,
+            "mate_locus": mate_locus,
+            "label": row.get("label"),
+            "chrom": row.get("chrom"),
+            "start": None if start is None else max(int(start), 1),
+            "end": row.get("end"),
+            "score": _json_cell(row.get("score")),
+            "extra": {c: _json_cell(row.get(f"x:{c}")) for c in regions.extra_columns(spec)},
+            "source": row.get("source"),
+            "sample": row.get("sample"),
+            "run": row.get("run"),
+        }
+        if "n_rows" in row:
+            item.update(
+                n_rows=row["n_rows"],
+                n_samples=row["n_samples"],
+                samples=row["samples"],
+                sources=row["sources"],
+            )
+        out.append(item)
+    return out
+
+
+def _jbrowse_first_call(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+    pins: DataVersionPins,
+) -> dict[str, str | None] | None:
+    """``{"locus", "mate_locus", "picked"}`` of the first call (best ``sort_by`` row), if any.
+
+    With ``span_top`` it frames the first N calls together when they sit close
+    (``opening_rows``). Among the rows left by the dashboard filters when there are some, so a
+    filtered view still opens on a call. Any failure (a column the collection
+    lacks, an unreadable table) is not the view's: it opens at the next level.
+    """
+    from depictio.api.v1.services.jbrowse.render import (
+        OPENING_PICKED,
+        centred_locus_from_rows,
+        mate_locus_from_rows,
+        opening_rows,
+        picked_from_rows,
+    )
+
+    try:
+        source = _jbrowse_calls_source(component, filters, project_id, access_token)
+        if source is None:
+            return None
+        rows = opening_rows(
+            _jbrowse_calls_page(source, pins, 0, int(source[0].get("span_top") or 1)), source[0]
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"render_jbrowse: first call lookup failed: {e}")
+        return None
+    # The best call sits in the middle of the frame, and is the one picked.
+    locus = centred_locus_from_rows(rows, source[0]) if rows else None
+    if not locus:
+        return None
+    picked = picked_from_rows(rows[:OPENING_PICKED], source[0])
+    return {
+        "locus": locus,
+        "mate_locus": mate_locus_from_rows(rows, source[0]),
+        # The best few of the calls it frames (``span_top``), the best alone
+        # otherwise; best first, so the viewer gives each its medal.
+        "picked": picked and {**picked, "medals": True},
+    }
+
+
+def _jbrowse_rank_rows(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+    pins: DataVersionPins,
+) -> list[dict] | None:
+    """The first ``rank_track`` calls (``sort_by`` order) for the rank track, if asked for.
+
+    Under the dashboard filters but not the picks made in a tile (a filter whose
+    ``source`` ends in ``_selection``), so a call keeps its rank once clicked. Any failure leaves the track out.
+    """
+    from depictio.api.v1.services.jbrowse.render import primary_locus_source
+
+    spec = primary_locus_source(component) or {}
+    top = int(spec.get("rank_track") or 0)
+    if top <= 0:
+        return None
+    kept = [f for f in filters if not str(f.get("source") or "").endswith("_selection")]
+    try:
+        source = _jbrowse_calls_source(component, kept, project_id, access_token)
+        return _jbrowse_calls_page(source, pins, 0, top) if source else None
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"render_jbrowse: rank track lookup failed: {e}")
+        return None
+
+
 @dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
-async def render_jbrowse_endpoint(
+def render_jbrowse_endpoint(
     dashboard_id: PyObjectId,
     component_id: str,
-    request: dict,
+    request: dict | None = Body(default=None),
     current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
-    """Synthesise the JBrowse 2 iframe URL for the React viewer.
+    """JBrowse configuration of a ``jbrowse`` component under the dashboard filters.
 
-    JBrowse 2 must be running at ``localhost:3000`` and its session config
-    server at ``localhost:9010/sessions/...``; if either is unreachable,
-    returns 503 (no silent fallback).
+    Request body: ``{"filters": [...]}`` (same payload as the other render
+    endpoints; the component strips its own ``jbrowse_selection`` entry), plus
+    the optional time-travel keys (``as_of_version`` / ``data_versions``, see
+    ``_data_pins``; ``definition_version``, see ``_render_component``).
+    Filters are extended over DC links, then applied to the component's
+    ``genomic_tracks`` manifest: the matching tracks are the ones shown. A
+    pinned manifest is read at its commit, and so is the ``locus_from``
+    collection; the signed track URLs name the commit for the proxy.
+
+    Returns the assembly and track configurations (file locations are signed
+    proxy URLs), the track ids to show, the locus and view flags, plus a
+    per-track summary the viewer uses to turn a click back into a filter.
+
+    The view opens on (``opening`` says which): the filtered ``locus_from``
+    rows, the component's ``location``, the first call of ``locus_from``, the
+    first region holding data in the first tracks, the assembly's default.
+    ``mate_location`` is the second side of the filtered or first call.
+    ``region`` (optional, ``{chrom, start, end}``) is the genome selection in
+    force; it never filters, but when the filters leave several ``locus_from``
+    rows, the ones inside it frame the view (the latest of several picks).
+    ``locus_source`` is the ``locus_from`` collection and columns (null without
+    ``locus_from``), and ``display`` the YAML display defaults (null when unset).
     """
-    import httpx
+    from depictio.api.v1.services.jbrowse import ucsc
+    from depictio.api.v1.services.jbrowse.render import (
+        build_jbrowse_payload,
+        filtered_track_rows,
+        gene_fallback_locus,
+        gene_symbols,
+        locus_from_rows,
+        mate_locus_from_rows,
+        pad_locus,
+        picked_from_rows,
+        rows_in_region,
+        union_locus,
+    )
+    from depictio.api.v1.services.jbrowse.tracks import TracksNotIngested, find_tracks_dc
 
-    from depictio.api.v1.configs.config import API_BASE_URL
+    if not settings.jbrowse.enabled:
+        raise HTTPException(status_code=404, detail="The genome browser is disabled.")
 
-    JBROWSE_HOST = "http://localhost:3000"
-    JBROWSE_SESSIONS_HOST = "http://localhost:9010"
-
-    filters = request.get("filters") or []
+    filters = (request or {}).get("filters") or []
+    region = (request or {}).get("region")
+    if not isinstance(region, dict):
+        region = None
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -5017,83 +5638,467 @@ async def render_jbrowse_endpoint(
         raise HTTPException(status_code=403, detail="Permission denied.")
 
     component = _render_component(dashboard_data, component_id, "jbrowse", request, label="JBrowse")
+    pins = _data_pins(request or {}, dashboard_data)
 
-    wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
-
-    dc_config = component.get("dc_config") or {}
-    jbrowse_params = dc_config.get("jbrowse_params") or {}
-    assembly = jbrowse_params.get("assemblyName") or "hg38"
-    default_loc = jbrowse_params.get("default_location") or "chr1:1-248956422"
-
-    user_id = str(getattr(current_user, "id", "anonymous"))
-    session = f"{user_id}_{dc_id}_lite.json"
-
-    track_ids: list[str] = []
-    filter_applied = bool(filters)
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            if filters:
-                try:
-                    map_resp = await client.get(
-                        f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/"
-                        f"{wf_id}/{dc_id}",
-                    )
-                    if map_resp.status_code == 200:
-                        mapping = map_resp.json() or {}
-                        dc_map = mapping.get(str(dc_id), {})
-                        for f in filters:
-                            col = f.get("column_name")
-                            value = f.get("value")
-                            if not col or value in (None, [], ""):
-                                continue
-                            values = value if isinstance(value, list) else [value]
-                            col_map = dc_map.get(col, {})
-                            for v in values:
-                                tid = col_map.get(str(v))
-                                if tid:
-                                    track_ids.append(tid)
-                except httpx.HTTPError as e:
-                    logger.warning(f"render_jbrowse: map_tracks unreachable: {e}")
-
-                if track_ids and len(track_ids) <= 100:
-                    try:
-                        filter_resp = await client.post(
-                            f"{API_BASE_URL}/depictio/api/v1/jbrowse/filter_config",
-                            json={
-                                "tracks": track_ids,
-                                "dashboard_id": str(dashboard_id),
-                                "data_collection_id": str(dc_id),
-                            },
-                        )
-                        if filter_resp.status_code == 200:
-                            body = filter_resp.json() or {}
-                            if body.get("session"):
-                                session = body["session"]
-                    except httpx.HTTPError as e:
-                        logger.warning(f"render_jbrowse: filter_config unreachable: {e}")
-    except Exception as e:
-        logger.error(f"render_jbrowse: internal jbrowse routing failed: {e}", exc_info=True)
+    if not dc_id:
+        raise HTTPException(status_code=400, detail="Component has no track data collection.")
+    tdc = find_tracks_dc(str(dc_id))
+    if tdc is None:
         raise HTTPException(
-            status_code=503,
-            detail=f"JBrowse internal services unreachable: {e}",
+            status_code=400,
+            detail="The component's data collection is not a genomic_tracks collection.",
         )
 
-    qs = f"assembly={assembly}&loc={default_loc}"
-    if track_ids and len(track_ids) <= 100:
-        qs += f"&tracks={','.join(track_ids)}"
-    iframe_url = f"{JBROWSE_HOST}?config={JBROWSE_SESSIONS_HOST}/sessions/{session}&{qs}"
+    merged_filters = _resolve_link_filters_cached(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type="jbrowse",
+    )
+    try:
+        delta_version = pins.for_dc(str(dc_id))
+        filtered = filtered_track_rows(tdc, _build_filter_metadata(merged_filters), delta_version)
+        locus = mate_locus = first_call = focus = picked = None
+        narrowed = _jbrowse_filter_rows(component, filters, project_id, access_token, pins)
+        if narrowed is not None:
+            unpadded = {**narrowed[0], "padding": 0}
+            # Several picks (a chord's accumulate): the genome region the latest
+            # one published frames the view, every pick stays highlighted.
+            framed = rows_in_region(narrowed[1], narrowed[0], region) or narrowed[1]
+            focus = locus_from_rows(framed, unpadded)
+            if focus is None and settings.jbrowse.ucsc_tracks_enabled:
+                # Rows without coordinates (an isoform table built without the
+                # extended annotation): the gene they name still places the view.
+                focus = gene_fallback_locus(
+                    framed,
+                    unpadded,
+                    ucsc.ucsc_genome(component.get("assembly") or tdc.props.assembly),
+                )
+            if (
+                focus is not None
+                and narrowed[0].get("frame_gene")
+                and narrowed[0].get("label_column")
+                and settings.jbrowse.ucsc_tracks_enabled
+            ):
+                # The whole gene the picked row sits in, not only its ORF or
+                # transcript: the gene search on the label, never the locate id.
+                focus = union_locus(
+                    focus,
+                    gene_fallback_locus(
+                        framed,
+                        {**unpadded, "locate_column": None},
+                        ucsc.ucsc_genome(component.get("assembly") or tdc.props.assembly),
+                    ),
+                )
+            locus = pad_locus(focus, int(narrowed[0].get("padding", 5000)))
+            mate_locus = mate_locus_from_rows(framed, narrowed[0])
+            picked = picked_from_rows(narrowed[1], narrowed[0])
+            if picked and picked.get("genes") and settings.jbrowse.ucsc_tracks_enabled:
+                # The annotation names a gene by its symbol, a row may by its id.
+                picked["genes"] = gene_symbols(
+                    picked["genes"],
+                    ucsc.ucsc_genome(component.get("assembly") or tdc.props.assembly),
+                )
+        # The first call only matters when nothing nearer opens the view.
+        if locus is None and not component.get("location"):
+            first_call = _jbrowse_first_call(component, filters, project_id, access_token, pins)
+        return build_jbrowse_payload(
+            component,
+            tdc,
+            filtered,
+            uid=str(getattr(current_user, "id", "")),
+            locus=locus,
+            mate_locus=mate_locus,
+            first_call=first_call,
+            locus_source=_jbrowse_locus_source(component, project_id),
+            picked=picked,
+            rank_rows=_jbrowse_rank_rows(component, filters, project_id, access_token, pins),
+            # A picked row below the top is drawn on the rank track too.
+            pick_rows=narrowed[1] if narrowed is not None else None,
+            delta_version=delta_version,
+            category_colors=effective_category_colors(dashboard_data),
+            # The anonymous user is the owner in single-user mode, a stranger on a
+            # public link otherwise.
+            anonymous=bool(getattr(current_user, "is_anonymous", False))
+            and not settings.auth.is_single_user_mode,
+        )
+    except TracksNotIngested as e:
+        # A template's optional track collection the run had no files for: the
+        # tile says so instead of failing.
+        raise HTTPException(
+            status_code=404,
+            detail="No genome-browser tracks: this project's track collection holds no data.",
+        ) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"render_jbrowse failed: {e}", exc_info=True)
+        # The exception text can name storage paths: it stays in the log.
+        raise HTTPException(status_code=500, detail="Failed to build the genome browser.") from e
 
-    return {
-        "iframe_url": iframe_url,
-        "assembly": assembly,
-        "location": default_loc,
-        "tracks": track_ids or None,
-        "metadata": {"filter_applied": filter_applied},
-    }
+
+def _jbrowse_calls_context(
+    dashboard_id: PyObjectId,
+    component_index: str,
+    request: dict | None,
+    current_user: User,
+) -> tuple[dict, dict, Any, DataVersionPins]:
+    """``(body, component, project_id, pins)`` of a request about a tile's regions.
+
+    404 when the genome browser is disabled or the dashboard is unknown, 403
+    without viewer access to its project.
+    """
+    if not settings.jbrowse.enabled:
+        raise HTTPException(status_code=404, detail="The genome browser is disabled.")
+    body = request or {}
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+    component = _render_component(
+        dashboard_data, component_index, "jbrowse", request, label="JBrowse"
+    )
+    return body, component, project_id, _data_pins(body, dashboard_data)
+
+
+def _jbrowse_enabled_sources(
+    component: dict,
+    body: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+) -> tuple[list[dict], list[tuple[dict, str, str, list[dict]]]]:
+    """``(declared sources, the readable ones the request's ``sources`` keeps)``.
+
+    400 when no declared source has a collection in the project. Names the
+    request lists that match no source are ignored, so the kept list may be
+    empty (a total of 0).
+    """
+    from depictio.api.v1.services.jbrowse.render import locus_sources
+
+    declared = locus_sources(component)
+    resolved = _jbrowse_calls_sources(component, filters, project_id, access_token)
+    if not resolved:
+        raise HTTPException(
+            status_code=400, detail="The component has no readable locus_from collection."
+        )
+    wanted = body.get("sources")
+    if isinstance(wanted, list):
+        names = {str(n) for n in wanted}
+        resolved = [r for r in resolved if r[0].get("name") in names]
+    return declared, resolved
+
+
+def _jbrowse_listing(
+    union: Any,
+    union_key: tuple,
+    declared: list[dict],
+    enabled: list[dict],
+    *,
+    sort: dict | None,
+    search: str | None,
+    near: dict | None,
+    merge: bool,
+    start: int,
+    limit: int,
+    column_filters: list[dict] | None = None,
+) -> tuple[int, list[dict]]:
+    """``(total, rows)`` of the regions in ``union`` (the common shape of ``regions.source_frame``).
+
+    Merge first (one row per overlapping region), then search, then either the
+    single region ``near`` asks for or the sorted page. Unsorted, the rows keep the
+    sources' own order (merged: genome order); when a source has a ``sort_by``
+    they come best-first by it, in the direction of the first source that has one.
+    """
+    from depictio.api.v1.services.jbrowse import regions
+
+    frame = union
+    default_descending = next(
+        (bool(s.get("descending", True)) for s in enabled if s.get("sort_by")), True
+    )
+    has_score = any(s.get("sort_by") for s in enabled)
+    if merge:
+        # The best row of a merged region is the one the order puts first.
+        best_descending = default_descending
+        if sort and (
+            sort["column"] == "score"
+            or any(regions.normalised_name(s, sort["column"]) == "score" for s in enabled)
+        ):
+            best_descending = sort["descending"]
+        frame = _JBROWSE_MERGED_FRAMES.get_or_build(
+            (union_key, best_descending), lambda: regions.merge_regions(union, best_descending)
+        )
+    if search and search.strip():
+        frame = frame.filter(regions.search_mask(frame, enabled, search))
+    if column_filters:
+        frame = frame.filter(regions.column_filter_mask(frame, declared, column_filters, merge))
+    total = frame.height
+    if near:
+        row = regions.near_region(
+            frame, near["chrom"], near["pos"], near["direction"], near["chrom_order"]
+        )
+        return total, [row] if row else []
+
+    keys: list | None = None
+    descending = default_descending
+    if sort:
+        keys = regions.sort_keys(frame, declared, sort["column"], merged=merge)
+        descending = sort["descending"]
+    elif has_score:
+        keys = regions.sort_keys(frame, declared, "score", merged=merge)
+    if keys:
+        frame = regions.sort_calls(frame, keys, descending)
+    return total, frame.slice(start, limit).to_dicts()
+
+
+def _jbrowse_parse_calls_body(body: dict, declared: list[dict], merge: bool) -> dict[str, Any]:
+    """The ``sort`` / ``search`` / ``near`` of a calls request, validated (400 otherwise)."""
+    from depictio.api.v1.services.jbrowse import regions
+
+    out: dict[str, Any] = {"sort": None, "search": None, "near": None, "column_filters": []}
+    sort = body.get("sort")
+    if sort:
+        column = sort.get("column") if isinstance(sort, dict) else None
+        if not isinstance(column, str) or not column:
+            raise HTTPException(status_code=400, detail="sort needs a column name.")
+        allowed = regions.sortable_columns(declared, merged=merge)
+        if column not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot sort the calls by '{column}'. Sortable columns: "
+                f"{', '.join(allowed)}.",
+            )
+        out["sort"] = {"column": column, "descending": bool(sort.get("descending", True))}
+    search = body.get("search")
+    if search is not None:
+        if not isinstance(search, str):
+            raise HTTPException(status_code=400, detail="search must be a string.")
+        out["search"] = search
+    raw_filters = body.get("column_filters") or []
+    if not isinstance(raw_filters, list):
+        raise HTTPException(status_code=400, detail="column_filters must be a list.")
+    allowed_filter_columns = regions.sortable_columns(declared, merged=merge)
+    for f in raw_filters:
+        if not isinstance(f, dict):
+            raise HTTPException(status_code=400, detail="Each column filter must be an object.")
+        column, kind, op = f.get("column"), f.get("kind"), f.get("op")
+        if column not in allowed_filter_columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot filter the calls by '{column}'. Filterable columns: "
+                f"{', '.join(allowed_filter_columns)}.",
+            )
+        ops = regions.TEXT_FILTER_OPS if kind == "text" else regions.NUMBER_FILTER_OPS
+        if kind not in ("text", "number") or op not in ops:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Column filter kind must be text or number, op one of {', '.join(ops)}.",
+            )
+        value, value_to = f.get("value"), f.get("value_to")
+        if kind == "number":
+            try:
+                value = float(value)
+                value_to = float(value_to) if op == "inRange" else None
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(
+                    status_code=400, detail="A number filter needs a numeric value."
+                ) from exc
+        elif not isinstance(value, str):
+            raise HTTPException(status_code=400, detail="A text filter needs a string value.")
+        out["column_filters"].append(
+            {"column": column, "kind": kind, "op": op, "value": value, "value_to": value_to}
+        )
+    near = body.get("near")
+    if near:
+        try:
+            order = near["chrom_order"]
+            if not isinstance(order, list) or not isinstance(near["chrom"], str):
+                raise TypeError
+            direction = int(near["direction"])
+            if direction not in (1, -1):
+                raise ValueError
+            out["near"] = {
+                "chrom": near["chrom"],
+                "pos": float(near["pos"]),
+                "direction": direction,
+                "chrom_order": [str(c) for c in order],
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="near needs chrom, pos, direction (1 or -1) and chrom_order (a list).",
+            ) from exc
+    return out
+
+
+@dashboards_endpoint_router.post("/jbrowse_calls/{dashboard_id}/{component_index}")
+def jbrowse_calls_endpoint(
+    dashboard_id: PyObjectId,
+    component_index: str,
+    request: dict | None = Body(default=None),
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """One page of the regions ("calls") a ``jbrowse`` component lists, steps through and bins.
+
+    Request body: ``{"filters": [...], "start": 0, "limit": 50}`` (``limit`` at
+    most 200), plus the time-travel keys of the render endpoints and these
+    optional keys (a body without them behaves as before):
+
+    - ``sources``: names of the ``locus_from`` sources to read (unknown names are
+      ignored; none left = ``total`` 0);
+    - ``sort``: ``{"column", "descending"}``, overriding ``sort_by``. ``column`` is a
+      common-shape name (``chrom``, ``start``, ``end``, ``score``, ``label``,
+      ``sample``, ``run``, ``source``; merged: ``n_rows``, ``n_samples``) or a raw
+      column of a source (``sort_by``, ``label_column``, ``sample_column``,
+      ``run_column``, ``columns``); anything else is a 400;
+    - ``search``: case-insensitive substring over the label and ``search_columns``;
+    - ``column_filters``: ``[{"column", "kind": "text" | "number", "op", "value",
+      "value_to"}]``, the picker's per-column filters (AG Grid's ops), all applied;
+    - ``near``: ``{"chrom", "pos", "direction", "chrom_order"}``, at most one row (see
+      ``regions.near_region``); ``total`` is still the full count;
+    - ``merge``: overlapping regions of one source (across samples and runs) joined into
+      one row each (``n_rows``, ``n_samples``, ``samples``, ``sources``); ``total``
+      counts the merged regions and every other key applies to them.
+
+    The regions are the rows of the sources' collections left by the filters
+    (extended over DC links) at their pinned commit, read in memory and memoised
+    for the modes above; the plain single-source page keeps its Delta page read.
+
+    Returns ``{"total": N, "rows": [...]}``; a row is ``{"locus", "mate_locus",
+    "label", "chrom", "start", "end", "score", "extra", "source", "sample", "run"}``
+    (plus the merge keys). A row whose coordinates are unreadable has a null
+    ``locus`` and still counts in ``total``; ``mate_locus`` is set for the primary
+    source (the first) when it declares a ``mate``.
+    """
+    from depictio.api.v1.deltatables_utils import count_deltatable_lite
+    from depictio.api.v1.services.jbrowse import regions
+
+    body, component, project_id, pins = _jbrowse_calls_context(
+        dashboard_id, component_index, request, current_user
+    )
+    filters = body.get("filters") or []
+    try:
+        start = max(int(body.get("start") or 0), 0)
+        limit = min(max(int(body.get("limit") or 50), 1), 200)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="start and limit must be integers.") from exc
+    declared, sources = _jbrowse_enabled_sources(component, body, filters, project_id, access_token)
+    merge = bool(body.get("merge"))
+    mode = _jbrowse_parse_calls_body(body, declared, merge)
+    if not sources:
+        return {"total": 0, "rows": []}
+    primary_name = declared[0]["name"]
+
+    try:
+        simple = (
+            len(declared) == 1
+            and len(sources) == 1
+            and not (
+                merge
+                or mode["sort"]
+                or mode["near"]
+                or mode["column_filters"]
+                or (mode["search"] or "").strip()
+            )
+        )
+        if simple:
+            source = sources[0]
+            spec, wf_id, dc_id, metadata = source
+            total = _cached_row_count(
+                ObjectId(wf_id),
+                dc_id,
+                metadata,
+                None,
+                count_deltatable_lite,
+                delta_version=pins.for_dc(dc_id),
+            )
+            page = _jbrowse_calls_page_frame(source, pins, start, limit) if start < total else None
+            rows = (
+                []
+                if page is None
+                else regions.source_frame(
+                    page, spec, is_primary=spec.get("name") == primary_name
+                ).to_dicts()
+            )
+        else:
+            union, union_key = _jbrowse_union_frame(sources, pins, primary_name)
+            total, rows = _jbrowse_listing(
+                union,
+                union_key,
+                declared,
+                [src[0] for src in sources],
+                sort=mode["sort"],
+                search=mode["search"],
+                near=mode["near"],
+                merge=merge,
+                start=start,
+                limit=limit,
+                column_filters=mode["column_filters"],
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"jbrowse_calls failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to read the calls.") from e
+    return {"total": total, "rows": _jbrowse_call_rows(rows, declared)}
+
+
+@dashboards_endpoint_router.post("/jbrowse_call_density/{dashboard_id}/{component_index}")
+def jbrowse_call_density_endpoint(
+    dashboard_id: PyObjectId,
+    component_index: str,
+    request: dict | None = Body(default=None),
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """How many regions of a ``jbrowse`` component start in each genome bin, per track.
+
+    Request body: ``{"filters": [...], "regions": [{"refName", "length"}],
+    "bins": 500, "sources": null, "group": "source"}`` plus the time-travel keys.
+    ``bins`` (1 to 2000) is the total over the genome: every chromosome shares one
+    bin size, ``ceil(sum(length) / bins)``. ``group`` is ``source`` (one track per
+    source), ``sample`` or ``run`` (one per sample / run of each source that has
+    the column; the others stay one track). The regions are read like
+    ``jbrowse_calls`` reads them (filters, pinned commit, memoised).
+
+    Returns ``{"bin_size", "max", "tracks", "truncated"}``, see ``regions.density``.
+    """
+    from depictio.api.v1.services.jbrowse import regions
+
+    body, component, project_id, pins = _jbrowse_calls_context(
+        dashboard_id, component_index, request, current_user
+    )
+    filters = body.get("filters") or []
+    chroms = body.get("regions")
+    if not isinstance(chroms, list) or not chroms:
+        raise HTTPException(status_code=400, detail="regions must list the assembly's regions.")
+    try:
+        chroms = [{"refName": str(r["refName"]), "length": int(r["length"])} for r in chroms]
+        bins = min(max(int(body.get("bins") or 500), 1), 2000)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400, detail="regions are {refName, length} and bins an integer."
+        ) from exc
+    group = body.get("group") or "source"
+    if group not in ("source", "sample", "run"):
+        raise HTTPException(status_code=400, detail="group must be source, sample or run.")
+
+    declared, sources = _jbrowse_enabled_sources(component, body, filters, project_id, access_token)
+    names = [src[0]["name"] for src in sources]
+    bin_size = regions.bin_size_for(chroms, bins)
+    if not sources:
+        return {"bin_size": bin_size, "max": 0, "tracks": [], "truncated": 0}
+    try:
+        union, _key = _jbrowse_union_frame(sources, pins, declared[0]["name"])
+        return regions.density(union, chroms, bin_size, group, source_order=names)
+    except Exception as e:
+        logger.error(f"jbrowse_call_density failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to read the region density.") from e
 
 
 # ============================================================================
@@ -5302,6 +6307,12 @@ def _resolve_multiqc_sample_filter(
             comp_dc == multiqc_dc_id_str
             and str(column_name or "").lower() in MULTIQC_SAMPLE_FILTER_COLUMNS
         ):
+            if (
+                f.get("interactive_component_type") or comp_meta.get("interactive_component_type")
+            ) == "TextInput":
+                # A pattern is not a sample name: reading it as one would match no
+                # sample and empty the figure, so it leaves the sample set alone.
+                continue
             values_list = value if isinstance(value, list) else [value]
             direct_sample_filters.append([str(v) for v in values_list])
             continue
@@ -5321,6 +6332,11 @@ def _resolve_multiqc_sample_filter(
                     or comp_meta.get("interactive_component_type"),
                     "column_name": column_name,
                     "value": value,
+                    # TextInput options (ignored by every other type).
+                    "case_sensitive": (f.get("metadata") or {}).get(
+                        "case_sensitive", f.get("case_sensitive")
+                    ),
+                    "match_mode": (f.get("metadata") or {}).get("match_mode", f.get("match_mode")),
                 }
             )
 
@@ -5483,6 +6499,74 @@ def _resolve_multiqc_sample_filter(
     return sorted(surviving)
 
 
+def _pinned_multiqc_locations(
+    pins: DataVersionPins, dc_id: Any, project_id: Any
+) -> tuple[list[str], list[str]] | None:
+    """The reports a pinned MultiQC read draws from, or None for a live read.
+
+    Returns ``(s3_locations, live_locations)``: the parquets of the pinned
+    report ids that still exist, and every parquet the collection holds now
+    (so a caller can tell a pin that equals the live set from a real subset).
+    400 when none of the pinned reports exist any more: answering with today's
+    data under a past label is the failure time travel exists to prevent.
+    """
+    if not dc_id:
+        return None
+    report_ids = pins.reports_for_dc(str(dc_id))
+    if report_ids is None:
+        return None
+    from depictio.api.v1.services.multiqc.dc_lookup import (
+        fetch_s3_locations_for_reports,
+        fetch_s3_locations_from_dc,
+    )
+
+    locations = fetch_s3_locations_for_reports(str(dc_id), report_ids)
+    if not locations:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "None of the MultiQC reports of the selected data version exist any more "
+                f"(dc_id={dc_id!s})."
+            ),
+        )
+    return locations, fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+
+
+def _start_pinned_multiqc_build(
+    cache: Any,
+    dc_id: Any,
+    bare_key: str,
+    s3_locations: list[str],
+    module: str,
+    plot: str,
+    dataset_id: Any,
+    theme: str,
+) -> None:
+    """Build a pinned report subset's figure in the background, once.
+
+    The Celery prerender only builds figures over every report a collection
+    holds, so a read pinned to a different set would answer 202 forever. This
+    parses the subset on a thread (``create_multiqc_plot`` caches the result
+    under the key the next poll probes). The lock is left to expire on
+    failure so a broken build is not retried on every poll.
+    """
+    lock_key = f"multiqc:pinned_build_lock:dc={dc_id}:{bare_key}"
+    if not cache.set_nx(lock_key, "building", ttl=600):
+        return
+
+    def _run() -> None:
+        try:
+            from depictio.api.v1.services.multiqc.figures import create_multiqc_plot
+
+            create_multiqc_plot(
+                s3_locations, module, plot, dataset_id, theme=theme, dc_id=str(dc_id)
+            )
+        except Exception as exc:
+            logger.warning(f"render_multiqc: pinned build failed for dc={dc_id}: {exc}")
+
+    threading.Thread(target=_run, daemon=True, name=f"multiqc-pinned-{dc_id}").start()
+
+
 @dashboards_endpoint_router.post("/render_multiqc/{dashboard_id}/{component_id}")
 def render_multiqc_endpoint(
     dashboard_id: PyObjectId,
@@ -5516,10 +6600,10 @@ def render_multiqc_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    # A past version's module and plot when the body names one. The data is
-    # not versioned (MultiQC reports are plain parquet), which
-    # `data_version_status` reports as such.
+    # A past version's module and plot when the body names one, and the set of
+    # reports it held (`manifest_pins`) when the body pins the data.
     component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
+    pins = _data_pins(request, dashboard_data)
 
     selected_module, selected_plot, selected_dataset, is_gs = _resolve_selected_keys(component)
 
@@ -5547,6 +6631,13 @@ def render_multiqc_endpoint(
         )
         if live_locations:
             s3_locations = live_locations
+
+    # Pinned to the reports a past version held: read only those parquets.
+    pinned = _pinned_multiqc_locations(pins, dc_id, project_id)
+    pinned_differs = False
+    if pinned is not None:
+        s3_locations, all_live_locations = pinned
+        pinned_differs = sorted(s3_locations) != sorted(all_live_locations)
 
     if not selected_module or not selected_plot or not s3_locations:
         missing = []
@@ -5620,6 +6711,9 @@ def render_multiqc_endpoint(
             except Exception as e:
                 logger.debug(f"render_multiqc: aggregation_version lookup failed: {e}")
         version_filter_sig = f"v={agg_version or '0'}|{filter_sig or ''}"
+        if pinned is not None:
+            # A pinned read is its own entry, never the live one.
+            version_filter_sig += f"|pin={report_set_digest(pins.reports_for_dc(str(dc_id)) or [])}"
 
         cache = get_cache()
         filter_aware_key = generate_figure_cache_key(
@@ -5668,7 +6762,9 @@ def render_multiqc_endpoint(
             dc_id=str(dc_id) if dc_id else None,
         )
 
-        if cached is None and dc_id:
+        # The prerender ledger and the Celery build cover the collection's
+        # whole report set; a read pinned to a different set has neither.
+        if cached is None and dc_id and not pinned_differs:
             # S3 prerender: the CLI may have shipped this figure at ingest
             # (``s3://{bucket}/{dc_id}/prerender/<sha>.json.gz``), keyed by the
             # same bare cache key. If so, warm the bare Redis key + disk store
@@ -5793,6 +6889,26 @@ def render_multiqc_endpoint(
                     # ``set_nx``-locked prerender task and 202 so the React poll
                     # loop retries once the figure lands on disk/Redis.
                     rebuild_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+                    if pinned_differs:
+                        _start_pinned_multiqc_build(
+                            cache,
+                            dc_id,
+                            bare_key,
+                            s3_locations,
+                            selected_module,
+                            selected_plot,
+                            selected_dataset,
+                            theme,
+                        )
+                        return JSONResponse(
+                            status_code=202,
+                            content={
+                                "status": "preparing",
+                                "dc_id": str(dc_id),
+                                "component_id": component_id,
+                                "message": "MultiQC figure of the selected version is being prepared.",
+                            },
+                        )
                     if dc_id and cache.get(rebuild_lock_key) is None:
                         from depictio.api.celery_app import build_multiqc_prerender
                         from depictio.api.v1.db import multiqc_prerender_collection
@@ -5909,10 +7025,10 @@ def render_multiqc_general_stats_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    # A past version's module and plot when the body names one. The data is
-    # not versioned (MultiQC reports are plain parquet), which
-    # `data_version_status` reports as such.
+    # A past version's module and plot when the body names one, and the set of
+    # reports it held when the body pins the data.
     component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
+    pins = _data_pins(request, dashboard_data)
 
     s3_locations = component.get("s3_locations") or []
     dc_id = component.get("dc_id") or component.get("data_collection_id")
@@ -5929,6 +7045,10 @@ def render_multiqc_general_stats_endpoint(
         live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         if live_locations:
             s3_locations = live_locations
+
+    pinned = _pinned_multiqc_locations(pins, dc_id, project_id)
+    if pinned is not None:
+        s3_locations = pinned[0]
 
     if not s3_locations:
         raise HTTPException(
@@ -5996,6 +7116,8 @@ def render_multiqc_general_stats_endpoint(
         # `_generate_figure_cache_key`.
         all_paths = "|".join(sorted(s3_locations))
         cache_key_str = f"{all_paths}::{filter_sig}::general_stats_payload"
+        if pinned is not None:
+            cache_key_str += f"::pin={report_set_digest(pins.reports_for_dc(str(dc_id)) or [])}"
         # Embed `dc=<id>` literally so the same `cache.delete_pattern(f"dc={dc_id}")`
         # invalidation that the figure cache uses also drops every GS payload
         # variant (theme/filter) for this DC after append/replace/clear.
@@ -6218,12 +7340,33 @@ _LIST_ITEM_LINE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 _STRUCTURE_LINE = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|(?:[-*_]\s*){3,}$)")
 
 
+_FILTER_COLUMN = re.compile(r"""col\(\s*['"]([^'"]+)['"]\s*\)""")
+
+
+def _text_value_lacks_column(spec: dict) -> bool:
+    """Whether a text value reads a column its collection does not carry.
+
+    The columns read are the value's own and those its `filter_expr` names with
+    `col('...')`. Compared with the schema recorded at ingest; a collection whose
+    schema is unknown never counts as lacking one (``None`` is "could not tell").
+    """
+    dc_id = spec.get("dc_id")
+    if not dc_id:
+        return False
+    names = _dc_column_names(str(dc_id))
+    if names is None:
+        return False
+    wanted = {spec.get("column")} | set(_FILTER_COLUMN.findall(spec.get("filter_expr") or ""))
+    return any(c and c not in names for c in wanted)
+
+
 def _prune_unresolved_text_values(component: dict, dc_meta: dict[str, dict]) -> bool:
     """Take out a text tile's list items citing a value this run cannot compute.
 
-    A value cannot be computed when its `dc` did not resolve, or names an
+    A value cannot be computed when its `dc` did not resolve, names an
     optional collection left unpopulated (the rule `_component_has_data`
-    applies to a card). Each list item citing one, its continuation lines
+    applies to a card), or reads a column the collection does not carry (an
+    optional sheet column the run left out). Each list item citing one, its continuation lines
     included, is removed; values no longer cited anywhere leave `values`, so an
     export stays valid. Lines that are not list items are kept, and print a
     dash for the value.
@@ -6239,7 +7382,7 @@ def _prune_unresolved_text_values(component: dict, dc_meta: dict[str, dict]) -> 
         if not isinstance(spec, dict):
             continue
         probe = {"data_collection_tag": spec.get("dc"), "dc_id": spec.get("dc_id")}
-        if not _component_has_data(probe, dc_meta):
+        if not _component_has_data(probe, dc_meta) or _text_value_lacks_column(spec):
             spec["dc_id"] = spec["wf_id"] = None
             unresolved.add(name)
     if not unresolved:
@@ -6472,6 +7615,7 @@ def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
                 "type": dc.get("config", {}).get("type"),
                 "metatype": dc.get("config", {}).get("metatype"),
                 "optional": dc.get("optional", False),
+                "ingesting": tag in _dc_tags_being_ingested.get(),
             }
             # MultiQC DCs: record which modules + plots actually parsed at
             # ingestion so module/plot-pinned components for absent modules or
@@ -6493,7 +7637,8 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
       - DC tag did not resolve (dc_id unset) -> DC was removed by template
         conditionals / optional-file pruning -> absent -> DROP.
       - DC present but declared `optional` AND a delta-backed Table AND has no
-        deltatables record (processing skipped it, no data) -> DROP.
+        deltatables record (processing skipped it, no data) AND not queued for
+        ingestion (see `dcs_being_ingested`) -> DROP.
       - Otherwise KEEP. In particular a NON-optional DC is always kept so a genuine
         gap renders a visible error instead of being silently hidden, and
         MultiQC / phylogeny DCs (which don't register a delta table) are kept.
@@ -6536,6 +7681,8 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
     # Stored config.type is normalised lower-case (e.g. "table"); MultiQC/phylogeny
     # types don't register delta tables, so only delta-backed Table DCs are checked.
     if not info.get("optional") or (info.get("type") or "").lower() != "table":
+        return True
+    if info.get("ingesting"):
         return True
 
     from depictio.api.v1.db import deltatables_collection
@@ -6660,10 +7807,21 @@ def _section_key(component: dict) -> tuple[str, str] | None:
 
 
 def _data_bound_sections(components: list[dict]) -> set[tuple[str, str]]:
-    """Section keys holding at least one component bound to a data collection."""
+    """Section keys holding at least one component bound to a data collection.
+
+    A highlight counts too: it draws a figure of another tab, so it carries no
+    collection of its own, but it is not a header either. Without it, a section
+    whose one bound tile the run cannot back (a somatic genome view on a
+    germline-only run) is dropped whole, and the highlights that could still
+    draw go with it. `_prune_family_highlights` removes the ones whose source
+    is gone.
+    """
     keys: set[tuple[str, str]] = set()
     for component in components:
-        if not component.get("data_collection_tag"):
+        if (
+            not component.get("data_collection_tag")
+            and component.get("component_type") != "highlight"
+        ):
             continue
         key = _section_key(component)
         if key is not None:
@@ -7204,11 +8362,50 @@ def _import_title(
     return yaml_title
 
 
+def _stamp_template_origin(
+    dashboard_dict: dict[str, Any], template_origin: DashboardTemplateOrigin | None
+) -> None:
+    """Record on an imported dashboard which template revision it came from.
+
+    Written on every import that writes the dashboard, so a replace by a plain
+    file clears a stamp it no longer deserves. A dashboard the import keeps as it
+    is is not stamped: it was not imported from this revision.
+    """
+    dashboard_dict["template_origin"] = (
+        template_origin.model_dump() if template_origin is not None else None
+    )
+
+
 def _family_main_id(doc: dict) -> Any:
     """The main tab's id of the family ``doc`` belongs to: its versions' subject."""
     if doc.get("is_main_tab", True) is False and doc.get("parent_dashboard_id"):
         return doc["parent_dashboard_id"]
     return doc["dashboard_id"]
+
+
+def _gained_category_colors(
+    colour_spec: Any, existing: dict, project_id: Any
+) -> dict[str, dict[str, str]] | None:
+    """A kept dashboard's colours, extended to the values its data gained.
+
+    An --attach-run keeps the dashboard as edited, but a new run brings new
+    values (a second locality) that its `auto` columns never coloured: the
+    legend and the figures then name only the first run's (epic #1399). The
+    template's spec is resolved again with the stored colours first, so every
+    value already coloured keeps its colour (edited in the viewer or not) and
+    only new ones take a palette slot. None when nothing was gained.
+    """
+    if not isinstance(colour_spec, dict) or not colour_spec:
+        return None
+    current = existing.get("category_colors") or {}
+    probe = {
+        "category_colors": json.loads(json.dumps(colour_spec)),
+        "stored_metadata": existing.get("stored_metadata") or [],
+    }
+    _resolve_auto_category_colors(probe, project_id, current)
+    # The stored map wins value by value: a resolve only ever adds.
+    merged = _layered_category_colors(probe.get("category_colors"), current)
+    return merged if merged != current else None
 
 
 def _keep_existing_dashboard(
@@ -7220,6 +8417,7 @@ def _keep_existing_dashboard(
     *,
     current_user: Any,
     before_write: Callable[[], None] | None = None,
+    colour_spec: Any = None,
 ) -> dict[str, Any]:
     """The response of an import that leaves a dashboard the project has as it is.
 
@@ -7229,10 +8427,14 @@ def _keep_existing_dashboard(
     for a multi-tab main: the tabs it gained, which the response lists with the
     ones it had.
 
-    A version is recorded only when the family's content moved: a rename, or
-    tabs gained. A `source_key` alone names the dashboard and changes nothing on
-    screen. `before_write` is the caller's pre-import capture, already run if the
-    caller wrote tabs, so the state before them is the one recorded.
+    `colour_spec`, the YAML's `category_colors`, colours the values the data
+    gained since (see `_gained_category_colors`).
+
+    A version is recorded only when the family's content moved: a rename, new
+    colours, or tabs gained. A `source_key` alone names the dashboard and
+    changes nothing on screen. `before_write` is the caller's pre-import
+    capture, already run if the caller wrote tabs, so the state before them is
+    the one recorded.
     """
     family_id = _family_main_id(existing)
     before_write = before_write or _capture_before_import(family_id, current_user)
@@ -7241,14 +8443,20 @@ def _keep_existing_dashboard(
         changes["title"] = title
     if source_key and not existing.get("source_key"):
         changes["source_key"] = source_key
+    gained = _gained_category_colors(colour_spec, existing, project_id)
+    if gained is not None:
+        changes["category_colors"] = gained
+    content_moved = "title" in changes or "category_colors" in changes
     if changes:
-        if "title" in changes:
+        if content_moved:
             before_write()
         dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
-    if "title" in changes or tabs_added:
+    if content_moved or tabs_added:
         _capture_import(family_id, current_user)
     kept = {**existing, **changes}
     message = "Dashboard kept as it is" + (", renamed" if "title" in changes else "")
+    if "category_colors" in changes:
+        message += ", colours added for new values"
     if tabs_added:
         message += f", {tabs_added} tab{'s' if tabs_added > 1 else ''} added"
     response: dict[str, Any] = {
@@ -7281,6 +8489,7 @@ def _import_multi_tab_dashboard(
     keep_titles: bool = False,
     main_title: str | None = None,
     keep_existing: bool = False,
+    template_origin: DashboardTemplateOrigin | None = None,
 ) -> dict[str, Any]:
     """
     Import a multi-tab dashboard from YAML data with main_dashboard and tabs structure.
@@ -7300,6 +8509,8 @@ def _import_multi_tab_dashboard(
         keep_existing: A main dashboard the project has (same source_key, else
             same title) is left as it is, its tabs too, and gains the tabs of
             the YAML it lacks; main_title still renames it
+        template_origin: The template revision the YAML comes from, stamped on
+            the main dashboard and on every tab this import writes
 
     Returns:
         Import result with main dashboard ID and child tab IDs
@@ -7337,6 +8548,7 @@ def _import_multi_tab_dashboard(
             family_filter,
             keep=True,
             before_write=before_write,
+            template_origin=template_origin,
         )
         _prune_family_highlights(
             existing_main["dashboard_id"], {tab["dashboard_id"] for tab in added}
@@ -7349,6 +8561,7 @@ def _import_multi_tab_dashboard(
             tabs_added=len(added),
             current_user=current_user,
             before_write=before_write,
+            colour_spec=main_dashboard_data.get("category_colors"),
         )
 
     main_dashboard_dict = main_lite.to_full()
@@ -7356,6 +8569,7 @@ def _import_multi_tab_dashboard(
         main_lite.title, existing_main, keep_titles, main_title
     )
     main_dashboard_dict["source_key"] = source_key or (existing_main or {}).get("source_key")
+    _stamp_template_origin(main_dashboard_dict, template_origin)
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
     main_dashboard_dict["is_public"] = project_is_public
 
@@ -7429,6 +8643,7 @@ def _import_multi_tab_dashboard(
         family_filter,
         overwrite=overwrite,
         keep_titles=keep_titles,
+        template_origin=template_origin,
     )
     # Now that every tab is in: a highlight whose tab or figure did not make it.
     _prune_family_highlights(
@@ -7468,6 +8683,7 @@ def _import_family_tabs(
     keep_titles: bool = False,
     keep: bool = False,
     before_write: Callable[[], None] | None = None,
+    template_origin: DashboardTemplateOrigin | None = None,
 ) -> list[dict[str, str]]:
     """Import the tabs of a multi-tab YAML under its main dashboard.
 
@@ -7540,6 +8756,7 @@ def _import_family_tabs(
         tab_dashboard_dict = tab_lite.to_full()
         tab_dashboard_dict["title"] = _import_title(tab_lite.title, existing_tab, keep_titles)
         tab_dashboard_dict["source_key"] = tab_source_key or (existing_tab or {}).get("source_key")
+        _stamp_template_origin(tab_dashboard_dict, template_origin)
         tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
         tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
@@ -7714,6 +8931,7 @@ def import_dashboard_yaml_content(
     main_title: str | None = None,
     parent_source_key: str | None = None,
     existing: Literal["keep", "replace"] | None = None,
+    template_origin: DashboardTemplateOrigin | None = None,
 ) -> dict:
     """Parse and import dashboard YAML (single or multi-tab format).
 
@@ -7769,6 +8987,8 @@ def import_dashboard_yaml_content(
                 status_code=403,
                 detail="You don't have permission to create dashboards in this project.",
             )
+        # A published project takes no import from an editor, new dashboard or replacement.
+        assert_dashboard_creation_allowed(project_id, current_user)
 
         return _import_multi_tab_dashboard(
             yaml_data,
@@ -7779,6 +8999,7 @@ def import_dashboard_yaml_content(
             keep_titles=keep_titles,
             main_title=main_title,
             keep_existing=keep_existing,
+            template_origin=template_origin,
         )
 
     # Single dashboard format
@@ -7813,6 +9034,8 @@ def import_dashboard_yaml_content(
             status_code=403,
             detail="You don't have permission to create dashboards in this project.",
         )
+    # A published project takes no import from an editor, new dashboard or replacement.
+    assert_dashboard_creation_allowed(project_id, current_user)
 
     # A child tab's parent first: the dashboard this import replaces is then one
     # of the parent's tabs, as a main one is a main dashboard.
@@ -7829,7 +9052,12 @@ def import_dashboard_yaml_content(
     )
     if keep_existing and existing_dashboard is not None:
         return _keep_existing_dashboard(
-            existing_dashboard, project_id, source_key, main_title, current_user=current_user
+            existing_dashboard,
+            project_id,
+            source_key,
+            main_title,
+            current_user=current_user,
+            colour_spec=yaml_data.get("category_colors") if isinstance(yaml_data, dict) else None,
         )
     if existing_dashboard:
         logger.info(
@@ -7840,6 +9068,7 @@ def import_dashboard_yaml_content(
     dashboard_dict = lite.to_full()
     dashboard_dict["title"] = _import_title(lite.title, existing_dashboard, keep_titles, main_title)
     dashboard_dict["source_key"] = source_key or (existing_dashboard or {}).get("source_key")
+    _stamp_template_origin(dashboard_dict, template_origin)
     # Visibility is project-driven; `to_full()` defaults to private, which
     # would also reset an existing public dashboard on --overwrite.
     dashboard_dict["is_public"] = get_project_visibility(project_id)
@@ -7942,6 +9171,33 @@ def import_dashboard_yaml_content(
     }
 
 
+def refuse_visitor_import(current_user: User) -> None:
+    """403 for a visitor on the dashboard import routes (#1335).
+
+    In public/demo mode every visitor is auto-minted as a temporary user that
+    passes `get_current_user`, so "authenticated" does not tell a visitor from
+    an admin. The thing to refuse is the visitor, not the mode: an admin (e.g.
+    a long-lived CLI token) or an editor of the target project keeps importing
+    on a public instance, through the usual project-permission check that
+    `import_dashboard_yaml_content` and the JSON route run next.
+
+    The anonymous user is refused too, except in single-user mode, where it is
+    the admin.
+    """
+    if getattr(current_user, "is_temporary", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard import is disabled in public/demo mode",
+        )
+    if getattr(current_user, "is_anonymous", False) and not settings.auth.is_single_user_mode:
+        detail = (
+            "Dashboard import is disabled in public/demo mode"
+            if settings.auth.is_public_mode
+            else "Anonymous users cannot import dashboards. Please login to continue."
+        )
+        raise HTTPException(status_code=403, detail=detail)
+
+
 @dashboards_endpoint_router.post("/import/yaml")
 async def import_dashboard_from_yaml(
     yaml_content: str = Body(..., media_type="text/plain"),
@@ -7952,6 +9208,8 @@ async def import_dashboard_from_yaml(
     main_title: str | None = None,
     parent_source_key: str | None = None,
     existing: Literal["keep", "replace"] | None = None,
+    template_id: str | None = None,
+    template_version: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -7995,6 +9253,12 @@ async def import_dashboard_from_yaml(
     match by key or by title, the tab imported from the same `source_key` stays
     under its current parent.
 
+    `template_id` and `template_version` (both or neither, else a 400) say the YAML
+    is a template's dashboard: every dashboard this import writes records them,
+    with the import date, as its `template_origin`. A dashboard left as it is
+    (`existing=keep`) keeps the stamp it had. The stamp is provenance, not content:
+    it is not in the dashboard's versions, nor in its YAML export.
+
     Project identification:
     - If `project_id` is provided, uses that project directly (404 if it does not exist)
     - If `project_id` is not provided, extracts `project_tag` from YAML and
@@ -8014,27 +9278,26 @@ async def import_dashboard_from_yaml(
         parent_source_key: Optional source_key of a child tab's parent dashboard
         existing: Optional "keep" or "replace", for a dashboard the project
             already has; without it, `overwrite` decides
+        template_id: Optional id of the template the YAML belongs to
+        template_version: Optional revision (`template.version`) of that template
         current_user: The authenticated user (will be set as owner)
 
     Returns:
         Created/updated dashboard information including dashboard_id
     """
-    # Public/demo mode hard-blocks imports: visitors are auto-minted temp
-    # users that pass `get_current_user`, so the frontend disable on the
-    # Import tab is the only client-side gate. Mirror it here.
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="Dashboard import is disabled in public/demo mode",
-        )
+    refuse_visitor_import(current_user)
 
-    # Allow anonymous users in single-user mode (they have admin privileges)
-    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        if not settings.auth.is_single_user_mode:
-            raise HTTPException(
-                status_code=403,
-                detail="Anonymous users cannot import dashboards. Please login to continue.",
-            )
+    try:
+        parsed_for_code = yaml.safe_load(yaml_content)
+    except yaml.YAMLError:
+        parsed_for_code = None  # The import below answers with the parse error.
+    refuse_new_figure_code(parsed_for_code, current_user)
+
+    if bool(template_id) != bool(template_version):
+        raise HTTPException(
+            status_code=400,
+            detail="template_id and template_version go together: send both or neither.",
+        )
 
     return import_dashboard_yaml_content(
         yaml_content,
@@ -8046,6 +9309,11 @@ async def import_dashboard_from_yaml(
         main_title=main_title,
         parent_source_key=parent_source_key,
         existing=existing,
+        template_origin=(
+            DashboardTemplateOrigin(template_id=template_id, template_version=template_version)
+            if template_id and template_version
+            else None
+        ),
     )
 
 
@@ -8559,11 +9827,8 @@ async def import_dashboard_from_json(
     Creates a new dashboard from the provided JSON configuration.
     Optionally validates that data collection schemas match the export.
 
-    Public/demo mode hard-blocks imports: visitors are auto-minted as
-    authenticated temp users, so `get_current_user` doesn't stop them from
-    POSTing user-supplied JSON that bypasses the project-permission model.
-    The frontend disables the Import tab in `CreateDashboardModal` and the
-    Dash equivalent — this check is the matching server-side enforcement.
+    Visitors (temporary and anonymous users) are refused, see
+    `refuse_visitor_import`; anyone else needs editor rights on the project.
 
     Args:
         json_content: The JSON content defining the dashboard
@@ -8574,11 +9839,9 @@ async def import_dashboard_from_json(
     Returns:
         Import result with dashboard ID and any validation warnings
     """
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="Dashboard import is disabled in public/demo mode",
-        )
+    refuse_visitor_import(current_user)
+
+    refuse_new_figure_code(json_content, current_user)
 
     # Validate export version
     export_version = json_content.get("_depictio_export_version")
@@ -8628,6 +9891,9 @@ async def import_dashboard_from_json(
         raise HTTPException(
             status_code=403, detail="You don't have permission to import dashboards to this project"
         )
+
+    # Always a new dashboard; a published project takes none from an editor.
+    assert_dashboard_creation_allowed(project_id, current_user)
 
     # Validate data integrity if requested
     validation_warnings: list[dict] = []
@@ -9418,6 +10684,7 @@ def _computed_filter_options(
     filter_expr: str | None,
     limit: int,
     delta_version: int | None,
+    order_by: str | None = None,
 ) -> dict[str, Any]:
     """Filter options read from the collection itself, at ``delta_version``.
 
@@ -9438,7 +10705,10 @@ def _computed_filter_options(
     from depictio.models.components.filter_expr import build_filter_expr, validate_filter_expr
 
     salt = _version_salt_for(dc_id, delta_version)
-    cache_key = f"filter_options_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
+    cache_key = (
+        f"filter_options_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
+        + (f"_by_{order_by}" if order_by else "")
+    )
     try:
         cached = get_cache().get(cache_key)
         if cached is not None:
@@ -9487,10 +10757,40 @@ def _computed_filter_options(
                 raise HTTPException(status_code=400, detail=f"Invalid filter_expr: {exc}")
 
         if kind == "unique":
-            values = scan.select(column).unique().limit(limit).collect()[column]
+            from depictio.models.components.value_order import order_values
+
+            keys: dict[str, Any] | None = None
+            if order_by and order_by != column:
+                if order_by not in schema.names():
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Column '{order_by}' not found in data collection {dc_id}.",
+                    )
+                pairs = (
+                    scan.select(column, order_by)
+                    .group_by(column)
+                    .agg(pl.col(order_by).min().alias("_order_key"))
+                    .limit(limit)
+                    .collect()
+                )
+                keys = {
+                    str(v): k
+                    for v, k in zip(pairs[column].to_list(), pairs["_order_key"].to_list())
+                    if v is not None
+                }
+                unique_values = list(keys)
+            else:
+                unique_values = (
+                    scan.select(column)
+                    .unique()
+                    .limit(limit)
+                    .collect()[column]
+                    .drop_nulls()
+                    .to_list()
+                )
             result: dict[str, Any] = {
                 "column": column,
-                "values": sorted({str(v) for v in values.drop_nulls().to_list()}),
+                "values": order_values(unique_values, keys),
             }
         else:
             dtype = schema[column]
@@ -9546,7 +10846,7 @@ async def filter_options_endpoint(
 
     Request body:
         {"dc_id": str, "column": str, "kind": "unique" | "range",
-         "filter_expr": str (optional),
+         "filter_expr": str (optional), "order_by": str (optional, unique only),
          "as_of_version": str, "data_versions": {"<dc_id>": int | null}}
 
     Response, the shapes ``GET /deltatables/unique_values/{dc}`` and a column's
@@ -9564,12 +10864,15 @@ async def filter_options_endpoint(
     column = request.get("column")
     kind = request.get("kind")
     filter_expr = request.get("filter_expr") or None
+    order_by = request.get("order_by") or None
     if not isinstance(dc_id, str) or not dc_id or not isinstance(column, str) or not column:
         raise HTTPException(status_code=400, detail="dc_id and column are required.")
     if kind not in ("unique", "range"):
         raise HTTPException(status_code=400, detail="kind must be 'unique' or 'range'.")
     if filter_expr is not None and not isinstance(filter_expr, str):
         raise HTTPException(status_code=400, detail="filter_expr must be a string.")
+    if order_by is not None and not isinstance(order_by, str):
+        raise HTTPException(status_code=400, detail="order_by must be a string.")
 
     def _resolve() -> tuple[dict[str, Any], int | None]:
         dashboard_data = _viewable_dashboard(dashboard_id, current_user)
@@ -9586,11 +10889,13 @@ async def filter_options_endpoint(
     if delta_version is None and kind == "unique":
         from depictio.api.v1.endpoints.deltatables_endpoints.routes import get_unique_values
 
-        return await get_unique_values(
+        return await run_in_threadpool(
+            get_unique_values,
             PyObjectId(dc_id),
             column=column,
             limit=_FILTER_OPTIONS_LIMIT,
             filter_expr=filter_expr,
+            order_by=order_by,
             current_user=current_user,
         )
     if delta_version is None and not filter_expr:
@@ -9605,8 +10910,301 @@ async def filter_options_endpoint(
             filter_expr=filter_expr,
             limit=_FILTER_OPTIONS_LIMIT,
             delta_version=delta_version,
+            order_by=order_by if kind == "unique" else None,
         )
     )
+
+
+_TEXT_MATCHES_LIMIT = 100
+
+
+def _text_filter_matches(
+    *,
+    dc_id: str,
+    dc_info: dict[str, Any],
+    column: str,
+    value: Any,
+    case_sensitive: Any,
+    match_mode: Any,
+    filter_expr: str | None,
+    limit: int,
+    delta_version: int | None,
+) -> dict[str, Any]:
+    """The distinct values of ``column`` a TextInput ``value`` keeps.
+
+    Counted with the predicate the filter itself applies
+    (``text_filter_predicate``), so the list is what the dashboard will show and
+    not a second regex dialect's idea of it. A value that is empty or does not
+    compile filters nothing: every value is returned as matching, as the
+    dashboard would show them.
+    """
+    import polars as pl
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import (
+        is_valid_text_pattern,
+        open_deltatable_scan,
+        text_filter_predicate,
+    )
+    from depictio.models.components.filter_expr import build_filter_expr, validate_filter_expr
+
+    dc_type = dc_info.get("dc_type") or "table"
+    if delta_version is not None and versioning._classify_dc(dc_type) != "delta":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Time travel is not available for '{dc_type}' collections: they have "
+            "no commit log.",
+        )
+    deltatable = deltatables_collection.find_one(
+        {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
+    )
+    location = (deltatable or {}).get("delta_table_location")
+    if not location:
+        raise HTTPException(status_code=404, detail=f"No Delta table for data collection {dc_id}.")
+    scan = open_deltatable_scan(
+        workflow_id=str(dc_info.get("workflow_id")),
+        data_collection_id=dc_id,
+        init_data={dc_id: {"delta_location": location, "dc_type": dc_type, "size_bytes": 0}},
+        delta_version=delta_version,
+    )
+    if scan is None:
+        raise HTTPException(status_code=500, detail=f"Could not read data collection {dc_id}.")
+
+    schema = scan.collect_schema()
+    if column not in schema.names():
+        raise HTTPException(
+            status_code=404, detail=f"Column '{column}' not found in data collection {dc_id}."
+        )
+    if filter_expr:
+        try:
+            validate_filter_expr(filter_expr)
+            scan = scan.filter(build_filter_expr(filter_expr))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid filter_expr: {exc}")
+
+    # Collected once: the count, the total and the listed values all come from
+    # the same distinct set, so the column is scanned a single time.
+    distinct = (
+        scan.select(pl.col(column).cast(pl.Utf8, strict=False).alias("v"))
+        .drop_nulls()
+        .unique()
+        .collect()
+    )
+    total = distinct.height
+    predicate = text_filter_predicate("v", value, case_sensitive, match_mode, dtype=pl.String)
+    matching = distinct if predicate is None else distinct.filter(predicate)
+    count = matching.height
+    values = matching.sort("v").head(limit)["v"].to_list()
+    return {
+        "column": column,
+        "total": total,
+        "matching": count,
+        "values": values,
+        "truncated": count > len(values),
+        "invalid": not is_valid_text_pattern(value, match_mode),
+    }
+
+
+@dashboards_endpoint_router.post("/text_filter_matches/{dashboard_id}")
+async def text_filter_matches_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """How many distinct values a TextInput pattern keeps, and which.
+
+    Request body:
+        {"dc_id": str, "column": str, "value": str, "case_sensitive": bool,
+         "match_mode": "regex" | "contains", "filter_expr": str (optional),
+         "limit": int (optional, default 100, at most 1000),
+         "as_of_version": str, "data_versions": {"<dc_id>": int | null}}
+
+    Response:
+        {"column": str, "total": int, "matching": int, "values": [str, ...],
+         "truncated": bool, "invalid": bool}
+
+    ``total`` is the column's distinct values in the whole collection (the
+    component's own ``filter_expr`` applied, the dashboard's other filters not):
+    the question it answers is "what does this pattern catch", not "what is left
+    on screen". Viewer permission on the dashboard; ``dc_id`` must belong to its
+    project. Pins resolve as for ``filter_options``.
+    """
+    dc_id = request.get("dc_id")
+    column = request.get("column")
+    filter_expr = request.get("filter_expr") or None
+    if not isinstance(dc_id, str) or not dc_id or not isinstance(column, str) or not column:
+        raise HTTPException(status_code=400, detail="dc_id and column are required.")
+    if filter_expr is not None and not isinstance(filter_expr, str):
+        raise HTTPException(status_code=400, detail="filter_expr must be a string.")
+    raw_limit = request.get("limit")
+    limit = (
+        min(max(int(raw_limit), 1), _FILTER_OPTIONS_LIMIT)
+        if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
+        else _TEXT_MATCHES_LIMIT
+    )
+
+    def _run() -> dict[str, Any]:
+        dashboard_data = _viewable_dashboard(dashboard_id, current_user)
+        dc_info = _project_collections(dashboard_data.get("project_id")).get(dc_id)
+        if dc_info is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data collection {dc_id} is not part of this dashboard's project.",
+            )
+        return _text_filter_matches(
+            dc_id=dc_id,
+            dc_info=dc_info,
+            column=column,
+            value=request.get("value"),
+            case_sensitive=request.get("case_sensitive"),
+            match_mode=request.get("match_mode"),
+            filter_expr=filter_expr,
+            limit=limit,
+            delta_version=_data_pins(request, dashboard_data).for_dc(dc_id),
+        )
+
+    return await run_in_threadpool(_run)
+
+
+@dashboards_endpoint_router.post("/resolve_groups/{dashboard_id}")
+async def resolve_groups_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Selection groups translated onto one data collection, for a client-side recolour.
+
+    Figures, cards and tables get their groups translated server side as part
+    of their render. An advanced viz recolours its points in the browser by
+    matching the group's values against its own point keys, so a group captured
+    on another collection (guide sequences, on a tab whose points are
+    libraries) matched nothing and the tile read "not grouped". This runs the
+    same translation (``_resolve_group_defs``, through the project's declared
+    links) and hands the rewritten groups back.
+
+    Request body:
+        {"dc_id": str, "groups": [{"name", "column_name", "values", "color",
+                                    "dc_id"}, ...]}
+
+    Response:
+        {"groups": [<group rewritten to dc_id's column and values>, ...],
+         "status": [<one verdict per input group, see resolve_group_defs_for_dc>]}
+
+    A group that cannot reach ``dc_id`` is absent from ``groups`` and says why
+    in ``status``. Viewer permission on the dashboard; ``dc_id`` must belong to
+    its project.
+
+    With ``"component_id"``, groups of runs (on ``depictio_run_id``, the
+    Overlay of "What's new") are rewritten to the ids the component matches
+    its marks by: its id role (``sample_id_col``, ``feature_id_col``, ...),
+    the ids whose rows came from those runs. A component whose ids each carry
+    rows of several runs gets none of them back (``runs_ambiguous``).
+    """
+    from depictio.api.v1.deltatables_utils import RUN_ID_COLUMN
+    from depictio.api.v1.services.figure.groups import sanitize_group_defs
+
+    dc_id = request.get("dc_id")
+    if not isinstance(dc_id, str) or not dc_id:
+        raise HTTPException(status_code=400, detail="dc_id is required.")
+    group_defs = sanitize_group_defs(request.get("groups"))
+    component_id = request.get("component_id")
+
+    def _run() -> dict[str, Any]:
+        dashboard_data = _viewable_dashboard(dashboard_id, current_user)
+        project_id = dashboard_data.get("project_id")
+        if dc_id not in _project_collections(project_id):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data collection {dc_id} is not part of this dashboard's project.",
+            )
+
+        # Groups of runs, as the Overlay builds them: on the run column and
+        # captured on no collection (the client's `isRunGroup`). A group taken
+        # on another collection's run column goes through the links instead.
+        def is_run_group(g: dict) -> bool:
+            return g["column_name"] == RUN_ID_COLUMN and not g.get("dc_id")
+
+        run_defs = [g for g in group_defs if is_run_group(g)]
+        by_runs = (
+            _run_groups_for_component(dashboard_data, component_id, dc_id, run_defs)
+            if run_defs and isinstance(component_id, str) and component_id
+            else None
+        )
+        if by_runs is None:
+            # No answer for the runs: they resolve as any other group.
+            resolved, status = _resolve_group_defs(
+                group_defs, dc_id, project_id, access_token, "advanced_viz"
+            )
+            return {"groups": resolved, "status": status}
+        run_groups, run_status = by_runs
+        others = [g for g in group_defs if not is_run_group(g)]
+        resolved, status = _resolve_group_defs(
+            others, dc_id, project_id, access_token, "advanced_viz"
+        )
+        # Back in the order the groups were asked in: the first wins a mark.
+        kept = {g["name"]: g for g in [*resolved, *run_groups]}
+        verdicts = {v["name"]: v for v in [*status, *run_status]}
+        return {
+            "groups": [kept[g["name"]] for g in group_defs if g["name"] in kept],
+            "status": [verdicts[g["name"]] for g in group_defs if g["name"] in verdicts],
+        }
+
+    return await run_in_threadpool(_run)
+
+
+def _component_by_index(components: Any, component_id: str) -> dict | None:
+    return next((c for c in components or [] if str(c.get("index")) == component_id), None)
+
+
+def _family_component(dashboard_data: dict, component_id: str) -> dict | None:
+    """A component of this tab, else of another tab of its family (a highlight
+    draws a component of the tab it points at)."""
+    component = _component_by_index(dashboard_data.get("stored_metadata"), component_id)
+    if component:
+        return component
+    family_id = versioning.resolve_family_id(dashboard_data) or dashboard_data.get("dashboard_id")
+    for tab in dashboards_collection.find(
+        {"$or": [{"dashboard_id": family_id}, {"parent_dashboard_id": family_id}]},
+        {"stored_metadata": 1},
+    ):
+        component = _component_by_index(tab.get("stored_metadata"), component_id)
+        if component:
+            return component
+    return None
+
+
+def _run_groups_for_component(
+    dashboard_data: dict, component_id: str, dc_id: str, run_defs: list[dict]
+) -> tuple[list[dict], list[dict]] | None:
+    """Groups of runs as groups of the component's mark ids, or None when that
+    cannot be said (no id role, no run column): the caller then resolves them
+    as any other group."""
+    from depictio.api.v1.deltatables_utils import RUN_ID_COLUMN, load_deltatable_lite
+    from depictio.api.v1.services.changes.advanced_diff import key_role
+    from depictio.api.v1.services.figure.groups import run_groups_to_identities
+
+    component = _family_component(dashboard_data, component_id)
+    if component is None or str(component.get("dc_id")) != dc_id or not component.get("wf_id"):
+        return None
+    config = component.get("config") or {}
+    _role, identity = key_role(config)
+    if not identity and component.get("viz_kind") == "complex_heatmap":
+        # A heatmap names its rows by its index, and a matrix of samples by
+        # samples names its columns by the same ids: its group strip reads them.
+        identity = config.get("index_column")
+    if not identity:
+        return None
+    try:
+        frame = load_deltatable_lite(
+            ObjectId(str(component["wf_id"])), dc_id, select_columns=[identity, RUN_ID_COLUMN]
+        )
+    except Exception as exc:
+        logger.warning(f"run groups on {dc_id}: could not read {identity!r} ({exc})")
+        return None
+    if identity not in frame.columns or RUN_ID_COLUMN not in frame.columns:
+        return None
+    return run_groups_to_identities(run_defs, frame, identity, RUN_ID_COLUMN)
 
 
 @dashboards_endpoint_router.post("/data_version_status/{dashboard_id}")
@@ -9621,13 +11219,15 @@ def data_version_status_endpoint(
     not pin: a collection added since, one kept live, MultiQC reports. The
     client asks this once per selection and badges what still shows live data.
 
-    Request body: ``{"as_of_version": str, "data_versions": {"<dc_id>": int | null}}``,
-    both optional, resolved exactly as a render resolves them (same 400s).
+    Request body: ``{"as_of_version": str, "data_versions": {"<dc_id>": int | null},
+    "report_sets": {"<dc_id>": [report_id, ...] | null}}``, all optional, resolved
+    exactly as a render resolves them (same 400s).
 
     Response:
         {"collections": [{"dc_id", "workflow_tag", "data_collection_tag",
                           "dc_type", "status": "pinned" | "live" | "not_versioned",
                           "delta_version": int | null, "reason": str | null}]}
+    A pinned MultiQC collection also carries ``"report_count"``.
 
     One entry per collection the family's live components read, then per
     collection the version stamped that none of them reads any more. See

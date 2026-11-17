@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Text,
@@ -26,16 +26,21 @@ import {
   VizSelect,
   VizSwitch,
 } from './controls/VizControls';
-import { recolourAnnotationStrips, type Trace } from './heatmapAnnotationColors';
+import {
+  annotationStripCategories,
+  recolourAnnotationStrips,
+  type Trace,
+} from './heatmapAnnotationColors';
+import { GroupColouringReportContext } from '../../groupReach';
+import type { GroupRenderState } from '../../selectionGroups';
+import { InSplitPanelContext } from './AdvancedVizExtras';
 import { namedColumns } from './namedColumns';
 import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
-import { demandForItems } from './contentDemand';
+import { demandForPx } from './contentDemand';
+import { heatmapDemandPx } from './heatmapDemand';
 
-/** The shortest a heatmap row may be drawn and still be read as a band rather
- *  than a line. Below this the matrix stops being a picture of the data. */
-const MIN_CELL_PX = 12;
 /** Column labels along the bottom, the title strip and the colourbar, none of
  *  which scale with the number of rows. */
 const HEATMAP_CHROME_PX = 130;
@@ -79,15 +84,47 @@ interface ComplexHeatmapConfig {
   cluster_metric?: 'euclidean' | 'correlation' | 'cosine';
   normalize?: 'none' | 'row_z' | 'col_z' | 'log1p';
   colorscale?: string | null;
+  /** Shortest a row may be drawn (px) when the tile asks the grid for height.
+   *  Unset: 12, with a 320 px floor on the matrix (see heatmapDemand.ts). */
+  min_cell_px?: number | null;
+  /** Most grid rows the tile may ask for. Default: the advanced_viz ceiling. */
+  max_rows?: number | null;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: ComplexHeatmapConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** The dashboard's groups (an analysis grouping, or the runs of "What's
+   *  new"): drawn as one more column strip, the matrix itself untouched. */
+  groupRender?: GroupRenderState;
 }
 
-const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+/** The column strip the groups are drawn as. A clustered matrix cut per group
+ *  would cluster each cut on its own, so the groups annotate the columns
+ *  instead, in the groups' colours. */
+const GROUP_STRIP = 'Group';
+
+/** The figure's layout for a split panel: no tick labels, no legend, thin
+ *  margins. At panel size the row and column names cannot be read, and they,
+ *  the strip legend and the margins together left Plotly no room to draw
+ *  ("Something went wrong with axis scaling"). Hover still names every cell,
+ *  and the panel's title names its group. */
+function withoutTickLabels(layout: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    ...((layout as Record<string, unknown>) ?? {}),
+    showlegend: false,
+    margin: { l: 8, r: 8, t: 8, b: 8 },
+  };
+  for (const [key, axis] of Object.entries(out)) {
+    if (/^[xy]axis\d*$/.test(key) && axis && typeof axis === 'object') {
+      out[key] = { ...(axis as Record<string, unknown>), showticklabels: false, automargin: false };
+    }
+  }
+  return out;
+}
+
+const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const config = (metadata.config || {}) as ComplexHeatmapConfig;
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
@@ -137,6 +174,23 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   const [computeMs, setComputeMs] = useState<number | null>(null);
   const [dims, setDims] = useState<{ rows: number; cols: number } | null>(null);
 
+  // Each column the groups name, by its group (the first group wins, as on the
+  // server), and each group's colour.
+  const inSplit = useContext(InSplitPanelContext);
+  const groupStrip = useMemo(() => {
+    if (inSplit || !groupRender?.colorByGroup) return null;
+    const groups = groupRender.groups.filter((g) => g.values.length > 0);
+    if (groups.length === 0) return null;
+    const byColumn: Record<string, string> = {};
+    for (const g of groups) {
+      for (const v of g.values) if (!(String(v) in byColumn)) byColumn[String(v)] = g.name;
+    }
+    const colours: Record<string, string> = {};
+    for (const g of groups) colours[g.name] = g.color;
+    return { byColumn, colours };
+  }, [inSplit, groupRender]);
+  const groupColumns = groupStrip ? JSON.stringify(groupStrip.byColumn) : null;
+
   // Sample of the underlying matrix powering the Show-data popover.
   const [dataRows, setDataRows] = useState<Record<string, unknown[]> | null>(null);
 
@@ -161,7 +215,11 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       // always-present null would recompute every heatmap cached before it.
       ...(config.value_columns_pattern ? { value_columns_pattern: config.value_columns_pattern } : {}),
       row_annotation_cols: rowAnnotationCols,
-      col_annotations: config.col_annotations ?? null,
+      // The groups' strip only when there are groups: the payload, and so the
+      // cache key, of a heatmap drawn without them stays what it was.
+      col_annotations: groupStrip
+        ? { ...(config.col_annotations ?? {}), [GROUP_STRIP]: groupStrip.byColumn }
+        : (config.col_annotations ?? null),
       col_annotation_cols: colAnnotationCols,
       annotation_source_dc_tag: config.annotation_source_dc_tag ?? null,
       col_annotation_colors: config.col_annotation_colors ?? null,
@@ -242,6 +300,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     config.value_columns_pattern,
     JSON.stringify(rowAnnotationCols),
     JSON.stringify(colAnnotationCols),
+    groupColumns,
   ]);
 
   // The annotation strips wear the dashboard's colours for their column (a
@@ -252,10 +311,25 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     if (!figure) return null;
     const ownColours = config.col_annotation_colors;
     const recoloured = recolourAnnotationStrips(figure.data as Trace[], (strip) =>
-      columnCategoryColors(categorySource, strip, ownColours?.[strip]),
+      strip === GROUP_STRIP && groupStrip
+        ? groupStrip.colours
+        : columnCategoryColors(categorySource, strip, ownColours?.[strip]),
     );
     return applyDataTheme(recoloured, isDark, theme);
-  }, [figure, categorySource, config.col_annotation_colors, isDark, theme]);
+  }, [figure, categorySource, config.col_annotation_colors, isDark, theme, groupStrip]);
+
+  // Whether the groups reached the columns, for the dispatch's "not grouped"
+  // badge: the server leaves out a strip with fewer than two values.
+  const reportColouring = useContext(GroupColouringReportContext);
+  const groupMatched = useMemo(() => {
+    if (!groupStrip || !figure) return null;
+    return annotationStripCategories(figure.data as Trace[]).has(GROUP_STRIP);
+  }, [groupStrip, figure]);
+  useEffect(() => {
+    if (!reportColouring || groupMatched === null) return;
+    reportColouring(groupMatched);
+    return () => reportColouring(null);
+  }, [reportColouring, groupMatched]);
 
   // Fetch the column schema once so the MultiSelect knows what's available.
   useEffect(() => {
@@ -309,11 +383,18 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   // when the columns cluster, and one strip per drawn annotation. Row
   // annotations are a right-side strip and cost no height.
   const drawnRows = dims?.rows ?? 0;
+  // `min_cell_px` unset: the shortest readable row, with a floor on the matrix
+  // so a small one (a 12-run correlation) does not shrink to a strip.
+  const minCellPx = config.min_cell_px;
+  const maxRows = config.max_rows;
   const bandsPx =
     (clusterCols ? COL_DENDROGRAM_PX : 0) + drawnColAnnotations.length * ANNOTATION_BAND_PX;
   const contentDemand = useMemo(
-    () => demandForItems(drawnRows, MIN_CELL_PX, HEATMAP_CHROME_PX + bandsPx),
-    [drawnRows, bandsPx],
+    () =>
+      demandForPx(heatmapDemandPx(drawnRows, HEATMAP_CHROME_PX + bandsPx, minCellPx), {
+        max: maxRows ?? undefined,
+      }),
+    [drawnRows, bandsPx, minCellPx, maxRows],
   );
 
   const colAnnotationData = useMemo(
@@ -487,7 +568,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
           layout={
             applyLayoutTheme(
               {
-                ...(figure.layout as Record<string, unknown>),
+                ...(inSplit ? withoutTickLabels(figure.layout) : (figure.layout as Record<string, unknown>)),
                 width: undefined,
                 height: undefined,
                 autosize: true,

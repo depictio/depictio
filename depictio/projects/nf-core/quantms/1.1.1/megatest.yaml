@@ -1,0 +1,82 @@
+# Megatest manifest for nf-core/quantms 1.1.1 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes read. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline quantms --version 1.1.1 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored SDRF
+#
+# Keys are fnmatch globs relative to run_root and are mirrored 1:1 below the
+# destination, which becomes the template DATA_ROOT.
+#
+# The 1.1.1 megatest holds three modes under results-<sha>/: mode_dia (4 label-free
+# DIA runs, DIA-NN), mode_lfq (a one-protein DDA test with no result tables) and
+# mode_tmt (one TMT run). The template reads the DIA mode, so run_root is mode_dia/.
+# The run carries no params JSON and no multiqc.parquet: quantms 1.1.1 reports through
+# pmultiqc custom content, which has no MultiQC module to reprocess.
+#
+# The SDRF is not published as a usable file (pipeline_info/ holds a staging path
+# only), so the template ships the public SDRF of the same dataset under input/
+# (METADATA_FILE); download_test_data.sh copies it into {dest}/input/. The design is
+# already in sdrfparsing/, the SDRF only adds its characteristics columns.
+pipeline: quantms
+version: "1.1.1"
+# s3://nf-core-awsmegatests/quantms/results-<results_sha>/ == the 1.1.1 release tag_sha.
+results_sha: "600505011027ab196bb18b1320607468bdae951a"
+run_root: "mode_dia/"
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  - pipeline_info/*software*versions*.yml
+  # The design quantms parsed from the SDRF: runs, conditions, acquisition settings.
+  - sdrfparsing/*.tsv
+  # DIA-NN: the precursor report (21 MB) and the protein-group matrix.
+  - diannsummary/diann_report.tsv
+  - diannsummary/diann_report.pg_matrix.tsv
+  # MSstats contrasts (tab separated despite the extension).
+  - msstats/*_comparisons.csv
+  # Spectrum table of every converted mzML (about 14 MB each).
+  - mzmlstatistics/*_mzml_info.tsv
+  #
+  # Deliberately NOT fetched:
+  #   diannsummary/*.pr_matrix, *.gg_matrix, *.unique_genes_matrix: the same
+  #     quantities per precursor, gene and unique gene, derived from the report.
+  #   diannconvert/*_msstats_in.csv and *_triqler_in.tsv: converter inputs of the
+  #     downstream tools, the MSstats results are what the template reads.
+  #   summarypipeline/multiqc_data: pmultiqc custom content, no MultiQC module.
+  #   mode_lfq and mode_tmt: other modes, see above.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - RD139
+  - Narrow_UPS1
+  - UPS1
+  - PXD026600
+  - MSV000087597
+  - Escherichia
+  - E. coli
+  - ECOLI
+  - K12
+  - fmol
+  - 1fmol
+  - 25fmol
+  - Orbitrap Fusion
+  - Spiked
+  - inj1
+  - inj2
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The SDRF is not published usably by the pipeline: the template reads
+  # {dest}/input/sdrf.tsv (download_test_data.sh copies the vendored one there) for
+  # its characteristics columns. The design itself comes from sdrfparsing/.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/quantms/1.1.1 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/quantms/1.1.1 --data-root {dest}

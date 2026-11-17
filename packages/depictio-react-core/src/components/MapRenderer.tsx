@@ -746,7 +746,8 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       }}
     >
       {metadata.title && !bare && (
-        <Group gap="xs" mb="xs" wrap="nowrap">
+        // The title leads the row: `dc-tile-head` (see FigureRenderer).
+        <Group gap="xs" mb="xs" wrap="nowrap" className="dc-tile-head">
           <Text fw={600} size="sm">
             {metadata.title}
           </Text>

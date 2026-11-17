@@ -32,9 +32,9 @@ Output schema:
     peak_duplicate_ratio : Float64    in-peak over out-of-peak duplicate rate
     total_peaks : Int64               peaks ataqv was given
     total_peak_territory : Int64      bases covered by those peaks
-    hqaa_tf_count : Int64             HQAA in sub-nucleosomal fragments
-    hqaa_mononucleosomal_count : Int64  HQAA in mononucleosomal fragments
-    short_mononucleosomal_ratio : Float64  sub-nucleosomal over mononucleosomal
+    hqaa_tf_count : Int64             HQAA in fragments of 50 to 100 bp
+    hqaa_mononucleosomal_count : Int64  HQAA in fragments of 150 to 200 bp
+    short_mononucleosomal_ratio : Float64  50-100 bp over 150-200 bp HQAA
     max_fraction_reads_from_single_autosome : Float64  worst autosome imbalance
     median_mapq : Float64             median mapping quality
     properly_paired_fraction : Float64  properly paired and mapped / total_reads

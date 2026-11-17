@@ -21,7 +21,7 @@
 template:
   template_id: "nf-core/funcscan/4.0.0"
   description: "nf-core/funcscan template for screening assemblies for AMR genes, antimicrobial peptides, biosynthetic gene clusters and CAZymes"
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing funcscan pipeline output (reports/, cazyme/, multiqc/)"
@@ -61,7 +61,7 @@ template:
           - "*_ref_databases*"   # bundled reference-DB catalogs, pure noise
           - "hook_url"           # nf-core runs put a live Slack webhook here
       - name: "software_versions"
-        glob: "pipeline_info/*software*versions.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"
@@ -496,7 +496,7 @@ workflows:
               "arg_genes": "Distinct resistance gene symbols"
               "arg_tools": "ARG screening tools that reported at least one hit"
               "amp_candidates": "Antimicrobial-peptide candidates"
-              "amp_high_confidence": "AMP candidates whose best tool probability reaches 0.8"
+              "amp_high_confidence": "AMP candidates whose best tool probability reaches 0.6, the nf-core/funcscan default of amp_ampcombi_parsetables_cutoff (the column keeps its name; the pipeline does not call this level high confidence)"
               "bgc_regions": "Predicted biosynthetic gene cluster regions"
               "bgc_classes": "Distinct BGC product classes"
               "cazymes": "Annotated carbohydrate-active enzyme genes"

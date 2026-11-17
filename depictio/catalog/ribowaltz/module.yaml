@@ -10,6 +10,7 @@
 # filter and compose them.
 id: ribowaltz
 name: riboWaltz
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribowaltz
 homepage: https://github.com/LabTranslationalArchitectomics/riboWaltz
 description: >-

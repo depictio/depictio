@@ -5,6 +5,7 @@
 # exception as mhcquant, comBGC and enchantR.
 id: crisprseq
 name: nf-core/crisprseq
+version: "1.0.0"
 description: >-
   Gene editing outcome tables of the nf-core/crisprseq targeted analysis: per
   library read accounting, edit outcome counts (wild type, template-based

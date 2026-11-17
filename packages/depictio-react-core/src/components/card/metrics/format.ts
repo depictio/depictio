@@ -4,6 +4,8 @@
  *  which strip happens to draw it.
  */
 
+import { paletteVar, parsePaletteColor } from '../../../paletteColor';
+
 const NUMBER_FORMATS = new Map<number, Intl.NumberFormat>();
 
 function fixed(digits: number): Intl.NumberFormat {
@@ -231,10 +233,10 @@ export function hexWithAlpha(hex: string | null | undefined, alpha: number): str
   }
   // A Mantine palette name (`orange`, `grape`, a theme's own `brandPrimary`):
   // the colour a card's icon takes, so its strip takes it too, in either scheme.
-  const paletteName = hex.trim();
-  if (/^[a-zA-Z][a-zA-Z0-9]*$/.test(paletteName)) {
+  const palette = parsePaletteColor(hex);
+  if (palette?.kind === 'palette') {
     const pct = Math.round(alpha * 100);
-    return `color-mix(in srgb, var(--mantine-color-${paletteName}-filled) ${pct}%, transparent)`;
+    return `color-mix(in srgb, ${paletteVar(hex, 'filled')} ${pct}%, transparent)`;
   }
   return fallback;
 }

@@ -99,7 +99,14 @@ export function visibleFilterCount(
 }
 
 /** The compact control a filter bar draws for each interactive type. */
-export type StripControlKind = 'categorical' | 'range' | 'slider' | 'toggle' | 'date' | 'unsupported';
+export type StripControlKind =
+  | 'categorical'
+  | 'range'
+  | 'slider'
+  | 'toggle'
+  | 'date'
+  | 'text'
+  | 'unsupported';
 
 export function stripControlKind(interactiveType: string | undefined): StripControlKind {
   switch (interactiveType) {
@@ -117,6 +124,8 @@ export function stripControlKind(interactiveType: string | undefined): StripCont
     case 'DatePicker':
     case 'DateRangePicker':
       return 'date';
+    case 'TextInput':
+      return 'text';
     default:
       return 'unsupported';
   }

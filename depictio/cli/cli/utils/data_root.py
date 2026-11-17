@@ -31,7 +31,8 @@ from typing import Protocol
 
 from depictio.api.v1 import remote_fetch
 from depictio.api.v1.configs.settings_models import local_data_policy
-from depictio.cli.cli.utils.scan_utils import regex_match
+from depictio.cli.cli.utils.scan_utils import regex_match, select_run_files
+from depictio.cli.cli.utils.scan_walk import ScanBounds, iter_run_files
 from depictio.cli.cli_logging import logger
 from depictio.models.local_access import LocalPathRefused
 from depictio.models.s3_access import (
@@ -258,6 +259,15 @@ def relative_to_root(root: DataRoot, location: str) -> str | None:
     return location
 
 
+@dataclass(frozen=True)
+class DirEntry:
+    """One entry of a folder listing: a file (with its size when known) or a folder."""
+
+    name: str
+    is_dir: bool
+    size: int | None = None
+
+
 # ── the protocol ─────────────────────────────────────────────────────────────
 
 
@@ -287,8 +297,23 @@ class DataRoot(Protocol):
         """``Path.glob`` semantics, as sorted root-relative POSIX paths."""
         ...
 
-    def match(self, regex: str, within: str = "") -> list[str]:
-        """Scan-matcher: files under ``within`` matching ``regex``, root-relative."""
+    def match(
+        self,
+        regex: str,
+        within: str = "",
+        *,
+        max_depth: int | None = None,
+        ignore: list[str] | None = None,
+    ) -> list[str]:
+        """Scan-matcher: files under ``within`` matching ``regex``, root-relative.
+
+        ``max_depth``/``ignore`` are a recursive scan's bounds, counted from
+        ``within`` the way the scan counts them from its run folder.
+        """
+        ...
+
+    def children(self, rel: str = "") -> list[DirEntry]:
+        """The entries directly inside the folder ``rel``, folders first, by name."""
         ...
 
     def runs(self, runs_regex: str) -> list[str]:
@@ -384,22 +409,52 @@ class LocalDataRoot:
             if _readable(policy, path)
         )
 
-    def match(self, regex: str, within: str = "") -> list[str]:
+    def match(
+        self,
+        regex: str,
+        within: str = "",
+        *,
+        max_depth: int | None = None,
+        ignore: list[str] | None = None,
+    ) -> list[str]:
+        """The files the recursive scan of ``within`` would pick, by construction.
+
+        Same walk (:func:`iter_run_files`: symlinked folders not descended,
+        symlinks leaving the folder skipped on a server), same bounds and same
+        two-shot regex rule (:func:`select_run_files`) as the scan itself.
+        """
         policy = local_data_policy()
         base = self._child(within)
+        if not base.is_dir():
+            return []
+        bounds = ScanBounds(max_depth=max_depth, ignore=tuple(ignore or ()))
+        walked = iter_run_files(str(base), max_depth=max_depth, ignore=list(bounds.ignore))
         matched: list[str] = []
-        for path in base.rglob("*"):
-            if not path.is_file() or not _readable(policy, path):
+        for scanned in select_run_files(walked, str(base), regex, bounds):
+            walk_path = Path(scanned.walk_path)
+            if not _readable(policy, walk_path):
                 continue
-            # Basename first, then - only when the pattern spells a path - the
-            # path relative to ``within``. Same two-shot rule as the local
-            # recursive scan, so a DC regex means the same thing either way.
-            hit, _ = regex_match(path.name, regex)
-            if not hit and "/" in regex:
-                hit, _ = regex_match(path.relative_to(base).as_posix(), regex)
-            if hit:
-                matched.append(path.relative_to(self._root).as_posix())
+            matched.append(walk_path.relative_to(self._root).as_posix())
         return sorted(matched)
+
+    def children(self, rel: str = "") -> list[DirEntry]:
+        policy = local_data_policy()
+        folder = self._child(rel)
+        if not folder.is_dir() or not _readable(policy, folder):
+            return []
+        entries: list[DirEntry] = []
+        with os.scandir(folder) as scan:
+            for entry in scan:
+                path = Path(entry.path)
+                try:
+                    is_dir = entry.is_dir(follow_symlinks=True)
+                    size = None if is_dir else entry.stat(follow_symlinks=True).st_size
+                except OSError:
+                    continue
+                if not _readable(policy, path):
+                    continue
+                entries.append(DirEntry(entry.name, is_dir, size))
+        return sorted(entries, key=lambda e: (not e.is_dir, e.name.lower()))
 
     def runs(self, runs_regex: str) -> list[str]:
         if not self._root.is_dir():
@@ -550,7 +605,17 @@ class S3DataRoot:
             candidate for candidate in (*self._files, *self._dirs) if compiled.fullmatch(candidate)
         )
 
-    def match(self, regex: str, within: str = "") -> list[str]:
+    def match(
+        self,
+        regex: str,
+        within: str = "",
+        *,
+        max_depth: int | None = None,
+        ignore: list[str] | None = None,
+    ) -> list[str]:
+        """``max_depth``/``ignore`` are accepted and not applied: an ``s3_prefix``
+        scan (what a recursive scan becomes under an ``s3://`` root) never
+        applies them, so a preview that did would not predict it."""
         within = _normalize_relative(within)
         prefix = f"{within}/" if within else ""
         matched: list[str] = []
@@ -573,6 +638,25 @@ class S3DataRoot:
             for segment in self._dirs
             if "/" not in segment and re.match(runs_regex, segment)
         )
+
+    def children(self, rel: str = "") -> list[DirEntry]:
+        rel = _normalize_relative(rel)
+        prefix = f"{rel}/" if rel else ""
+        entries: list[DirEntry] = [
+            DirEntry(name=folder[len(prefix) :], is_dir=True)
+            for folder in self._dirs
+            if folder.startswith(prefix) and "/" not in folder[len(prefix) :]
+        ]
+        entries.extend(
+            DirEntry(
+                name=relative[len(prefix) :],
+                is_dir=False,
+                size=obj.size if obj.size >= 0 else None,
+            )
+            for relative, obj in self._files.items()
+            if relative.startswith(prefix) and "/" not in relative[len(prefix) :]
+        )
+        return sorted(entries, key=lambda e: (not e.is_dir, e.name.lower()))
 
     def scoped(self, sub: str) -> S3DataRoot:
         """A view of ``sub`` over the listing this root already holds.

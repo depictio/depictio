@@ -1,0 +1,21 @@
+{
+  // Codespace of the Depictio hands-on workshop: the "Try Depictio" image, with
+  // the nf-core/ampliseq run ready to explore and to load again from the web UI.
+  //
+  // Open with:
+  // https://codespaces.new/depictio/depictio?devcontainer_path=.devcontainer/workshop/devcontainer.json&quickstart=1
+  "name": "Depictio workshop",
+  "image": "ghcr.io/depictio/depictio-try:latest",
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+  },
+  // Runs once, when the codespace is created.
+  "onCreateCommand": "bash .devcontainer/workshop/setup.sh",
+  // Runs at every start of the codespace. Unlike postAttachCommand it does not
+  // wait for the editor to connect or for the folder to be trusted.
+  "postStartCommand": "$HOME/.local/bin/depictio local up --no-open --port 8058",
+  "portsAttributes": {
+    "8058": { "label": "Depictio", "onAutoForward": "openBrowser" }
+  },
+  "otherPortsAttributes": { "onAutoForward": "silent" }
+}

@@ -8,8 +8,8 @@
  * review, the project's Data refresh settings, and the run a project created
  * from a run folder starts), so a status reads the same wherever it shows up.
  */
-import React from 'react';
-import { Badge, Group, Table, Text, ThemeIcon } from '@mantine/core';
+import React, { useState } from 'react';
+import { ActionIcon, Badge, Group, Table, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { ManifestRefreshStatus } from 'depictio-react-core';
@@ -73,6 +73,60 @@ export const IngestionStatusBadge: React.FC<{ status: string }> = ({ status }) =
   );
 };
 
+/** One collection, its message folded away until the reader asks for it. */
+const IngestionRow: React.FC<{ row: IngestionResultRow; testIdPrefix: string }> = ({
+  row,
+  testIdPrefix,
+}) => {
+  const [open, setOpen] = useState(false);
+  const tag = row.data_collection_tag;
+  return (
+    <>
+      <Table.Tr data-testid={`${testIdPrefix}-row-${tag}`} data-status={row.status}>
+        <Table.Td>
+          <Text size="sm" fw={600}>
+            {tag}
+          </Text>
+        </Table.Td>
+        <Table.Td>
+          <IngestionStatusBadge status={row.status} />
+        </Table.Td>
+        <Table.Td ta="right">
+          <Text size="sm">{row.entries}</Text>
+        </Table.Td>
+        <Table.Td ta="right">
+          {row.message && (
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
+              aria-label={`${open ? 'Hide' : 'Show'} details of ${tag}`}
+              data-testid={`${testIdPrefix}-details-toggle-${tag}`}
+            >
+              <Icon icon={open ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={16} />
+            </ActionIcon>
+          )}
+        </Table.Td>
+      </Table.Tr>
+      {open && row.message && (
+        <Table.Tr data-testid={`${testIdPrefix}-details-${tag}`}>
+          <Table.Td colSpan={4}>
+            <Text
+              size="xs"
+              c={row.status === 'failed' ? 'red' : 'dimmed'}
+              style={{ overflowWrap: 'anywhere' }}
+            >
+              {row.message}
+            </Text>
+          </Table.Td>
+        </Table.Tr>
+      )}
+    </>
+  );
+};
+
 interface IngestionResultTableProps {
   rows: ReadonlyArray<IngestionResultRow>;
   /** Shown instead of the table when there is no row. */
@@ -102,41 +156,22 @@ const IngestionResultTable: React.FC<IngestionResultTableProps> = ({
   }
   return (
     <Table.ScrollContainer minWidth={480} data-testid={testId}>
-      <Table verticalSpacing="xs" striped highlightOnHover>
+      <Table verticalSpacing="xs" highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Data collection</Table.Th>
             <Table.Th>Status</Table.Th>
             <Table.Th ta="right">Entries</Table.Th>
-            <Table.Th>Details</Table.Th>
+            <Table.Th ta="right">Details</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {rows.map((row) => (
-            <Table.Tr
+            <IngestionRow
               key={row.data_collection_tag}
-              data-testid={`${rowTestIdPrefix}-row-${row.data_collection_tag}`}
-              data-status={row.status}
-            >
-              <Table.Td>
-                <Text size="sm" fw={600}>
-                  {row.data_collection_tag}
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <IngestionStatusBadge status={row.status} />
-              </Table.Td>
-              <Table.Td ta="right">
-                <Text size="sm">{row.entries}</Text>
-              </Table.Td>
-              <Table.Td>
-                {row.message && (
-                  <Text size="xs" c={row.status === 'failed' ? 'red' : 'dimmed'}>
-                    {row.message}
-                  </Text>
-                )}
-              </Table.Td>
-            </Table.Tr>
+              row={row}
+              testIdPrefix={rowTestIdPrefix}
+            />
           ))}
         </Table.Tbody>
       </Table>

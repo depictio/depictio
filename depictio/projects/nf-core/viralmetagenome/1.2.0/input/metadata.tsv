@@ -1,0 +1,5 @@
+sample	specimen	sample_alias	study_accession	instrument_model	read_count
+SRR11140744	Cell culture	veroSTAT-1KO_illumina	PRJNA607948	Illumina MiSeq	503344
+SRR11140746	Cell culture	veroE6_illumina	PRJNA607948	Illumina MiSeq	358971
+SRR11140748	Cell culture	vero76_illumina	PRJNA607948	Illumina MiSeq	421395
+SRR11140750	Clinical sample	swab_illumina	PRJNA607948	Illumina MiSeq	17657

@@ -181,6 +181,7 @@ main_dashboard:
       screens: {dc: screening_summary, column: screens, aggregation: max, format: integer}
     body: |
       ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/funcscan 4.0.0
       - ![](icon:mdi:flask-outline) **Assemblies** {{samples}}
       - ![](icon:mdi:magnify) **Screens** {{screens}} of 4
       - ![](icon:mdi:dna) **Gene caller** {{param:annotation_tool}}
@@ -191,16 +192,22 @@ main_dashboard:
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_contigs: {dc: contig_annotation, column: contig, aggregation: count, format: si}
+      n_args: {dc: hamronization_report, column: hits, aggregation: sum, format: si}
+      n_amps: {dc: ampcombi_summary, column: cds_id, aggregation: count, format: si}
+      n_bgcs: {dc: combgc_summary, column: regions, aggregation: sum, format: integer}
+      n_cazymes: {dc: dbcan_overview, column: genes, aggregation: sum, format: si}
     body: |
       ### Five steps from contigs to functions
       Each step names its settings and the tab that shows its result.
 
       ::: steps
-      1. ![](icon:mdi:dna) **Annotate** Genes called on every contig · [Settings](params:annotation) · [Contigs](tab:Contigs)
-      2. ![](icon:mdi:bacteria-outline) **Resistance** Five ARG tools, harmonised · [Settings](params:arg_) · [Resistome](tab:Resistome)
-      3. ![](icon:mdi:atom) **Peptides** Predictors merged by AMPcombi · [Settings](params:amp_) · [AMPs](tab:AMPs)
-      4. ![](icon:mdi:graph-outline) **Clusters** antiSMASH, DeepBGC, GECCO · [Settings](params:bgc_) · [BGCs](tab:BGCs)
-      5. ![](icon:mdi:leaf) **CAZymes** run_dbCAN on every protein · [Settings](params:cazyme) · [CAZymes](tab:CAZymes)
+      1. ![](icon:mdi:dna) **Annotate** Genes called on every contig, {{n_contigs}} of them carry a feature · [Settings](params:annotation) · [Contigs](tab:Contigs)
+      2. ![](icon:mdi:bacteria-outline) **Resistance** Five ARG tools, harmonised into {{n_args}} hits · [Settings](params:arg_) · [Resistome](tab:Resistome)
+      3. ![](icon:mdi:atom) **Peptides** Predictors merged by AMPcombi into {{n_amps}} candidates · [Settings](params:amp_) · [AMPs](tab:AMPs)
+      4. ![](icon:mdi:graph-outline) **Clusters** antiSMASH, DeepBGC and GECCO predict {{n_bgcs}} regions · [Settings](params:bgc_) · [BGCs](tab:BGCs)
+      5. ![](icon:mdi:leaf) **CAZymes** run_dbCAN on every protein finds {{n_cazymes}} CAZyme genes · [Settings](params:cazyme) · [CAZymes](tab:CAZymes)
       :::
     tag: fs-ov-steps
     index: ov-steps
@@ -327,7 +334,7 @@ main_dashboard:
     values:
       arg_genes: {dc: hamronization_report, column: gene_symbol, aggregation: nunique, format: integer}
       arg_tools: {dc: hamronization_report, column: tool, aggregation: nunique, format: integer}
-      amp_hi: {dc: ampcombi_summary, column: cds_id, aggregation: count, filter_expr: "col('prob_max') >= 0.8",
+      amp_hi: {dc: ampcombi_summary, column: cds_id, aggregation: count, filter_expr: "col('prob_max') >= 0.6",
         format: integer}
       amp_n: {dc: ampcombi_summary, column: cds_id, aggregation: count, format: integer}
       bgc_top: {dc: combgc_summary, column: product_class, aggregation: top, weight: regions, filter_expr: "col('product_class') != 'Unknown'"}
@@ -338,7 +345,7 @@ main_dashboard:
         format: percent}
     body: |
       - **{{arg_genes}}** distinct resistance gene names, from {{arg_tools}} ARG tools – harmonised by hAMRonization [Resistome](tab:Resistome)
-      - **{{amp_hi}}** of {{amp_n}} peptide candidates reach a probability of 0.8 – best of the AMP predictors [AMPs](tab:AMPs)
+      - **{{amp_hi}}** of {{amp_n}} peptide candidates reach a probability of 0.6, AMPcombi's cut-off – best of the AMP predictors [AMPs](tab:AMPs)
       - **{{bgc_share}}** of the classified BGC regions are {{bgc_top}} – the leading product class [BGCs](tab:BGCs)
       - **{{caz_share}}** of the CAZyme genes with a substrate call target {{caz_top}} – the leading substrate [CAZymes](tab:CAZymes)
     section: Findings
@@ -702,8 +709,11 @@ tabs:
     section: Samples at a glance
     tag: fs-smp-card-amp
     index: smp-card-amp
-    title: High-confidence AMPs
-    description: Peptide candidates per assembly with a best probability of at least 0.8.
+    title: AMPs reaching the cut-off
+    description: >-
+      Peptide candidates per assembly with a best probability of at least 0.6.
+
+      Source: 0.6 is the default of the pipeline parameter amp_ampcombi_parsetables_cutoff (AMPcombi --amp_cutoff), which sets a prediction score below it to 0, nf-core/funcscan nextflow_schema.json at 4.0.0, https://github.com/nf-core/funcscan/blob/4.0.0/nextflow_schema.json. It is a fixed reference here, not read from the run. The pipeline does not call this level high confidence.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: funcscan
@@ -1419,19 +1429,21 @@ tabs:
     column_name: prob_max
     column_type: float64
     secondary_layout: threshold
-    threshold_value: 0.8
+    threshold_value: 0.6
     threshold_direction: min
-    threshold_warn: 0.6
     display:
       icon_name: mdi:check-decagram
       icon_color: violet
-      caption: median; 0.8 marks high confidence
+      caption: median; 0.6 is AMPcombi's cut-off
       decimals: 2
     section: AMPs at a glance
     tag: fs-amp-card-prob
     index: amp-card-prob
     title: Best probability
-    description: Median of each candidate's highest probability across the predictors.
+    description: >-
+      Median of each candidate's highest probability across the predictors.
+
+      Source: the 0.6 mark is the default of the pipeline parameter amp_ampcombi_parsetables_cutoff (AMPcombi --amp_cutoff), nf-core/funcscan nextflow_schema.json at 4.0.0, https://github.com/nf-core/funcscan/blob/4.0.0/nextflow_schema.json. It is a fixed reference, not read from the run.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: funcscan

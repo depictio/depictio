@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/ampliseq/2.18.0"
   description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
-  version: "1.1.0"
+  version: "1.3.3"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing ampliseq pipeline output (multiqc/, qiime2/)"
@@ -100,7 +100,7 @@ template:
           - "*_ref_databases*"   # bundled reference-DB catalogs, ~78 KB of noise
           - "hook_url"           # nf-core runs put a live Slack webhook here
       - name: "software_versions"
-        glob: "pipeline_info/*software*versions.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"

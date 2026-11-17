@@ -17,6 +17,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 )
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import cleanup_orphaned_s3_files
 from depictio.api.v1.services.analytics_service import AnalyticsService
+from depictio.api.v1.services.migration_import import expire_stale_requests
 from depictio.models.models.users import UserBeanie
 
 WORKER_ID = os.getpid()
@@ -236,6 +237,29 @@ async def periodic_cleanup_orphaned_s3_files(
         await asyncio.sleep(interval_in_seconds)
 
 
+async def periodic_expire_migration_requests(
+    interval_hours: int | None = None,
+    interval_minutes: int | None = None,
+    interval_seconds: int | None = None,
+):
+    """Periodically expire pushed projects nobody decided on (#1303).
+
+    Staged bundles are whole projects sitting in the bucket; the TTL
+    (``DEPICTIO_MIGRATION_PENDING_TTL_DAYS``) bounds how long an undecided one
+    stays. The sweep is idempotent and claims each request atomically, so every
+    worker may run it.
+    """
+    interval_in_seconds, _ = _calculate_interval(
+        interval_hours, interval_minutes, interval_seconds, default_seconds=3600
+    )
+    while True:
+        try:
+            await asyncio.to_thread(expire_stale_requests)
+        except Exception as e:
+            logger.error(f"Error during migration request expiry: {e}")
+        await asyncio.sleep(interval_in_seconds)
+
+
 async def periodic_purge_expired_tokens(
     interval_hours: int | None = None,
     interval_minutes: int | None = None,
@@ -327,6 +351,13 @@ def start_cleanup_tasks(
     asyncio.create_task(
         periodic_cleanup_orphaned_s3_files(
             interval_hours=1,  # Run S3 cleanup hourly
+        )
+    )
+
+    # Expire pushed projects that waited too long for a decision
+    asyncio.create_task(
+        periodic_expire_migration_requests(
+            interval_hours=1,
         )
     )
 

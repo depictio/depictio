@@ -100,3 +100,26 @@ def publish_ingestion_event(
     if counters is not None:
         payload["counters"] = counters
     publish_monitoring_event("ingestion_event", payload)
+
+
+def publish_migration_event(
+    request_id: str,
+    status: str,
+    project_name: str | None,
+    source: str | None,
+) -> None:
+    """Tell admin browsers an inbound migration request appeared or changed status.
+
+    A ping, not a delta: the Projects banner and Admin > Migrations reload their
+    short request list, and the Projects banner raises a toast from the fields
+    below. Admins only, like every message on this channel.
+    """
+    publish_monitoring_event(
+        "migration_event",
+        {
+            "request_id": request_id,
+            "status": status,
+            "project_name": project_name,
+            "source": source,
+        },
+    )

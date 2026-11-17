@@ -1,0 +1,19 @@
+id: mosdepth_per_base_bins
+name: Binned depth along the reference
+mode: coverage
+description: >-
+  Read depth along each reference from mosdepth's per-base output, folded
+  into bins sized to the reference (50 bp on a 30 kb viral genome) as the
+  length-weighted mean depth and the lowest depth of each bin. One lane per
+  mapping keeps dropouts and amplicon gaps visible without the ten thousand
+  rows a per-base track would draw.
+find:
+  path_glob: "**/mosdepth/**/*.per-base.bed.gz"
+recipe: mosdepth/per_base_bins.py
+fixture: per_base_bins.tsv
+renders_as:
+  - { id: depth_track, component: advanced_viz, kind: coverage_track,
+      roles: {chromosome: chrom, position: position, value: mean_depth, end: end, sample: genome_id} }
+  - { component: card, column: min_depth, aggregation: min,
+      secondary_layout: top_n, breakdown_col: genome_id, top_n_count: 3 }
+  - { component: table }

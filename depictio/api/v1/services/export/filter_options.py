@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 from depictio.api.v1.configs.logging_init import logger
 
@@ -32,7 +33,7 @@ from depictio.api.v1.configs.logging_init import logger
 MAX_OPTIONS = 500
 
 #: Component types whose control is driven by distinct values rather than a range.
-_CATEGORICAL_TYPES = frozenset({"Select", "MultiSelect", "SegmentedControl", "TextInput"})
+_CATEGORICAL_TYPES = frozenset({"Select", "MultiSelect", "SegmentedControl"})
 _RANGE_TYPES = frozenset({"Slider", "RangeSlider", "DateRangePicker", "Timeline"})
 
 
@@ -60,6 +61,10 @@ async def filter_options(component: dict, current_user: Any) -> dict[str, Any] |
     if not control or not column or not dc_id:
         return None
 
+    if control == "TextInput":
+        # Free text has no value universe to list (a sequence column has one per
+        # row); the consumer needs to know it takes a pattern, not a pick.
+        return {"kind": "text", "control": control}
     if control in _CATEGORICAL_TYPES:
         return await _categorical_options(str(dc_id), str(column), control, current_user)
     if control in _RANGE_TYPES:
@@ -85,7 +90,8 @@ async def _categorical_options(
         # route; calling the handler directly skips that, and the Mongo query
         # `{"data_collection_id": <str>}` matches nothing — which surfaces as a
         # misleading "No DeltaTable found" rather than a type error.
-        result = await get_unique_values(
+        result = await run_in_threadpool(
+            get_unique_values,
             data_collection_id=PyObjectId(dc_id),
             column=column,
             limit=MAX_OPTIONS + 1,

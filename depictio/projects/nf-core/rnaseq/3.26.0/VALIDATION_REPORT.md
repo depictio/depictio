@@ -73,6 +73,13 @@ The main tab's tile list moved on after this ingest without changing its total: 
 general-statistics panel was added (RS-C5) and the at-a-glance intro was folded away when the
 design cards moved into `Sample sheet` (RS-C6), so it ships 18 MultiQC and 5 text tiles today.
 
+A fifth tab, `Genome tracks` (text, JBrowse browser, samplesheet table with row selection),
+and the `genomic_tracks` collection `tracks` behind it were added after this ingest and are
+not part of the counts above. Its recipe was run offline on the samplesheet: 24 manifest rows
+(8 forward and 8 reverse strand bigWigs, 8 BAMs), whose paths were checked against the
+megatest bucket. Ingest with `--var TRACKS_URI=<aligner_star_salmon folder>` to read them in
+place (see `megatest.yaml`).
+
 Every tile was then executed or grounded against those frames:
 
 - **1 / 1 `mode: code` figure** executed with scope

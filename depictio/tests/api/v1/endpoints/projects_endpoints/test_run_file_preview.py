@@ -22,6 +22,7 @@ from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPExc
 from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
     RunFilePreviewRequest,
 )
+from depictio.cli.cli.utils import file_preview
 from depictio.models.models.users import UserBase
 from depictio.tests.cli.s3_stubs import (
     MEGATEST_TREE,
@@ -169,9 +170,9 @@ def test_wide_tables_show_their_first_columns_and_long_cells_are_cut(run):
     cells = ",".join(["y" * 300] + ["1"] * 39)
     (run / "input" / "wide.csv").write_text(f"{header}\n{cells}\n")
     preview = _preview(run, "input/wide.csv")
-    assert len(preview.columns) == run_file_preview.MAX_PREVIEW_COLUMNS
+    assert len(preview.columns) == file_preview.MAX_PREVIEW_COLUMNS
     assert preview.columns_total == 40
-    assert preview.rows[0][0] == "y" * run_file_preview.MAX_CELL_CHARS + "..."
+    assert preview.rows[0][0] == "y" * file_preview.MAX_CELL_CHARS + "..."
     assert preview.truncated is True
 
 
@@ -196,7 +197,7 @@ def test_a_parquet_file_that_is_not_one_says_so(run):
 
 def test_a_parquet_file_past_the_cap_is_not_opened(run, monkeypatch):
     pl.DataFrame({"a": [1, 2]}).write_parquet(run / "multiqc" / "multiqc.parquet")
-    monkeypatch.setattr(run_file_preview, "MAX_PARQUET_BYTES", 10)
+    monkeypatch.setattr(file_preview, "MAX_PARQUET_BYTES", 10)
     monkeypatch.setattr(
         pl, "scan_parquet", lambda *_a, **_k: pytest.fail("a parquet over the cap was opened")
     )
@@ -216,9 +217,7 @@ def test_a_long_text_shows_its_first_lines(run):
     (run / "pipeline_info" / "run.log").write_text("".join(f"line {i}\n" for i in range(500)))
     preview = _preview(run, "pipeline_info/run.log")
     assert preview.format == "text"
-    assert preview.text.splitlines() == [
-        f"line {i}" for i in range(run_file_preview.MAX_TEXT_LINES)
-    ]
+    assert preview.text.splitlines() == [f"line {i}" for i in range(file_preview.MAX_TEXT_LINES)]
     assert preview.truncated is True
 
 
@@ -231,7 +230,7 @@ def test_an_html_report_is_not_shown_and_says_why(run):
 
 def test_a_binary_file_of_unknown_kind_is_not_shown(run):
     preview = _preview(run, "pipeline_info/blob.bin")
-    assert (preview.format, preview.reason) == ("none", run_file_preview.BINARY)
+    assert (preview.format, preview.reason) == ("none", file_preview.BINARY)
 
 
 def test_a_gzipped_file_of_a_binary_kind_is_not_decompressed(run):
@@ -324,7 +323,7 @@ def test_an_s3_file_is_read_with_one_ranged_request(monkeypatch):
     assert (preview.format, preview.columns) == ("table", ["sample", "habitat", "treatment"])
     assert preview.rows == [["S1", "soil", "control"]]
     assert client.get_object_calls == [f"{S3_KEY_PREFIX}input/Metadata_full.tsv"]
-    assert client.get_object_ranges == [f"bytes=0-{run_file_preview.MAX_HEAD_BYTES - 1}"]
+    assert client.get_object_ranges == [f"bytes=0-{file_preview.MAX_HEAD_BYTES - 1}"]
 
 
 def test_an_unlisted_bucket_is_refused_as_from_run_refuses_it(monkeypatch):
@@ -367,3 +366,47 @@ async def test_the_route_is_closed_to_non_admins_in_public_mode(run, monkeypatch
         await routes.post_run_file_preview(payload, _request(), current_user=_user(is_admin=False))
     assert exc.value.status_code == 403
     assert "public/demo mode" in str(exc.value.detail)
+
+
+# ── dtypes ───────────────────────────────────────────────────────────────────
+
+
+def test_dtypes_only_when_asked(run):
+    assert _preview(run, "input/samplesheet.csv").dtypes is None
+
+
+def test_a_csv_names_its_inferred_dtypes(run):
+    preview = _preview(run, "input/samplesheet.csv", infer_types=True)
+    assert preview.dtypes == {"sample": "String", "reads": "Int64", "group": "String"}
+    # The cells themselves are still text.
+    assert preview.rows[0] == ["S1", "100", "a"]
+
+
+def test_a_gzipped_tsv_names_its_dtypes(run):
+    preview = _preview(run, "qiime2/abundance.tsv.gz", infer_types=True)
+    assert preview.dtypes == {"sample": "String", "reads": "Int64"}
+
+
+def test_a_parquet_file_names_its_schema(run):
+    pl.DataFrame({"a": [1, 2], "b": [0.5, 1.5], "c": ["x", "y"]}).write_parquet(
+        run / "multiqc" / "multiqc.parquet"
+    )
+    preview = _preview(run, "multiqc/multiqc.parquet", infer_types=True)
+    assert preview.dtypes == {"a": "Int64", "b": "Float64", "c": "String"}
+
+
+def test_a_text_file_has_no_dtypes(run):
+    assert _preview(run, "pipeline_info/versions.yml", infer_types=True).dtypes is None
+
+
+def test_preview_root_file_reads_without_a_route(run):
+    """The standalone builder previews a root's file with no request or user."""
+    from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+    preview = file_preview.preview_root_file(
+        LocalDataRoot(str(run)), "input/metadata.tsv", infer_types=True
+    )
+    assert (preview.format, preview.columns) == ("table", ["sample", "reads"])
+    assert preview.dtypes == {"sample": "String", "reads": "Int64"}
+    with pytest.raises(FileNotFoundError):
+        file_preview.preview_root_file(LocalDataRoot(str(run)), "input/nope.tsv")

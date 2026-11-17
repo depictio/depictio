@@ -447,6 +447,9 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           the frame gives it, exactly where the frame's own centring put it. */}
       <div
         ref={contentRef}
+        // A card with a strip: a chrome style pins the strip to the card's foot
+        // (it reads this instead of looking for the strip's root with `:has()`).
+        data-strip={secondaryStrip ? '' : undefined}
         style={{
           // ``flex: 0 0 auto`` is what makes this box measurable, not just a
           // style preference. A flex item shrinks to its container by default,

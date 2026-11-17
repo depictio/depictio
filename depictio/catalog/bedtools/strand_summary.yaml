@@ -1,0 +1,19 @@
+id: bedtools_strand_summary
+name: Strand coverage per library
+mode: coverage/strand-summary
+description: >-
+  Per-library totals of the plus and minus strand coverage bedGraphs: read
+  bases per strand and their balance, the share on the mitochondrial contig and
+  outside the chromosomes, and the share of the chromosome signal the top 1% of
+  250 kb windows hold, the reading of a poorly depleted library.
+find:
+  path_glob: "**/*.plus.bedGraph"
+recipe: bedtools/strand_summary.py
+fixture: strand_summary.tsv
+renders_as:
+  - { component: card, column: plus_share_pct, aggregation: median, secondary_layout: gauge, coverage_max: 100 }
+  - { component: card, column: hotspot_share_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: total_read_bases, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: plus_share_pct, title: Plus-strand share of the signal per library} }
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: hotspot_share_pct, y: off_main_pct, hover_name: sample, title: Hotspot share against signal outside the chromosomes} }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

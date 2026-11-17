@@ -35,6 +35,7 @@ from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
     get_multiqc_reports_by_data_collection,
     update_multiqc_report_by_id,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
@@ -82,6 +83,8 @@ def _require_dc_permission_or_404(
             status_code=404,
             detail=f"Data collection {data_collection_id} not found",
         )
+    if permission != "viewer":
+        assert_project_unlocked(project_id)
     return project_id
 
 
@@ -122,6 +125,7 @@ async def create_multiqc_report(
     Returns:
         Created MultiQC report with assigned ID
     """
+    _require_dc_permission_or_404(str(report.data_collection_id), current_user, "editor")
     saved_report = await create_multiqc_report_in_db(report)
 
     response = MultiQCReportResponse(
@@ -158,6 +162,18 @@ async def update_multiqc_report(
     Returns:
         Updated MultiQC report with preserved ID
     """
+    try:
+        report_oid = ObjectId(report_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail=f"Invalid report id: {report_id}")
+    stored = multiqc_collection.find_one({"_id": report_oid}, {"data_collection_id": 1})
+    if not stored:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+    # Authorise against the stored report's collection, and the target one if the
+    # update moves it: neither may be a collection the caller cannot edit.
+    _require_dc_permission_or_404(str(stored["data_collection_id"]), current_user, "editor")
+    if str(report.data_collection_id) != str(stored["data_collection_id"]):
+        _require_dc_permission_or_404(str(report.data_collection_id), current_user, "editor")
     updated_report = await update_multiqc_report_by_id(report_id, report)
 
     response = MultiQCReportResponse(

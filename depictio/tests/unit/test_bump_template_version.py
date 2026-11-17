@@ -57,20 +57,28 @@ def test_bump_copies_from_latest_and_rewrites_versions(btv: ModuleType, pipeline
     assert btv.latest_version(pipeline_dir / "ampliseq") == "2.18.0"
 
 
-def test_bump_blanks_megatest_results_sha_in_the_copy(btv: ModuleType, pipeline_dir: Path) -> None:
+def test_bump_keeps_the_pinned_run_and_the_validation_record(
+    btv: ModuleType, pipeline_dir: Path
+) -> None:
+    source = pipeline_dir / "ampliseq" / "2.16.0"
+    (source / "VALIDATION_REPORT.md").write_text(
+        "# validated on 2.16.0\nHPC run, pipeline v2.16.0\n"
+    )
+    (source / "pipeline_info").mkdir()
+    (source / "pipeline_info" / "software_versions.yml").write_text("ampliseq: 2.16.0\n")
     new_dir = btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir)
     copied = (new_dir / "megatest.yaml").read_text()
-    # The version string is rewritten like any text file, the pinned run is dropped
-    # (it belongs to 2.16.0) and everything else survives verbatim.
+    # The version string is rewritten like any text file; the pinned run stays, since
+    # the copied data are still that run's, and everything else survives verbatim.
     assert 'version: "2.18.0"' in copied
-    assert "3d5c7e5bec28de279337f3ffe3c312a45940b782" not in copied
-    assert "results_sha: null" in copied
+    assert 'results_sha: "3d5c7e5bec28de279337f3ffe3c312a45940b782"' in copied
     assert "# the release tag_sha" in copied and "multiqc/multiqc_data/multiqc.parquet" in copied
-    # The source manifest keeps its pin.
-    source = (pipeline_dir / "ampliseq" / "2.16.0" / "megatest.yaml").read_text()
-    assert 'results_sha: "3d5c7e5bec28de279337f3ffe3c312a45940b782"' in source
-    # Idempotent: a manifest without a sha line is left alone.
-    assert btv.blank_manifest_sha(new_dir / "megatest.yaml") is False
+    # The record of the old validation and old outputs does not claim the new version.
+    report = (new_dir / "VALIDATION_REPORT.md").read_text()
+    assert report.startswith("> **Carried over from 2.16.0.**")
+    assert "# validated on 2.16.0\nHPC run, pipeline v2.16.0\n" in report
+    assert "2.18.0" in report.splitlines()[0]  # only the note names the new version
+    assert (new_dir / "pipeline_info" / "software_versions.yml").read_text() == "ampliseq: 2.16.0\n"
 
 
 def test_bump_refusals_and_dry_run(btv: ModuleType, pipeline_dir: Path) -> None:

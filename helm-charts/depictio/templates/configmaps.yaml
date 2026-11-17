@@ -13,7 +13,7 @@ data:
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
   DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
   # Public viewer URL: the backend builds browser-facing redirect/link targets
-  # from it (magic-link login URLs, SAML ACS → /auth/magic hand-off).
+  # from it (magic-link login URLs, OIDC callback → /auth/magic hand-off).
   DEPICTIO_VIEWER_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_VIEWER_PUBLIC_URL | default (include "depictio.frontendUrlWithProtocol" .) | quote }}
   {{- if .Values.mongo.useOperator }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-rs0" .Release.Name | quote }}
@@ -40,6 +40,7 @@ data:
   DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
   DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
   DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
+  {{- include "depictio.eventsEnv" . | nindent 2 }}
   {{- else }}
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
   {{- end }}
@@ -49,46 +50,30 @@ data:
   DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
   DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
   DEPICTIO_AUTH_REGISTRATION_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_REGISTRATION_DISABLED | default "false" | quote }}
-  # Blocks email+password sign-in, leaving Google OAuth as the only door in.
-  # The backend ignores it unless google_oauth_enabled is also set, so a
-  # half-done configuration cannot lock every user out. Not a secret, so it
+  # Blocks email+password sign-in, leaving SSO as the only door in.
+  # The backend ignores it unless at least one OIDC provider is enabled and
+  # fully configured, so a half-done configuration cannot lock every user out. Not a secret, so it
   # belongs here; the public-mode access code does not (see secrets.yaml).
   DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 
-  # Google OAuth Configuration
+  # Legacy Google OAuth (deprecated, still honoured for one release). The backend
+  # maps these onto the `google` OIDC provider; prefer `oidc.providers`. The client
+  # secret is NOT here: it is carried by the Secret (see secrets.yaml).
   DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED | default "false" | quote }}
   {{- if .Values.auth }}
   DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID | default "" | quote }}
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET | default "" | quote }}
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI | default "" | quote }}
   {{- else }}
   DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: ""
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: ""
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
   {{- end }}
 
-  # SAML SSO Configuration (the SP side of a deployment is set in its own values
-  # file; the IdP side — entity ID, SSO URL, certificate — belongs in the
-  # environment's secrets values, merged into `auth:`). The IdP signing certificate is
-  # public X.509 material — a ConfigMap is fine; no key material rides here.
-  # Empty strings are coerced to "unset" by the backend settings model.
-  DEPICTIO_AUTH_SAML_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_SAML_ENABLED | default "false" | quote }}
-  {{- if .Values.auth }}
-  DEPICTIO_AUTH_SAML_IDP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_ENTITY_ID | default "" | quote }}
-  DEPICTIO_AUTH_SAML_IDP_SSO_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_SSO_URL | default "" | quote }}
-  DEPICTIO_AUTH_SAML_IDP_CERT: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_CERT | default "" | quote }}
-  DEPICTIO_AUTH_SAML_SP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_ENTITY_ID | default "" | quote }}
-  DEPICTIO_AUTH_SAML_SP_BASE_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_BASE_URL | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL | default "" | quote }}
-  DEPICTIO_AUTH_SAML_LOGIN_LABEL: {{ .Values.auth.DEPICTIO_AUTH_SAML_LOGIN_LABEL | default "Sign in with SSO" | quote }}
-  # Which assertion attributes feed the group and profile sync. Each one left empty
-  # disables its part of the sync.
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN | default "" | quote }}
+  # OpenID Connect providers (JSON list). Client credentials come from the Secret
+  # (secrets.oidcClients), not from here.
+  {{- if .Values.oidc.providers }}
+  DEPICTIO_AUTH_OIDC_PROVIDERS: {{ .Values.oidc.providers | toJson | quote }}
   {{- end }}
 
   # Instance branding (issue #397) — see examples/values-branding.yaml.
@@ -100,6 +85,26 @@ data:
   # flat branding layer with a warning.
   {{- range $key, $value := .Values.backend.env }}
   {{- if and (hasPrefix "DEPICTIO_BRANDING_" $key) $value }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
+  # Genome browser (jbrowse component + genomic_tracks collections). Forwarded
+  # by prefix like branding: JBrowseConfig (env_prefix DEPICTIO_JBROWSE_) owns
+  # the names. The remote-S3 secret key is a credential: pass it through a
+  # Secret (secrets.jbrowseRemoteS3SecretKey), never here.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_JBROWSE_" $key) (ne $key "DEPICTIO_JBROWSE_REMOTE_S3_SECRET_KEY") (ne (toString $value) "") }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
+  # Project migration (#1303). Forwarded by prefix: MigrationConfig (env_prefix
+  # DEPICTIO_MIGRATION_) owns the names. TARGETS and INBOUND_SOURCES carry
+  # pairing keys: pass them through a Secret, never here. Only the API runs
+  # migrations (FastAPI background tasks), so the worker needs none of these.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_MIGRATION_" $key) (ne $key "DEPICTIO_MIGRATION_TARGETS") (ne $key "DEPICTIO_MIGRATION_INBOUND_SOURCES") (ne (toString $value) "") }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}
   {{- end }}
@@ -292,6 +297,7 @@ data:
   DEPICTIO_CACHE_REDIS_PORT: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
   DEPICTIO_CACHE_REDIS_DB: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.backend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
+  {{- include "depictio.eventsEnv" . | nindent 2 }}
   {{- else }}
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
   {{- end }}

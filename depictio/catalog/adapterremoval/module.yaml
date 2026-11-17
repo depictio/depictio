@@ -4,6 +4,7 @@
 # file reaches dashboards through MultiQC's AdapterRemoval panel.
 id: adapterremoval
 name: AdapterRemoval
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/adapterremoval
 homepage: https://github.com/MikkelSchubert/adapterremoval
 biotools_url: https://bio.tools/adapterremoval

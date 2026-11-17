@@ -34,6 +34,7 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _run_dc_ingest,
     _validate_manifest_url,
 )
+from depictio.api.v1.endpoints.projects_endpoints.provenance import stamp_new_project
 from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.logging import logger
 
@@ -188,8 +189,32 @@ def _refuse_a_taken_project_name(name: str, current_user) -> None:
         raise HTTPException(status_code=409, detail=_project_taken("name")["message"])
 
 
-def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict[str, Any]:
+def _stamp_origin(project_config: dict[str, Any], kind: str, location: str) -> None:
+    """Record ``DataOrigin(kind, location)`` on every data collection of ``project_config``."""
+    from depictio.api.v1.endpoints.datacollections_endpoints.utils import origin_now
+
+    for workflow in project_config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            config = dc.get("config")
+            if isinstance(config, dict):
+                config["origin"] = origin_now(kind, location)
+
+
+def _new_project_document(
+    resolved_config: dict[str, Any],
+    current_user,
+    *,
+    origin_kind: str | None = None,
+    origin_location: str | None = None,
+    is_public: bool = False,
+) -> dict[str, Any]:
     """The document a resolved template is inserted as, owned by ``current_user``.
+
+    ``is_public`` decides the visibility, whatever the template says: a project
+    is private unless the request asks otherwise.
+
+    ``origin_kind`` / ``origin_location`` stamp every data collection with
+    where its data came from (``DataOrigin``); left None, origin stays unset.
 
     With the identity and uniqueness rules of ``POST /projects/create``: a
     taken name is a 409 (:func:`_refuse_a_taken_project_name`), a config the
@@ -211,13 +236,16 @@ def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict
         "editors": [],
         "viewers": [],
     }
+    project_config["is_public"] = bool(is_public)
+    if origin_kind is not None:
+        _stamp_origin(project_config, origin_kind, origin_location or "")
     try:
         project = Project(**project_config)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Resolved project config invalid: {exc}")
     validate_workflow_uniqueness_in_project(project)
 
-    create_payload = project.mongo()
+    create_payload = stamp_new_project(project.mongo())
     # Template links name their DCs by tag; store the new DCs' ids next to
     # them, as the CLI's template sync does, so readers that do not resolve
     # tags (link cleanup on DC deletion, for one) see real ids.
@@ -227,13 +255,34 @@ def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict
     return create_payload
 
 
+def _rename_workflow_tags(node: Any, renames: dict[str, str]) -> Any:
+    """``node`` with every ``workflow_tag`` naming a renamed workflow pointed at
+    its new name; an ``engine/name`` or ``catalog/name`` tag keeps its prefix."""
+    if isinstance(node, list):
+        return [_rename_workflow_tags(item, renames) for item in node]
+    if not isinstance(node, dict):
+        return node
+    out: dict[Any, Any] = {}
+    for key, value in node.items():
+        if key == "workflow_tag" and isinstance(value, str):
+            prefix, _, name = value.rpartition("/")
+            if name in renames:
+                value = f"{prefix}/{renames[name]}" if prefix else renames[name]
+            out[key] = value
+        else:
+            out[key] = _rename_workflow_tags(value, renames)
+    return out
+
+
 def _import_template_dashboards(
     dashboard_paths: list[Path],
     *,
     template_id: str,
+    template_version: str,
     project_id: ObjectId,
     variables: dict[str, str],
     current_user,
+    workflow_renames: dict[str, str] | None = None,
 ) -> list[DashboardImportResult]:
     """Import a template's dashboards into a new project, keyed as ``depictio ingest`` keys them.
 
@@ -244,7 +293,9 @@ def _import_template_dashboards(
     same project with this template so finds these dashboards instead of adding
     a second copy of each. In-process, through the shared import handler, which
     binds DC tags to the ids just persisted and drops components whose optional
-    DC was pruned.
+    DC was pruned. Each dashboard records the template revision (``template_version``)
+    it was imported from. ``workflow_renames`` (``{shipped: new}``) points each
+    ``workflow_tag`` that names a workflow the Project Builder renamed at its new name.
     """
     import yaml
 
@@ -257,6 +308,7 @@ def _import_template_dashboards(
         locate_template,
         substitute_template_variables,
     )
+    from depictio.models.models.templates import DashboardTemplateOrigin
 
     try:
         template_dir: Path | None = locate_template(template_id).parent
@@ -273,6 +325,9 @@ def _import_template_dashboards(
             parsed = yaml.safe_load(text)
             if variables:
                 parsed = substitute_template_variables(parsed, variables)
+            if workflow_renames:
+                parsed = _rename_workflow_tags(parsed, workflow_renames)
+            if variables or workflow_renames:
                 # sort_keys=False: PyYAML sorts mapping keys by default, which
                 # re-orders every dict-shaped component config.
                 text = yaml.dump(
@@ -304,6 +359,9 @@ def _import_template_dashboards(
                 keep_titles=True,
                 parent_source_key=main_keys.get(parent_tag) if parent_tag else None,
                 existing="keep",
+                template_origin=DashboardTemplateOrigin(
+                    template_id=template_id, template_version=template_version
+                ),
             )
             entry.success = bool(result.get("success"))
             entry.dashboard_id = result.get("dashboard_id")
@@ -423,7 +481,12 @@ def _create_project_from_manifest(
         report.success = True
         return report
 
-    create_payload = _new_project_document(resolved_config, current_user)
+    create_payload = _new_project_document(
+        resolved_config,
+        current_user,
+        origin_kind="manifest",
+        origin_location=manifest_url,
+    )
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
     report.project_id = str(project_oid)
@@ -461,6 +524,7 @@ def _create_project_from_manifest(
     report.dashboards = _import_template_dashboards(
         dashboard_paths,
         template_id=template_metadata.template_id,
+        template_version=template_metadata.version,
         project_id=project_oid,
         variables=resolved_vars,
         current_user=current_user,

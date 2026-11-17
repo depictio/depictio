@@ -5,7 +5,8 @@ pipelines depictio templates or considered templating, taken on 2026-09-05 with
 `scripts/nfcore_megatest.py` and re-surveyed on 2026-09-16 for the lot 2 pipelines
 (sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic, scdownstream), then on 2026-09-23 for
 the wave 3 pipelines (riboseq, smrnaseq, genomeassembler, mhcquant, demultiplex, rnasplice,
-seqinspector). Every release of a pipeline is expected at
+seqinspector), then on 2026-10-19 for the wave 4 pipelines (rnavar, epitopeprediction,
+hlatyping, mcmicro, genomeqc, viralmetagenome, nascent, stableexpression). Every release of a pipeline is expected at
 `<pipeline>/results-<tag_sha>/`, where `tag_sha` is the release's sha in
 <https://nf-co.re/pipelines.json>. In practice many release prefixes are empty
 (only `pipeline_info/` plus zero-byte directory markers), truncated syncs (a few
@@ -64,6 +65,14 @@ and are lower bounds for the big runs.
 | pairgenomealign | 3.0.4 | `8ee09a1c` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (lot 3).** `test_full` profile, 34 query genomes against one target. 42.8 GB, almost all MAF alignments and a merged CRAM; tables-only fetch 173 files / 20 MB (`--max-file-mb 50`). MultiQC 1.33, custom content only. Ran with `--export_aln_to no_export`, so there is no PSL export and the Synteny tab is pruned on it. The samplesheet is not published: vendored under `input/` with a design table. |
 | proteinannotator | 1.1.0 | `cbf78d47` | ok (dev) | `.` | yes, not read | **Templated.** Development run `v1.2.0dev-gb8fac19` (outdir `results-dev`) synced under a non-tag sha; the template directory stays at 1.1.0, the latest release. 36 files / 84 KB fetched: three single-protein samples, four hmmsearch domain tables each, InterProScan (two empty TSVs), S4PRED ss2 per protein. MultiQC 1.33 holds only SeqFu custom content anchored by sample name, so it is not read and the template has no MultiQC tab. Samplesheet and design vendored under `input/`. |
 | isoseq | 3.0.1 | `6c944831` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated.** `test_full` profile: one Iso-Seq sample, CCS in 100 chunks, uLTRA mapping. 287 MB fetched, 234 MB of it the indexed GTF (BAMs and FASTA skipped). Reads the CCS and refine reports, the TAMA poly(A), collapse and merge outputs, the GTF and the MultiQC 1.33 parquet (ccs, lima). The samplesheet is not published and has no design column: the design table is vendored under `input/`. |
+| rnavar | 1.3.0 | `a0e46414` | partial | `.` | no | **Templated (wave 4).** The release prefix is a truncated sync: 148 objects, six of the eight BAMs and the per-sample alignment reports, but no `variant_calling/` and no MultiQC. **Selected run is the 1.3.0dev non-tag `5e72bcb5`** (235 objects / 136 GB, written 2026-06-01): 8 samples (4 cell lines x 2), STAR + HaplotypeCaller + VariantFiltration, MultiQC 1.35, no `--tools`, so no snpEff or VEP. Tables-only fetch 145 files / 140 MB with the 16 VCF + TBI pairs. The design is not published: vendored under `input/`. |
+| epitopeprediction | 3.2.0 | `e637bc7c` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 4).** `test_full` profile, release run (three runs of the release under one prefix, the last written 2026-10-17). MultiQC 1.35 parquet: binding-prediction custom content plus bcftools. 179 objects / 19 MB; 31 files / 6.1 MB fetched (predictions, variant peptides, parquet, pipeline_info). The samplesheet is not published and is vendored under `input/`. |
+| hlatyping | 2.2.0 | `3237d20e` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 4).** `test_full`, 176 objects / 153 MB; three launches under one prefix (2026-02-02 and 2026-02-16 10:30 failed at YARA_MAPPER, 10:48 complete). MultiQC 1.32 (FastQC, OptiType). The sheet params.json names was replaced upstream on 2026-07-10; the run's sheet (test-datasets 2adcc84, 5 samples) is vendored under `input/`. 9 files / 1.9 MB fetched. |
+| viralmetagenome | 1.2.0 | `74064a43` | ok | `.` | no (MultiQC 1.27 at `multiqc/<prefix>-multiqc_data/`) | **Templated (wave 4).** `test_full`: 4 paired-end metagenomic libraries of one virus, MEGAHIT + CD-HIT-EST + 1 refinement cycle + iVar, 3 mapping constraints. 994 objects / 320 MB; tables-only fetch 580 files / 42 MB (`--max-file-mb 20`); BAM/FASTQ/mpileup skipped. Every file name carries the run's `--global_prefix`. Reprocessed with 1.35 (`--exclude '*_mqc.tsv'`). The `--metadata` table is not published: vendored under `input/`. |
+| nascent | 2.3.0 | `7d4fe619` | partial | `.` | no | **Templated (wave 4).** `test_full`: one GRO-seq time course, 11 single-end libraries (0 h to 72 h), hg38. 90 objects / 37 GB, 31 GB of BAMs; fetch is 48 files / 5.2 GB (22 strand bigWig, 22 strand bedGraph, the gene featureCounts matrix). The run aborted at transcript identification (PINTS failed; groHMM and HOMER aborted) and published no QC reports and no MultiQC, so the template has no MultiQC and no Transcripts tab. No samplesheet or design is published; both are vendored under `input/`. |
+| mcmicro | 2.0.0 | `f4400001` | ok | `.` | yes (1.32, custom content only) | **Templated (wave 4).** **Early: kept as is until the bioimage module lands**, which will replace the PNG previews and carry the image views. Full test profile, release run. 59 objects / 48 MB; 45 files / 44 MB fetched (images included, for the PNG previews). Samplesheet and marker sheet not published, vendored under `input/`. No bioimage viewer yet: PNG previews are written at fetch time as an optional Image collection. |
+| stableexpression | 1.1.0 | `c4cbf824` | empty | `.` | no | **Templated (wave 4).** 1.1.0 prefix holds pipeline_info/ only; 1.0.0 (`f0313431`) has no prefix. **Selected run is the non-tag test_full `d6b1654c`** (dev build `v1.0.0-gd6b1654`, 2026-07-16, 908 objects / 3.9 GB, homo_sapiens, 162 Expression Atlas datasets, 4,330 samples in the merged matrix); its MULTIQC and DASH_APP tasks failed, so no report. Tables-only fetch 177 files / 358 MB (the 341 MB merged matrix included). |
+| genomeqc | 1.0.1 | `bce44e5b` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 4).** `test_full`: 3 RefSeq assemblies with annotations. 54,093 objects / 1.2 GB, 53,910 of them OrthoFinder internals; tables-only fetch 105 files / 7.9 MB (`--max-file-mb 50`). MultiQC 1.35, QUAST only. No BUSCO full table and no sequence-length table are published: the karyotype reads genomeqc's per-sequence BUSCO counts and takes lengths from tidk. FCS-GX ran on NCBI's test-only database. The samplesheet is not published: design vendored under `input/`. 1.0.0 has no MultiQC. |
 
 ## Selected runs for this lot
 
@@ -221,6 +230,69 @@ What changed in the manifests of the reworked templates:
 - **genomeassembler** fetches a flagstat file that no collection reads; left in the manifest
   for now.
 
+### 2026-10-19 wave 4 (eight new templates, four new kinds)
+
+Eight pipelines were chosen on three criteria: a recent megatest on one of the latest major
+versions with more than one sample, a healthy nf-core status (released, not archived) and a
+reasonable following. Four new Advanced Visualisation kinds came with them (`ideogram`,
+`ranked_distribution`, `allele_grid`, `spatial_cells`; see `docs/design/advanced-viz.md`
+section 9). None was ingested live in this wave: each `VALIDATION_REPORT.md` records an offline
+validation and lists every RULES section 15 item as pending.
+
+| pipeline | version | results_sha | run_root | MultiQC |
+|---|---|---|---|---|
+| rnavar | 1.3.0 (1.3.0dev run) | `5e72bcb5520e00422750c978d4153b38f1fd7312` | `.` | 1.35 native parquet |
+| epitopeprediction | 3.2.0 | `e637bc7c49e6e05a09f5207501a142ec68d8570b` | `.` | 1.35, custom content plus bcftools |
+| hlatyping | 2.2.0 | `3237d20e7e611d8bbf8c37e637202dfe8a23e996` | `.` | 1.32 (FastQC, OptiType) |
+| viralmetagenome | 1.2.0 | `74064a43f4b00c163c22bcfc9cf1d84a2a69e988` | `.` | 1.27, no parquet; reprocessed with 1.35 |
+| nascent | 2.3.0 | `7d4fe61975015f652c271886e661764b05cfd3bf` | `.` | none published |
+| mcmicro | 2.0.0 | `f4400001578642e370a72668966c6602fe172ef6` | `.` | 1.32, custom content only |
+| stableexpression | 1.1.0 (dev-build run) | `d6b1654c4784332cbad71f1d928cc8b75a77272f` | `.` | none published (MULTIQC failed) |
+| genomeqc | 1.0.1 | `bce44e5b558e21b38d4dd2b6521302246b4dae6d` | `.` | 1.35 native parquet (QUAST only) |
+
+Two pins are **not release shas**. `resolve` warns about both and keeps the pin, as for mag
+5.5.0:
+
+- **rnavar** `5e72bcb5` (`software_versions.yml`: `v1.3.0dev`, two weeks before the release run).
+  The 1.3.0 release prefix `a0e46414` is a truncated sync with no `variant_calling/` and no
+  MultiQC; of the eight rnavar prefixes, `5e72bcb5` is the only one holding the calls.
+- **stableexpression** `d6b1654c` (`v1.0.0-gd6b1654`, written two months before the 1.0.0
+  tag). It is the only stableexpression prefix in the bucket: the 1.1.0 release prefix holds
+  `pipeline_info/` only and 1.0.0 has none. The run follows the 1.1.0 layout, except that it
+  publishes no MultiQC report and no Dash app (both tasks failed), and writes `id_mapping/`
+  where the 1.1.0 docs say `idmapping/`.
+
+What else is particular to this wave:
+
+- **No JBrowse2 and no bioimage viewer yet.** Tracks go through an `indexed_file` collection
+  and `genome_view` (rnavar VCFs, nascent bigWigs), or a table-backed `genome_view` where the
+  published files cannot be range-read (viralmetagenome: the filtered VCFs sit next to the
+  index of a different file). mcmicro images are shown as PNG previews written by
+  `scripts/make_previews.py` at fetch time, in an optional Image collection. Each template
+  marks the swap with `TODO(jbrowse)` or `TODO(bioimage)`.
+- **nascent 2.3.0** is its latest release and its prefix a real run, but an incomplete one:
+  coverage graphs and gene counts are complete for all 11 libraries, while transcript
+  identification, the QC directories and MultiQC are empty markers. A Transcripts tab needs a
+  run where PINTS completes.
+- **viralmetagenome** ran CheckV on the minimal test database, so every genome reads
+  Not-determined; the QUAST numbers come from the overview tables, the per-consensus QUAST
+  `.tsv` being one-line pointers.
+- **mcmicro** publishes the Cellpose tables as `<sample>_backsub_<sample>_backsub.csv`; its
+  MultiQC holds only the prelude's check matrix.
+- **genomeqc** publishes neither BUSCO's full table nor sequence lengths: the karyotype shades
+  each sequence by complete BUSCOs per Mb (genomeqc's own per-sequence count) and takes lengths
+  from tidk. tidk ran without `--repeat`, so its units on this run are simple repeats, not
+  telomeres. FCS-GX ran on NCBI's test-only database.
+- **hlatyping 2.2.0**'s prefix holds three launches of the release. Only the last (2026-02-16
+  10:48) got past YARA_MAPPER, so every output comes from it. Its `params.json` names
+  `samplesheet_full.csv` by URL, and test-datasets replaced that file in July 2026 with a
+  three-row sheet the 2.2.0 schema rejects; the five-sample sheet the run read (revision
+  `2adcc84`) is vendored under `input/`. The five samples are two individuals typed through
+  several input routes, so the genotypes repeat by design.
+- **epitopeprediction** ran a synthetic `test_full` sheet (6 VCF rows, 1 protein FASTA, 4
+  peptide tables) with mhcflurry, mhcnuggets and mhcnuggetsii, `--wide_format_output` and
+  `--wild_type`.
+
 ## How to use
 
 ```bash
@@ -263,14 +335,16 @@ version gate, seeding, missing visualisation kinds) are in
   variantbenchmarking 1.3.0 and 1.4.0, differentialabundance 1.2.0 to 1.5.0,
   funcscan 2.x / 3.0.0, smrnaseq 2.2.3 to 2.4.0, scrnaseq 2.x, crisprseq 2.0.0 to
   2.2.1, taxprofiler 1.2.2 / 1.2.4, airrflow 4.1.0 / 4.2.0, oncoanalyser 1.0.0 to
-  2.1.0, mag 5.2.0 / 5.3.0.
+  2.1.0, mag 5.2.0 / 5.3.0, stableexpression 1.1.0 (every release).
 - **Missing runs** (no prefix for the release sha): airrflow 5.1.1, phyloplace
   2.1.0, bacass 2.6.1. viralrecon 3.0.0 has a prefix but no MultiQC parquet.
 - **Partial runs**: mag 5.5.0 tag run `56abab5b` (crashed after read QC; the 5.5.0 release candidate `171cf369` is complete and is the pin),
   viralrecon 3.0.0 (nanopore layout only), phyloplace 2.0.1 (parquet without
   module data), sarek (germline only, somatic profiles never run), genomeassembler
   2.0.0 (one failed task aborted the assembly QC of half the samples), rnasplice 1.0.4
-  (alignments and quantification only, no MultiQC, no splicing results).
+  (alignments and quantification only, no MultiQC, no splicing results), rnavar 1.3.0
+  (truncated sync without variant calls; the 1.3.0dev run `5e72bcb5` is the pin), nascent 2.3.0
+  (transcript identification aborted, no QC and no MultiQC).
 - **Reports without their sections**: demultiplex 1.8.0 publishes a `multiqcsav/` report
   whose SAV module found no `RunInfo.xml`, and InterOp only as binaries, so the run-level
   sequencer metrics have no table to read.

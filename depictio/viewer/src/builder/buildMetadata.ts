@@ -59,6 +59,8 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildImage(state, base, existing);
     case 'map':
       return buildMap(state, base, existing);
+    case 'jbrowse':
+      return buildJBrowse(state, base, existing);
     case 'text':
       return buildText(state, base, existing);
     case 'advanced_viz':
@@ -271,9 +273,13 @@ export function buildInteractive(
     strip_icon?: boolean;
     show_histogram?: boolean;
     always_selected?: boolean;
+    multiple?: boolean;
     default_by?: string;
     default_order?: 'asc' | 'desc';
     banner_facts?: StoredMetadata['banner_facts'];
+    placeholder?: string;
+    case_sensitive?: boolean;
+    match_mode?: 'regex' | 'contains';
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -325,11 +331,28 @@ export function buildInteractive(
     // `loadExisting` seeds the config bag from the stored metadata, and
     // without this line saving an edit would silently drop the setting.
     show_histogram: c.show_histogram,
+    // TextInput options, stored only while the control is a TextInput and only
+    // when they differ from the default: the model rejects them on any other
+    // control, so switching the variant away must not carry them into a save the
+    // backend then refuses.
+    placeholder:
+      c.interactive_component_type === 'TextInput' ? c.placeholder?.trim() || undefined : undefined,
+    case_sensitive:
+      c.interactive_component_type === 'TextInput' && c.case_sensitive === true ? true : undefined,
+    match_mode:
+      c.interactive_component_type === 'TextInput' && c.match_mode === 'contains'
+        ? 'contains'
+        : undefined,
     // Stored only while on and while the control is still a Select: the model
     // rejects the flag on any other control, so switching the variant away
     // must not carry it into a save the backend then refuses.
     always_selected:
       c.interactive_component_type === 'Select' && c.always_selected === true ? true : undefined,
+    // YAML only as well: lets the always-on Select hold several values.
+    multiple:
+      c.interactive_component_type === 'Select' && c.always_selected === true && c.multiple === true
+        ? true
+        : undefined,
     // Set in YAML only (no builder control): kept through an edit while the
     // flag it ranks for is on.
     default_by:
@@ -561,5 +584,126 @@ function buildMap(
     // Written unconditionally so switching back to 'grid' actually clears it.
     placement: c.placement ?? 'grid',
     floating_initial_state: c.floating_initial_state ?? 'compact',
+  };
+}
+
+/** A stored list of `locus_from` sources. */
+type StoredLocusList = Extract<NonNullable<StoredMetadata['locus_from']>, unknown[]>;
+
+/** The `locus_from` fields the builder form edits (one source). */
+interface LocusFromForm {
+  data_collection_tag?: string;
+  chrom_column?: string;
+  start_column?: string;
+  end_column?: string | null;
+  padding?: number;
+  max_rows?: number;
+}
+
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (v == null || v === '' || !Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
+function buildJBrowse(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  // Keys and defaults mirror JBrowseLiteComponent (depictio/models/components/
+  // lite.py); depictio/api/v1/services/jbrowse/render.py reads them back. Unset
+  // optionals are written as null (not undefined) so an edit that clears one
+  // actually overrides the value carried in from `existing`.
+  const c = as<{
+    title?: string;
+    assembly?: string | null;
+    location?: string | null;
+    locus_from?: LocusFromForm | LocusFromForm[] | null;
+    track_mode?: string;
+    max_tracks?: number;
+    initial_tracks?: number;
+    default_tracks?: unknown;
+    ucsc_tracks?: unknown;
+    show_annotation?: boolean;
+    selection_enabled?: boolean;
+    selection_column?: string | null;
+    selection_mode?: string;
+    show_header?: boolean;
+    show_overview?: boolean;
+    track_labels?: string;
+    force_load?: boolean;
+    fetch_size_limit_mb?: unknown;
+    preset?: string | null;
+    config_overrides?: unknown;
+  }>(state.config);
+  // `locus_from` requires the DC and both coordinate columns (JBrowseLocusSource
+  // forbids partial objects), so a half-filled section is dropped, not saved.
+  // A list of sources: the form edits the first, the others are kept as stored.
+  const lfRaw = c.locus_from;
+  const lf: LocusFromForm | null | undefined = Array.isArray(lfRaw) ? lfRaw[0] : lfRaw;
+  // Stored entries the form never saw went through the model already.
+  const lfRest = (Array.isArray(lfRaw) ? lfRaw.slice(1) : []) as StoredLocusList;
+  const primaryLocus =
+    lf && lf.data_collection_tag && lf.chrom_column && lf.start_column
+      ? {
+          // Keep what the form does not edit (sort_by, label_column, mate...).
+          ...lf,
+          data_collection_tag: lf.data_collection_tag,
+          chrom_column: lf.chrom_column,
+          start_column: lf.start_column,
+          end_column: lf.end_column || null,
+          padding: clampInt(lf.padding, 0, Number.MAX_SAFE_INTEGER, 5000),
+          max_rows: clampInt(lf.max_rows, 1, Number.MAX_SAFE_INTEGER, 20),
+        }
+      : null;
+  const locusFrom = lfRest.length
+    ? primaryLocus
+      ? [primaryLocus, ...lfRest]
+      : lfRest
+    : primaryLocus;
+  const overrides = c.config_overrides;
+  const fetchLimit =
+    typeof c.fetch_size_limit_mb === 'number' ? c.fetch_size_limit_mb : Number.NaN;
+  return {
+    ...existing,
+    ...base,
+    title: c.title ?? '',
+    assembly: c.assembly || null,
+    location: c.location?.trim() || null,
+    locus_from: locusFrom,
+    track_mode: c.track_mode === 'all' ? 'all' : 'filtered',
+    max_tracks: clampInt(c.max_tracks, 1, 200, 20),
+    initial_tracks: clampInt(c.initial_tracks, 0, 200, 5),
+    default_tracks: Array.isArray(c.default_tracks)
+      ? c.default_tracks.filter((t): t is string => typeof t === 'string' && t.length > 0)
+      : [],
+    ucsc_tracks: Array.isArray(c.ucsc_tracks)
+      ? [
+          ...new Set(
+            c.ucsc_tracks.filter((t): t is string => typeof t === 'string' && t.length > 0),
+          ),
+        ]
+      : [],
+    show_annotation: c.show_annotation !== false,
+    selection_enabled: Boolean(c.selection_enabled),
+    // null = the DC's sample_column, resolved server-side.
+    selection_column: c.selection_column || null,
+    selection_mode: c.selection_mode === 'visible_tracks' ? 'visible_tracks' : 'feature_click',
+    show_header: c.show_header !== false,
+    show_overview: c.show_overview !== false,
+    track_labels:
+      c.track_labels === 'overlapping' || c.track_labels === 'hidden'
+        ? c.track_labels
+        : 'offset',
+    force_load: c.force_load === true,
+    // null = JBrowse's own per-adapter fetchSizeLimit (the model caps it at 10 000 MB).
+    fetch_size_limit_mb:
+      Number.isFinite(fetchLimit) && fetchLimit > 0 ? Math.min(fetchLimit, 10_000) : null,
+    preset: c.preset || null,
+    config_overrides:
+      overrides && typeof overrides === 'object' && !Array.isArray(overrides)
+        ? (overrides as Record<string, unknown>)
+        : {},
   };
 }

@@ -1,0 +1,99 @@
+AGGREGATE_RESULTS:
+  polars: 1.39.2
+  python: 3.14.3
+  pyyaml: 6.0.3
+CLEAN_GENE_IDS:
+  polars: 1.37.1
+  python: 3.12.8
+COLLECT_ALL_GENE_IDS:
+  python: 3.14.2
+  tqdm: 4.67.1
+COLLECT_STATISTICS:
+  pandas: 2.3.3
+  python: 3.13.7
+COMPUTE_GENE_TRANSCRIPT_LENGTHS:
+  pandas: 2.3.3
+  python: 3.13.7
+COMPUTE_M_MEASURE:
+  polars: 1.41.2
+  python: 3.14.3
+COMPUTE_STABILITY_SCORES:
+  polars: 1.39.2
+  python: 3.14.3
+COMPUTE_TPM:
+  polars: 1.39.2
+  python: 3.14.3
+CROSS_JOIN:
+  polars: 1.39.2
+  python: 3.14.3
+DESCRIPTIVE_STATISTICS:
+  polars: 1.37.1
+  python: 3.12.8
+DETECT_RARE_GENES:
+  polars: 1.39.2
+  python: 3.14.3
+DOWNLOAD_ENSEMBL_ANNOTATION:
+  bs4: 4.14.3
+  httpx: 0.28.1
+  pandas: 3.0.1
+  python: 3.14.3
+  tqdm: 4.67.3
+EXPRESSION_ATLAS:
+  ExpressionAtlas: 1.34.0
+  R: 4.4.3 (2025-02-28)
+  httpx: 0.28.1
+  nltk: 3.9.2
+  pandas: 3.0.1
+  python: 3.14.3
+  pyyaml: 6.0.3
+EXPRESSION_RATIO:
+  polars: 1.39.2
+  python: 3.14.3
+EXTRACT_GENE_IDS:
+  polars: 1.39.2
+  python: 3.14.3
+FILTER_AND_RENAME_GENES:
+  polars: 1.39.2
+  python: 3.14.3
+GET_CANDIDATE_GENES:
+  polars: 1.39.2
+  python: 3.14.3
+GLOBAL:
+  polars: 1.39.2
+  python: 3.14.3
+GPROFILER_IDMAPPING:
+  httpx: 0.28.1
+  pandas: 3.0.1
+  python: 3.14.3
+IMPUTE_MISSING_VALUES:
+  polars: 1.39.2
+  python: 3.14.3
+  scikit-learn: 1.8.0
+MAKE_CHUNKS:
+  polars: 1.39.2
+  python: 3.14.3
+NORMFINDER:
+  numba: 0.64.0
+  numpy: 2.4.3
+  polars: 1.39.2
+  python: 3.14.3
+  tqdm: 4.67.3
+PLATFORM:
+  polars: 1.39.2
+  python: 3.14.3
+QUANTILE_NORMALISATION:
+  polars: 1.39.2
+  python: 3.14.3
+  scikit-learn: 1.8.0
+RATIO_STANDARD_VARIATION:
+  polars: 1.39.2
+  python: 3.14.3
+TOO_MANY_MISSING_VALUES:
+  polars: 1.39.2
+  python: 3.14.3
+TOO_MANY_ZEROS:
+  polars: 1.39.2
+  python: 3.14.3
+Workflow:
+    nf-core/stableexpression: v1.0.0-gd6b1654
+    Nextflow: 26.04.6

@@ -1,0 +1,57 @@
+BCFTOOLS_ANNOTATE:
+  bcftools: 1.23.1
+BCFTOOLS_NORM:
+  bcftools: 1.23.1
+BCFTOOLS_PLUGINSETGT:
+  bcftools: 1.23.1
+BCFTOOLS_STATS:
+  bcftools: 1.23.1
+BCFTOOLS_VIEW:
+  bcftools: 1.23.1
+ENSEMBLVEP_VEP:
+  ensemblvep: 116.1
+  perl-math-cdf: 0.1
+  tabix: 1.23.1
+ENSEMBLVEP_VEP_CONTEXT:
+  ensemblvep: 116.1
+  perl-math-cdf: 0.1
+  tabix: 1.23.1
+FASTA2PEPTIDES:
+  biopython: 1.85
+  python: 3.13.1
+FASTA2PEPTIDES_FROM_VARIANTS:
+  biopython: 1.85
+  python: 3.13.1
+MERGE_PREDICTIONS:
+  mhcgnomes: 1.8.6
+  pandas: 2.1.0
+MHCFLURRY:
+  mhcflurry: 2.1.4
+MHCFLURRY_DOWNLOAD_MODELS:
+  mhcflurry: 2.1.4
+MHCNUGGETS:
+  mhcnuggets: 2.4.0
+  pandas: 1.1.5
+MHCNUGGETSII:
+  mhcnuggets: 2.4.0
+  pandas: 1.1.5
+PREPARE_PREDICTION_INPUT:
+  mhcgnomes: 1.8.6
+  pandas: 2.1.0
+PREP_GERMLINE_CONTEXT:
+  bcftools: 1.23.1
+PREP_PROXIMAL_VCF:
+  bcftools: 1.23.1
+PVACSEQ_GENERATEPROTEINFASTA:
+  pvactools: 7.0.1
+PVACSEQ_INSTALLVEPPLUGIN:
+  pvactools: 7.0.1
+SPLIT_PEPTIDES:
+  python: 3.14.3
+SUMMARIZE_RESULTS:
+  python: 3.11.5
+UNTAR:
+  untar: 1.34
+Workflow:
+    nf-core/epitopeprediction: v3.2.0-ge637bc7
+    Nextflow: 26.04.7

@@ -145,8 +145,34 @@ export function groupUnmatchedReasons(): string[] {
   return [sentence(GROUP_UNMATCHED_REASON)];
 }
 
+/** Why the Overlay of "What's new" leaves a chart as it was, when its chart
+ *  type draws each mark from several samples (a hierarchy, a matrix, a set
+ *  intersection): no mark belongs to one run. */
+export const RUN_OVERLAY_KIND_REASON =
+  'each mark of this chart sums several samples, so it cannot show which runs are new; Split shows the runs side by side where the chart allows it';
+
+/** Why the Overlay leaves a chart as it was when its marks are ids found in
+ *  several runs: a feature tested once per run is new and seen at once. */
+export const RUN_OVERLAY_AMBIGUOUS_REASON =
+  'each mark of this chart holds rows of several runs, so it cannot be coloured by run; Split shows the runs side by side';
+
+/** The single hover line for a chart the run Overlay cannot colour by kind. */
+export function runOverlayKindReasons(): string[] {
+  return [sentence(RUN_OVERLAY_KIND_REASON)];
+}
+
+/** The single hover line for a chart whose marks hold rows of several runs. */
+export function runOverlayAmbiguousReasons(): string[] {
+  return [sentence(RUN_OVERLAY_AMBIGUOUS_REASON)];
+}
+
 /** Which of the reasons above an advanced viz wears on its "not grouped" badge. */
-export type AdvancedVizGroupBadge = 'kind' | 'unreachable' | 'unmatched';
+export type AdvancedVizGroupBadge =
+  | 'kind'
+  | 'unreachable'
+  | 'unmatched'
+  | 'run_kind'
+  | 'run_ambiguous';
 
 /** What the advanced viz dispatch knows about one tile's grouping. */
 export interface AdvancedVizGroupInputs {
@@ -163,6 +189,9 @@ export interface AdvancedVizGroupInputs {
   coloured: boolean | null;
   /** A group was drawn on this tile's own dataset. */
   drawnHere: boolean;
+  /** The Overlay of "What's new" cannot colour this tile by run: by its
+   *  chart type, or because its marks hold rows of several runs. */
+  runOverlay?: 'kind' | 'ambiguous' | null;
 }
 
 export interface AdvancedVizGroupOutcome {
@@ -184,7 +213,10 @@ export interface AdvancedVizGroupOutcome {
  * vouching for groups drawn on its own dataset.
  */
 export function advancedVizGroupOutcome(inputs: AdvancedVizGroupInputs): AdvancedVizGroupOutcome {
-  const { groupsActive, split, declinedByKind, splitIneffective, coloured, drawnHere } = inputs;
+  const { groupsActive, split, declinedByKind, splitIneffective, coloured, drawnHere, runOverlay } =
+    inputs;
+  if (runOverlay === 'kind') return { badge: 'run_kind', reach: false };
+  if (runOverlay === 'ambiguous') return { badge: 'run_ambiguous', reach: false };
   if (!groupsActive) return { badge: null, reach: null };
   if (declinedByKind) return { badge: 'kind', reach: false };
   if (split || coloured === true) return { badge: null, reach: true };

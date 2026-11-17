@@ -20,6 +20,7 @@ import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } 
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { COLOUR_SCALES, looksContinuous } from './colourScales';
+import { plotlyColorscale } from '../../utils/colorScale';
 import {
   buildAxisScale,
   toNumbers,
@@ -452,7 +453,7 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
       // offered and ignored.
       line = {
         color: colourValues.map((value) => Number(value) || 0),
-        colorscale: colourScale,
+        colorscale: plotlyColorscale(colourScale),
         showscale: true,
         colorbar: {
           thickness: 10,

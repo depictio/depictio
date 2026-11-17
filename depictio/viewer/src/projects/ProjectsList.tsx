@@ -110,10 +110,6 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
           .toLowerCase();
         if (!haystack.includes(q)) return false;
       }
-      if (prefs.filters.types.length > 0) {
-        const t = p.project_type === 'advanced' ? 'advanced' : 'basic';
-        if (!prefs.filters.types.includes(t)) return false;
-      }
       if (prefs.filters.visibility === 'public' && !p.is_public) return false;
       if (prefs.filters.visibility === 'private' && p.is_public) return false;
       if (!matchesTemplateFilter(p.template_origin, prefs.filters.templates)) {
@@ -207,17 +203,6 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
         }),
     });
   }
-  for (const t of prefs.filters.types) {
-    scopeChips.push({
-      key: `y:${t}`,
-      label: t === 'basic' ? 'Basic' : 'Advanced',
-      onRemove: () =>
-        setFilters({
-          ...prefs.filters,
-          types: prefs.filters.types.filter((v) => v !== t),
-        }),
-    });
-  }
   if (prefs.filters.visibility !== 'all') {
     scopeChips.push({
       key: 'v',
@@ -255,7 +240,6 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   const noResults =
     filtered.length === 0 &&
     (prefs.search.trim().length > 0 ||
-      prefs.filters.types.length > 0 ||
       prefs.filters.visibility !== 'all' ||
       prefs.filters.templates.length > 0 ||
       prefs.onlyPinned);

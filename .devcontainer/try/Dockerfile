@@ -24,8 +24,10 @@ ENV PATH=/home/vscode/.local/bin:$PATH
 # layer small: the uv and py-rattler caches; mongos and the Redis modules, which
 # the local server never starts; and Polars' compat runtime, for CPUs without
 # AVX2, which Polars would otherwise pick first over the faster default one.
+# This boot is the image build, not an installation: no telemetry from it (a build has
+# no CI variables). Set for this command only, so a codespace keeps the default.
 RUN uv tool install --python 3.12 "depictio[local]${DEPICTIO_VERSION:+==$DEPICTIO_VERSION}" \
- && depictio local up --no-open --port 8058 \
+ && DEPICTIO_TELEMETRY_ENABLED=false depictio local up --no-open --port 8058 \
  && depictio local down \
  && rm -rf /home/vscode/.cache /tmp/weed.* \
     /home/vscode/.depictio/local/env/bin/mongos \

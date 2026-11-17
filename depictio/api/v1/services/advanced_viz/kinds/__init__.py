@@ -4,7 +4,7 @@ Importing this package registers every builder. Adding a kind means adding a
 module here and importing it below — ``capabilities.formats_for`` picks it up
 automatically and the export route stops answering 501 for that kind.
 
-Ported so far: volcano, ma, qq, stacked_taxonomy, manhattan, embedding,
+Ported so far: volcano, ma, qq, stacked_bar, manhattan, embedding,
 da_barplot, enrichment, sunburst, and the four benchmarking kinds
 (roc_pr_curve, pr_benchmark, confusion_matrix, metric_ci_bars). The remaining
 kinds still render client-side only and are exportable as ``format=html``; see
@@ -22,7 +22,7 @@ from depictio.api.v1.services.advanced_viz.kinds import (  # noqa: F401
     pr_benchmark,
     qq,
     roc_pr_curve,
-    stacked_taxonomy,
+    stacked_bar,
     sunburst,
     volcano,
 )
@@ -38,7 +38,7 @@ __all__ = [
     "pr_benchmark",
     "qq",
     "roc_pr_curve",
-    "stacked_taxonomy",
+    "stacked_bar",
     "sunburst",
     "volcano",
 ]

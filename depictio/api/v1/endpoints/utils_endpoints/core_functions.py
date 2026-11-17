@@ -11,10 +11,12 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
     deltatables_collection,
+    migration_requests_collection,
     multiqc_collection,
 )
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.users import UserBeanie
+from depictio.models.s3_utils import delete_keys
 
 
 class BucketResponse(BaseModel):
@@ -134,6 +136,19 @@ def _registered_dc_ids() -> set[str]:
     return registered
 
 
+def _importing_dc_ids() -> set[str]:
+    """Data collection ids of pushed projects being imported right now (#1303).
+
+    An approved import writes the project's objects to S3 before its documents
+    exist, so for a while those prefixes look orphaned. The requests record
+    the bundle's data collection ids for exactly this reason.
+    """
+    ids: set[str] = set()
+    for doc in migration_requests_collection.find({"status": "importing"}, {"dc_ids": 1}):
+        ids.update(str(i) for i in doc.get("dc_ids") or [])
+    return ids
+
+
 def _is_registered(dc_id: str) -> bool:
     """Whether MongoDB knows ``dc_id`` now. Ids are stored as ObjectId or as string."""
     query = {"data_collection_id": {"$in": [ObjectId(dc_id), dc_id]}}
@@ -198,7 +213,12 @@ async def cleanup_orphaned_s3_files(
                     if len(prefix) == 24 and all(c in "0123456789abcdef" for c in prefix.lower()):
                         s3_prefixes.add(prefix)
 
-        valid_dc_ids = _registered_dc_ids()
+        # The staging prefix holds pushed bundles awaiting a decision. It can
+        # never look like an ObjectId (MigrationConfig refuses that), but the
+        # sweep spares it by name too rather than by that coincidence.
+        s3_prefixes.discard(settings.migration.staging_prefix)
+
+        valid_dc_ids = _registered_dc_ids() | _importing_dc_ids()
 
         # Find orphaned prefixes (in S3 but not in MongoDB)
         orphaned_prefixes = sorted(s3_prefixes - valid_dc_ids)
@@ -254,16 +274,9 @@ async def cleanup_orphaned_s3_files(
             total_size_bytes += sum(obj.get("Size", 0) for obj in objects)
 
             if not dry_run:
-                # Delete objects in batches of 1000 (S3 limit)
-                batch_size = 1000
-                for i in range(0, len(objects), batch_size):
-                    batch = [{"Key": obj["Key"]} for obj in objects[i : i + batch_size]]
-                    response = s3_client.delete_objects(
-                        Bucket=bucket_name, Delete={"Objects": batch}
-                    )
-                    errors = response.get("Errors", [])
-                    if errors:
-                        logger.error(f"Errors deleting objects: {errors}")
+                errors = delete_keys(s3_client, bucket_name, (obj["Key"] for obj in objects))
+                if errors:
+                    logger.error(f"Errors deleting objects: {errors}")
 
         if recent_prefixes:
             logger.info(

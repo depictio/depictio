@@ -111,6 +111,7 @@ const AdminMaintenancePanel: React.FC = () => {
               </Text>
             </Stack>
             <Button
+              className="gp-danger"
               color="red"
               variant="filled"
               leftSection={<Icon icon="tabler:trash" width={16} />}

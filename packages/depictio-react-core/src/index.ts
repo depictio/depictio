@@ -12,6 +12,9 @@ import './styles/realtime-highlight.css';
 import './plotlyStrictMode';
 // Before any Plot mounts: plain wheel scrolls the page, Ctrl / Cmd + wheel zooms.
 import './plotlyZoomGate';
+import './plotlySkipIdenticalUpdate';
+// A resize that finds the box at the size of the last draw is not a redraw.
+import './plotlySkipIdleResize';
 
 // Grid + top-level renderer
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
@@ -45,6 +48,9 @@ export {
 // Thrown by the fetch helpers on a non-2xx response; `status` lets a poller
 // stop on a refusal instead of retrying it forever.
 export { HttpStatusError } from './api';
+// Why a dashboard failed to load (missing, refused, unavailable), from the status.
+export { classifyLoadError } from './loadError';
+export type { LoadErrorInfo, LoadErrorKind } from './loadError';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
 export { default as ComponentSkeleton } from './components/ComponentSkeleton';
@@ -68,11 +74,29 @@ export type {
 export { default as FigureRenderer } from './components/FigureRenderer';
 export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
+export { default as PhylogeneticRenderer } from './components/advanced_viz/PhylogeneticRenderer';
+export { imageServeUrl } from './components/advanced_viz/spatial_cells/spatialLayout';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
 export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
+export {
+  DEFAULT_PALETTE_SHADE,
+  paletteHex,
+  paletteName,
+  paletteShade,
+  paletteVar,
+  parsePaletteColor,
+} from './paletteColor';
+export type { ParsedPalette } from './paletteColor';
+export { TabColorContext, tabHueHex, useTabHue } from './tabColor';
+export { tintSingleSeries } from './figureTint';
 export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
+export { GenomeBrowserTargetContext, useGenomeBrowserTarget } from './components/jbrowse/browserTarget';
+export type { GenomeBrowserTarget } from './components/jbrowse/browserTarget';
+export { genomeSelectionRegion, locusForAction } from './components/jbrowse/locusForAction';
+export { isGenomicKind } from './components/advanced_viz/genomicAxis';
+export type { OpenLocusReader, OpenLocusSource } from './components/jbrowse/locusForAction';
 export {
   groupTabs,
   sameTabGroup,
@@ -162,6 +186,7 @@ export type {
 
 // Interactive renderers
 export { default as MultiSelectRenderer } from './components/interactive/MultiSelectRenderer';
+export { default as TextInputRenderer } from './components/interactive/TextInputRenderer';
 export { default as RangeSliderRenderer } from './components/interactive/RangeSliderRenderer';
 export { default as SliderRenderer } from './components/interactive/SliderRenderer';
 export { default as DatePickerRenderer } from './components/interactive/DatePickerRenderer';
@@ -205,7 +230,10 @@ export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
 export { default as SelectionGroupsPanel } from './components/interactive/SelectionGroupsPanel';
-export type { SelectionGroupsPanelProps } from './components/interactive/SelectionGroupsPanel';
+export type {
+  SelectionGroupsPanelProps,
+  LabelColumnChoice,
+} from './components/interactive/SelectionGroupsPanel';
 export { SaveGroupContext } from './components/chrome/SaveGroupAction';
 export type { SaveGroupApi } from './components/chrome/SaveGroupAction';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
@@ -318,6 +346,7 @@ export {
   SIDEBAR_TOGGLE_EVENT,
   FILTER_PANEL_TOGGLE_EVENT,
   ANALYSIS_PANEL_TOGGLE_EVENT,
+  METADATA_PANEL_TOGGLE_EVENT,
   INSPECTOR_TOGGLE_EVENT,
   dispatchPanelToggle,
   PANEL_RESIZE_END_EVENT,
@@ -481,6 +510,8 @@ export {
   fetchImagePaths,
   renderMap,
   fetchJBrowseSession,
+  fetchTracksPreview,
+  fetchUcscTracks,
   renderMultiQC,
   renderMultiQCGeneralStats,
   fetchServerStatus,
@@ -550,9 +581,8 @@ export {
   registerUser,
   createTemporaryUser,
   getAnonymousSession,
-  startGoogleOAuth,
-  samlLoginUrl,
-  handleGoogleCallback,
+  oidcLoginUrl,
+  oidcCallbackUrl,
   exchangeMagicToken,
   persistSession,
   clearSession,
@@ -577,6 +607,8 @@ export {
   // Project management
   fetchProject,
   fetchIngestionReport,
+  fetchProjectRuns,
+  fetchProjectRunFiles,
   fetchIngestionHealth,
   fetchDataCollectionFiles,
   createProject,
@@ -586,8 +618,23 @@ export {
   listS3Dirs,
   inspectFolder,
   previewRunFile,
+  previewRemoteUrl,
   findRunFolders,
   testRunStorage,
+  builderCapabilities,
+  builderTracksManifest,
+  builderWriteManifest,
+  builderTree,
+  builderSuggest,
+  builderRunsRegex,
+  builderRunsOverview,
+  builderMatch,
+  builderTemplate,
+  builderFromTemplate,
+  builderMetadata,
+  builderContext,
+  builderPlan,
+  builderWrite,
   ApiDetailError,
   apiErrorCode,
   refreshManifest,
@@ -595,6 +642,28 @@ export {
   listProjectTemplates,
   updateProject,
   deleteProject,
+  lockProject,
+  unlockProject,
+  listMigrationRequests,
+  getMigrationRequest,
+  regenerateMigrationThumbnails,
+  approveMigrationRequest,
+  rejectMigrationRequest,
+  revalidateMigrationRequest,
+  listMigrationTargets,
+  createMigrationTarget,
+  deleteMigrationTarget,
+  listPushTargets,
+  checkPush,
+  getPushDestinations,
+  startPush,
+  listPushes,
+  getPush,
+  retryPush,
+  listMigrationInvites,
+  createMigrationInvite,
+  revokeMigrationInvite,
+  retryMigrationRequest,
   toggleProjectVisibility,
   updateProjectPermissions,
   getProjectStorage,
@@ -610,12 +679,24 @@ export {
   deleteDataCollection,
   createDataCollectionFromUpload,
   createDataCollectionFromUrl,
+  fetchTableEditStatus,
+  setTableEditLock,
+  setTableCoordinates,
+  fetchTableForEdit,
+  patchTableCells,
+  restoreTableVersion,
+  mergeTableFile,
+  TableEditError,
+  addTablesFromFolder,
+  attachRun,
   // Groups (membership, group admins, project sharing)
   listGroups,
   listMyGroups,
   fetchGroup,
   fetchProjectEffectiveAccess,
   previewGroupMembers,
+  searchShareCandidates,
+  SHARE_CANDIDATE_MIN_QUERY,
   createGroup,
   updateGroup,
   deleteGroup,
@@ -673,11 +754,13 @@ export {
   updateProjectLink,
   deleteProjectLink,
   listLinkResolvers,
+  fetchLinkSuggestions,
   fetchMultiQCSampleMappings,
   fetchLinkMappingPreview,
   // Funnel filtering (issue #939)
   fetchFunnelValues,
   // MultiQC management (multipart uploads)
+  createAssetDataCollection,
   createMultiQCDataCollection,
   checkMultiQCUniformity,
   appendMultiQCFiles,
@@ -693,6 +776,7 @@ export {
   fetchPolarsSchema,
   fetchVizSuggestions,
   fetchPhylogenyNewick,
+  fetchGeojson,
   dispatchComputeEmbedding,
   pollComputeEmbedding,
   dispatchComplexHeatmap,
@@ -714,6 +798,14 @@ export type {
   TableMutationResult,
   RoleDtypeSpec,
   IngestionReport,
+  RecipeInput,
+  ProjectRun,
+  RunScan,
+  RunFile,
+  RunFileChange,
+  RunReportChange,
+  RunFiles,
+  RunScanFiles,
   IngestionDataCollection,
   IngestionRun,
   IngestionSummary,
@@ -740,6 +832,7 @@ export type {
   EffectiveAccess,
   EffectiveAccessUser,
   GroupMemberPreview,
+  ShareCandidate,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
@@ -804,7 +897,9 @@ export {
   syncFiltersToLocation,
   buildFilterShareUrl,
   sanitizeRestoredFilters,
+  filterComponentIndex,
 } from './filterShare';
+export { default as GenomeDebugPanel } from './components/genomeLink/GenomeDebugPanel';
 export {
   readEditorFilters,
   writeEditorFilters,
@@ -849,6 +944,63 @@ export {
 export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export {
+  annotationsProblem,
+  emptyAnnotations,
+  mergeAccountAndLocal,
+  MAX_ANNOTATION_COLUMNS,
+  columnsFor,
+  MAX_ANNOTATION_KEYS,
+  MAX_ANNOTATION_ROWS,
+  LABEL_SCOPE,
+  MAX_LABEL_LENGTH,
+  MAX_SERVER_GROUPS,
+  copyName,
+  labelScope,
+  newAnnotationId,
+  normaliseLabel,
+  parseAnnotations,
+  parseSharedColumns,
+  readBrowserAnnotations,
+  setLabel,
+  splitForAccount,
+  withShared,
+  writeBrowserAnnotations,
+} from './sessionAnnotations';
+export { buildMetadataSheet, metadataSheetName } from './metadataSheet';
+export type {
+  AnnotationColumn,
+  AnnotationTarget,
+  BrowserRead,
+  DashboardAnnotations,
+  LabelScope,
+} from './sessionAnnotations';
+export {
+  fetchAnnotationTables,
+  fetchDashboardAnnotations,
+  saveDashboardAnnotations,
+  saveSharedLabels,
+} from './api';
+export type { AnnotationTable, AnnotationTablesLoad, SharedLabelsSave } from './api';
+export type { AnnotationsLoad, AnnotationsSave } from './api';
+export {
+  annotationColumnBudget,
+  deriveAnnotationGroups,
+  distinctLabels,
+  sameGroups,
+} from './annotationGroups';
+export type { Budget } from './annotationGroups';
+export {
+  asKey,
+  fileColumnKeys,
+  matchDroppedTable,
+  MAX_DROP_BYTES,
+  parseDroppedTable,
+  parsePastedBlock,
+} from './annotationInput';
+export type { DropMatch, ParsedTable } from './annotationInput';
+export { planAnnotationMerge, suggestedMergeMode } from './annotationMerge';
+export type { AnnotationMergeMode, AnnotationMergeReport } from './annotationMerge';
 export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
 export { defaultFilterValue, withInteractiveDefaults } from './interactiveDefaults';
 export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
@@ -892,6 +1044,7 @@ export type {
   RealtimeMode,
   RealtimeEvent,
   MonitoringLiveEvent,
+  MigrationLiveEvent,
 } from './realtime';
 export { default as RealtimeIndicator } from './components/RealtimeIndicator';
 export { useRealtimeJournal } from './hooks/useRealtimeJournal';
@@ -969,6 +1122,9 @@ export {
 
 export type {
   StoredMetadata,
+  LinkSuggestion,
+  GeoJsonCollection,
+  GeoJsonFeature,
   TextValueSpec,
   DashboardData,
   FilterSectionSpec,
@@ -981,6 +1137,11 @@ export type {
   FigureResponse,
   TableResponse,
   JBrowseSessionResponse,
+  JBrowseTrackRow,
+  UcscTrackOption,
+  UcscTrackGroup,
+  UcscTracksQuery,
+  UcscTracksResponse,
   ServerStatusResponse,
   ServerInfo,
   VersionCheckBlock,
@@ -1028,12 +1189,21 @@ export type {
   AvatarInfo,
   SessionPayload,
   RegisterResult,
-  GoogleCallbackResult,
+  SsoProvider,
   // Dashboard management types
   DashboardListEntry,
   DashboardPermissions,
   DashboardPermissionsUser,
   ProjectListEntry,
+  DataOrigin,
+  FolderTableFile,
+  FolderTableCreated,
+  FolderTablesReport,
+  AttachRunMatch,
+  AttachRunReport,
+  ProjectProvenance,
+  ImportHop,
+  PublishedLock,
   CreateDashboardInput,
   EditDashboardInput,
   ImportDashboardOptions,
@@ -1045,6 +1215,7 @@ export type {
   FromManifestReport,
   FromRunRequest,
   FromRunReport,
+  SharedRunSamples,
   FromRunDCPreview,
   FromRunRecipePreview,
   FromRunRecipeSource,
@@ -1064,6 +1235,34 @@ export type {
   RunFilePreview,
   FoundRunFolder,
   FindRunsResult,
+  BuilderCapabilities,
+  BuilderStoreSummary,
+  BuilderTracksCheck,
+  BuilderTracksManifest,
+  BuilderTreeEntry,
+  BuilderTreeListing,
+  BuilderCatalogMatch,
+  BuilderSuggestion,
+  BuilderRunsRegex,
+  BuilderRunsOverview,
+  BuilderSchemaMismatch,
+  BuilderMatchResult,
+  BuilderTemplateResult,
+  BuilderBaseCollection,
+  BuilderBaseCollectionKind,
+  BuilderBaseSource,
+  BuilderBaseVariable,
+  BuilderBaseWorkflow,
+  BuilderScanEdit,
+  BuilderSourceEdit,
+  BuilderWorkflowEdit,
+  BuilderTemplateBaseEdits,
+  BuilderTemplateDescription,
+  FromRunTemplateEdits,
+  BuilderRepoMetadata,
+  BuilderContext,
+  BuilderWriteResult,
+  BuilderRequestOptions,
   ManifestIngestDCResult,
   ManifestRefreshStatus,
   ManifestRefreshEntry,
@@ -1083,6 +1282,19 @@ export type {
   MultiQCReportsList,
   CreateDataCollectionUploadInput,
   CreateDataCollectionResult,
+  TableEditStatus,
+  TableCoordinates,
+  TableEditColumn,
+  TableColumnKind,
+  TableEditData,
+  TableCellEdit,
+  TableCellError,
+  TableEditResult,
+  TableRestoreResult,
+  TableMergeMode,
+  TableMergeColumn,
+  TableMergeKeyCandidate,
+  TableMergeReport,
   // Admin types
   AdminUser,
   AdminCreateUserInput,
@@ -1129,6 +1341,26 @@ export type {
   FunnelTargetResult,
   FunnelStage,
   FunnelValuesResponse,
+  // Server-to-server push types
+  MigrationRequestStatus,
+  MigrationTransferMode,
+  MigrationRequestSummary,
+  MigrationRequestDetail,
+  MigrationDashboardSummary,
+  MigrationDcSummary,
+  MigrationTarget,
+  MigrationTargetList,
+  PushPreflightResult,
+  PushDestination,
+  PushDestinations,
+  PushInviteInfo,
+  PushRemoteStatus,
+  MigrationPush,
+  MigrationPushStatus,
+  MigrationInvite,
+  MigrationInviteState,
+  MigrationInviteDefaults,
+  MigrationInviteList,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
@@ -1179,11 +1411,18 @@ export { catalogToolUrl } from './catalogLinks';
 // Shareable listing views: the /dashboards and /projects pages encode their
 // filters into the URL, and both narrow on the template a project came from.
 export {
+  describeRevisionMismatch,
   matchesTemplateFilter,
   parseTemplateOrigin,
+  readTemplateRevision,
   templateFilterValues,
+  templateRevisionMismatch,
 } from './templateFilter';
-export type { ParsedTemplate } from './templateFilter';
+export type {
+  ParsedTemplate,
+  TemplateRevision,
+  TemplateRevisionMismatch,
+} from './templateFilter';
 // "From a run folder": locations, the template catalog per pipeline, and the
 // reading of a run-folder plan.
 export {
@@ -1202,6 +1441,9 @@ export {
   shortenHome,
 } from './runFolderPaths';
 export type { FolderSource } from './runFolderPaths';
+export { provenanceBadge } from './provenance';
+export type { ProvenanceBadgeInfo, ProvenanceState } from './provenance';
+export { bareVersion } from './versions';
 export {
   compareVersions,
   defaultVersionFor,
@@ -1248,6 +1490,130 @@ export type {
   RunStorageFieldErrors,
   RunStorageFields,
 } from './runFolderStorage';
+export {
+  BUILDER_BIOIMAGE_FORMATS,
+  BUILDER_CATALOGS,
+  BUILDER_DC_TYPES,
+  BUILDER_LINK_RESOLVERS,
+  DEFAULT_CRS,
+  DEFAULT_FREE_ASSEMBLY,
+  EMPTY_PROJECT_FIELDS,
+  LINK_SOURCE_TYPES,
+  METATYPE_DC_TYPES,
+  READER_FORMATS,
+  SINGLE_FILE_DC_TYPES,
+  SPATIALDATA_FORMAT,
+  TRACK_COLUMN_FIELDS,
+  BUILDER_HANDOFF_KEY,
+  DEFAULT_ENGINE,
+  DEFAULT_WORKFLOW_NAME,
+  allBuilderDcs,
+  assemblyIssue,
+  bioimageFormatOf,
+  blockingIssues,
+  builderDraftKey,
+  builderReducer,
+  clearBuilderDraft,
+  coordinatesIssue,
+  dcTypeAvailability,
+  defaultDcProps,
+  defaultLinkResolver,
+  builderDcColumns,
+  defaultLinkTargetField,
+  fallbackBuilderCapabilities,
+  findBuilderDc,
+  globToRegex,
+  initialBuilderState,
+  isStorePath,
+  isTagTaken,
+  readsTrackFiles,
+  isTrackFilePath,
+  isWorkflowNameTaken,
+  linkIssues,
+  linkSourceTags,
+  linkTargetTags,
+  loadBuilderDraft,
+  newLinkDraft,
+  normalizeDcDraft,
+  offeredDcTypes,
+  parseBuilderState,
+  regexToGlob,
+  saveBuilderDraft,
+  seedPropsForCapabilities,
+  tableTags,
+  tagFromGlob,
+  tagFromPath,
+  stateFromTemplateBase,
+  baseCollections,
+  baseDependants,
+  collectionFolderStatus,
+  folderStatusOf,
+  scopeRemovals,
+  baseEditCounts,
+  baseIssues,
+  WORKFLOW_EDIT_KEYS,
+  baseKept,
+  baseRemoved,
+  baseVariables,
+  findProjectCollection,
+  toBaseEdits,
+  takeBuilderHandoff,
+  toProjectDraft,
+  uniqueTag,
+  validateBuilderState,
+  wildcardIssues,
+  writeBuilderHandoff,
+} from './projectBuilder';
+export type {
+  WorkflowEditKey,
+  CollectionFolderStatus,
+  BuilderAction,
+  BuilderBioimageFormat,
+  BuilderBioimageProps,
+  BuilderCatalogName,
+  BuilderCustomAssembly,
+  BuilderDcDraft,
+  BuilderDcProps,
+  BuilderDcType,
+  BuilderGenomicTracksProps,
+  BuilderGeoJSONProps,
+  BuilderHandoff,
+  BuilderHandoffProject,
+  BuilderHandoffDetection,
+  BuilderHandoffIntent,
+  BuilderImageProps,
+  BuilderIndexedFileProps,
+  BuilderIssue,
+  BuilderLinkDraft,
+  BuilderLinkResolver,
+  BuilderMetatype,
+  BuilderMultiQCProps,
+  BuilderPhylogenyProps,
+  BuilderProjectDraft,
+  BuilderProjectFields,
+  BuilderReaderOptions,
+  BuilderRootSpec,
+  BuilderScanMode,
+  BuilderSendOptions,
+  BuilderSpatialCoordinates,
+  BuilderSpatialDataTableSource,
+  BuilderState,
+  BuilderStorage,
+  BuilderTableProps,
+  BuilderTrackColumnField,
+  BuilderValidateOptions,
+  BuilderWildcard,
+  BuilderWorkflowCatalog,
+  BuilderWorkflowDraft,
+  BuilderWorkflowPatch,
+  BuilderWorkflowState,
+  BuilderWorkflowStructure,
+  DcTypeAvailability,
+  LocatedDc,
+  BuilderBaseState,
+  LocatedBaseCollection,
+  ProjectCollection,
+} from './projectBuilder';
 export {
   asEnum,
   asList,
@@ -1298,6 +1664,9 @@ export {
   pickFromFamily,
   pinnedDemoSections,
   selectionColumnOf,
+  genomeConfigOf,
+  genomeTabsOf,
+  jbrowseRank,
   siblingDemoSections,
   takesSelection,
 } from './guide/demoSources';
@@ -1306,6 +1675,9 @@ export type {
   GuideFamilyDoc,
   GuideFamilyPick,
   GuideFilterDemoPick,
+  GuideGenomeConfig,
+  GuideGenomeSection,
+  GuideGenomeTab,
   GuideSiblingSectionsPick,
   PinnedDemoSections,
 } from './guide/demoSources';
@@ -1363,3 +1735,93 @@ export {
   residueEntityFromFilters,
   isResidueFilter,
 } from './selection';
+
+// What changed since the reader's last visit (#1397).
+export {
+  fetchDashboardChanges,
+  recordDashboardVisit,
+  markDashboardSeen,
+  fetchProjectChanges,
+  recordProjectVisit,
+  markProjectSeen,
+  fetchProjectTimeline,
+  fetchChangesPrefs,
+  saveChangesPrefs,
+  fetchChangesInbox,
+  fetchComponentDiff,
+} from './api';
+export type {
+  MarkMode,
+  ReaderBaseline,
+  DismissedComponents,
+  DataChange,
+  FailedIngestion,
+  DashboardChange,
+  CommentChange,
+  DashboardChangeSet,
+  ProjectRunChange,
+  ProjectDashboardChange,
+  ProjectChangeSet,
+  ChangesQuery,
+  TimelineEvent,
+  InboxItem,
+  ComponentDiff,
+  ComponentDiffMeta,
+  SupportedComponentDiff,
+  DiffPoint,
+  DiffPointsMove,
+  DiffPoints,
+  DiffGroup,
+  DiffGroups,
+  DiffSamples,
+  DiffRow,
+  DiffRowChange,
+  DiffRows,
+  DiffUnsupported,
+} from './api';
+
+// Change marks on the canvas, and the browser-held mark of an anonymous reader (#1397).
+export {
+  ChangeMarksContext,
+  ChangeMarksProviderBase,
+  EMPTY_CHANGE_MARKS,
+  changeKey,
+  useChangeMark,
+  useChangeMarkDetails,
+  useNewsSplitGroups,
+  useOverlayNewRuns,
+  useRunUnscoped,
+} from './changeMarks';
+export type { ChangeReason, ChangeMarksValue } from './changeMarks';
+export { OVERALL_COLOR, OVERALL_LABEL, panelFilters, panelsFromGroups } from './splitPanels';
+export type { PanelSpec } from './splitPanels';
+export {
+  DIFF_HOVER,
+  DIFF_TRACE_PREFIX,
+  applyFigureDiffOverlay,
+  buildFigureDiffOverlay,
+  diffSummaryParts,
+  diffSummaryText,
+  isDiffTraceName,
+  resolveDiffColors,
+} from './figureDiffOverlay';
+export type {
+  DiffColors,
+  FigureDiffOverlay,
+  PlotlyFigureLike,
+  TracePatch,
+} from './figureDiffOverlay';
+export { useComponentDiff, useFigureDiffOverlay } from './hooks/useComponentDiff';
+export { default as DiffSummaryChip } from './components/chrome/DiffSummaryChip';
+export {
+  CHANGES_KEY_PREFIX,
+  CHANGES_MODE_KEY,
+  changesStorageKey,
+  isMarkMode,
+  mergeLocalDismissed,
+  readLocalMode,
+  readLocalReader,
+  writeLocalBaseline,
+  writeLocalMode,
+} from './changesStore';
+export type { LocalReaderState } from './changesStore';

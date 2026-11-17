@@ -67,6 +67,9 @@ function hexWithAlpha(hex: string, alpha: number): string {
   return `${hex}${a}`;
 }
 
+const PLOT_STYLE = { width: '100%', height: '100%' } as const;
+const PLOT_CONFIG = { displaylogo: false, responsive: true } as any;
+
 const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const config = (metadata.config || {}) as SankeyConfig;
   const theme = useMantineTheme();
@@ -584,6 +587,23 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     ],
   );
 
+  // Themed once per figure, so a parent re-render does not redraw the plot.
+  const plotData = useMemo(
+    () => (figureSpec ? applyDataTheme(figureSpec.data, isDark, theme) : null),
+    [figureSpec, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () =>
+      figureSpec
+        ? applyLayoutTheme(
+            { ...(figureSpec.layout as any), width: undefined, height: undefined, autosize: true },
+            isDark,
+            theme,
+          )
+        : null,
+    [figureSpec, isDark, theme],
+  );
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Categorical flow'}
@@ -596,19 +616,13 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       dataColumns={['from_step', 'from', 'to_step', 'to', 'flow']}
       echo={echo}
     >
-      {figureSpec ? (
+      {figureSpec && plotData && plotLayout ? (
         <Plot
-          data={applyDataTheme(figureSpec.data, isDark, theme) as any}
-          layout={
-            applyLayoutTheme(
-              { ...(figureSpec.layout as any), width: undefined, height: undefined, autosize: true },
-              isDark,
-              theme,
-            ) as any
-          }
+          data={plotData as any}
+          layout={plotLayout as any}
           useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
+          style={PLOT_STYLE}
+          config={PLOT_CONFIG}
         />
       ) : null}
     </AdvancedVizFrame>

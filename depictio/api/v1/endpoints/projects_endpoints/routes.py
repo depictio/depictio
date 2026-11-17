@@ -4,7 +4,7 @@ from collections.abc import Awaitable
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from pymongo.errors import DuplicateKeyError
 
 from depictio.api.v1.configs.config import settings
@@ -23,6 +23,9 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_project
+from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+    delete_annotations_for_project,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     cascade_project_visibility,
 )
@@ -72,6 +75,17 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.project_runs import (
+    ProjectRuns,
+    RunFiles,
+    project_runs,
+    run_files,
+)
+from depictio.api.v1.endpoints.projects_endpoints.provenance import (
+    stamp_new_project,
+    strip_server_owned_fields,
+)
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
     RunFilePreview,
     RunFilePreviewRequest,
@@ -87,6 +101,14 @@ from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
     find_runs,
     inspect_folder,
     list_s3_dirs,
+)
+from depictio.api.v1.endpoints.projects_endpoints.share_candidates import (
+    FETCH_LIMIT,
+    USER_PROJECTION,
+    clean_query,
+    exact_email_filter,
+    partial_filter,
+    rank_candidates,
 )
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
@@ -119,12 +141,14 @@ from depictio.api.v1.permissions import (
     has_permission,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.migration import PublishedLock
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.project_merge import (
     merge_project_data_collections,
     merge_project_workflows,
 )
+from depictio.models.s3_utils import delete_keys
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 projects_endpoint_router = APIRouter()
@@ -193,11 +217,11 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
                     for page in paginator.paginate(
                         Bucket=settings.s3.bucket, Prefix=prefix.strip("/")
                     ):
-                        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
-                        if keys:
-                            s3_client.delete_objects(
-                                Bucket=settings.s3.bucket, Delete={"Objects": keys}
-                            )
+                        delete_keys(
+                            s3_client,
+                            settings.s3.bucket,
+                            (obj["Key"] for obj in page.get("Contents", [])),
+                        )
                 logger.info(f"Deleted S3 objects for project {project_id}: {s3_paths}")
         except Exception as exc:
             logger.warning(f"S3 cleanup failed for project {project_id} (non-fatal): {exc}")
@@ -219,6 +243,7 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
 
     # Before the dashboards go: a saved filter state only knows its dashboard id.
     delete_filter_states_for_project(project_id)
+    delete_annotations_for_project(project_id)
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
     delete_threads_for_project(project_id)
     # The dashboards went without the dashboard delete route, so their version
@@ -417,6 +442,29 @@ async def get_ingestion_report(project_id: PyObjectId, current_user=Depends(get_
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     return build_ingestion_report(project)
+
+
+@projects_endpoint_router.get("/project-runs/{project_id}", response_model=ProjectRuns)
+async def get_project_runs(project_id: PyObjectId, current_user=Depends(get_user_or_anonymous)):
+    """The project's runs: folder, dates, every scan, and the files each
+    collection found in each run. Read-only."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    return project_runs(project)
+
+
+@projects_endpoint_router.get("/project-runs/{project_id}/files", response_model=RunFiles)
+async def get_project_run_files(
+    project_id: PyObjectId, run_tag: str, current_user=Depends(get_user_or_anonymous)
+):
+    """The files of one run of the project, each with the scans that brought,
+    changed or failed it (``added_in``, ``changed_in``, ``failed_in``, indexes
+    into ``scans``). Read-only; read when the run is unfolded in the runs view."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    return run_files(project, run_tag)
 
 
 @projects_endpoint_router.get("/ingestion-health/{project_id}", response_model=IngestionSummary)
@@ -681,6 +729,7 @@ async def trigger_project_ingestion(
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     if not _may_trigger_ingestion(project, current_user):
         raise HTTPException(status_code=403, detail="Editor access is required to run ingestion.")
+    assert_project_unlocked(project_id)
 
     is_admin = bool(getattr(current_user, "is_admin", False))
     refusal, outside = await asyncio.to_thread(roots_refusal, project)
@@ -806,9 +855,11 @@ async def refresh_manifest(
     Covers every data collection the server can read again: any remote
     source (manifest, url, s3_prefix), and, under ``depictio local`` only, a
     local one below a root of the local-data policy (for a loopback caller
-    who is an admin, as every local read). Overwrite-with-report semantics: File records sync to
-    the source's current files (``sync_files`` beats the identity-hash skip)
-    and each Delta table is rebuilt from the resulting file set. A manifest
+    who is an admin, as every local read). Only what moved is read again: new
+    and changed files, and the collections they belong to; a collection none of
+    whose files moved since its last successful refresh is left as it is.
+    ``full=true`` reads everything again. A manifest or URL collection is always
+    read again (its hash names the source, not its bytes). A manifest
     DC whose manifest no longer lists its type is reported failed and left
     untouched. ``dry_run=true`` reports what would refresh (per-DC entry
     counts for manifest DCs) without touching any data.
@@ -825,6 +876,7 @@ async def refresh_manifest(
         dry_run=payload.dry_run,
         async_run=payload.async_run,
         request=request,
+        full=payload.full,
     )
 
 
@@ -902,6 +954,7 @@ async def set_project_storage(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
+    assert_project_unlocked(project_id)
     return await asyncio.to_thread(_set_project_storage, project_id, payload, current_user)
 
 
@@ -910,6 +963,7 @@ async def delete_project_storage(project_id: str, current_user=Depends(get_user_
     """Remove a project's storage credentials (owners only)."""
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
+    assert_project_unlocked(project_id)
     return await asyncio.to_thread(_delete_project_storage, project_id, current_user)
 
 
@@ -1038,6 +1092,11 @@ async def create_project_from_run(
         dry_run=payload.dry_run,
         request=request,
         storage=payload.storage,
+        is_public=payload.is_public,
+        description=payload.description,
+        template=payload.template,
+        edits=payload.edits,
+        runs=payload.runs,
     )
 
 
@@ -1276,7 +1335,7 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     except HTTPException as e:
         return {"success": False, "message": str(e.detail), "status_code": e.status_code}
 
-    create_payload = project.mongo()
+    create_payload = stamp_new_project(project.mongo())
     create_payload["registration_time"] = utc_now_str()
     create_payload["last_modified"] = create_payload["registration_time"]
     try:
@@ -1314,6 +1373,7 @@ async def update_project(project: Project, current_user=Depends(get_current_user
             detail="User does not have permission to update this project.",
         )
 
+    assert_project_unlocked(project.id)
     validate_workflow_uniqueness_in_project(project)
     update_payload = project.mongo()
     # `registration_time` is write-once: the client round-trips the whole project
@@ -1332,6 +1392,9 @@ async def update_project(project: Project, current_user=Depends(get_current_user
     # client round-trips the whole project, so honouring its `permissions` here
     # would let a plain update rewrite who owns the project.
     update_payload.pop("permissions", None)
+    # Provenance, the published lock and a parked owner are server-written: the
+    # `$set` below leaves the stored values in place once they are dropped here.
+    strip_server_owned_fields(update_payload)
     # The browser appends workflows straight onto the stored document while the
     # client round-trips the whole project through here, so a plain `$set` lets
     # whoever saves last delete the other surface's work. Same reasoning as the
@@ -1375,6 +1438,7 @@ async def delete_project(project_id: PyObjectId, current_user=Depends(get_curren
             detail="User does not have permission to delete this project.",
         )
 
+    assert_project_unlocked(project_id)
     _cascade_delete_project(project_id, project.name)
 
     return {
@@ -1464,6 +1528,33 @@ async def get_effective_access(project_id: str, current_user=Depends(get_current
         )
     }
     return compute_effective_access(permissions, group_docs, user_docs)
+
+
+@projects_endpoint_router.get("/share_candidates/{project_id}")
+async def find_share_candidates(
+    project_id: str,
+    q: str = Query(default="", description="Part of an email, name or login (3+ characters)"),
+    current_user=Depends(get_current_user),
+):
+    """People a project could be shared with, for the sharing dialog.
+
+    ``/auth/list`` is admin-only, so without this an owner or P.I. who is not an
+    admin cannot find a person from another group. Gated like the grant itself,
+    so only someone who manages this project's sharing can search the accounts;
+    a short query returns nothing rather than a page of the directory.
+    """
+    project = _async_get_project_from_id(PyObjectId(project_id), current_user, projects_collection)
+    if not _can_manage_project_sharing(project, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="User does not have permission to update permissions for this project.",
+        )
+    query = clean_query(q)
+    if query is None:
+        return []
+    exact = list(users_collection.find(exact_email_filter(query), USER_PROJECTION).limit(2))
+    partial = list(users_collection.find(partial_filter(query), USER_PROJECTION).limit(FETCH_LIMIT))
+    return rank_candidates([*exact, *partial], query)
 
 
 @projects_endpoint_router.get("/group_members_preview/{project_id}/{group_id}")
@@ -1606,6 +1697,68 @@ async def add_or_update_permission(
     }
 
 
+class ProjectLockRequest(BaseModel):
+    reason: str | None = None
+
+
+@projects_endpoint_router.post("/{project_id}/lock")
+async def lock_project(
+    project_id: PyObjectId,
+    request: ProjectLockRequest | None = None,
+    current_user=Depends(get_current_user),
+):
+    """Publish a project read-only (admin only).
+
+    Freezes the project and every dashboard it holds now; a dashboard created
+    later by a visitor (a copy) is not part of the release. Every content- or
+    data-mutating route then answers 409 until an administrator unlocks it.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only administrators can lock projects")
+    project = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    dashboard_ids = [
+        str(d.get("dashboard_id") or d["_id"])
+        for d in dashboards_collection.find(
+            {"$or": [{"project_id": project["_id"]}, {"project_id": str(project["_id"])}]},
+            {"_id": 1, "dashboard_id": 1},
+        )
+    ]
+    lock = PublishedLock(
+        locked_by_id=str(current_user.id),
+        locked_by_email=getattr(current_user, "email", None),
+        reason=(request.reason if request else None),
+        source="admin",
+        dashboard_ids=dashboard_ids,
+    ).model_dump()
+    projects_collection.update_one({"_id": project["_id"]}, {"$set": {"published_lock": lock}})
+    logger.info(f"Project {project_id} locked by {current_user.email}: {lock.get('reason')}")
+    return {"success": True, "published_lock": lock}
+
+
+@projects_endpoint_router.post("/{project_id}/unlock")
+async def unlock_project(
+    project_id: PyObjectId,
+    request: ProjectLockRequest | None = None,
+    current_user=Depends(get_current_user),
+):
+    """Lift the published lock (admin only). The project becomes editable again."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only administrators can unlock projects")
+    project = projects_collection.find_one(
+        {"_id": ObjectId(str(project_id))}, {"published_lock": 1}
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    projects_collection.update_one({"_id": project["_id"]}, {"$set": {"published_lock": None}})
+    logger.info(
+        f"Project {project_id} unlocked by {current_user.email}: "
+        f"{(request.reason if request else None)}"
+    )
+    return {"success": True, "published_lock": None}
+
+
 @projects_endpoint_router.post("/toggle_public_private/{project_id}")
 async def toggle_public_private(
     project_id: str, is_public: str, current_user=Depends(get_current_user)
@@ -1622,6 +1775,11 @@ async def toggle_public_private(
             detail="User does not have permission to update this project.",
         )
 
+    # Visibility is not content (snapshots never hold it): an administrator may
+    # publish a locked release, which is the publication order "lock, then make
+    # public" (#1303). Anyone else still meets the lock.
+    if not getattr(current_user, "is_admin", False):
+        assert_project_unlocked(project_id)
     is_public_bool = is_public.lower() == "true"
 
     projects_collection.update_one(
@@ -1638,3 +1796,28 @@ async def toggle_public_private(
         "message": f"Project '{project['name']}' with ID '{project_id}' is now {'public' if is_public_bool else 'private'}.",
         **cascade_counts,
     }
+
+
+# Routes whose handlers live in their own module (they import helpers from this
+# one inside the handler, so they are registered here, after it is loaded).
+from depictio.api.v1.endpoints.projects_endpoints.attach_run import (  # noqa: E402
+    AttachRunReport,
+    attach_run,
+)
+from depictio.api.v1.endpoints.projects_endpoints.from_folder_tables import (  # noqa: E402
+    FolderTablesReport,
+    add_tables_from_folder,
+)
+
+projects_endpoint_router.add_api_route(
+    "/{project_id}/add_tables_from_folder",
+    add_tables_from_folder,
+    methods=["POST"],
+    response_model=FolderTablesReport,
+)
+projects_endpoint_router.add_api_route(
+    "/{project_id}/attach_run",
+    attach_run,
+    methods=["POST"],
+    response_model=AttachRunReport,
+)

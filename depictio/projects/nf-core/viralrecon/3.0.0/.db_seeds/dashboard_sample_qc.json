@@ -30,7 +30,7 @@
       "order": 1,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Each sample's alignment and consensus, from the pipeline's [variant summary](https://nf-co.re/viralrecon/3.0.0/docs/output) and the [Nextclade](https://clades.nextstrain.org) QC of its consensus. The first scatter tells a thin sample from one that lost amplicons; lasso a point to read its record beside it.\n",
+      "body": "Each sample's alignment and consensus, from the pipeline's [variant summary](https://nf-co.re/viralrecon/3.0.0/docs/output) and the [Nextclade](https://clades.nextstrain.org) QC of its consensus. The first scatter tells a thin sample from one that lost amplicons; lasso a point to read its record beside it. It judges coverage only: a sample can pass it and still be rated mediocre or bad below, where Nextclade also counts the bases the consensus could not read.\n",
       "surface": "none",
       "accent": null,
       "logo": null,
@@ -73,6 +73,7 @@
       "group": "Variant counts",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -116,6 +117,7 @@
       "group": "Variant counts",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "violet",
@@ -159,6 +161,7 @@
       "group": "Consensus",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "orange",
@@ -219,7 +222,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:target",
-      "icon_color": "indigo",
+      "icon_color": "indigo.4",
       "caption": "samples against the 1,000-read floor",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -278,7 +281,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:percent-outline",
-      "icon_color": "blue",
+      "icon_color": "indigo.6",
       "caption": "median share of each sample's reads",
       "decimals": 1,
       "wf_tag": "nextflow/viralrecon"
@@ -339,7 +342,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:chart-line",
-      "icon_color": "cyan",
+      "icon_color": "indigo.8",
       "caption": "median per sample, with its spread",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -398,7 +401,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:chart-areaspline",
-      "icon_color": "teal",
+      "icon_color": "indigo.9",
       "caption": "median, with its distribution",
       "decimals": 1,
       "wf_tag": "nextflow/viralrecon"
@@ -428,7 +431,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "A thin sample sits low and left; a deep one under the line lost amplicons.",
+      "description": "A thin sample sits low and left; a deep one under the line lost amplicons. Coverage only, the consensus is rated below.",
       "title_size": "sm",
       "title_align": "left",
       "use": "multiqc/summary_metrics",
@@ -439,11 +442,11 @@
         "use": "multiqc/summary_metrics",
         "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
       },
-      "section": "Diagnostics",
+      "section": "Depth and breadth",
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "# Depth against 10x breadth, one point per sample: by lineage, or by\n# Analysis mode's groups when it has some. Depth on a log axis: samples\n# of one run span orders of magnitude. The dashed line is the 80% breadth\n# floor of the bars below.\nkw = depictio_group_kwargs or {'color': 'lineage', 'color_discrete_map': depictio_category_colors.get('lineage') or {}}\nfig = px.scatter(df.to_pandas(), x='coverage_median', y='pct_genome_covered_10x', log_x=True, hover_data=['sample', 'num_variants_total'], labels={'coverage_median': 'Median depth', 'pct_genome_covered_10x': 'Genome at 10x (%)', 'lineage': 'Lineage', 'num_variants_total': 'Variants called'}, **kw)\nfig.update_traces(marker=dict(size=10))\nfig.add_hline(y=80, line_dash='dash')\nfig.update_yaxes(range=[0, 105])\nfig.update_layout(margin=dict(t=10))",
+      "code_content": "# Depth against 10x breadth, one point per sample, coloured by verdict: a\n# sample passes with 80% of the genome at 10x and a median depth of 10x or\n# more, and the shaded corners are where it fails. Depth on a log axis:\n# samples of one run span orders of magnitude. A failing sample carries its name.\nd = df.filter(pl.col('coverage_median').is_not_null() & (pl.col('coverage_median') > 0) & pl.col('pct_genome_covered_10x').is_not_null())\nd = d.with_columns(pl.when((pl.col('pct_genome_covered_10x') >= 80) & (pl.col('coverage_median') >= 10)).then(pl.lit('pass')).otherwise(pl.lit('fail')).alias('qc_status')).with_columns(pl.when(pl.col('qc_status') == 'fail').then(pl.col('sample')).otherwise(pl.lit('')).alias('flag'))\nlow = min(d['coverage_median'].min() or 10, 10) / 2\ntop = max(d['coverage_median'].max() or 10, 10) * 2\nfig = px.scatter(d.to_pandas(), x='coverage_median', y='pct_genome_covered_10x', color='qc_status', color_discrete_map=depictio_category_colors.get('qc_status') or {}, category_orders={'qc_status': ['pass', 'fail']}, log_x=True, text='flag', hover_data=['sample', 'num_variants_total'], labels={'coverage_median': 'Median depth', 'pct_genome_covered_10x': 'Genome at 10x (%)', 'qc_status': 'Verdict', 'num_variants_total': 'Variants called'})\nfig.add_hrect(y0=0, y1=80, fillcolor='rgba(224, 49, 49, 0.08)', line_width=0, layer='below')\nfig.add_vrect(x0=low, x1=10, fillcolor='rgba(224, 49, 49, 0.08)', line_width=0, layer='below')\nfig.add_hline(y=80, line_dash='dash', line_width=1, opacity=0.6, annotation_text='80%')\nfig.add_vline(x=10, line_dash='dash', line_width=1, opacity=0.6, annotation_text='10x')\nfig.update_traces(marker=dict(size=14), textposition='top center')\nfig.update_xaxes(range=[np.log10(low), np.log10(top)])\nfig.update_yaxes(range=[0, 105])\nfig.update_layout(margin=dict(t=10), legend_title_text='')",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -482,7 +485,7 @@
       "description": "The sample picked in the scatter or the run summary, with its alignment, breadth and calls.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Diagnostics",
+      "section": "Depth and breadth",
       "viz_kind": "record_card",
       "config": {
         "controls_placement": "popover",
@@ -521,14 +524,16 @@
         "selection_source": "any",
         "linked_component": "qc-depth-breadth",
         "max_fields": 40,
-        "default_record": null
+        "default_record": null,
+        "default_record_by": null,
+        "default_record_ascending": false
       },
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qc-nextclade-scatter",
+      "index": "qc-nextclade-load",
       "component_type": "figure",
-      "title": "Substitutions against deletions (Nextclade)",
+      "title": "Differences and missing bases per consensus genome (Nextclade)",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "nextclade_results",
       "wf_id": {
@@ -550,7 +555,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Each consensus genome's mutation load; a point far from its clade is worth a look.",
+      "description": "Substitutions and deleted bases above, bases it could not read below (log axis); a tall green bar or a red dot is worth a look.",
       "title_size": "sm",
       "title_align": "left",
       "use": "nextclade/report",
@@ -562,10 +567,10 @@
         "description": "Per-sample clade assignment + sequence QC."
       },
       "section": "Diagnostics",
-      "visu_type": "scatter",
+      "visu_type": "bar",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "# Substitutions against deletions per consensus genome: by clade, or by\n# Analysis mode's groups when it has some.\nkw = depictio_group_kwargs or {'color': 'clade', 'color_discrete_map': depictio_category_colors.get('clade') or {}}\nfig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions', hover_data=['sample', 'qc_overallStatus', 'totalMissing'], opacity=0.8, labels={'totalSubstitutions': 'Substitutions', 'totalDeletions': 'Deleted bases', 'clade': 'Clade', 'qc_overallStatus': 'Nextclade QC', 'totalMissing': 'Missing bases'}, **kw)\nfig.update_traces(marker=dict(size=10))\n# Counts: from zero, in whole steps (a narrow range otherwise ticks 0.5).\nfig.update_xaxes(rangemode='tozero', dtick=max(1, round((df['totalSubstitutions'].max() or 0) / 5)))\nfig.update_yaxes(rangemode='tozero', dtick=max(1, round((df['totalDeletions'].max() or 0) / 5)))\nfig.update_layout(margin=dict(t=10))",
+      "code_content": "# Nextclade's reading of each consensus genome, in two panels because the counts differ by\n# orders of magnitude: the substitutions and deleted bases it finds against the reference\n# (top) and the bases it could not read (bottom, log axis), the most missing bases first.\n# The dot above each bottom bar is the sample's Nextclade QC verdict.\ncolors = depictio_category_colors.get('qc_overallStatus') or {}\nnames = {'totalSubstitutions': 'Substitutions', 'totalDeletions': 'Deleted bases', 'totalMissing': 'Missing bases'}\nd = df.with_columns(pl.col('totalMissing').fill_null(0)).sort(['totalMissing', 'sample'], descending=[True, False])\nlong = d.select(['sample', *names.keys()]).unpivot(index='sample', variable_name='kind', value_name='n').with_columns(pl.col('n').fill_null(0), pl.col('kind').replace(names))\nfig = px.bar(long.to_pandas(), x='sample', y='n', color='kind', custom_data=['sample'], category_orders={'sample': d.get_column('sample').to_list(), 'kind': list(names.values())}, labels={'sample': '', 'n': '', 'kind': ''})\nbars = fig\nfig = go.Figure()\nfig.set_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.5, 0.5], vertical_spacing=0.08)\nfor trace in bars.data:\n    fig.add_trace(trace, row=2 if trace.name == 'Missing bases' else 1, col=1)\nfor status in ['good', 'mediocre', 'bad']:\n    sub = d.filter(pl.col('qc_overallStatus') == status)\n    if not sub.is_empty():\n        fig.add_scatter(x=sub.get_column('sample').to_list(), y=[max(m, 1) * 1.5 for m in sub.get_column('totalMissing').to_list()], mode='markers', name='Nextclade QC ' + status, marker=dict(color=colors.get(status), size=10), customdata=[[s] for s in sub.get_column('sample').to_list()], hovertemplate='%{x}: ' + status + '<extra></extra>', row=2, col=1)\nfig.update_yaxes(title_text='Differences', row=1, col=1)\nfig.update_yaxes(title_text='Missing bases', type='log', row=2, col=1)\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\nfig.update_layout(barmode='stack', margin=dict(t=10), legend=dict(orientation='h', y=-0.3))",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -708,7 +713,7 @@
       "x": 0,
       "y": 0,
       "w": 5,
-      "h": 5,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -723,7 +728,7 @@
       "x": 5,
       "y": 0,
       "w": 3,
-      "h": 5,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -734,11 +739,11 @@
       ]
     },
     {
-      "i": "box-qc-nextclade-scatter",
+      "i": "box-qc-nextclade-load",
       "x": 0,
-      "y": 5,
+      "y": 0,
       "w": 8,
-      "h": 4,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -800,10 +805,26 @@
       "figure_style": null
     },
     {
-      "name": "Diagnostics",
+      "name": "Depth and breadth",
       "icon": "mdi:chart-scatter-plot",
       "color": "indigo",
-      "description": "Depth against breadth, then the consensus as Nextclade reads it",
+      "description": "Depth against breadth, with the record of the sample picked in it",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": "linked",
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Diagnostics",
+      "icon": "mdi:shield-check-outline",
+      "color": "indigo",
+      "description": "The consensus as Nextclade reads it",
       "collapsed": false,
       "persistent": false,
       "pin": "top",
@@ -837,6 +858,7 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",
@@ -875,11 +897,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 21:52:39",
+  "creation_time": "2026-10-30 14:56:15",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -897,5 +922,10 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Sample QC"
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Sample QC",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-30 14:58:06"
+  }
 }

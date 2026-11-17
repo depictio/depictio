@@ -1,0 +1,23 @@
+id: mcquant_segmentation_summary
+name: Segmentation per image
+mode: imaging/segmentation
+description: >-
+  One row per image and segmentation method: the cells the mask holds, the
+  median, quartiles, mean and sum of their area, and the medians of their major
+  axis, eccentricity, solidity and aspect ratio. Two methods on one image are
+  two rows, which is how a run segmented with both Mesmer and Cellpose compares
+  them image by image.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/segmentation_summary.py
+fixture: segmentation_summary.tsv
+renders_as:
+  - id: cells_per_image
+    component: figure
+    visu_type: bar
+    dict_kwargs: { x: sample, y: n_cells, color: segmenter, barmode: group }
+  - { id: cells_per_image_card, component: card, column: n_cells, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }
+  - { component: card, column: n_cells, aggregation: sum, secondary_layout: composition, breakdown_col: segmenter, headline: true }
+  - { component: figure, visu_type: bar, dict_kwargs: { x: sample, y: median_area, color: segmenter, barmode: group } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }
+  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }

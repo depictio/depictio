@@ -64,10 +64,12 @@ const uniqueValuesKey = (
   column?: string,
   filterExpr?: string | null,
   pinKey?: string,
-) => (dcId && column ? `${dcId}|${column}|${filterExpr || ''}|${pinKey || ''}` : null);
+  orderBy?: string | null,
+) => (dcId && column ? `${dcId}|${column}|${filterExpr || ''}|${pinKey || ''}|${orderBy || ''}` : null);
 
 /**
- * A categorical column's distinct values (`fetchUniqueValues`). `loading` is
+ * A categorical column's distinct values (`fetchUniqueValues`), in the order
+ * of the `orderBy` companion column when one is named. `loading` is
  * false with no values when the metadata names no column; `error` carries the
  * failure, and the failed fetch is dropped from the cache so a later mount
  * retries.
@@ -76,9 +78,10 @@ export function useUniqueValues(
   dcId: string | undefined,
   columnName: string | undefined,
   filterExpr?: string | null,
+  orderBy?: string | null,
 ): Loadable<string[]> {
   const versioned = useFilterDataPins();
-  const key = uniqueValuesKey(dcId, columnName, filterExpr, versioned?.key);
+  const key = uniqueValuesKey(dcId, columnName, filterExpr, versioned?.key, orderBy);
   const [state, setState] = useState<Loadable<string[]>>(() => {
     const hit = key ? uniqueValuesResolved.get(key) : undefined;
     return { data: hit ?? [], loading: Boolean(key) && !hit, error: null };
@@ -98,8 +101,15 @@ export function useUniqueValues(
     let pending = uniqueValuesPending.get(key);
     if (!pending) {
       pending = versioned
-        ? fetchUniqueValuesAt(versioned.dashboardId, dcId, columnName, versioned.pins, filterExpr)
-        : fetchUniqueValues(dcId, columnName, filterExpr);
+        ? fetchUniqueValuesAt(
+            versioned.dashboardId,
+            dcId,
+            columnName,
+            versioned.pins,
+            filterExpr,
+            orderBy,
+          )
+        : fetchUniqueValues(dcId, columnName, filterExpr, orderBy);
       uniqueValuesPending.set(key, pending);
     }
     pending

@@ -13,6 +13,8 @@ this one.
 Output schema:
     assembly_id : Utf8     the assessed assembly
     lineage : Utf8         the lineage dataset the class shares are against
+    busco_mode : Utf8      genome, proteins or transcriptome when the summary names it, else null
+    run_id : Utf8          one label per bar: the assembly, with its mode after it when there is one
     busco_class : Utf8     one of the four BUSCO classes
     rank : Utf8            always "BUSCO class"
     class_order : Int64    1 to 4, single-copy first, so tables sort the classes the BUSCO way
@@ -47,6 +49,8 @@ SOURCES: list[RecipeSource] = [
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "lineage": pl.Utf8,
+    "busco_mode": pl.Utf8,
+    "run_id": pl.Utf8,
     "busco_class": pl.Utf8,
     "rank": pl.Utf8,
     "class_order": pl.Int64,
@@ -71,10 +75,25 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if missing:
         raise ValueError(f"busco_composition: missing columns {missing} in {summary.columns}")
 
+    # A summary written before `busco_mode` existed has no such column.
+    mode = (
+        pl.col("busco_mode").cast(pl.Utf8)
+        if "busco_mode" in summary.columns
+        else pl.lit(None, dtype=pl.Utf8).alias("busco_mode")
+    )
+    # Two modes of one assembly are two bars, so each bar gets its own label.
+    run_id = (
+        pl.when(mode.is_null())
+        .then(pl.col("assembly_id"))
+        .otherwise(pl.concat_str([pl.col("assembly_id"), pl.lit(" ("), mode, pl.lit(")")]))
+        .alias("run_id")
+    )
     parts = [
         summary.select(
             pl.col("assembly_id"),
             pl.col("lineage"),
+            mode,
+            run_id,
             pl.lit(label).alias("busco_class"),
             pl.lit("BUSCO class").alias("rank"),
             pl.lit(order, dtype=pl.Int64).alias("class_order"),
@@ -86,5 +105,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.concat(parts, how="vertical")
         .drop_nulls(["percent"])
         .select(list(OUTPUT_SCHEMA))
-        .sort(["assembly_id", "lineage", "class_order"])
+        .sort(["assembly_id", "lineage", "busco_mode", "class_order"], nulls_last=True)
     )

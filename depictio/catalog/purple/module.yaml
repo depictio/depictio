@@ -5,6 +5,7 @@
 # under <group_id>/purple/, one set per tumor named <tumor_id>.purple.*.
 id: purple
 name: PURPLE
+version: "1.0.0"
 description: >-
   Purity, ploidy and absolute copy-number fitting for tumor/normal or tumor-only whole-genome and panel data, with the somatic and germline driver catalog and the purity-adjusted somatic variants.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/purple

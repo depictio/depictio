@@ -80,7 +80,11 @@ export interface BuildSashimiSpecInput {
   lanes: readonly string[];
   /** Junction classes seen in the data, the colour domain of `annotation`. */
   annotations: readonly string[];
-  colorBy: 'annotation' | 'sample';
+  colorBy: 'annotation' | 'sample' | 'chromosome';
+  /** Chromosomes of the junctions and their colours (the Manhattan's), for
+   *  `colorBy: 'chromosome'`. */
+  chroms?: readonly string[];
+  chromColours?: readonly string[];
   /** One colour per lane, same order as `lanes`. */
   laneColours: readonly string[];
   /** One colour per annotation class, same order as `annotations`. */
@@ -192,7 +196,9 @@ function junctionGroup(input: BuildSashimiSpecInput, lane: string, i: number): R
   const color =
     input.colorBy === 'sample'
       ? nominalColour('lane', input.lanes, input.laneColours, fallback)
-      : nominalColour('annotation', input.annotations, input.annotationColours, fallback);
+      : input.colorBy === 'chromosome' && input.chroms?.length
+        ? nominalColour('chrom', input.chroms, input.chromColours ?? [], fallback)
+        : nominalColour('annotation', input.annotations, input.annotationColours, fallback);
   // `max_arc_width` is sized for the Plotly panel's thin arcs; a dome is read
   // by its thickness, so the GenomeSpy range is twice as wide, never under 4.
   const maxWidth = Math.max(4, input.maxArcWidth * 2);

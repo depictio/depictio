@@ -100,7 +100,10 @@ _FIELDS: dict[str, str] = {
 #: Trailing dot-separated tokens of the report name that describe the dedupper
 #: stage rather than the sample. ``strip_stage_suffixes`` handles the shared
 #: alignment tokens; these are the MarkDuplicates-specific ones.
-_REPORT_TOKENS = ("metrics", "markduplicates", "rmdup", "dedup", "duplicates")
+#: ``md`` is the stage rnavar and sarek name the duplicate-marked BAM after
+#: (``GM12878_REP1.md.metrics.txt``); it sits behind ``metrics``, which the
+#: shared pass stops at, so it is dropped here too.
+_REPORT_TOKENS = ("metrics", "markduplicates", "rmdup", "dedup", "duplicates", "md")
 
 
 def _sample_from_path(source_path: str) -> str:

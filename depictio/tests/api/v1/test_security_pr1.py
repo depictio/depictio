@@ -421,19 +421,36 @@ async def test_login_blocked_when_password_login_disabled():
 
 def test_password_login_disabled_is_ignored_without_sso():
     """The flag alone would leave a deployment with no way in, so the computed
-    property only reports it as disabled once Google OAuth or SAML is configured."""
+    property only reports it as disabled once an OIDC provider is configured."""
     from depictio.api.v1.configs.settings_models import AuthConfig
 
+    provider = {
+        "id": "kc",
+        "issuer": "https://idp.example.org/realms/example",
+        "client_id": "depictio",
+        "client_secret": "secret",
+    }
     assert AuthConfig(password_login_disabled=True).is_password_login_disabled is False
+    # A provider that is declared but not fully configured is no door either.
     assert (
         AuthConfig(
-            password_login_disabled=True, google_oauth_enabled=True
+            password_login_disabled=True, oidc_providers=[{"id": "kc"}]
+        ).is_password_login_disabled
+        is False
+    )
+    assert (
+        AuthConfig(
+            password_login_disabled=True, oidc_providers=[provider]
         ).is_password_login_disabled
         is True
     )
-    # SAML alone is an SSO door too: turning Google off must not hand the
-    # password form back.
-    assert AuthConfig(password_login_disabled=True, saml_enabled=True).is_password_login_disabled
+    # The deprecated Google variables map onto a provider: still an SSO door.
+    assert AuthConfig(
+        password_login_disabled=True,
+        google_oauth_enabled=True,
+        google_oauth_client_id="id",
+        google_oauth_client_secret="secret",
+    ).is_password_login_disabled
 
 
 @pytest.mark.asyncio
@@ -481,23 +498,20 @@ def test_public_access_code_gates_only_public_mode():
 
 
 @pytest.mark.asyncio
-async def test_oauth_create_or_get_user_blocks_unknown_when_create_disallowed():
-    """With registration disabled, OAuth must not provision a new account for
-    an unknown email — create_or_get_user(allow_create=False) returns
-    (None, False) instead of saving a user (the OAuth registration bypass)."""
+async def test_sso_create_or_get_user_blocks_unknown_when_create_disallowed():
+    """With registration disabled, SSO must not provision a new account for
+    an unknown email — create_or_get_sso_user(allow_create=False) returns
+    (None, False) instead of saving a user (the SSO registration bypass)."""
     from unittest.mock import AsyncMock, patch
 
-    from depictio.api.v1.endpoints.auth_endpoints import utils as oauth_utils
-    from depictio.models.models.google_oauth import GoogleUserInfo
+    from depictio.api.v1.endpoints.auth_endpoints import utils as sso_utils
 
-    google_user = GoogleUserInfo(
-        id="g-123", email="stranger@example.com", verified_email=True, name="Stranger"
-    )
+    with patch.object(sso_utils.UserBeanie, "find_one", AsyncMock(return_value=None)) as find_one:
+        user, created = await sso_utils.create_or_get_sso_user(
+            "stranger@example.com", allow_create=False
+        )
 
-    with patch.object(oauth_utils.UserBeanie, "find_one", AsyncMock(return_value=None)) as find_one:
-        user, created = await oauth_utils.create_or_get_user(google_user, allow_create=False)
-
-    find_one.assert_awaited_once()
+    find_one.assert_awaited()
     assert user is None
     assert created is False
 

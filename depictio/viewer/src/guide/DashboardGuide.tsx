@@ -30,8 +30,10 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { TextRenderer, useCommentsControl } from 'depictio-react-core';
+import { genomeConfigOf, TextRenderer, useCommentsControl } from 'depictio-react-core';
+import { paletteVar } from 'depictio-react-core';
 import type {
+  AnnotationTable,
   DashboardData,
   DashboardSummary,
   GuideModel,
@@ -43,9 +45,15 @@ import { DemoFrame, TabPillsDemo, YourViewDemo } from './GuideDemos';
 import { ActionsDemo } from './demos/ActionsDemo';
 import { AnalysisDemo } from './demos/AnalysisDemo';
 import { CommentsDemo, type CommentsRole } from './demos/CommentsDemo';
+import { GenomeDemo, GenomeWhere } from './demos/GenomeDemo';
 import { LiveFilterDemo, LiveFilterDemoSkeleton } from './demos/LiveFilterDemo';
 import { SectionsDemo } from './demos/SectionsDemo';
 import { VersionsDemo } from './demos/VersionsDemo';
+import { MetadataDemo } from './demos/MetadataDemo';
+import { WhatsNewPanel } from './demos/WhatsNewPanel';
+import { useChangesSince } from '../changes/ChangesSinceContext';
+import { changeCounts, hasChanges } from '../changes/describe';
+import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import { findDemoTargets, showDemoTarget, type GuideTarget } from './showMe';
 import { useGuideSources } from './useGuideSources';
 
@@ -73,6 +81,11 @@ export interface DashboardGuideProps {
   onClose: () => void;
   /** Opens the dashboard settings on "Your view". */
   onOpenYourView: () => void;
+  /** Set only where the dashboard has a metadata table to label, which is
+   *  when the header shows the Metadata button: the table the panel opens on
+   *  (null on a past view, which shows no live rows) and how to open the
+   *  panel, closing the Guide. */
+  metadata?: { table: AnnotationTable | null; open: () => void };
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +302,7 @@ const Kbd: React.FC<{ icon?: string; color?: string; children: React.ReactNode }
         style={{
           verticalAlign: '-2px',
           marginRight: 3,
-          color: color ? `var(--mantine-color-${color}-filled)` : 'var(--mantine-primary-color-filled)',
+          color: color ? paletteVar(color, 'filled') : 'var(--mantine-primary-color-filled)',
         }}
       />
     )}
@@ -329,7 +342,10 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   canEdit,
   onClose,
   onOpenYourView,
+  metadata,
 }) => {
+  const changes = useChangesSince();
+  const changesEnabled = useChangesSinceEnabled();
   const sources = useGuideSources({
     dashboardId,
     dashboard,
@@ -389,6 +405,35 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   const ownSelection = selection.filter((s) => !s.floating);
 
   const parts: (PartProps & { navLabel: string })[] = [];
+
+  // The reader's news, if any. Its part sits with Versions, not first: the
+  // landing card and the header's pill already announce it.
+  const news = changes && !changes.readOnly && hasChanges(changes.changeSet) ? changes.changeSet : null;
+
+  // 0. What the Guide is: read first by whoever opens it without knowing.
+  parts.push({
+    id: 'about',
+    navLabel: 'About this Guide',
+    icon: 'mdi:book-open-page-variant-outline',
+    title: 'What this Guide is for',
+    subtitle: `How to read and use ${dashboardName}, one part at a time`,
+    points: [
+      <>
+        Each part below covers one thing you can do here, in the order you meet it: tabs, sections,
+        filters and components first, then the rest. A part shows only when this dashboard has what
+        it covers.
+      </>,
+      <>
+        The examples are live: they use this dashboard&apos;s own components and data. What you
+        try in them stays in the Guide; the dashboard does not change.
+      </>,
+      <>
+        <b>Show me</b>, beside a part, rings the control its example is about.{' '}
+        <b>Back to {tabName}</b> returns to the dashboard, and <b>Guide</b> in the sidebar brings
+        you back here.
+      </>,
+    ],
+  });
 
   // 1. Tabs
   parts.push({
@@ -625,6 +670,178 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     });
   }
 
+  // 5b. The genome browser: only where the dashboard has one, on any tab.
+  // The Guide carries what is true of every genome browser tile; why this
+  // dashboard has one where it does is the author's line in the section that
+  // holds it, shown as written under "Where the browser appears".
+  if (sources.genome) {
+    const genome = sources.genome;
+    const genomeConfig = genomeConfigOf(genome.tile.metadata);
+    const tilesHere = genome.tabs.some((t) => t.here);
+    // What the tile adds on top of the shared gestures, from its own config:
+    // the stepper needs `locus_from`, the Breakpoint view a mate, the circular
+    // view a `views` entry.
+    const genomeMeta = genome.tile.metadata;
+    const genomeViews: unknown[] = Array.isArray(genomeMeta.views) ? genomeMeta.views : [];
+    const genomeStepper = Boolean(genomeConfig.locusFromDc) && genomeMeta.call_stepper !== false;
+    const genomeBreakpoint = genomeViews.includes('breakpoint');
+    const genomeCircular = genomeViews.includes('circular');
+    parts.push({
+      id: 'genome',
+      navLabel: 'Genome',
+      icon: 'mdi:dna',
+      title: 'Browse the genome',
+      subtitle: tilesHere
+        ? 'A genome browser on this tab shows the tracks behind the numbers'
+        : `A genome browser on ${genome.tile.tabLabel} shows the tracks behind the numbers`,
+      points: [
+        <>
+          The browser has JBrowse's own menus. <Kbd icon="mdi:format-list-checks">Tracks</Kbd>{' '}
+          lists every track: search it, then switch a track on to open it or off to close it. The
+          settings icon switches the header, the overview ruler and the status bar, and loads
+          tracks the region is too large for.
+        </>,
+        <>
+          Drag to move along the genome. Hold Ctrl or ⌘ and turn the mouse wheel, or pinch on a
+          trackpad, to zoom. A plain wheel scrolls the page, not the tracks.
+        </>,
+        genomeConfig.locusFromDc && (
+          <>
+            The browser follows the rows you filter in{' '}
+            <Text span inherit fw={600}>
+              {genomeConfig.locusFromDc}
+            </Text>
+            : when a few rows are left, it jumps to where they sit on the genome. With many rows
+            left, it stays where it is.
+          </>
+        ),
+        genomeStepper && (
+          <>
+            Without a pick, the browser opens on the first call. The{' '}
+            <Kbd icon="mdi:chevron-right">previous and next</Kbd> buttons of the header jump to the
+            nearest region left or right of the view (overlapping regions of several samples are one
+            stop); the region count opens a sortable, searchable list, and the density strip under
+            the header shows where the regions fall. The view moves, the filters do not. Type a gene
+            name in the locus box to go to it.
+          </>
+        ),
+        <>
+          The browser sits on one tab. The genomic plots on the other tabs carry an{' '}
+          <Kbd icon="mdi:dna">Open in genome browser</Kbd> action: it opens that tab on the point
+          you clicked, the region you selected or the window in view.
+        </>,
+        <>
+          Where a tab has a genome navigator above the browser, drag across it to pick a region.
+          The browser follows that region without filtering anything itself.
+        </>,
+        genomeBreakpoint && (
+          <>
+            <Kbd icon="mdi:vector-link">Breakpoint view</Kbd>, in the tile's toolbar, opens both
+            sides of the call in two panes joined by the reads that span them.
+          </>
+        ),
+        genomeCircular && (
+          <>
+            <Kbd icon="mdi:chart-donut">Circular view</Kbd>, in the tile's toolbar, draws the
+            structural variants of the run as chords around the genome.
+          </>
+        ),
+        genomeConfig.selects && (
+          <>
+            {genomeConfig.selectionMode === 'visible_tracks'
+              ? 'The tracks open in the view select their samples'
+              : 'Click a track, or a feature on it, to select its sample'}
+            {genomeConfig.selectionColumn ? (
+              <>
+                {' '}
+                on{' '}
+                <Text span inherit fw={600}>
+                  {genomeConfig.selectionColumn}
+                </Text>
+              </>
+            ) : null}
+            : the rest of the tab filters to it.
+          </>
+        ),
+        genomeConfig.ucscTracks.length > 0 && (
+          <>
+            {plural(genomeConfig.ucscTracks.length, 'track')} here come from the UCSC Genome
+            Browser, for the same assembly. They are in the Tracks menu with the others.
+          </>
+        ),
+        <>
+          <Kbd icon="mdi:information-outline">Component metadata</Kbd>, in the tile's corner, lists
+          every track with where it comes from.
+        </>,
+      ],
+      demoLabel: genome.tile.here
+        ? 'This tab · the genome browser'
+        : `From ${genome.tile.tabLabel} · the genome browser`,
+      demo: <GenomeDemo source={genome} />,
+      note: <GenomeWhere tabs={genome.tabs} mode={mode} onCurrent={onClose} />,
+      showMe: { target: 'genome', label: 'Show me the browser' },
+    });
+  }
+
+  // 5b. Metadata: only where the header offers it (a metadata table linked to
+  // the data).
+  if (metadata) {
+    parts.push({
+      id: 'metadata',
+      navLabel: 'Metadata',
+      icon: 'mdi:table-edit',
+      title: 'Label your samples',
+      subtitle: 'The metadata table as a grid, with columns of your own',
+      points: [
+        <>
+          <Kbd icon="mdi:table-edit">Metadata</Kbd> in the header opens the samplesheet or metadata
+          sheet behind this dashboard, one grid per table.
+        </>,
+        <>
+          A label column is yours: type a value, paste a block from a spreadsheet, drop a CSV or
+          TSV, or fill a range by dragging.{' '}
+          {analysis.available ? 'Each label of the column you compare by becomes a group in Analysis.' : ''}
+        </>,
+        <>
+          Your labels are kept with your account (in this browser for a guest). Whoever may edit
+          the dashboard can <b>share</b> a label column from its header menu, for every reader.
+        </>,
+        <>
+          Every column action sits in its header menu; Export downloads the table with your labels
+          added.
+        </>,
+      ],
+      ...(metadata.table
+        ? {
+            demoLabel: 'Live · this dashboard\'s metadata · label a few samples',
+            demo: (
+              <MetadataDemo
+                dashboardId={dashboardId}
+                table={metadata.table}
+                analysis={analysis.available}
+              />
+            ),
+            note: (
+              <Text size="xs" c="dimmed">
+                Labels typed here stay in the Guide. The panel keeps yours.
+              </Text>
+            ),
+          }
+        : {}),
+      footer: (
+        <Button
+          variant="light"
+          size="sm"
+          leftSection={<Icon icon="mdi:table-edit" width={16} />}
+          onClick={metadata.open}
+          data-testid="guide-open-metadata"
+        >
+          Open the Metadata panel
+        </Button>
+      ),
+    });
+  }
+
   // 6. Comments and annotations: only where the dashboard has comments.
   if (commentsRole) {
     const guest = commentsRole === 'guest';
@@ -731,6 +948,60 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       demoLabel: 'An example · one component, its history',
       demo: <VersionsDemo family={sources.family} />,
       ...(showVersions ? { showMe: { target: 'versions', label: 'Show me Preview' } } : {}),
+    });
+  }
+
+  // 7b. What's new: the changes since the reader's last visit (the viewer
+  // alone tracks visits; the editor never has news), else how the feature
+  // will speak once something changes.
+  if (news) {
+    const counts = changeCounts(news);
+    parts.push({
+      id: 'news',
+      navLabel: "What's new",
+      icon: 'mdi:update',
+      title: "What's new since your last visit",
+      subtitle: `${plural(counts.total, 'change')}: ${[
+        counts.data > 0 && 'the data',
+        counts.dashboard > 0 && 'the dashboard itself',
+        counts.comments > 0 && 'its comments',
+      ]
+        .filter(Boolean)
+        .join(', ')}`,
+      points: [
+        <>
+          <Kbd icon="mdi:update">What&apos;s new</Kbd> in the header lists the same changes. A
+          component that changed carries a dot in its corner, and its tooltip says why.
+        </>,
+        <>
+          <Kbd icon="mdi:eye-outline">Show on the dashboard</Kbd> marks the new rows in place
+          (Overlay), or draws the new runs beside the ones you had seen (Split).
+        </>,
+        <>
+          <Kbd icon="mdi:check-all">Mark as seen</Kbd> moves your mark to now: the dots go, and the
+          next visit compares with this one.
+        </>,
+      ],
+      demoLabel: 'Since your last visit',
+      demo: <WhatsNewPanel />,
+    });
+  } else if (changesEnabled && !isEdit) {
+    parts.push({
+      id: 'news',
+      navLabel: "What's new",
+      icon: 'mdi:update',
+      title: 'Keep up with changes',
+      subtitle: changes ? 'Nothing has changed since your last visit' : 'Starting with your next visit',
+      points: [
+        <>
+          When new data arrives or the dashboard is edited, a <Kbd icon="mdi:update">What&apos;s new</Kbd>{' '}
+          button appears in the header, with the number of changes since your last visit.
+        </>,
+        <>
+          A component that changed carries a dot in its corner. New rows can be marked in place, or new
+          runs drawn beside the ones you had seen.
+        </>,
+      ],
     });
   }
 
@@ -889,9 +1160,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
               <Text span inherit fw={600}>
                 Guide
               </Text>{' '}
-              at the end of the tab list, or{' '}
-              <Icon icon="mdi:help-circle-outline" width={13} style={{ verticalAlign: '-2px' }} />{' '}
-              in the header.
+              at the end of the tab list.
             </Text>
           </Group>
         </Stack>

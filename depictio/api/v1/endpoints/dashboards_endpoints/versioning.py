@@ -96,8 +96,15 @@ SNAPSHOT_DERIVED_FIELDS: frozenset[str] = frozenset(
         "parent_dashboard_title",
         "project_realtime",
         "parent_dashboard_id",
+        "published_lock",
     }
 )
+
+#: Where a dashboard came from, not what it shows. The template import stamps
+#: ``template_origin`` (template id, revision, date) on every import, so hashing it
+#: would turn a re-import of unchanged content into a fake version. Restore and
+#: preview leave it live.
+SNAPSHOT_PROVENANCE_FIELDS: frozenset[str] = frozenset({"template_origin"})
 
 #: ``MongoModel`` bookkeeping every model inherits (``id`` is ``_id``). No
 #: dashboard route writes the other three.
@@ -113,6 +120,7 @@ SNAPSHOT_EXCLUDED_FIELDS: frozenset[str] = (
     | SNAPSHOT_FORBIDDEN_FIELDS
     | SNAPSHOT_VOLATILE_FIELDS
     | SNAPSHOT_DERIVED_FIELDS
+    | SNAPSHOT_PROVENANCE_FIELDS
     | SNAPSHOT_BASE_MODEL_FIELDS
 )
 
@@ -129,7 +137,7 @@ _LOGO_CACHE_BUSTER = re.compile(r"\?v=\d+$")
 #: ``image`` is Delta-backed for its *manifest* of image paths; the image
 #: blobs themselves live at a user-supplied prefix with no content
 #: addressing, which is recorded as an explicit gap rather than glossed over.
-_DELTA_TYPES = frozenset({"table", "image"})
+_DELTA_TYPES = frozenset({"table", "image", "genomic_tracks"})
 _MANIFEST_TYPES = frozenset({"multiqc", "jbrowse2"})
 _ASSET_TYPES = frozenset({"geojson", "phylogeny"})
 
@@ -227,6 +235,8 @@ def build_tab_snapshots(family_docs: list[dict[str, Any]]) -> list[TabSnapshot]:
                 advanced_viz_controls=doc.get("advanced_viz_controls") or "popover",
                 autofit=doc.get("autofit") is not False,
                 brand_theme=_jsonify(doc.get("brand_theme")) or None,
+                # Read from the main tab for the whole family, as the viewer does.
+                shared_labels=_jsonify(doc.get("shared_labels") or []) if is_main_tab else [],
                 source_key=doc.get("source_key"),
             )
         )
@@ -373,6 +383,31 @@ def count_data_version_kinds(stamps: list[dict[str, Any]]) -> dict[str, int]:
     return kinds
 
 
+def _stamp_multiqc_reports(stamp: DataCollectionStamp) -> None:
+    """Record the set of reports a MultiQC collection holds, in place.
+
+    Each report owns a content-addressed parquet, so the set of report ids is
+    what "the data as of this version" means. An overwrite re-ingest updates a
+    report in place under the same S3 key, which this cannot reproduce. A
+    collection with no report stays ``none`` with a reason.
+    """
+    from depictio.api.v1.services.multiqc.dc_lookup import fetch_reports_for_dc, report_set_digest
+
+    reports = fetch_reports_for_dc(stamp.dc_id)
+    if not reports:
+        stamp.reason = "no_multiqc_reports"
+        return
+    ids = sorted(report["id"] for report in reports)
+    stamp.version_kind = "manifest"
+    stamp.reason = None
+    stamp.report_ids = ids
+    stamp.s3_locations = [report["s3_location"] for report in reports if report["s3_location"]]
+    stamp.sample_count = len({str(s) for report in reports for s in report["samples"]})
+    stamp.manifest_digest = report_set_digest(ids)
+    stamp.as_of = utc_now_naive()
+    stamp.unversioned_parts = ["report_overwrites"]
+
+
 def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
     """Record what data each referenced collection was at, right now.
 
@@ -412,6 +447,10 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
         # live under a user-supplied prefix with no content addressing.
         if dc_type.lower() == "image":
             stamp.unversioned_parts = ["image_pixels"]
+        # Likewise a track manifest: its rows are versioned, the track files
+        # they name (read in place, or uploaded under the DC's prefix) are not.
+        elif dc_type.lower() == "genomic_tracks":
+            stamp.unversioned_parts = ["track_files"]
 
         try:
             dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)})
@@ -447,6 +486,8 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
             # Populated in the manifest stage; the stamp records the intent and
             # the instant so a later backfill has an anchor.
             stamp.reason = "manifest_versioning_not_enabled"
+            if dc_type.lower() == "multiqc":
+                _stamp_multiqc_reports(stamp)
             if latest:
                 stamp.columns = schema_integrity.columns_from_aggregation(described)
                 stamp.schema_hash = schema_integrity.generate_schema_hash(stamp.columns)

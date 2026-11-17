@@ -305,7 +305,8 @@ def _require_provisioning_key(api_key: str) -> None:
             status_code=503,
             detail="User provisioning is not enabled on this instance",
         )
-    if api_key != configured:
+    # Constant time: a byte-by-byte `!=` leaks how much of the key matched.
+    if not hmac.compare_digest(str(api_key or "").encode(), str(configured).encode()):
         raise HTTPException(status_code=403, detail="Invalid provisioning API key")
 
 
@@ -630,7 +631,7 @@ async def get_current_user_info_optional(
 
     Backward compatible: existing callers that read ``auth_mode`` and ``user``
     keep working. The React /auth page additionally consumes ``is_public_mode``,
-    ``is_single_user_mode``, and ``google_oauth_enabled`` to decide which UI to
+    ``is_single_user_mode``, and ``sso_providers`` to decide which UI to
     render with a single round-trip on page load.
 
     Args:
@@ -704,7 +705,7 @@ async def get_current_user_info_optional(
         "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
         "registration_disabled": getattr(settings.auth, "registration_disabled", False),
         # Effective, not the raw flag: the SPA must not hide the password form
-        # on an instance where Google OAuth was never configured.
+        # on an instance where no OIDC provider is configured.
         "password_login_disabled": getattr(settings.auth, "is_password_login_disabled", False),
         # Whether public mode asks for the shared code — never the code itself.
         "public_access_code_required": getattr(
@@ -713,9 +714,11 @@ async def get_current_user_info_optional(
         "is_dev_mode": is_dev_mode,
         "walkthrough_disabled": walkthrough_disabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
-        "google_oauth_enabled": settings.auth.google_oauth_enabled,
-        "saml_enabled": settings.auth.saml_enabled,
-        "saml_login_label": settings.auth.saml_login_label,
+        # Sign-in buttons, one per enabled OIDC provider (id + label only; the
+        # same list as GET /auth/oidc/providers, here to save a round-trip).
+        "sso_providers": [
+            {"id": p.id, "label": p.display_label} for p in settings.auth.enabled_oidc_providers
+        ],
         "temporary_user_expiry_hours": settings.auth.temporary_user_expiry_hours,
         "temporary_user_expiry_minutes": settings.auth.temporary_user_expiry_minutes,
         # Viewer feature flags ride along here rather than on an endpoint of
@@ -732,6 +735,8 @@ async def get_current_user_info_optional(
         # folder. Only the flag, for the same reason: the bucket names are
         # listed by GET /projects/s3_dirs, to a signed-in user.
         "remote_browse_enabled": remote_browse_enabled(),
+        # Whether non-admin users are kept from writing figure code.
+        "code_figures_locked": bool(getattr(settings.viewer, "code_figures_locked", False)),
         # Whether the component export API (`/export/...`) answers, which puts an
         # "Export / embed" action on every tile. And whether any site may frame
         # an embed: the allowlist itself is not sent, only that it is non-empty,
@@ -1114,7 +1119,9 @@ async def admin_create_user(
         )
 
     email = str(payload.email).strip().lower()
-    result = await _create_user_in_db(email, payload.password, is_admin=payload.is_admin)
+    result = await _create_user_in_db(
+        email, payload.password, is_admin=payload.is_admin, claim_pending_owner=True
+    )
     if not result or not result.get("success"):
         if result and result.get("message") == "User already exists":
             raise HTTPException(
@@ -1500,6 +1507,11 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
     # Delete the user from the database
     result = users_collection.delete_one({"_id": user_id})
     if result.deleted_count == 1:
+        from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+            delete_annotations_for_user,
+        )
+
+        delete_annotations_for_user(user_id)
         # The picture lives in its own collection; without this it would
         # outlive the account it belongs to.
         try:

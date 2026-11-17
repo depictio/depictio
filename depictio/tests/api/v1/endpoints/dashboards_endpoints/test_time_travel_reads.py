@@ -300,10 +300,40 @@ def test_status_names_every_collection_of_the_family(env):
         "reason": None,
     }
     assert (got[str(DC_MQC)]["status"], got[str(DC_MQC)]["reason"]) == (
-        "not_versioned",
+        "live",
         "manifest_versioning_not_enabled",
     )
     assert (got[str(DC_NEW)]["status"], got[str(DC_NEW)]["reason"]) == ("live", "not_in_version")
+
+
+def test_status_pins_a_multiqc_collection_to_its_report_set(env):
+    version = _version(
+        env,
+        stamps=[
+            _delta(DC, 0),
+            {
+                "dc_id": str(DC_MQC),
+                "version_kind": "manifest",
+                "report_ids": ["a1", "a2"],
+            },
+        ],
+    )
+
+    response = _status(env, CHILD, {"as_of_version": version})
+
+    got = {entry["dc_id"]: entry for entry in response.json()["collections"]}
+    assert (got[str(DC_MQC)]["status"], got[str(DC_MQC)]["report_count"]) == ("pinned", 2)
+
+
+def test_status_report_sets_override(env):
+    response = _status(env, body={"report_sets": {str(DC_MQC): ["a1"]}})
+
+    got = {entry["dc_id"]: entry for entry in response.json()["collections"]}
+    assert (got[str(DC_MQC)]["status"], got[str(DC_MQC)]["report_count"]) == ("pinned", 1)
+
+
+def test_status_refuses_a_malformed_report_set(env):
+    assert _status(env, body={"report_sets": {str(DC_MQC): "nope"}}).status_code == 400
 
 
 def test_status_without_time_travel_is_live(env):
@@ -312,7 +342,7 @@ def test_status_without_time_travel_is_live(env):
     statuses = [(e["status"], e["reason"]) for e in response.json()["collections"]]
     assert statuses == [
         ("live", None),
-        ("not_versioned", "manifest_versioning_not_enabled"),
+        ("live", None),
         ("live", None),
     ]
 

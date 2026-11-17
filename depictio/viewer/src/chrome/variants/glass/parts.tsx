@@ -3,8 +3,11 @@ import { Modal, Tooltip } from '@mantine/core';
 import { useBrandScopeAttributes, Z_LAYERS } from 'depictio-react-core';
 import {
   ArrowLeft,
+  Bell,
   BookOpenText,
   ChevronRight,
+  Compass,
+  Globe,
   LogIn,
   Moon,
   Server,
@@ -15,11 +18,13 @@ import {
 } from 'lucide-react';
 
 import BrandLogo from '../../BrandLogo';
+import NotificationsBell from '../../NotificationsBell';
 import PoweredBy from '../../PoweredBy';
 import { useBrandLogoMode } from '../../useBrandLogoMode';
 import DepictioRose from '../../../components/rose/DepictioRose';
 import { useColorScheme } from '../../../hooks/useColorScheme';
 import { getEmbedColorScheme } from '../../../lib/embedColorScheme';
+import { useCurrentUser } from '../../../hooks/useCurrentUser';
 import { useServerStatus } from '../../../hooks/useServerStatus';
 import { useUpdateNotice } from '../../../hooks/useUpdateNotice';
 import { AvatarPicture, useAccountIdentity } from '../../account';
@@ -287,6 +292,18 @@ export const ThemeTile: React.FC<{ place?: 'rail' | 'top' | 'sheet' }> = ({ plac
   );
 };
 
+/** The changes bell, as a top-bar tile. Renders nothing while the feature is off. */
+export const BellTile: React.FC = () => (
+  <NotificationsBell
+    position="bottom-end"
+    renderTrigger={({ label, onClick }) => (
+      <Tooltip label={label} withArrow openDelay={300}>
+        <Tile place="top" icon={Bell} label={label} onClick={onClick} data-testid="notifications-bell" />
+      </Tooltip>
+    )}
+  />
+);
+
 /** The reader: initials (or a figure) linking straight to Account settings. */
 export const ProfileTile: React.FC = () => {
   const who = useAccountIdentity();
@@ -348,29 +365,52 @@ function statusLabel(status: string, version: string | null): string {
   return status === 'unknown' ? 'Checking server' : 'Server offline';
 }
 
-/** The server's state at the sidebar's foot: a dot and "Online · v1.2.3"
- *  (the dot alone when folded). It opens the server info popover. */
+/** The server's state at the sidebar's foot, laid out like the landing pages'
+ *  footer: one soft card holding the live dot with "Online" and the dimmed
+ *  version, then the instance mode (single user, public, demo). Folded, the
+ *  dot alone. It opens the server info popover. */
 export const SideStatus: React.FC<{ open: boolean }> = ({ open }) => {
   const { status, version } = useServerStatus();
+  const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const label = statusLabel(status, version);
+  const online = status === 'online';
+  const main = online ? 'Online' : status === 'unknown' ? 'Checking server' : 'Server offline';
+  const ver = online && version ? `v${version}` : null;
+  const mode = isDemoMode
+    ? 'Demo mode'
+    : isPublicMode
+      ? 'Public mode'
+      : isSingleUserMode
+        ? 'Single user mode'
+        : null;
+  const ModeIcon = isDemoMode ? Compass : isPublicMode ? Globe : UserRound;
   return (
-    <ServerInfoPopover tooltip={open ? null : status === 'online' ? 'Server online' : label}>
-      {({ label: named, updateDot }) => (
-        <button
-          type="button"
-          className="hy-status"
-          data-state={status}
-          aria-label={named(label)}
-          data-testid="hy-status"
-        >
-          <span className="hy-row-icon">
+    <div className="hy-status-card">
+      <ServerInfoPopover tooltip={open ? null : online ? 'Server online' : label}>
+        {({ label: named, updateDot }) => (
+          <button
+            type="button"
+            className="hy-status"
+            data-state={status}
+            aria-label={named(label)}
+            data-testid="hy-status"
+          >
             <span className="hy-status-dot" aria-hidden />
-          </span>
-          <span className="hy-status-text">{label}</span>
-          {updateDot && <UpdateDot />}
-        </button>
+            <span className="hy-status-text">
+              <span>{main}</span>
+              {ver && <span className="hy-status-ver">{ver}</span>}
+            </span>
+            {updateDot && <UpdateDot />}
+          </button>
+        )}
+      </ServerInfoPopover>
+      {mode && open && (
+        <span className="hy-mode">
+          <ModeIcon size={14} strokeWidth={STROKE} aria-hidden />
+          {mode}
+        </span>
       )}
-    </ServerInfoPopover>
+    </div>
   );
 };
 

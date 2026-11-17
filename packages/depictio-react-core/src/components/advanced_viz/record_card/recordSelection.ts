@@ -13,7 +13,11 @@ import type { InteractiveFilter } from '../../../api';
 import { RESIDUE_RANGE_INDEX_SUFFIX } from '../../../selection';
 
 /** Mirrors `RecordCardConfig.selection_source`. */
-export type RecordSelectionSource = 'scatter_selection' | 'table_selection' | 'any';
+export type RecordSelectionSource =
+  | 'scatter_selection'
+  | 'table_selection'
+  | 'jbrowse_selection'
+  | 'any';
 
 /** The sources a card can follow, in the order a tie is broken.
  *  `residue_selection` (a protein tile's residue pick) is followed under
@@ -22,6 +26,7 @@ export type RecordSelectionSource = 'scatter_selection' | 'table_selection' | 'a
 export const RECORD_SELECTION_SOURCES = [
   'scatter_selection',
   'table_selection',
+  'jbrowse_selection',
   'residue_selection',
 ] as const;
 

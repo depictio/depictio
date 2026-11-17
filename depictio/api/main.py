@@ -202,8 +202,11 @@ app.add_middleware(
     cast(Any, CORSMiddleware),
     allow_origins=_cors_origins,
     allow_credentials=settings.fastapi.cors_allow_credentials and bool(_cors_origins),
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    # Range + the exposed headers let a genome browser on another origin (dev
+    # server, split viewer/API hosts) read track files by byte range.
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Range"],
+    expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
     max_age=600,
 )
 if not _cors_origins:
@@ -375,7 +378,7 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
         Asset paths in index.html still resolve via /dashboard/assets/."""
         return _spa_index()
 
-    # /auth and /auth/google/callback → same React bundle. The SPA's boot
+    # /auth and /auth/* (incl. the legacy /auth/google/callback) → same React bundle. The SPA's boot
     # routing detects /auth and renders <AuthApp/>. Replaces the Dash /auth
     # page; Dash now redirects users straight here for sign-in.
     @app.get("/auth")
@@ -441,6 +444,17 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
 
     @app.get("/profile/{_path:path}")
     async def _serve_profile_spa(_path: str) -> FileResponse:
+        return _spa_index()
+
+    # /activity → React Activity page (tasks, ingestion runs and sends of the
+    # projects the reader can access). Same SPA bundle; main.tsx renders
+    # <ActivityApp/>.
+    @app.get("/activity")
+    async def _serve_activity_spa_root() -> FileResponse:
+        return _spa_index()
+
+    @app.get("/activity/{_path:path}")
+    async def _serve_activity_spa(_path: str) -> FileResponse:
         return _spa_index()
 
     # /groups → React groups page (my-groups list + group-admin management).

@@ -177,6 +177,7 @@ def build_figure_preview(payload: dict) -> dict:
         apply_column_coloring_kwargs,
         apply_facet_kwargs,
         apply_group_coloring_kwargs,
+        apply_group_split_kwargs,
         code_group_globals,
         group_annotation_expr,
         group_source_columns,
@@ -184,6 +185,7 @@ def build_figure_preview(payload: dict) -> dict:
         sanitize_group_defs,
         sanitize_grouping_display,
         tidy_facet_layout,
+        with_overall_rows,
     )
 
     coloring_allowed = mode != "code" and (visu_type or "").lower() not in _WHOLE_FRAME_VISU
@@ -251,7 +253,16 @@ def build_figure_preview(payload: dict) -> dict:
             return kwargs
         return apply_facet_kwargs(kwargs, facet_column)
 
+    # "Split, colours kept" (#1397's what's new): one panel per group with the
+    # figure's own colours, instead of recolouring by group.
+    group_keep_color = bool(payload.get("group_keep_color")) and grouping_display == "facet"
+    # With it, an "All" panel first: every row, the groups' together.
+    group_overall = group_keep_color and bool(payload.get("group_overall"))
+
     def _grouped_kwargs(base: dict) -> dict:
+        n_panels = len(group_defs) + (1 if include_other else 0) + (1 if group_overall else 0)
+        if group_keep_color and n_panels <= MAX_FACET_CATEGORIES:
+            return apply_group_split_kwargs(base, group_defs, include_other, group_overall)
         # +1 when "Other" is shown: the synthetic column then carries the
         # fallback label as its own category (and facet panel in Split mode).
         return _apply_display(
@@ -397,9 +408,12 @@ def build_figure_preview(payload: dict) -> dict:
                         group_defs, scan_schema.names(), dict(scan_schema)
                     )
                     if group_expr is not None:
-                        scan = scan.with_columns(group_expr)
+                        annotated_scan = scan.with_columns(group_expr)
+                        scan = annotated_scan
                         if not include_other:
                             scan = scan.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+                        if group_overall:
+                            scan = with_overall_rows(scan, annotated_scan)
                         group_colored = True
                     else:
                         # No group column in this frame: render ungrouped, and
@@ -464,9 +478,12 @@ def build_figure_preview(payload: dict) -> dict:
             # subset keeps its labels.
             group_expr = group_annotation_expr(group_defs, df.columns, dict(df.schema))
             if group_expr is not None:
-                df = df.with_columns(group_expr)
+                annotated_df = df.with_columns(group_expr)
+                df = annotated_df
                 if not include_other:
                     df = df.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+                if group_overall:
+                    df = with_overall_rows(df, annotated_df)
                 if code_group_optin:
                     # Same kwargs, handed over rather than applied: the author's
                     # code decides which px call they land in.
@@ -902,6 +919,11 @@ def build_multiqc_preview(payload: dict) -> dict:
     }
 
 
+# The most rows one preview returns. The annotation panel reads a whole sample
+# table (up to this many keys) in one call; every other caller asks for 500 or fewer.
+MAX_PREVIEW_ROWS = 10_000
+
+
 @celery_app.task(name="depictio.deltatables.preview", soft_time_limit=60, time_limit=120)
 def preview_deltatable(payload: dict) -> dict:
     """Heavy body of `GET`/`POST /deltatables/preview/{id}`.
@@ -926,7 +948,7 @@ def preview_deltatable(payload: dict) -> dict:
     from depictio.api.v1.s3 import polars_s3_config
 
     delta_loc = payload["delta_table_location"]
-    limit = max(1, min(int(payload.get("limit", 100)), 1000))
+    limit = max(1, min(int(payload.get("limit", 100)), MAX_PREVIEW_ROWS))
     filter_metadata = payload.get("filter_metadata") or []
     raw_version = payload.get("version")
     version = int(raw_version) if raw_version is not None else None
@@ -1524,6 +1546,8 @@ def compute_complex_heatmap(payload: dict) -> dict:
         _narrow_wide_matrix_columns(value_columns, filter_metadata, what="heatmap columns")
         or value_columns
     )
+    if filter_metadata:
+        value_columns = _square_matrix_columns(df, index_column, value_columns)
 
     # Column annotations, in priority order. Both branches produce the same
     # ``{annotation_name: {sample_column: value}}`` shape the aligner below
@@ -1574,12 +1598,9 @@ def compute_complex_heatmap(payload: dict) -> dict:
     # subset leaves one column; pick a single Phylum and the row filter leaves
     # one row — so this is a click away, not an edge case. Clustering is a
     # presentation choice, so drop it rather than failing the tile.
-    if len(value_columns) < 2 and cluster_cols:
-        logger.info("not clustering heatmap columns: %d column(s) left", len(value_columns))
-        cluster_cols = False
-    if len(pdf) < 2 and cluster_rows:
-        logger.info("not clustering heatmap rows: %d row(s) left", len(pdf))
-        cluster_rows = False
+    cluster_rows, cluster_cols = _heatmap_clustering_flags(
+        len(pdf), len(value_columns), cluster_rows, cluster_cols, cluster_metric
+    )
 
     hm_kwargs: dict = {
         "index_column": index_column,
@@ -1711,8 +1732,40 @@ def compute_complex_heatmap(payload: dict) -> dict:
     if colorscale:
         hm_kwargs["colorscale"] = colorscale
 
-    hm = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs)
-    fig = hm.to_plotly()
+    if pdf.empty:
+        # Filters can leave no row at all (a pick on a time point no feature
+        # peaks at); the library divides by the row count, so say so instead.
+        import plotly.graph_objects as _go
+
+        fig = _go.Figure()
+        fig.update_layout(
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+            annotations=[
+                {
+                    "text": "No rows in scope: the filters leave nothing to draw",
+                    "showarrow": False,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                }
+            ],
+        )
+    else:
+        try:
+            fig = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs).to_plotly()
+        except (ValueError, ZeroDivisionError) as exc:
+            if not (hm_kwargs["cluster_rows"] or hm_kwargs["cluster_cols"]):
+                raise
+            # A constant row or column has no correlation, and a matrix with
+            # one such axis has no finite distances to link: draw it unordered.
+            logger.warning(
+                "compute_complex_heatmap: clustering failed (%s); drawing unclustered", exc
+            )
+            hm_kwargs["cluster_rows"] = False
+            hm_kwargs["cluster_cols"] = False
+            fig = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs).to_plotly()
     # Margin tweak for the React viewer: b=110 so the x-tick labels, which the
     # library sizes from a 6px-per-char approximation, aren't clipped when a
     # rotated sample id runs longer than that estimate (~14 chars @10pt).
@@ -1763,6 +1816,54 @@ def compute_complex_heatmap(payload: dict) -> dict:
         "available_col_annotations": available_col_annotations,
         "constant_col_annotations": constant_col_annotations,
     }
+
+
+def _heatmap_clustering_flags(
+    n_rows: int, n_cols: int, cluster_rows: bool, cluster_cols: bool, metric: str
+) -> tuple[bool, bool]:
+    """Which axes of an ``n_rows`` x ``n_cols`` matrix can still carry a dendrogram.
+
+    A dendrogram needs two leaves on its own axis. A correlation distance also
+    needs two values per leaf, so with a single column the rows have no
+    distance to each other (and a single row leaves the columns none): that
+    axis is left unclustered rather than failing the tile. Both axes can be
+    narrowed this far by an ordinary filter, so this is a click away, not an
+    edge case. Clustering is a presentation choice.
+    """
+    if n_cols < 2 and cluster_cols:
+        logger.info("not clustering heatmap columns: %d column(s) left", n_cols)
+        cluster_cols = False
+    if n_rows < 2 and cluster_rows:
+        logger.info("not clustering heatmap rows: %d row(s) left", n_rows)
+        cluster_rows = False
+    if metric == "correlation":
+        if n_cols < 2 and cluster_rows:
+            logger.info("not clustering heatmap rows by correlation: %d column(s) left", n_cols)
+            cluster_rows = False
+        if n_rows < 2 and cluster_cols:
+            logger.info("not clustering heatmap columns by correlation: %d row(s) left", n_rows)
+            cluster_cols = False
+    return cluster_rows, cluster_cols
+
+
+def _square_matrix_columns(df: Any, index_column: str, value_columns: list[str]) -> list[str]:
+    """The columns of a matrix whose rows name them, cut to the rows a filter kept.
+
+    A sample-by-sample matrix (a distance, a correlation) names each column by
+    a row's index. A filter that removed rows (a run, a group of a split)
+    leaves their columns standing, so the matrix would read the kept samples
+    against every sample. When every kept row names a column, the columns
+    follow the rows. A matrix of anything else by samples (taxa, genes) never
+    names a column by a row and is left alone.
+    """
+    if index_column not in df.columns or df.height == 0:
+        return value_columns
+    kept = {str(v) for v in df.get_column(index_column).drop_nulls().to_list()}
+    if not kept or len(kept) >= len(value_columns):
+        return value_columns
+    if not kept <= {str(c) for c in value_columns}:
+        return value_columns
+    return [c for c in value_columns if str(c) in kept]
 
 
 def _narrow_wide_matrix_columns(
@@ -3167,7 +3268,7 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         {
           "run_id":     ingestion-run id (steps pre-seeded, one per DC tag),
           "project_id", "wf_index", "dc_id", "dc_tag",
-          "sync_files": bool,
+          "sync_files": bool (read every file again; otherwise only what moved),
           "user": {"id", "email", "is_admin"},
           "depends_on": [dc_tag, ...] (optional; recipe DCs, see
                          ``manifest_ingest._recipe_dependencies``, and scan
@@ -3203,7 +3304,10 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     retrying forever against a dependency that will never finish.
     """
     from depictio.api.v1.db import projects_collection
-    from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _run_dc_ingest
+    from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
+        _run_dc_ingest,
+        last_ingested_signature,
+    )
     from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
         ProjectStorageUnusable,
         project_storage_for,
@@ -3216,11 +3320,16 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     tag = payload["dc_tag"]
     # A scan leader's scan outcomes, kept on every write of its step.
     scans: dict[str, str | None] = {}
+    # What the collection was built from, recorded on success so the next
+    # refresh can leave it alone if nothing moved (see ``_run_dc_ingest``).
+    outcome: dict = {}
 
     def _step(status: str, detail: str | None = None) -> dict:
         step: dict = {"name": tag, "status": status, "detail": detail}
         if scans:
             step["scans"] = dict(scans)
+        if status == "success" and outcome.get("inputs_signature"):
+            step["inputs_signature"] = outcome["inputs_signature"]
         return step
 
     def _close_step(ok: bool, message: str | None) -> dict:
@@ -3300,13 +3409,23 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
             email=payload["user"]["email"],
             is_admin=bool(payload["user"].get("is_admin", False)),
         )
+        sync_files = bool(payload.get("sync_files", False))
         ok, message = _run_dc_ingest(
             workflow_dict,
             payload["dc_id"],
             user,
-            sync_files=bool(payload.get("sync_files", True)),
+            sync_files=sync_files,
             # Resolved worker-side so credentials never cross the broker.
             remote_storage_options=project_storage_for(payload["project_id"]),
+            previous_signature=(
+                None if sync_files else last_ingested_signature(payload["project_id"], tag, run_id)
+            ),
+            outcome=outcome,
+            # The run ledger entry this task belongs to, so what it writes can
+            # be joined back to the ingestion that produced it.
+            ingestion_run_id=run_id,
+            project_id=payload["project_id"],
+            trigger="ui",
             **scan_kwargs,
         )
     except ProjectStorageUnusable as exc:

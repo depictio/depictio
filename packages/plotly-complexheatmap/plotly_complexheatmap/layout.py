@@ -83,10 +83,14 @@ def compute_grid_layout(
         bottom_total = bottom_annotation.total_size()
         heatmap_budget = max(0.3, heatmap_budget - bottom_total)
 
+    # A matrix with no row left (a filter emptied it) has no height to share out:
+    # the groups then split the budget evenly instead of dividing by zero.
     total_data_rows = sum(group_sizes)
     for gs in group_sizes:
         rows.append("heatmap")
-        row_heights.append(heatmap_budget * gs / total_data_rows)
+        row_heights.append(
+            heatmap_budget * gs / total_data_rows if total_data_rows else heatmap_budget / max(1, len(group_sizes))
+        )
 
     if bottom_annotation:
         for track in bottom_annotation.tracks:

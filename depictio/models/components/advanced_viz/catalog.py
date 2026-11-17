@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Literal, get_args
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from depictio.models.components.lite import CardLiteComponent
 from depictio.models.components.types import (
@@ -162,6 +162,8 @@ _LIST_ROLES: dict[str, frozenset[str]] = {
     "sankey": frozenset({"steps"}),
     "sunburst": frozenset({"ranks"}),
     "complex_heatmap": frozenset({"value_columns", "row_annotation_cols"}),
+    # The markers a spatial_cells tile's colour picker offers.
+    "spatial_cells": frozenset({"value_columns"}),
 }
 
 # Roles that pick a *setting* rather than a column, so they are accepted as
@@ -289,6 +291,17 @@ class Render(BaseModel):
     priority: int | None = Field(default=None, ge=0)
     # advanced_viz
     kind: AdvancedVizKind | None = None
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _renamed_kind(cls, value: object) -> object:
+        """A catalog entry may still name `stacked_taxonomy`, which is `stacked_bar` now.
+
+        Only this one rename: the kinds merged into a survivor (`ma`, `qq`, ...)
+        keep their own catalog roles, which differ from the survivor's.
+        """
+        return "stacked_bar" if value == "stacked_taxonomy" else value
+
     # viz role -> column, or -> ordered column list for the few list-typed
     # roles (see `_LIST_ROLES`).
     roles: dict[str, str | list[str]] = Field(default_factory=dict)
@@ -597,6 +610,10 @@ class CatalogTool(BaseModel):
 
     id: str
     name: str
+    # The module's own revision (semver), held to its content by
+    # `depictio/catalog/catalog_versions.lock.json`. A template's lock entry records
+    # the revision of each module it consumes, so bumping a module bumps them too.
+    version: str = Field(default="1.0.0", pattern=r"^\d+\.\d+\.\d+$")
     description: str = ""
     homepage: str | None = None
     # Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched

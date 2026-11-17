@@ -7,6 +7,7 @@
 # tidied into catalog outputs here; nothing needed a bindable frame of them yet.
 id: qualimap
 name: Qualimap
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qualimap/bamqc
 homepage: http://qualimap.conesalab.org
 description: Quality control of alignment sequencing data and of feature counts.

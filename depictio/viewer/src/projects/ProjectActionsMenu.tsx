@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { ActionIcon, Menu } from '@mantine/core';
+import { ActionIcon, Menu, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
 import { exportProjectZip } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
+
+import { NO_DESTINATION_REASON, usePublishStatus } from './usePushTargets';
+import { useMigrationUi } from '../hooks/useMigrationUi';
 
 export interface ProjectActionsMenuProps {
   project: ProjectListEntry;
@@ -26,6 +29,22 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
 }) => {
   const projectId = (project._id ?? project.id) as string;
   const [exporting, setExporting] = useState(false);
+  // Owners and admins only; hidden when this instance hides migration, and
+  // disabled with the reason when it has no push target (nor URL publishing).
+  const migrationUi = useMigrationUi();
+  const publishStatus = usePublishStatus(canMutate && migrationUi);
+  const showPush = canMutate && migrationUi && publishStatus !== 'loading';
+  const canPush = showPush && publishStatus === 'available';
+  const locked = !!project.published_lock;
+  const mutable = canMutate && !locked;
+  const lockTip = (node: React.ReactElement) =>
+    locked ? (
+      <Tooltip label="Read-only: editing is locked" position="left" withinPortal>
+        <div>{node}</div>
+      </Tooltip>
+    ) : (
+      node
+    );
 
   const handleExport = async () => {
     setExporting(true);
@@ -49,7 +68,8 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
   };
 
   return (
-    <Menu position="bottom-end" shadow="md" withinPortal width={170}>
+    <>
+    <Menu position="bottom-end" shadow="md" withinPortal width={260}>
       <Menu.Target>
         <ActionIcon
           variant="subtle"
@@ -62,31 +82,58 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item
+        {lockTip(
+          <Menu.Item
           leftSection={<Icon icon="mdi:pencil" width={14} />}
-          disabled={!canMutate}
+          disabled={!mutable}
           onClick={() => onEdit(project)}
         >
           Edit
         </Menu.Item>
+        )}
         <Menu.Item
           leftSection={<Icon icon="mdi:export" width={14} />}
           disabled={exporting}
           onClick={handleExport}
         >
-          {exporting ? 'Exporting…' : 'Export'}
+          {exporting ? 'Exporting…' : 'Export as ZIP'}
         </Menu.Item>
+        {showPush &&
+          (canPush ? (
+            <Menu.Item
+              leftSection={<Icon icon="mdi:transfer-up" width={14} />}
+              onClick={() => window.location.assign(`/projects/${projectId}?settings=send`)}
+              data-testid="project-push-menu-item"
+            >
+              Send to another instance
+            </Menu.Item>
+          ) : (
+            <Tooltip label={NO_DESTINATION_REASON} multiline w={260} position="left" withinPortal>
+              <div>
+                <Menu.Item
+                  leftSection={<Icon icon="mdi:transfer-up" width={14} />}
+                  disabled
+                  data-testid="project-push-menu-item"
+                >
+                  Send to another instance
+                </Menu.Item>
+              </div>
+            </Tooltip>
+          ))}
         <Menu.Divider />
-        <Menu.Item
+        {lockTip(
+          <Menu.Item
           color="red"
           leftSection={<Icon icon="tabler:trash" width={14} />}
-          disabled={!canMutate}
+          disabled={!mutable}
           onClick={() => onDelete(project)}
         >
           Delete
         </Menu.Item>
+        )}
       </Menu.Dropdown>
     </Menu>
+    </>
   );
 };
 

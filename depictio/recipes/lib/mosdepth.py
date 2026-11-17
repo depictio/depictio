@@ -28,3 +28,21 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
         .select("sample", "stage")
     )
     return df.join(kept, on=["sample", "stage"], how="semi")
+
+
+#: The column polars names a fifth field when the scan declares four.
+_NAMED_TARGET_DEPTH_COL = "column_5"
+
+
+def region_depth(df: pl.DataFrame) -> pl.Expr:
+    """The mean depth of a ``regions.bed.gz`` row, as Float64.
+
+    mosdepth copies the ``--by`` bed's columns before the depth, so a capture bed
+    with a name column (gene names, as most vendor exome beds have) yields
+    ``chrom start end name depth``. The scan names four columns, so there the
+    fourth holds the name and the depth lands in a fifth: read it when present.
+    """
+    coverage = pl.col("coverage").cast(pl.Float64, strict=False)
+    if _NAMED_TARGET_DEPTH_COL not in df.columns:
+        return coverage
+    return pl.coalesce(pl.col(_NAMED_TARGET_DEPTH_COL).cast(pl.Float64, strict=False), coverage)

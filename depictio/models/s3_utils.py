@@ -1,4 +1,6 @@
 from abc import ABC
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
@@ -8,6 +10,41 @@ from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.s3 import PolarsStorageOptions
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
+_DELETE_BATCH = 1000  # DeleteObjects' per-request limit
+
+
+def delete_keys(s3_client: "S3Client", bucket: str, keys: Iterable[str]) -> list[Any]:
+    """Delete ``keys`` from ``bucket``; return the per-key errors a bulk delete reported.
+
+    Uses ``DeleteObjects`` in batches of 1000. A store without it (Google Cloud
+    Storage's XML API) makes the first batch fail; every key is then deleted one by
+    one. Any other error fails the single deletes too, so it still raises.
+    """
+    keys = list(keys)
+    errors: list[Any] = []
+    bulk = True
+    for i in range(0, len(keys), _DELETE_BATCH):
+        batch = keys[i : i + _DELETE_BATCH]
+        if bulk:
+            try:
+                response = s3_client.delete_objects(
+                    Bucket=bucket, Delete={"Objects": [{"Key": k} for k in batch]}
+                )
+                errors.extend(response.get("Errors") or [])
+                continue
+            except ClientError as e:
+                logger.info(
+                    f"DeleteObjects failed ({e.response.get('Error', {}).get('Code')}); "
+                    "deleting one object at a time"
+                )
+                bulk = False
+        for key in batch:
+            s3_client.delete_object(Bucket=bucket, Key=key)
+    return errors
 
 
 class S3ProviderBase(ABC):
