@@ -11,7 +11,8 @@ the likelihood-ratio p-value with its FDR.
 
 This recipe reads the JCEC tables (repoint the glob to ``*.MATS.JC.txt`` for the
 junction-only model) and keeps one row per contrast and event. The contrast is
-the name of the directory rMATS wrote into (``<contrast>/rmats_post/`` in
+the name of the directory rMATS wrote into (``<contrast>/rmats_post/`` in 1.x,
+``rmats/<contrast>[_paired]/`` from 2.0, the ``_paired`` suffix dropped;
 nf-core/rnasplice): the file names carry the event type only.
 
 Orientation: rnasplice passes the treatment BAMs as ``--b1``, so
@@ -103,7 +104,9 @@ EVENT_LABELS = {
     "A5SS": "Alternative 5' splice site",
 }
 _TYPE = r"(SE|RI|MXE|A3SS|A5SS)\.MATS\.JC(?:EC)?\.txt$"
-_CONTRAST = r"([^/]+)/(?:rmats_post/)?[^/]+\.MATS\.JC(?:EC)?\.txt$"
+# 1.x: <contrast>/rmats_post/<type>.MATS.JCEC.txt; 2.0: rmats/<contrast>[_paired]/,
+# the suffix telling the paired model's directory apart (the contrast is the same).
+_CONTRAST = r"([^/]+?)(?:_paired)?/(?:rmats_post/)?[^/]+\.MATS\.JC(?:EC)?\.txt$"
 
 # The alternative region of each event type, 0-based start column and end column.
 _REGION = {

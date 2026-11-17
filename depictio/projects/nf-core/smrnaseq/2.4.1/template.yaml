@@ -33,7 +33,7 @@
 template:
   template_id: "nf-core/smrnaseq/2.4.1"
   description: "nf-core/smrnaseq template for small RNA sequencing: MultiQC funnel, library QC, miRNA expression and two-group comparison, isomiRs, novel miRNAs"
-  version: "1.1.1"
+  version: "1.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one smrnaseq run (multiqc/, mirna_quant/, the miRDeep2 result_*.csv tables, pipeline_info/)"
@@ -60,9 +60,11 @@ template:
     - name: "SKIP_MIRDEEP"
       description: "Set (--var SKIP_MIRDEEP=true) for a run with --skip_mirdeep: no result_*.csv tables, so the miRDeep2 collections are pruned."
       required: false
+      from_params: {param: skip_mirdeep}
     - name: "SKIP_MULTIQC"
       description: "Set (--var SKIP_MULTIQC=true) for a run with --skip_multiqc: no report, so the MultiQC and miRTrace collections are pruned."
       required: false
+      from_params: {param: skip_multiqc}
   # Variables for the BUNDLED reference dataset: the megatest run with the
   # design table vendored in input/ (built once from the samplesheet; see
   # docs/dashboards.md) and the assembly the megatest mapped to.

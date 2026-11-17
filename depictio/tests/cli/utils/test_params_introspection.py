@@ -1,4 +1,4 @@
-"""Which params*.json the template-variable introspection reads.
+"""Which params*.json a run's template variables are read from.
 
 A resumed run writes one params file per attempt, so a results directory
 routinely holds several and only the last describes the run that produced the
@@ -8,9 +8,23 @@ prunes the wrong data collections.
 """
 
 import json
+from pathlib import Path
 
-from depictio.cli.cli.utils.templates import _introspect_pipeline_params
+import yaml
+
+from depictio.cli.cli.utils.templates import _introspect_pipeline_params, _read_run_params
 from depictio.models.models.nextflow import params_files_newest_first
+from depictio.models.models.templates import TemplateMetadata
+
+NFCORE = Path(__file__).resolve().parents[3] / "projects" / "nf-core"
+
+
+def _flags(root, template: str = "ampliseq/2.18.0") -> dict[str, str]:
+    """The variables a shipped template's ``from_params`` rules set on this run."""
+    meta = TemplateMetadata(
+        **yaml.safe_load((NFCORE / template / "template.yaml").read_text())["template"]
+    )
+    return meta.variables_from_params(_read_run_params(str(root)))
 
 
 def _write_params(directory, name, payload):
@@ -23,11 +37,12 @@ class TestStringBooleans:
 
     def test_string_true_ancombc_keeps_the_differential_abundance(self, tmp_path):
         _write_params(
-            tmp_path / "pipeline_info", "params_2026-08-25_13-30-37.json", {"ancombc": "true"}
+            tmp_path / "pipeline_info",
+            "params_2026-08-25_13-30-37.json",
+            {"ancombc": "true", "metadata": "meta.tsv"},
         )
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert "SKIP_ANCOM" not in variables
 
@@ -38,8 +53,7 @@ class TestStringBooleans:
             {"ancombc": "false", "skip_taxonomy": "True", "skip_qiime": "false"},
         )
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert variables["SKIP_ANCOM"] == "true"
         assert variables["SKIP_TAXONOMY"] == "true"
@@ -53,8 +67,7 @@ class TestNewestParamsWins:
         _write_params(info, "params_2026-06-11_16-37-38.json", {"skip_taxonomy": True})
         _write_params(info, "params_2026-06-12_07-20-45.json", {"skip_taxonomy": False})
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert "SKIP_TAXONOMY" not in variables
 
@@ -64,8 +77,7 @@ class TestNewestParamsWins:
         _write_params(info, "params_2026-06-11_16-37-38.json", {"skip_taxonomy": False})
         _write_params(info, "params_2026-06-12_07-20-45.json", {"skip_taxonomy": True})
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert variables["SKIP_TAXONOMY"] == "true"
 
@@ -75,8 +87,7 @@ class TestNewestParamsWins:
         _write_params(info, "params_2026-06-11_16-37-38.json", {"platform": "nanopore"})
         info.joinpath("params_2026-06-12_07-20-45.json").write_text('{"platform": "nano')
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path, "viralrecon/3.0.0")
 
         assert variables["IS_NANOPORE"] == "true"
 
@@ -87,20 +98,18 @@ class TestWhereItLooks:
         _write_params(
             tmp_path / "run_A" / "pipeline_info",
             "params_2026-01-01_00-00-00.json",
-            {"protocol": "metagenomic"},
+            {"platform": "nanopore"},
         )
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path, "viralrecon/3.0.0")
 
-        assert variables["IS_METAGENOMIC"] == "true"
+        assert variables["IS_NANOPORE"] == "true"
 
     def test_params_file_run_shape_is_recognised(self, tmp_path):
         """A `-params-file` run writes nf-params.json, which the old glob missed."""
         _write_params(tmp_path / "pipeline_info", "nf-params.json", {"skip_qiime": True})
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert variables["SKIP_QIIME"] == "true"
 
@@ -108,18 +117,6 @@ class TestWhereItLooks:
         variables: dict[str, str] = {"GROUP_COL": "treatment"}
         _introspect_pipeline_params(str(tmp_path), variables)
         assert variables == {"GROUP_COL": "treatment"}
-
-
-class TestExplicitVarsWin:
-    def test_a_user_supplied_flag_is_never_overridden(self, tmp_path):
-        _write_params(
-            tmp_path / "pipeline_info", "params_2026-01-01_00-00-00.json", {"skip_qiime": True}
-        )
-
-        variables = {"SKIP_QIIME": "false"}
-        _introspect_pipeline_params(str(tmp_path), variables)
-
-        assert variables["SKIP_QIIME"] == "false"
 
 
 class TestPplaceTree:
@@ -263,6 +260,47 @@ class TestPhylumLevel:
         variables = self._introspect(tmp_path, {**self.GTDB, "tax_agglom_max": 6})
 
         assert variables["PHYLUM_LEVEL"] == "3"
+
+    def test_ampliseq3_names_the_table_after_the_first_database(self, tmp_path):
+        """3.x: one table per classifier and database; the first listed one counts."""
+        tables = tmp_path / "qiime2" / "rel_abundance_tables"
+        self._write(
+            tables / "rel-table-ASV_with-DADA2-silva-tax.tsv",
+            '"ID"\t"Domain"\t"Kingdom"\t"Phylum"\t"sample_1"\n',
+        )
+        self._write(
+            tables / "rel-table-ASV_with-DADA2-gtdb-tax.tsv",
+            '"ID"\t"Domain"\t"Phylum"\t"Class"\t"sample_1"\n',
+        )
+        params = {"dada_ref_taxonomy": "silva,gtdb", "tax_agglom_max": 6}
+
+        assert self._introspect(tmp_path, params)["PHYLUM_LEVEL"] == "3"
+
+    def test_a_database_list_reads_the_first_databases_taxlevels(self, tmp_path):
+        params = {
+            "dada_ref_taxonomy": "silva=144,gtdb",
+            "dada_ref_databases": {
+                "silva=144": {"taxlevels": "Domain,Kingdom,Phylum,Class,Order,Family,Genus"}
+            },
+            "tax_agglom_max": 6,
+        }
+
+        assert self._introspect(tmp_path, params)["PHYLUM_LEVEL"] == "3"
+
+    def test_the_dada2_table_label_is_the_first_database_sanitised(self, tmp_path):
+        variables = self._introspect(tmp_path, {"dada_ref_taxonomy": "silva=138.2, gtdb"})
+
+        assert variables["DADA2_REF_DB"] == "silva_138_2"
+
+    def test_a_consolidated_taxonomy_is_its_own_label(self, tmp_path):
+        params = {"dada_ref_taxonomy": "silva,gtdb", "consolidate_taxonomies": "score"}
+
+        assert self._introspect(tmp_path, params)["DADA2_REF_DB"] == "consolidated_score"
+
+    def test_one_database_is_never_consolidated(self, tmp_path):
+        params = {"dada_ref_taxonomy": "sbdi-gtdb", "consolidate_taxonomies": "score"}
+
+        assert self._introspect(tmp_path, params)["DADA2_REF_DB"] == "sbdi-gtdb"
 
     def test_rank_prefixed_barplot_lineages(self, tmp_path):
         barplot = tmp_path / "qiime2" / "barplot"

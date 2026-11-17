@@ -20,7 +20,7 @@
 template:
   template_id: "nf-core/airrflow/5.1.0"
   description: "nf-core/airrflow adaptive immune receptor repertoire template: sequence processing, repertoire composition and clonal analysis"
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing airrflow pipeline output (multiqc/, clonal_analysis/, repertoire_comparison/, parsed_logs/)"
@@ -31,18 +31,23 @@ template:
     - name: "SKIP_CLONAL_ANALYSIS"
       description: "Set when the run used --skip_clonal_analysis (params.json skip_clonal_analysis). Prunes every clonal_analysis/ derived DC."
       required: false
+      from_params: {param: skip_clonal_analysis}
     - name: "SKIP_REPORT"
       description: "Set when the run used --skip_report (params.json skip_report). Prunes the repertoire_comparison/ and parsed_logs/ derived DCs: the pRESTO log parser runs inside the report step."
       required: false
+      from_params: {param: skip_report}
     - name: "SKIP_THRESHOLD_REPORT"
       description: "Set when the run used --skip_report_threshold, or an explicit --clonal_threshold instead of 'auto'. Prunes the threshold summary DC."
       required: false
+      from_params: {any: [{param: skip_report_threshold}, {param: clonal_threshold, not_equals: auto}]}
     - name: "SKIP_MULTIQC"
       description: "Set when the run used --skip_multiqc (params.json skip_multiqc). Prunes the MultiQC DC, which drops the MultiQC tab; the other tabs are unaffected."
       required: false
+      from_params: {param: skip_multiqc}
     - name: "ASSEMBLED_MODE"
       description: "Set when the run used --mode assembled (params.json mode). Prunes the pRESTO log DCs: assembled input skips read pre-processing entirely."
       required: false
+      from_params: {param: mode, equals: assembled}
     # Design column (ampliseq 2.18.0 convention). airrflow's samplesheet carries
     # the design in free submitter columns; `treatment` is the one its schema
     # documents for the condition, so it is the default. A run whose samplesheet

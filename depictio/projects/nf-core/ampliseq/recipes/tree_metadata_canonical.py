@@ -38,6 +38,7 @@ Output schema:
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import asv_sample_columns, with_kingdom
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -116,20 +117,6 @@ _RANK_PREFIXES = (
 )
 
 
-# Columns of the ASV table that are not per-sample abundances.
-_ASV_META_COLS = (
-    "ID",
-    "Kingdom",
-    "Phylum",
-    "Class",
-    "Order",
-    "Family",
-    "Genus",
-    "Species",
-    "confidence",
-    "sequence",
-)
-
 _RANKS = ("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
 
 
@@ -147,7 +134,7 @@ def top_taxa(asv_tax: pl.DataFrame, max_tips: int) -> list[str]:
 
     Ties break on the ASV id so the selection is reproducible across runs.
     """
-    sample_cols = [c for c in asv_tax.columns if c not in _ASV_META_COLS]
+    sample_cols = asv_sample_columns(asv_tax)
     if not sample_cols:
         return asv_tax["ID"].to_list()
     ranked = (
@@ -165,7 +152,8 @@ def top_taxa(asv_tax: pl.DataFrame, max_tips: int) -> list[str]:
 
 def _from_asv_table(asv: pl.DataFrame) -> pl.DataFrame:
     """Ranks are already columns here — only naming and blanks need work."""
-    df = asv.rename({"ID": "taxon"})
+    # ampliseq >= 3.0 may name the top rank Domain: read it as the Kingdom.
+    df = with_kingdom(asv).rename({"ID": "taxon"})
     present = [r for r in _RANKS if r in df.columns]
     df = df.with_columns([_blank_to_null(r) for r in present])
     if "confidence" in df.columns:
@@ -261,7 +249,7 @@ def transform(
     # does not, so dominance is only available on the first route.
     asv_abundance = None
     if asv_tax is not None:
-        sample_cols = [c for c in asv_tax.columns if c not in _ASV_META_COLS]
+        sample_cols = asv_sample_columns(asv_tax)
         if sample_cols:
             asv_abundance = asv_tax.select(["ID", *sample_cols])
 

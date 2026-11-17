@@ -119,8 +119,25 @@ def kingdom_phylum(lineage: pl.Expr) -> list[pl.Expr]:
 
 
 def asv_sample_columns(asv_tax: pl.DataFrame) -> list[str]:
-    """Per-sample abundance columns of an ASV × taxonomy table."""
-    return [c for c in asv_tax.columns if c not in ASV_META_COLS]
+    """Per-sample abundance columns of an ASV × taxonomy table.
+
+    nf-core/ampliseq >= 3.0 adds one ``<rank>_confidence`` column per rank next
+    to ``confidence``; those are not samples either.
+    """
+    return [c for c in asv_tax.columns if c not in ASV_META_COLS and not c.endswith("_confidence")]
+
+
+def with_kingdom(asv_tax: pl.DataFrame) -> pl.DataFrame:
+    """The table's top rank as ``Kingdom``, the name the taxonomy DCs expose.
+
+    nf-core/ampliseq >= 3.0 names the top rank after what the database holds:
+    ``Domain`` for GTDB, SILVA 138, RDP, Greengenes2 and sbdi-gtdb (whose 2.x
+    tables repeated it as ``Domain`` *and* ``Kingdom``). A table with both keeps
+    its ``Kingdom``; one with only a ``Domain`` reads it as the top rank.
+    """
+    if "Kingdom" in asv_tax.columns or "Domain" not in asv_tax.columns:
+        return asv_tax
+    return asv_tax.rename({"Domain": "Kingdom"})
 
 
 def asv_table_to_ranks(
@@ -137,6 +154,7 @@ def asv_table_to_ranks(
     Abundances are summed per taxon tuple, reproducing exactly what a collapsed
     table at that depth holds. Blank rank cells become ``Unclassified``.
     """
+    asv_tax = with_kingdom(asv_tax)
     present = [r for r in ranks if r in asv_tax.columns]
     if not present:
         raise ValueError(
