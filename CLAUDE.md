@@ -313,6 +313,12 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 
 `metatype` is a free-form unvalidated string — never key behaviour on it.
 
+The instance's own bucket is a `StorageBackend` (`depictio/models/storage/`, #1358): get it with
+`instance_storage(settings | CLI_config)` and build locations with `backend.url(key)`, never an
+`f"s3://{bucket}/…"`. Backends register by name and scheme; code outside that package never names a
+backend class (guard test in `tests/unit/test_storage_backend.py`). `api/v1/s3.py`'s `s3_client` is
+transitional (S3-only).
+
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
   `DEPICTIO_AUTH_SINGLE_USER_MODE`

@@ -30,6 +30,7 @@ from depictio.cli.cli.utils.server_target import (
 from depictio.cli.cli_logging import logger
 from depictio.models.models.s3 import PolarsStorageOptions
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
+from depictio.models.storage import instance_storage
 
 app = typer.Typer()
 
@@ -668,7 +669,7 @@ def _delta_table_of(
         raise typer.Exit(code=1)
 
     # The location client_aggregate_data writes to.
-    destination = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id!s}"
+    destination = instance_storage(CLI_config).url(str(data_collection.id))
     return destination, turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
 
 

@@ -33,6 +33,7 @@ from depictio.models.models.base import PyObjectId
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
 from depictio.models.models.users import User
 from depictio.models.s3_utils import delete_keys
+from depictio.models.storage import instance_storage
 
 _MAX_PER_FILE_BYTES = 50 * 1024 * 1024
 _MAX_TOTAL_BYTES = 500 * 1024 * 1024
@@ -48,7 +49,7 @@ def _delta_location_for(dc_id: str) -> str:
     Mirrors `client_aggregate_data` (cli/utils/deltatables.py): one delta per
     DC at ``s3://{bucket}/{dc_id}``.
     """
-    return f"s3://{settings.s3.bucket}/{dc_id}"
+    return instance_storage(settings).url(str(dc_id))
 
 
 def _load_table_dc(data_collection_id: str, current_user) -> tuple[dict, dict]:

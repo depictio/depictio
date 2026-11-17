@@ -1,18 +1,19 @@
-import boto3
+"""The server's handles on its own bucket.
+
+``instance_backend`` is the :class:`~depictio.models.storage.StorageBackend` of
+the instance (``DEPICTIO_STORAGE_BACKEND``); new code uses it. The two module
+attributes below predate it and are derived from it:
+
+- ``polars_s3_config``: the backend's Polars / delta-rs storage options.
+- ``s3_client``: the S3 backend's boto3 client, for the callers not yet moved
+  onto the backend's methods (#1358).
+"""
 
 from depictio.api.v1.configs.config import settings
-from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
+from depictio.models.storage import instance_storage
 
-polars_s3_config = turn_S3_config_into_polars_storage_options(settings.s3).model_dump(
-    exclude_none=True
-)
+instance_backend = instance_storage(settings)
 
+polars_s3_config = instance_backend.storage_options()
 
-# Initialize your S3 client outside of your endpoint function
-s3_client = boto3.client(
-    "s3",
-    aws_access_key_id=settings.s3.aws_access_key_id,
-    aws_secret_access_key=settings.s3.aws_secret_access_key,
-    endpoint_url=settings.s3.endpoint_url,
-    verify=settings.s3.verify_tls,
-)
+s3_client = instance_backend.client  # type: ignore[attr-defined]

@@ -20,6 +20,7 @@ from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.data_collections import DataOrigin
 from depictio.models.s3_access import ProjectS3Config
 from depictio.models.s3_utils import delete_keys
+from depictio.models.storage import StorageError, instance_storage
 from depictio.models.timestamps import utc_now_naive
 
 
@@ -423,56 +424,31 @@ async def _update_dc_specific_properties(
 
 
 async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
-    """Core function to cleanup S3 Delta table objects.
+    """Delete the objects of a data collection's Delta table, best effort.
+
+    The table lives under the collection id in the instance bucket. A storage
+    failure is logged, never raised: the collection's documents go regardless.
 
     Args:
         data_collection_id: String ID of the data collection
     """
     try:
-        import boto3
-        from botocore.exceptions import ClientError
-
-        # Initialize S3 client for the configured store
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=settings.s3.endpoint_url,
-            aws_access_key_id=settings.s3.aws_access_key_id,
-            aws_secret_access_key=settings.s3.aws_secret_access_key,
-            region_name="us-east-1",
-        )
-
-        # Delta table is stored with data_collection_id as the key
-        delta_table_prefix = data_collection_id
-        bucket_name = settings.s3.bucket
-
-        # Delete all objects in the Delta table directory
         logger.info(f"Deleting Delta table for data collection: {data_collection_id}")
-        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=delta_table_prefix)
-
-        if "Contents" in response:
-            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
-            if objects_to_delete:
-                delete_keys(s3_client, bucket_name, (o["Key"] for o in objects_to_delete))
-                logger.info(
-                    f"Deleted {len(objects_to_delete)} Delta table objects for data collection {data_collection_id}"
-                )
-            else:
-                logger.info(
-                    f"No Delta table objects found for data collection {data_collection_id}"
-                )
+        deleted = instance_storage(settings).delete_prefix(data_collection_id)
+        if deleted:
+            logger.info(
+                f"Deleted {deleted} Delta table objects for data collection {data_collection_id}"
+            )
         else:
             logger.info(f"No Delta table found for data collection {data_collection_id}")
-
-    except ClientError as e:
+    except StorageError as e:
         logger.error(
             f"Failed to delete S3 Delta table objects for data collection {data_collection_id}: {e}"
         )
-        # Don't fail the entire operation if S3 cleanup fails, just log the error
     except Exception as e:
         logger.error(
             f"Unexpected error during S3 cleanup for data collection {data_collection_id}: {e}"
         )
-        # Don't fail the entire operation if S3 cleanup fails, just log the error
 
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024

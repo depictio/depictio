@@ -9,9 +9,8 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
-import fsspec
 import plotly.graph_objects as go
 
 from depictio.api.cache import get_cache
@@ -27,6 +26,7 @@ from depictio.cli.cli.utils.multiqc_figures import (
     multiqc_figure_cache_key,
 )
 from depictio.cli.cli.utils.multiqc_state import MULTIQC_STATE_LOCK
+from depictio.models.storage import instance_storage
 
 # MultiQC's state is the module's: the one lock every reader in the process
 # takes (ingestion, prerender and the run-folder checks too).
@@ -49,24 +49,15 @@ _resident_report_key: str | None = None
 MULTIQC_CACHE_TTL_SECONDS = 30 * 24 * 3600
 
 
-def _get_s3_filesystem_config() -> Dict[str, Any]:
-    """Get S3 filesystem configuration from settings."""
-    return {
-        "endpoint_url": settings.s3.endpoint_url,
-        "key": settings.s3.aws_access_key_id,
-        "secret": settings.s3.aws_secret_access_key,
-    }
-
-
-# Module-level cached S3 filesystem (reused across calls within the same process)
+# Module-level cached filesystem (reused across calls within the same process)
 _cached_s3_fs = None
 
 
 def _get_s3_filesystem():
-    """Get a cached S3 filesystem instance (avoids re-creating per call)."""
+    """The instance store as a cached fsspec filesystem (avoids re-creating per call)."""
     global _cached_s3_fs
     if _cached_s3_fs is None:
-        _cached_s3_fs = fsspec.filesystem("s3", **_get_s3_filesystem_config())
+        _cached_s3_fs = instance_storage(settings).filesystem()
     return _cached_s3_fs
 
 

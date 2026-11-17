@@ -18,6 +18,7 @@ from rich.markup import escape
 
 from depictio.cli.cli.utils.rich_utils import console, rich_print_checked_statement
 from depictio.cli.cli_logging import logger
+from depictio.models.storage import instance_storage
 
 SUPPORTED_IMAGE_EXTENSIONS = {
     ".png",
@@ -281,7 +282,7 @@ def _referenced_images(data_collection, CLI_config) -> list[str] | None:
     from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
     column = data_collection.config.dc_specific_properties.image_column
-    table = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id}"
+    table = instance_storage(CLI_config).url(str(data_collection.id))
     result = read_delta_table(
         table, turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
     )

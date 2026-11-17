@@ -67,6 +67,7 @@ from depictio.models.s3_access import (
     blank_foreign_session_token,
 )
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
+from depictio.models.storage import instance_storage
 
 
 def calculate_dataframe_size_bytes(df: pl.DataFrame) -> int:
@@ -1107,7 +1108,7 @@ def client_aggregate_data(
         )
 
     # Generate destination prefix using the data collection id - should be a S3 path
-    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
+    destination_prefix = instance_storage(CLI_config).url(str(data_collection.id))
     logger.debug(f"Destination prefix: {destination_prefix}")
     # logger.info(f"Destination prefix: {destination_prefix}")
 
@@ -2223,7 +2224,7 @@ def process_recipe_data_collection(
                             f"Ensure the referenced data collection is processed first."
                         ),
                     }
-                ref_s3_path = f"s3://{CLI_config.s3_storage.bucket}/{ref_dc.id!s}"
+                ref_s3_path = instance_storage(CLI_config).url(str(ref_dc.id))
                 read_result = read_delta_table(ref_s3_path, storage_options)
                 if read_result.get("result") != "success":
                     if src.optional:
@@ -2288,7 +2289,7 @@ def process_recipe_data_collection(
         except RecipeError as e:
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
-    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id!s}"
+    destination_prefix = instance_storage(CLI_config).url(str(data_collection.id))
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
 
     # How the output relates to the runs (recipe_scopes). A recipe that mixes

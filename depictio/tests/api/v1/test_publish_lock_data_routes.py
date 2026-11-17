@@ -223,13 +223,13 @@ def _delta_doc(database):
 def test_deltatable_delete_locked_leaves_s3_alone(make_db):
     db = make_db(True)
     dt_id = _delta_doc(db)
-    with patch.object(dt_routes.boto3, "client") as client:
+    with patch.object(dt_routes, "instance_storage") as storage:
         _assert_409(
             lambda: asyncio.run(
                 dt_routes.delete_deltatable(deltatable_id=str(dt_id), current_user=_admin())
             )
         )
-        client.return_value.delete_objects.assert_not_called()
+        storage.return_value.delete_prefix.assert_not_called()
     assert db["deltatables"].count_documents({}) == 1
 
 
@@ -240,29 +240,25 @@ def test_deltatable_delete_checks_ownership_before_s3(make_db):
     stranger.is_admin = False
     with (
         patch.object(dt_routes, "get_user_group_ids", return_value=[]),
-        patch.object(dt_routes.boto3, "client") as client,
+        patch.object(dt_routes, "instance_storage") as storage,
     ):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
                 dt_routes.delete_deltatable(deltatable_id=str(dt_id), current_user=stranger)
             )
         assert exc.value.status_code == 404
-        client.assert_not_called()
+        storage.assert_not_called()
     assert db["deltatables"].count_documents({}) == 1
 
 
 def test_deltatable_delete_owner_strips_bucket_prefix(make_db):
     db = make_db(False)
     dt_id = _delta_doc(db)
-    with (
-        patch.object(dt_routes.settings.s3, "bucket", "bucket"),
-        patch.object(dt_routes.boto3, "client") as client,
-    ):
-        s3 = client.return_value
-        s3.list_objects_v2.return_value = {"Contents": [{"Key": f"{DC}/part.parquet"}]}
+    with patch.object(dt_routes, "instance_storage") as storage:
+        backend = storage.return_value
+        backend.bucket = "bucket"
         asyncio.run(dt_routes.delete_deltatable(deltatable_id=str(dt_id), current_user=_admin()))
-        assert s3.list_objects_v2.call_args.kwargs["Prefix"] == str(DC)
-        s3.delete_objects.assert_called_once()
+        backend.delete_prefix.assert_called_once_with(str(DC))
     assert db["deltatables"].count_documents({}) == 0
 
 

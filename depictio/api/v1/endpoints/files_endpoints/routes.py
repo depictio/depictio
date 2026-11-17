@@ -1,6 +1,7 @@
 import asyncio
 import mimetypes
 import posixpath
+from functools import cache
 from typing import Any
 from urllib.parse import unquote
 
@@ -24,6 +25,7 @@ from depictio.models.models.data_collections_types.indexed_file import (
     indexed_file_s3_key,
 )
 from depictio.models.models.files import File
+from depictio.models.storage import instance_storage
 
 files_endpoint_router = APIRouter()
 
@@ -428,38 +430,20 @@ async def serve_image(
 #: track, short enough that a leaked link dies on its own.
 INDEXED_FILE_URL_TTL_SECONDS = 15 * 60
 
-_presign_client = None
-
-
-def _presigning_s3_client():
-    """boto3 client whose signatures are valid for the browser's endpoint.
-
-    Built lazily and once: instantiating a boto3 client costs a session load,
-    and this one is only needed by deployments that expose indexed files.
-    """
-    global _presign_client
-    if _presign_client is None:
-        import boto3
-        from botocore.client import Config
-
-        _presign_client = boto3.client(
-            "s3",
-            aws_access_key_id=settings.minio.aws_access_key_id,
-            aws_secret_access_key=settings.minio.aws_secret_access_key,
-            endpoint_url=settings.minio.external_url,
-            verify=settings.minio.verify_tls,
-            config=Config(signature_version="s3v4"),
-        )
-    return _presign_client
-
 
 def presign_indexed_file(key: str, ttl_seconds: int = INDEXED_FILE_URL_TTL_SECONDS) -> str:
-    """Presigned GET URL for one bucket object, valid for ``ttl_seconds``."""
-    return _presigning_s3_client().generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.minio.bucket, "Key": key},
-        ExpiresIn=ttl_seconds,
-    )
+    """Presigned GET URL for one bucket object, valid for ``ttl_seconds``.
+
+    Signed for the endpoint the browser reaches (the S3 public URL, or the
+    backend's own signed-URL host), not the internal one.
+    """
+    return _instance_storage().presign_get(key, ttl_seconds)
+
+
+@cache
+def _instance_storage():
+    """The instance backend, built once: its presigning client is reused."""
+    return instance_storage(settings)
 
 
 def _indexed_file_dc_properties(dc_oid: ObjectId) -> dict:

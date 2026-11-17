@@ -13,9 +13,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal
 
-import boto3
 import polars as pl
-from botocore.exceptions import ClientError
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -48,7 +46,12 @@ from depictio.models.models.deltatables import (
     latest_complete_aggregation,
 )
 from depictio.models.models.users import User
-from depictio.models.s3_utils import delete_keys
+from depictio.models.storage import (
+    StorageError,
+    instance_storage,
+    is_object_url,
+    split_object_url,
+)
 
 deltatables_endpoint_router = APIRouter()
 
@@ -1834,17 +1837,14 @@ async def get_preview_filtered(
 
 
 def _s3_prefix_of(location: str, bucket_name: str) -> str:
-    """The object-key prefix of a ``s3://bucket/key`` (or bare key) location."""
+    """The object-key prefix of a ``<scheme>://bucket/key`` (or bare key) location.
+
+    A URL of another bucket loses its bucket segment all the same.
+    """
     loc = location.strip()
-    scheme = "s3://"
-    if loc.startswith(scheme):
-        loc = loc[len(scheme) :]
-        if loc == bucket_name or loc.startswith(bucket_name + "/"):
-            loc = loc[len(bucket_name) :]
-        else:
-            # A different bucket's URL: drop its bucket segment all the same.
-            loc = loc.partition("/")[2]
-    return loc.lstrip("/")
+    if is_object_url(loc):
+        return split_object_url(loc).key.lstrip("/")
+    return loc.partition("://")[2] if "://" in loc else loc.lstrip("/")
 
 
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")
@@ -1902,22 +1902,12 @@ async def delete_deltatable(
         )
     assert_project_unlocked(project)
 
-    bucket_name = settings.s3.bucket
-    deltatable_location = _s3_prefix_of(deltatable["delta_table_location"], bucket_name)
-
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=settings.s3.endpoint_url,
-        aws_access_key_id=settings.s3.aws_access_key_id,
-        aws_secret_access_key=settings.s3.aws_secret_access_key,
-        region_name="us-east-1",
-    )
+    storage = instance_storage(settings)
+    deltatable_location = _s3_prefix_of(deltatable["delta_table_location"], storage.bucket)
 
     try:
-        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=deltatable_location)
-        if "Contents" in response:
-            delete_keys(s3_client, bucket_name, (obj["Key"] for obj in response["Contents"]))
-    except ClientError as e:
+        storage.delete_prefix(deltatable_location)
+    except StorageError as e:
         logger.error(f"Failed to delete S3 objects: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete S3 objects.")
 
