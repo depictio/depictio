@@ -210,11 +210,15 @@ const CollectionsTable: React.FC<{ rows: CollectionRow[] }> = ({ rows }) => (
               </Table.Td>
               <Table.Td>
                 <Tooltip label={presence.hint} withArrow withinPortal multiline maw={260}>
+                  {/* `max-content`: a Badge clips its label with an ellipsis,
+                      so its minimum width is next to nothing and the table gave
+                      the column too little ("In this…"). */}
                   <Badge
                     variant="light"
                     color={presence.color}
                     radius="sm"
                     tt="none"
+                    miw="max-content"
                     leftSection={<Icon icon={presence.icon} width={12} />}
                   >
                     {presence.label}
