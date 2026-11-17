@@ -594,6 +594,22 @@ button.gp-status:focus-visible {
   max-width: 1480px;
   margin: 0 auto;
 }
+/* A page drawn inside another frame (GlassPageInset): the frame scrolls. */
+.gp-main.gp-main--inset {
+  position: static;
+  inset: auto;
+  overflow: visible;
+  min-height: auto;
+  padding: 4px 24px 56px;
+}
+.gp-main--inset .gp-title:focus {
+  outline: none;
+}
+@media (max-width: 47.99em) {
+  .gp-main.gp-main--inset {
+    padding: 4px 12px 96px;
+  }
+}
 .gp-head {
   display: flex;
   align-items: center;
@@ -855,7 +871,7 @@ button.gp-status:focus-visible {
 }
 
 /* Fields: outlined, on the surface, the accent ring on focus. */
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input {
   min-height: 38px;
   border: 1px solid var(--gp-input-line);
   border-radius: var(--gp-radius-input);
@@ -865,24 +881,24 @@ button.gp-status:focus-visible {
     border-color 120ms ease,
     box-shadow 120ms ease;
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input:hover:not(:focus, :focus-within, [data-disabled]) {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input:hover:not(:focus, :focus-within, [data-disabled]) {
   border-color: var(--gp-input-line-hover);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input:is(:focus, :focus-within) {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input:is(:focus, :focus-within) {
   border-color: var(--gl-accent);
   box-shadow: var(--gp-focus);
   background: var(--gp-input-bg);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Input-input[data-error] {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Input-input[data-error] {
   border-color: var(--mantine-color-error);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-InputWrapper-label {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-InputWrapper-label {
   margin-bottom: 4px;
   font-size: 13px;
   font-weight: 600;
   color: var(--gl-fg);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-InputWrapper-description {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-InputWrapper-description {
   color: var(--gl-muted);
 }
 :root[data-chrome='glass'] .gp-main .mantine-Input-section {
@@ -890,11 +906,11 @@ button.gp-status:focus-visible {
 }
 
 /* Buttons: pills; the primary in the accent, the rest on glass. */
-:root[data-chrome='glass'] .gp-shell .mantine-Button-root {
+:root[data-chrome='glass'] :is(.gp-shell, .gp-main--inset) .mantine-Button-root {
   border-radius: 999px;
   font-weight: 600;
 }
-:root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='default'], [data-variant='outline']) {
+:root[data-chrome='glass'] :is(.gp-shell, .gp-main--inset) .mantine-Button-root:is([data-variant='default'], [data-variant='outline']) {
   /* One hairline: a ring outside the transparent border plus an inset rim
    * read as a doubled edge. */
   border-color: var(--gl-hair);
@@ -902,15 +918,15 @@ button.gp-status:focus-visible {
   color: var(--gl-fg);
   box-shadow: none;
 }
-:root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='default'], [data-variant='outline']):not([data-disabled]):hover {
+:root[data-chrome='glass'] :is(.gp-shell, .gp-main--inset) .mantine-Button-root:is([data-variant='default'], [data-variant='outline']):not([data-disabled]):hover {
   background: var(--gp-raised);
 }
-:root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='filled'], :not([data-variant])):not([data-disabled]) {
+:root[data-chrome='glass'] :is(.gp-shell, .gp-main--inset) .mantine-Button-root:is([data-variant='filled'], :not([data-variant])):not([data-disabled]) {
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--mantine-color-white) 30%, transparent),
     0 8px 18px -8px color-mix(in srgb, var(--button-bg, var(--gl-accent)) 80%, transparent);
 }
-:root[data-chrome='glass'] .gp-shell .mantine-Button-root[data-variant='light'] {
+:root[data-chrome='glass'] :is(.gp-shell, .gp-main--inset) .mantine-Button-root[data-variant='light'] {
   background: var(--gl-accent-soft);
   color: var(--gl-accent-fg);
 }
@@ -922,7 +938,7 @@ button.gp-status:focus-visible {
 /* Tags: a hairline chip on the paper, its hue reduced to a dot (or to the
  * ink of its icon). Colour says what kind of thing it is; the chip stays as
  * quiet as the rest of the page. `gp-tag-plain` drops the dot (a count). */
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root {
   --gp-tag-dot: var(--badge-color);
   display: inline-flex;
   align-items: center;
@@ -940,13 +956,13 @@ button.gp-status:focus-visible {
   letter-spacing: 0;
   text-transform: none;
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:is([data-variant='filled'], :not([data-variant])) {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:is([data-variant='filled'], :not([data-variant])) {
   --gp-tag-dot: var(--badge-bg);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root[data-variant='dot'] {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root[data-variant='dot'] {
   --gp-tag-dot: var(--badge-dot-color);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:not([data-with-left-section], [data-with-right-section])::before {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:not([data-with-left-section], [data-with-right-section])::before {
   content: '';
   flex: none;
   width: 7px;
@@ -955,16 +971,16 @@ button.gp-status:focus-visible {
   border-radius: 50%;
   background: var(--gp-tag-dot);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root.gp-tag-plain::before {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root.gp-tag-plain::before {
   display: none;
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-section {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-section {
   margin: 0;
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-section :is(svg, img) {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-section :is(svg, img) {
   color: var(--gp-tag-dot) !important;
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-label {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .gp-main--inset, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1403,13 +1419,13 @@ button.gp-status:focus-visible {
 /* A destructive action keeps its own hue: the soft accent pill above would turn
  * a red button blue. `gp-danger` is a soft pill in the button's own colour
  * (Mantine's red tokens, no accent). */
-:root[data-chrome='glass'] .gp-shell .gp-main .mantine-Button-root.gp-danger:is([data-variant='filled'], [data-variant='light']):not([data-disabled]):not(:disabled) {
+:root[data-chrome='glass'] :is(.gp-shell .gp-main, .gp-main--inset) .mantine-Button-root.gp-danger:is([data-variant='filled'], [data-variant='light']):not([data-disabled]):not(:disabled) {
   background: color-mix(in srgb, var(--mantine-color-red-filled) 12%, transparent);
   color: var(--mantine-color-red-light-color);
   /* !important: styles/app.css gives every filled Glass button a drop glow with it. */
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-red-filled) 28%, transparent) !important;
 }
-:root[data-chrome='glass'] .gp-shell .gp-main .mantine-Button-root.gp-danger:is([data-variant='filled'], [data-variant='light']):not([data-disabled]):not(:disabled):hover {
+:root[data-chrome='glass'] :is(.gp-shell .gp-main, .gp-main--inset) .mantine-Button-root.gp-danger:is([data-variant='filled'], [data-variant='light']):not([data-disabled]):not(:disabled):hover {
   background: color-mix(in srgb, var(--mantine-color-red-filled) 20%, transparent);
 }
 

@@ -13,6 +13,13 @@ template's ``data_root`` / ``variables`` / ``config_snapshot``), never
 migration internals (``provenance``, ``published_lock``). A field the project
 model gains later stays out until someone adds it here on purpose.
 
+Each data collection also carries what its last ingestion recorded, as the
+live data collection viewer shows it: row count, schema (column names, dtypes,
+descriptions, distinct counts), stored size, time, Delta version and source
+format. Read from the aggregation entry, of which everything else stays out:
+who ran it (``aggregation_by`` is a user and an email), the run tags (run
+folder names), the hashes, and the Delta table's location.
+
 Run parameters are the one place where free text reaches the bundle, and they
 routinely hold server paths (``--input /data/runs/x/samplesheet.csv``) and,
 now and then, a credential. :func:`safe_parameter_value` keeps the last part of
@@ -23,9 +30,11 @@ any key that looks like a secret.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any
 
 from depictio.models.models.serverless import (
+    ProjectColumnSummary,
     ProjectDataCollectionSummary,
     ProjectJoinSummary,
     ProjectLinkSummary,
@@ -67,6 +76,13 @@ def _str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _time(value: Any) -> str | None:
+    """A stored timestamp as text (``datetime`` from Mongo, or a string)."""
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="seconds")
+    return _str(value)
 
 
 def _oid(value: Any) -> str | None:
@@ -149,21 +165,89 @@ def _workflow(workflow: dict[str, Any]) -> ProjectWorkflowSummary | None:
     )
 
 
+def _int(value: Any) -> int | None:
+    """A non-negative whole number, or None (bools and junk are not counts)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value or value < 0:  # NaN or negative
+        return None
+    return int(value)
+
+
+def _latest(aggregation: Any) -> dict[str, Any]:
+    """The newest aggregation entry, whichever shape it is stored in."""
+    if isinstance(aggregation, list):
+        aggregation = aggregation[-1] if aggregation else None
+    return aggregation if isinstance(aggregation, dict) else {}
+
+
+def _columns(specs: Any, described: dict[str, Any]) -> list[ProjectColumnSummary]:
+    out: list[ProjectColumnSummary] = []
+    for spec in specs if isinstance(specs, list) else []:
+        if not isinstance(spec, dict) or not _str(spec.get("name")):
+            continue
+        name = str(spec["name"])
+        stats = spec.get("specs") if isinstance(spec.get("specs"), dict) else {}
+        out.append(
+            ProjectColumnSummary(
+                name=name,
+                type=_str(spec.get("type")),
+                description=_str(spec.get("description")) or _str(described.get(name)),
+                distinct=_int(stats.get("nunique")),
+            )
+        )
+    return out
+
+
+def _size_bytes(dc: dict[str, Any], dc_type: str) -> int | None:
+    """The stored size the live page shows (its ``getDcSizeBytes``)."""
+    flex = dc.get("flexible_metadata") if isinstance(dc.get("flexible_metadata"), dict) else {}
+    if dc_type.lower() == "multiqc":
+        for key in ("total_file_size_bytes", "file_size_bytes", "s3_size_bytes"):
+            if _int(flex.get(key)) is not None:
+                return _int(flex.get(key))
+        return None
+    return _int(flex.get("deltatable_size_bytes"))
+
+
 def _data_collection(
-    dc: dict[str, Any], workflow_id: str | None
+    dc: dict[str, Any],
+    workflow_id: str | None,
+    aggregations: dict[str, Any] | None = None,
 ) -> ProjectDataCollectionSummary | None:
     dc_id = _oid(dc.get("_id") or dc.get("id"))
     tag = _str(dc.get("data_collection_tag"))
     if not dc_id or not tag:
         return None
     config = dc.get("config") if isinstance(dc.get("config"), dict) else {}
+    props = (
+        config.get("dc_specific_properties")
+        if isinstance(config.get("dc_specific_properties"), dict)
+        else {}
+    )
+    described = (
+        props.get("columns_description")
+        if isinstance(props.get("columns_description"), dict)
+        else {}
+    )
+    dc_type = _str(config.get("type")) or "table"
+    # The deltatables entry producer A read, else the one an enriched project
+    # document carries (the API's `/projects/get/from_id` stamps it on).
+    agg = _latest((aggregations or {}).get(dc_id)) or _latest(dc.get("last_aggregation"))
+    flex = dc.get("flexible_metadata") if isinstance(dc.get("flexible_metadata"), dict) else {}
     return ProjectDataCollectionSummary(
         id=dc_id,
         tag=tag,
-        type=_str(config.get("type")) or "table",
+        type=dc_type,
         metatype=_str(config.get("metatype")),
         workflow_id=workflow_id,
         description=_str(dc.get("description") or config.get("description")),
+        rows=_int(agg.get("rows_total")),
+        size_bytes=_size_bytes(dc, dc_type),
+        updated_at=_time(agg.get("aggregation_time")) or _time(flex.get("deltatable_size_updated")),
+        version=_int(agg.get("delta_version")),
+        format=_str(props.get("format")),
+        columns=_columns(agg.get("aggregation_columns_specs"), described),
     )
 
 
@@ -224,12 +308,17 @@ def _run_parameters(origin: dict[str, Any]) -> list[RunParameter]:
 
 
 def build_project_summary(
-    project_doc: dict[str, Any] | None, base_url: str | None = None
+    project_doc: dict[str, Any] | None,
+    base_url: str | None = None,
+    aggregations: dict[str, Any] | None = None,
 ) -> ProjectSummary | None:
     """The bundle's :class:`ProjectSummary` for a project document, or None.
 
     ``base_url`` is the instance's declared public URL (producer A's
     ``_public_base_url``); with it the summary links the live project page.
+    ``aggregations`` maps a data collection id to its newest ``deltatables``
+    aggregation entry (or the whole list): the raw project document does not
+    hold them, the API's enriched one stamps them on as ``last_aggregation``.
     """
     if not project_doc:
         return None
@@ -248,12 +337,12 @@ def build_project_summary(
             workflows.append(workflow)
         for dc in raw.get("data_collections") or []:
             if isinstance(dc, dict):
-                summary = _data_collection(dc, workflow.id if workflow else None)
+                summary = _data_collection(dc, workflow.id if workflow else None, aggregations)
                 if summary is not None:
                     data_collections.append(summary)
     for dc in project_doc.get("data_collections") or []:
         if isinstance(dc, dict):
-            summary = _data_collection(dc, None)
+            summary = _data_collection(dc, None, aggregations)
             if summary is not None:
                 data_collections.append(summary)
 

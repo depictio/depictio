@@ -48,6 +48,11 @@ const SWAPS = {
   [path.join(VIEWER, 'src/chrome/variants/index.ts')]: path.join(RUNTIME, 'chromeVariantShim.ts'),
   [path.join(CORE, 'components/JBrowseRenderer.tsx')]: path.join(RUNTIME, 'jbrowseStub.tsx'),
 };
+// The project page's server-only parts, swapped for one empty stand-in.
+const PROJECT_STUBS = path.join(RUNTIME, 'projectServerStubs.tsx');
+for (const m of JSON.parse(fs.readFileSync(path.join(RUNTIME, 'projectServerParts.json'), 'utf8')).modules) {
+  SWAPS[path.join(VIEWER, m)] = PROJECT_STUBS;
+}
 const SWAP_TARGETS = new Set(Object.values(SWAPS));
 const ALIASES = [
   ['depictio-react-core', CORE],

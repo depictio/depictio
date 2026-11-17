@@ -494,4 +494,42 @@ const GlassPage: React.FC<GlassPageProps> = ({
   );
 };
 
+/**
+ * A Glass page's head and body without its shell: no top bar, no sidebar.
+ *
+ * For a page drawn inside another page's frame — the static bundle's project
+ * page, laid over the dashboard canvas beside the bundle's own sidebar. The
+ * head, the section's colour and every `.gp-main` style are the page's own,
+ * so the content reads exactly as it does at its own address.
+ */
+export const GlassPageInset: React.FC<
+  Pick<GlassPageProps, 'section' | 'title' | 'description' | 'actions' | 'titleProps' | 'children'>
+> = ({ section, title, description, actions, titleProps, children }) => {
+  usePageMark(section);
+  const Icon = SECTION_ICON[section];
+  const palettes = useSectionPalettes();
+  const pageTheme = useSectionTone(section, palettes[section]);
+  return (
+    <MantineThemeContext.Provider value={pageTheme}>
+      <div className="gp-main gp-main--inset" data-section={section}>
+        <div className="gp-page">
+          <div className="gp-head">
+            <span className="gp-head-icon" style={tint(palettes[section])} aria-hidden>
+              <Icon size={22} strokeWidth={1.7} />
+            </span>
+            <div className="gp-head-text">
+              <h1 className="gp-title" {...titleProps}>
+                {title}
+              </h1>
+              {description && <div className="gp-desc">{description}</div>}
+            </div>
+            {actions && <div className="gp-head-actions">{actions}</div>}
+          </div>
+          {children}
+        </div>
+      </div>
+    </MantineThemeContext.Provider>
+  );
+};
+
 export default GlassPage;

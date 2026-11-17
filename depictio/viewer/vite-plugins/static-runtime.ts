@@ -17,6 +17,8 @@
  *   - depictio-react-core JBrowseRenderer -> src/static-runtime/jbrowseStub.tsx
  *                                          (which mounts the real one when the
  *                                          bundle ships the session's files)
+ *   - the project page's server-only parts -> src/static-runtime/projectServerStubs.tsx
+ *                                          (listed in projectServerParts.json)
  *
  * JBrowse itself (and MUI, mobx) is never compiled in: every import of it
  * resolves to a forwarder over the conditional `jbrowse` add-on
@@ -24,6 +26,7 @@
  * vite.static-jbrowse.config.ts). And `3dmol` is aliased to `src/static-runtime/threeDmolAddon.ts`, which forwards
  * to the conditional 3Dmol.js add-on (scripts/build-static-addons.mjs).
  */
+import fs from 'fs';
 import path from 'path';
 import type { Alias, Plugin } from 'vite';
 
@@ -33,6 +36,17 @@ import { moduleShim } from './module-shim';
 const VIEWER = path.resolve(__dirname, '..');
 const CORE_SRC = path.resolve(VIEWER, '../../packages/depictio-react-core/src');
 const RUNTIME = path.resolve(VIEWER, 'src/static-runtime');
+
+/** The live project page's server-only parts, each swapped for an empty
+ *  stand-in (projectServerStubs.tsx): the bundle mounts the real page, hides
+ *  those parts, and compiles none of them in. Paths are relative to the viewer. */
+const PROJECT_SERVER_STUBS: Record<string, string> = Object.fromEntries(
+  (
+    JSON.parse(
+      fs.readFileSync(path.join(RUNTIME, 'projectServerParts.json'), 'utf8'),
+    ) as { modules: string[] }
+  ).modules.map((m) => [path.resolve(VIEWER, m), path.join(RUNTIME, 'projectServerStubs.tsx')]),
+);
 
 export function staticRuntimeShim(): Plugin {
   return moduleShim(
@@ -64,6 +78,7 @@ export function staticRuntimeShim(): Plugin {
         RUNTIME,
         'jbrowseStub.tsx',
       ),
+      ...PROJECT_SERVER_STUBS,
     },
     // Middle link of the api chain: apiShim's own `export * from api.ts`
     // must reach the real module, not bounce back through tabApiShim.

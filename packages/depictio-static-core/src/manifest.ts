@@ -281,7 +281,21 @@ export interface ProjectWorkflowSummary {
   catalog?: string | null;
 }
 
-/** One data collection of the project; its size comes from `data_refs`. */
+/** One column of a collection as its last ingestion recorded it. */
+export interface ProjectColumnSummary {
+  name: string;
+  /** Column dtype as recorded at ingestion (e.g. 'string', 'float64'). */
+  type?: string | null;
+  description?: string | null;
+  /** Distinct values at ingestion. */
+  distinct?: number | null;
+}
+
+/**
+ * One data collection of the project. The ingestion facts are what the live
+ * data collection viewer shows; absent from manifests written before them, so
+ * every one is optional (read `data_refs` for a bundled table's own figures).
+ */
 export interface ProjectDataCollectionSummary {
   id: string;
   tag: string;
@@ -289,6 +303,18 @@ export interface ProjectDataCollectionSummary {
   metatype?: string | null;
   workflow_id?: string | null;
   description?: string | null;
+  /** Rows at the last ingestion. */
+  rows?: number | null;
+  /** Stored size at the last ingestion. */
+  size_bytes?: number | null;
+  /** Time of the last ingestion. */
+  updated_at?: string | null;
+  /** Delta commit of the last ingestion. */
+  version?: number | null;
+  /** Source file format (csv, parquet, ...). */
+  format?: string | null;
+  /** Schema at the last ingestion. */
+  columns?: ProjectColumnSummary[];
 }
 
 /** A cross-collection link without its value mappings. */

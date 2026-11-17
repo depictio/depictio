@@ -28,6 +28,7 @@ import {
   listProjectLinks,
   updateProjectLink,
   useBrandAccents,
+  useIsStaticBundle,
 } from 'depictio-react-core';
 import type { DCLink, ResolverInfo } from 'depictio-react-core';
 
@@ -56,6 +57,8 @@ interface LinksSectionProps {
   joins?: ProjectJoin[];
   /** Bumped by the page when a link changed elsewhere (the collection viewer). */
   reloadKey?: number;
+  /** Open a collection picked on the map in the page's collection viewer. */
+  onOpenDc?: (dcId: string) => void;
 }
 
 /** Sortable column header for the links table. */
@@ -96,9 +99,13 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   onLinksChange,
   joins = [],
   reloadKey = 0,
+  onOpenDc,
 }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
+  // A static bundle reads its links from the file: nothing to add, edit,
+  // switch or inspect (a link's value mapping is computed on the server).
+  const offline = useIsStaticBundle();
   // Glass opens on the map; the table stays one click away.
   const [view, setView] = useState<'map' | 'table'>('map');
   const [links, setLinks] = useState<DCLink[]>([]);
@@ -202,12 +209,13 @@ const LinksSection: React.FC<LinksSectionProps> = ({
 
   // Resolvers list is roughly static; fetch once on mount.
   useEffect(() => {
+    if (offline) return;
     listLinkResolvers(projectId)
       .then(setResolvers)
       .catch(() => {
         // Static fallback inside the modal — silent.
       });
-  }, [projectId]);
+  }, [projectId, offline]);
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
@@ -321,14 +329,20 @@ const LinksSection: React.FC<LinksSectionProps> = ({
                     </Badge>
                   </Table.Td>
                   <Table.Td>
-                    <Tooltip label={disabledTip} disabled={canMutate}>
-                      <Switch
-                        checked={link.enabled}
-                        onChange={() => handleToggle(link)}
-                        disabled={!canMutate}
-                        size="xs"
-                      />
-                    </Tooltip>
+                    {offline ? (
+                      <Text fz="xs" c={link.enabled ? undefined : 'dimmed'}>
+                        {link.enabled ? 'On' : 'Off'}
+                      </Text>
+                    ) : (
+                      <Tooltip label={disabledTip} disabled={canMutate}>
+                        <Switch
+                          checked={link.enabled}
+                          onChange={() => handleToggle(link)}
+                          disabled={!canMutate}
+                          size="xs"
+                        />
+                      </Tooltip>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <Text fz="xs" lineClamp={1}>
@@ -336,40 +350,42 @@ const LinksSection: React.FC<LinksSectionProps> = ({
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Group gap={4} justify="flex-end" wrap="nowrap">
-                      <Tooltip label="Inspect mapping" withArrow>
-                        <ActionIcon
-                          variant="subtle"
-                          color="teal"
-                          onClick={() => setInspecting(link)}
-                          aria-label="Inspect mapping"
-                          data-testid="inspect-link-btn"
-                        >
-                          <Icon icon="mdi:magnify-scan" width={16} />
-                        </ActionIcon>
-                      </Tooltip>
-                      <Tooltip label={disabledTip} disabled={canMutate}>
-                        <ActionIcon
-                          variant="subtle"
-                          onClick={() => openEdit(link)}
-                          disabled={!canMutate}
-                          aria-label="Edit link"
-                        >
-                          <Icon icon="mdi:pencil" width={16} />
-                        </ActionIcon>
-                      </Tooltip>
-                      <Tooltip label={disabledTip} disabled={canMutate}>
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          onClick={() => handleDelete(link)}
-                          disabled={!canMutate}
-                          aria-label="Delete link"
-                        >
-                          <Icon icon="mdi:delete" width={16} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
+                    {!offline && (
+                      <Group gap={4} justify="flex-end" wrap="nowrap">
+                        <Tooltip label="Inspect mapping" withArrow>
+                          <ActionIcon
+                            variant="subtle"
+                            color="teal"
+                            onClick={() => setInspecting(link)}
+                            aria-label="Inspect mapping"
+                            data-testid="inspect-link-btn"
+                          >
+                            <Icon icon="mdi:magnify-scan" width={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label={disabledTip} disabled={canMutate}>
+                          <ActionIcon
+                            variant="subtle"
+                            onClick={() => openEdit(link)}
+                            disabled={!canMutate}
+                            aria-label="Edit link"
+                          >
+                            <Icon icon="mdi:pencil" width={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label={disabledTip} disabled={canMutate}>
+                          <ActionIcon
+                            variant="subtle"
+                            color="red"
+                            onClick={() => handleDelete(link)}
+                            disabled={!canMutate}
+                            aria-label="Delete link"
+                          >
+                            <Icon icon="mdi:delete" width={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    )}
                   </Table.Td>
                 </Table.Tr>
               );
@@ -399,18 +415,20 @@ const LinksSection: React.FC<LinksSectionProps> = ({
           </Group>
         </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
-          <Tooltip label={disabledTip} disabled={canMutate}>
-            <Button
-              color={accent.secondary}
-              data-testid="add-link-btn"
-              leftSection={<Icon icon="mdi:plus" width={16} />}
-              onClick={openCreate}
-              disabled={!canMutate}
-              size="xs"
-            >
-              Add link
-            </Button>
-          </Tooltip>
+          {!offline && (
+            <Tooltip label={disabledTip} disabled={canMutate}>
+              <Button
+                color={accent.secondary}
+                data-testid="add-link-btn"
+                leftSection={<Icon icon="mdi:plus" width={16} />}
+                onClick={openCreate}
+                disabled={!canMutate}
+                size="xs"
+              >
+                Add link
+              </Button>
+            </Tooltip>
+          )}
           <ActionIcon
             variant="subtle"
             color="gray"
@@ -460,8 +478,9 @@ const LinksSection: React.FC<LinksSectionProps> = ({
                 links={links}
                 joins={joins}
                 canMutate={canMutate}
-                onInspect={setInspecting}
-                onEdit={openEdit}
+                onInspect={offline ? undefined : setInspecting}
+                onEdit={offline ? undefined : openEdit}
+                onOpenDc={onOpenDc}
               />
             ) : (
               <ScrollArea.Autosize mah={460} type="auto" offsetScrollbars>
@@ -486,28 +505,32 @@ const LinksSection: React.FC<LinksSectionProps> = ({
         )}
       </Collapse>
 
-      <LinkMappingModal
-        opened={!!inspecting}
-        projectId={projectId}
-        link={inspecting}
-        sourceTag={inspecting ? srcTag(inspecting) : ''}
-        targetTag={inspecting ? tgtTag(inspecting) : ''}
-        onClose={closeInspect}
-      />
+      {!offline && (
+        <>
+          <LinkMappingModal
+            opened={!!inspecting}
+            projectId={projectId}
+            link={inspecting}
+            sourceTag={inspecting ? srcTag(inspecting) : ''}
+            targetTag={inspecting ? tgtTag(inspecting) : ''}
+            onClose={closeInspect}
+          />
 
-      <LinkEditModal
-        key={modalKey}
-        opened={modalOpened}
-        projectId={projectId}
-        link={editing}
-        dataCollections={dataCollections}
-        resolvers={resolvers}
-        onClose={closeModal}
-        onSaved={() => {
-          closeModal();
-          refresh();
-        }}
-      />
+          <LinkEditModal
+            key={modalKey}
+            opened={modalOpened}
+            projectId={projectId}
+            link={editing}
+            dataCollections={dataCollections}
+            resolvers={resolvers}
+            onClose={closeModal}
+            onSaved={() => {
+              closeModal();
+              refresh();
+            }}
+          />
+        </>
+      )}
     </Paper>
   );
 };

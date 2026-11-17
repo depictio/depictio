@@ -1,0 +1,22 @@
+{
+  "//": "The live project page's server-only parts. vite.static.config.ts swaps each for projectServerStubs.tsx and scripts/check-static-shim.mjs walks the same swap; ProjectDetailApp hides them in a bundle (useIsStaticBundle).",
+  "modules": [
+    "src/projects/detail/ProjectSettingsModal.tsx",
+    "src/projects/detail/IngestionReportPanel.tsx",
+    "src/projects/detail/ProjectIngestionHistoryPanel.tsx",
+    "src/projects/detail/ProjectIngestionTrigger.tsx",
+    "src/projects/detail/ProjectTimelinePanel.tsx",
+    "src/projects/detail/RunsPanel.tsx",
+    "src/projects/detail/ProjectChangesPill.tsx",
+    "src/projects/detail/TableEditor.tsx",
+    "src/projects/detail/ManageDataCollectionModal.tsx",
+    "src/projects/detail/addData/AddDataButton.tsx",
+    "src/projects/detail/coordinates/MapCoordinatesModal.tsx",
+    "src/projects/detail/LinkEditModal.tsx",
+    "src/projects/detail/LinkMappingInspector.tsx",
+    "src/projects/detail/DeltaVersionHistory.tsx",
+    "src/projects/detail/MultiQCViewerPreview.tsx",
+    "src/projects/detail/CoordinatesMapPreview.tsx",
+    "src/projects/detail/AssetPreviews.tsx"
+  ]
+}
