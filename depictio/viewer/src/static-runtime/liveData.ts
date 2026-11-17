@@ -1378,3 +1378,29 @@ export async function specsLive(dcId: string): Promise<Record<string, unknown>> 
   );
   return entries as unknown as Record<string, unknown>;
 }
+
+/** What `fetchDataCollectionPreview` answers for a bundled table: its first
+ *  `limit` rows in file order (the server's preview reads the Delta table's
+ *  head, unsorted and unfiltered), over the columns the file carries. */
+export async function previewLive(
+  dcId: string,
+  limit: number,
+): Promise<{ columns: string[]; rows: Record<string, unknown>[]; total_rows: number; total_columns: number }> {
+  const { ref, handle } = await tableFor(dcId);
+  const companions = new Set(Object.keys(ref.companions ?? {}));
+  const names = (ref.columns ?? [])
+    .map((c) => c.name)
+    .filter((name) => !companions.has(name) && !name.startsWith('__'));
+  const cols = await engine.columns(handle, names);
+  const { rows } = sortSlice(cols, null, [], 0, Math.max(1, Math.floor(limit) || 100));
+  return {
+    columns: names,
+    rows: rows.map((row) => {
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(row)) out[key] = jsonNumber(value);
+      return out;
+    }),
+    total_rows: ref.rows,
+    total_columns: names.length,
+  };
+}

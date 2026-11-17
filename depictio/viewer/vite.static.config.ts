@@ -14,6 +14,8 @@
  *   - depictio-react-core JBrowseRenderer -> src/static-runtime/jbrowseStub.tsx
  *                                          (which mounts the real one when the
  *                                          bundle ships the session's files)
+ *   - the project page's server-only parts -> src/static-runtime/projectServerStubs.tsx
+ *                                          (listed in projectServerParts.json)
  *
  * JBrowse itself (and MUI, mobx) is never compiled in: every import of it
  * resolves to a forwarder over the conditional `jbrowse` add-on
@@ -29,10 +31,21 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 
 import { moduleShim } from './vite-plugins/module-shim';
+import projectServerParts from './src/static-runtime/projectServerParts.json';
 import { jbrowseVendorForwarders } from './vite-plugins/jbrowse-vendor';
 
 const CORE_SRC = path.resolve(__dirname, '../../packages/depictio-react-core/src');
 const RUNTIME = path.resolve(__dirname, 'src/static-runtime');
+
+/** The live project page's server-only parts, each swapped for an empty
+ *  stand-in (projectServerStubs.tsx): the bundle mounts the real page, hides
+ *  those parts, and compiles none of them in. */
+const PROJECT_SERVER_STUBS = Object.fromEntries(
+  projectServerParts.modules.map((m) => [
+    path.resolve(__dirname, m),
+    path.join(RUNTIME, 'projectServerStubs.tsx'),
+  ]),
+);
 
 export default defineConfig({
   base: './',
@@ -67,6 +80,7 @@ export default defineConfig({
           RUNTIME,
           'jbrowseStub.tsx',
         ),
+        ...PROJECT_SERVER_STUBS,
       },
       // Middle link of the api chain: apiShim's own `export * from api.ts`
       // must reach the real module, not bounce back through tabApiShim.

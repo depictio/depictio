@@ -345,8 +345,9 @@ export const DcLinksTable: React.FC<{
   /** The link whose value mapping shows under its row. */
   inspecting: string | null;
   onInspect: (linkId: string | null) => void;
-  /** The mapping itself, the same view the project's links section opens. */
-  mapping: (linkId: string) => React.ReactNode;
+  /** The mapping itself, the same view the project's links section opens.
+   *  Absent where nothing can compute it (a static bundle): no eye button. */
+  mapping?: (linkId: string) => React.ReactNode;
   onEdit?: (linkId: string) => void;
   canEdit: boolean;
 }> = ({ rows, inspecting, onInspect, mapping, onEdit, canEdit }) => (
@@ -364,7 +365,7 @@ export const DcLinksTable: React.FC<{
       <Table.Tbody>
         {rows.map((r) => {
           const [icon, word] = LINK_KIND[r.kind];
-          const open = !!r.linkId && inspecting === r.linkId;
+          const open = !!r.linkId && !!mapping && inspecting === r.linkId;
           return (
             <React.Fragment key={r.key}>
             <Table.Tr style={r.enabled ? undefined : { opacity: 0.55 }}>
@@ -389,20 +390,22 @@ export const DcLinksTable: React.FC<{
                 <FieldCell field={r.otherField} />
               </Table.Td>
               <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                {r.linkId && (
+                {r.linkId && (mapping || onEdit) && (
                   <Group gap={2} wrap="nowrap" justify="flex-end">
-                    <Tooltip label={open ? 'Hide the value mapping' : 'Show which values match'} withArrow>
-                      <ActionIcon
-                        variant={open ? 'light' : 'subtle'}
-                        color="gray"
-                        size="sm"
-                        onClick={() => onInspect(open ? null : (r.linkId as string))}
-                        aria-label="Value mapping"
-                        data-testid={`dc-link-mapping-${r.linkId}`}
-                      >
-                        <Icon icon="mdi:eye-outline" width={16} />
-                      </ActionIcon>
-                    </Tooltip>
+                    {mapping && (
+                      <Tooltip label={open ? 'Hide the value mapping' : 'Show which values match'} withArrow>
+                        <ActionIcon
+                          variant={open ? 'light' : 'subtle'}
+                          color="gray"
+                          size="sm"
+                          onClick={() => onInspect(open ? null : (r.linkId as string))}
+                          aria-label="Value mapping"
+                          data-testid={`dc-link-mapping-${r.linkId}`}
+                        >
+                          <Icon icon="mdi:eye-outline" width={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
                     {onEdit && (
                       <Tooltip label={canEdit ? 'Edit this link' : 'Owner permission required'} withArrow>
                         <ActionIcon
@@ -422,7 +425,7 @@ export const DcLinksTable: React.FC<{
                 )}
               </Table.Td>
             </Table.Tr>
-            {open && (
+            {open && mapping && (
               <Table.Tr>
                 <Table.Td colSpan={5} p="sm">
                   {mapping(r.linkId as string)}

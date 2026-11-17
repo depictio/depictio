@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionIcon, Tooltip } from '@mantine/core';
-import { ArrowRight, Pencil, ScanSearch, X } from 'lucide-react';
+import { ActionIcon, Button, Tooltip } from '@mantine/core';
+import { ArrowRight, PanelRightOpen, Pencil, ScanSearch, X } from 'lucide-react';
 
 import type { DCLink } from 'depictio-react-core';
 
@@ -64,6 +64,8 @@ interface ConnectionsMapProps {
    *  static bundle's project page, which has no server to ask). */
   onInspect?: (link: DCLink) => void;
   onEdit?: (link: DCLink) => void;
+  /** Open a collection picked on the map in the page's collection viewer. */
+  onOpenDc?: (dcId: string) => void;
 }
 
 const sameFocus = (a: Exclude<Focus, null>, b: Exclude<Focus, null>) =>
@@ -188,6 +190,7 @@ const ConnectionsMap: React.FC<ConnectionsMapProps> = ({
   canMutate,
   onInspect,
   onEdit,
+  onOpenDc,
 }) => {
   const hostRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -354,6 +357,9 @@ const ConnectionsMap: React.FC<ConnectionsMapProps> = ({
     : [];
   const detailOrder = (e: Edge) =>
     sel?.kind === 'dc' && e.to === sel.key && e.from !== sel.key ? 1 : 0;
+
+  // A picked collection known to the project (not a `tag:` placeholder).
+  const openable = !!onOpenDc && sel?.kind === 'dc' && !sel.key.startsWith('tag:');
 
   const pills = lit && lit.edges.size > 0 && lit.edges.size <= 3
     ? drawn.filter((e) => lit.edges.has(e.id))
@@ -547,11 +553,23 @@ const ConnectionsMap: React.FC<ConnectionsMapProps> = ({
             <span>
               {detailEdges.length} {detailEdges.length === 1 ? 'connection' : 'connections'}
             </span>
+            {openable && (
+              <Button
+                variant="subtle"
+                size="compact-xs"
+                ml="auto"
+                leftSection={<PanelRightOpen size={14} strokeWidth={STROKE} aria-hidden />}
+                onClick={() => sel?.kind === 'dc' && onOpenDc?.(sel.key)}
+                data-testid="connections-open-dc"
+              >
+                Open
+              </Button>
+            )}
             <ActionIcon
               variant="subtle"
               color="gray"
               size="sm"
-              ml="auto"
+              ml={openable ? undefined : 'auto'}
               aria-label="Close details"
               onClick={() => setSel(null)}
             >
