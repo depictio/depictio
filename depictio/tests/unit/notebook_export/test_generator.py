@@ -633,7 +633,8 @@ def test_the_report_is_in_paper_by_default(penguins_tabs):
         "print(use_theme(\"paper\", primary='#7950f2', font_family='Lato, sans-serif'))"
         in chunks[1]
     )
-    assert "Paper look" in src.rsplit("---", 1)[1]
+    # The foot says what produced the file, outside every fold.
+    assert "dpx-footer" in _front(src)["format"]["html"]["include-after-body"]["text"]
 
 
 def test_classic_keeps_quartos_stock_look(penguins_tabs):
@@ -695,7 +696,12 @@ def test_a_text_tiles_own_headings_rank_under_its_section(ampliseq_tabs):
     src = generate_qmd(_ampliseq_plan(ampliseq_tabs))
     for line in src.splitlines():
         m = re.match(r"(#{1,6}) ", line)
-        if m and "data-dpx-accent" not in line and not line.startswith("# "):
+        if (
+            m
+            and "data-dpx-accent" not in line
+            and not line.startswith("# ")
+            and "{#methods}" not in line
+        ):
             # Any heading a tile writes is below the section level (h4).
             assert len(m.group(1)) >= 5, line
     assert "##### Data & QC" in src

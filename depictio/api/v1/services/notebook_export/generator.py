@@ -37,14 +37,36 @@ from .cells import Cell, md_cell, render_qmd
 from .classify import Classification, classify
 from .names import NameAllocator, slug
 from .predicates import PredicateSource, emit_filter_expr, emit_predicate
-from .provenance import EXPORT_DETAILS_ICON, PROVENANCE_ICON, header_markdown
+from .provenance import (
+    EXPORT_DETAILS_ICON,
+    PARAMS_ANCHOR,
+    PROVENANCE_ICON,
+    RUN_ICON,
+    header_markdown,
+)
 from .quarto import QuartoFrontMatter, paper_brand
 from .reading_order import (
     ComponentUnit,
     MarkdownUnit,
+    filter_icon_id,
+    grid_columns,
     ordered_units,
     tab_display_name,
     tab_link_key,
+)
+from .report_chrome import (
+    DIV_CLOSE,
+    REPORT_CSS,
+    TOC_SCOPE_JS,
+    about_callout,
+    about_callout_many,
+    appbar_html,
+    cell_open,
+    footer_html,
+    grid_open,
+    mark_css,
+    methods,
+    stepper_markdown,
 )
 
 # What a highlight can show (``highlightTile.ts``: ``HIGHLIGHTABLE_TYPES``).
@@ -74,6 +96,8 @@ _MANTINE_SHADE_6 = {
 _CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()")
 # SectionAccordion's TAB_LINK: a markdown link whose target is another tab.
 _TAB_LINK_RE = re.compile(r"\[([^\]]+)\]\(tab:([^)]+)\)")
+_PARAMS_LINK_RE = re.compile(r"\[([^\]]+)\]\(params:[^)]*\)")
+_SECTION_LINK_RE = re.compile(r"\[([^\]]+)\]\(section:([^)]+)\)")
 _LEGEND_RE = re.compile(r"\{\{legend:([A-Za-z0-9_.-]+)\}\}")
 # A text tile's inline icon, `![](icon:mdi:flask-outline)` (TextRenderer draws it).
 INLINE_ICON_RE = re.compile(r"!\[[^\]]*\]\(icon:([a-z0-9-]+:[a-z0-9-]+)\)")
@@ -98,6 +122,9 @@ RESULTS_ICON = "mdi:view-dashboard-outline"
 FILTERS_ICON = "mdi:filter-variant"
 SUMMARY_ICON = "mdi:format-list-bulleted"
 FUNNEL_ICON = "mdi:filter-check-outline"
+# The closing part: what produced the data and the report, and what to cite.
+METHODS_HEADING = "Methods and citations"
+METHODS_ICON = "mdi:book-open-variant"
 
 # ``activeFilters.ts``: what the panel's summary prints for a filter's value.
 _MAX_INLINE_VALUES = 2
@@ -926,6 +953,19 @@ class ExportPlan:
     # inlines the runtime and the manifest. Off: the document is exactly the
     # notebook it always was.
     embed_runtime: bool = False
+    # A text tile's header logo (``logo`` / ``logo_dark``), inlined by the
+    # endpoint: ``{index: {"light": data_uri, "dark": data_uri}}``. A logo
+    # already given as a data URI on the tile is used as it is.
+    logos: dict[str, dict[str, str]] = field(default_factory=dict)
+    # The dashboard's own mark (its management-page icon when that is an
+    # image, e.g. the nf-core logo), as a data URI: the header bar's.
+    dashboard_logo: str | None = None
+    # The Depictio wordmark, as a data URI: the "Powered by" mark of the
+    # header bar and the footer, as the app header shows it.
+    depictio_mark: str | None = None
+    # Whether a reader of the file can open the live dashboard: the footer
+    # links it only then (a private dashboard's URL is a login page).
+    dashboard_public: bool = False
 
     @property
     def dashboard_id(self) -> str:
@@ -1014,6 +1054,30 @@ class NotebookBuilder:
             self.final_names[dc.dc_id] = f"final_{self.df_names[dc.dc_id][3:]}"
         self._entries: list[tuple[MarkdownUnit | ComponentEntry, str | None]] | None = None
         self.tab_anchors, self._anchor_by_tab_name = self._tab_anchors()
+        self._section_anchor_seq: list[str] = []
+        self._section_i = 0
+        self.section_anchors = self._section_anchors()
+        self._float_labels: set[str] = set()
+
+    def _section_anchors(self) -> dict[str, str]:
+        """Each section heading's id, by name: what ``](section:Name)`` lands on.
+
+        A name used by several tabs answers with the first; that is the one a
+        persistent section is written under, and the one the reader meets first.
+        """
+        out: dict[str, str] = {}
+        taken: set[str] = set(self.tab_anchors.values())
+        for unit in ordered_units(self.plan.tabs):
+            if not isinstance(unit, MarkdownUnit) or unit.kind != "section":
+                continue
+            base = "sec-" + slug(unit.text, max_len=48, fallback="section").replace("_", "-")
+            anchor, n = base, 2
+            while anchor in taken:
+                anchor, n = f"{base}-{n}", n + 1
+            taken.add(anchor)
+            out.setdefault(unit.text.strip().lower(), anchor)
+            self._section_anchor_seq.append(anchor)
+        return out
 
     def _tab_anchors(self) -> tuple[dict[str, str], dict[str, str]]:
         """Each tab's heading id, and the tab names a ``](tab:Name)`` link may use.
@@ -1051,6 +1115,29 @@ class NotebookBuilder:
             return f"[{label}](#{anchor})" if anchor else label
 
         return _TAB_LINK_RE.sub(sub, text)
+
+    def _rewrite_links(self, text: str) -> str:
+        """Every link a text tile can write, as a jump inside the document.
+
+        ``tab:`` to the tab's part; ``section:`` to the section's heading;
+        ``params:`` (the app opens its run-parameters dialog there) to the
+        header's parameters block when the export has one. A target the
+        document does not hold keeps its label and loses the link.
+        """
+        text = self._rewrite_tab_links(text)
+        has_params = bool(
+            ((self.plan.project or {}).get("template_origin") or {}).get("run_provenance")
+        )
+
+        def params(m: re.Match[str]) -> str:
+            return f"[{m.group(1)}](#{PARAMS_ANCHOR})" if has_params else m.group(1)
+
+        def section(m: re.Match[str]) -> str:
+            anchor = self.section_anchors.get(m.group(2).strip().lower())
+            return f"[{m.group(1)}](#{anchor})" if anchor else m.group(1)
+
+        text = _PARAMS_LINK_RE.sub(params, text)
+        return _SECTION_LINK_RE.sub(section, text)
 
     def _inline_icons(self, text: str) -> str:
         """``![](icon:prefix:name)`` → the glyph as inline SVG (dropped when unknown)."""
@@ -1234,18 +1321,88 @@ class NotebookBuilder:
         cells.extend(self._tile_cells())
         if self.plan.embed_runtime:
             cells.append(self._runtime_cell())
-        if self.paper:
-            footer = (
-                "*Generated by Depictio's notebook export, in the dashboard's Paper look and "
-                "the instance's brand colour; every number is the dashboard's.*"
-            )
-        else:
-            footer = (
-                "*Generated by Depictio's notebook export. The dashboard's theme and "
-                "brand colours are not reproduced; every number is.*"
-            )
-        cells.append(md_cell("---\n\n" + footer))
+        methods_md = self._methods()[0]
+        if methods_md:
+            cells.append(md_cell(methods_md))
         return render_qmd(cells, front_matter=self.front_matter().to_yaml())
+
+    # ------------------------------------------------------------ the chrome
+    def _methods(self) -> tuple[str, list[dict[str, Any]]]:
+        """The "Methods and citations" part (heading included) and its references."""
+        if getattr(self, "_methods_cache", None) is not None:
+            return self._methods_cache
+        uses_multiqc = any(
+            m.get("component_type") == "multiqc"
+            for t in self.plan.tabs
+            for m in t.get("stored_metadata") or []
+            if isinstance(m, dict)
+        )
+        body, refs = methods(
+            project=self.plan.project,
+            depictio_version=self.plan.depictio_version,
+            uses_multiqc=uses_multiqc,
+            collections=[(dc.tag, dc.initial_rows) for dc in self.plan.dcs],
+        )
+        if body:
+            # A heading of its own, not one of the folding parts: the footer
+            # after it must stay in view whatever the reader folded.
+            accent = self._accent()
+            body = (
+                f"{'#' * RESULTS_LEVEL} {self._icon_html(METHODS_ICON, accent)}"
+                f'<span style="color:{accent}">{METHODS_HEADING}</span> {{#methods}}\n\n' + body
+            )
+        self._methods_cache = (body, refs)
+        return self._methods_cache
+
+    def _dashboard_url(self) -> str:
+        return f"{self.plan.api_url.rstrip('/')}/dashboard/{self.plan.dashboard_id}"
+
+    def _accent(self) -> str:
+        return _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+
+    def _appbar(self) -> str:
+        """The header bar: the dashboard's mark and name, "Powered by" Depictio."""
+        plan = self.plan
+        main = plan.tabs[0] if plan.tabs else {}
+        crumb = None
+        units = [u for u in ordered_units(plan.tabs) if isinstance(u, MarkdownUnit)]
+        first_tab = next((u for u in units if u.kind == "tab"), None)
+        if first_tab is not None and first_tab.text != plan.title:
+            crumb = first_tab.text
+        accent = _resolve_accent_hex(str(main.get("icon_color") or "") or None, self._accent())
+        return appbar_html(
+            title=plan.title,
+            logo=plan.dashboard_logo,
+            logo_dark=None,
+            accent=accent,
+            has_mark=bool(plan.depictio_mark),
+            crumb=crumb,
+        )
+
+    def _footer(self) -> str:
+        """The report's foot: provenance, the way back to the source."""
+        plan = self.plan
+        project = plan.project or {}
+        licence = next(
+            (str(project[k]) for k in ("license", "licence", "data_license") if project.get(k)),
+            None,
+        )
+        citation = next(
+            (str(project[k]) for k in ("citation", "how_to_cite") if project.get(k)), None
+        )
+        html = footer_html(
+            exported_at=f"{plan.exported_at:%Y-%m-%d %H:%M UTC}",
+            exported_by=plan.exported_by,
+            instance=plan.instance,
+            version=plan.depictio_version,
+            dashboard_url=self._dashboard_url() if plan.dashboard_public else None,
+            project=str(project.get("name") or "") or None,
+            licence=licence,
+            citation=citation,
+            data_url=str(project.get("data_management_platform_project_url") or "") or None,
+            has_mark=bool(plan.depictio_mark),
+        )
+        return html
 
     @property
     def paper(self) -> bool:
@@ -1263,7 +1420,12 @@ class NotebookBuilder:
             subtitle=plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
             author=plan.exported_by,
             date=plan.exported_at.strftime("%Y-%m-%d"),
-            favicon_data_uri=plan.favicon_data_uri,
+            # The dashboard's own mark on the browser tab when it has one (the
+            # nf-core apple), the app's otherwise.
+            favicon_data_uri=plan.dashboard_logo or plan.favicon_data_uri,
+            before_body=self._appbar(),
+            after_body=self._footer(),
+            extra={"references": refs} if (refs := self._methods()[1]) else {},
             brand=(
                 paper_brand(
                     primary=self._primary()[0],
@@ -1387,15 +1549,15 @@ def card_row(cards):
 
     The column count is fixed by how many cards there are rather than left to
     `auto-fit`, which fits as many as the page happens to be wide enough for
-    and strands the remainder: three cards share one line, four fall into a
-    2x2 block instead of 3+1, and anything larger runs three to a line.
+    and strands the remainder: up to four cards share one line, as the
+    dashboard's strip draws them; more run four (or three) to a line.
     `_repr_html_()` is the standard rich-display hook (IPython's HTML and Depictio's
     own components both implement it): calling it directly gets the actual
     card look, the same HTML each object would show if displayed bare —
     `.html` on a Depictio component is a different thing, an embeddable tile.
     """
     n = len(cards)
-    cols = n if n <= 3 else (2 if n == 4 else 3)
+    cols = n if n <= 4 else (4 if n % 4 == 0 else 3)
     items = "".join(c._repr_html_() for c in cards)
     return HTML(
         f'<div class="dpx-cards" style="display:grid;grid-template-columns:'
@@ -1422,7 +1584,12 @@ def card_row(cards):
         return (
             f"<style>:root {{ {root} }}</style>\n"
             + chrome
+            + "\n"
+            + REPORT_CSS
+            + TOC_SCOPE_JS
+            + mark_css(self.plan.depictio_mark)
             + "\n\n"
+            + self._state_line()
             + header_markdown(
                 title=self.plan.title,
                 subtitle=self.plan.subtitle,
@@ -1435,11 +1602,28 @@ def card_row(cards):
                 stem=self.plan.stem,
                 state_version=self.plan.state.version,
                 warnings=self.plan.warnings,
-                brand=self.plan.brand,
                 params_icon=self.plan.icons.get(PROVENANCE_ICON, ""),
                 details_rows=self._export_details(),
                 details_icon=self.plan.icons.get(EXPORT_DETAILS_ICON, ""),
+                run_icon=self.plan.icons.get(RUN_ICON, ""),
             )
+        )
+
+    def _state_line(self) -> str:
+        """ "Exported state": the filters the export was taken under, one line,
+        when there are any (the full view is the Filters part)."""
+        stages = self.plan.stages
+        if not stages:
+            return ""
+        bits = [f"<b>{_esc(s.label)}</b> {_esc(self._filter_value_text(s))}" for s in stages]
+        pins = self.plan.state.pins
+        pinned = pins.as_of_version or pins.definition_version
+        tail = f" · as of dashboard version {_esc(str(pinned))}" if pinned else ""
+        return (
+            '<p class="dpx-state-line">Exported state: '
+            + " · ".join(bits)
+            + tail
+            + ' · <a href="#filters">filters</a></p>\n\n'
         )
 
     def _export_details(self) -> list[tuple[str, str]]:
@@ -1878,6 +2062,7 @@ fig_funnel"""
             cells.append(
                 md_cell(
                     part("Filters", FILTERS_ICON, RESULTS_LEVEL, "filters", **filters_opts)
+                    + " {#filters}"
                     + "\n\nNo filter was active when this notebook was exported: "
                     "every tile below reads the whole table."
                 )
@@ -1889,6 +2074,7 @@ fig_funnel"""
             cells.append(
                 md_cell(
                     part("Filters", FILTERS_ICON, RESULTS_LEVEL, "filters", **filters_opts)
+                    + " {#filters}"
                     + "\n\n*Each stage applies one filter on top of the previous one, in the "
                     "order the funnel view showed. Reordering stages changes the intermediate "
                     "counts, never the final one. The stages read their filters from "
@@ -2098,67 +2284,223 @@ fig_funnel"""
     # ----------------------------------------------------------------- tiles
     def _tile_cells(self) -> list[Cell]:
         cells: list[Cell] = [md_cell(self._results_header_html())]
-        row: list[ComponentEntry] = []
+        self._section_i = 0
+        pending: list[ComponentEntry] = []
+        tab_doc: dict[str, Any] = self.plan.tabs[0] if self.plan.tabs else {}
 
-        def flush_row() -> None:
-            # A run of 0 or 1 buffered cards needs no row cell: 1 renders
-            # exactly as it always has, folded or not.
-            if not row:
-                return
-            refs = [self._tile_ref(e) for e in row]
-            if self.plan.embed_runtime:
-                cells.append(md_cell(tile_open(refs)))
-            if len(row) == 1:
-                cells.append(self._tile_cell(row[0]))
-            else:
-                render_names = []
-                for e in row:
-                    cell, render_name = self._tile_cell(e, show=False)
-                    cells.append(cell)
-                    render_names.append(render_name)
-                cells.append(self._row_cell(render_names))
-            if self.plan.embed_runtime:
-                cells.append(md_cell(tile_close()))
-            row.clear()
+        def flush() -> None:
+            # The run of tiles between two headings, laid out row by row as
+            # the dashboard's grid draws them.
+            for row in self._grid_rows(pending, grid_columns(tab_doc) or 12):
+                cells.extend(self._row_cells(row, grid_columns(tab_doc) or 12))
+            pending.clear()
 
         tabs_seen = 0
         for entry, _tab in self.entries():
             if isinstance(entry, MarkdownUnit):
-                flush_row()
+                flush()
                 # The first tab opens unfolded, every other one folded: the
                 # report opens on its overview, not on every plot at once.
                 if entry.kind == "tab":
                     tabs_seen += 1
+                    tab_doc = next(
+                        (
+                            t
+                            for t in self.plan.tabs
+                            if str(t.get("dashboard_id") or "") == (entry.dashboard_id or "")
+                        ),
+                        tab_doc,
+                    )
                 cells.append(
                     md_cell(
                         self._markdown_unit_html(
-                            entry, folded=entry.kind == "tab" and tabs_seen > 1
+                            entry, folded=entry.kind == "tab" and tabs_seen > 1, tab=tab_doc
                         )
                     )
                 )
                 continue
-            if entry.highlight is not None:
-                flush_row()
-                cells.append(self._highlight_note(entry))
-            # Only cards fold into a row — a dashboard's card strip is what
-            # "several tiles on one line" means; figures/tables/text stay
-            # full-width, same as the dashboard draws them.
-            meta = entry.unit.meta
-            if (
-                str(meta.get("component_type") or "") == "card"
-                and entry.verdict.status != "omitted"
-            ):
-                row.append(entry)
-                continue
-            flush_row()
-            wrap = self.plan.embed_runtime and self._mountable(entry)
-            if wrap:
-                cells.append(md_cell(tile_open([self._tile_ref(entry)])))
-            cells.append(self._tile_cell(entry))
-            if wrap:
-                cells.append(md_cell(tile_close()))
-        flush_row()
+            pending.append(entry)
+        flush()
         return cells
+
+    # ------------------------------------------------------------ grid rows
+    @staticmethod
+    def _layout_of(entry: ComponentEntry) -> dict[str, Any]:
+        source = entry.highlight if entry.highlight is not None else entry.unit.meta
+        layout = (source or {}).get("layout") or {}
+        if entry.highlight is not None and not layout:
+            layout = entry.unit.meta.get("layout") or {}
+        return layout if isinstance(layout, dict) else {}
+
+    def _grid_rows(self, entries: list[ComponentEntry], cols: int) -> list[list[ComponentEntry]]:
+        """Tiles that share a row of the dashboard's grid, in order.
+
+        A row is a run of tiles at the same ``y`` whose widths fit the grid;
+        a tile with no position stands alone, except a run of cards, which
+        the dashboard draws as a strip.
+        """
+        rows: list[list[ComponentEntry]] = []
+        for entry in entries:
+            lay = self._layout_of(entry)
+            y, w = lay.get("y"), lay.get("w")
+            last = rows[-1] if rows else None
+            if last:
+                prev = self._layout_of(last[-1])
+                if y is not None and prev.get("y") == y and isinstance(w, (int, float)):
+                    used = sum(int(self._layout_of(e).get("w") or cols) for e in last)
+                    if used + int(w) <= cols:
+                        last.append(entry)
+                        continue
+                if (
+                    y is None
+                    and prev.get("y") is None
+                    and self._is_card(entry)
+                    and all(self._is_card(e) for e in last)
+                ):
+                    last.append(entry)
+                    continue
+            rows.append([entry])
+        return rows
+
+    @staticmethod
+    def _is_card(entry: ComponentEntry) -> bool:
+        return (
+            str(entry.unit.meta.get("component_type") or "") == "card"
+            and entry.verdict.status != "omitted"
+        )
+
+    def _row_cells(self, row: list[ComponentEntry], cols: int) -> list[Cell]:
+        if len(row) > 1 and all(self._is_card(e) for e in row):
+            return self._card_row_cells(row)
+        if len(row) == 1:
+            return self._entry_cells(row[0])
+        out = [md_cell(grid_open([int(self._layout_of(e).get("w") or 1) for e in row]))]
+        for entry in row:
+            out.append(md_cell(cell_open()))
+            out.extend(self._entry_cells(entry))
+            out.append(md_cell(DIV_CLOSE))
+        out.append(md_cell(DIV_CLOSE))
+        return out
+
+    def _card_row_cells(self, row: list[ComponentEntry]) -> list[Cell]:
+        """A strip of cards: one row cell, one note for their descriptions."""
+        out: list[Cell] = []
+        if self.plan.embed_runtime:
+            out.append(md_cell(tile_open([self._tile_ref(e) for e in row])))
+        render_names = []
+        for e in row:
+            cell, render_name = self._tile_cell(e, show=False)
+            out.append(cell)
+            render_names.append(render_name)
+        out.append(self._row_cell(render_names))
+        if self.plan.embed_runtime:
+            out.append(md_cell(tile_close()))
+        about = about_callout_many(
+            [
+                (
+                    str(e.unit.meta.get("title") or e.unit.meta.get("index") or ""),
+                    str(e.unit.meta.get("description") or ""),
+                )
+                for e in row
+            ],
+            rewrite=self._rewrite_links,
+        )
+        if about:
+            out.append(md_cell(about))
+        return out
+
+    # The tiles a report numbers as figures, and as tables.
+    _TABLE_TYPES = frozenset({"table"})
+    _UNNUMBERED = frozenset({"text", "card", "interactive", "highlight"})
+
+    def _float_label(self, entry: ComponentEntry) -> str | None:
+        """``fig-<index>`` / ``tbl-<index>``: the tile's Quarto cross-reference.
+
+        From the component's own index (a UUID5 of its tag, stable across
+        exports), so a reference to it survives a re-export. A highlight is
+        labelled by its own index, the figure it shows already is."""
+        meta = entry.unit.meta
+        ctype = str(meta.get("component_type") or "")
+        if ctype in self._UNNUMBERED or entry.verdict.status == "omitted":
+            return None
+        own = entry.highlight if entry.highlight is not None else meta
+        ident = re.sub(r"[^a-z0-9-]+", "-", str(own.get("index") or "").lower()).strip("-")
+        if not ident:
+            return None
+        prefix = "tbl" if ctype in self._TABLE_TYPES else "fig"
+        label, n = f"{prefix}-{ident}", 2
+        while label in self._float_labels:
+            label, n = f"{prefix}-{ident}-{n}", n + 1
+        self._float_labels.add(label)
+        return label
+
+    def _data_badge(self, meta: dict[str, Any]) -> str:
+        """Where the tile's data came from: its collection, the rows it read,
+        and as of when (the pinned commit, else the export)."""
+        dc = self.dc_by_id.get(str(meta.get("dc_id") or ""))
+        tag = dc.tag if dc else str(meta.get("data_collection_tag") or "")
+        if not tag:
+            return ""
+        bits = [f"Data: {_esc(tag)}"]
+        if dc is not None:
+            rows = dc.initial_rows
+            for stage in self.plan.stages:
+                got = stage.rows_by_dc.get(dc.dc_id)
+                if got is not None:
+                    rows = got
+            if rows is not None:
+                bits.append(f"{rows:,} rows")
+            if dc.version is not None:
+                bits.append(f"commit v{dc.version}")
+        bits.append(f"as of {self.plan.exported_at:%Y-%m-%d}")
+        return f'<span class="dpx-asof">{" · ".join(bits)}</span>'
+
+    def _entry_cells(self, entry: ComponentEntry) -> list[Cell]:
+        """One tile: its highlight line, the tile (numbered when it is a figure
+        or a table, with its caption), then its "About this component"."""
+        out: list[Cell] = []
+        meta = entry.unit.meta
+        ctype = str(meta.get("component_type") or "")
+        if entry.highlight is not None:
+            out.append(self._highlight_note(entry))
+        tile: Cell | list[Cell] = self._tile_cell(entry)  # type: ignore[assignment]
+        assert isinstance(tile, Cell)
+        if self.plan.embed_runtime and self._mountable(entry):
+            # The runtime's placeholder; the cell's own output inside it is
+            # the fallback. The caption and the note stay the document's.
+            tile = [md_cell(tile_open([self._tile_ref(entry)])), tile, md_cell(tile_close())]
+        tiles = tile if isinstance(tile, list) else [tile]
+        if ctype == "text":
+            surface = str(meta.get("surface") or "")
+            if surface == "card":
+                accent = _resolve_accent_hex(str(meta.get("accent") or "") or None, "")
+                out.append(md_cell(cell_open("dpx-surface-card", accent or None)))
+                out.extend(tiles)
+                out.append(md_cell(DIV_CLOSE))
+            else:
+                out.extend(tiles)
+            return out
+        label = self._float_label(entry)
+        if label is None:
+            out.extend(tiles)
+        else:
+            title = str(meta.get("title") or "").strip()
+            caption_bits = []
+            if title:
+                caption_bits.append(f"**{_esc(title)}**.")
+            if entry.highlight is None and str(meta.get("caption") or "").strip():
+                caption_bits.append(self._rewrite_links(str(meta["caption"]).strip()))
+            badge = self._data_badge(meta)
+            if badge:
+                caption_bits.append(badge)
+            caption = " ".join(caption_bits) or _esc(ctype)
+            out.append(md_cell(f"::: {{#{label}}}"))
+            out.extend(tiles)
+            out.append(md_cell(f"{caption}\n\n:::"))
+        about = about_callout(str(meta.get("description") or ""), rewrite=self._rewrite_links)
+        if about:
+            out.append(md_cell(about))
+        return out
 
     # ---------------------------------------------------------- the runtime
     @property
@@ -2262,9 +2604,11 @@ fig_funnel"""
         aside = f' <span class="dpx-h-note">{_esc(note)}</span>' if note else ""
         return f"{'#' * max(1, min(6, level))} {mark}{title}{aside}"
 
-    def _markdown_unit_html(self, unit: MarkdownUnit, *, folded: bool = False) -> str:
+    def _markdown_unit_html(
+        self, unit: MarkdownUnit, *, folded: bool = False, tab: dict[str, Any] | None = None
+    ) -> str:
         if unit.kind == "section":
-            return self._section_header_html(unit)
+            return self._section_header_html(unit, tab=tab)
         return self._tab_header_html(unit, folded=folded)
 
     def _results_header_html(self) -> str:
@@ -2283,7 +2627,48 @@ fig_funnel"""
             ]
         )
 
-    def _section_header_html(self, unit: MarkdownUnit) -> str:
+    def _section_filter_bar(self, unit: MarkdownUnit, tab: dict[str, Any] | None) -> str:
+        """The section's own filter bar (``filter_bar: true``), as exported:
+        each control with its icon and the value it held, "All" when unset."""
+        if not tab:
+            return ""
+        spec = next(
+            (
+                g
+                for g in tab.get("grid_sections") or []
+                if isinstance(g, dict) and str(g.get("name") or "") == unit.text
+            ),
+            None,
+        )
+        if not spec or not spec.get("filter_bar"):
+            return ""
+        controls = [
+            m
+            for m in tab.get("stored_metadata") or []
+            if isinstance(m, dict)
+            and m.get("component_type") == "interactive"
+            and str(m.get("section") or "") == unit.text
+        ]
+        if not controls:
+            return ""
+        by_index = {s.index: s for s in self.plan.stages}
+        chips = []
+        for m in controls:
+            stage = by_index.get(str(m.get("index") or ""))
+            value = self._filter_value_text(stage) if stage else "All"
+            color = _resolve_accent_hex(
+                str(m.get("custom_color") or m.get("icon_color") or m.get("color") or "") or None,
+                "",
+            )
+            label = str(m.get("strip_label") or m.get("title") or m.get("column_name") or "")
+            chips.append(
+                '<span class="dpx-filterchip">'
+                + self._icon_html(filter_icon_id(m), color)
+                + f"<b>{_esc(label)}</b> <i>{_esc(value)}</i></span>"
+            )
+        return '<div class="dpx-filterbar">' + "".join(chips) + "</div>"
+
+    def _section_header_html(self, unit: MarkdownUnit, *, tab: dict[str, Any] | None = None) -> str:
         # The live grid's own section chrome (SectionAccordion / SectionIcon):
         # icon and title in the section's colour, over a body the reader can
         # fold, behind that colour's rail. Unset stays neutral rather than
@@ -2300,6 +2685,7 @@ fig_funnel"""
                 # report opens folded too.
                 folded=unit.collapsed,
             )
+            + self._next_section_anchor()
         ]
         lines = []
         if unit.description:
@@ -2314,7 +2700,17 @@ fig_funnel"""
             )
         if lines:
             parts.append("<br>".join(lines) if len(lines) > 1 else lines[0])
+        bar = self._section_filter_bar(unit, tab)
+        if bar:
+            parts.append(bar)
         return "\n\n".join(parts)
+
+    def _next_section_anchor(self) -> str:
+        if self._section_i >= len(self._section_anchor_seq):
+            return ""
+        anchor = self._section_anchor_seq[self._section_i]
+        self._section_i += 1
+        return f" {{#{anchor}}}"
 
     def _tab_header_html(self, unit: MarkdownUnit, *, folded: bool = False) -> str:
         # Each tab of a multi-tab family is its own dashboard_id with its own
@@ -2470,16 +2866,25 @@ fig_funnel"""
         # level with the tabs in the table of contents.
         level = max(SECTION_LEVEL + 1, min(6, level))
         parts = []
-        if title:
+        logo = self._text_logo(meta)
+        if logo:
+            # The tile's header logo stands in for its title, as on the
+            # dashboard (the title is its alt text).
+            parts.append(logo)
+        elif title:
             parts.append(f"{'#' * level} {title}")
         if body:
             # Headings a tile writes inside itself rank under its section too:
             # `### Data & QC` in a tile's body used to close the section and
             # the tab around it, and listed itself among the tabs.
             parts.append(demote_headings(body, level + 1 if title else level))
-        text = self._inline_icons(
-            self._rewrite_tab_links("\n\n".join(parts) or "*(empty text tile)*")
+        text = "\n\n".join(parts) or "*(empty text tile)*"
+        text = stepper_markdown(
+            text,
+            lambda icon: self._inline_icons(f"![](icon:{icon})"),
+            rewrite_link=self._rewrite_links,
         )
+        text = self._inline_icons(self._rewrite_links(text))
         legends = {
             f"legend:{c}": self._legend_html(c) for c in dict.fromkeys(_LEGEND_RE.findall(text))
         }
@@ -2518,6 +2923,23 @@ fig_funnel"""
             ")",
         ]
         return Cell("\n".join(lines))
+
+    def _text_logo(self, meta: dict[str, Any]) -> str:
+        """A text tile's header logo, light and dark, as inline images."""
+        given = self.plan.logos.get(str(meta.get("index") or "")) or {}
+        light = given.get("light") or meta.get("logo")
+        dark = given.get("dark") or meta.get("logo_dark")
+        light = light if isinstance(light, str) and light.startswith("data:image/") else None
+        dark = dark if isinstance(dark, str) and dark.startswith("data:image/") else None
+        if not light:
+            return ""
+        alt = _esc(str(meta.get("title") or ""), quote=True)
+        if not dark:
+            return f'<img class="dpx-hero-logo" src="{light}" alt="{alt}" />'
+        return (
+            f'<img class="dpx-hero-logo dpx-light-only" src="{light}" alt="{alt}" />'
+            f'<img class="dpx-hero-logo dpx-dark-only" src="{dark}" alt="{alt}" />'
+        )
 
     def _api_cell(self, entry: ComponentEntry, title: str, *, show: bool = True) -> Cell:
         meta = entry.unit.meta

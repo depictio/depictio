@@ -67,6 +67,8 @@ TAB_PROJECTION = {
         # document reads a tab in the order the grid draws it.
         "right_panel_layout_data",
         "project_id",
+        # The footer links the live dashboard only when a reader can open it.
+        "is_public",
         "brand_theme",
         # Sidebar precedence is tab_icon(_color) || icon(_color) — both are
         # needed to replicate a tab's own icon in the export.
@@ -197,6 +199,87 @@ def _favicon_data_uri() -> str | None:
         return None
 
 
+_STATIC_ASSETS = Path(__file__).resolve().parents[3] / "static_assets"
+#: A text tile's header logo is inlined up to this size; past it the tile shows its title.
+_MAX_TEXT_LOGO_BYTES = 1024 * 1024
+_IMAGE_MAGIC: tuple[tuple[bytes, str], ...] = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def _image_mime(data: bytes) -> str | None:
+    for magic, mime in _IMAGE_MAGIC:
+        if data.startswith(magic):
+            return mime
+    if data[:8] == b"RIFF" or data[8:12] == b"WEBP":
+        return "image/webp" if data[8:12] == b"WEBP" else None
+    head = data[:512].lstrip().lower()
+    if head.startswith(b"<svg") or (head.startswith(b"<?xml") and b"<svg" in head):
+        return "image/svg+xml"
+    return None
+
+
+def _image_data_uri(ref: str | None) -> str | None:
+    """An image the app shows by path or URL, as a data URI, or ``None``.
+
+    ``/assets/...`` is one of the app's own static images (the dashboards'
+    workflow marks), read from disk; an http(s) URL goes through the SSRF
+    gateway, capped and checked to be an image. A data URI is kept. Any
+    failure answers ``None``: a logo is never worth failing an export over.
+    """
+    if not isinstance(ref, str) or not ref:
+        return None
+    if ref.startswith("data:image/"):
+        return ref
+    try:
+        if ref.startswith("/assets/"):
+            path = (_STATIC_ASSETS / ref[len("/assets/") :]).resolve()
+            if _STATIC_ASSETS.resolve() not in path.parents or not path.is_file():
+                return None
+            data = path.read_bytes()
+        elif ref.startswith(("https://", "http://")):
+            from depictio.api.v1.remote_fetch import fetch_validated_bytes
+
+            data = fetch_validated_bytes(ref, max_bytes=_MAX_TEXT_LOGO_BYTES, timeout=10)
+        else:
+            return None
+    except Exception as exc:  # unreachable, rejected, too large: no logo
+        logger.debug(f"notebook export: image {ref} not inlined: {exc}")
+        return None
+    mime = _image_mime(data)
+    return _data_uri(data, mime) if mime else None
+
+
+def _resolve_text_logos(tabs: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    """Every text tile's header logo (``logo`` / ``logo_dark``), inlined."""
+    out: dict[str, dict[str, str]] = {}
+    for tab in tabs:
+        for meta in tab.get("stored_metadata") or []:
+            if not isinstance(meta, dict) or meta.get("component_type") != "text":
+                continue
+            got = {
+                kind: uri
+                for kind, key in (("light", "logo"), ("dark", "logo_dark"))
+                if (uri := _image_data_uri(meta.get(key)))
+            }
+            if got:
+                out[str(meta.get("index") or "")] = got
+    return out
+
+
+@lru_cache(maxsize=1)
+def _depictio_mark() -> str | None:
+    """The Depictio wordmark the app's "Powered by" shows (``logo_black.svg``)."""
+    try:
+        return _data_uri(_DEFAULT_LOGO_PATH.read_bytes(), "image/svg+xml")
+    except OSError as exc:
+        logger.debug(f"notebook export: wordmark unavailable: {exc}")
+        return None
+
+
 @lru_cache(maxsize=1)
 def _depictio_version() -> str | None:
     try:
@@ -309,12 +392,14 @@ def _resolve_tab_icons(tabs: list[dict[str, Any]]) -> dict[str, str]:
         FILTERS_ICON,
         FUNNEL_ICON,
         INLINE_ICON_RE,
+        METHODS_ICON,
         RESULTS_ICON,
         SUMMARY_ICON,
     )
     from depictio.api.v1.services.notebook_export.provenance import (
         EXPORT_DETAILS_ICON,
         PROVENANCE_ICON,
+        RUN_ICON,
     )
     from depictio.api.v1.services.notebook_export.reading_order import tab_icon_id
 
@@ -322,6 +407,8 @@ def _resolve_tab_icons(tabs: list[dict[str, Any]]) -> dict[str, str]:
     icon_ids: set[str] = {
         PROVENANCE_ICON,
         EXPORT_DETAILS_ICON,
+        RUN_ICON,
+        METHODS_ICON,
         RESULTS_ICON,
         FILTERS_ICON,
         SUMMARY_ICON,
@@ -615,6 +702,12 @@ def build_export_plan(
         warnings=warnings,
         favicon_data_uri=_favicon_data_uri(),
         depictio_version=_depictio_version(),
+        logos=_resolve_text_logos(tabs),
+        # The dashboard's own mark: its management-page icon when that is an
+        # image (the nf-core apple), as the dashboards list shows it.
+        dashboard_logo=_image_data_uri(str(main.get("icon") or "")),
+        depictio_mark=_depictio_mark(),
+        dashboard_public=bool(main.get("is_public")),
         brand=brand,
         tab_brands=_resolve_tab_brands(tabs, main_brand=brand),
         icons=_resolve_tab_icons(tabs),

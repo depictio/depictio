@@ -42,6 +42,12 @@ class QuartoFrontMatter:
     # front matter so the export stays one file; ``None`` keeps Quarto's
     # stock Bootstrap (the classic look).
     brand: dict[str, Any] | None = None
+    # Markup placed at the very top of the page, above Quarto's layout: the
+    # report's header bar (``report_chrome.appbar_html``).
+    before_body: str | None = None
+    # Markup at the very end of the page, below it: the report's footer
+    # (``report_chrome.footer_html``), outside every fold.
+    after_body: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_yaml(self) -> str:
@@ -79,6 +85,10 @@ class QuartoFrontMatter:
             doc["format"]["html"]["include-in-header"] = {
                 "text": f'<link rel="icon" href="{self.favicon_data_uri}">'
             }
+        if self.before_body:
+            doc["format"]["html"]["include-before-body"] = {"text": self.before_body}
+        if self.after_body:
+            doc["format"]["html"]["include-after-body"] = {"text": self.after_body}
         if self.brand:
             doc["brand"] = self.brand
         doc["jupyter"] = "python3"

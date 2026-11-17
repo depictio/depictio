@@ -714,3 +714,33 @@ def test_a_definition_version_exports_the_components_as_that_version_defined_the
     assert card["aggregation"] == "median"  # the version's definition
     assert card["dc_config"] == {"live": True}  # the live identity fields
     assert warnings and "another collection" in warnings[0]
+
+
+def test_report_images_are_inlined_from_the_apps_own_assets_only(monkeypatch):
+    """The dashboard's mark and a text tile's logo end up as data URIs; a path
+    outside the static assets, or a non-image, is never read into the file."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as ep
+
+    uri = ep._image_data_uri("/assets/images/workflows/nf-core.png")
+    assert uri and uri.startswith("data:image/png;base64,")
+    assert ep._image_data_uri("/assets/../../../../etc/passwd") is None
+    assert ep._image_data_uri("relative/logo.png") is None
+    assert ep._image_data_uri("data:image/png;base64,AAAA") == "data:image/png;base64,AAAA"
+
+    import depictio.api.v1.remote_fetch as rf
+
+    monkeypatch.setattr(rf, "fetch_validated_bytes", lambda url, **kw: b"<html>not an image")
+    assert ep._image_data_uri("https://example.org/logo.png") is None
+    monkeypatch.setattr(rf, "fetch_validated_bytes", lambda url, **kw: b"\x89PNG\r\n\x1a\nxx")
+    logos = ep._resolve_text_logos(
+        [
+            {
+                "stored_metadata": [
+                    {"index": "hero", "component_type": "text", "logo": "https://e.org/l.png"},
+                    {"index": "fig", "component_type": "figure", "logo": "https://e.org/l.png"},
+                ]
+            }
+        ]
+    )
+    assert set(logos) == {"hero"} and logos["hero"]["light"].startswith("data:image/png")
+    assert ep._depictio_mark().startswith("data:image/svg+xml;base64,")
