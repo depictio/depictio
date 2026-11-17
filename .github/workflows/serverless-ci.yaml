@@ -145,10 +145,11 @@ jobs:
       # text — the floor every combined file pays, on top of its report and
       # manifest. It replaces both the report runtime and Quarto's own
       # plotly.js in the page. Measured 3.84 MB gzip (12.23 MB raw), the base
-      # runtime + 0.01 MB; budget = the base budget + 0.1 MB.
+      # runtime + 0.01 MB; budget = the base budget + 0.2 MB, as the add-on
+      # floors get.
       - name: Byte budget — combined runtime (report + dashboard file)
         working-directory: depictio/viewer
-        run: node scripts/check-bundle-budget.mjs dist-static/combined-runtime-floor.html 4508877 combined-runtime
+        run: node scripts/check-bundle-budget.mjs dist-static/combined-runtime-floor.html 4613734 combined-runtime
 
       - name: Byte budget — static runtime + genome browser (JBrowse add-on)
         working-directory: depictio/viewer
