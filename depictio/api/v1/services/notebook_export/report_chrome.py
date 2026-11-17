@@ -522,6 +522,9 @@ body.quarto-dark .dpx-light-only { display: none !important; }
   .dpx-all, .dpx-tab-all, .dpx-zoom, .dpx-chev, #quarto-code-tools-source, .code-tools-button,
   .dpx-open-dashboard, .dpx-tile-links, .quarto-color-scheme-toggle { display: none !important; }
   .dpx-folded { opacity: 1; }
+  /* Above the buttons' own `display` (two classes, !important). */
+  body #quarto-code-tools-source.btn, body .code-tools-button.btn,
+  body .dpx-open-dashboard.btn { display: none !important; }
   section[data-dpx-kind="tab"] { break-before: page; }
   section[data-dpx-kind="tab"]:first-of-type { break-before: auto; }
   .dpx-grid { break-inside: avoid; }
