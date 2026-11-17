@@ -416,10 +416,21 @@ STATIC_IDS = {
     },
 }
 
-# Reference projects that are NOT seeded by default. They exist for the test
-# suite, so they stay out of ordinary deployments until DEPICTIO_SEED_EXTRA_PROJECTS
-# names one.
-OPTIONAL_DATASETS = ("catalog_conformance",)
+# Reference projects seeded on a fresh database, in this order.
+# DEPICTIO_SEED_PROJECTS narrows this set.
+DEFAULT_DATASETS = (
+    "iris",
+    "penguins",
+    "ampliseq",
+    "advanced_viz_showcase",
+    "viralrecon",
+)
+
+# Reference projects that are NOT seeded by default: a test fixture
+# (catalog_conformance) and a feature showcase (genome_tracks_examples) that a
+# fresh instance should not open with. They stay out until
+# DEPICTIO_SEED_EXTRA_PROJECTS names one.
+OPTIONAL_DATASETS = ("catalog_conformance", "genome_tracks_examples")
 
 
 def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
@@ -447,6 +458,9 @@ def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
 
 
 for _optional in OPTIONAL_DATASETS:
+    if _optional in STATIC_IDS:
+        # Its id table is maintained above, not generated.
+        continue
     _ids = _load_generated_static_ids(_optional)
     if _ids:
         STATIC_IDS[_optional] = _ids
@@ -984,14 +998,7 @@ async def create_reference_datasets(
     # `resolve_template_for_init`. Run
     # `depictio/projects/nf-core/viralrecon/3.0.0/generate_seeds.sh` against a
     # local viralrecon run to populate `.db_seeds/` and the canonical TSVs.
-    all_datasets = [
-        "iris",
-        "penguins",
-        "ampliseq",
-        "advanced_viz_showcase",
-        "viralrecon",
-        "genome_tracks_examples",
-    ]
+    all_datasets = list(DEFAULT_DATASETS)
 
     if only is not None:
         unknown = only - set(all_datasets)
