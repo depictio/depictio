@@ -3409,6 +3409,15 @@ def export_manifest(
                 if note:
                     row.detail = f"{row.detail}; {note}"
             elif ctype == "jbrowse":
+                problem = jbrowse_dc_problem(comp, project_doc)
+                if problem is not None:
+                    # Said before the session endpoint is asked: its 400 ("not
+                    # a genomic_tracks collection") names the wrong cause when
+                    # the collection is simply not in the project.
+                    row.tier = ComponentTier.OMITTED
+                    row.reason = TierReason.JBROWSE
+                    row.detail = problem
+                    continue
                 payload, outcome = _freeze_jbrowse(
                     dashboard_oid,
                     component_id,
@@ -3630,6 +3639,46 @@ def _freeze_image(
             f"{len(kept)} of {len(rows)} images shipped (the rest did not fit or were unreadable)"
         )
     return payload, note
+
+
+def jbrowse_dc_problem(comp: dict[str, Any], project_doc: dict[str, Any] | None) -> str | None:
+    """Why a genome browser tile has no track collection to ship, or ``None``.
+
+    ``render_jbrowse`` answers every such case with the same 400, "not a
+    genomic_tracks collection" (``find_tracks_dc`` returns ``None`` for a
+    collection it cannot find as well as for one of another type). The usual
+    cause is the first: the dashboard names the template's ``tracks``
+    collection, but this instance's project holds no such collection (its track
+    files were never ingested). The live tile cannot draw either way; the
+    bundle says which. ``None`` when the project is unreadable: the endpoint
+    then gives its own answer.
+    """
+    if not project_doc:
+        return None
+    dc_id = str(comp.get("dc_id") or "")
+    tag = comp.get("data_collection_tag") or (comp.get("dc_config") or {}).get(
+        "data_collection_tag"
+    )
+    label = f"'{tag}' ({dc_id})" if tag else f"{dc_id or '?'}"
+    if not dc_id:
+        return "the genome browser names no track data collection"
+    for wf in project_doc.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            if str(dc.get("_id") or dc.get("id") or "") != dc_id:
+                continue
+            dc_type = str((dc.get("config") or {}).get("type") or "").lower()
+            if dc_type == "genomic_tracks":
+                return None
+            return (
+                f"its data collection {label} is a {dc_type or 'untyped'} collection, not "
+                "genomic_tracks: there are no track files to ship, and the live tile cannot "
+                "draw it either"
+            )
+    return (
+        f"its track data collection {label} is not in this project on the exporting "
+        "instance (its track files were never ingested), so there are no tracks to ship; "
+        "the live tile cannot draw it either"
+    )
 
 
 def _freeze_jbrowse(

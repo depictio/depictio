@@ -2379,3 +2379,72 @@ def test_preflight_and_build_on_a_cold_multiqc_prerender(
     assert built.manifest.frozen["mqc-1"].kind == "multiqc"
     assert len(calls) == 2
 
+
+# ---------------------------------------------------------------------------
+# A genome browser whose track collection is not in the project (viralrecon)
+# ---------------------------------------------------------------------------
+
+TRACKS_DC = "746b0f3c1e4a2d7f8e5b9c20"
+
+
+def _browser() -> dict[str, Any]:
+    return {
+        "index": "var-browser",
+        "component_type": "jbrowse",
+        "title": "Genome browser",
+        "data_collection_tag": "tracks",
+        "dc_id": TRACKS_DC,
+    }
+
+
+def _project(*dcs: dict[str, Any]) -> dict[str, Any]:
+    return {"_id": PROJECT_OID, "workflows": [{"_id": WF_OID, "data_collections": list(dcs)}]}
+
+
+def test_a_browser_over_a_collection_the_project_lacks_says_so():
+    """viralrecon's "Genome browser" reads the template's `tracks` collection;
+    an instance that never ingested the track files has no such collection, and
+    the session endpoint's 400 called that "not a genomic_tracks collection"."""
+    problem = producer_a.jbrowse_dc_problem(
+        _browser(), _project({"_id": ObjectId(), "config": {"type": "table"}})
+    )
+    assert problem and "'tracks' (746b0f3c1e4a2d7f8e5b9c20) is not in this project" in problem
+    assert "never ingested" in problem
+
+
+def test_a_browser_over_a_table_collection_names_its_type():
+    problem = producer_a.jbrowse_dc_problem(
+        _browser(), _project({"_id": ObjectId(TRACKS_DC), "config": {"type": "table"}})
+    )
+    assert problem and "is a table collection, not genomic_tracks" in problem
+
+
+def test_a_browser_over_a_tracks_collection_goes_to_the_endpoint():
+    project = _project({"_id": ObjectId(TRACKS_DC), "config": {"type": "genomic_tracks"}})
+    assert producer_a.jbrowse_dc_problem(_browser(), project) is None
+    # An unreadable project leaves the answer to the endpoint.
+    assert producer_a.jbrowse_dc_problem(_browser(), None) is None
+
+
+def test_the_export_omits_that_browser_with_the_real_reason(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch
+):
+    from depictio.api.v1 import db as db_mod
+
+    doc = _dashboard_doc()
+    doc["stored_metadata"].append(_browser())
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
+
+    def no_session(*args, **kwargs):
+        raise AssertionError("the session endpoint must not be asked")
+
+    monkeypatch.setattr(producer_a._routes(), "render_jbrowse_endpoint", no_session)
+    for result in (
+        _preflight(),
+        export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True)),
+    ):
+        row = {r.component_id: r for r in result.tier_rows}["var-browser"]
+        assert row.tier is ComponentTier.OMITTED
+        assert row.reason is TierReason.JBROWSE
+        assert row.detail and "not in this project" in row.detail
+        assert "genomic_tracks collection" not in row.detail
