@@ -14,13 +14,20 @@ lands as the frame its CSV would. The extension decides, not the declared
 format: a template declaring ``CSV`` keeps working when ``SAMPLESHEET_FILE``
 points at a YAML sheet, and a ``.csv`` is never read as anything but CSV.
 
+Every value is read as the text it would be in a CSV cell, and the columns
+are then typed by the very inference the CSV reader uses. So ``yes``, ``on``
+or ``2024-01-05`` stay text, as they would in a CSV, rather than taking the
+boolean or date YAML would make of them: one table reads to one frame,
+whichever of the three formats it is written in.
+
 The CSV reader's options (``separator``, ``skip_rows``...) mean nothing to a
 list of records and are ignored.
 """
 
 from __future__ import annotations
 
-import datetime
+import csv
+import io
 import json
 from pathlib import PurePosixPath
 from urllib.parse import urlparse
@@ -31,7 +38,7 @@ import yaml
 RECORD_SHEET_SUFFIXES = (".yaml", ".yml", ".json")
 
 # What a CSV cell can hold. A nested list or mapping has no column to land in.
-_SCALARS = (str, int, float, bool, datetime.date, datetime.datetime, type(None))
+_SCALARS = (str, int, float, bool, type(None))
 
 
 class RecordSheetError(ValueError):
@@ -58,7 +65,8 @@ def parse_record_sheet(data: bytes | str, name: str) -> list[dict]:
             raise RecordSheetError(f"{name} is not valid JSON: {exc}") from exc
     else:
         try:
-            records = yaml.safe_load(text)
+            # BaseLoader keeps every scalar as the text it was written as.
+            records = yaml.load(text, Loader=yaml.BaseLoader)
         except yaml.YAMLError as exc:
             raise RecordSheetError(f"{name} is not valid YAML: {exc}") from exc
 
@@ -76,7 +84,14 @@ def parse_record_sheet(data: bytes | str, name: str) -> list[dict]:
                     f"In {name}, column '{key}' of record {number} holds a "
                     f"{type(value).__name__}; a samplesheet cell must be a single value"
                 )
-    return [{str(key): value for key, value in record.items()} for record in records]
+    return [{str(key): _cell(value) for key, value in record.items()} for record in records]
+
+
+def _cell(value: str | int | float | bool | None) -> str | None:
+    """``value`` as the text of its CSV cell: JSON's ``true`` is ``true``, ``null`` empty."""
+    if value is None or isinstance(value, str):
+        return value
+    return json.dumps(value)
 
 
 def read_record_sheet(data: bytes | str, name: str) -> pl.DataFrame:
@@ -87,20 +102,12 @@ def read_record_sheet(data: bytes | str, name: str) -> pl.DataFrame:
     records = parse_record_sheet(data, name)
     if not records:
         return pl.DataFrame()
-    # YAML types every value on its own (``yes`` a bool, ``2024-01-05`` a
-    # date), so one column can mix kinds polars has no common type for. Such
-    # a column is read as text; whole and decimal numbers stay numeric.
-    kinds: dict[str, set[type]] = {}
+    columns = list(dict.fromkeys(key for record in records for key in record))
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(columns)
     for record in records:
-        for key, value in record.items():
-            if value is not None:
-                kinds.setdefault(key, set()).add(type(value))
-    mixed = {key for key, seen in kinds.items() if len(seen) > 1 and not seen <= {int, float}}
-    if mixed:
-        records = [
-            {k: str(v) if k in mixed and v is not None else v for k, v in record.items()}
-            for record in records
-        ]
-    # Every record decides the schema, so a column first seen on the last
-    # record still exists.
-    return pl.from_dicts(records, infer_schema_length=None, strict=False)
+        writer.writerow(["" if record.get(c) is None else record[c] for c in columns])
+    # The CSV reader's own inference, over every row, so the frame is the one
+    # the same table written as a CSV reads to.
+    return pl.read_csv(buffer.getvalue().encode(), infer_schema_length=None)

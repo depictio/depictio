@@ -107,19 +107,40 @@ def test_records_with_missing_keys_take_the_union_of_columns():
     ]
 
 
-def test_a_column_whose_records_disagree_on_a_type_reads_as_text():
-    """YAML types each value (``yes`` a bool, ``2024-01-05`` a date): a column
-    mixing kinds is read as text rather than failing the whole sheet."""
-    text = "- {sample: a, v: yes}\n- {sample: b, v: 2024-01-05}\n- {sample: c, v: x}\n"
-    frame = read_record_sheet(text.encode(), "sheet.yaml")
-    assert frame["v"].dtype == pl.String
-    assert frame["v"].to_list() == ["True", "2024-01-05", "x"]
+# Values YAML would type on its own (booleans, dates, null) next to plain ones.
+# Written as CSV, YAML and JSON, the three must read to the very same frame.
+TRICKY_CSV = (
+    "sample,flag,on_off,date,count,ratio,sci,padded,note\n"
+    "s1,yes,on,2024-01-05,1,1.10,1e3,007,NA\n"
+    "s2,no,Off,x,2,2.5,2e3,010,\n"
+)
+TRICKY_YAML = (
+    "- {sample: s1, flag: yes, on_off: on, date: 2024-01-05, count: 1, ratio: 1.10,"
+    " sci: 1e3, padded: 007, note: NA}\n"
+    "- {sample: s2, flag: no, on_off: Off, date: x, count: 2, ratio: 2.5,"
+    " sci: 2e3, padded: 010}\n"
+)
 
 
-def test_numbers_and_one_kind_columns_keep_their_type():
-    text = "- {n: 1, f: 1, ok: true, d: 2024-01-05}\n- {n: 2, f: 2.5, ok: false, d: null}\n"
-    frame = read_record_sheet(text.encode(), "sheet.yaml")
-    assert frame.schema == {"n": pl.Int64, "f": pl.Float64, "ok": pl.Boolean, "d": pl.Date}
+def test_a_yaml_sheet_reads_exactly_as_the_same_csv():
+    """No YAML typing: ``yes`` stays the text yes, a date stays text, as in a CSV."""
+    frame = read_record_sheet(TRICKY_YAML.encode(), "sheet.yaml")
+    expected = pl.read_csv(TRICKY_CSV.encode())
+    assert frame.schema == expected.schema
+    assert frame.equals(expected)
+    assert frame["flag"].to_list() == ["yes", "no"]
+    assert frame["on_off"].to_list() == ["on", "Off"]
+
+
+def test_a_json_sheet_reads_exactly_as_the_same_csv():
+    records = [
+        {"sample": "s1", "ok": True, "n": 1, "x": 1.5, "note": None},
+        {"sample": "s2", "ok": False, "n": 2, "x": 2.0, "note": "NA"},
+    ]
+    frame = read_record_sheet(json.dumps(records).encode(), "sheet.json")
+    expected = pl.read_csv(b"sample,ok,n,x,note\ns1,true,1,1.5,\ns2,false,2,2.0,NA\n")
+    assert frame.schema == expected.schema
+    assert frame.equals(expected)
 
 
 @pytest.mark.parametrize(
