@@ -43,6 +43,7 @@ import {
   componentFor,
   reportCategorySource,
   type BundleManifest,
+  type FilterChannel,
   type ReportSectionSpec,
   type TileRef,
 } from 'depictio-static-core';
@@ -85,7 +86,12 @@ interface Props {
   manifest: BundleManifest;
   tiles: ReportTile[];
   panels: ReportPanel[];
+  /** The combined file's one filter state, shared with its dashboard view. */
+  channel?: FilterChannel | null;
 }
+
+/** The name this view writes to a shared filter channel under. */
+const CHANNEL_SOURCE = 'report';
 
 /** One renderer crash restores that tile's fallback; the others carry on. */
 class TileBoundary extends React.Component<
@@ -160,7 +166,7 @@ const Mounted: React.FC<{ host: HTMLElement; children: React.ReactNode }> = ({
   return <>{children}</>;
 };
 
-const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels }) => {
+const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = null }) => {
   const entryId = manifest.dashboard.id;
   const metadata = useMemo(() => familyMetadata() as unknown as StoredMetadata[], []);
   const entryInteractive = useMemo(() => {
@@ -174,9 +180,25 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels }) => {
     const exported = (manifest.initial_filters ?? []) as unknown as InteractiveFilter[];
     return exported.length > 0 ? exported : withInteractiveDefaults([], entryInteractive);
   }, [manifest, entryInteractive]);
-  const [filters, setFilters] = useState<InteractiveFilter[]>(initialFilters);
+  // In a combined file the dashboard view may have moved the filters already.
+  const [filters, setFilters] = useState<InteractiveFilter[]>(
+    () => (channel?.get() as InteractiveFilter[] | null) ?? initialFilters,
+  );
   const [deferredFilters] = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
-  const touched = filters !== initialFilters;
+  const initialKey = useMemo(() => JSON.stringify(initialFilters), [initialFilters]);
+  const touched = filters !== initialFilters && JSON.stringify(filters) !== initialKey;
+
+  // One filter state for both views of a combined file: every change is
+  // published, and a change made in the dashboard lands here.
+  useEffect(() => {
+    channel?.set(filters, CHANNEL_SOURCE);
+  }, [channel, filters]);
+  useEffect(
+    () =>
+      channel?.subscribe(CHANNEL_SOURCE, (next) => setFilters(next as InteractiveFilter[])) ??
+      undefined,
+    [channel],
+  );
 
   const onFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -336,10 +358,17 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels }) => {
                   <Group justify="space-between" mb="xs" wrap="nowrap">
                     <Text size="sm" c="dimmed">
                       {touched
-                        ? 'Filtered in this page: every interactive tile below follows. The text ' +
-                          'of the report still describes the exported state.'
-                        : 'The exported state. Change a filter and every interactive tile below ' +
-                          'recomputes in this page, with no server.'}
+                        ? channel
+                          ? 'Filtered in this file (here or in the dashboard view): every ' +
+                            'interactive tile below follows. The text of the report, its numbers ' +
+                            'and its static figures still describe the exported state.'
+                          : 'Filtered in this page: every interactive tile below follows. The text ' +
+                            'of the report still describes the exported state.'
+                        : channel
+                          ? 'The exported state. Change a filter here or in the dashboard view and ' +
+                            'every interactive tile follows, in both, with no server.'
+                          : 'The exported state. Change a filter and every interactive tile below ' +
+                            'recomputes in this page, with no server.'}
                     </Text>
                     {touched ? (
                       <Button

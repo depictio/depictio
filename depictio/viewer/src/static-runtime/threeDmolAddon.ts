@@ -24,8 +24,13 @@ function lib(): ThreeDmolGlobal | undefined {
 export const PREVIEW_UNAVAILABLE_MESSAGE =
   '3D preview unavailable: this bundle was built without the 3Dmol.js add-on';
 
-/** True when no add-on is embedded (the hooks probe this flag). */
+/** True when no add-on is embedded, as the page first ran this module. */
 export const CATALOG_PREVIEW_STUB = !lib();
+
+/** True when no add-on is embedded NOW (the hooks probe this first). In a
+ *  combined report + dashboard file the runtime runs early in the page, where
+ *  the report's Plotly copy was, before a 3Dmol script further down. */
+export const isCatalogPreviewStub = (): boolean => !lib();
 
 function call<K extends keyof ThreeDmolGlobal>(name: K, args: unknown[]): unknown {
   const l = lib();
@@ -41,4 +46,4 @@ export const download = (): never => {
   throw new Error('3Dmol downloads are not available in a read-only bundle');
 };
 
-export default { createViewer, createViewerGrid, createStereoViewer, download };
+export default { createViewer, createViewerGrid, createStereoViewer, download, isCatalogPreviewStub };
