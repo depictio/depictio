@@ -519,8 +519,9 @@ body.quarto-dark .dpx-light-only { display: none !important; }
 @media print {
   .dpx-appbar { border-bottom: 1px solid #ccc; }
   .dpx-appbar-inner { padding: 4px 0; }
-  .dpx-all, .dpx-zoom, .dpx-chev, #quarto-code-tools-source, .code-tools-button,
-  .dpx-open-dashboard { display: none !important; }
+  .dpx-all, .dpx-tab-all, .dpx-zoom, .dpx-chev, #quarto-code-tools-source, .code-tools-button,
+  .dpx-open-dashboard, .dpx-tile-links, .quarto-color-scheme-toggle { display: none !important; }
+  .dpx-folded { opacity: 1; }
   section[data-dpx-kind="tab"] { break-before: page; }
   section[data-dpx-kind="tab"]:first-of-type { break-before: auto; }
   .dpx-grid { break-inside: avoid; }
