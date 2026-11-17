@@ -76,6 +76,14 @@ class ScanRecursive(BaseModel):
 
 class ScanSingle(BaseModel):
     filename: str
+    # The file of each run location, when a project's runs do not all read
+    # ``filename`` (the first location's). Written by the CLI on --attach-run and
+    # refresh, never declared in a YAML. Two locations bound to one path share
+    # it: that file belongs to no run in particular.
+    run_files: dict[str, str] | None = None
+    # "project": one file for every run, never bound per run. None lets the CLI
+    # bind each run its own file, keeping one copy of identical bytes.
+    scope: Literal["run", "project"] | None = None
 
     class Config:
         extra = "forbid"
@@ -286,7 +294,10 @@ def _scan_mode_of(parameters: object) -> str | None:
 
 def _describe_scan_parameters(mode: str) -> str:
     cls = _SCAN_MODE_PARAMETERS[mode]
-    return f"{cls.__name__} parameters ({', '.join(cls.model_fields)})"
+    # The fields a user writes; optional ones (and those the CLI fills in, such
+    # as ScanSingle.run_files) would only crowd the hint.
+    fields = [name for name, info in cls.model_fields.items() if info.is_required()]
+    return f"{cls.__name__} parameters ({', '.join(fields or cls.model_fields)})"
 
 
 def _scan_mode_mismatch(mode: str, actual_mode: str | None) -> str:

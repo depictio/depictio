@@ -177,13 +177,19 @@ import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
 import { useBundleProjectPage } from './chrome/bundlePage';
-import { LandingHint, useLandingHint } from './landing';
+import { shouldSuppressWalkthrough } from './coach';
+import { LandingHost } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import ExportStaticModal from './chrome/ExportStaticModal';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
+import ChangeMarksProvider from './changes/ChangeMarksProvider';
+import ChangesHeaderButton from './changes/ChangesHeaderButton';
+import type { NewsSplit } from './changes/newsSplit';
+import type { BulkComputeOptions } from 'depictio-react-core';
+import { panelsFromGroups } from 'depictio-react-core';
 
 /**
  * Top-level SPA. Layout:
@@ -258,10 +264,35 @@ const App: React.FC = () => {
     return id ? String(id) : undefined;
   }, [dashboard]);
   const groupsApi = useSelectionGroups(groupingScopeId);
+  // "What's new" in Split view (#1397): virtual New / Seen before groups that
+  // stand in for the reader's own groups while it is on, never stored.
+  const [newsSplit, setNewsSplit] = useState<NewsSplit | null>(null);
+  // Only a split on runs reaches the Delta figures and cards. MultiQC splits
+  // on its own samples, read from the change marks by its renderer; a split
+  // with nothing on runs leaves the rest of the canvas as it was.
+  const runNews = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
+  // "New only" is a filter on the new runs, not a split: the reader's own
+  // grouping stays as it was. "Overlay" colours the runs in one panel and
+  // leaves the cards alone.
+  const runSplit = runNews?.mode === 'split' ? runNews : null;
+  const runOverlay = runNews?.mode === 'overlay' ? runNews : null;
+  const newOnlyFilters = useMemo(
+    () => (runNews?.mode === 'new' ? panelsFromGroups(runNews.groups)[0]?.constraints ?? [] : []),
+    [runNews],
+  );
+  const bulkOptions = useMemo<BulkComputeOptions | undefined>(
+    () =>
+      runSplit
+        ? { groups: runSplit.groups, compareGroups: true, showOther: runSplit.showOther, showOverall: true }
+        : groupsApi.bulkOptions,
+    [runSplit, groupsApi.bulkOptions],
+  );
   const combinedFilters = useMemo(
     () =>
-      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
-    [filters, groupsApi.groupFilters],
+      groupsApi.groupFilters.length > 0 || newOnlyFilters.length > 0
+        ? [...filters, ...groupsApi.groupFilters, ...newOnlyFilters]
+        : filters,
+    [filters, groupsApi.groupFilters, newOnlyFilters],
   );
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays
@@ -328,6 +359,8 @@ const App: React.FC = () => {
     isPublicMode,
     isDemoMode,
     isSingleUserMode,
+    isDevMode,
+    walkthroughDisabled,
     loading: userLoading,
   } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
@@ -628,7 +661,7 @@ const App: React.FC = () => {
           dashboardId,
           req.filters,
           req.ids,
-          groupsApi.bulkOptions,
+          bulkOptions,
           // Wired to the abort above: without it a slow superseded response
           // (e.g. compare-on forces real Delta loads) could land after a fast
           // newer one and resurrect stale card strips.
@@ -663,7 +696,7 @@ const App: React.FC = () => {
     filterScopes,
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
-    JSON.stringify(groupsApi.bulkOptions ?? null),
+    JSON.stringify(bulkOptions ?? null),
     versionKey,
   ]);
 
@@ -1302,7 +1335,27 @@ const App: React.FC = () => {
   // identity, so a fresh one per render would rebuild every cell.
   const groupRender = useMemo(
     () =>
-      resolveGroupRender(
+      runSplit
+        ? {
+            groups: runSplit.groups,
+            colorByGroup: true,
+            display: 'facet' as const,
+            showOther: runSplit.showOther,
+            keepColor: true,
+            // "All" first, then each new run, then the runs seen before.
+            showOverall: true,
+          }
+        : runOverlay
+          ? {
+              // One panel: the new runs in the dashboard's colour, the runs
+              // seen before in grey.
+              groups: runOverlay.groups,
+              colorByGroup: true,
+              display: 'color' as const,
+              showOther: runOverlay.showOther,
+              keepColor: false,
+            }
+          : resolveGroupRender(
         groupsApi.colorBy,
         groupsApi.renderGroups,
         colorByColumnRender,
@@ -1315,6 +1368,8 @@ const App: React.FC = () => {
       colorByColumnRender,
       groupsApi.displayMode,
       groupsApi.showOther,
+      runSplit,
+      runOverlay,
     ],
   );
 
@@ -1377,7 +1432,7 @@ const App: React.FC = () => {
           onFilterChange={handleFilterChange}
           refreshTick={refreshTick}
           groupRender={groupRender}
-          bulkOptions={groupsApi.bulkOptions}
+          bulkOptions={bulkOptions}
           onResetFilters={handleResetAllFilters}
           onResetBarFilters={handleResetFilterIndices}
           autofit={dashboard?.autofit !== false}
@@ -1658,26 +1713,27 @@ const App: React.FC = () => {
       inspectorControl,
     ],
   );
-  // ---- Landing hint -------------------------------------------------------
-  // A guest on a public instance (the demo keeps its tour) lands on the Overview
-  // with one small callout beside the Guide. Opening the Guide, by the hint or
-  // the sidebar, is the answer to it: it is dismissed for good.
-  const landingEligible =
+  // ---- Landing card -------------------------------------------------------
+  // A reader who does not own this dashboard (a public guest or a signed-in
+  // colleague) is introduced to it once, on its Overview, by one card beside
+  // the Guide. The demo keeps its tour of the dashboards list. Opening the
+  // Guide answers the introduction. Anyone returning to news since their last
+  // visit gets the same card with the "What's new" line (`LandingHost`). The
+  // coach's gates hold it too, so no capture or e2e run ever meets it.
+  const landingReady =
     Boolean(dashboard) &&
     !loading &&
     !error &&
     !userLoading &&
-    isPublicMode &&
-    !isDemoMode &&
-    Boolean(currentUser?.is_temporary) &&
-    !(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id) &&
     !previewVersionId &&
-    guideSettings.enabled;
-  const landing = useLandingHint(landingEligible && !guide.open);
-  const dismissLanding = landing.dismiss;
-  useEffect(() => {
-    if (guide.open && landingEligible) dismissLanding();
-  }, [guide.open, landingEligible, dismissLanding]);
+    guideSettings.enabled &&
+    !shouldSuppressWalkthrough(isDevMode, walkthroughDisabled);
+  const landingGuest = isPublicMode && Boolean(currentUser?.is_temporary);
+  const landingIntro =
+    landingReady &&
+    !isDemoMode &&
+    !isOwner &&
+    !(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id);
   // The dashboard's own line (the main tab's `subtitle` is its identity line,
   // as on the listing card), else its name.
   const landingDescription =
@@ -1743,6 +1799,8 @@ const App: React.FC = () => {
   const ready = Boolean(dashboard) && !loading && !error;
   const headerActions: HeaderAction[] = [];
   if (dashboard) {
+    // Renders nothing on a first visit, when nothing changed and in a preview.
+    headerActions.push({ id: 'changes', group: 'read', node: <ChangesHeaderButton /> });
     headerActions.push({ id: 'comments', group: 'read', node: <CommentsHeaderButton /> });
     headerActions.push({
       id: 'analysis',
@@ -2014,11 +2072,14 @@ const App: React.FC = () => {
           ...contentScaleStyle,
         }}
       >
-        {landing.visible && (
-          <LandingHint
+        {landingReady && (
+          <LandingHost
+            familyId={crossTab.familyId ?? null}
+            introEligible={landingIntro}
+            audience={landingGuest ? 'guest' : 'reader'}
             description={landingDescription}
+            guideOpen={guide.open}
             onOpenGuide={guide.openGuide}
-            onDismiss={landing.dismiss}
           />
         )}
         {/* The tab's own description, ahead of everything the canvas
@@ -2133,7 +2194,7 @@ const App: React.FC = () => {
               onFilterChange={handleFilterChange}
               refreshTick={refreshTick}
               groupRender={groupRender}
-              bulkOptions={groupsApi.bulkOptions}
+              bulkOptions={bulkOptions}
               onResetFilters={handleResetAllFilters}
               autofit={dashboard?.autofit !== false}
             />
@@ -2237,6 +2298,24 @@ const App: React.FC = () => {
           canEdit={canEditNow}
           onClose={guide.closeGuide}
           onOpenYourView={() => openSettingsAt('view')}
+          metadata={
+            hasMetadataTable
+              ? {
+                  // A past view keeps the part but not the live rows.
+                  table: annotationPins
+                    ? null
+                    : (defaultAnnotationTable(
+                        annotationTables,
+                        annotationView?.columns,
+                        annotationView?.activeColumnId,
+                      ) ?? null),
+                  open: () => {
+                    guide.closeGuide();
+                    handleMetadataOpenChange(true);
+                  },
+                }
+              : undefined
+          }
         />
       )}
       {projectPage?.open &&
@@ -2369,6 +2448,22 @@ const App: React.FC = () => {
       >
       {/* Editors and owners only: for anyone else the provider renders its
           children alone, so no comment badge, button or drawer appears. */}
+      {/* "Changed since your last visit" (#1397): the change set, the marks on
+          the canvas and what the header pill reads. Always mounted so the tree
+          never remounts when the flag arrives; inert until it does. Never
+          active in a `?version=` preview. */}
+      <ChangeMarksProvider
+        dashboardId={dashboardId}
+        familyId={groupingScopeId}
+        projectId={dashboard?.project_id ? String(dashboard.project_id) : null}
+        previewVersionId={previewVersionId}
+        userLoading={userLoading}
+        readerId={currentUser?.id ?? currentUser?.email ?? null}
+        canEdit={canEditNow}
+        components={summaryMetadata}
+        filters={deferredFilters}
+        onSplitChange={setNewsSplit}
+      >
       <CommentsProvider
         dashboardId={dashboardId}
         metadata={summaryMetadata}
@@ -2397,7 +2492,9 @@ const App: React.FC = () => {
           isOwner: canEditNow,
           titleExtras:
             dashboard && !loading && !error ? (
-              <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+              <>
+                <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+              </>
             ) : undefined,
           extraActions: headerActions,
         }}
@@ -2459,6 +2556,7 @@ const App: React.FC = () => {
         guideOpen={guide.open}
       />
       </CommentsProvider>
+      </ChangeMarksProvider>
       </ComponentExportProvider>
       </GenomeBrowserTargetProvider>
       </TabLinkProvider>

@@ -297,9 +297,18 @@ s3:
 backend:
   image:
     repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
-    tag: "1.21.0-b6"
+    tag: "1.21.0"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
+  # Extra labels on the backend pods (pod template only, never the selector).
+  # SciLifeLab Serve denies outbound traffic by default and opens it to pods
+  # carrying this label. The backend dials out for the UCSC track catalogue
+  # and genome files (JBrowse), remote tracks, structure lookups, OIDC and
+  # migration targets. The label is inert on clusters without that policy.
+  # Set it to "false" to keep the backend off the internet on Serve (an empty
+  # map in an override file does not remove it: Helm merges maps).
+  podLabels:
+    networking/allow-internet-egress: "true"
   # Raw container env entries (name/value or valueFrom), appended after the
   # chart-managed ones. The ConfigMap is an explicit key allowlist, so this is
   # the way to set variables it does not know, e.g. the botocore checksum
@@ -365,6 +374,14 @@ backend:
     # JSON list of domain suffixes (["serve.scilifelab.se"]), or "[]" to turn
     # sending off.
     DEPICTIO_MIGRATION_DESTINATION_DOMAINS: '["*"]'
+
+    # "Changed since your last visit" (#1397): a per-reader mark per dashboard
+    # and project, the changes pill, updated dots, figure before/after and the
+    # ingestion bell. Off by default. MARK_MODE is the default for readers who
+    # have not chosen: "sticky" (the mark stays until "Mark as seen") or
+    # "previous_visit" (every visit moves it).
+    DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_ENABLED: "false"
+    DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_MARK_MODE: "sticky"
 
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
@@ -539,9 +556,12 @@ celery:
   image:
     # Distinct worker image (Celery + Playwright/chromium for screenshots).
     repository: ghcr.io/depictio/depictio-worker
-    tag: "1.21.0-b6"
+    tag: "1.21.0"
     pullPolicy: Always
   replicas: 1
+  # Same as backend.podLabels: server-side ingestion can read remote data.
+  podLabels:
+    networking/allow-internet-egress: "true"
   # Same as backend.extraEnv, for the worker container.
   extraEnv: []
   resources:
@@ -586,7 +606,7 @@ celery:
 viewer:
   image:
     repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
-    tag: "1.21.0-b6"
+    tag: "1.21.0"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Deployment update strategy. Default "Recreate" matches the other

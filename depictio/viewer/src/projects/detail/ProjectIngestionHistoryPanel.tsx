@@ -23,9 +23,12 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { fetchProjectIngestionRuns } from 'depictio-react-core';
+import type { MonitoringIngestionRun, MonitoringIngestionStep } from 'depictio-react-core';
+import { INGESTION_STATUS_META } from '../IngestionResultTable';
 
 import { absTime, formatDuration, matchesQuery, spanMs, stepTally } from '../../monitoring/format';
 import { Field, PaneHeader, SearchInput, TimeText } from '../../monitoring/primitives';
@@ -36,6 +39,94 @@ import { TriggerBadge } from '../../monitoring/TriggerBadge';
 
 const ACTIVE_POLL_MS = 3000;
 const IDLE_POLL_MS = 30000;
+
+/** A step's outcome in the words and marks of an ingestion row. */
+const STEP_STATUS: Record<string, string> = {
+  success: 'ingested',
+  ok: 'ingested',
+  failed: 'failed',
+  failure: 'failed',
+  skipped: 'skipped',
+  running: 'running',
+  pending: 'planned',
+};
+const ORDER: Record<string, number> = { failed: 0, running: 1, planned: 2, skipped: 3, ingested: 4 };
+
+/**
+ * One collection per line: its outcome, its name and, for anything but a
+ * clean ingest, the reason. Collections are ingested independently, so they
+ * read as a list (failures first), not as a sequence of steps.
+ */
+const CollectionOutcomes: React.FC<{ steps: MonitoringIngestionStep[] }> = ({ steps }) => {
+  const rows = steps
+    .map((st) => ({
+      tag: st.data_collection_tag || st.name,
+      status: STEP_STATUS[st.status] ?? st.status,
+      message: st.error || st.detail || null,
+    }))
+    .sort((a, b) => (ORDER[a.status] ?? 5) - (ORDER[b.status] ?? 5) || a.tag.localeCompare(b.tag));
+  return (
+    <Stack gap={6} data-testid="run-collection-outcomes">
+      {rows.map((r) => {
+        const meta = INGESTION_STATUS_META[r.status as keyof typeof INGESTION_STATUS_META] ?? {
+          color: 'gray',
+          icon: 'mdi:help-circle-outline',
+          label: r.status,
+        };
+        return (
+          <Group key={r.tag} gap="xs" wrap="nowrap" align="flex-start" data-status={r.status}>
+            <Tooltip label={meta.label} withArrow openDelay={300}>
+              <Box component="span" mt={2} style={{ flexShrink: 0, lineHeight: 0 }}>
+                <Icon icon={meta.icon} width={16} color={`var(--mantine-color-${meta.color}-6)`} aria-label={meta.label} />
+              </Box>
+            </Tooltip>
+            <Stack gap={0} style={{ minWidth: 0 }}>
+              <Text size="sm" fw={500} ff="monospace">
+                {r.tag}
+              </Text>
+              {r.message && r.status !== 'ingested' && (
+                <Text size="xs" c={r.status === 'failed' ? 'red' : 'dimmed'} style={{ overflowWrap: 'anywhere' }}>
+                  {r.message}
+                </Text>
+              )}
+            </Stack>
+          </Group>
+        );
+      })}
+    </Stack>
+  );
+};
+
+/** One ingestion run in full: where it ran, what happened to each collection
+ *  and, for a run with real stages (scan, write, ...), those in order. Shared
+ *  with the Activity timeline, which lists the same runs. */
+export const IngestionRunDetails: React.FC<{ run: MonitoringIngestionRun }> = ({ run: r }) => {
+  const tags = new Set((r.data_collections ?? []).map((d) => d.tag));
+  const steps = r.steps ?? [];
+  // A step names a collection (the UI's Add data writes one per collection)
+  // or a stage of the run; only stages have an order worth drawing.
+  const perCollection = steps.filter((st) => st.data_collection_tag || tags.has(st.name));
+  const stages = steps.filter((st) => !(st.data_collection_tag || tags.has(st.name)));
+  return (
+    <Stack gap="sm">
+      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md" verticalSpacing="xs">
+        <Field label="Instance">{r.cli_instance_label || '—'}</Field>
+        <Field label="CLI version">{r.cli_version ? `v${r.cli_version}` : '—'}</Field>
+        <Field label="Started">{absTime(r.started_at)}</Field>
+        <Field label="Steps">{stepTally(r.steps)}</Field>
+      </SimpleGrid>
+      {stages.length > 0 && (
+        <IngestionStepTimeline steps={stages} currentStep={r.status === 'running' ? r.current_step : null} />
+      )}
+      {perCollection.length > 0 && <CollectionOutcomes steps={perCollection} />}
+      {r.error && !perCollection.some((st) => (st.error || st.detail) === r.error) && (
+        <Alert color="red" variant="light" p="xs">
+          <Text size="xs">{r.error}</Text>
+        </Alert>
+      )}
+    </Stack>
+  );
+};
 
 const ProjectIngestionHistoryPanel: React.FC<{
   projectId: string;
@@ -156,27 +247,7 @@ const ProjectIngestionHistoryPanel: React.FC<{
                 </Group>
               </Accordion.Control>
               <Accordion.Panel>
-                {open.includes(r.run_id) && (
-                  <Stack gap="sm">
-                    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md" verticalSpacing="xs">
-                      <Field label="Instance">{r.cli_instance_label || '—'}</Field>
-                      <Field label="CLI version">{r.cli_version ? `v${r.cli_version}` : '—'}</Field>
-                      <Field label="Started">{absTime(r.started_at)}</Field>
-                      <Field label="Steps">{stepTally(r.steps)}</Field>
-                    </SimpleGrid>
-                    {r.steps && r.steps.length > 0 && (
-                      <IngestionStepTimeline
-                        steps={r.steps}
-                        currentStep={r.status === 'running' ? r.current_step : null}
-                      />
-                    )}
-                    {r.error && (
-                      <Alert color="red" variant="light" p="xs">
-                        <Text size="xs">{r.error}</Text>
-                      </Alert>
-                    )}
-                  </Stack>
-                )}
+                {open.includes(r.run_id) && <IngestionRunDetails run={r} />}
               </Accordion.Panel>
             </Accordion.Item>
           ))}

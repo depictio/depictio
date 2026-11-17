@@ -7,8 +7,8 @@
  * drawer AND over its dimming overlay. Anything that leaves the document flow
  * on a dashboard picks its layer from here instead.
  *
- * Above these sit the walkthrough's spotlight backdrop (1000) and its popover
- * (1100), which must never be occluded — leave room below them.
+ * The coach's cards (`viewer/src/coach`) sit just below `overlay`: a modal
+ * the visitor opens covers them, not the other way round.
  */
 export const Z_LAYERS = {
   /** Fixed furniture pinned to the viewport: FABs, banners. */

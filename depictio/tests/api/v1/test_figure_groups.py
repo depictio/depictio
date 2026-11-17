@@ -22,14 +22,17 @@ from depictio.api.v1.services.figure.groups import (
     MAX_VALUES_PER_GROUP,
     OTHER_COLOR,
     OTHER_LABEL,
+    OVERALL_LABEL,
     apply_column_coloring_kwargs,
     apply_facet_kwargs,
     apply_group_coloring_kwargs,
+    apply_group_split_kwargs,
     group_annotation_expr,
     group_source_columns,
     sanitize_color_by_column,
     sanitize_group_defs,
     sanitize_grouping_display,
+    with_overall_rows,
 )
 
 
@@ -331,6 +334,55 @@ class TestFacetDisplay:
         assert out["facet_col"] == GROUP_COLUMN
         # facet_row is the author's own split axis; a grid is still readable.
         assert out["facet_row"] == "year"
+
+    def test_group_split_keeps_the_figure_colours(self):
+        """The "what's new" split: one panel per group, the figure's own colour
+        encoding untouched, panels in group order."""
+        groups = [
+            {
+                "name": "New: run_3",
+                "column_name": "depictio_run_id",
+                "values": ["run_3"],
+                "color": "#159090",
+            },
+            {
+                "name": "Seen before",
+                "column_name": "depictio_run_id",
+                "values": ["run_1"],
+                "color": "#adb5bd",
+            },
+        ]
+        base = {"x": "a", "color": "species", "category_orders": {"species": ["b", "a"]}}
+        out = apply_group_split_kwargs(base, groups, include_other=False)
+        assert out["color"] == "species"
+        assert "color_discrete_map" not in out
+        assert out["facet_col"] == GROUP_COLUMN
+        assert out["category_orders"] == {
+            "species": ["b", "a"],
+            GROUP_COLUMN: ["New: run_3", "Seen before"],
+        }
+        assert base == {"x": "a", "color": "species", "category_orders": {"species": ["b", "a"]}}
+        with_other = apply_group_split_kwargs({}, groups[:1], include_other=True)
+        assert with_other["category_orders"][GROUP_COLUMN] == ["New: run_3", OTHER_LABEL]
+
+    def test_split_with_overall_puts_all_first(self):
+        groups = [_group("run_b"), _group("run_c"), _group("Seen before")]
+        out = apply_group_split_kwargs({}, groups, include_other=False, include_overall=True)
+        assert out["category_orders"][GROUP_COLUMN] == [
+            OVERALL_LABEL,
+            "run_b",
+            "run_c",
+            "Seen before",
+        ]
+
+    def test_overall_rows_repeat_every_row_under_all(self):
+        df = pl.DataFrame({"sample": ["s1", "s2", "s3"], GROUP_COLUMN: ["A", "Other", "B"]})
+        out = with_overall_rows(df.filter(pl.col(GROUP_COLUMN) != "Other"), df)
+        # Every row once under "All" (Other included: "All" is the whole data),
+        # then the grouped rows as they were.
+        assert out[GROUP_COLUMN].to_list() == [OVERALL_LABEL] * 3 + ["A", "B"]
+        lazy = with_overall_rows(df.lazy(), df.lazy()).collect()
+        assert lazy.height == 6
 
     def test_apply_facet_kwargs_does_not_mutate(self):
         original = {"x": "a"}

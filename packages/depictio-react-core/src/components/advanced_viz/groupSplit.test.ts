@@ -95,6 +95,22 @@ describe('splitFigureByGroups', () => {
     expect(out.layout.annotations.map((a: any) => a.text)).toEqual(['Soil', 'River', OTHER_LABEL]);
   });
 
+  it('opens the what\'s new split on an All panel holding every group, each in its colour', () => {
+    const out = splitFigureByGroups(figure(), {
+      ...OPTS,
+      groupRender: { ...GROUPS, display: 'facet', showOverall: true },
+    });
+    expect(out.layout.annotations.map((a: any) => a.text)).toEqual(['All', 'Soil', 'River', OTHER_LABEL]);
+    const inAll = out.data.filter((t: any) => t.xaxis === 'x');
+    expect(inAll.map((t: any) => t.name)).toEqual(['Soil', 'River', OTHER_LABEL]);
+    // Each group sits in the legend once, not once per panel.
+    expect(out.data.filter((t: any) => t.showlegend).map((t: any) => t.name)).toEqual([
+      'Soil',
+      'River',
+      OTHER_LABEL,
+    ]);
+  });
+
   it('degrades a split to colouring when the renderer cannot facet', () => {
     const out = splitFigureByGroups(figure(), {
       ...OPTS,

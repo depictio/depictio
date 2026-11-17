@@ -383,6 +383,31 @@ def count_data_version_kinds(stamps: list[dict[str, Any]]) -> dict[str, int]:
     return kinds
 
 
+def _stamp_multiqc_reports(stamp: DataCollectionStamp) -> None:
+    """Record the set of reports a MultiQC collection holds, in place.
+
+    Each report owns a content-addressed parquet, so the set of report ids is
+    what "the data as of this version" means. An overwrite re-ingest updates a
+    report in place under the same S3 key, which this cannot reproduce. A
+    collection with no report stays ``none`` with a reason.
+    """
+    from depictio.api.v1.services.multiqc.dc_lookup import fetch_reports_for_dc, report_set_digest
+
+    reports = fetch_reports_for_dc(stamp.dc_id)
+    if not reports:
+        stamp.reason = "no_multiqc_reports"
+        return
+    ids = sorted(report["id"] for report in reports)
+    stamp.version_kind = "manifest"
+    stamp.reason = None
+    stamp.report_ids = ids
+    stamp.s3_locations = [report["s3_location"] for report in reports if report["s3_location"]]
+    stamp.sample_count = len({str(s) for report in reports for s in report["samples"]})
+    stamp.manifest_digest = report_set_digest(ids)
+    stamp.as_of = utc_now_naive()
+    stamp.unversioned_parts = ["report_overwrites"]
+
+
 def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
     """Record what data each referenced collection was at, right now.
 
@@ -461,6 +486,8 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
             # Populated in the manifest stage; the stamp records the intent and
             # the instant so a later backfill has an anchor.
             stamp.reason = "manifest_versioning_not_enabled"
+            if dc_type.lower() == "multiqc":
+                _stamp_multiqc_reports(stamp)
             if latest:
                 stamp.columns = schema_integrity.columns_from_aggregation(described)
                 stamp.schema_hash = schema_integrity.generate_schema_hash(stamp.columns)

@@ -132,7 +132,12 @@ const SplitPanels: React.FC<SplitPanelsProps> = ({
   // A flat list of cells, wrapped. Two dimensions arrive already crossed, so
   // the wrap is what gives the grid back its shape without this component
   // needing to know how many dimensions produced the cells.
-  const columns = Math.min(panels.length, PANEL_COL_WRAP);
+  // Balanced: four panels are two by two, not three and one, so no panel is
+  // squeezed narrower than it has to be.
+  const columns =
+    panels.length <= PANEL_COL_WRAP
+      ? panels.length
+      : Math.min(PANEL_COL_WRAP, Math.ceil(Math.sqrt(panels.length)));
 
   const panelRows = Math.ceil(panels.length / columns);
 

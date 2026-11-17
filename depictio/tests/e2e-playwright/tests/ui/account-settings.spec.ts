@@ -150,7 +150,7 @@ test.describe("Account entry points", () => {
       timeout: 20_000,
     });
     // CI runs with DEPICTIO_DEV_MODE=true, which suppresses the walkthrough
-    // (see src/walkthrough/availability.ts): there the header button and the
+    // (see src/coach/availability.ts): there the header button and the
     // restart are both disabled. On a deployment with tours on, both are
     // live. The two surfaces share one gate, so they must agree.
     const headerTour = page.locator("[data-testid='tour-button']");

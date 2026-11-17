@@ -43,6 +43,7 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_section_separator,
 )
+from depictio.cli.cli.utils.run_bindings import carry_run_bindings
 from depictio.cli.cli.utils.scan import (
     flat_run_tag_clash,
     prune_empty_optional_manifest_dcs,
@@ -891,6 +892,15 @@ def refresh_run_locations(project_config, remote_project: dict, drop_missing: bo
     return report
 
 
+def _resolved_locations(project_config) -> dict[str, list[str]]:
+    """The locations each workflow of a freshly resolved configuration lists: the
+    data root it was resolved against, before the server's runs are merged in."""
+    return {
+        wf.workflow_tag: [str(loc) for loc in (wf.data_location.locations or [])]
+        for wf in project_config.workflows
+    }
+
+
 def attach_run_to_project(project_config, remote_project: dict) -> dict:
     """Fold this run into an existing project, in place, and report what changed.
 
@@ -899,46 +909,45 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
     refresh keeps it. The scan is incremental, so the runs already registered are
     skipped.
 
-    Two things are deliberately preserved from the server:
-
-    * the existing locations, so attaching never drops a run already ingested;
-    * the ``scan.mode: single`` bindings. Such a collection points at ONE absolute
-      path, substituted from whichever ``DATA_ROOT`` the template was resolved
-      against, which here is the *new* run. Pushing that as-is would re-point the
-      collection, and the next scan deletes files whose location no longer matches
-      the config (the stale-file cleanup in ``scan_files_for_data_collection``), so
-      the original run's samplesheet/metadata/tree would be dropped.
+    The configuration was resolved against this run, so what a template resolves
+    per data root is kept per run rather than overwritten (see
+    :func:`~depictio.cli.cli.utils.run_bindings.carry_run_bindings`): each
+    ``single`` collection's file, each recipe's params and the template variables.
+    The project-level values stay the first run's.
 
     Returns ``{"added": {workflow_tag: [locations]}, "recorded": {workflow_tag:
-    [locations]}, "kept_single": [dc_tags]}``.
+    [locations]}, "bindings": BindingReport}``.
     """
-    remote_single: dict[tuple[str, str], str] = {}
-    for wf_doc in remote_project.get("workflows", []) or []:
-        wf_tag = wf_doc.get("workflow_tag")
-        if not wf_tag:
-            continue
-        for dc_doc in wf_doc.get("data_collections", []) or []:
-            scan_doc = (dc_doc.get("config") or {}).get("scan") or {}
-            if str(scan_doc.get("mode", "")).lower() != "single":
-                continue
-            filename = (scan_doc.get("scan_parameters") or {}).get("filename")
-            dc_tag = dc_doc.get("data_collection_tag")
-            if filename and dc_tag:
-                remote_single[(wf_tag, dc_tag)] = filename
-
+    resolved_from = _resolved_locations(project_config)
     merge = merge_run_locations(project_config, remote_project)
+    bindings = carry_run_bindings(project_config, remote_project, resolved_from)
+    return {**merge, "bindings": bindings}
 
-    kept_single: list[str] = []
-    for wf in project_config.workflows:
-        for dc in wf.data_collections:
-            if not (dc.config.scan and dc.config.scan.mode.lower() == "single"):
-                continue
-            previous = remote_single.get((wf.workflow_tag, dc.data_collection_tag))
-            if previous and previous != dc.config.scan.scan_parameters.filename:
-                dc.config.scan.scan_parameters.filename = previous
-                kept_single.append(dc.data_collection_tag)
 
-    return {**merge, "kept_single": kept_single}
+def _report_run_bindings(report) -> None:
+    """Say which collections read a file, params or variables of their own per run."""
+    if report.per_run_single:
+        rich_print_checked_statement(
+            f"Read per run, each from its own file: {escape(', '.join(report.per_run_single))}",
+            "info",
+        )
+    if report.shared_single:
+        rich_print_checked_statement(
+            "Same file as an earlier run, kept once for every run: "
+            f"{escape(', '.join(report.shared_single))}",
+            "info",
+        )
+    if report.missing_single:
+        rich_print_checked_statement(
+            "Not in this run, the file of the run before is kept: "
+            f"{escape(', '.join(report.missing_single))}",
+            "warning",
+        )
+    if report.per_run_params:
+        rich_print_checked_statement(
+            f"Recipe parameters kept per run: {escape(', '.join(report.per_run_params))}",
+            "info",
+        )
 
 
 def _stop_on_missing_locations(report: dict) -> None:
@@ -1256,6 +1265,7 @@ class IngestOptions:
     incremental_write: bool = False
     skip_unchanged: bool = False
     repartition: bool = False
+    per_run: bool = False
     async_upsert: bool = False
     # Where to write how the ingestion ended, as JSON, for scripts.
     result_json: str | None = None
@@ -1335,6 +1345,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     write_mode = opts.write_mode
     incremental_write = opts.incremental_write
     skip_unchanged = opts.skip_unchanged
+    per_run = opts.per_run
     repartition = opts.repartition
     async_upsert = opts.async_upsert
     result_json = opts.result_json
@@ -2117,6 +2128,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     if update_config and not attach_run and not dry_run:
         remote = api_get_project_from_name(str(project_config.name), CLI_config)
         if remote.status_code == 200:
+            resolved_from = _resolved_locations(project_config)
             run_locations = refresh_run_locations(
                 project_config, remote.json(), drop_missing=drop_missing_runs
             )
@@ -2124,6 +2136,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 _stop_on_missing_locations(run_locations)
             _stop_on_run_tag_clash(project_config)
             _report_run_locations(project_config, run_locations)
+            _report_run_bindings(carry_run_bindings(project_config, remote.json(), resolved_from))
 
     # Step 3b (--attach-run): fold the run into an EXISTING project instead of
     # creating a new one. `data_location.locations` is a list and the scan treats
@@ -2132,6 +2145,8 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # validation above already ran merge_existing_ids(), which copies the server's
     # workflow / data-collection ids onto this config by tag, so the runs and files
     # already ingested stay attached to the same collections.
+    # The run folders this --attach-run adds: processing writes their rows alone.
+    attached_locations: list[str] = []
     if attach_run and not dry_run:
         rich_print_section_separator("Step 3b: Attaching run to existing project")
         try:
@@ -2150,6 +2165,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             report = attach_run_to_project(project_config, remote.json())
             _stop_on_run_tag_clash(project_config)
             added_locations = {tag: locs for tag, locs in report["added"].items() if locs}
+            attached_locations = sorted({loc for locs in added_locations.values() for loc in locs})
             for wf_tag, new_locations in added_locations.items():
                 rich_print_checked_statement(
                     f"Workflow '{escape(wf_tag)}': +{len(new_locations)} run location(s) -> "
@@ -2168,13 +2184,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     ),
                     "info",
                 )
-            if report["kept_single"]:
-                rich_print_checked_statement(
-                    f"{len(report['kept_single'])} single-file data collection(s) keep "
-                    f"the file they were first ingested from, and do not pick up this "
-                    f"run's copy: {escape(', '.join(report['kept_single']))}",
-                    "warning",
-                )
+            _report_run_bindings(report["bindings"])
 
             success_count += 1
             _rec("attach_run", "success", f"{len(project_config.workflows)} workflow(s)")
@@ -2195,6 +2205,8 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             _proj = locals().get("project_config")
             ingestion.CLI_config = CLI_config
             ingestion.project_config = _proj
+            from depictio.cli.cli.utils.run_roots import attached_run_tags
+
             ingestion.run_id = api_monitoring_ingestion_start(
                 CLI_config=CLI_config,
                 command=command,
@@ -2208,6 +2220,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 # says what started its cycle.
                 trigger=trigger,
                 trigger_reason=trigger_reason,
+                run_tags=attached_run_tags(
+                    getattr(_proj, "workflows", None), CLI_config, attached_locations
+                ),
             )
         except Exception:
             ingestion.run_id = None
@@ -2482,11 +2497,13 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                             "repartition": repartition,
                             "scan_signal": scan_signal,
                             "incremental_write": incremental_write,
+                            "per_run": per_run,
                             # Off for `ingest`: running it again is how someone
                             # rebuilds a project that drifted, so it must not
                             # quietly decide to do nothing.
                             "skip_unchanged": skip_unchanged,
                             "dry_run": scan_dry_run,
+                            "attach_locations": attached_locations,
                         }
 
                         process_result = process_project_helper(
@@ -2962,9 +2979,9 @@ def register_run_command(app: typer.Typer):
                 help="Add DATA_DIR to an EXISTING project as one more run, instead of "
                 "creating a project. The run is recorded as attached, so a later "
                 "--update-config keeps it. The project is found by --project, else by the "
-                "template's own name. Implies --update-config, dashboards included. The "
-                "tables of file-based collections are rebuilt from all runs; collections a "
-                "recipe computes still read the project's first run only.",
+                "template's own name. Implies --update-config, dashboards included. Only "
+                "the new run's rows are written; a recipe that mixes samples (distances, "
+                "ordinations, top-N) is recomputed over every run, see --per-run.",
                 rich_help_panel=PROJECT_PANEL,
             ),
         ] = False,
@@ -3192,6 +3209,16 @@ def register_run_command(app: typer.Typer):
                 rich_help_panel=STEPS_PANEL,
             ),
         ] = False,
+        per_run: Annotated[
+            bool,
+            typer.Option(
+                "--per-run",
+                help="Compute every recipe once per run, including those that mix samples "
+                "(distances, ordinations, top-N cuts), which are otherwise recomputed over "
+                "all the project's runs at once. Their per-run outputs are then stacked.",
+                rich_help_panel=STEPS_PANEL,
+            ),
+        ] = False,
         skip_unchanged: Annotated[
             bool,
             typer.Option(
@@ -3415,6 +3442,7 @@ def register_run_command(app: typer.Typer):
             upload_chunk_size=upload_chunk_size,
             write_mode=write_mode,
             incremental_write=incremental_write,
+            per_run=per_run,
             skip_unchanged=skip_unchanged,
             repartition=repartition,
             async_upsert=async_upsert,

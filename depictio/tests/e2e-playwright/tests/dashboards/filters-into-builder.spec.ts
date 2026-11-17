@@ -107,10 +107,14 @@ test.describe("Active filters propagate into the builder and new components", ()
       .replace(/:/g, "-")}`;
     await createDashboard(page, uniqueTitle);
 
-    // Open the new dashboard and switch to edit mode.
+    // Open the new dashboard and switch to edit mode. Click the card's open
+    // link, not the card: the card is not a link, and its centre falls
+    // between the thumbnail and the title once a taller card shares its row.
     await page
       .locator("[data-testid='dashboard-card']")
       .filter({ hasText: uniqueTitle })
+      .first()
+      .locator("a[href*='/dashboard/']")
       .first()
       .click();
     await page.waitForURL(/\/dashboard\//, { timeout: 15_000 });

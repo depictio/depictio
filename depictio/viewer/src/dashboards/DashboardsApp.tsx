@@ -26,7 +26,7 @@ import type {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { AppSidebar, LoadErrorCard } from '../chrome';
-import TourButton from '../walkthrough/TourButton';
+import TourButton from '../coach/TourButton';
 import DashboardsList from './DashboardsList';
 import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import CreateDashboardModal from './CreateDashboardModal';

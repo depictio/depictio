@@ -1474,6 +1474,8 @@ export interface ColumnRange {
 export interface DataPinFields {
   as_of_version?: string;
   data_versions?: Record<string, number | null>;
+  /** MultiQC: report ids to read per collection (`null` keeps it live). */
+  report_sets?: Record<string, string[] | null>;
 }
 
 export interface FilterOptionsRequest extends DataPinFields {
@@ -1562,10 +1564,13 @@ export async function fetchResolvedGroups(
   dcId: string,
   groups: Array<{ name: string; column_name: string; values: string[]; color: string; dc_id?: string }>,
   signal?: AbortSignal,
+  /** The component the groups are for: groups of runs are then rewritten to
+   *  the ids it matches its marks by (its samples, its features). */
+  componentId?: string,
 ): Promise<ResolvedGroupsResult> {
   const res = await authFetch(`${API_BASE}/dashboards/resolve_groups/${dashboardId}`, {
     method: 'POST',
-    body: JSON.stringify({ dc_id: dcId, groups }),
+    body: JSON.stringify({ dc_id: dcId, groups, ...(componentId ? { component_id: componentId } : {}) }),
     signal,
   });
   if (!res.ok) throw new Error(`Failed to resolve the groups: ${res.status}`);
@@ -1625,6 +1630,8 @@ export interface DataVersionCollectionStatus {
   status: DataVersionCollectionState;
   /** The commit read, for a pinned collection. */
   delta_version?: number | null;
+  /** Reports read, for a pinned MultiQC collection. */
+  report_count?: number | null;
   /** Why a collection is live or not versioned, in the server's words. */
   reason?: string | null;
 }
@@ -1879,6 +1886,11 @@ export interface RenderFigureOptions {
   display?: GroupingDisplay;
   /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
   showOther?: boolean;
+  /** Groups in "facet": split into one panel per group but keep the figure's
+   *  own colours (the "what's new" split, #1397). */
+  keepColor?: boolean;
+  /** With `keepColor`: an "All" panel of every row first. */
+  showOverall?: boolean;
   /** Draw the figure in this style rather than its own (a highlight showing a
    *  figure from another tab). Sent only when set. */
   style?: FigureStyleRequest;
@@ -1920,6 +1932,10 @@ export async function renderFigure(
   }
   if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
     groupBody.grouping_display = 'facet';
+    if (options.keepColor && groupBody.color_by_group) {
+      groupBody.group_keep_color = true;
+      if (options.showOverall) groupBody.group_overall = true;
+    }
   }
   if (options?.style) groupBody.style = options.style;
   const res = await authFetch(
@@ -3313,19 +3329,27 @@ export async function renderMultiQC(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  /** Data time travel: `as_of_version` / `report_sets` / `definition_version`,
+   *  from `dataVersionBody`. Empty for a live read. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<MultiQCRenderResult> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_multiqc/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
   if (res.status === 202) {
     const body = (await res.json()) as MultiQCPreparingResponse;
     return { ...body, status: 'preparing' };
   }
-  if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC');
+  if (!res.ok) {
+    if (dataVersions && Object.keys(dataVersions).length > 0) {
+      await throwRenderError(res, 'Failed to render MultiQC', dataVersions);
+    }
+    await throwHttpDetailError(res, 'Failed to render MultiQC');
+  }
   const body = (await res.json()) as FigureResponse;
   return { ...body, status: 'ready' };
 }
@@ -3379,15 +3403,22 @@ export async function renderMultiQCGeneralStats(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[] = [],
+  /** Data time travel; see `renderMultiQC`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<GeneralStatsPayload> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_multiqc_general_stats/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ filters, ...(dataVersions ?? {}) }),
     },
   );
-  if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC General Stats');
+  if (!res.ok) {
+    if (dataVersions && Object.keys(dataVersions).length > 0) {
+      await throwRenderError(res, 'Failed to render MultiQC General Stats', dataVersions);
+    }
+    await throwHttpDetailError(res, 'Failed to render MultiQC General Stats');
+  }
   return res.json();
 }
 
@@ -3429,7 +3460,7 @@ export interface ServerInfo {
   docs_url: string;
   version_check: VersionCheckBlock | null;
   /** UI switches from the server's settings; absent on older servers. */
-  features?: { migration?: boolean };
+  features?: { migration?: boolean; changes_since?: boolean };
 }
 
 /** Optional-auth: the bearer goes along when there is one (it is what makes
@@ -5269,6 +5300,10 @@ export interface ProjectRun {
   files: number;
   dc_files: Record<string, number>;
   scans: RunScan[];
+  /** The recipe collections computed from the run, each with how it relates
+   *  to the runs: `run` (from this run alone), `aggregate` (recomputed over
+   *  every run) or `pipeline` (the pipeline's statistic for this run). */
+  dc_outputs?: Record<string, 'run' | 'aggregate' | 'pipeline' | string>;
 }
 
 /** The project's runs, their scans and the files each collection found in
@@ -9119,6 +9154,9 @@ export interface MonitoringIngestionRun {
   project_config_path?: string | null;
   data_root?: string | null;
   data_collections?: MonitoringIngestionDataCollection[];
+  /** Run tags (run folders) this ingestion brought in, e.g. the new runs of
+   *  an attach_run. Absent on runs recorded before this existed. */
+  run_tags?: string[];
   /** True when the reader is only a viewer of the run's project: commands,
    *  local paths, user details and step messages are left out. */
   redacted?: boolean;
@@ -10882,4 +10920,436 @@ export function componentExportPath(
     `${API_BASE}/export/dashboards/${encodeURIComponent(dashboardId)}` +
     `/components/${encodeURIComponent(componentId)}?${query}`
   );
+}
+
+// ── What changed since the reader's last visit (#1397) ─────────────────────
+//
+// A signed-in reader's mark lives on the server. An anonymous or temporary
+// reader's lives in the browser: the server returns `current_baseline` and
+// reads it back from the request body. `since` / `beforeRun` ask for a
+// read-only view that never moves a mark.
+
+export type MarkMode = 'sticky' | 'previous_visit';
+
+/** Opaque to the client: stored and sent back as is. */
+export type ReaderBaseline = Record<string, unknown> & { seen_at: string };
+export type DismissedComponents = Record<string, { fingerprint: string | null; data_token: string | null }>;
+
+export interface DataChange {
+  dc_id: string;
+  dc_type: string;
+  workflow_tag: string;
+  data_collection_tag: string;
+  kind: 'refreshed' | 'emptied';
+  new_run_tags: string[];
+  touched_run_tags: string[];
+  /** A recipe collection's relation to the runs (see ProjectRun.dc_outputs). */
+  run_scope?: string | null;
+  /** Runs the reader had seen whose rows a recomputation over every run
+   *  rewrote: "seen before" holds new values for them. */
+  recomputed_run_tags?: string[];
+  /** Delta collections: the runs the reader had seen (absent on MultiQC). */
+  seen_run_tags?: string[];
+  /** Delta collections: when, and by whom, each new run was written. `at` is
+   *  the last commit's, a later run's when several arrived since the mark. */
+  run_at?: Record<string, string | null>;
+  run_by?: Record<string, string[]>;
+  rows_before?: number | null;
+  rows_after?: number | null;
+  rows_added?: number;
+  commits?: number;
+  delta_from?: number | null;
+  delta_to?: number | null;
+  reports_added?: number;
+  reports_refreshed?: number;
+  reports_removed?: number;
+  new_samples?: string[];
+  new_sample_count?: number;
+  /** MultiQC collections: the new samples of each new run. A sample that
+   *  reports of several runs name is under none. */
+  new_samples_by_run?: Record<string, string[]>;
+  /** MultiQC collections: the samples the reader had seen that are still
+   *  there, the other side of the split. Null when either side is too long
+   *  to list in full. */
+  seen_samples?: string[] | null;
+  ingestion_run_ids: string[];
+  by: string[];
+  at: string | null;
+}
+
+export interface FailedIngestion {
+  run_id: string;
+  status: string;
+  run_tags: string[];
+  data_collection_tags: string[];
+  at: string | null;
+}
+
+export interface DashboardChange {
+  kind:
+    | 'component_added'
+    | 'component_edited'
+    | 'component_removed'
+    | 'tab_added'
+    | 'tab_removed'
+    | 'tab_renamed';
+  tab_id: string;
+  tab_title: string;
+  component_index?: string;
+  component_type?: string | null;
+  component_title?: string;
+  key?: string;
+  authors: string[];
+  version_id: string | null;
+  seq: number | null;
+  at: string | null;
+}
+
+export interface CommentChange {
+  thread_id: string;
+  tab_id: string | null;
+  component_index: string | null;
+  component_title: string | null;
+  number: number | null;
+  kind: 'thread' | 'reply';
+  author: string | null;
+  at: string | null;
+  excerpt: string;
+}
+
+export interface DashboardChangeSet {
+  family_id: string;
+  first_visit: boolean;
+  since: string | null;
+  approximate: boolean;
+  data: DataChange[];
+  failed_ingestions: FailedIngestion[];
+  dashboard: DashboardChange[];
+  comments: CommentChange[];
+  /** `tabId:componentIndex` -> why it is marked. */
+  changed_components: Record<string, Array<'definition' | 'data'>>;
+  baseline_version_id: string | null;
+  /** Runs that are one group of the dashboard's pinned colours, in that
+   *  group's colour (epic #1399). Other runs take a colour of the palette. */
+  run_colors?: Record<string, string>;
+  server_held: boolean;
+  mark_mode: MarkMode;
+  current_baseline?: ReaderBaseline;
+}
+
+export interface ProjectRunChange {
+  workflow_id: string;
+  run_tag: string;
+  run_location: string | null;
+  registered: string | null;
+}
+
+export interface ProjectDashboardChange {
+  family_id: string;
+  title: string;
+  versions: number;
+  authors: string[];
+  seq?: number;
+  version_id?: string;
+}
+
+export interface ProjectChangeSet {
+  project_id: string;
+  first_visit: boolean;
+  since: string | null;
+  data: DataChange[];
+  new_runs: ProjectRunChange[];
+  failed_ingestions: FailedIngestion[];
+  dashboards: ProjectDashboardChange[];
+  server_held: boolean;
+  current_baseline?: ReaderBaseline;
+}
+
+export interface ChangesQuery {
+  baseline?: ReaderBaseline | null;
+  dismissed?: DismissedComponents | null;
+  since?: string | null;
+  beforeRun?: string | null;
+}
+
+function changesBody(q: ChangesQuery): string {
+  const body: Record<string, unknown> = {};
+  if (q.baseline) body.baseline = q.baseline;
+  if (q.dismissed && Object.keys(q.dismissed).length) body.dismissed = q.dismissed;
+  if (q.since) body.since = q.since;
+  if (q.beforeRun) body.before_run = q.beforeRun;
+  return JSON.stringify(body);
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+export async function fetchDashboardChanges(
+  dashboardId: string,
+  q: ChangesQuery = {},
+): Promise<DashboardChangeSet> {
+  const res = await authFetch(`${API_BASE}/changes/dashboard/${dashboardId}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: changesBody(q),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch changes');
+  return (await res.json()) as DashboardChangeSet;
+}
+
+export async function recordDashboardVisit(
+  dashboardId: string,
+): Promise<{ persisted: boolean; moved?: boolean }> {
+  const res = await authFetch(`${API_BASE}/changes/dashboard/${dashboardId}/visit`, { method: 'PUT' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to record the visit');
+  return res.json();
+}
+
+/** No keys: everything is seen (the mark moves to now). Keys: only those components. */
+export async function markDashboardSeen(
+  dashboardId: string,
+  componentKeys?: string[],
+): Promise<{ persisted: boolean; baseline?: ReaderBaseline; dismissed?: DismissedComponents }> {
+  const res = await authFetch(`${API_BASE}/changes/dashboard/${dashboardId}/seen`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(componentKeys ? { component_keys: componentKeys } : {}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to mark as seen');
+  return res.json();
+}
+
+export async function fetchProjectChanges(
+  projectId: string,
+  q: ChangesQuery = {},
+): Promise<ProjectChangeSet> {
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: changesBody(q),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch project changes');
+  return (await res.json()) as ProjectChangeSet;
+}
+
+export async function recordProjectVisit(projectId: string): Promise<{ persisted: boolean }> {
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}/visit`, { method: 'PUT' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to record the visit');
+  return res.json();
+}
+
+export async function markProjectSeen(
+  projectId: string,
+): Promise<{ persisted: boolean; baseline?: ReaderBaseline }> {
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}/seen`, { method: 'PUT' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to mark as seen');
+  return res.json();
+}
+
+export interface TimelineEvent {
+  type: 'ingestion' | 'version' | 'comment';
+  at: string;
+  id: string;
+  by?: string | null;
+  // ingestion
+  status?: string;
+  command?: string | null;
+  trigger?: string | null;
+  run_tags?: string[];
+  collections?: string[];
+  rows_written?: number;
+  // version / comment
+  family_id?: string;
+  dashboard_title?: string;
+  seq?: number;
+  kind?: string;
+  label?: string | null;
+  component_count?: number;
+  tab_id?: string | null;
+  component_title?: string | null;
+  excerpt?: string;
+}
+
+export async function fetchProjectTimeline(
+  projectId: string,
+  opts: { before?: string | null; types?: Array<TimelineEvent['type']>; limit?: number } = {},
+): Promise<{ events: TimelineEvent[]; next_before: string | null }> {
+  const params = new URLSearchParams();
+  if (opts.before) params.set('before', opts.before);
+  if (opts.types?.length) params.set('types', opts.types.join(','));
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  const res = await authFetch(`${API_BASE}/changes/project/${projectId}/timeline${qs ? `?${qs}` : ''}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch the project timeline');
+  return res.json();
+}
+
+export async function fetchChangesPrefs(): Promise<{
+  mark_mode: MarkMode;
+  default_mark_mode: MarkMode;
+  server_held: boolean;
+}> {
+  const res = await authFetch(`${API_BASE}/changes/prefs`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch preferences');
+  return res.json();
+}
+
+export async function saveChangesPrefs(markMode: MarkMode): Promise<{ persisted: boolean; mark_mode: MarkMode }> {
+  const res = await authFetch(`${API_BASE}/changes/prefs`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ mark_mode: markMode }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save preferences');
+  return res.json();
+}
+
+export interface InboxItem {
+  scope_kind: 'dashboard' | 'project';
+  scope_id: string;
+  title: string;
+  new_run_tags: string[];
+  /** As `DashboardChangeSet.run_colors`, for the new runs. */
+  run_colors?: Record<string, string>;
+  refreshed: string[];
+  dashboard_versions: number;
+  at: string | null;
+}
+
+export async function fetchChangesInbox(): Promise<{
+  items: InboxItem[];
+  server_held: boolean;
+  /** The projects of every mark, news or not: whose ingestions the bell listens for. */
+  followed_project_ids?: string[];
+}> {
+  const res = await authFetch(`${API_BASE}/changes/inbox`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch notifications');
+  return res.json();
+}
+
+// ── One component, before and after (#1397) ────────────────────────────────
+
+/** Fields every `component_diff` answer carries. */
+export interface ComponentDiffMeta {
+  component_key?: string;
+  /** The dashboard version the baseline saw; the 'before' definition renders from it. */
+  baseline_version_id?: string | null;
+  /** The reader saw another definition of this component than the live one. */
+  definition_changed?: boolean;
+  since?: string;
+  /** Delta commits compared (figure and advanced viz). */
+  delta_from?: number;
+  delta_to?: number;
+  /** The collection did not move between the two commits. */
+  unchanged?: boolean;
+  truncated?: boolean;
+}
+
+export interface DiffPoint {
+  key: string | null;
+  x: unknown;
+  y: unknown;
+  color?: unknown;
+}
+
+export interface DiffPointsMove {
+  key: string;
+  before: DiffPoint;
+  after: DiffPoint;
+}
+
+export interface DiffPoints extends ComponentDiffMeta {
+  supported: true;
+  shape: 'points';
+  key_column: string | null;
+  x: string;
+  y: string;
+  color: string | null;
+  counts: { added: number; removed: number; changed: number; before: number; after: number };
+  added: DiffPoint[];
+  removed: DiffPoint[];
+  changed: DiffPointsMove[];
+}
+
+export interface DiffGroup {
+  /** Column -> value, for the x column and the colour column when present. */
+  group: Record<string, unknown>;
+  before: number | null;
+  after: number | null;
+  status: 'added' | 'removed' | 'changed';
+}
+
+export interface DiffGroups extends ComponentDiffMeta {
+  supported: true;
+  shape: 'groups';
+  group_columns: string[];
+  x: string | null;
+  color: string | null;
+  metric: 'sum' | 'count' | 'median';
+  value_column: string | null;
+  counts: { added: number; removed: number; changed: number; same: number };
+  groups: DiffGroup[];
+}
+
+export interface DiffSamples extends ComponentDiffMeta {
+  supported: true;
+  shape: 'samples';
+  counts: { added: number; removed: number; before: number; after: number };
+  added: string[];
+  removed: string[];
+  /** The reports the reader saw that still exist: the Before pane's `report_sets`. */
+  report_ids_before?: string[];
+}
+
+export interface DiffRow {
+  key: string | null;
+  values: Record<string, unknown>;
+}
+
+export interface DiffRowChange {
+  key: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+}
+
+export interface DiffRows extends ComponentDiffMeta {
+  supported: true;
+  shape: 'rows';
+  key_column: string | null;
+  value_columns: string[];
+  counts: { added: number; removed: number; changed: number; before: number; after: number };
+  added: DiffRow[];
+  removed: DiffRow[];
+  changed: DiffRowChange[];
+  viz_kind?: string;
+}
+
+export interface DiffUnsupported extends ComponentDiffMeta {
+  supported: false;
+  reason: string;
+}
+
+export type ComponentDiff = DiffPoints | DiffGroups | DiffSamples | DiffRows | DiffUnsupported;
+
+export type SupportedComponentDiff = Exclude<ComponentDiff, DiffUnsupported>;
+
+/**
+ * Which points, bars, samples or rows of one component changed since the
+ * reader's baseline. The body carries the same baseline fields as the change
+ * set (a signed-in reader sends none), plus the filters the figure is drawn
+ * with so the comparison covers the same slice.
+ */
+export async function fetchComponentDiff(
+  dashboardId: string,
+  componentId: string,
+  query: ChangesQuery & { filters?: InteractiveFilter[] | Array<Record<string, unknown>> } = {},
+  signal?: AbortSignal,
+): Promise<ComponentDiff> {
+  const body = JSON.parse(changesBody(query)) as Record<string, unknown>;
+  if (query.filters && query.filters.length) body.filters = query.filters;
+  const res = await authFetch(
+    `${API_BASE}/changes/component_diff/${encodeURIComponent(dashboardId)}/${encodeURIComponent(componentId)}`,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body), signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to compare with your last visit');
+  return (await res.json()) as ComponentDiff;
 }
