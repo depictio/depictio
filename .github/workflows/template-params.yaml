@@ -1,11 +1,17 @@
 name: template-params
 
 # Every `from_params` rule in a template.yaml names a parameter of the nf-core
-# release the template targets: `depictio template check --all --fetch-schema`
-# reads that release's own nextflow_schema.json from GitHub and fails when a
-# rule reads a param the release does not have (misspelt or renamed: the rule
-# would otherwise silently never hold, and the run keep a route it did not take).
+# release the template targets: `depictio template check --fetch-schema` reads
+# that release's own nextflow_schema.json from GitHub and fails when a rule
+# reads a param the release does not have (misspelt or renamed: the rule would
+# otherwise silently never hold, and the run keep a route it did not take).
 # The same command is what a pipeline developer runs locally.
+#
+# A released template and its pipeline's schema both stay as they are, so a
+# pull request checks the templates it changes. Every template is checked when
+# the checker itself changes, on main, and weekly (an upstream schema can only
+# move under a template through a re-tagged release, rare but not impossible).
+# What a NEW release changes is the release monitor's job (nfcore_drift.py).
 on:
   pull_request:
     paths:
@@ -14,6 +20,9 @@ on:
       - "depictio/cli/cli/utils/template_check.py"
       - "depictio/cli/cli/commands/template.py"
       - ".github/workflows/template-params.yaml"
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -30,6 +39,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: astral-sh/setup-uv@v7
 
@@ -38,7 +49,38 @@ jobs:
           uv venv --python 3.12 venv
           uv pip install --python venv/bin/python -e .
 
+      - name: Which templates to check
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "all=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          changed=$(git diff --name-only "$BASE"...HEAD)
+          # The checker or the rule model changed: every template is re-read.
+          if grep -qE '^depictio/(models/models/templates\.py|cli/cli/utils/template_check\.py|cli/cli/commands/template\.py)$|^\.github/workflows/template-params\.yaml$' <<< "$changed"; then
+            echo "all=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          grep -E '^depictio/projects/.+/template\.yaml$' <<< "$changed" > templates.txt || true
+          echo "changed templates:"; cat templates.txt
+
       - name: Check every template against its pipeline's schema
+        if: steps.scope.outputs.all == '1'
         env:
           COLUMNS: "200"
         run: venv/bin/depictio template check --all --fetch-schema
+
+      - name: Check the templates this pull request changes
+        if: steps.scope.outputs.all != '1'
+        env:
+          COLUMNS: "200"
+        run: |
+          status=0
+          while read -r path; do
+            [ -n "$path" ] && [ -f "$path" ] || continue
+            echo "::group::$path"
+            venv/bin/depictio template check "$(dirname "$path")" --fetch-schema || status=1
+            echo "::endgroup::"
+          done < templates.txt
+          exit $status

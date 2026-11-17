@@ -506,3 +506,91 @@ def test_params_drift_reads_both_schemas(nfm: ModuleType, monkeypatch: pytest.Mo
     lines, problems = nfm.params_drift(template, "demo", "1.0.0", "2.0.0")
     assert problems == 1
     assert "`X` reads `skip_x`, gone from the release; renamed to `skip_xx`" in "\n".join(lines)
+
+
+def test_an_error_running_the_template_on_both_runs_needs_review(nfm: ModuleType) -> None:
+    """Recipes passing on the new run prove nothing when the differential run
+    found a source the recipe silently fell back from (ampliseq 3.x)."""
+    passing = [nfm.RecipeCheck("t", "r", "PASS", "ok")] * 3
+    structure = nfm.StructureDiff([], [], [], [], n_checked=3)
+    verdict = nfm.compute_verdict(
+        "1.0.0", "1.0.1", new_data=True, n_problems=0,
+        recipe_results=passing, structure=structure, diff_errors=2,
+    )  # fmt: skip
+    assert verdict.key == "review"
+    assert "both runs" in verdict.reason
+
+
+def test_diff_variables_leave_out_the_vendored_paths(nfm: ModuleType) -> None:
+    template = {
+        "template": {
+            "reference": {
+                "vars": {"GROUP_COL": "habitat", "METADATA_FILE": "{DATA_ROOT}/input/m.tsv"}
+            }
+        }
+    }
+    assert nfm._diff_variables(template) == {"GROUP_COL": "habitat"}
+
+
+# -- bump: a version a pull request adds, against the one it was copied from ---
+
+_SHA_A, _SHA_B = "a" * 40, "b" * 40
+
+
+def _bump_tree(root: Path, versions: dict[str, str | None]) -> Path:
+    """``versions``: version → the results_sha its megatest.yaml pins (None: no file)."""
+    for version, sha in versions.items():
+        d = root / "demo" / version
+        d.mkdir(parents=True)
+        (d / "template.yaml").write_text("template: {}\n")
+        if sha is not None:
+            (d / "megatest.yaml").write_text(
+                f'pipeline: "demo"\nversion: "{version}"\nresults_sha: {sha}\nkeys: []\n'
+            )
+    return root
+
+
+def test_a_bump_is_compared_with_the_version_below_it(
+    nfm: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _bump_tree(tmp_path, {"1.0.0": _SHA_A, "1.2.0": _SHA_A, "2.0.0": _SHA_A})
+    monkeypatch.setattr(nfm, "NFCORE_PROJECTS_DIR", root)
+    assert nfm.previous_version("demo", "2.0.0", root) == "1.2.0"
+
+    calls: list[dict] = []
+
+    def fake_ingestion(template, pipeline, local, new_version, old_prefix, new_prefix, **kw):
+        calls.append({"local": local, "new": new_version, "old": old_prefix,
+                      "new_prefix": new_prefix, **kw})  # fmt: skip
+        return ["## Differential ingestion — x: 1 error(s), 0 warning(s)"], 1
+
+    monkeypatch.setattr(nfm, "differential_ingestion", fake_ingestion)
+    # The copied megatest.yaml still names the old run: the release's own is looked up.
+    monkeypatch.setattr(
+        nfm, "resolve_run", lambda *a, **k: type("Run", (), {"results_sha": _SHA_B})()
+    )
+    text, errors = nfm.bump_report("demo", "2.0.0", index={})
+
+    assert errors == 1
+    (call,) = calls
+    assert (call["local"], call["new"], call["new_template_version"]) == ("1.2.0", "2.0.0", "2.0.0")
+    assert call["old"] == f"demo/results-{_SHA_A}/"
+    assert call["new_prefix"] == f"demo/results-{_SHA_B}/"
+    assert call["strict"] is True
+    assert "### Differential ingestion" in text  # demoted under the bump's own title
+
+
+def test_a_bump_with_nothing_to_compare_says_so_and_fails_nothing(
+    nfm: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _bump_tree(tmp_path, {"1.0.0": None, "2.0.0": _SHA_B, "0.9.0-only": None})
+    monkeypatch.setattr(nfm, "NFCORE_PROJECTS_DIR", root)
+
+    text, errors = nfm.bump_report("demo", "1.0.0", index={})
+    assert errors == 0 and "no earlier version" in text
+
+    text, errors = nfm.bump_report("demo", "2.0.0", index={})
+    assert errors == 0 and "no pinned run" in text
+
+    with pytest.raises(nfm.ReportError):
+        nfm.bump_report("demo", "3.0.0", index={})
