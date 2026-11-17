@@ -6,12 +6,11 @@ import { GlassKey, useGlassPages } from '../chrome/variants/glass/pages';
 import { useTourLauncher } from './availability';
 
 /**
- * Starts the guided tour from the page header. It sits on the pages where the
- * tours begin (Projects for the builder tour, Dashboards for the explorer
- * tour), left of the page's primary action, in both chromes: a Glass key in
- * Glass, a light icon button in Classic.
+ * Starts the tour of this page from its header, left of the page's primary
+ * action, in both chromes: a Glass key in Glass, a light icon button in
+ * Classic.
  *
- * Where the walkthrough host is suppressed (dev mode, the kill switch,
+ * Where the coach is suppressed (dev mode, the kill switch,
  * `?no-walkthrough=1`) the button is disabled with the reason, not hidden: a
  * button that does nothing would mislead, and a gap would not say why. While
  * the deployment's answer loads it is disabled too, so the header does not shift.

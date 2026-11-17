@@ -45,3 +45,11 @@ export interface ChangesSinceValue {
 export const ChangesSinceContext = createContext<ChangesSinceValue | null>(null);
 
 export const useChangesSince = (): ChangesSinceValue | null => useContext(ChangesSinceContext);
+
+/** Opens the header's "What's new" list from elsewhere on the page (the
+ *  landing card, the Guide). */
+export const OPEN_CHANGES_EVENT = 'depictio:changes:open';
+
+export function openChangesPanel(): void {
+  window.dispatchEvent(new CustomEvent(OPEN_CHANGES_EVENT));
+}

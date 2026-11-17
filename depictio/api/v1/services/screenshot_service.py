@@ -314,11 +314,8 @@ async def generate_dual_theme_screenshots(
         # Get admin authentication token
         token_data = await get_admin_auth_token()
         token_data_json = json.dumps(token_data)
-        # ``no-walkthrough=1`` tells the React viewer's ``WalkthroughHost`` to
-        # short-circuit before mounting either tour engine. The legacy
-        # ``/dashboard/{id}`` route doesn't render the React walkthrough today,
-        # so this is defensive — keeps the PNG clean if/when screenshots ever
-        # target ``/dashboard/{id}``.
+        # ``no-walkthrough=1`` tells the React viewer's ``CoachHost`` and its
+        # landing card to render nothing, so the PNG stays clean.
         dashboard_url = f"{settings.viewer.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
 
         logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
@@ -539,11 +536,9 @@ async def generate_react_dual_theme_screenshots(
     # internal vs external by DEPICTIO_CONTEXT (server → docker/k8s DNS
     # hostname; host invocation → external port).
     origin = settings.viewer.url
-    # `?no-walkthrough=1` tells the React SPA's WalkthroughHost to bail
-    # before mounting either tour engine, so the captured PNG never
-    # contains the popover, anchor, or dim backdrop — even when the
-    # seeded admin's localStorage would otherwise auto-start the
-    # builder walkthrough on first visit.
+    # `?no-walkthrough=1` tells the React SPA's CoachHost and its landing
+    # card to render nothing, so the captured PNG never holds a coach card,
+    # even on the seeded admin's first visit or a dashboard with news.
     dashboard_url = f"{origin}/dashboard/{dashboard_id}?no-walkthrough=1"
 
     try:

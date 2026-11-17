@@ -5,7 +5,7 @@
  * while the feature is off: it draws only from `ChangeMarksProvider`'s change
  * set.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Popover } from '@mantine/core';
 
 import { ChromeButton, useBrandScopeAttributes, Z_LAYERS } from 'depictio-react-core';
@@ -15,7 +15,7 @@ import { formatDate, formatRelativeTime } from '../lib/datetime';
 
 import ChangesPanel from './ChangesPanel';
 import NewRowsPreview from './NewRowsPreview';
-import { useChangesSince } from './ChangesSinceContext';
+import { OPEN_CHANGES_EVENT, useChangesSince } from './ChangesSinceContext';
 import { changeCounts, hasChanges, pillLabel } from './describe';
 
 const ChangesHeaderButton: React.FC = () => {
@@ -25,6 +25,11 @@ const ChangesHeaderButton: React.FC = () => {
   // The collection whose new rows are open. Held here, not in the panel: a
   // modal inside the popover would close with it on the first click.
   const [rowsOf, setRowsOf] = useState<DataChange | null>(null);
+  useEffect(() => {
+    const open = () => setOpened(true);
+    window.addEventListener(OPEN_CHANGES_EVENT, open);
+    return () => window.removeEventListener(OPEN_CHANGES_EVENT, open);
+  }, []);
   if (!ctx || !hasChanges(ctx.changeSet)) return null;
 
   const { changeSet, readOnlyQuery } = ctx;

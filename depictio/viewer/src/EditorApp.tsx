@@ -3200,6 +3200,24 @@ const EditorApp: React.FC = () => {
           mode="edit"
           onClose={guide.closeGuide}
           onOpenYourView={() => openSettingsAt('view')}
+          metadata={
+            hasMetadataTable
+              ? {
+                  // A past view keeps the part but not the live rows.
+                  table: annotationPins
+                    ? null
+                    : (defaultAnnotationTable(
+                        annotationTables,
+                        annotationView?.columns,
+                        annotationView?.activeColumnId,
+                      ) ?? null),
+                  open: () => {
+                    guide.closeGuide();
+                    handleMetadataOpenChange(true);
+                  },
+                }
+              : undefined
+          }
         />
       )}
     </>
