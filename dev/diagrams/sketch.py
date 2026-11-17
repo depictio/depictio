@@ -575,6 +575,23 @@ class Sketch:
             self.text(cx, y + 50, caption, size=12.5, colour=GREY if ghost else DIM)
         return xs
 
+    def image(self, path: Path, x: float, y: float, w: float, h: float) -> None:
+        """A logo or picture, embedded so the SVG stays one self-contained file.
+
+        Fitted inside the box, centred, its aspect ratio kept. A missing file
+        draws nothing: a diagram without a logo is still a diagram.
+        """
+        import base64
+
+        mime = {".png": "image/png", ".svg": "image/svg+xml", ".webp": "image/webp"}
+        if not path.is_file() or path.suffix not in mime:
+            return
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        self._parts.append(
+            f'<image x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
+            f'preserveAspectRatio="xMidYMid meet" href="data:{mime[path.suffix]};base64,{data}"/>'
+        )
+
     def svg(self) -> str:
         body = "\n  ".join(self._parts)
         return (
@@ -632,7 +649,7 @@ def _chromium_executable() -> str | None:
     root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", ""))
     if not root.is_dir():
         return None
-    for candidate in sorted(root.glob("chromium-*/chrome-linux/chrome")):
+    for candidate in sorted(root.glob("chromium-*/chrome-linux*/chrome")):
         if candidate.is_file():
             return str(candidate)
     return None
