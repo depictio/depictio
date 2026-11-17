@@ -40,6 +40,7 @@ _ASSEMBLY_KEYS = ("annotation", "assembly")
 BLOB_PREFIX = "genes_"
 
 _SOURCE_DIR = Path(__file__).resolve().parents[1] / "viewer" / "public" / "assets" / "genomes"
+_DIST_DIR = Path(__file__).resolve().parents[1] / "viewer" / "dist" / "assets" / "genomes"
 
 
 def blob_key(assembly: str) -> str:
@@ -68,11 +69,13 @@ def gene_assemblies(components: Iterable[dict[str, Any]]) -> set[str]:
 def gene_asset_path(assembly: str, template_dir: Path | None = None) -> Path | None:
     """Where this process can read ``<assembly>.genes.json``, or None.
 
-    The checked-in source first (images and the wheel carry it), then the copy
-    Vite puts beside the static template (``dist-static/assets/genomes``).
+    The checked-in source first (a checkout and the images carry it), then the
+    copy Vite puts in the SPA build (``viewer/dist/assets/genomes``, the one a
+    wheel carries: shipping ``public/`` too counted every table twice), then the
+    one beside the static template (``dist-static/assets/genomes``).
     """
     name = f"{assembly}.genes.json"
-    candidates = [_SOURCE_DIR / name]
+    candidates = [_SOURCE_DIR / name, _DIST_DIR / name]
     if template_dir is not None:
         candidates.append(template_dir / "assets" / "genomes" / name)
     for path in candidates:
