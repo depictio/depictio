@@ -207,7 +207,7 @@ export function reportUrl(initialFilters: unknown[] = []): string {
     "<!--DEPICTIO_REPORT_RUNTIME-->",
     () => block,
   );
-  const dir = mkdtempSync(join(tmpdir(), "depictio-report-"));
+  const dir = fixtureDir("depictio-report-");
   const out = join(dir, "report-fixture.html");
   writeFileSync(out, html);
   return `file://${out}`;
@@ -251,7 +251,7 @@ export function combinedUrl(
     "<!--DEPICTIO_REPORT_RUNTIME-->",
     () => block,
   );
-  const dir = mkdtempSync(join(tmpdir(), "depictio-combined-"));
+  const dir = fixtureDir("depictio-combined-");
   const out = join(dir, "combined-fixture.html");
   writeFileSync(out, html);
   return `file://${out}`;
