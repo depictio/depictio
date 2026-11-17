@@ -13,6 +13,7 @@ import {
   splitSelectorList,
   tabSlug,
   viewMemoryKey,
+  type WindowLike,
 } from '../src/combined';
 
 const MAIN = '6824cb3b89d2b72169309738';
@@ -102,26 +103,26 @@ describe('filter channel', () => {
 describe('findCombinedHost', () => {
   it('finds the host on the window itself or on its parent', () => {
     const api = { filters: createFilterChannel() };
-    const parent = { [COMBINED_HOST_GLOBAL]: api } as unknown as Window;
-    (parent as unknown as { parent: Window }).parent = parent;
-    const child = { parent } as unknown as Window;
+    const parent = { [COMBINED_HOST_GLOBAL]: api } as unknown as WindowLike;
+    (parent as unknown as { parent: WindowLike }).parent = parent;
+    const child = { parent } as unknown as WindowLike;
     expect(findCombinedHost(parent)).toBe(api);
     expect(findCombinedHost(child)).toBe(api);
   });
 
   it('is null for a plain page and for a parent it may not read', () => {
-    const lone = {} as Window;
-    (lone as unknown as { parent: Window }).parent = lone;
+    const lone = {} as WindowLike;
+    (lone as unknown as { parent: WindowLike }).parent = lone;
     expect(findCombinedHost(lone)).toBeNull();
     const foreign = new Proxy(
       {},
       {
         get() {
-          throw new DOMException('Blocked a frame', 'SecurityError');
+          throw new Error('SecurityError: Blocked a frame');
         },
       },
-    ) as Window;
-    expect(findCombinedHost({ parent: foreign } as unknown as Window)).toBeNull();
+    ) as WindowLike;
+    expect(findCombinedHost({ parent: foreign } as unknown as WindowLike)).toBeNull();
     expect(findCombinedHost(null)).toBeNull();
   });
 });

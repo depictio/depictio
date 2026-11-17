@@ -106,8 +106,14 @@ export interface DashboardController {
  * the dashboard iframe of a combined file. Null everywhere else (a plain
  * bundle, the server app), and when the parent is another origin.
  */
-export function findCombinedHost(win: Window | null | undefined): CombinedHostApi | null {
-  const candidates: Array<Window | null | undefined> = [win];
+/** The part of a browser window this module reads. The package builds without
+ *  the DOM lib (it is DOM-free by design), so `Window` itself is not in scope. */
+export interface WindowLike {
+  parent?: WindowLike | null;
+}
+
+export function findCombinedHost(win: WindowLike | null | undefined): CombinedHostApi | null {
+  const candidates: Array<WindowLike | null | undefined> = [win];
   try {
     if (win && win.parent && win.parent !== win) candidates.push(win.parent);
   } catch {
