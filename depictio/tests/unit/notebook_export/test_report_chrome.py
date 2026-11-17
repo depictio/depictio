@@ -71,13 +71,8 @@ def test_the_overview_keeps_its_grid_rows(ampliseq_tabs):
     assert "cols = n if n <= 4" in src
 
 
-def test_the_hero_tile_shows_its_logo_in_place_of_its_title(ampliseq_tabs):
-    plan = _plan(ampliseq_tabs, logos={"ov-hero": {"light": LOGO, "dark": LOGO + "AA"}})
-    src = _body(generate_qmd(plan))
-    assert f'<img class="dpx-hero-logo dpx-light-only" src="{LOGO}"' in src
-    assert f'src="{LOGO}AA"' in src
-    assert "##### nf-core/ampliseq" not in src
-    # Without an inlined logo the title stays text (a remote URL is never linked).
+def test_a_remote_logo_is_never_linked(ampliseq_tabs):
+    # Without an inlined logo the title stays text: a remote URL is never linked.
     src = _body(generate_qmd(_plan(ampliseq_tabs)))
     assert "##### nf-core/ampliseq" in src
     assert "raw.githubusercontent.com" not in src
@@ -270,3 +265,63 @@ def test_pdf_adds_a_typst_format(ampliseq_tabs):
     assert front["format"]["typst"]["citeproc"] is True
     assert front["format"]["html"]["format-links"] is False
     assert "typst" not in _front(generate_qmd(_plan(ampliseq_tabs)))["format"]
+
+
+# ── One place per name ──────────────────────────────────────────────────────
+
+
+def _hero_plan(ampliseq_tabs, **extra):
+    return _plan(ampliseq_tabs, logos={"ov-hero": {"light": LOGO, "dark": LOGO + "AA"}}, **extra)
+
+
+def test_the_first_tabs_logo_is_the_title_and_not_repeated_in_its_tile(ampliseq_tabs):
+    src = generate_qmd(_hero_plan(ampliseq_tabs))
+    body = _body(src)
+    # The H1 shows the logo (its text kept for the contents and screen readers)...
+    assert "text-indent: -10000px" in body and f"url('{LOGO}')" in body
+    assert f"body.quarto-dark h1.title {{ background-image: url('{LOGO}AA'); }}" in body
+    assert "print-color-adjust: exact" in body
+    assert _front(src)["title"] == "nf-core/ampliseq"
+    # ...and the tile draws neither the logo nor its title again; its prose stays.
+    assert 'class="dpx-hero-logo' not in body
+    assert "##### nf-core/ampliseq" not in body
+    assert "Amplicon reads turned into a census" in body
+
+
+def test_without_a_header_logo_the_title_is_text_once(ampliseq_tabs):
+    body = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert "text-indent: -10000px" not in body
+    assert "##### nf-core/ampliseq" in body  # the tile keeps its own title
+
+
+def test_a_logo_on_a_later_tile_is_not_the_title(ampliseq_tabs):
+    tabs = [dict(t) for t in ampliseq_tabs]
+    main = next(t for t in tabs if t.get("is_main_tab"))
+    plan = _plan(tabs, logos={"ov-about": {"light": LOGO}})
+    body = _body(generate_qmd(plan))
+    # ov-hero (no logo here) leads the tab, so nothing is promoted to the title.
+    assert "text-indent: -10000px" not in body and 'class="dpx-hero-logo"' in body
+    assert main["dashboard_id"]
+
+
+def test_the_header_bar_does_not_repeat_the_title(ampliseq_tabs):
+    for plan in (_hero_plan(ampliseq_tabs, dashboard_logo=LOGO), _plan(ampliseq_tabs)):
+        bar = _front(generate_qmd(plan))["format"]["html"]["include-before-body"]["text"]
+        assert "dpx-appbar-title" not in bar and "nf-core/ampliseq" not in bar
+        # No tab breadcrumb: the first part's heading follows right under it.
+        assert "Overview" not in bar and "›" not in bar
+        assert "Powered by" in bar
+    bar = _front(generate_qmd(_hero_plan(ampliseq_tabs, dashboard_logo=LOGO)))["format"]["html"][
+        "include-before-body"
+    ]["text"]
+    assert f'src="{LOGO}"' in bar  # the dashboard's mark stays
+
+
+def test_a_tab_description_equal_to_the_subtitle_is_not_repeated(ampliseq_tabs):
+    main = next(t for t in ampliseq_tabs if t.get("is_main_tab"))
+    subtitle = main["subtitle"]
+    body = _body(generate_qmd(_plan(ampliseq_tabs, subtitle=subtitle)))
+    assert f"*{subtitle}*" not in body
+    # A different subtitle leaves the tab's own description in place.
+    body = _body(generate_qmd(_plan(ampliseq_tabs, subtitle="Something else")))
+    assert f"*{subtitle}*" in body
