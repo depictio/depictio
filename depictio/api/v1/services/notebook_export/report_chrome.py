@@ -415,10 +415,10 @@ body.quarto-dark .dpx-light-only { display: none !important; }
   padding: 6px 0; border-bottom: 1px solid var(--gl-hair, #dee2e6);
 }
 .dpx-surface-card ul:has(> li > span:first-child + strong) > li:last-child { border-bottom: 0; }
-.dpx-surface-card li > span:first-child + strong {
+.dpx-surface-card ul > li > span:first-child + strong {
   display: inline-block; min-width: 7em; font-weight: 500; color: var(--gl-muted, #868e96);
 }
-.dpx-surface-card li > span:first-child { color: var(--gl-muted, #868e96); }
+.dpx-surface-card ul > li > span:first-child { color: var(--gl-muted, #868e96); }
 /* The text tile's header logo, in place of its title. */
 .dpx-hero-logo { height: 72px; width: auto; max-width: 100%; margin: .25rem 0 .5rem; }
 /* The stepper (`::: steps`). */
