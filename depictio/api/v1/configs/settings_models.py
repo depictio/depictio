@@ -2938,11 +2938,11 @@ class Settings(BaseSettings):
         default="",
         description=(
             "Comma-separated list of *optional* reference projects to seed in "
-            "addition to the default set, e.g. 'catalog_conformance'. Empty (the "
+            "addition to the default set: 'catalog_conformance', 'genome_tracks_examples'. Empty (the "
             "default) seeds none of them. This is additive, unlike "
-            "DEPICTIO_SEED_PROJECTS which narrows the default set — an optional "
-            "project is a test fixture, so it stays out of ordinary deployments "
-            "until something asks for it. Ignored when "
+            "DEPICTIO_SEED_PROJECTS which narrows the default set: an optional "
+            "project is a test fixture or a showcase, so it stays out of ordinary "
+            "deployments until something asks for it. Ignored when "
             "DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is true."
         ),
     )
