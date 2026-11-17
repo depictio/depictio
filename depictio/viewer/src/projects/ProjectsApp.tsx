@@ -38,7 +38,7 @@ import type {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
-import TourButton from '../walkthrough/TourButton';
+import TourButton from '../coach/TourButton';
 import { ImportProjectDialog } from './ImportProjectDialog';
 import { uploadFiles } from './create/FilesDropArea';
 import type { TableUploadOutcome } from './create/FilesDropArea';

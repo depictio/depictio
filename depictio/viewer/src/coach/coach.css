@@ -1,0 +1,194 @@
+/* The coach's cards and the ring around what they point at. Colours come from
+   the Mantine scope the card is drawn in, so a branded dashboard and dark mode
+   need nothing of their own. */
+
+.depictio-coach-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mantine-primary-color-filled) 9%, var(--mantine-color-body)) 0,
+      var(--mantine-color-body) 84px
+    );
+  border: 1.5px solid var(--mantine-primary-color-filled);
+  border-radius: var(--mantine-radius-lg);
+  box-shadow: var(--mantine-shadow-xl);
+  color: var(--mantine-color-text);
+  outline: none;
+}
+
+.depictio-coach-card:focus-visible {
+  box-shadow:
+    var(--mantine-shadow-xl),
+    0 0 0 3px color-mix(in srgb, var(--mantine-primary-color-filled) 35%, transparent);
+}
+
+/* On its own, without an element to point at: bottom right, or a sheet along
+   the bottom edge of a phone. */
+.depictio-coach-floating {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  max-width: calc(100vw - 32px);
+  animation: depictio-coach-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (max-width: 36em) {
+  .depictio-coach-floating {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto !important;
+  }
+}
+
+@keyframes depictio-coach-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.depictio-coach-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--mantine-primary-color-filled);
+  background: color-mix(in srgb, var(--mantine-primary-color-filled) 14%, transparent);
+}
+
+.depictio-coach-eyebrow {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.depictio-coach-body code {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--mantine-color-default-hover);
+}
+
+.depictio-coach-dots {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.depictio-coach-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--mantine-color-default-border);
+  transition:
+    width 200ms ease,
+    background-color 200ms ease;
+}
+
+.depictio-coach-dot[data-active] {
+  width: 18px;
+  background: var(--mantine-primary-color-filled);
+}
+
+.depictio-coach-dot[data-done] {
+  background: color-mix(in srgb, var(--mantine-primary-color-filled) 45%, transparent);
+}
+
+/* A journey on the welcome card: a row that reads as one button. */
+/* Equal rows: a journey whose line wraps sets the height of all three. */
+.depictio-coach-journeys {
+  display: grid;
+  grid-auto-rows: 1fr;
+  gap: var(--mantine-spacing-xs);
+}
+
+.depictio-coach-journey {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.depictio-coach-journey:enabled:hover,
+.depictio-coach-journey:focus-visible {
+  border-color: var(--mantine-primary-color-filled);
+  background: color-mix(in srgb, var(--mantine-primary-color-filled) 6%, var(--mantine-color-body));
+  outline: none;
+}
+
+.depictio-coach-journey:enabled:hover {
+  transform: translateY(-1px);
+}
+
+.depictio-coach-journey:disabled {
+  cursor: default;
+  opacity: 0.6;
+  transform: none;
+  border-color: var(--mantine-color-default-border);
+  background: transparent;
+}
+
+.depictio-coach-journey .depictio-coach-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+/* The ring around the element a step points at. Its own fixed element on
+   <body>, like the Guide's "Show me" ring: an outline on the target would be
+   clipped by any `overflow: hidden` parent. */
+.depictio-coach-ring {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid var(--mantine-primary-color-filled);
+  border-radius: 10px;
+  animation: depictio-coach-pulse 1.8s ease-out infinite;
+}
+
+@keyframes depictio-coach-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--mantine-primary-color-filled) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--mantine-primary-color-filled) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .depictio-coach-floating {
+    animation: none;
+  }
+  .depictio-coach-ring {
+    animation: none;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--mantine-primary-color-filled) 25%, transparent);
+  }
+  .depictio-coach-journey,
+  .depictio-coach-dot {
+    transition: none;
+  }
+}

@@ -172,7 +172,8 @@ import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
-import { LandingHint, useLandingHint } from './landing';
+import { shouldSuppressWalkthrough } from './coach';
+import { LandingHost } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
@@ -342,6 +343,8 @@ const App: React.FC = () => {
     isPublicMode,
     isDemoMode,
     isSingleUserMode,
+    isDevMode,
+    walkthroughDisabled,
     loading: userLoading,
   } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
@@ -1653,26 +1656,27 @@ const App: React.FC = () => {
       inspectorControl,
     ],
   );
-  // ---- Landing hint -------------------------------------------------------
-  // A guest on a public instance (the demo keeps its tour) lands on the Overview
-  // with one small callout beside the Guide. Opening the Guide, by the hint or
-  // the sidebar, is the answer to it: it is dismissed for good.
-  const landingEligible =
+  // ---- Landing card -------------------------------------------------------
+  // A reader who does not own this dashboard (a public guest or a signed-in
+  // colleague) is introduced to it once, on its Overview, by one card beside
+  // the Guide. The demo keeps its tour of the dashboards list. Opening the
+  // Guide answers the introduction. Anyone returning to news since their last
+  // visit gets the same card with the "What's new" line (`LandingHost`). The
+  // coach's gates hold it too, so no capture or e2e run ever meets it.
+  const landingReady =
     Boolean(dashboard) &&
     !loading &&
     !error &&
     !userLoading &&
-    isPublicMode &&
-    !isDemoMode &&
-    Boolean(currentUser?.is_temporary) &&
-    !(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id) &&
     !previewVersionId &&
-    guideSettings.enabled;
-  const landing = useLandingHint(landingEligible && !guide.open);
-  const dismissLanding = landing.dismiss;
-  useEffect(() => {
-    if (guide.open && landingEligible) dismissLanding();
-  }, [guide.open, landingEligible, dismissLanding]);
+    guideSettings.enabled &&
+    !shouldSuppressWalkthrough(isDevMode, walkthroughDisabled);
+  const landingGuest = isPublicMode && Boolean(currentUser?.is_temporary);
+  const landingIntro =
+    landingReady &&
+    !isDemoMode &&
+    !isOwner &&
+    !(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id);
   // The dashboard's own line (the main tab's `subtitle` is its identity line,
   // as on the listing card), else its name.
   const landingDescription =
@@ -1993,11 +1997,14 @@ const App: React.FC = () => {
           ...contentScaleStyle,
         }}
       >
-        {landing.visible && (
-          <LandingHint
+        {landingReady && (
+          <LandingHost
+            familyId={crossTab.familyId ?? null}
+            introEligible={landingIntro}
+            audience={landingGuest ? 'guest' : 'reader'}
             description={landingDescription}
+            guideOpen={guide.open}
             onOpenGuide={guide.openGuide}
-            onDismiss={landing.dismiss}
           />
         )}
         {/* The tab's own description, ahead of everything the canvas
@@ -2214,6 +2221,24 @@ const App: React.FC = () => {
           canEdit={canEditNow}
           onClose={guide.closeGuide}
           onOpenYourView={() => openSettingsAt('view')}
+          metadata={
+            hasMetadataTable
+              ? {
+                  // A past view keeps the part but not the live rows.
+                  table: annotationPins
+                    ? null
+                    : (defaultAnnotationTable(
+                        annotationTables,
+                        annotationView?.columns,
+                        annotationView?.activeColumnId,
+                      ) ?? null),
+                  open: () => {
+                    guide.closeGuide();
+                    handleMetadataOpenChange(true);
+                  },
+                }
+              : undefined
+          }
         />
       )}
     </>

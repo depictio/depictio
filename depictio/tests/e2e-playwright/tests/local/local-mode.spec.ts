@@ -76,10 +76,6 @@ test.describe("Local mode (depictio local up)", () => {
   test("the iris dashboard renders and its filter recomputes a card", async ({ page }) => {
     await page.goto(`/dashboard/${IRIS_DASHBOARD_ID}`);
 
-    // First visit on a fresh stack: the onboarding tour overlays the page.
-    const skipTour = page.getByRole("button", { name: "Skip tour" });
-    await skipTour.click({ timeout: 15_000 }).catch(() => {});
-
     await expect(page.locator("[data-testid='dashboard-content']")).toBeVisible({
       timeout: 30_000,
     });

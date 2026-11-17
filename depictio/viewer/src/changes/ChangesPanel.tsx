@@ -552,10 +552,14 @@ const ChangesPanel: React.FC<{
   subtitle?: React.ReactNode;
   /** Opens a collection's new rows; held by the caller, outside the popover. */
   onViewRows?: (change: DataChange) => void;
+  /** Laid out in a page (the Guide) rather than a popover: the list grows
+   *  with the page instead of scrolling inside it. */
+  embedded?: boolean;
 }> = ({
   onClose,
   subtitle,
   onViewRows,
+  embedded = false,
 }) => {
   const ctx = useChangesSince();
   if (!ctx) return null;
@@ -584,7 +588,7 @@ const ChangesPanel: React.FC<{
       {(ctx.highlightable > 0 || ctx.splitAvailable) && (
         <NewsViewControl ctx={ctx} runOrder={news.runs.map((r) => r.run)} />
       )}
-      <FeedScroll mah="min(60vh, 520px)">
+      <FeedScroll mah={embedded ? 'none' : 'min(60vh, 520px)'}>
         <Stack gap="sm">
           {counts.data > 0 && (
             <FeedSection title="Data" icon={FEED_KIND.data.icon} count={counts.data} testId="changes-section-data">
