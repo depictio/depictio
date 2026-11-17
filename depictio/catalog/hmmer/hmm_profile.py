@@ -33,6 +33,11 @@ A family's model is read once: the filtered HMM of ``hmm/filtered/`` wins over a
 raw model of the same name, and a file that is not a complete HMMER3 record is
 left out. ``sample`` is the directory the file sits in.
 
+Files are read one at a time (``iter_texts_by_file``): of an alignment only the
+representative's residue numbers are kept, and the families' rows are joined in
+batches, so a run of thousands of families is never held as text next to its
+table (#1418).
+
 Output schema (``PROFILE_SCHEMA`` plus the sample):
     entity : Utf8          family id (the HMM name)
     position : Int64       residue of the representative at the state, null if none
@@ -57,10 +62,10 @@ from depictio.recipes.lib import hmm as hmm_lib
 from depictio.recipes.lib.hmm import PROFILE_SCHEMA, profile_frame
 from depictio.recipes.lib.protein_families import (
     family_id,
+    iter_texts_by_file,
     representative_positions,
     representatives,
     sample_from_path,
-    texts_by_file,
 )
 
 RAW_DC_TAG = "hmmer_hmm_raw"
@@ -100,19 +105,46 @@ def _is_raw_model(path: str) -> bool:
     return "/hmm/raw/" in "/" + path.replace("\\", "/")
 
 
+#: Families whose rows are joined into one frame before the next batch starts:
+#: the pieces of a batch are dropped once joined, so the list of per-family
+#: frames never sits next to the whole table.
+BATCH_FAMILIES = 256
+
+
+def _positions_by_family(
+    alignments: pl.DataFrame | None, reps: dict[tuple[str, str], str]
+) -> dict[tuple[str, str], list[int | None] | None]:
+    """The representative's residue at each match column of every family alignment.
+
+    Read one alignment at a time, keeping only the numbers. ``None`` for an
+    alignment the representative is absent from, or that does not parse. The
+    model's length is checked against them later, when the model is read.
+    """
+    positions: dict[tuple[str, str], list[int | None] | None] = {}
+    for path, text in iter_texts_by_file(alignments):
+        key = (sample_from_path(path), family_id(path))
+        representative = reps.get(key)
+        if not (text and representative):
+            positions.pop(key, None)  # as a later file of the same family would
+            continue
+        try:
+            positions[key] = representative_positions(text, representative)
+        except ValueError:  # representative absent, rows of unequal width, ...
+            positions[key] = None
+    return positions
+
+
 def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     """One row per match state and letter of every family HMM."""
-    stockholm = {
-        (sample_from_path(path), family_id(path)): text
-        for path, text in texts_by_file(sources.get("alignments")).items()
-    }
     reps = representatives(sources.get("family_meta"))
-    models = texts_by_file(sources["hmms"])
+    aligned = _positions_by_family(sources.get("alignments"), reps)
+    batches: list[pl.DataFrame] = []
     frames: list[pl.DataFrame] = []
     seen: set[str] = set()
-    for path in sorted(models, key=_is_raw_model):  # stable: scan order within each group
+    # Filtered models first, raw ones after; scan order within each group.
+    for path, text in iter_texts_by_file(sources["hmms"], order=_is_raw_model):
         try:
-            parsed = hmm_lib.parse_hmm(models[path])
+            parsed = hmm_lib.parse_hmm(text)
         except ValueError:
             continue
         sample = sample_from_path(path)
@@ -120,19 +152,23 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
             if model.name in seen:
                 continue
             seen.add(model.name)
-            positions = None
-            alignment = stockholm.get((sample, model.name))
-            representative = reps.get((sample, model.name))
-            if alignment and representative:
-                try:
-                    positions = representative_positions(alignment, representative, model.length)
-                except ValueError:  # representative absent, or states and RF columns disagree
-                    positions = None
+            positions = aligned.get((sample, model.name))
+            if positions is not None and len(positions) != model.length:
+                positions = None  # the states and the RF columns disagree
             frames.append(
                 profile_frame(model, entity=model.name, positions=positions).with_columns(
                     pl.lit(sample, dtype=pl.Utf8).alias("sample")
                 )
             )
-    if not frames:
+            if len(frames) >= BATCH_FAMILIES:
+                batches.append(_joined(frames))
+                frames = []
+    if frames:
+        batches.append(_joined(frames))
+    if not batches:
         return pl.DataFrame(schema=OUTPUT_SCHEMA)
-    return pl.concat(frames).select(list(OUTPUT_SCHEMA)).cast(OUTPUT_SCHEMA)  # type: ignore[arg-type]
+    return pl.concat(batches)
+
+
+def _joined(frames: list[pl.DataFrame]) -> pl.DataFrame:
+    return pl.concat(frames, rechunk=True).select(list(OUTPUT_SCHEMA)).cast(OUTPUT_SCHEMA)  # type: ignore[arg-type]

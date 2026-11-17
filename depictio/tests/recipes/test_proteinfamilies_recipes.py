@@ -187,6 +187,26 @@ def test_profile_reads_each_family_once_and_skips_broken_files() -> None:
     assert empty.is_empty()
 
 
+def test_profile_rows_do_not_depend_on_the_batch_size(monkeypatch, meta) -> None:
+    """Families are joined in batches (#1418): the table is the same at any batch size."""
+    families = [f"{SAMPLE}_{i}" for i in range(5)]
+    hmms = raw({f"hmm/filtered/{SAMPLE}/{f}.hmm.gz": _hmm(name=f) for f in families})
+    alignments = raw(
+        {f"full_msa/raw/hmmer_hmmalign/{SAMPLE}/{f}.sto.gz": STOCKHOLM for f in families}
+    )
+    reps = pl.concat(
+        [meta.with_columns(pl.lit(f).alias("Family Id")) for f in families], how="vertical"
+    )
+    sources = {"hmms": hmms, "alignments": alignments, "family_meta": reps}
+    module = load_recipe("hmmer/hmm_profile.py")
+    whole = run("hmmer/hmm_profile.py", sources)
+    monkeypatch.setattr(module, "BATCH_FAMILIES", 2)
+    batched = module.transform(sources)
+    assert batched.equals(whole)
+    assert whole["entity"].unique(maintain_order=True).to_list() == families
+    assert whole.filter(pl.col("entity") == families[-1])["position"].null_count() == 0
+
+
 # ---------------------------------------------------------------------------
 # hmmer/hmmalign_hits
 # ---------------------------------------------------------------------------
@@ -361,3 +381,18 @@ def test_family_metadata_folds_in_the_model_and_the_alignment(meta, hmms, aligne
         {"family_meta": meta, "hmms": None, "alignments": None},
     )
     assert bare["seed_size"].null_count() == 1 and bare["aligned_members"].null_count() == 1
+
+
+def test_texts_are_read_one_file_at_a_time_as_texts_by_file_reads_them() -> None:
+    from depictio.recipes.lib.protein_families import iter_texts_by_file, texts_by_file
+
+    scan = raw({"hmm/raw/b.hmm": "B1\n\nB2", "hmm/filtered/a.hmm": "A1", "c.hmm": "C1\nC2"})
+    scan = pl.concat([scan, pl.DataFrame({"raw": ["N1"], "source_path": [None]})])
+    assert dict(iter_texts_by_file(scan)) == texts_by_file(scan)
+    assert [p for p, _ in iter_texts_by_file(scan)] == list(texts_by_file(scan))
+    ordered = [p for p, _ in iter_texts_by_file(scan, order=lambda p: "/raw/" in p)]
+    assert ordered == ["hmm/filtered/a.hmm", "c.hmm", "", "hmm/raw/b.hmm"]
+    assert list(iter_texts_by_file(None)) == []
+    assert list(iter_texts_by_file(scan.drop("source_path"))) == list(
+        texts_by_file(scan.drop("source_path")).items()
+    )

@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "2.2.1",
-      "content_hash": "d28dc246ba0172f0bce801273b0f4e8429ca8d2f6de14c9b60d8e58885452150",
+      "version": "2.3.0",
+      "content_hash": "729265318770650c543b6ba46462d93fadd0693e7c804448542cca3e7a3f503f",
       "catalog": {
         "adapterremoval": "1.0.0",
         "agat": "1.0.0",
@@ -65,7 +65,7 @@
         "hicexplorer": "1.0.0",
         "hicpro": "1.0.0",
         "hmf_bamtools": "1.0.0",
-        "hmmer": "1.0.0",
+        "hmmer": "1.1.0",
         "homer": "1.0.0",
         "interop": "1.0.0",
         "interproscan": "1.0.0",
@@ -489,10 +489,10 @@
       }
     },
     "nf-core/proteinannotator/1.1.0": {
-      "version": "2.0.0",
-      "content_hash": "cbb735a072231a6c803f9984d41185c9decef09ac9c6df0089f88bcc3bddf65d",
+      "version": "2.1.0",
+      "content_hash": "6eb4de0fce50c8bb3e723447f2962c96a0336238c398cb3af8c04fd5a5e5fff8",
       "catalog": {
-        "hmmer": "1.0.0",
+        "hmmer": "1.1.0",
         "interproscan": "1.0.0",
         "proteinannotator": "1.1.0",
         "s4pred": "1.0.0",
@@ -501,11 +501,11 @@
       }
     },
     "nf-core/proteinfamilies/2.5.0": {
-      "version": "1.1.2",
-      "content_hash": "affdc8d694ee6a23647150d60a8d4de4375bb20550f7300ecd763b1af5a9af9b",
+      "version": "1.2.0",
+      "content_hash": "0865297f9945e9b6e7707f7b36c73973c52426a73179b9e9b34a2f05a2d9405f",
       "catalog": {
         "famsa": "1.0.0",
-        "hmmer": "1.0.0",
+        "hmmer": "1.1.0",
         "proteinfamilies": "1.0.0",
         "seqfu": "1.0.0"
       }
