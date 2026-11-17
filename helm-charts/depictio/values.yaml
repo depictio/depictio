@@ -300,6 +300,15 @@ backend:
     tag: "1.21.0"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
+  # Extra labels on the backend pods (pod template only, never the selector).
+  # SciLifeLab Serve denies outbound traffic by default and opens it to pods
+  # carrying this label. The backend dials out for the UCSC track catalogue
+  # and genome files (JBrowse), remote tracks, structure lookups, OIDC and
+  # migration targets. The label is inert on clusters without that policy.
+  # Set it to "false" to keep the backend off the internet on Serve (an empty
+  # map in an override file does not remove it: Helm merges maps).
+  podLabels:
+    networking/allow-internet-egress: "true"
   # Raw container env entries (name/value or valueFrom), appended after the
   # chart-managed ones. The ConfigMap is an explicit key allowlist, so this is
   # the way to set variables it does not know, e.g. the botocore checksum
@@ -550,6 +559,9 @@ celery:
     tag: "1.21.0"
     pullPolicy: Always
   replicas: 1
+  # Same as backend.podLabels: server-side ingestion can read remote data.
+  podLabels:
+    networking/allow-internet-egress: "true"
   # Same as backend.extraEnv, for the worker container.
   extraEnv: []
   resources:
