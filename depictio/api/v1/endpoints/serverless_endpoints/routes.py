@@ -250,10 +250,19 @@ def _compact_timestamp(built_at: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+#: The Python runtime mode a build gets when the caller names none. The
+#: preflight defaults to the SAME mode: a preflight run under ``auto`` reports
+#: the tiles the runtime would serve as live, so a caller that preflights and
+#: then builds with both defaults was promised live tiles the build froze
+#: (code-mode figures the transpiler refuses, group comparisons). A caller that
+#: wants the runtime's offer (the export modal) asks for ``auto`` explicitly.
+DEFAULT_PYTHON_RUNTIME: Literal["auto", "on", "off"] = "off"
+
+
 @serverless_endpoint_router.get("/export-static/{dashboard_id}/preflight")
 async def preflight_export_static(
     dashboard_id: str,
-    python_runtime: Literal["auto", "on", "off"] = "auto",
+    python_runtime: Literal["auto", "on", "off"] = DEFAULT_PYTHON_RUNTIME,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Per-component (and per-tab, per-link) tier table for a would-be static export.
@@ -261,6 +270,11 @@ async def preflight_export_static(
     Covers the whole tab family the dashboard belongs to, because that is what a
     bundle carries: every tier row names its ``tab_id`` and ``tabs`` repeats the
     per-tab counts. The top-level ``counts`` stay family-wide.
+
+    ``python_runtime`` defaults to what a build defaults to (``off``), so the
+    tiers are the ones a build with the same defaults ships. Under ``auto`` the
+    tiles the optional Python runtime would serve read ``live``, and
+    ``python_runtime.without`` keeps what each of them ships without it.
 
     The FIGURE tiers are the real ones, not a plan: ``export_static``'s default
     preflight runs the export's own body — it loads and prunes the data
@@ -377,7 +391,7 @@ async def preflight_export_static(
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
 def dispatch_export_static(
     dashboard_id: str,
-    python_runtime: Literal["auto", "on", "off"] = "off",
+    python_runtime: Literal["auto", "on", "off"] = DEFAULT_PYTHON_RUNTIME,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Enqueue a static-bundle build; poll ``/export-static/status/{job_id}``.
