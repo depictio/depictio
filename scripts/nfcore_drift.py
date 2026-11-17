@@ -121,6 +121,8 @@ class RunSnapshot:
     # Headers of files no collection reads, read on demand (rename candidates).
     extra_headers: dict[str, list[str]] = field(default_factory=dict)
     root: Any = field(default=None, repr=False)
+    # The template.yaml and its dashboards, as text: what still names a column.
+    template_text: str = field(default="", repr=False)
 
     def header_of(self, rel: str) -> list[str] | None:
         """The header of any file of the run, read once (a rename candidate)."""
@@ -400,8 +402,33 @@ def snapshot_run(
         params = {}
     keys = [o.relative for o in getattr(root, "objects", [])] or root.glob("**/*")
     return RunSnapshot(
-        label or location, root.location, keys, dict(resolved), dcs, params, root=root
-    )
+        label or location, root.location, keys, dict(resolved), dcs, params, root=root,
+        template_text=_template_text(template_id),
+    )  # fmt: skip
+
+
+def _template_text(template_id: str) -> str:
+    """``template.yaml`` and every dashboard YAML next to it, as one text: a
+    column none of them names is one nothing in the template reads."""
+    from depictio.cli.cli.utils import templates as templates_mod
+
+    try:
+        path = templates_mod.locate_template(template_id)
+    except Exception:  # noqa: BLE001 - unknown: every lost column stays an error
+        return ""
+    files = [path, *sorted(path.parent.glob("dashboards/**/*.yaml"))]
+    return "\n".join(f.read_text(errors="replace") for f in files if f.is_file())
+
+
+def _names(text: str, col: str) -> bool:
+    """Whether the YAML ``text`` names ``col`` as a whole scalar: a value
+    (``column: sample``, ``- sample``, ``{column: "sample"}``) or a key
+    (``"sample": "…"``). Prose does not count: a comment or a description
+    that mentions an old column name reads nothing."""
+    c = re.escape(col)
+    value = rf"[:\-\[,{{]\s*([\"']?){c}\1\s*(?:$|[,}}\]#])"
+    key = rf"^\s*(?:-\s+)?([\"']?){c}\2\s*:"
+    return re.search(rf"{value}|{key}", text, re.MULTILINE) is not None
 
 
 def _build_on_mirror(
@@ -640,8 +667,9 @@ def compare_runs(old: RunSnapshot, new: RunSnapshot) -> list[Finding]:
             for s in o.sources if s.kind == "file"
         )  # fmt: skip
         findings += _compare_tables(
-            tag, o.table, n.table, old.label, new.label, explained=lost_files
-        )
+            tag, o.table, n.table, old.label, new.label, explained=lost_files,
+            template_text=new.template_text,
+        )  # fmt: skip
     for cause, tags in followers.items():
         findings.append(Finding(
             "info", "files", cause, f"{len(tags)} collection(s) built on it follow: {', '.join(tags)}",
@@ -783,8 +811,11 @@ def _compare_header(
 
 def _compare_tables(
     tag: str, o: TableSnapshot | None, n: TableSnapshot | None, old_label: str, new_label: str,
-    explained: bool = False,
+    explained: bool = False, template_text: str = "",
 ) -> list[Finding]:  # fmt: skip
+    """``template_text`` is the new template with its dashboards: an output
+    column it no longer names was dropped or renamed on purpose (a warning);
+    one it still names is read by a link or a figure that now finds nothing."""
     if o is None or n is None or o.status != "ok":
         return []
     if n.status != "ok" and explained:
@@ -801,7 +832,12 @@ def _compare_tables(
     out: list[Finding] = []
     for col in o.columns:
         if col not in n.columns:
-            out.append(Finding("error", "tables", tag, f"output column `{col}` is gone"))
+            if template_text and not _names(template_text, col):
+                out.append(Finding("warn", "tables", tag, f"output column `{col}` is gone",
+                                   "the template no longer names it"))  # fmt: skip
+            else:
+                out.append(Finding("error", "tables", tag, f"output column `{col}` is gone",
+                                   "the template still names it" if template_text else ""))  # fmt: skip
         elif o.columns[col] != n.columns[col]:
             out.append(
                 Finding("warn", "tables", tag, f"`{col}`: {o.columns[col]} → {n.columns[col]}")

@@ -242,3 +242,40 @@ def test_a_named_column_is_not_an_error_when_the_collection_still_builds(
     assert [f.level for f in built] == ["warn"] and "still builds" in built[0].hint
     declared = nfd._compare_header("dc.src", old, new, ["Kingdom"], text=text, still_builds=True)
     assert [f.level for f in declared] == ["error"]
+
+
+def test_a_lost_output_column_is_an_error_only_while_the_template_names_it(
+    nfd: ModuleType,
+) -> None:
+    # ampliseq 3.x renamed the samplesheet's sampleID to sample: a template
+    # that still links on sampleID is broken, one moved to sample is not.
+    def table(cols: list[str]) -> object:
+        return nfd.TableSnapshot("ok", "", 10, {c: "String" for c in cols})
+
+    old, new = table(["sampleID", "fastq_1"]), table(["sample", "fastq_1"])
+    stale = nfd._compare_tables("samplesheet", old, new, "a", "b",
+                                template_text='source_column: "sampleID"')  # fmt: skip
+    assert [f.level for f in stale] == ["error"]
+    moved = nfd._compare_tables("samplesheet", old, new, "a", "b",
+                                template_text="source_column: sample\ncolumn: sample_id")  # fmt: skip
+    assert [f.level for f in moved] == ["warn"]
+    assert not nfd._names("column: sample_id", "sample")
+
+
+@pytest.mark.parametrize(
+    ("text", "named"),
+    [
+        ('source_column: "sampleID"', True),
+        ("    column: sampleID\n", True),
+        ("values: {dc: samplesheet, column: sampleID, aggregation: nunique}", True),
+        ("  - sampleID\n", True),
+        ('    "sampleID": "Sample identifier"', True),
+        ("# ampliseq 3.x renamed sampleID/forwardReads to sample/fastq_1", False),
+        ('"sample": "Sample identifier (sampleID before ampliseq 3.0)"', False),
+        ("column: sampleID_2", False),
+    ],
+)
+def test_a_column_is_named_as_a_yaml_scalar_not_in_prose(
+    nfd: ModuleType, text: str, named: bool
+) -> None:
+    assert nfd._names(text, "sampleID") is named
