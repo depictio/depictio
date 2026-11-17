@@ -79,3 +79,41 @@ def test_dispatch_reenqueues_after_old_failure(monkeypatch):
     doc = db["compute_results"].find_one({"_id": key})
     assert doc["status"] == "pending" and "error" not in doc
     assert doc["celery_task_id"] == "task-1"
+
+
+def test_a_pending_entry_past_the_task_limit_is_a_miss_and_removed(cache):
+    # Its result went with a Redis restarted without persistence: polling it
+    # would say "pending" forever.
+    cache.insert_one({"_id": "k", "status": "pending", "created_at": _ago(1300)})
+    assert routes._find_reusable_cache_entry(cache, "k", stale_after_s=600) is None
+    assert cache.find_one({"_id": "k"}) is None
+
+
+def test_a_pending_entry_within_the_task_limit_is_reused(cache):
+    cache.insert_one({"_id": "k", "status": "pending", "created_at": _ago(30)})
+    assert routes._find_reusable_cache_entry(cache, "k", stale_after_s=600)["status"] == "pending"
+    # Past one limit but not two: the task may have waited that long in the queue.
+    cache.insert_one({"_id": "queued", "status": "pending", "created_at": _ago(900)})
+    assert (
+        routes._find_reusable_cache_entry(cache, "queued", stale_after_s=600)["status"] == "pending"
+    )
+    # Without a limit, a pending entry is reused whatever its age, as before.
+    cache.insert_one({"_id": "old", "status": "pending", "created_at": _ago(90_000)})
+    assert routes._find_reusable_cache_entry(cache, "old")["status"] == "pending"
+
+
+def test_a_stale_read_does_not_delete_the_entry_that_replaced_it(cache):
+    # Another request already dropped the stale entry and enqueued afresh;
+    # this one, still holding the stale read, must leave the new entry be.
+    stale = {"_id": "k", "status": "pending", "created_at": _ago(1300)}
+    cache.insert_one({"_id": "k", "status": "pending", "created_at": _ago(1)})
+
+    class Racing:
+        def find_one(self, _query):
+            return stale
+
+        def delete_one(self, query):
+            return cache.delete_one(query)
+
+    assert routes._find_reusable_cache_entry(Racing(), "k", stale_after_s=600) is None
+    assert cache.find_one({"_id": "k"})["status"] == "pending"

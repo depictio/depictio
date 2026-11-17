@@ -37,13 +37,13 @@ HUB_DC_TAG = "samples"
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="spectra",
-        glob_pattern="mzmlstatistics/*_mzml_info.tsv",
+        # quantms <= 1.1: <run>_mzml_info.tsv; 1.2: <run>_ms_info.tsv (mzML or .d).
+        glob_pattern="mzmlstatistics/*_info.tsv",
         format="tsv",
         source_path="source_path",
         read_kwargs={"infer_schema_length": 20000, "null_values": ["NA"]},
         input_schema={
             "MSLevel": pl.Int64,
-            "MS2_peaks": pl.Float64,
             "Base_Peak_Intensity": pl.Float64,
             "Retention_Time": pl.Float64,
         },
@@ -69,12 +69,19 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 NO_GROUP_COL = "__no_group__"
 NO_GROUP_VALUE = "All runs"
-_SUFFIX = "_mzml_info.tsv"
+_SUFFIX = r"_(?:mzml|ms)_info\.tsv$"
+
+
+def ms2_peaks(spectra: pl.DataFrame) -> pl.Expr:
+    """Peak count per spectrum: ``MS2_peaks`` up to quantms 1.1, ``MS_peaks``
+    (filled for every MS level) from 1.2."""
+    col = "MS2_peaks" if "MS2_peaks" in spectra.columns else "MS_peaks"
+    return pl.col(col).cast(pl.Float64, strict=False)
 
 
 def run_of_path(path_expr: pl.Expr) -> pl.Expr:
     """The run named by ``mzmlstatistics/<run>_mzml_info.tsv``."""
-    return path_expr.str.split("/").list.last().str.replace(_SUFFIX, "", literal=True)
+    return path_expr.str.split("/").list.last().str.replace(_SUFFIX, "")
 
 
 def group_lookup(hub: pl.DataFrame | None, params: dict | None) -> tuple[str, pl.DataFrame]:
@@ -102,7 +109,7 @@ def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = Non
         .agg(
             (pl.col("MSLevel") == 1).sum().cast(pl.Int64).alias("ms1_spectra"),
             ms2.sum().cast(pl.Int64).alias("ms2_spectra"),
-            pl.col("MS2_peaks").filter(ms2).median().alias("median_ms2_peaks"),
+            ms2_peaks(sources["spectra"]).filter(ms2).median().alias("median_ms2_peaks"),
             pl.col("Base_Peak_Intensity")
             .filter(ms2)
             .median()

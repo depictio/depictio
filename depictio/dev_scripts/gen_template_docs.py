@@ -195,11 +195,15 @@ def _recipe_github_url(ref: str, pipeline_version: str) -> str | None:
 
 
 def _render_variables(meta: TemplateMetadata) -> list[str]:
-    # Auto-detected vars (descriptions start with "Auto-…") are derived from the
-    # run, not user inputs — listing them inline keeps the main table short and
-    # readable. The route flags among them drive the Conditional routes below.
-    provided = [v for v in meta.variables if not v.description.lstrip().startswith("Auto")]
-    auto = [v for v in meta.variables if v.description.lstrip().startswith("Auto")]
+    # Auto-detected vars (a `from_params` rule, or a description starting with
+    # "Auto-…") are derived from the run, not user inputs — listing them inline
+    # keeps the main table short and readable. The route flags among them drive
+    # the Conditional routes below.
+    def _is_auto(v) -> bool:
+        return v.from_params is not None or v.description.lstrip().startswith("Auto")
+
+    provided = [v for v in meta.variables if not _is_auto(v)]
+    auto = [v for v in meta.variables if _is_auto(v)]
 
     lines = [
         "### Template variables",

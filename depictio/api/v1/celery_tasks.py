@@ -177,6 +177,7 @@ def build_figure_preview(payload: dict) -> dict:
         apply_column_coloring_kwargs,
         apply_facet_kwargs,
         apply_group_coloring_kwargs,
+        apply_group_split_kwargs,
         code_group_globals,
         group_annotation_expr,
         group_source_columns,
@@ -184,6 +185,7 @@ def build_figure_preview(payload: dict) -> dict:
         sanitize_group_defs,
         sanitize_grouping_display,
         tidy_facet_layout,
+        with_overall_rows,
     )
 
     coloring_allowed = mode != "code" and (visu_type or "").lower() not in _WHOLE_FRAME_VISU
@@ -251,7 +253,16 @@ def build_figure_preview(payload: dict) -> dict:
             return kwargs
         return apply_facet_kwargs(kwargs, facet_column)
 
+    # "Split, colours kept" (#1397's what's new): one panel per group with the
+    # figure's own colours, instead of recolouring by group.
+    group_keep_color = bool(payload.get("group_keep_color")) and grouping_display == "facet"
+    # With it, an "All" panel first: every row, the groups' together.
+    group_overall = group_keep_color and bool(payload.get("group_overall"))
+
     def _grouped_kwargs(base: dict) -> dict:
+        n_panels = len(group_defs) + (1 if include_other else 0) + (1 if group_overall else 0)
+        if group_keep_color and n_panels <= MAX_FACET_CATEGORIES:
+            return apply_group_split_kwargs(base, group_defs, include_other, group_overall)
         # +1 when "Other" is shown: the synthetic column then carries the
         # fallback label as its own category (and facet panel in Split mode).
         return _apply_display(
@@ -397,9 +408,12 @@ def build_figure_preview(payload: dict) -> dict:
                         group_defs, scan_schema.names(), dict(scan_schema)
                     )
                     if group_expr is not None:
-                        scan = scan.with_columns(group_expr)
+                        annotated_scan = scan.with_columns(group_expr)
+                        scan = annotated_scan
                         if not include_other:
                             scan = scan.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+                        if group_overall:
+                            scan = with_overall_rows(scan, annotated_scan)
                         group_colored = True
                     else:
                         # No group column in this frame: render ungrouped, and
@@ -464,9 +478,12 @@ def build_figure_preview(payload: dict) -> dict:
             # subset keeps its labels.
             group_expr = group_annotation_expr(group_defs, df.columns, dict(df.schema))
             if group_expr is not None:
-                df = df.with_columns(group_expr)
+                annotated_df = df.with_columns(group_expr)
+                df = annotated_df
                 if not include_other:
                     df = df.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+                if group_overall:
+                    df = with_overall_rows(df, annotated_df)
                 if code_group_optin:
                     # Same kwargs, handed over rather than applied: the author's
                     # code decides which px call they land in.
@@ -1529,6 +1546,8 @@ def compute_complex_heatmap(payload: dict) -> dict:
         _narrow_wide_matrix_columns(value_columns, filter_metadata, what="heatmap columns")
         or value_columns
     )
+    if filter_metadata:
+        value_columns = _square_matrix_columns(df, index_column, value_columns)
 
     # Column annotations, in priority order. Both branches produce the same
     # ``{annotation_name: {sample_column: value}}`` shape the aligner below
@@ -1825,6 +1844,26 @@ def _heatmap_clustering_flags(
             logger.info("not clustering heatmap columns by correlation: %d row(s) left", n_rows)
             cluster_cols = False
     return cluster_rows, cluster_cols
+
+
+def _square_matrix_columns(df: Any, index_column: str, value_columns: list[str]) -> list[str]:
+    """The columns of a matrix whose rows name them, cut to the rows a filter kept.
+
+    A sample-by-sample matrix (a distance, a correlation) names each column by
+    a row's index. A filter that removed rows (a run, a group of a split)
+    leaves their columns standing, so the matrix would read the kept samples
+    against every sample. When every kept row names a column, the columns
+    follow the rows. A matrix of anything else by samples (taxa, genes) never
+    names a column by a row and is left alone.
+    """
+    if index_column not in df.columns or df.height == 0:
+        return value_columns
+    kept = {str(v) for v in df.get_column(index_column).drop_nulls().to_list()}
+    if not kept or len(kept) >= len(value_columns):
+        return value_columns
+    if not kept <= {str(c) for c in value_columns}:
+        return value_columns
+    return [c for c in value_columns if str(c) in kept]
 
 
 def _narrow_wide_matrix_columns(
@@ -3382,6 +3421,11 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
                 None if sync_files else last_ingested_signature(payload["project_id"], tag, run_id)
             ),
             outcome=outcome,
+            # The run ledger entry this task belongs to, so what it writes can
+            # be joined back to the ingestion that produced it.
+            ingestion_run_id=run_id,
+            project_id=payload["project_id"],
+            trigger="ui",
             **scan_kwargs,
         )
     except ProjectStorageUnusable as exc:

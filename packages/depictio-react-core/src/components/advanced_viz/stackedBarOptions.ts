@@ -46,27 +46,34 @@ export function isDenseTaxonomyAxis(bars: number): boolean {
   return bars > DENSE_AXIS_BARS;
 }
 
-export type TaxonomyLegendPos = 'right' | 'bottom';
+/** `top` is not a config value: it is how a split's panels place the key. */
+export type TaxonomyLegendPos = 'right' | 'bottom' | 'top';
 
 /** What every placement shares: the key is titled with the rank it shows. */
 const legendCommon = (title: string) => ({ title: { text: `${title} ` }, font: { size: 10 } });
+
+/** A key in rows reads left to right: largest first, Other last, like a
+ *  figure's. A column keeps Plotly's stacked order, top segment on top. */
+const ROWS_ORDER = { traceorder: 'normal' } as const;
 
 /**
  * The taxa's legend. `right` (the default): a column right of the plot, clear
  * of the tilted sample labels. `bottom`: rows under the whole figure, below the
  * sample labels and the axis title; on a dense axis, whose labels are hidden,
  * rows above the bars instead, where it does not float in their empty band.
+ * `top`: rows above the bars whatever the density, so the panels of a split
+ * (each with its own sample count) all carry the key in the same place.
  */
 export function taxonomyLegend(
   pos: TaxonomyLegendPos | null | undefined,
   denseAxis: boolean,
   title: string,
 ): Record<string, unknown> {
+  if (pos === 'top' || (pos === 'bottom' && denseAxis)) {
+    return { orientation: 'h', x: 0, xanchor: 'left', y: 1.02, yanchor: 'bottom', ...ROWS_ORDER, ...legendCommon(title) };
+  }
   if (pos !== 'bottom') {
     return { orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top', ...legendCommon(title) };
-  }
-  if (denseAxis) {
-    return { orientation: 'h', x: 0, xanchor: 'left', y: 1.02, yanchor: 'bottom', ...legendCommon(title) };
   }
   // Anchored to the figure's own bottom edge (`yref: 'container'`), so it
   // clears the automargined sample labels whatever their length.
@@ -77,6 +84,7 @@ export function taxonomyLegend(
     y: 0,
     yref: 'container',
     yanchor: 'bottom',
+    ...ROWS_ORDER,
     ...legendCommon(title),
   };
 }
@@ -87,7 +95,7 @@ export function taxonomyLegendTopPx(
   denseAxis: boolean,
   showLegend: boolean,
 ): number {
-  return showLegend && pos === 'bottom' && denseAxis ? 40 : 0;
+  return showLegend && (pos === 'top' || (pos === 'bottom' && denseAxis)) ? 40 : 0;
 }
 
 // ---------------------------------------------------------------------------

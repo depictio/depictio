@@ -399,6 +399,16 @@ class S3DepictioCLIConfig(ServiceConfig):
             "development against self-signed dev S3 instances."
         ),
     )
+    browser_access: Literal["presigned", "proxy"] = Field(
+        default="presigned",
+        description=(
+            "How browsers read indexed files (3D structures, GenomeSpy VCF/BAM/BigWig "
+            "tracks). 'presigned': a URL signed for the S3 public URL, so S3 must be "
+            "reachable from browsers, with CORS for Range. 'proxy': the API streams the "
+            "object, by byte range, for instances whose S3 is internal only (IP-only "
+            "installs, Serve apps)."
+        ),
+    )
 
     model_config = SettingsConfigDict(env_prefix=S3_ENV_PREFIX)
 
@@ -1813,6 +1823,18 @@ class DashboardVersionsConfig(BaseSettings):
         description="Skip (and log) a capture larger than this rather than risk the "
         "16 MB BSON document limit. A version must never break a save.",
     )
+    changes_since_enabled: bool = Field(
+        default=False,
+        description="Show readers what changed since their last visit: the viewer pill "
+        "and panel, the marks on changed components, the figure before/after, the "
+        "project's new runs and timeline, and the notifications bell. Off by default.",
+    )
+    changes_since_mark_mode: Literal["sticky", "previous_visit"] = Field(
+        default="sticky",
+        description="Default for readers who have not chosen: 'sticky' keeps the marks "
+        "until the reader marks them as seen, 'previous_visit' shows what changed "
+        "since the visit before this one.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
 
@@ -2926,11 +2948,11 @@ class Settings(BaseSettings):
         default="",
         description=(
             "Comma-separated list of *optional* reference projects to seed in "
-            "addition to the default set, e.g. 'catalog_conformance'. Empty (the "
+            "addition to the default set: 'catalog_conformance', 'genome_tracks_examples'. Empty (the "
             "default) seeds none of them. This is additive, unlike "
-            "DEPICTIO_SEED_PROJECTS which narrows the default set — an optional "
-            "project is a test fixture, so it stays out of ordinary deployments "
-            "until something asks for it. Ignored when "
+            "DEPICTIO_SEED_PROJECTS which narrows the default set: an optional "
+            "project is a test fixture or a showcase, so it stays out of ordinary "
+            "deployments until something asks for it. Ignored when "
             "DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is true."
         ),
     )

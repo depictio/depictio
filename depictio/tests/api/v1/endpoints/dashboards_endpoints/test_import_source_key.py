@@ -1377,3 +1377,65 @@ class TestTemplateOrigin:
 
         save(template_origin={"template_id": "evil/template/9", "template_version": "9.9.9"})
         assert _stored(db, "Edited")["template_origin"]["template_version"] == "1.0.0"
+
+
+class TestKeptDashboardColours:
+    """An attached run brings new values (a second locality): the kept
+    dashboard's `auto` colours gain them, and the values it had keep theirs
+    (epic #1399)."""
+
+    def _multi_coloured(self):
+        return yaml.safe_dump(
+            {
+                "main_dashboard": {
+                    "title": "Amplicons",
+                    "components": [],
+                    "category_colors": {"locality": "auto"},
+                },
+                "tabs": [],
+            }
+        )
+
+    def _import_with(self, values, content, user, project_id, **kwargs):
+        with (
+            patch.object(dash_routes, "_category_column_dc", return_value="dc"),
+            patch.object(dash_routes, "_distinct_column_values", return_value=values),
+        ):
+            return _import(content, user, project_id, source_key=KEY, **kwargs)
+
+    def test_a_kept_dashboard_colours_the_values_its_data_gained(self, db, user, project_id):
+        self._import_with(["Athens"], self._multi_coloured(), user, project_id)
+        before = db["dashboards"].find_one({"is_main_tab": True})["category_colors"]["locality"]
+
+        result = self._import_with(
+            ["Athens", "Barcelona"], self._multi_coloured(), user, project_id, existing="keep"
+        )
+
+        assert result["status"] == "kept"
+        after = db["dashboards"].find_one({"is_main_tab": True})["category_colors"]["locality"]
+        assert after["Athens"] == before["Athens"]
+        assert set(after) == {"Athens", "Barcelona"}
+        assert after["Barcelona"] != after["Athens"]
+
+    def test_a_colour_edited_in_the_viewer_survives(self, db, user, project_id):
+        self._import_with(["Athens"], self._multi_coloured(), user, project_id)
+        db["dashboards"].update_one(
+            {"is_main_tab": True},
+            {"$set": {"category_colors": {"locality": {"Athens": "#000000"}}}},
+        )
+
+        self._import_with(
+            ["Athens", "Barcelona"], self._multi_coloured(), user, project_id, existing="keep"
+        )
+
+        after = db["dashboards"].find_one({"is_main_tab": True})["category_colors"]["locality"]
+        assert after["Athens"] == "#000000"
+        assert "Barcelona" in after
+
+    def test_nothing_gained_writes_nothing(self, db, user, project_id):
+        self._import_with(["Athens"], self._multi_coloured(), user, project_id)
+        versions = db["dashboard_versions"].count_documents({})
+
+        self._import_with(["Athens"], self._multi_coloured(), user, project_id, existing="keep")
+
+        assert db["dashboard_versions"].count_documents({}) == versions

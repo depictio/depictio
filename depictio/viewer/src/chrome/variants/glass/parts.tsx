@@ -3,6 +3,7 @@ import { Modal, Tooltip } from '@mantine/core';
 import { useBrandScopeAttributes, Z_LAYERS } from 'depictio-react-core';
 import {
   ArrowLeft,
+  Bell,
   BookOpenText,
   ChevronRight,
   Compass,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 import BrandLogo from '../../BrandLogo';
+import NotificationsBell from '../../NotificationsBell';
 import PoweredBy from '../../PoweredBy';
 import { useBrandLogoMode } from '../../useBrandLogoMode';
 import DepictioRose from '../../../components/rose/DepictioRose';
@@ -289,6 +291,18 @@ export const ThemeTile: React.FC<{ place?: 'rail' | 'top' | 'sheet' }> = ({ plac
     tile
   );
 };
+
+/** The changes bell, as a top-bar tile. Renders nothing while the feature is off. */
+export const BellTile: React.FC = () => (
+  <NotificationsBell
+    position="bottom-end"
+    renderTrigger={({ label, onClick }) => (
+      <Tooltip label={label} withArrow openDelay={300}>
+        <Tile place="top" icon={Bell} label={label} onClick={onClick} data-testid="notifications-bell" />
+      </Tooltip>
+    )}
+  />
+);
 
 /** The reader: initials (or a figure) linking straight to Account settings. */
 export const ProfileTile: React.FC = () => {

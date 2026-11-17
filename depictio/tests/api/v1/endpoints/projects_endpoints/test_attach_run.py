@@ -222,6 +222,8 @@ def test_real_attach_records_location_keeps_single_and_dispatches(env):
     kwargs = env.dispatch.call_args.kwargs
     assert kwargs["data_root"] == env.new
     assert {entry[0] for entry in kwargs["to_dispatch"]} == {"counts", "samplesheet"}
+    # The new run tags are persisted on the ingestion run, not only in the response.
+    assert kwargs["run_tags"] == ["run2"]
 
 
 def test_locked_project_409(env):

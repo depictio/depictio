@@ -214,3 +214,79 @@ def test_a_changed_file_says_what_it_was_and_what_its_report_changed():
     assert f.report_change is not None and f.report_change.samples_added == ["S3"]
     assert f.report_change.modules_removed == ["fastp"]
     assert [s.changed for s in report.scans] == [0, 1]
+
+
+def test_a_single_file_bound_to_a_run_is_counted_under_it():
+    """A one-file collection bound per run (epic #1399) is registered under
+    the run, outside the recursive scan's stats: it counts in that run."""
+    a = {"workflow_id": WF, "run_tag": "run_a", "scan_results": [_scan("t", 3, 1)]}
+    b = {"workflow_id": WF, "run_tag": "run_b", "scan_results": [_scan("t", 3, 1)]}
+    rows = build_project_runs(
+        _project(), [a, b], single_files={"run_a": {"samplesheet": 1}, "run_b": {"samplesheet": 1}}
+    ).runs
+    assert [r.dc_files for r in rows] == [
+        {"counts": 3, "qc": 1, "samplesheet": 1},
+        {"counts": 3, "qc": 1, "samplesheet": 1},
+    ]
+    assert [r.files for r in rows] == [5, 5]
+
+
+def test_a_shared_single_file_never_makes_another_run_incomplete():
+    """One file kept for every run is counted under the run that brought it,
+    and the other runs are not missing it."""
+    a = {"workflow_id": WF, "run_tag": "run_a", "scan_results": [_scan("t", 3, 1)]}
+    b = {"workflow_id": WF, "run_tag": "run_b", "scan_results": [_scan("t", 3, 1)]}
+    rows = build_project_runs(_project(), [a, b], single_files={"run_a": {"samplesheet": 1}}).runs
+    assert [(r.run_tag, r.dc_files.get("samplesheet"), r.status) for r in rows] == [
+        ("run_a", 1, "ok"),
+        ("run_b", None, "ok"),
+    ]
+
+
+def test_a_run_lists_the_recipe_collections_it_fed():
+    from depictio.api.v1.endpoints.projects_endpoints.project_runs import outputs_by_run
+
+    alpha, bray = ObjectId(), ObjectId()
+    project = {
+        "workflows": [
+            {
+                "_id": WF,
+                "data_collections": [
+                    {
+                        "_id": alpha,
+                        "data_collection_tag": "alpha",
+                        "config": {"source": "transformed"},
+                    },
+                    {
+                        "_id": bray,
+                        "data_collection_tag": "bray",
+                        "config": {"source": "transformed"},
+                    },
+                ],
+            }
+        ]
+    }
+    outputs = outputs_by_run(
+        project,
+        {
+            str(alpha): [
+                {"run_tags": ["run_a"], "run_scope": "run"},
+                {"run_tags": ["run_b"], "run_scope": "run"},
+            ],
+            str(bray): [
+                {"run_tags": ["run_a"]},
+                {
+                    "run_tags": ["run_a", "run_b"],
+                    "computed_from_runs": ["run_a", "run_b"],
+                    "run_scope": "aggregate",
+                },
+            ],
+        },
+    )
+    assert outputs == {
+        "run_a": {"alpha": "run", "bray": "aggregate"},
+        "run_b": {"alpha": "run", "bray": "aggregate"},
+    }
+    run = {"workflow_id": WF, "run_tag": "run_b", "scan_results": [_scan("t", 3, 1)]}
+    (row,) = build_project_runs(_project(), [run], outputs=outputs).runs
+    assert row.dc_outputs == {"alpha": "run", "bray": "aggregate"}

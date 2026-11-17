@@ -38,6 +38,7 @@ from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.api.v1.services import project_bundle
 from depictio.api.v1.services.migration_push import BundleListingError, build_project_bundle_file
 from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
+from depictio.models.models.data_collections_types.indexed_file import indexed_file_s3_prefix
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.migration import ImportHop
 from depictio.models.models.users import User
@@ -150,9 +151,9 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
             if uri.startswith("s3://"):
                 add(_normalize_s3_path(uri, source_bucket))
 
-    # Phylogeny trees and genomic track files: no document records where the
-    # CLI uploaded them, the key is derived from the DC id, so tell those DCs
-    # apart by their config.
+    # Phylogeny trees, genomic track files and indexed files (structures, VCF,
+    # BAM...): no document records where the CLI uploaded them, the key is
+    # derived from the DC id, so tell those DCs apart by their config.
     wanted = set(dc_ids)
     for project in projects_collection.find(
         {"workflows.data_collections._id": {"$in": dc_ids}},
@@ -172,6 +173,8 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
                     add(phylogeny_s3_key(str(dc["_id"])))
                 elif dc_type == "genomic_tracks":
                     add(genomic_tracks_s3_prefix(str(dc["_id"])))
+                elif dc_type == "indexed_file":
+                    add(indexed_file_s3_prefix(str(dc["_id"]), ""))
                 elif dc_type == "image":
                     # Uploaded to the folder the project names, not under the DC
                     # id, and the DC lives here, not in ``data_collections``.

@@ -135,6 +135,7 @@ EXEMPT_MODULES: dict[str, str] = {
     "comments_endpoints.routes": "comments are conversation about a release, not part of it",
     "dashboards_endpoints.filter_state_routes": "per-viewer filter state",
     "dashboards_endpoints.annotation_routes": "per-viewer session annotations",
+    "changes_endpoints.routes": "per-reader last-seen marks and read-only change views",
     "figure_endpoints.routes": "renders a preview, writes nothing",
     "advanced_viz_endpoints.routes": "computes a render, writes nothing",
     "advanced_viz_endpoints.structure_resolver": "resolves a structure for rendering",
