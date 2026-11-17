@@ -190,3 +190,47 @@ export function reportUrl(initialFilters: unknown[] = []): string {
   writeFileSync(out, html);
   return `file://${out}`;
 }
+
+// ---------------------------------------------------------------------------
+// The combined file: the report AND the dashboard, one HTML
+// ---------------------------------------------------------------------------
+
+export const COMBINED_RUNTIME_JS = join(DIST_STATIC, "combined-runtime.js");
+
+export function skipUnlessCombinedRuntimeBuilt(): void {
+  test.skip(
+    !existsSync(COMBINED_RUNTIME_JS),
+    "combined runtime not built — run `pnpm run build:static` in depictio/viewer first",
+  );
+}
+
+/** The penguins report as a combined file (the producer's composition,
+ *  depictio/serverless/combined.py, for a report with no Plotly copy of its
+ *  own), opened on `initialFilters`. Returns a file:// URL. */
+export function combinedUrl(
+  initialFilters: unknown[] = [],
+  defaultView: "report" | "dashboard" = "report",
+): string {
+  const manifest = JSON.parse(readFileSync(PENGUINS_MANIFEST, "utf-8"));
+  manifest.initial_filters = initialFilters;
+  const inert = (text: string) =>
+    text.replace(/<\/script/g, "<\\/script").replace(/<!--/g, "<\\!--");
+  const js = readFileSync(COMBINED_RUNTIME_JS, "utf-8");
+  const css = readFileSync(join(DIST_STATIC, "combined-runtime.css"), "utf-8");
+  const block =
+    jsonScript("depictio-report-config", {
+      brand: { primary: "#228be6" },
+      combined: { default_view: defaultView },
+    }) +
+    jsonScript("depictio-report-manifest", manifest) +
+    `<script type="text/plain" data-depictio-runtime="css">${inert(css)}</script>` +
+    `<script data-depictio-runtime="js">${inert(js)}</script>`;
+  const html = readFileSync(PENGUINS_REPORT, "utf-8").replace(
+    "<!--DEPICTIO_REPORT_RUNTIME-->",
+    () => block,
+  );
+  const dir = mkdtempSync(join(tmpdir(), "depictio-combined-"));
+  const out = join(dir, "combined-fixture.html");
+  writeFileSync(out, html);
+  return `file://${out}`;
+}

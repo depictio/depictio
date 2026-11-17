@@ -1,0 +1,549 @@
+/**
+ * The combined file's host: a rendered Quarto report that also holds the full
+ * interactive dashboard, behind a "Report | Dashboard" switch.
+ *
+ * The page is the report. The dashboard is the viewer App, opened the first
+ * time it is asked for in a same-origin iframe written from what the page
+ * already holds: the runtime's script text, its stylesheet text, the manifest
+ * and the add-ons. Nothing is stored twice in the file; Quarto's Bootstrap and
+ * Mantine never share a document; Plotly and 3Dmol inject their styles into
+ * the document they draw in.
+ *
+ * Between the two views: one filter state (`FilterChannel`, held here and read
+ * by the iframe through `parent`), cross-links ("Open in dashboard" on each
+ * report tile, "Show in report" on each dashboard tile and tab the report
+ * holds), deep links (`#dashboard`, `#dashboard/<tab>`, `#report/<anchor>`),
+ * the view a file opens on (chosen at export, then remembered per file), and
+ * the colour scheme of the switch, which follows the view on screen.
+ *
+ * Plain DOM, no React: this is chrome around two documents, and the report's
+ * own scripts (Quarto's, the export's fold script) own the rest of the page.
+ */
+import {
+  COMBINED_HOST_GLOBAL,
+  REPORT_CONFIG_ID,
+  REPORT_MANIFEST_ID,
+  REPORT_TILE_ATTR,
+  componentFor,
+  formatCombinedHash,
+  landingView,
+  parseCombinedHash,
+  parseTileRefs,
+  viewMemoryKey,
+  type BundleManifest,
+  type CombinedHostApi,
+  type CombinedRoute,
+  type CombinedView,
+  type DashboardController,
+  type FilterChannel,
+  type RouteTab,
+} from 'depictio-static-core';
+
+/** Marks the runtime's script, stylesheet text and add-ons in a combined file. */
+export const RUNTIME_ATTR = 'data-depictio-runtime';
+/** Attribute of a report tab heading naming its dashboard tab. */
+export const REPORT_TAB_ATTR = 'data-depictio-tab';
+
+export interface CombinedConfig {
+  /** The view a file opens on when its link names none (chosen at export). */
+  default_view?: CombinedView;
+}
+
+interface HostOptions {
+  manifest: BundleManifest;
+  channel: FilterChannel;
+  config: CombinedConfig;
+}
+
+function readJson<T>(id: string): T | null {
+  try {
+    const raw = document.getElementById(id)?.textContent;
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The combined section of the report's config (`depictio-report-config`). */
+export function readCombinedConfig(): CombinedConfig {
+  const config = readJson<{ combined?: CombinedConfig }>(REPORT_CONFIG_ID);
+  return config?.combined ?? {};
+}
+
+function runtimeText(kind: 'js' | 'css'): string {
+  return document.querySelector(`script[${RUNTIME_ATTR}="${kind}"]`)?.textContent ?? '';
+}
+
+function storageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage blocked: the view is simply not remembered */
+  }
+}
+
+const HOST_CSS = `
+.dpx-switch{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2147483001;
+  display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;
+  font:500 13px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  background:var(--dpx-sw-bg);color:var(--dpx-sw-fg);border:1px solid var(--dpx-sw-border);
+  box-shadow:0 2px 10px rgba(0,0,0,.12);
+  --dpx-sw-bg:rgba(255,255,255,.92);--dpx-sw-fg:#495057;--dpx-sw-border:rgba(0,0,0,.12);
+  --dpx-sw-active-bg:#228be6;--dpx-sw-active-fg:#fff;--dpx-sw-hover:rgba(0,0,0,.06)}
+.dpx-switch[data-theme="dark"]{--dpx-sw-bg:rgba(37,38,43,.92);--dpx-sw-fg:#c1c2c5;
+  --dpx-sw-border:rgba(255,255,255,.14);--dpx-sw-hover:rgba(255,255,255,.08)}
+.dpx-switch button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;white-space:nowrap}
+.dpx-switch button:hover{background:var(--dpx-sw-hover)}
+.dpx-switch button:focus-visible{outline:2px solid var(--dpx-sw-active-bg);outline-offset:1px}
+.dpx-switch button[aria-selected="true"]{background:var(--dpx-sw-active-bg);color:var(--dpx-sw-active-fg)}
+.dpx-switch .dpx-switch-aside{font-weight:400;font-size:12px;opacity:.85;
+  border-left:1px solid var(--dpx-sw-border);border-radius:0 999px 999px 0;margin-left:2px}
+.dpx-switch .dpx-switch-aside[hidden]{display:none}
+.dpx-dashboard-frame{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483000;
+  background:#fff;visibility:hidden}
+html.dpx-view-dashboard{overflow:hidden}
+html:not(.dpx-view-dashboard) body{padding-top:36px}
+html.dpx-view-dashboard .dpx-dashboard-frame{visibility:visible}
+.dpx-tile-links{display:flex;justify-content:flex-end;margin:0 0 -0.25rem}
+.dpx-tile-links button{all:unset;cursor:pointer;font:500 12px/1.4 system-ui,-apple-system,sans-serif;
+  color:#1c7ed6;padding:2px 6px;border-radius:4px;opacity:.75}
+.dpx-tile-links button:hover,.dpx-tile-links button:focus-visible{opacity:1;background:rgba(28,126,214,.08)}
+.dpx-flash{animation:dpx-flash 1.6s ease-out 1}
+@keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px rgba(34,139,230,.55)}100%{box-shadow:0 0 0 3px rgba(34,139,230,0)}}
+@media print{.dpx-switch,.dpx-dashboard-frame,.dpx-tile-links{display:none!important}
+  html.dpx-view-dashboard{overflow:visible}html body{padding-top:0!important}}
+`;
+
+/** Styles the host writes into the dashboard's document. */
+const FRAME_CSS = `
+html,body{margin:0}
+.dpx-show-in-report{position:fixed;z-index:2147483000;display:none;cursor:pointer;
+  font:500 12px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:6px 10px;
+  border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.95);color:#1c7ed6;
+  box-shadow:0 2px 8px rgba(0,0,0,.15)}
+[data-mantine-color-scheme="dark"] .dpx-show-in-report{background:rgba(37,38,43,.95);
+  color:#74c0fc;border-color:rgba(255,255,255,.14)}
+.dpx-flash{animation:dpx-flash 1.6s ease-out 1}
+@keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px rgba(34,139,230,.6)}100%{box-shadow:0 0 0 3px rgba(34,139,230,0)}}
+`;
+
+function escapeStyle(css: string): string {
+  return css.replace(/<\/style/gi, '<\\/style');
+}
+
+/** The report's tile placeholders, by `<tab>:<index>`. */
+function tileHosts(): Map<string, HTMLElement> {
+  const out = new Map<string, HTMLElement>();
+  for (const host of Array.from(document.querySelectorAll<HTMLElement>(`[${REPORT_TILE_ATTR}]`))) {
+    const refs = parseTileRefs(host.getAttribute(REPORT_TILE_ATTR));
+    // A stable anchor per tile (`#report/tile-<index>`), so a link to one
+    // survives a reload; a highlight drawing the same tile twice keeps the
+    // first.
+    const anchor = refs[0] ? `tile-${refs[0].index}` : '';
+    if (anchor && !host.id && !document.getElementById(anchor)) host.id = anchor;
+    for (const ref of refs) {
+      const key = `${ref.tabId}:${ref.index}`;
+      if (!out.has(key)) out.set(key, host);
+    }
+  }
+  return out;
+}
+
+/** The report's part for a dashboard tab: its heading (written with the tab's
+ *  id since this host exists), else the section around the tab's first tile. */
+function tabTarget(tabId: string, hosts: Map<string, HTMLElement>): HTMLElement | null {
+  // The Quarto section a heading opens carries the heading's id: the anchor
+  // the contents list links to, and the one a `#report/<anchor>` link names.
+  const sectionOf = (heading: Element | null): HTMLElement | null => {
+    const section = heading?.parentElement;
+    return section && section.tagName === 'SECTION' && section.id ? section : null;
+  };
+  const mark = document.querySelector<HTMLElement>(`[${REPORT_TAB_ATTR}="${CSS.escape(tabId)}"]`);
+  if (mark) {
+    const heading = mark.closest('h1,h2,h3,h4,h5,h6');
+    return sectionOf(heading) ?? (heading as HTMLElement | null) ?? mark;
+  }
+  for (const [key, host] of hosts) {
+    if (!key.startsWith(`${tabId}:`)) continue;
+    // The innermost Quarto section holding a tab heading (the export marks
+    // those `data-dpx-kind="tab"`).
+    let el: HTMLElement | null = host;
+    while (el && el !== document.body) {
+      if (el.tagName === 'SECTION') {
+        const heading = el.querySelector(':scope > h1,:scope > h2,:scope > h3,:scope > h4');
+        if (heading?.querySelector('[data-dpx-kind="tab"]')) return el;
+      }
+      el = el.parentElement;
+    }
+    return host;
+  }
+  return null;
+}
+
+/**
+ * Open every fold of the report on the way to `el`, with the export's own
+ * fold script: it opens folds for a click on any `a[href^="#"]` (in the
+ * capture phase), so a click on a throwaway anchor to `el`'s id does it, and
+ * the anchor's own default (moving the hash) is cancelled.
+ */
+function unfoldTo(el: HTMLElement): void {
+  if (!el.id) return;
+  const a = document.createElement('a');
+  a.href = `#${el.id}`;
+  a.hidden = true;
+  a.addEventListener('click', (ev) => ev.preventDefault());
+  document.body.appendChild(a);
+  try {
+    a.click();
+  } finally {
+    a.remove();
+  }
+}
+
+function flash(el: Element): void {
+  el.classList.remove('dpx-flash');
+  void (el as HTMLElement).offsetWidth;
+  el.classList.add('dpx-flash');
+  window.setTimeout(() => el.classList.remove('dpx-flash'), 1800);
+}
+
+/** Wait (a few seconds at most) for `find` to return an element. */
+function waitFor<T>(find: () => T | null, timeoutMs = 8000): Promise<T | null> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      const hit = find();
+      if (hit) return resolve(hit);
+      if (Date.now() - start > timeoutMs) return resolve(null);
+      window.setTimeout(tick, 80);
+    };
+    tick();
+  });
+}
+
+export interface CombinedHost {
+  api: CombinedHostApi;
+  show(view: CombinedView, route?: CombinedRoute): void;
+}
+
+export function installCombinedHost({ manifest, channel, config }: HostOptions): CombinedHost {
+  const style = document.createElement('style');
+  style.setAttribute(RUNTIME_ATTR, 'host-css');
+  style.textContent = HOST_CSS;
+  document.head.appendChild(style);
+
+  const tabs: RouteTab[] = (manifest.tabs ?? []).length
+    ? (manifest.tabs ?? []).map((t) => ({ id: t.id, title: t.title }))
+    : [{ id: manifest.dashboard.id, title: manifest.dashboard.title }];
+  const memoryKey = viewMemoryKey(manifest.dashboard.id, manifest.built_at);
+  const hosts = tileHosts();
+
+  let view: CombinedView = 'report';
+  let frame: HTMLIFrameElement | null = null;
+  let controller: DashboardController | null = null;
+  let pendingTab: string | null = null;
+  let pendingTile: string | null = null;
+  const whenAttached: Array<(c: DashboardController) => void> = [];
+
+  // ── The switch ──────────────────────────────────────────────────────────
+  const bar = document.createElement('div');
+  bar.className = 'dpx-switch';
+  bar.setAttribute('role', 'tablist');
+  bar.setAttribute('aria-label', 'View');
+  bar.setAttribute(RUNTIME_ATTR, 'switch');
+  const button = (label: string, v: CombinedView) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('role', 'tab');
+    b.dataset.view = v;
+    b.addEventListener('click', () => show(v, undefined, true));
+    return b;
+  };
+  const reportBtn = button('Report', 'report');
+  const dashBtn = button('Dashboard', 'dashboard');
+  const aside = document.createElement('button');
+  aside.type = 'button';
+  aside.className = 'dpx-switch-aside';
+  aside.textContent = 'Show this tab in the report';
+  aside.hidden = true;
+  aside.addEventListener('click', () => {
+    if (controller) api.showInReport(controller.currentTab(), null);
+  });
+  bar.append(reportBtn, dashBtn, aside);
+  document.body.appendChild(bar);
+
+  const reportScheme = (): 'light' | 'dark' =>
+    document.body.classList.contains('quarto-dark') ? 'dark' : 'light';
+  const frameScheme = (): 'light' | 'dark' =>
+    frame?.contentDocument?.documentElement.getAttribute('data-mantine-color-scheme') === 'dark'
+      ? 'dark'
+      : 'light';
+
+  function syncChrome(): void {
+    reportBtn.setAttribute('aria-selected', String(view === 'report'));
+    dashBtn.setAttribute('aria-selected', String(view === 'dashboard'));
+    bar.dataset.theme = view === 'dashboard' ? frameScheme() : reportScheme();
+    aside.hidden = !(view === 'dashboard' && controller && api.reportHas(controller.currentTab()));
+    document.documentElement.classList.toggle('dpx-view-dashboard', view === 'dashboard');
+    if (frame) {
+      frame.toggleAttribute('inert', view !== 'dashboard');
+      frame.setAttribute('aria-hidden', String(view !== 'dashboard'));
+    }
+  }
+
+  function setHash(route: CombinedRoute, push: boolean): void {
+    const hash = formatCombinedHash(route);
+    if (location.hash === hash) return;
+    try {
+      if (push) history.pushState(null, '', hash);
+      else history.replaceState(null, '', hash);
+    } catch {
+      /* a document that cannot rewrite its URL keeps the old hash */
+    }
+  }
+
+  // ── The dashboard view ──────────────────────────────────────────────────
+  function buildFrame(): HTMLIFrameElement {
+    const el = document.createElement('iframe');
+    el.className = 'dpx-dashboard-frame';
+    el.title = 'Dashboard';
+    el.setAttribute(RUNTIME_ATTR, 'dashboard-frame');
+    document.body.appendChild(el);
+    const doc = el.contentDocument!;
+    const title = (manifest.dashboard.title || document.title || 'Dashboard').replace(/</g, '&lt;');
+    doc.open();
+    doc.write(
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+        '<meta name="color-scheme" content="light dark">' +
+        `<title>${title}</title>` +
+        `<style ${RUNTIME_ATTR}="app-css">${escapeStyle(runtimeText('css'))}</style>` +
+        `<style ${RUNTIME_ATTR}="frame-css">${FRAME_CSS}</style>` +
+        '</head><body><div id="root"></div></body></html>',
+    );
+    doc.close();
+    // The manifest, the add-ons and the script: copied as DOM, not written as
+    // markup, so 12 MB of script text is never re-parsed as HTML.
+    const manifestEl = doc.createElement('script');
+    manifestEl.type = 'application/json';
+    manifestEl.id = 'bundle-manifest';
+    manifestEl.textContent = document.getElementById(REPORT_MANIFEST_ID)?.textContent ?? 'null';
+    doc.body.appendChild(manifestEl);
+    for (const node of Array.from(
+      document.querySelectorAll<HTMLScriptElement>(
+        'script[data-depictio-addon], script[data-pya], script#depictio-pyodide-meta',
+      ),
+    )) {
+      const copy = doc.createElement('script');
+      for (const attr of Array.from(node.attributes)) copy.setAttribute(attr.name, attr.value);
+      copy.textContent = node.textContent;
+      doc.body.appendChild(copy);
+    }
+    const script = doc.createElement('script');
+    script.setAttribute(RUNTIME_ATTR, 'js');
+    script.textContent = runtimeText('js');
+    doc.body.appendChild(script);
+    // The switch follows the dashboard's scheme; a report that has a dark
+    // theme of its own follows it too.
+    new MutationObserver(() => {
+      syncChrome();
+      const toggle = (window as unknown as { quartoToggleColorScheme?: () => void })
+        .quartoToggleColorScheme;
+      if (toggle && view === 'dashboard' && frameScheme() !== reportScheme()) toggle();
+    }).observe(doc.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-mantine-color-scheme'],
+    });
+    installShowInReport(doc);
+    return el;
+  }
+
+  /** "Show in report" over the dashboard tile under the pointer. */
+  function installShowInReport(doc: Document): void {
+    const chip = doc.createElement('button');
+    chip.type = 'button';
+    chip.className = 'dpx-show-in-report';
+    chip.textContent = 'Show in report';
+    chip.setAttribute(RUNTIME_ATTR, 'show-in-report');
+    doc.body.appendChild(chip);
+    let current: { tab: string; index: string; tile: HTMLElement } | null = null;
+    const hide = () => {
+      chip.style.display = 'none';
+      current = null;
+    };
+    // The tile's bottom-right corner, kept on screen for a tile taller or
+    // wider than the view.
+    const place = (tile: HTMLElement) => {
+      const r = tile.getBoundingClientRect();
+      const view = doc.defaultView;
+      const height = view?.innerHeight ?? r.bottom;
+      if (r.bottom <= 0 || r.top >= height) return hide();
+      const maxTop = height - 40;
+      const maxLeft = (view?.innerWidth ?? r.right) - 136;
+      chip.style.display = 'block';
+      chip.style.top = `${Math.max(4, Math.min(r.bottom - 34, maxTop))}px`;
+      chip.style.left = `${Math.max(4, Math.min(r.right - 128, maxLeft))}px`;
+    };
+    doc.addEventListener('mouseover', (ev) => {
+      const target = ev.target as Element | null;
+      if (!target || chip.contains(target)) return;
+      const tile = target.closest?.('[data-component-index]') as HTMLElement | null;
+      const index = tile?.getAttribute('data-component-index');
+      const tab = controller?.currentTab();
+      if (!tile || !index || !tab || !api.reportHas(tab, index)) return hide();
+      if (current?.index === index) return;
+      current = { tab, index, tile };
+      place(tile);
+    });
+    // Any scroll (the page's, or a grid's or a table's inside it) moves the
+    // tile, not the chip: follow it.
+    doc.addEventListener(
+      'scroll',
+      () => {
+        if (current) place(current.tile);
+      },
+      true,
+    );
+    chip.addEventListener('click', () => {
+      if (current) api.showInReport(current.tab, current.index);
+      hide();
+    });
+  }
+
+  function onController(c: DashboardController): void {
+    controller = c;
+    c.onTabChange((id) => {
+      if (view === 'dashboard') setHash({ view: 'dashboard', tab: id }, false);
+      syncChrome();
+    });
+    for (const fn of whenAttached.splice(0)) fn(c);
+    syncChrome();
+  }
+
+  function withController(fn: (c: DashboardController) => void): void {
+    if (controller) fn(controller);
+    else whenAttached.push(fn);
+  }
+
+  async function scrollToDashboardTile(index: string): Promise<void> {
+    const doc = frame?.contentDocument;
+    if (!doc) return;
+    const sel = `[data-component-index="${CSS.escape(index)}"]`;
+    const el = await waitFor(() => doc.querySelector<HTMLElement>(sel));
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    flash(el);
+  }
+
+  // ── Switching ───────────────────────────────────────────────────────────
+  function show(next: CombinedView, route?: CombinedRoute, push = false): void {
+    view = next;
+    // The reader's own switches are remembered for this file; a link that
+    // opened it on a view is not a choice.
+    if (push) storageSet(memoryKey, next);
+    if (next === 'dashboard') {
+      if (route?.tab) pendingTab = route.tab;
+      if (!frame) frame = buildFrame();
+      else if (route?.tab) withController((c) => c.switchTab(route.tab!));
+      const tab = route?.tab ?? controller?.currentTab() ?? pendingTab ?? undefined;
+      setHash({ view: 'dashboard', tab: tab ?? undefined }, push);
+      if (pendingTile) {
+        const index = pendingTile;
+        pendingTile = null;
+        void scrollToDashboardTile(index);
+      }
+      frame.contentWindow?.focus();
+    } else {
+      setHash({ view: 'report', anchor: route?.anchor }, push);
+      if (route?.anchor) {
+        const el = document.getElementById(route.anchor);
+        if (el) {
+          unfoldTo(el);
+          el.scrollIntoView({ block: 'start' });
+        }
+      }
+    }
+    syncChrome();
+  }
+
+  // ── Cross-links from the report ─────────────────────────────────────────
+  for (const host of new Set(hosts.values())) {
+    const refs = parseTileRefs(host.getAttribute(REPORT_TILE_ATTR));
+    const ref = refs.find((r) => componentFor(manifest, r));
+    if (!ref) continue;
+    const row = document.createElement('div');
+    row.className = 'dpx-tile-links';
+    row.setAttribute(RUNTIME_ATTR, 'tile-links');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.textContent = 'Open in dashboard ↗';
+    open.title = 'Show this tile in the interactive dashboard';
+    open.addEventListener('click', () => {
+      pendingTile = ref.index;
+      show('dashboard', { view: 'dashboard', tab: ref.tabId }, true);
+    });
+    row.appendChild(open);
+    host.insertBefore(row, host.firstChild);
+  }
+
+  const api: CombinedHostApi = {
+    filters: channel,
+    reportHas(tabId, index) {
+      if (index) return hosts.has(`${tabId}:${index}`);
+      if (document.querySelector(`[${REPORT_TAB_ATTR}="${CSS.escape(tabId)}"]`)) return true;
+      for (const key of hosts.keys()) if (key.startsWith(`${tabId}:`)) return true;
+      return false;
+    },
+    showInReport(tabId, index) {
+      const target = index ? (hosts.get(`${tabId}:${index}`) ?? null) : tabTarget(tabId, hosts);
+      if (!target) return false;
+      show('report', undefined, true);
+      unfoldTo(target);
+      // After the switch has given the page its scrollbar back.
+      window.requestAnimationFrame(() => {
+        target.scrollIntoView({ block: index ? 'center' : 'start' });
+        flash(target);
+        setHash({ view: 'report', anchor: target.id }, false);
+      });
+      return true;
+    },
+    requestedTab: () => pendingTab,
+    attachDashboard: onController,
+  };
+  (window as unknown as Record<string, unknown>)[COMBINED_HOST_GLOBAL] = api;
+
+  // ── Deep links ──────────────────────────────────────────────────────────
+  const route = parseCombinedHash(location.hash, tabs);
+  const first = landingView(route, storageGet(memoryKey), config.default_view ?? 'report');
+  if (first === 'dashboard') show('dashboard', route ?? { view: 'dashboard' });
+  else if (route?.anchor) show('report', route);
+  else syncChrome();
+
+  const onLocation = () => {
+    const next = parseCombinedHash(location.hash, tabs);
+    // A plain `#anchor` (the contents list, a link in the text) is the
+    // report's own: it brings the report back if the dashboard is up.
+    if (!next) {
+      if (view === 'dashboard') show('report');
+      return;
+    }
+    if (next.view === 'dashboard' && view === 'dashboard' && next.tab) {
+      if (next.tab !== controller?.currentTab()) withController((c) => c.switchTab(next.tab!));
+      return;
+    }
+    show(next.view, next);
+  };
+  window.addEventListener('hashchange', onLocation);
+  window.addEventListener('popstate', onLocation);
+
+  return { api, show };
+}

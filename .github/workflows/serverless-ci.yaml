@@ -140,6 +140,16 @@ jobs:
       # add-on is JBrowse 2 + MUI + mobx, 3.04 MB raw / 0.92 MB gzip; the base
       # runtime keeps the depictio half of the renderer (+0.06 MB gzip). Measured
       # 4.73 MB; budget = the base budget + the add-on + 0.3 MB.
+      # The combined report + dashboard file (vite.combined.config.ts): the
+      # whole App runtime plus the report host, its stylesheet once as inert
+      # text — the floor every combined file pays, on top of its report and
+      # manifest. It replaces both the report runtime and Quarto's own
+      # plotly.js in the page. Measured 3.84 MB gzip (12.23 MB raw), the base
+      # runtime + 0.01 MB; budget = the base budget + 0.1 MB.
+      - name: Byte budget — combined runtime (report + dashboard file)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/combined-runtime-floor.html 4508877 combined-runtime
+
       - name: Byte budget — static runtime + genome browser (JBrowse add-on)
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-static/static-genome.html 5662310 static-runtime+jbrowse
@@ -205,5 +215,7 @@ jobs:
             depictio/viewer/dist-static/static.html
             depictio/viewer/dist-static/report-runtime.js
             depictio/viewer/dist-static/report-runtime.css
+            depictio/viewer/dist-static/combined-runtime.js
+            depictio/viewer/dist-static/combined-runtime.css
             depictio/viewer/dist-static/addons/
           retention-days: 7

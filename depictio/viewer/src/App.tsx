@@ -138,6 +138,7 @@ import type { FilterPanelOptions } from './chrome/shell/types';
 import { useChromeVariant } from './chrome/variants';
 import TabLinkProvider from './chrome/TabLinkProvider';
 import GenomeBrowserTargetProvider from './chrome/GenomeBrowserTargetProvider';
+import { combinedInitialFilters, useCombinedFilterSync } from './hooks/useCombinedFilterSync';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
@@ -224,8 +225,13 @@ const App: React.FC = () => {
   const hydrationRef = useRef<InitialFilterHydration | null>(null);
   if (hydrationRef.current === null) {
     hydrationRef.current = hydrateInitialFilters(extractDashboardId(), extractPreviewVersionId());
+    // The dashboard view of a combined report + dashboard file opens on the
+    // filters its report is showing (null everywhere else).
+    const shared = combinedInitialFilters();
+    if (shared) hydrationRef.current = { ...hydrationRef.current, filters: shared };
   }
   const [filters, setFilters] = useState<InteractiveFilter[]>(hydrationRef.current.filters);
+  useCombinedFilterSync(filters, setFilters);
   // Indices we hydrated from the cross-tab store. Only these may be pruned by
   // the cross-tab validation pass — a selection the viewer makes on a *grid*
   // map during this page load, or a filter restored from this dashboard's own
