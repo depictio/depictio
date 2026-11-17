@@ -503,3 +503,18 @@ def test_a_session_that_cannot_render_gives_its_budget_back(demo_dir: Path) -> N
     assert result.reason and result.reason.startswith("no track fits the bundle")
     assert inline == {shared_key: "AAAA"}
     assert objects.used == 4 and objects.seen == {shared_key}
+
+
+def test_an_addon_runs_with_amd_hidden(monkeypatch, tmp_path):
+    """A report loads RequireJS: an add-on's UMD wrapper must still set its
+    global, not register an anonymous AMD module."""
+    from depictio.serverless import addons
+
+    (tmp_path / "x.js").write_text("window.X = 1;")
+    monkeypatch.setattr(addons, "registry", lambda: {"x": {"file": "x.js"}})
+    monkeypatch.setattr(addons, "addons_dir", lambda: tmp_path)
+    html = addons.addon_script("x")
+    hide = html.index("window.define=undefined")
+    body = html.index('<script data-depictio-addon="x">window.X = 1;</script>')
+    restore = html.index("window.define=window.__dpxDefine")
+    assert hide < body < restore

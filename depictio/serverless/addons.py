@@ -94,7 +94,16 @@ def addon_script(name: str) -> str:
     body = (addons_dir() / str(info["file"])).read_text(encoding="utf-8")
     if "</script" in body.lower():  # pragma: no cover - guarded at build time too
         raise AddonError(f"runtime add-on {name!r} contains '</script' and cannot be inlined")
-    return f'<script data-depictio-addon="{name}">{body}</script>'
+    # A Quarto report loads RequireJS (Jupyter's widget and Plotly outputs), and
+    # an add-on's UMD wrapper then registers itself as an anonymous AMD module
+    # ("Mismatched anonymous define()") instead of setting its global. AMD is
+    # hidden while the add-on runs and given back after; a page without it is
+    # unchanged.
+    return (
+        "<script>window.__dpxDefine=window.define;window.define=undefined;</script>"
+        f'<script data-depictio-addon="{name}">{body}</script>'
+        "<script>window.define=window.__dpxDefine;delete window.__dpxDefine;</script>"
+    )
 
 
 PYODIDE_META_ID = "depictio-pyodide-meta"
