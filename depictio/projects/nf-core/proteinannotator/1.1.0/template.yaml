@@ -46,7 +46,7 @@
 template:
   template_id: "nf-core/proteinannotator/1.1.0"
   description: "nf-core/proteinannotator template: input filtering, domains from Pfam, FunFam, NMPFamsDB, MetagRoot and InterProScan in one table, database agreement per protein, secondary structure per residue, and a predicted 3D structure coloured by domain"
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one proteinannotator run (qc/, domain_annotation/, functional_annotation/, s4pred/, pipeline_info/)"
@@ -69,9 +69,11 @@ template:
     - name: "SKIP_INTERPROSCAN"
       description: "Set (--var SKIP_INTERPROSCAN=true) for a run with --skip_interproscan: no functional_annotation/, so the InterProScan collections are pruned."
       required: false
+      from_params: {param: skip_interproscan}
     - name: "SKIP_S4PRED"
       description: "Set (--var SKIP_S4PRED=true) for a run with --skip_s4pred: no s4pred/, so the secondary-structure collections are pruned (the residue table keeps its sequence and domains)."
       required: false
+      from_params: {param: skip_s4pred}
   # Variables for the BUNDLED reference dataset: the megatest run with the
   # design table vendored in input/ (see docs/dashboards.md).
   reference:

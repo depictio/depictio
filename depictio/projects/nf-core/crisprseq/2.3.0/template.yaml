@@ -40,7 +40,7 @@
 template:
   template_id: "nf-core/crisprseq/2.3.0"
   description: "nf-core/crisprseq targeted gene editing template: read accounting and replicate agreement, edit outcome composition per library and per guide, the library sample space, frameshift and template-based repair rates, the indel size and position signature around the cut site, per-position substitution rates, and the clonality call."
-  version: "2.2.5"
+  version: "2.3.0"
   variables:
     - name: "DATA_ROOT"
       description: "crisprseq output directory (cigar/, clonality/, pipeline_info/)."
@@ -64,6 +64,7 @@ template:
     - name: "SKIP_CLONALITY"
       description: "Set (--var SKIP_CLONALITY=true) for a run with --skip_clonality: clonality/ is absent, so the clonality collection is removed."
       required: false
+      from_params: {param: skip_clonality}
   # Variables used when materialising the bundled reference dataset.
   reference:
     vars:

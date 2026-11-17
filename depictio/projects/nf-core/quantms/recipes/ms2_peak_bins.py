@@ -30,11 +30,13 @@ TOP_BIN = 1000
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="spectra",
-        glob_pattern="mzmlstatistics/*_mzml_info.tsv",
+        # quantms <= 1.1: <run>_mzml_info.tsv; 1.2: <run>_ms_info.tsv (mzML or .d).
+        glob_pattern="mzmlstatistics/*_info.tsv",
         format="tsv",
         source_path="source_path",
         read_kwargs={"infer_schema_length": 20000, "null_values": ["NA"]},
-        input_schema={"MSLevel": pl.Int64, "MS2_peaks": pl.Float64},
+        # MS2_peaks (<= 1.1) or MS_peaks (1.2, every level): read by ms2_peaks().
+        input_schema={"MSLevel": pl.Int64},
     ),
     RecipeSource(ref="hub", dc_ref=HUB_DC_TAG, optional=True, input_schema={"run_id": pl.Utf8}),
 ]
@@ -52,7 +54,14 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 NO_GROUP_COL = "__no_group__"
 NO_GROUP_VALUE = "All runs"
-_SUFFIX = "_mzml_info.tsv"
+_SUFFIX = r"_(?:mzml|ms)_info\.tsv$"
+
+
+def ms2_peaks(spectra: pl.DataFrame) -> pl.Expr:
+    """Peak count per spectrum: ``MS2_peaks`` up to quantms 1.1, ``MS_peaks``
+    (filled for every MS level) from 1.2."""
+    col = "MS2_peaks" if "MS2_peaks" in spectra.columns else "MS_peaks"
+    return pl.col(col).cast(pl.Float64, strict=False)
 
 
 def group_lookup(hub: pl.DataFrame | None, params: dict | None) -> tuple[str, pl.DataFrame]:
@@ -81,14 +90,14 @@ def _label(start: int) -> str:
 def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = None) -> pl.DataFrame:
     spectra = (
         sources["spectra"]
-        .filter((pl.col("MSLevel") == 2) & pl.col("MS2_peaks").is_not_null())
+        .filter((pl.col("MSLevel") == 2) & ms2_peaks(sources["spectra"]).is_not_null())
         .with_columns(
             pl.col("source_path")
             .str.split("/")
             .list.last()
-            .str.replace(_SUFFIX, "", literal=True)
+            .str.replace(_SUFFIX, "")
             .alias("run_id"),
-            (pl.col("MS2_peaks") // BIN_WIDTH * BIN_WIDTH)
+            (ms2_peaks(sources["spectra"]) // BIN_WIDTH * BIN_WIDTH)
             .clip(upper_bound=TOP_BIN)
             .cast(pl.Int64)
             .alias("bin_start"),

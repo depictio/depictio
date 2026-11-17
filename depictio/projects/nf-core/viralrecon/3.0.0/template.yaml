@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/viralrecon/3.0.0"
   description: "nf-core/viralrecon viral genome analysis template for amplicon sequencing (ivar variant caller)"
-  version: "2.2.0"
+  version: "2.3.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing viralrecon pipeline output (multiqc/, variants/)"
@@ -24,6 +24,7 @@ template:
     - name: "IS_NANOPORE"
       description: "Auto-set from params.json (platform=nanopore). Repoints coverage/lineage DCs at the artic_minion/ layout and drops illumina-only variant DCs."
       required: false
+      from_params: {param: platform, equals: nanopore}
     - name: "TRACKS_URI"
       description: "s3:// or https:// folder holding the run's results, to read the genome-browser tracks (iVar VCF, primer-trimmed BAM) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
       required: false

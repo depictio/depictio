@@ -33,6 +33,9 @@ class TemplateVariableInfo(BaseModel):
     # Templates don't declare defaults today; kept for forward compatibility
     # with the picker UI's form contract.
     default: str | None = None
+    # Set from the run's own params.json (the template's `from_params` rule):
+    # the picker need not ask for it.
+    from_params: bool = False
 
 
 class TemplateInfo(BaseModel):
@@ -199,6 +202,7 @@ def list_templates_catalog() -> TemplateCatalog:
                             name=var.get("name", ""),
                             description=var.get("description"),
                             required=bool(var.get("required", True)),
+                            from_params=bool(var.get("from_params")),
                         )
                         for var in meta.get("variables") or []
                         if var.get("name")

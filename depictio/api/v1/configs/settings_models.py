@@ -399,6 +399,16 @@ class S3DepictioCLIConfig(ServiceConfig):
             "development against self-signed dev S3 instances."
         ),
     )
+    browser_access: Literal["presigned", "proxy"] = Field(
+        default="presigned",
+        description=(
+            "How browsers read indexed files (3D structures, GenomeSpy VCF/BAM/BigWig "
+            "tracks). 'presigned': a URL signed for the S3 public URL, so S3 must be "
+            "reachable from browsers, with CORS for Range. 'proxy': the API streams the "
+            "object, by byte range, for instances whose S3 is internal only (IP-only "
+            "installs, Serve apps)."
+        ),
+    )
 
     model_config = SettingsConfigDict(env_prefix=S3_ENV_PREFIX)
 

@@ -159,3 +159,13 @@ def test_without_the_contig_map_one_pseudo_contig(tmp_path: Path) -> None:
 
     assert out["chromosome"].unique().to_list() == ["genome"]
     assert out["position"].to_list() == out["global_position"].to_list()
+
+
+def test_preseq_curve_names_the_library_with_or_without_bam_filtering() -> None:
+    """eager names the curve after the BAM it read: `.filtered` with
+    --run_bam_filtering, `.mapped` without (the test profile)."""
+    from depictio.recipes import load_recipe
+
+    recipe = load_recipe("nf-core/eager/complexity_curve.py")
+    assert recipe._sample_from_path("preseq/JK2782_PE.mapped.preseq") == "JK2782_PE"
+    assert recipe._sample_from_path("preseq/JK2782_PE.filtered.preseq") == "JK2782_PE"
