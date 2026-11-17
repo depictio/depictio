@@ -187,24 +187,21 @@ def test_profile_reads_each_family_once_and_skips_broken_files() -> None:
     assert empty.is_empty()
 
 
-def test_profile_rows_do_not_depend_on_the_batch_size(monkeypatch, meta) -> None:
-    """Families are joined in batches (#1418): the table is the same at any batch size."""
+def test_profile_maps_every_family_onto_its_representative(meta) -> None:
+    """Each family's alignment numbers its own model, read one file at a time (#1418)."""
     families = [f"{SAMPLE}_{i}" for i in range(5)]
     hmms = raw({f"hmm/filtered/{SAMPLE}/{f}.hmm.gz": _hmm(name=f) for f in families})
     alignments = raw(
-        {f"full_msa/raw/hmmer_hmmalign/{SAMPLE}/{f}.sto.gz": STOCKHOLM for f in families}
+        {f"full_msa/raw/hmmer_hmmalign/{SAMPLE}/{f}.sto.gz": STOCKHOLM for f in families[:4]}
     )
     reps = pl.concat(
         [meta.with_columns(pl.lit(f).alias("Family Id")) for f in families], how="vertical"
     )
-    sources = {"hmms": hmms, "alignments": alignments, "family_meta": reps}
-    module = load_recipe("hmmer/hmm_profile.py")
-    whole = run("hmmer/hmm_profile.py", sources)
-    monkeypatch.setattr(module, "BATCH_FAMILIES", 2)
-    batched = module.transform(sources)
-    assert batched.equals(whole)
-    assert whole["entity"].unique(maintain_order=True).to_list() == families
-    assert whole.filter(pl.col("entity") == families[-1])["position"].null_count() == 0
+    out = run("hmmer/hmm_profile.py", {"hmms": hmms, "alignments": alignments, "family_meta": reps})
+    assert out["entity"].unique(maintain_order=True).to_list() == families
+    nulls = out.group_by("entity").agg(pl.col("position").null_count()).sort("entity")
+    # The last family has no alignment: its logo is drawn, without positions.
+    assert nulls["position"].to_list() == [0, 0, 0, 0, 4 * len(LETTERS)]
 
 
 # ---------------------------------------------------------------------------

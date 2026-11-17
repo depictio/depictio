@@ -668,6 +668,102 @@ def test_content_digest_ignores_the_write_time_and_float_noise():
     assert content_digest(df) != content_digest(df.with_columns(pl.col("a") * 1.001))
 
 
+class TestSlicedWrite:
+    """The frame reaches deltalake a slice at a time (#1418): polars'
+    ``write_delta`` exported it whole, as much memory again as the frame."""
+
+    def _mixed(self, n: int = 2500) -> pl.DataFrame:
+        return pl.DataFrame(
+            {
+                RUN_ID_COLUMN: [f"run_{i % 3}" for i in range(n)],
+                "s": [None if i % 5 == 0 else f"v{i % 7}" for i in range(n)],
+                "v": list(range(n)),
+                "f": [i / 7 for i in range(n)],
+                "when": [datetime(2026, 1, 1, i % 24) for i in range(n)],
+                "items": [[i, i + 1] for i in range(n)],
+                "rec": [{"a": i, "b": str(i)} for i in range(n)],
+            }
+        )
+
+    def test_slices_write_the_table_write_delta_wrote(self, tmp_path, storage, monkeypatch):
+        from depictio.cli.cli.utils import delta_versioning
+
+        monkeypatch.setattr(delta_versioning, "WRITE_SLICE_ROWS", 700)
+        df = self._mixed()
+        reference = str(tmp_path / "reference")
+        df.write_delta(reference, mode="overwrite")
+        sliced = str(tmp_path / "sliced")
+        result = write_delta_table_versioned(df, sliced, storage)
+
+        assert result.rows_written == df.height
+        assert DeltaTable(sliced).schema().to_json() == DeltaTable(reference).schema().to_json()
+        assert pl.read_delta(sliced).sort("v").equals(pl.read_delta(reference).sort("v"))
+        # One commit, whatever the number of slices.
+        assert [h["version"] for h in DeltaTable(sliced).history()] == [0]
+
+    def test_slices_write_a_partitioned_and_a_scoped_table(self, tmp_path, storage, monkeypatch):
+        from depictio.cli.cli.utils import delta_versioning
+
+        monkeypatch.setattr(delta_versioning, "WRITE_SLICE_ROWS", 700)
+        df = self._mixed()
+        destination = str(tmp_path / "table")
+        write_delta_table_versioned(df, destination, storage, partition=True)
+        assert DeltaTable(destination).metadata().partition_columns == [RUN_ID_COLUMN]
+        update = df.filter(pl.col(RUN_ID_COLUMN) == "run_1").with_columns(pl.col("f") * 2)
+        write_delta_table_versioned(
+            update,
+            destination,
+            storage,
+            write_mode="replace-runs",
+            replace_run_tags=["run_1"],
+            scoped=True,
+            partition=True,
+        )
+        back = pl.read_delta(destination)
+        assert back.height == df.height
+        assert (
+            back.filter(pl.col(RUN_ID_COLUMN) == "run_1")
+            .sort("v")["f"]
+            .equals(update.sort("v")["f"])
+        )
+
+    def test_an_empty_frame_writes_its_schema(self, destination, storage):
+        empty = self._mixed().head(0)
+        write_delta_table_versioned(empty, destination, storage)
+        assert pl.read_delta(destination).schema == empty.schema
+
+    @pytest.mark.parametrize(
+        "column", [pl.Series("n", [None, None]), pl.Series("t", [[None], [None]])]
+    )
+    def test_a_null_column_is_refused_as_write_delta_refused_it(self, column, destination, storage):
+        df = pl.DataFrame({"v": [1, 2]}).with_columns(column)
+        with pytest.raises(TypeError, match="unsupported data types"):
+            write_delta_table_versioned(df, destination, storage)
+
+    def test_the_digest_does_not_depend_on_the_slices(self, monkeypatch):
+        import hashlib
+
+        from depictio.cli.cli.utils import delta_versioning
+
+        df = self._mixed().drop("rec")
+        # The digest the whole frame got before the slicing: a table's digest
+        # must not change with this write, or every table reads as changed.
+        cols = sorted(df.columns)
+        hashed = (
+            df.select(
+                pl.col(c).round_sig_figs(10) if df.schema[c].is_float() else pl.col(c) for c in cols
+            )
+            .hash_rows()
+            .sort()
+            .to_numpy()
+        )
+        schema = "|".join(f"{c}:{df.schema[c]}" for c in cols)
+        before = hashlib.sha256(schema.encode() + hashed.tobytes()).hexdigest()
+        assert content_digest(df) == before
+        monkeypatch.setattr(delta_versioning, "WRITE_SLICE_ROWS", 333)
+        assert content_digest(df) == before
+
+
 class TestPlanAttachWrite:
     """An --attach-run writes the new runs' rows alone (epic #1399)."""
 

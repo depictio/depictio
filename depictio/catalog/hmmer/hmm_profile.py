@@ -33,10 +33,9 @@ A family's model is read once: the filtered HMM of ``hmm/filtered/`` wins over a
 raw model of the same name, and a file that is not a complete HMMER3 record is
 left out. ``sample`` is the directory the file sits in.
 
-Files are read one at a time (``iter_texts_by_file``): of an alignment only the
-representative's residue numbers are kept, and the families' rows are joined in
-batches, so a run of thousands of families is never held as text next to its
-table (#1418).
+Files are read one at a time (``iter_texts_by_file``), and of an alignment only
+the representative's residue numbers are kept, so a run of thousands of families
+is never held as text next to its table (#1418).
 
 Output schema (``PROFILE_SCHEMA`` plus the sample):
     entity : Utf8          family id (the HMM name)
@@ -105,12 +104,6 @@ def _is_raw_model(path: str) -> bool:
     return "/hmm/raw/" in "/" + path.replace("\\", "/")
 
 
-#: Families whose rows are joined into one frame before the next batch starts:
-#: the pieces of a batch are dropped once joined, so the list of per-family
-#: frames never sits next to the whole table.
-BATCH_FAMILIES = 256
-
-
 def _positions_by_family(
     alignments: pl.DataFrame | None, reps: dict[tuple[str, str], str]
 ) -> dict[tuple[str, str], list[int | None] | None]:
@@ -138,7 +131,6 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     """One row per match state and letter of every family HMM."""
     reps = representatives(sources.get("family_meta"))
     aligned = _positions_by_family(sources.get("alignments"), reps)
-    batches: list[pl.DataFrame] = []
     frames: list[pl.DataFrame] = []
     seen: set[str] = set()
     # Filtered models first, raw ones after; scan order within each group.
@@ -160,15 +152,6 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
                     pl.lit(sample, dtype=pl.Utf8).alias("sample")
                 )
             )
-            if len(frames) >= BATCH_FAMILIES:
-                batches.append(_joined(frames))
-                frames = []
-    if frames:
-        batches.append(_joined(frames))
-    if not batches:
+    if not frames:
         return pl.DataFrame(schema=OUTPUT_SCHEMA)
-    return pl.concat(batches)
-
-
-def _joined(frames: list[pl.DataFrame]) -> pl.DataFrame:
-    return pl.concat(frames, rechunk=True).select(list(OUTPUT_SCHEMA)).cast(OUTPUT_SCHEMA)  # type: ignore[arg-type]
+    return pl.concat(frames).select(list(OUTPUT_SCHEMA)).cast(OUTPUT_SCHEMA)  # type: ignore[arg-type]

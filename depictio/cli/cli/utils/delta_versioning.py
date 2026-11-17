@@ -591,6 +591,58 @@ DIGEST_VOLATILE_COLUMNS = frozenset({"aggregation_time"})
 DIGEST_SIG_FIGS = 10
 
 
+#: Rows handed to deltalake, and hashed for the digest, at a time. polars'
+#: ``write_delta`` exports the whole frame in one go, which costs about as much
+#: memory again as the frame (4 GB more on a 25M-row recipe table, #1418);
+#: sliced, the write adds a few hundred MB, whatever the frame's size.
+WRITE_SLICE_ROWS = 1_000_000
+
+
+def frame_stream(df: pl.DataFrame, rows: int = WRITE_SLICE_ROWS):
+    """``df`` as an Arrow stream, ``rows`` at a time, for deltalake.
+
+    Each slice goes through ``to_arrow()``, which shares the frame's buffers.
+    The frame's own Arrow C stream (what ``write_delta`` hands deltalake) costs
+    about as much memory again as the frame, even a slice at a time (#1418).
+    """
+    import pyarrow as pa
+
+    schema = df.head(0).to_arrow().schema
+
+    def batches():
+        for part in df.iter_slices(rows):
+            yield from part.to_arrow().cast(schema).to_batches()
+
+    return pa.RecordBatchReader.from_batches(schema, batches())
+
+
+def _refuse_unwritable_types(schema: pl.Schema) -> None:
+    """Refuse what ``DataFrame.write_delta`` refuses: a ``Null`` or ``Time``
+    column, nested or not. deltalake itself would write a ``Null`` column, and
+    a table that carried one could not be read back by every reader."""
+
+    def inner(dtype: pl.DataType):
+        yield dtype
+        if isinstance(dtype, pl.List | pl.Array):
+            yield from inner(dtype.inner)
+        elif isinstance(dtype, pl.Struct):
+            for field in dtype.fields:
+                yield from inner(field.dtype)
+
+    found = {d.base_type() for dtype in schema.values() for d in inner(dtype)} & {pl.Null, pl.Time}
+    if found:
+        raise TypeError(f"dataframe contains unsupported data types: {found!r}")
+
+
+def _delta_uri(destination: str) -> str:
+    """A local destination as an absolute path, as ``DataFrame.write_delta`` resolves it."""
+    import os
+
+    if "://" in destination:
+        return destination
+    return os.path.abspath(os.path.expanduser(destination))
+
+
 def content_digest(df: pl.DataFrame) -> str | None:
     """Digest of a frame's content, blind to row and column order.
 
@@ -610,14 +662,17 @@ def content_digest(df: pl.DataFrame) -> str | None:
     """
     try:
         cols = sorted(c for c in df.columns if c not in DIGEST_VOLATILE_COLUMNS)
+        exprs = [
+            pl.col(c).round_sig_figs(DIGEST_SIG_FIGS) if df.schema[c].is_float() else pl.col(c)
+            for c in cols
+        ]
+        # Hashed a slice at a time: a row's hash does not depend on its
+        # neighbours, and the rounded copy of the floats never exists whole.
+        hashes = [part.select(exprs).hash_rows() for part in df.iter_slices(WRITE_SLICE_ROWS)]
         rows = (
-            df.select(
-                pl.col(c).round_sig_figs(DIGEST_SIG_FIGS) if df.schema[c].is_float() else pl.col(c)
-                for c in cols
-            )
-            .hash_rows()
-            .sort()
-            .to_numpy()
+            pl.concat(hashes).sort().to_numpy()
+            if hashes
+            else df.head(0).select(exprs).hash_rows().to_numpy()
         )
     except Exception as exc:  # unhashable dtype (Object, ...)
         logger.debug(f"content digest skipped: {exc}")
@@ -695,11 +750,17 @@ def write_delta_table_versioned(
         f"Writing Delta table to {destination_file} "
         f"(write_mode={write_mode}, partition={partition}, scoped={scoped})"
     )
-    aggregated_df.write_delta(
-        destination_file,
-        storage_options=_delta_options(storage_options),
-        delta_write_options=delta_write_options,
+    from deltalake import write_deltalake
+
+    _refuse_unwritable_types(aggregated_df.schema)
+    # What ``aggregated_df.write_delta(..., mode="overwrite")`` does, but fed a
+    # slice at a time (``frame_stream``): one commit either way.
+    write_deltalake(
+        _delta_uri(destination_file),
+        frame_stream(aggregated_df),
         mode="overwrite",
+        storage_options=_delta_options(storage_options),
+        **delta_write_options,
     )
 
     commit = read_delta_commit_info(destination_file, storage_options)
