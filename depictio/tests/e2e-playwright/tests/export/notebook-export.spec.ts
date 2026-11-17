@@ -24,6 +24,8 @@ test.describe("Notebook export", () => {
     // `exact`: every tile carries its own "… settings" button.
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.locator("[data-testid='settings-nav-export']").click();
+    // The separate outputs sit under "Advanced"; the default is report + dashboard.
+    await page.locator("[data-testid='export-advanced-toggle']").first().click();
     const exportButton = page.locator("[data-testid='export-notebook']");
     await expect(exportButton).toBeVisible({ timeout: 15_000 });
     await exportButton.click();

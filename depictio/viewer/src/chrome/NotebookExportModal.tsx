@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Accordion,
   Alert,
   Badge,
   Button,
@@ -23,6 +24,7 @@ import {
   fetchNotebookRenderStatus,
   startNotebookRender,
   type AnalysisState,
+  type CombinedDefaultView,
   type NotebookInclusion,
   type NotebookPreflight,
   type NotebookRenderStatus,
@@ -31,13 +33,18 @@ import {
 } from 'depictio-react-core';
 
 /**
- * Export the dashboard as a Quarto document: preflight first (what each tile
- * becomes, with a reason written for the reader), then the download.
+ * Export the dashboard: preflight first (what each tile becomes, with a reason
+ * written for the reader), then the file.
  *
- * Two outputs, one document. The `.qmd` is generated text the reader renders
- * themselves. The report is that same document rendered here, and it is the
- * one thing that executes — on a worker, over minutes, so it is started,
- * polled, then downloaded.
+ * The default is the combined file: the rendered report AND the interactive
+ * dashboard in one HTML, behind a "Report | Dashboard" switch. The separate
+ * outputs sit under "Advanced": the dashboard alone (the static bundle, its
+ * own modal), the report alone, and the `.qmd` source. The `.qmd` is generated
+ * text the reader renders themselves; the two rendered outputs are that same
+ * document executed here — on a worker, over minutes, so they are started,
+ * polled, then downloaded. Where this server cannot produce the combined file
+ * (no Quarto, or the caller may not embed the data), the default falls back to
+ * the dashboard alone and says why.
  */
 interface NotebookExportModalProps {
   opened: boolean;
@@ -45,6 +52,10 @@ interface NotebookExportModalProps {
   dashboardId: string;
   dashboardTitle?: string;
   getAnalysisState: () => AnalysisState;
+  /** Which output the modal opens on (the combined file by default). */
+  initialOutput?: ExportChoice;
+  /** Opens the dashboard-only export (the static bundle's own modal). */
+  onExportDashboardOnly?: () => void;
 }
 
 const STATUS_META: Record<NotebookInclusion, { label: string; color: string }> = {
@@ -53,10 +64,13 @@ const STATUS_META: Record<NotebookInclusion, { label: string; color: string }> =
   omitted: { label: 'omitted', color: 'gray' },
 };
 
-/** The document, or what rendering it produces. */
-type ExportChoice = 'qmd' | 'report';
+/** The combined file, the report alone, or the document. */
+export type ExportChoice = 'combined' | 'report' | 'qmd';
 
 const FORMAT_HINT: Record<ExportChoice, string> = {
+  combined:
+    'One HTML file: the rendered report and the interactive dashboard, with a Report | ' +
+    'Dashboard switch. Opens without a server.',
   qmd: 'The document to render yourself: quarto render <file>.qmd',
   report: 'That same document, rendered here: one HTML file, nothing to install.',
 };
@@ -65,6 +79,20 @@ const THEME_HINT: Record<NotebookTheme, string> = {
   paper: "Depictio's Paper look, in this instance's brand colour, with Inter embedded.",
   classic: "Quarto's stock page and Plotly's own figures.",
 };
+
+/** What the worker is doing, in the reader's words. */
+function phaseLabel(phase?: string | null): string {
+  switch (phase) {
+    case 'embedding':
+      return 'Packing the dashboard';
+    case 'combining':
+      return 'Putting the report and the dashboard together';
+    case 'storing':
+      return 'Saving';
+    default:
+      return 'Rendering';
+  }
+}
 
 function elapsedLabel(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -78,11 +106,14 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   dashboardId,
   dashboardTitle,
   getAnalysisState,
+  initialOutput = 'combined',
+  onExportDashboardOnly,
 }) => {
   const [state, setState] = useState<AnalysisState | null>(null);
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [format, setFormat] = useState<ExportChoice>('qmd');
+  const [format, setFormat] = useState<ExportChoice>(initialOutput);
+  const [defaultView, setDefaultView] = useState<CombinedDefaultView>('report');
   const [theme, setTheme] = useState<NotebookTheme>('paper');
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState<string | null>(null);
@@ -99,6 +130,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setDownloaded(null);
     setJob(null);
     setStartedAt(null);
+    setFormat(initialOutput);
     const controller = new AbortController();
     fetchNotebookPreflight(dashboardId, snapshot, controller.signal)
       .then((res) => setPreflight(res))
@@ -162,7 +194,10 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setError(null);
     setDownloaded(null);
     try {
-      const started = await startNotebookRender(dashboardId, state, theme);
+      const started = await startNotebookRender(dashboardId, state, theme, {
+        output: format === 'combined' ? 'combined' : 'report',
+        defaultView,
+      });
       setStartedAt(Date.now());
       setElapsed(0);
       setJob(started);
@@ -187,8 +222,17 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   };
 
   const renderAvailable = preflight?.render_available ?? false;
+  const combinedAvailable = preflight?.combined_available ?? false;
   const counts = preflight?.counts ?? {};
-  const isReport = format === 'report';
+  const isCombined = format === 'combined';
+  // Both rendered outputs run the same job; only what it produces differs.
+  const isReport = format === 'report' || isCombined;
+  // The default cannot be made here: it falls back to the dashboard alone.
+  const combinedFallback = isCombined && Boolean(preflight) && !combinedAvailable;
+  const handleDashboardOnly = () => {
+    onClose();
+    onExportDashboardOnly?.();
+  };
   const rendering = Boolean(job && job.status !== 'ready' && job.status !== 'error');
 
   return (
@@ -201,18 +245,39 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
       size="lg"
       title={
         <Group gap="xs">
-          <Icon icon="mdi:notebook-outline" width={20} />
-          <Text fw={600}>Export as notebook</Text>
+          <Icon icon="mdi:export-variant" width={20} />
+          <Text fw={600}>Export</Text>
         </Group>
       }
     >
       <Stack gap="md" data-testid="notebook-export-modal">
         <Text size="sm" c="dimmed">
           {dashboardTitle ? `"${dashboardTitle}"` : 'This dashboard'}, every tab, with the
-          filters, funnel order and groups you have right now — as a Quarto document you can
-          keep working in. Each tile is reproduced as code where it can be, and rendered through
-          Depictio otherwise.
+          filters, funnel order and groups you have right now.{' '}
+          {isCombined
+            ? 'One file to send: the rendered report, and the whole interactive dashboard one ' +
+              'click away. Filters set in either view follow in the other.'
+            : 'As a Quarto document you can keep working in: each tile is reproduced as code ' +
+              'where it can be, and rendered through Depictio otherwise.'}
         </Text>
+
+        {combinedFallback && (
+          <Alert
+            color="yellow"
+            variant="light"
+            title="Report + dashboard is not available here"
+            data-testid="export-combined-fallback"
+          >
+            <Stack gap="xs">
+              <Text size="sm">
+                {preflight?.combined_reason
+                  ? `Why: ${preflight.combined_reason}.`
+                  : 'This server cannot produce it.'}{' '}
+                The dashboard alone still exports as one offline HTML file.
+              </Text>
+            </Stack>
+          </Alert>
+        )}
 
         {error && (
           <Alert color="red" title="Export failed" data-testid="notebook-export-error">
@@ -330,24 +395,78 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           </>
         )}
 
-        <Stack gap={4}>
-          <Text fw={500} size="sm">
-            Quarto
-          </Text>
-          <SegmentedControl
-            value={format}
-            onChange={(v) => setFormat(v as ExportChoice)}
-            data={[
-              { label: 'Document (.qmd)', value: 'qmd' },
-              { label: 'Rendered report', value: 'report', disabled: !renderAvailable },
-            ]}
-            data-testid="notebook-export-format"
-          />
-          <Text size="xs" c="dimmed">
-            {FORMAT_HINT[format]}
-            {!renderAvailable && ' Rendered reports are off on this server.'}
-          </Text>
-        </Stack>
+        {isCombined && !combinedFallback && (
+          <Stack gap={4}>
+            <Text fw={500} size="sm">
+              Opens on
+            </Text>
+            <SegmentedControl
+              value={defaultView}
+              onChange={(v) => setDefaultView(v as CombinedDefaultView)}
+              data={[
+                { label: 'Report', value: 'report' },
+                { label: 'Dashboard', value: 'dashboard' },
+              ]}
+              data-testid="export-default-view"
+            />
+            <Text size="xs" c="dimmed">
+              The view the file shows first; a reader's own choice is remembered after that, and
+              links can open either (<code>#dashboard</code>, <code>#report</code>).
+            </Text>
+          </Stack>
+        )}
+
+        <Accordion
+          variant="contained"
+          defaultValue={initialOutput === 'combined' ? null : 'advanced'}
+          data-testid="export-advanced-panel"
+        >
+          <Accordion.Item value="advanced">
+            <Accordion.Control data-testid="export-advanced-toggle">
+              <Text size="sm" fw={500}>
+                Advanced: separate outputs
+              </Text>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Stack gap="xs">
+                <SegmentedControl
+                  value={format}
+                  onChange={(v) => setFormat(v as ExportChoice)}
+                  data={[
+                    {
+                      label: 'Report + dashboard',
+                      value: 'combined',
+                      disabled: !combinedAvailable,
+                    },
+                    { label: 'Report only', value: 'report', disabled: !renderAvailable },
+                    { label: 'Quarto source (.qmd)', value: 'qmd' },
+                  ]}
+                  data-testid="notebook-export-format"
+                />
+                <Text size="xs" c="dimmed">
+                  {FORMAT_HINT[format]}
+                  {!renderAvailable && ' Rendered reports are off on this server.'}
+                </Text>
+                {onExportDashboardOnly && (
+                  <Group gap="xs">
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<Icon icon="mdi:view-dashboard-outline" width={14} />}
+                      onClick={handleDashboardOnly}
+                      data-testid="export-dashboard-only"
+                    >
+                      Dashboard only…
+                    </Button>
+                    <Text size="xs" c="dimmed">
+                      The interactive dashboard alone, as one offline HTML file (owners).
+                    </Text>
+                  </Group>
+                )}
+              </Stack>
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
 
         <Stack gap={4}>
           <Text fw={500} size="sm">
@@ -367,7 +486,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           </Text>
         </Stack>
 
-        {isReport && !job && renderAvailable && (
+        {isReport && !job && renderAvailable && !combinedFallback && (
           <Alert color="blue" variant="light" data-testid="notebook-export-render-hint">
             The Quarto document, executed on the server: every tile is recomputed and every
             rendered figure costs a browser pass, so a dashboard this size takes a few minutes.
@@ -380,7 +499,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
             <Group gap="xs">
               <Loader size="xs" />
               <Text size="sm">
-                {job.status === 'queued' ? 'Queued' : 'Rendering'} · {elapsedLabel(elapsed)}
+                {job.status === 'queued' ? 'Queued' : phaseLabel(job.phase)} · {elapsedLabel(elapsed)}
               </Text>
             </Group>
           </Alert>
@@ -417,15 +536,30 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           <Button variant="default" onClick={onClose}>
             Close
           </Button>
-          {isReport && job?.status !== 'ready' ? (
+          {combinedFallback && !job ? (
+            <Button
+              leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+              onClick={handleDashboardOnly}
+              disabled={!onExportDashboardOnly}
+              data-testid="export-dashboard-only-primary"
+            >
+              Export dashboard only
+            </Button>
+          ) : isReport && job?.status !== 'ready' ? (
             <Button
               leftSection={<Icon icon="mdi:file-document-outline" width={16} />}
               onClick={handleRender}
               loading={downloading || rendering}
-              disabled={!state || !preflight || !renderAvailable}
+              disabled={
+                !state || !preflight || (isCombined ? !combinedAvailable : !renderAvailable)
+              }
               data-testid="notebook-export-render"
             >
-              {job?.status === 'error' ? 'Render again' : 'Render report'}
+              {job?.status === 'error'
+                ? 'Render again'
+                : isCombined
+                  ? 'Build report + dashboard'
+                  : 'Render report'}
             </Button>
           ) : (
             <Button
@@ -435,7 +569,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               disabled={!state || !preflight}
               data-testid="notebook-export-download"
             >
-              {isReport ? 'Download report' : 'Download'}
+              {isCombined ? 'Download file' : isReport ? 'Download report' : 'Download'}
             </Button>
           )}
         </Group>

@@ -34,7 +34,7 @@ import {
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersField from './ShareFiltersField';
-import NotebookExportModal from './NotebookExportModal';
+import NotebookExportModal, { type ExportChoice } from './NotebookExportModal';
 import {
   SECTION_ICON_STYLE,
   SettingsNavModal,
@@ -645,36 +645,83 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
   </Stack>
 );
 
-/** "Export" section: the dashboard as a Quarto document. */
+/**
+ * "Export" section. The default is ONE file: the rendered report and the
+ * interactive dashboard together, behind a "Report | Dashboard" switch. The
+ * separate outputs (the dashboard alone, the report alone, the `.qmd` source)
+ * are tucked under "Advanced"; the modal falls back to the dashboard alone, and
+ * says why, where this server cannot build the combined file.
+ */
 const ExportBlock: React.FC<{
   dashboard: DashboardData | null;
   getAnalysisState: () => AnalysisState;
-}> = ({ dashboard, getAnalysisState }) => {
-  const [opened, setOpened] = useState(false);
+  /** The dashboard-only export (owner-gated); absent where it is not offered. */
+  staticExport?: { isOwner: boolean; onExportStatic: () => void } | null;
+}> = ({ dashboard, getAnalysisState, staticExport }) => {
+  const [opened, setOpened] = useState<ExportChoice | null>(null);
   const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
   return (
     <Stack gap="sm" data-testid="export-section">
       <Text size="sm" c="dimmed">
-        Take this dashboard with you as code: the same table, the same filters in funnel order,
-        every tile — as a Quarto document to render yourself, or a report rendered for you.
+        One HTML file to send: the rendered report with its text and code, and the whole
+        interactive dashboard one click away. It opens without a server.
       </Text>
       <Group>
         <Button
-          variant="light"
-          leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
-          onClick={() => setOpened(true)}
+          leftSection={<Icon icon="mdi:export-variant" width={16} />}
+          onClick={() => setOpened('combined')}
           disabled={!dashboardId}
-          data-testid="export-notebook"
+          data-testid="export-combined"
         >
-          Export as notebook
+          Export report + dashboard
         </Button>
       </Group>
+      <Accordion variant="contained" data-testid="export-advanced">
+        <Accordion.Item value="advanced">
+          <Accordion.Control data-testid="export-advanced-toggle">
+            <Text size="sm" fw={500}>
+              Advanced: separate outputs
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="md">
+              {staticExport && (
+                <ExportStaticBlock
+                  dashboardId={dashboardId}
+                  isOwner={staticExport.isOwner}
+                  onExportStatic={staticExport.onExportStatic}
+                />
+              )}
+              <Stack gap="xs">
+                <Group>
+                  <Button
+                    variant="light"
+                    size="sm"
+                    leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
+                    onClick={() => setOpened('qmd')}
+                    disabled={!dashboardId}
+                    data-testid="export-notebook"
+                  >
+                    Report only, or its source
+                  </Button>
+                </Group>
+                <Text size="xs" c="dimmed">
+                  The report rendered here without the dashboard, or the Quarto document (
+                  <code>.qmd</code>) to render and keep working in yourself.
+                </Text>
+              </Stack>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
       <NotebookExportModal
-        opened={opened}
-        onClose={() => setOpened(false)}
+        opened={opened !== null}
+        onClose={() => setOpened(null)}
+        initialOutput={opened ?? 'combined'}
         dashboardId={dashboardId}
         dashboardTitle={dashboard?.title}
         getAnalysisState={getAnalysisState}
+        onExportDashboardOnly={staticExport?.onExportStatic}
       />
     </Stack>
   );
@@ -714,13 +761,13 @@ const ExportStaticBlock: React.FC<{
           disabled={!dashboardId || !isOwner}
           data-testid="export-static-btn"
         >
-          Export static
+          Dashboard only
         </Button>
       </Tooltip>
     </Group>
     <Text size="xs" c="dimmed">
       {isOwner
-        ? 'Builds a single self-contained HTML file of this dashboard that opens without a server.'
+        ? 'The interactive dashboard alone, as one self-contained HTML file that opens without a server.'
         : OWNER_GATE_HINT}
     </Text>
   </Stack>
@@ -1144,18 +1191,26 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       icon: 'mdi:export-variant',
       title: 'Export',
       navLabel: 'Export',
-      subtitle: 'This dashboard as one offline HTML file, or as a Quarto document',
+      subtitle: 'The report and the dashboard in one offline HTML file, or each on its own',
       body: (
         <Stack gap="lg">
-          {showStaticExport && onExportStatic && (
-            <ExportStaticBlock
-              dashboardId={dashboardId}
-              isOwner={isOwner}
-              onExportStatic={onExportStatic}
+          {showNotebookExport && getAnalysisState ? (
+            <ExportBlock
+              dashboard={dashboard}
+              getAnalysisState={getAnalysisState}
+              staticExport={
+                showStaticExport && onExportStatic ? { isOwner, onExportStatic } : null
+              }
             />
-          )}
-          {showNotebookExport && getAnalysisState && (
-            <ExportBlock dashboard={dashboard} getAnalysisState={getAnalysisState} />
+          ) : (
+            showStaticExport &&
+            onExportStatic && (
+              <ExportStaticBlock
+                dashboardId={dashboardId}
+                isOwner={isOwner}
+                onExportStatic={onExportStatic}
+              />
+            )
           )}
         </Stack>
       ),

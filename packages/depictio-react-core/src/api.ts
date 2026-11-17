@@ -1275,7 +1275,17 @@ export interface NotebookPreflight {
   /** Whether this deployment offers the rendered HTML report as well. */
   render_available?: boolean;
   counts: Record<string, number>;
+  /** Whether this caller can have the combined report + dashboard file. */
+  combined_available?: boolean;
+  /** Why not, when it cannot (the export then defaults to the dashboard alone). */
+  combined_reason?: string | null;
 }
+
+/** What a render produces: the report alone, or the report and the dashboard
+ *  in one file behind a "Report | Dashboard" switch. */
+export type NotebookRenderOutput = 'report' | 'combined';
+/** The view a combined file opens on. */
+export type CombinedDefaultView = 'report' | 'dashboard';
 
 /** A render job: the notebook being executed on a worker, which takes minutes. */
 export interface NotebookRenderStatus {
@@ -1350,10 +1360,14 @@ export async function startNotebookRender(
   dashboardId: string,
   state: unknown,
   theme: NotebookTheme = 'paper',
+  options: { output?: NotebookRenderOutput; defaultView?: CombinedDefaultView } = {},
 ): Promise<NotebookRenderStatus> {
+  const body: Record<string, unknown> = { state, theme };
+  if (options.output) body.output = options.output;
+  if (options.defaultView) body.default_view = options.defaultView;
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
     method: 'POST',
-    body: JSON.stringify({ state, theme }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report render');
   return res.json();
