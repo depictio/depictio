@@ -5,7 +5,7 @@
  * (depictio/viewer/dist-static/static.html) the same way the Python producers
  * do — token replacement with `</`-escaping — and serves it from file://.
  */
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
@@ -93,6 +93,21 @@ export function skipUnlessBundleBuilt(): void {
   );
 }
 
+/** Fixture dirs this worker wrote, removed when it exits: each test writes a
+ *  10-50 MB HTML file, and leaving them behind filled a dev box's disk
+ *  (1700 dirs, 9.8 GB). */
+const FIXTURE_DIRS: string[] = [];
+process.once("exit", () => {
+  for (const dir of FIXTURE_DIRS) rmSync(dir, { recursive: true, force: true });
+});
+
+/** A fresh temp dir for one fixture file, removed when the worker exits. */
+export function fixtureDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  FIXTURE_DIRS.push(dir);
+  return dir;
+}
+
 /** Inject a manifest into the built bundle; returns a file:// URL. */
 export function injectedBundleUrl(manifestPath: string = FIXTURE_MANIFEST): string {
   const template = readFileSync(BUNDLE_TEMPLATE, "utf-8");
@@ -104,7 +119,7 @@ export function injectedBundleUrl(manifestPath: string = FIXTURE_MANIFEST): stri
   const blob = JSON.stringify(manifest).replace(/<\//g, "<\\/");
   const names = ((manifest.addons ?? []) as { name: string }[]).map((a) => a.name);
   const html = applyAddons(template, names).replaceAll("__BUNDLE_MANIFEST__", () => blob);
-  const dir = mkdtempSync(join(tmpdir(), "depictio-static-"));
+  const dir = fixtureDir("depictio-static-");
   const out = join(dir, "bundle-fixture.html");
   writeFileSync(out, html);
   return `file://${out}`;
