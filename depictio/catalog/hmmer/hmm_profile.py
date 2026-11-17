@@ -35,7 +35,9 @@ left out. ``sample`` is the directory the file sits in.
 
 Files are read one at a time (``iter_texts_by_file``), and of an alignment only
 the representative's residue numbers are kept, so a run of thousands of families
-is never held as text next to its table (#1418).
+is never held as text next to its table. Ingestion takes the table a batch of
+families at a time (``transform_batches``), so it is never held whole either
+(#1418).
 
 Output schema (``PROFILE_SCHEMA`` plus the sample):
     entity : Utf8          family id (the HMM name)
@@ -53,6 +55,8 @@ Output schema (``PROFILE_SCHEMA`` plus the sample):
 """
 
 from __future__ import annotations
+
+from collections.abc import Iterator
 
 import polars as pl
 
@@ -133,8 +137,16 @@ def _positions_by_family(
     return positions
 
 
-def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
-    """One row per match state and letter of every family HMM."""
+#: Families per batch of ``transform_batches``: ~1.5M rows, ~150 MB on a mid-size run.
+BATCH_FAMILIES = 256
+
+
+def transform_batches(sources: dict[str, pl.DataFrame | None]) -> Iterator[pl.DataFrame]:
+    """The rows of ``transform``, ``BATCH_FAMILIES`` families at a time.
+
+    Ingestion writes each batch as it comes (#1418), so the table (25M rows on
+    a mid-size run) is never held whole.
+    """
     reps = representatives(sources.get("family_meta"))
     aligned = _positions_by_family(sources.get("alignments"), reps)
     frames: list[pl.DataFrame] = []
@@ -159,6 +171,14 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
                 .select(list(OUTPUT_SCHEMA))
                 .cast(_IN_MEMORY_SCHEMA)  # type: ignore[arg-type]
             )
-    if not frames:
-        return pl.DataFrame(schema=_IN_MEMORY_SCHEMA)
-    return pl.concat(frames)
+            if len(frames) >= BATCH_FAMILIES:
+                yield pl.concat(frames)
+                frames = []
+    if frames:
+        yield pl.concat(frames)
+
+
+def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
+    """One row per match state and letter of every family HMM."""
+    batches = list(transform_batches(sources))
+    return pl.concat(batches) if batches else pl.DataFrame(schema=_IN_MEMORY_SCHEMA)

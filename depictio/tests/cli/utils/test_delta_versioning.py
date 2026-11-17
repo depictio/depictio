@@ -765,6 +765,43 @@ class TestSlicedWrite:
         assert content_digest(df) == before
 
 
+class TestFramesWrite:
+    """A table that comes in frames (a recipe's batches) is written as they come (#1418)."""
+
+    def test_frames_write_the_table_their_concatenation_writes(self, tmp_path, storage):
+        from depictio.cli.cli.utils.delta_versioning import write_delta_frames_versioned
+
+        parts = [frame(["A", "A"], [1, 2]), frame(["B"], [3]), frame(["A"], [4])]
+        whole = pl.concat(parts)
+        streamed = write_delta_frames_versioned(
+            iter(parts), whole.schema, str(tmp_path / "streamed"), storage
+        )
+        reference = write_delta_table_versioned(whole, str(tmp_path / "whole"), storage)
+
+        assert (streamed.rows_written, streamed.run_tags) == (4, ["A", "B"])
+        assert streamed.content_digest == reference.content_digest == content_digest(whole)
+        assert rows(str(tmp_path / "streamed")) == rows(str(tmp_path / "whole"))
+
+    def test_a_frame_source_that_raises_commits_nothing_and_surfaces_as_itself(
+        self, destination, storage
+    ):
+        from depictio.cli.cli.utils.delta_versioning import write_delta_frames_versioned
+
+        write_delta_table_versioned(frame(["A"]), destination, storage)
+
+        class Boom(Exception):
+            pass
+
+        def parts():
+            yield frame(["B"], [5])
+            raise Boom("run B has none of its inputs")
+
+        with pytest.raises(Boom, match="none of its inputs"):
+            write_delta_frames_versioned(parts(), frame(["A"]).schema, destination, storage)
+        assert [h["version"] for h in DeltaTable(destination).history()] == [0]
+        assert rows(destination) == [("A", 0)]
+
+
 class TestStringHeldAsCategorical:
     """A frame may hold a String column as Categorical to save memory (#1418):
     the table, its digest and the scoped-write checks see a String column."""

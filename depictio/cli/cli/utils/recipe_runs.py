@@ -17,7 +17,7 @@ column to a number would choke on it.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
 import polars as pl
@@ -136,6 +136,90 @@ def execute_per_run(
         raise source_missing(f"Recipe {recipe_name} found its inputs in no run ({reasons})")
     result.frame = frames[0] if len(frames) == 1 else pl.concat(frames, how="diagonal_relaxed")
     return result
+
+
+# ── a recipe's table, a batch at a time ──────────────────────────────────────
+
+
+class StreamFallback(Exception):
+    """A streamed recipe cannot be written as one stream: a run lacks its inputs.
+
+    Raised before or while the batches are written, so nothing is committed;
+    the caller computes the table whole instead (``execute_per_run`` skips
+    that run), as it does for every recipe that does not stream.
+    """
+
+
+@dataclass
+class RecipeStream:
+    """A recipe's table as batches (``transform_batches``, #1418).
+
+    ``first`` is already computed, so the schema is known and a missing input
+    has surfaced before anything is written; ``frames()`` yields it, then the
+    rest as they are computed. ``ran`` are the runs it covers.
+    """
+
+    first: pl.DataFrame
+    rest: Iterator[pl.DataFrame]
+    ran: list[str] = field(default_factory=list)
+
+    @property
+    def schema(self) -> pl.Schema:
+        return self.first.schema
+
+    def frames(self) -> Iterator[pl.DataFrame]:
+        yield self.first
+        yield from self.rest
+
+
+def stream_recipe(
+    execute_batches: Callable[..., Iterator[pl.DataFrame]],
+    recipe_name: str,
+    runs: list[RunRoot],
+    refs: dict[str, RefFrame],
+    params_for: Callable[[RunRoot], dict[str, str] | None],
+    source_missing: type[Exception],
+    run_tags: set[str] | None = None,
+    **kwargs,
+) -> RecipeStream:
+    """``execute_per_run``, a batch at a time: each run's batches tagged with its run.
+
+    Runs are computed one after the other, while the previous one's batches
+    are written, so only one run's sources and one batch are held. A run that
+    lacks its inputs cannot be skipped once the commit's runs are fixed: with
+    several runs it raises ``StreamFallback`` and the caller computes the
+    table whole, which skips it. With a single run the missing input is
+    raised, as ``execute_per_run`` does.
+    """
+    if not runs:
+        raise ValueError("stream_recipe needs at least one run")
+    run_tags = run_tags or {r.tag for r in runs}
+
+    def batches() -> Iterator[pl.DataFrame]:
+        for run in runs:
+            try:
+                run_batches = execute_batches(
+                    recipe_name,
+                    run.root,
+                    extra_sources=ref_frames_for_run(refs, run.tag, run_tags) or None,
+                    params=params_for(run),
+                    **kwargs,
+                )
+            except source_missing as exc:
+                if len(runs) == 1 and len(run_tags) == 1:
+                    raise
+                raise StreamFallback(f"run {run.tag} has none of its inputs ({exc})") from exc
+            for batch in run_batches:
+                if RUN_ID_COLUMN in batch.columns:
+                    raise ValueError(
+                        f"Recipe {recipe_name}: a batch carries {RUN_ID_COLUMN}; "
+                        "ingestion tags the rows with their run"
+                    )
+                yield batch.with_columns(pl.lit(run.tag).alias(RUN_ID_COLUMN))
+
+    stream = batches()
+    first = next(stream)
+    return RecipeStream(first=first, rest=stream, ran=[r.tag for r in runs])
 
 
 # ── recomputed over every run ───────────────────────────────────────────────

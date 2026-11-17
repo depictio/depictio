@@ -400,6 +400,34 @@ def test_a_utf8_column_may_be_held_as_categorical_but_not_as_another_type() -> N
         validate_schema(held.with_columns(pl.lit(1).alias("name")), schema, "test")
 
 
+def test_profile_batches_make_the_table_transform_returns(monkeypatch, meta) -> None:
+    """Ingestion writes the profile a batch of families at a time (#1418)."""
+    from depictio.recipes import execute_recipe, execute_recipe_batches, streams_batches
+
+    families = [f"{SAMPLE}_{i}" for i in range(5)]
+    sources = {
+        "hmms": raw({f"hmm/filtered/{SAMPLE}/{f}.hmm.gz": _hmm(name=f) for f in families}),
+        "alignments": raw(
+            {f"full_msa/raw/hmmer_hmmalign/{SAMPLE}/{f}.sto.gz": STOCKHOLM for f in families}
+        ),
+        "family_meta": pl.concat(
+            [meta.with_columns(pl.lit(f).alias("Family Id")) for f in families], how="vertical"
+        ),
+    }
+    import depictio.recipes as recipes
+
+    module = load_recipe("hmmer/hmm_profile.py")
+    assert streams_batches(module)
+    monkeypatch.setattr(module, "BATCH_FAMILIES", 2)
+    # Each load builds a new module: hand both calls the patched one.
+    monkeypatch.setattr(recipes, "load_recipe", lambda name, version=None: module)
+
+    batches = list(execute_recipe_batches("hmmer/hmm_profile.py", ".", sources=sources))
+    whole = execute_recipe("hmmer/hmm_profile.py", ".", sources=sources)
+    assert [b["entity"].n_unique() for b in batches] == [2, 2, 1]
+    assert pl.concat(batches).equals(whole)
+
+
 def test_texts_are_read_one_file_at_a_time_as_texts_by_file_reads_them() -> None:
     from depictio.recipes.lib.protein_families import iter_texts_by_file, texts_by_file
 
