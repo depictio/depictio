@@ -77,6 +77,8 @@ comment_threads_collection = db[settings.mongodb.collections.comment_threads_col
 # Per-user filter state of a dashboard (the viewer's remembered filters).
 dashboard_filter_states_collection = db["dashboard_filter_states"]
 dashboard_annotations_collection = db["dashboard_annotations"]
+# What each reader last saw of a dashboard family or a project (#1397).
+reader_marks_collection = db["reader_marks"]
 cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
 jobs_collection = db[settings.mongodb.collections.jobs_collection]
 migration_requests_collection = db[settings.mongodb.collections.migration_requests_collection]

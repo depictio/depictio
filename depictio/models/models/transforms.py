@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator, model_validator
 
+from depictio.models.models.deltatables import RunScope
+
 
 class RecipeSource(BaseModel):
     """Declares one input source for a recipe."""
@@ -86,6 +88,15 @@ class TransformConfig(BaseModel):
     # a ``params`` keyword (e.g. ``marker_panel: "{MARKER_PANEL}"``). Values still
     # holding an unresolved ``{VAR}`` placeholder are dropped before the call.
     params: dict[str, str] | None = None
+    # ``params`` resolved per run location, when the runs of a project were
+    # resolved with different template variables. ``params`` stays the first
+    # location's. Written by the CLI on --attach-run and refresh.
+    run_params: dict[str, dict[str, str]] | None = None
+    # How the output relates to the project's runs: ``run`` once per run,
+    # ``aggregate`` recomputed over every run, ``pipeline`` a per-run statistic
+    # of the pipeline's. None takes the CLI's registry (recipe_scopes.py),
+    # which defaults to ``run``.
+    scope: RunScope | None = None
 
     model_config = ConfigDict(extra="forbid")
 

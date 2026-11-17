@@ -108,7 +108,9 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   content-mutating route without both calls silently makes that change unrecoverable
 - Autosaves coalesce within an anchored window; an unchanged save writes nothing, **whatever its kind**.
   One exception: a Save click (`seal=True`) on content an autosave already holds turns that
-  autosave `explicit` and closes its window, or the click would leave no trace. A dashboard's
+  autosave `explicit` and closes its window, or the click would leave no trace. A reader's
+  mark (#1397) closes the window of the version it points at too (`close_window`), without
+  sealing it: folding into a version a reader saw would erase what changed since. A dashboard's
   creation is `explicit` too, so the creator's first edits cannot fold into and erase it
 - Version timestamps are naive UTC (`utc_now_naive`), like every other API timestamp: a local
   clock is invisible in Docker but hours off under `depictio local up`
@@ -174,8 +176,13 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   so a round trip keeps it. `restore_component` takes `tab_id` with the index. Without
   stable ids no component-level history can match anything
 - Time-travel UI is **edit mode only** (timeline, dataset picker, component history):
-  all of it writes or re-points data. The viewer keeps only the `?version=` preview.
+  all of it writes or re-points data. The viewer keeps the `?version=` preview and the
+  read-only "changed since" compare (overlay + Before | Now modal), which renders through
+  the preview contract and never writes or re-pins the page.
   `check_served_bundle.py` asserts that split in the *served bundle*, in both directions
+- MultiQC time travel is by **report set**: `DataCollectionStamp.report_ids` at save,
+  `report_sets: {dc_id: [report ids]}` in a render request. An in-place overwrite keeps
+  its S3 key, so its past is not recoverable
 - Deleting a main tab drops its ledger + seq counter; a child tab's versions belong to
   the family and must survive. Deleting a project drops its families' ledgers
 - `depictio/projects/init/iris_versioned/` is the fixture for exercising any of this:
@@ -187,6 +194,22 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   and all four versions stamp the newest commit: labels, counts and stamps all look
   right, and "restore v1's data" quietly shows the complete survey. `rebuild_demo.py`
   asserts the stamps ascend
+
+### Changed Since Last Visit (#1397)
+- Per-reader mark per dashboard family / project (`reader_marks`, routes under `/changes`),
+  off by default (`DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_ENABLED`, `features.changes_since`).
+  Anonymous readers keep it in localStorage and send it back. **Detail**:
+  `docs/changes-since-last-visit.md`
+- A mark is a **snapshot** (version id, Delta commit per DC, MultiQC report set by S3
+  location, cursors), not a timestamp: ingestion records no dashboard version and several
+  ingestion clocks are local. Writing one records no dashboard version
+- Never written by the editor, a `?version=` preview, `?since=` or `?before_run=`. The
+  reader's own versions and comments never count as news; ingestions always do (a run is
+  asynchronous, and on a single-user instance every ingestion is the reader's)
+- MultiQC append recreates every report document: identify reports by `s3_location`, never
+  by `_id`
+- A new ingestion path must set `ingestion_run_id` (and `run_tags`, `trigger`) on what it
+  writes, or the project Runs tab cannot tell which run produced it
 
 ### Migration & Publishing (#1303)
 - One instance pushes a project to another (`/migrate/push` → target `/migrate/inbound/requests`,
@@ -262,6 +285,25 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
+
+### Multi-run templates (#1399)
+- `depictio ingest <dir> --attach-run` adds a run to an existing project. A single-run
+  project must come out identical apart from `depictio_run_id`; `multirun_harness.py
+  compare` checks that, `multirun` drives athens -> barcelona -> naples
+- An attach writes **only the new run**: `plan_attach_write` gives a predicate write
+  (`depictio_run_id IN (...)`, works unpartitioned). It falls back to a full rewrite when
+  the table holds tags that are not project runs (`*-single-file-scan`, old recipe
+  outputs). A scoped write without a predicate raises, never overwrites the table
+- `single` files bind to their real run (`File.run_id` = stored `WorkflowRun`), so the
+  Runs tab counts them; a file shared by every run keeps the synthetic tag
+- Recipe scopes live in `cli/cli/utils/recipe_scopes.py` (`TransformConfig.scope`
+  overrides): `run` (default, per run, stacked), `aggregate` (mixes samples: recomputed
+  over all runs, `combine` = rows/wide/unique per source, rows get the run of their
+  `sample_column`), `pipeline` (pipeline statistic, per run). `--per-run` forces `run`.
+  A new recipe that mixes samples must be registered, or it is silently wrong once stacked
+- Lineage: `Aggregation.run_scope / computed_from_runs / inputs` and commit metadata
+  `depictio.run_scope / computed_from / inputs` (`tag@version`). Read by
+  `ProjectRun.dc_outputs`, `_delta_change.recomputed_run_tags` and the viewer history
 
 ### Data Collection Storage Families
 Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with three storage shapes:

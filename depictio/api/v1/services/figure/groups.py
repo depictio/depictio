@@ -19,6 +19,7 @@ cache-key schemes.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -74,6 +75,9 @@ def code_group_globals(
 OTHER_LABEL = "Other"
 # Neutral gray for unassigned rows: context, not a category of its own.
 OTHER_COLOR = "#adb5bd"
+#: The first panel of the "what's new" split: every row, whatever its group.
+#: Kept in step with `OVERALL_LABEL` in the viewer's `splitPanels.ts`.
+OVERALL_LABEL = "All"
 
 # Caps mirror the client's (MAX_GROUP_VALUES in selectionGroups.ts) with server
 # headroom — the request body is untrusted, so the server enforces its own.
@@ -189,8 +193,63 @@ GROUP_LINK_FAILED = "link_failed"
 #: group was passed through unchanged and the frame has the last word.
 GROUP_UNKNOWN = "unknown"
 
+#: A group of runs ("What's new", Overlay) rewritten to the ids of the marks
+#: whose rows came from those runs, for a chart that matches its marks by id.
+GROUP_RUNS = "runs"
+#: A group of runs no mark can be filed under: some id carries rows of runs in
+#: two groups (a feature tested once per run), so colouring it either way
+#: would be wrong.
+GROUP_RUNS_AMBIGUOUS = "runs_ambiguous"
+
 #: Statuses whose group is in the returned definitions.
-APPLIED_GROUP_STATUSES = frozenset({GROUP_APPLIED, GROUP_LINKED, GROUP_UNKNOWN})
+APPLIED_GROUP_STATUSES = frozenset({GROUP_APPLIED, GROUP_LINKED, GROUP_UNKNOWN, GROUP_RUNS})
+
+
+def run_groups_to_identities(
+    group_defs: list[dict], frame: pl.DataFrame, identity_column: str, run_column: str
+) -> tuple[list[dict], list[dict]]:
+    """Groups of runs rewritten as groups of mark ids, or all dropped.
+
+    ``frame`` holds ``identity_column`` (the id a chart matches its marks by:
+    a sample, a feature) and ``run_column``. Each group becomes the ids whose
+    rows carry one of its runs. An id found under two groups belongs to
+    neither, and then no group is kept: half the marks coloured by run and
+    half left grey would read as an answer. Rows without a run (an aggregate
+    recomputed over every run) fall in no group.
+    """
+
+    def status(g: dict, code: str, matched: int = 0) -> dict:
+        return {
+            "name": g["name"],
+            "status": code,
+            "applied": code in APPLIED_GROUP_STATUSES,
+            "column_name": identity_column,
+            "source_dc_id": str(g.get("dc_id") or ""),
+            "source_column": g["column_name"],
+            "matched_values": matched,
+        }
+
+    pairs = frame.select(
+        pl.col(identity_column).cast(pl.String), pl.col(run_column).cast(pl.String)
+    ).drop_nulls()
+    ids: list[list[str]] = []
+    for g in group_defs:
+        runs = [str(v) for v in g["values"]]
+        found = pairs.filter(pl.col(run_column).is_in(runs)).get_column(identity_column)
+        ids.append(found.unique(maintain_order=True).to_list())
+    owners = Counter(value for group_ids in ids for value in group_ids)
+    if any(n > 1 for n in owners.values()):
+        return [], [status(g, GROUP_RUNS_AMBIGUOUS) for g in group_defs]
+    resolved: list[dict] = []
+    statuses: list[dict] = []
+    for g, group_ids in zip(group_defs, ids, strict=True):
+        if not group_ids:
+            statuses.append(status(g, GROUP_LINK_NO_MATCH))
+            continue
+        values = group_ids[:MAX_VALUES_PER_GROUP]
+        resolved.append({**g, "column_name": identity_column, "values": values})
+        statuses.append(status(g, GROUP_RUNS, len(values)))
+    return resolved, statuses
 
 
 def resolve_group_defs_for_dc(
@@ -445,6 +504,38 @@ def apply_facet_kwargs(dict_kwargs: dict, column: str) -> dict:
     out["facet_col"] = column
     out["facet_col_wrap"] = FACET_COL_WRAP
     return out
+
+
+def apply_group_split_kwargs(
+    dict_kwargs: dict, groups: list[dict], include_other: bool, include_overall: bool = False
+) -> dict:
+    """Copy of ``dict_kwargs`` split into one panel per group, colours kept.
+
+    The "what's new" split (#1397): the panels are the reader's runs (new
+    ones, the ones seen before), and inside each panel the figure keeps its
+    own colour encoding, so a species is the same colour on both sides. Only
+    the panel order is set, in group order with ``Other`` last, after an
+    ``All`` panel when ``include_overall`` (see ``with_overall_rows``).
+    """
+    out = dict(dict_kwargs)
+    out["category_orders"] = {
+        **(out.get("category_orders") if isinstance(out.get("category_orders"), dict) else {}),
+        GROUP_COLUMN: ([OVERALL_LABEL] if include_overall else [])
+        + [g["name"] for g in groups]
+        + ([OTHER_LABEL] if include_other else []),
+    }
+    return apply_facet_kwargs(out, GROUP_COLUMN)
+
+
+def with_overall_rows(grouped: Any, annotated: Any) -> Any:
+    """``grouped`` preceded by every row of ``annotated`` labelled ``All``.
+
+    ``annotated`` is the frame with its group column, before ``Other`` is
+    dropped: the ``All`` panel is the whole data. Works on a DataFrame or a
+    LazyFrame (both arguments the same kind).
+    """
+    overall = annotated.with_columns(pl.lit(OVERALL_LABEL).alias(GROUP_COLUMN))
+    return pl.concat([overall, grouped], how="vertical_relaxed")
 
 
 def tidy_facet_layout(fig: Any) -> Any:

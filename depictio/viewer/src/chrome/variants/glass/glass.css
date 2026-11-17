@@ -114,6 +114,22 @@
   --dc-card-bg: var(--gl-surface);
 }
 
+/* A dashboard's brand scope re-themes Mantine on its own wrapper. The accent
+   variables above are resolved where they are declared (:root, the instance
+   primary), so inside the scope they are declared again to follow the
+   dashboard's primary: a count badge or an engaged key in the dashboard bar
+   then wears the dashboard's colour, like the rest of its chrome. */
+:root[data-chrome='glass'] .depictio-dashboard-brand {
+  --gl-accent: var(--mantine-primary-color-filled);
+  --gl-accent-soft: light-dark(
+    color-mix(in srgb, var(--mantine-primary-color-filled) 12%, transparent),
+    color-mix(in srgb, var(--mantine-primary-color-filled) 22%, transparent)
+  );
+  --gl-accent-fg: light-dark(var(--mantine-primary-color-7), var(--mantine-primary-color-3));
+  --gl-ring: color-mix(in srgb, var(--mantine-primary-color-filled) 55%, transparent);
+  --gl-badge-bg: var(--mantine-primary-color-filled);
+}
+
 :root[data-chrome='glass'] body {
   background: var(--gl-paper);
 }

@@ -813,6 +813,22 @@ def _replace_multiqc_dc_uploads(
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def _reports_replacing(merged_reports: list[dict], old_report_ids: set[str]) -> list[dict]:
+    """The reports an append leaves behind: the reprocessed set, without the old rows.
+
+    An append reprocesses every existing report alongside the new uploads, so
+    the new rows already hold the old reports' samples, and the old rows are
+    deleted right after. Validating old and new together compared each report
+    with its own copy: it passed only when the reprocess numbered the files
+    in the same order ("MultiQC Report N" matched), which the directory
+    listing does not promise, and failed with "Sample ... appears in multiple
+    reports" otherwise. Before the reprocess writes anything (no new rows),
+    the old set is what stays, and is returned as is.
+    """
+    new = [r for r in merged_reports if str(r.get("_id")) not in old_report_ids]
+    return new or merged_reports
+
+
 def _append_multiqc_dc_uploads(
     *,
     data_collection_id: str,
@@ -939,7 +955,7 @@ def _append_multiqc_dc_uploads(
             str(r.get("_id")) for r in merged_reports if str(r.get("_id")) not in old_id_set
         ]
         try:
-            validate_multiqc_reports_uniform(merged_reports)
+            validate_multiqc_reports_uniform(_reports_replacing(merged_reports, old_id_set))
         except HTTPException:
             _rollback_reports(new_report_ids, context="append uniformity rollback")
             raise

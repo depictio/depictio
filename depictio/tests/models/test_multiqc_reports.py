@@ -5,7 +5,11 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from depictio.models.models.multiqc_reports import MultiQCMetadata, MultiQCReport
+from depictio.models.models.multiqc_reports import (
+    MultiQCMetadata,
+    MultiQCReport,
+    run_tag_from_path,
+)
 
 
 class TestMultiQCMetadata:
@@ -254,3 +258,60 @@ class TestMultiQCReport:
         assert report.metadata.modules == ["fastqc"]
         assert "fastqc" in report.metadata.plots
         assert report.file_size_bytes == 2884253
+
+
+class TestReportRunProvenance:
+    """``run_tag`` / ``ingestion_run_id`` are optional so legacy reports still load."""
+
+    def _report(self, **extra) -> MultiQCReport:
+        return MultiQCReport(
+            data_collection_id="68cd8d3f364450bd1aeb14f3",
+            s3_location="s3://b/dc/multiqc.parquet",
+            original_file_path="/data/run_b/multiqc/multiqc_data/multiqc.parquet",
+            **extra,
+        )
+
+    def test_default_to_none(self):
+        report = self._report()
+        assert report.run_tag is None
+        assert report.ingestion_run_id is None
+
+    def test_round_trip(self):
+        report = self._report(run_tag="run_b", ingestion_run_id="abc123")
+        dumped = report.model_dump(exclude={"id"}, mode="json")
+        assert dumped["run_tag"] == "run_b" and dumped["ingestion_run_id"] == "abc123"
+        assert MultiQCReport(**dumped).run_tag == "run_b"
+
+
+class TestRunTagFromPath:
+    ROOT = "/data/4_folder_with_two_runs"
+
+    def test_first_component_under_the_location(self):
+        path = f"{self.ROOT}/run_b/multiqc/multiqc_data/multiqc.parquet"
+        assert run_tag_from_path(path, [self.ROOT]) == "run_b"
+
+    def test_trailing_slash_and_other_locations(self):
+        path = f"{self.ROOT}/run_a/multiqc_data/multiqc.parquet"
+        assert run_tag_from_path(path, ["/elsewhere", f"{self.ROOT}/"]) == "run_a"
+
+    def test_longest_matching_location_wins(self):
+        path = f"{self.ROOT}/run_b/multiqc/multiqc_data/multiqc.parquet"
+        assert run_tag_from_path(path, [self.ROOT, f"{self.ROOT}/run_b"]) == "multiqc"
+
+    def test_s3_urls(self):
+        root = "s3://bucket/ampliseq/results-runs"
+        path = f"{root}/run_01/multiqc/multiqc_data/multiqc.parquet"
+        assert run_tag_from_path(path, [root]) == "run_01"
+
+    def test_no_match_or_no_component(self):
+        assert run_tag_from_path("/other/run_b/multiqc.parquet", [self.ROOT]) is None
+        assert run_tag_from_path(f"{self.ROOT}", [self.ROOT]) is None
+        assert run_tag_from_path(f"{self.ROOT}/multiqc.parquet", [self.ROOT]) is None
+        assert run_tag_from_path(f"{self.ROOT}/run_b/multiqc.parquet", []) is None
+
+    def test_not_fooled_by_a_sibling_sharing_the_prefix(self):
+        assert run_tag_from_path(f"{self.ROOT}_2/run_b/x/multiqc.parquet", [self.ROOT]) is None
+
+    def test_flat_structure_names_the_location_directory(self):
+        path = f"{self.ROOT}/multiqc/multiqc_data/multiqc.parquet"
+        assert run_tag_from_path(path, [self.ROOT], structure="flat") == "4_folder_with_two_runs"

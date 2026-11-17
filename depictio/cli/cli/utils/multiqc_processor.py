@@ -30,6 +30,7 @@ from depictio.cli.cli_logging import logger, multiqc_logging
 from depictio.models.models.multiqc_reports import (
     GENERAL_STATS_ANCHOR,
     GENERAL_STATS_FALLBACK_ANCHORS,
+    run_tag_from_path,
 )
 from depictio.models.s3_access import (
     S3AccessFailed,
@@ -693,6 +694,7 @@ def process_multiqc_data_collection(
     overwrite: bool = False,
     workflow=None,  # Workflow object for accessing data locations
     keep_unchanged: bool = False,
+    ingestion_run_id: Optional[str] = None,
 ) -> Dict[str, str]:
     """
     Process MultiQC data collection by copying parquet files to S3 and extracting metadata.
@@ -705,6 +707,10 @@ def process_multiqc_data_collection(
         data_collection: The MultiQC data collection object
         CLI_config: CLI configuration object containing API URL and credentials
         overwrite: Whether to overwrite existing files in S3
+        workflow: The workflow, for its data locations
+        ingestion_run_id: The ingestion run (ledger entry) this processing belongs to,
+            recorded on every report it stores. Each report also records its ``run_tag``:
+            the File's own, else read from where the file lives.
         keep_unchanged: With ``overwrite``, keep a report whose file has not
             moved since it was read (see ``_unchanged_report``) instead of
             reading it again. A refresh sets it; a full refresh and the CLI
@@ -805,6 +811,18 @@ def process_multiqc_data_collection(
             files = discovered_files
             logger.info(f"Using discovered MultiQC files: {[f.file_location for f in files]}")
             logger.info(f"Total MultiQC files discovered: {len(files)}")
+
+        # Which run each report belongs to: the scan's own run_tag on its File,
+        # else read back from the path under the workflow's locations.
+        file_run_tags = {f.file_location: f.run_tag for f in files if getattr(f, "run_tag", None)}
+        data_location = getattr(workflow, "data_location", None)
+        workflow_locations = list(getattr(data_location, "locations", None) or [])
+        workflow_structure = getattr(data_location, "structure", None)
+
+        def _run_tag_of(location: str) -> Optional[str]:
+            return file_run_tags.get(location) or run_tag_from_path(
+                location, workflow_locations, workflow_structure
+            )
 
         # S3 storage setup
         storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
@@ -1033,6 +1051,8 @@ def process_multiqc_data_collection(
                                 last_change=MultiQCReportChange.between(
                                     existing_report.get("metadata") or {}, metadata_for_report
                                 ),
+                                run_tag=_run_tag_of(file_path),
+                                ingestion_run_id=ingestion_run_id,
                             )
 
                             # UPDATE existing report instead of creating new one
@@ -1145,6 +1165,8 @@ def process_multiqc_data_collection(
                         multiqc_version=multiqc_version,
                         report_name=f"MultiQC Report {i + 1} - {data_collection.data_collection_tag}",
                         source_file_hash=hashes.get(file_path),
+                        run_tag=_run_tag_of(file_path),
+                        ingestion_run_id=ingestion_run_id,
                     )
 
                     # Save individual MultiQC report to MongoDB via API call

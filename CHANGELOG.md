@@ -3,6 +3,110 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.21.0
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.21.0</summary>
+
+### Changes 📜
+
+#### Improvements 🚀
+
+* style: sort imports for ruff 0.16.1 [cff4254c2]
+* style: format the overall split test for the CI ruff [aea962df4]
+
+#### Documentation Updates 📚
+
+* docs: multi-run templates, recipe scopes and per-run changes [0e3926f87]
+* docs: screenshots of the What's new key and the change lists [4f7b48e4d]
+* docs: screenshots of changed since your last visit [8d4d4cc40]
+* docs: changed since your last visit, and its switches in Helm and local [a33eef5ee]
+
+#### Other Changes 📝
+
+* Bump version: 1.21.0-b6 → 1.21.0 [6cac2a094]
+* feat(changes): split into All, each new run and Seen before [faafb6a24]
+* test(e2e): the preview and editor check watches mark writes, not reads [fea0c8c8b]
+* feat(changes): Before | Now says it draws standard figures only [746806565]
+* fix(changes): split MultiQC runs with more than 200 sample names [cd6c31946]
+* feat(advanced-viz): complex heatmap group strip and split by run [e36e85fc4]
+* feat(editor): What's new and the run views in the editor [d38176f3f]
+* feat(changes): a run takes its group's colour, in What's new, the Overlay and the toasts [b98d2103b]
+* fix(viewer): header button tooltips above popovers [f7f60b463]
+* ci(allinone): prove the image on arm64 and that a reopen keeps the data [62d580571]
+* ci(images): publish the all-in-one image to GHCR on releases [062850ff1]
+* feat(viewer): What's new by run, and the run Overlay on every visualisation [63fd1fec1]
+* fix(api): drop a pending compute entry past its task's time limit [8a925250e]
+* feat(api): per-run changes, run lineage and run groups for advanced viz [387244dd6]
+* feat(ingest): attach writes only its run, recipes that mix samples recompute over every run [69e761d00]
+* feat(ingest): run recipes and single files per run, keep template values per run [8b37616a4]
+* test(ingest): a black-box harness for multi-run template ingestion [f2c92bd63]
+* fix(viewer): honest new-rows counts, failed marks, stale legend [b8195b140]
+* feat(projects): Map coordinates only where coordinates are; clearer way back [c5ea30bdd]
+* feat(projects): clear a run's marking from the Data table [b1f2c8acc]
+* feat(projects): a run's rows in the collection's own Data table [3d17d5e28]
+* feat(viewer): new rows on top, the rows seen faded below [d7908b13f]
+* feat(viewer): show the rows a new run added [4d85dff84]
+* fix(viewer): no Plotly title inside a split panel [8ffd4e520]
+* feat(viewer): overlay tables by run, quiet the per-figure chip [b7ecfebc3]
+* feat(viewer): mark notifications as seen, one by one or all [b2d282ea3]
+* feat(viewer): hide what was seen, and overlay the General Stats table [2cf76e2a3]
+* feat(changes): split MultiQC figures on their new samples [5bcad8d01]
+* fix(changes): MultiQC overlay keeps the new samples' own colours [b261e942d]
+* fix(changes): content digest ignores the write time and float noise [c66a8c604]
+* feat(changes): a commit that rewrites identical rows is not news [dde28e698]
+* feat(changes): split code-mode figures per side in the what's new view [2889a2d51]
+* feat(changes): Off | Overlay | Split view of what is new [b3d6466e0]
+* feat(changes): highlight what is new on every figure at once [3dbf8cbd5]
+* feat(versions): History marks the version you last viewed [f6d863314]
+* fix(changes): only a mark that moves closes the autosave window [5210c151d]
+* feat(projects): Activity history in the What's new look [35f518a58]
+* feat(projects): shorter tab subtitles, so four tabs read in full [ef76fdb2c]
+* fix(changes): count a collection's rows by its totals [198f286c2]
+* feat(projects): one Activity tab for the ingestion report and the timeline [201101fc0]
+* test(e2e): open the filter-propagation dashboard through the card's link [0b20a3c22]
+* fix(multiqc): an append validates only the reports that replace the old set [bb67a5c27]
+* test(e2e): a preview and the editor make no call about the dashboard's mark [93c12b39b]
+* fix(versions): a reader's mark closes the autosave window it points at [91341618a]
+* feat(viewer): What's new as a header key, and one look for every change list [8f1d5ea7b]
+* fix(api): a new run's registration time in UTC in the changes views [a1f0cc7f4]
+* fix(changes): group once when x and colour share a column; overwrite row totals [8f272daa3]
+* fix(projects): call the version link of a run "Layout before <run>" [202cd9085]
+* fix(viewer): Before | Now draws the reports the reader saw, and the dot sits clear of content [edbaba64f]
+* fix(api): show ingestion times in UTC in the changes views [f0bdcb7cc]
+* test(e2e): changed since your last visit [4077f3916]
+* feat(viewer): changed since your last visit, updated marks and figure before/after [a6a1662d0]
+* feat(chrome): the notifications bell in the glass shell [96fc3b84a]
+* fix(api): an ingestion is news even to the reader who ran it [f2976c878]
+* feat(projects): new runs, what a run produced, and a project timeline [d522fd6dd]
+* feat(notifications): a bell and a live toast when an ingestion finishes [2d68d16be]
+* fix(api): MultiQC changes survive an append that recreates every report [9b3d9bd95]
+* feat(api): which points, bars and samples of a figure changed [3c41872f6]
+* feat(api): what changed since a reader's last visit [3cf34cfdb]
+* feat(versions): MultiQC data time travel by report set [1afb3e5c0]
+* fix(ingest): record which ingestion and which run wrote the data [58abbe925]
+* feat(runs): a Runs tab that says what each scan found and changed [e542fcebc]
+* feat(refresh): read again only what changed, with a switch to force it [1e667e090]
+* feat(attach-run): hold back a run whose reports name samples already in the project [a335e2c5a]
+* feat(project-builder): define collections yourself, on a server or without one [2c9c3fa75]
+* feat(chrome): one server footer for the landing pages and the dashboard sidebar [7c4a7ce37]
+* Update CHANGELOG.md for v1.21.0-b6 [353f9410b]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.21.0-b6
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
