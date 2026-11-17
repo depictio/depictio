@@ -123,9 +123,11 @@ def _details_block(
     )
     count_html = f'<span style="color:#868e96;font-weight:normal">({count})</span>' if count else ""
     id_attr = f' id="{anchor}"' if anchor else ""
+    # A browser's fold: a page (the PDF) has none, so it is left out there.
     return (
+        '::: {.content-visible when-format="html"}\n'
         f"<details{id_attr}>\n<summary>{icon_html}<strong>{_esc(title)}</strong> "
-        f"{count_html}</summary>\n\n{body}\n\n</details>"
+        f"{count_html}</summary>\n\n{body}\n\n</details>\n:::"
     )
 
 

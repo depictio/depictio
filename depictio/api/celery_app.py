@@ -1012,8 +1012,9 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
 @celery_app.task(
     bind=True,
     name="render_notebook_report",
-    soft_time_limit=settings.notebook_export.render_timeout_s + 60,
-    time_limit=settings.notebook_export.render_timeout_s + 120,
+    # Room for the optional PDF, a second render of the same document.
+    soft_time_limit=2 * settings.notebook_export.render_timeout_s + 60,
+    time_limit=2 * settings.notebook_export.render_timeout_s + 120,
 )
 def render_notebook_report(
     self,
@@ -1023,6 +1024,7 @@ def render_notebook_report(
     stem: str,
     api_url: str,
     token_id: str,
+    pdf: bool = False,
 ) -> dict:
     """Execute an exported notebook and keep the report Quarto renders from it.
 
@@ -1044,7 +1046,10 @@ def render_notebook_report(
     from depictio.api.v1.configs.config import MONGODB_URL
     from depictio.api.v1.configs.logging_init import logger
     from depictio.api.v1.services.notebook_export import store
-    from depictio.api.v1.services.notebook_export.render import render_quarto_html
+    from depictio.api.v1.services.notebook_export.render import (
+        render_quarto_html,
+        render_quarto_pdf,
+    )
     from depictio.models.models.users import TokenBeanie, UserBeanie
 
     async def _with_token(action):
@@ -1084,7 +1089,7 @@ def render_notebook_report(
         self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
         store.put(html_key, html, store.HTML_MEDIA_TYPE)
         logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
-        return {
+        out = {
             "status": "success",
             "job_id": job_id,
             "user_id": user_id,
@@ -1092,6 +1097,25 @@ def render_notebook_report(
             "filename": f"{stem}.html",
             "size": len(html),
         }
+        if pdf:
+            # The PDF is a second render (static figures); its failure never
+            # costs the HTML report, it is reported beside it.
+            self.update_state(state="PROGRESS", meta={"phase": "pdf", "job_id": job_id})
+            try:
+                pdf_bytes = render_quarto_pdf(
+                    notebook,
+                    stem=stem,
+                    api_url=api_url,
+                    api_token=access_token,
+                    timeout_s=settings.notebook_export.render_timeout_s,
+                )
+                pdf_key = store.job_key(user_id, job_id, f"{stem}.pdf")
+                store.put(pdf_key, pdf_bytes, store.PDF_MEDIA_TYPE)
+                out.update(pdf_key=pdf_key, pdf_filename=f"{stem}.pdf")
+            except Exception as exc:  # noqa: BLE001 — the HTML report stands on its own
+                logger.warning(f"render_notebook_report: PDF failed for {job_id}: {exc}")
+                out["pdf_error"] = str(exc)[-500:]
+        return out
     finally:
         # The staged notebook has served its purpose either way, and a token
         # minted for one render outlives its usefulness the moment it ends.

@@ -321,7 +321,10 @@ def test_card_row_reads_the_real_display_not_the_iframe_tile():
 
     body = NotebookBuilder._metric_card_cell(None).body
     ns: dict = {}
-    exec(compile(body, "<metric_card_cell>", "exec"), {"HTML": HTML}, ns)
+    from depictio.notebook import html_text, static_figures
+
+    glb = {"HTML": HTML, "static_figures": static_figures, "html_text": html_text}
+    exec(compile(body, "<metric_card_cell>", "exec"), glb, ns)
     card_row, metric_card = ns["card_row"], ns["metric_card"]
 
     class FakeApiCard:

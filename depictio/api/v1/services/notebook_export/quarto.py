@@ -48,6 +48,10 @@ class QuartoFrontMatter:
     # Markup at the very end of the page, below it: the report's footer
     # (``report_chrome.footer_html``), outside every fold.
     after_body: str | None = None
+    # A PDF beside the HTML (``quarto render --to typst``): Quarto's bundled
+    # typst, so no TeX. Static figures and tables come from the notebook
+    # client when the render asks for them (``DEPICTIO_STATIC_FIGURES``).
+    pdf: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_yaml(self) -> str:
@@ -89,6 +93,18 @@ class QuartoFrontMatter:
             doc["format"]["html"]["include-before-body"] = {"text": self.before_body}
         if self.after_body:
             doc["format"]["html"]["include-after-body"] = {"text": self.after_body}
+        if self.pdf:
+            doc["format"]["typst"] = {
+                "toc": True,
+                "toc-depth": 3,
+                "papersize": "a4",
+                "margin": {"x": "1.8cm", "y": "2cm"},
+                "fontsize": "10pt",
+                "fig-format": "png",
+                # The references are inline CSL (``references:``), which
+                # typst's own bibliography cannot read: pandoc resolves them.
+                "citeproc": True,
+            }
         if self.brand:
             doc["brand"] = self.brand
         doc["jupyter"] = "python3"

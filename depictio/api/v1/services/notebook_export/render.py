@@ -64,6 +64,12 @@ def render_available() -> bool:
     return True
 
 
+#: Set for a render whose output has no browser (the PDF): the notebook client
+#: then gives every figure a PNG and every table a markdown copy, which is what
+#: a typst page can hold (``depictio.notebook.components``).
+STATIC_FIGURES_ENV = "DEPICTIO_STATIC_FIGURES"
+
+
 def render_quarto_html(
     qmd: bytes,
     *,
@@ -78,6 +84,47 @@ def render_quarto_html(
     report is computed with the rights of whoever asked for it, exactly as if
     they had run the file themselves.
     """
+    return _render(
+        qmd, stem=stem, api_url=api_url, api_token=api_token, timeout_s=timeout_s, to="html"
+    )
+
+
+def render_quarto_pdf(
+    qmd: bytes,
+    *,
+    stem: str,
+    api_url: str,
+    api_token: str | None,
+    timeout_s: int = 900,
+) -> bytes:
+    """The same document as a PDF, through Quarto's bundled typst (no TeX).
+
+    Executed again, with static figures: a PDF holds no plotly.js, so each
+    figure is a PNG (kaleido) and each table a markdown table; the filter
+    panel and anything else that only works in a browser is left out, and the
+    document says so where it was.
+    """
+    return _render(
+        qmd,
+        stem=stem,
+        api_url=api_url,
+        api_token=api_token,
+        timeout_s=timeout_s,
+        to="typst",
+        extra_env={STATIC_FIGURES_ENV: "1"},
+    )
+
+
+def _render(
+    qmd: bytes,
+    *,
+    stem: str,
+    api_url: str,
+    api_token: str | None,
+    timeout_s: int,
+    to: str,
+    extra_env: dict[str, str] | None = None,
+) -> bytes:
     if not quarto_binary():
         raise RenderUnavailable(
             "Quarto is not installed on this worker — the HTML report needs the Quarto CLI. "
@@ -101,12 +148,13 @@ def render_quarto_html(
         env["DEPICTIO_API_TOKEN"] = api_token
     # The notebook is a client of this deployment, whichever side of it runs.
     env["DEPICTIO_CONTEXT"] = "client"
+    env.update(extra_env or {})
 
     with tempfile.TemporaryDirectory(prefix="depictio-report-") as tmp:
         src = Path(tmp) / f"{stem}.qmd"
-        out = Path(tmp) / f"{stem}.html"
+        out = Path(tmp) / f"{stem}.{'pdf' if to == 'typst' else 'html'}"
         src.write_bytes(qmd)
-        cmd = [str(quarto_binary()), "render", src.name, "--execute", "--to", "html"]
+        cmd = [str(quarto_binary()), "render", src.name, "--execute", "--to", to]
         try:
             proc = subprocess.run(
                 cmd,

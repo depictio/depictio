@@ -212,13 +212,16 @@ def stepper_markdown(
         links = [r for r in (rewrite_link(b) for b in bits if _LINK_ONLY.match(b)) if "](" in r]
         text = " · ".join(b for b in bits if not _LINK_ONLY.match(b))
         mark = icon_html(m.group("icon")) if m.group("icon") else ""
-        head = f'<span class="dpx-step-mark">{mark}</span>'
+        # Spaces between the parts: a page without the stylesheet (the PDF)
+        # still reads "Trim MultiQC Primers cut by Cutadapt".
+        head = [f'<span class="dpx-step-mark">{mark}</span>']
         if m.group("label"):
-            head += f'<span class="dpx-step-label">{_esc(m.group("label").strip())}</span>'
+            head.append(f'<span class="dpx-step-label">{_esc(m.group("label").strip())}</span>')
         if links:
-            head += '<span class="dpx-step-links">' + " ".join(links) + "</span>"
-        body = f'<span class="dpx-step-text">{text}</span>' if text else ""
-        lines[i] = f"{m.group('num')}{head}{body}"
+            head.append('<span class="dpx-step-links">' + " ".join(links) + "</span>")
+        if text:
+            head.append(f'<span class="dpx-step-text">{text}</span>')
+        lines[i] = m.group("num") + " ".join(head)
     return "\n".join(lines)
 
 
