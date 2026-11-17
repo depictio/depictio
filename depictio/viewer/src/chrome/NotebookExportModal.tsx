@@ -590,26 +590,26 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
             </Button>
           ) : (
             <>
-            {isReport && job?.pdf_filename && (
+              {isReport && job?.pdf_filename && (
+                <Button
+                  variant="default"
+                  leftSection={<Icon icon="mdi:file-pdf-box" width={16} />}
+                  onClick={() => handleDownloadReport('pdf')}
+                  loading={downloading}
+                  data-testid="notebook-export-download-pdf"
+                >
+                  Download PDF
+                </Button>
+              )}
               <Button
-                variant="default"
-                leftSection={<Icon icon="mdi:file-pdf-box" width={16} />}
-                onClick={() => handleDownloadReport('pdf')}
+                leftSection={<Icon icon="mdi:download" width={16} />}
+                onClick={isReport ? () => handleDownloadReport('html') : handleDownload}
                 loading={downloading}
-                data-testid="notebook-export-download-pdf"
+                disabled={!state || !preflight}
+                data-testid="notebook-export-download"
               >
-                Download PDF
+                {isCombined ? 'Download file' : isReport ? 'Download report' : 'Download'}
               </Button>
-            )}
-            <Button
-              leftSection={<Icon icon="mdi:download" width={16} />}
-              onClick={isReport ? () => handleDownloadReport('html') : handleDownload}
-              loading={downloading}
-              disabled={!state || !preflight}
-              data-testid="notebook-export-download"
-            >
-              {isCombined ? 'Download file' : isReport ? 'Download report' : 'Download'}
-            </Button>
             </>
           )}
         </Group>
