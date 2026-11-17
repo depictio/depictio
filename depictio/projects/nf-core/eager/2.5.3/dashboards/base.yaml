@@ -213,6 +213,10 @@ main_dashboard:
   - component_type: text
     surface: card
     accent: green
+    # Genotyping is off by default (--run_genotyping): citing its collection lets
+    # the step go when the run did not genotype, instead of linking an empty tab.
+    values:
+      n_snps: {dc: bcftools_stats_summary, column: n_snps, aggregation: sum, format: si}
     body: |
       ### Six steps from reads to genotypes
       Each step names the tool version it ran and the tab that shows its result.
@@ -223,7 +227,7 @@ main_dashboard:
       3. ![](icon:mdi:content-duplicate) **Deduplicate** PCR copies removed, complexity extrapolated · [Version](params:Picard) · [Complexity](tab:Complexity)
       4. ![](icon:mdi:shield-check-outline) **Authenticate** DamageProfiler, deamination and fragment length · [Version](params:DamageProfiler) · [Authentication](tab:Authentication)
       5. ![](icon:mdi:waves) **Cover** Qualimap depth per contig and along the reference · [Version](params:Qualimap) · [Coverage](tab:Coverage)
-      6. ![](icon:mdi:scale-balance) **Genotype** Variants called, summed up by bcftools stats · [Version](params:bcftools) · [Genotypes](tab:Genotypes)
+      6. ![](icon:mdi:scale-balance) **Genotype** Variants called, {{n_snps}} SNPs summed up by bcftools stats · [Version](params:bcftools) · [Genotypes](tab:Genotypes)
       :::
     tag: ea-ov-steps
     index: ov-steps

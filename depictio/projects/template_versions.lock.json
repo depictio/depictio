@@ -320,8 +320,8 @@
       }
     },
     "nf-core/eager/2.5.3": {
-      "version": "1.4.0",
-      "content_hash": "642d7aab37f39f2f5030978f5ef8f98f65619925f060e61f7d6c9e37708b17c4",
+      "version": "1.5.0",
+      "content_hash": "4d967b28e94ea91917327986eca3391dcf8b614290c76f0ac9bfa059a1b6ba6b",
       "catalog": {
         "adapterremoval": "1.0.0",
         "bcftools": "1.0.0",
