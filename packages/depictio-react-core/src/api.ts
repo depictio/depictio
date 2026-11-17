@@ -5467,6 +5467,17 @@ export interface FromRunRequest {
   runs?: string[] | null;
 }
 
+/** A MultiQC collection of one run whose reports the shared-samples check
+ *  did not all read (#1400): it reads the first few a collection matched, and
+ *  none when one cannot be read (`checked` 0). No shared sample then means
+ *  none among the reports read. */
+export interface SamplesCheckGap {
+  data_collection_tag: string;
+  run: string;
+  checked: number;
+  reports: number;
+}
+
 /** Samples one MultiQC collection finds in more than one run
  *  (`FromRunReport.shared_samples`). */
 export interface SharedRunSamples {
@@ -5540,6 +5551,8 @@ export interface FromRunReport {
    *  merge them, so a creation is refused (`runs_share_samples`). Empty for
    *  one run; older backends omit it. */
   shared_samples?: SharedRunSamples[];
+  /** The runs' collections that check read only some reports of. */
+  samples_check_gaps?: SamplesCheckGap[];
   resolved_variables: Record<string, string>;
   data_collections: FromRunDCPreview[];
   /** Empty on a dry run. */
@@ -8162,6 +8175,8 @@ export interface AttachRunReport {
   /** Per MultiQC collection, the samples of the new run a report already in
    *  the project names; a real call refuses them (`runs_share_samples`). */
   shared_samples?: SharedRunSamples[];
+  /** The new run's collections that check read only some reports of. */
+  samples_check_gaps?: SamplesCheckGap[];
   /** Ingestion to poll with `getManifestRefreshRun`; null on a dry run. */
   run_id: string | null;
   dry_run: boolean;

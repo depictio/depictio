@@ -291,6 +291,36 @@ class SharedRunSamples(BaseModel):
     samples: list[str]
 
 
+class SamplesCheckGap(BaseModel):
+    """A MultiQC collection of one run whose reports the shared-samples check
+    did not all read (#1400).
+
+    The check reads the reports of the folder's preview, which keeps the first
+    few locations a collection matched (``PREVIEW_SAMPLES``), and leaves out a
+    run whose reports cannot be read. Finding no shared sample then means none
+    among the ``checked`` reports, not none in the run.
+    """
+
+    data_collection_tag: str
+    run: str
+    # Reports read, and reports the collection matched in the run.
+    checked: int
+    reports: int
+
+
+def samples_check_gap(tag: str, run: str, row, names: set[str] | None) -> SamplesCheckGap | None:
+    """The gap of the check on ``row`` (a preview row), None when it read every report.
+
+    ``names`` is what ``_report_sample_names`` said: None when a report could
+    not be read, and nothing of the run was then checked.
+    """
+    reports = int(row.matched or 0)
+    checked = 0 if names is None else len(row.samples)
+    if checked >= reports:
+        return None
+    return SamplesCheckGap(data_collection_tag=tag, run=run, checked=checked, reports=reports)
+
+
 class FromRunReport(BaseModel):
     """Result of a from_run request: the plan, and what was created from it.
 
@@ -318,6 +348,9 @@ class FromRunReport(BaseModel):
     runs: list[str] | None = None
     # MultiQC samples found in more than one of ``runs`` (empty for one run).
     shared_samples: list[SharedRunSamples] = Field(default_factory=list)
+    # The collections of a run whose reports that check did not all read: an
+    # empty ``shared_samples`` then covers only the reports read.
+    samples_check_gaps: list[SamplesCheckGap] = Field(default_factory=list)
     resolved_variables: dict[str, str] = Field(default_factory=dict)
     data_collections: list[FromRunDCPreview] = Field(default_factory=list)
     dashboards: list[DashboardImportResult] = Field(default_factory=list)
@@ -1173,6 +1206,7 @@ def _create_project_from_run(
 
     preview = preview_on(root, resolution)
     shared_samples: list[SharedRunSamples] = []
+    samples_check_gaps: list[SamplesCheckGap] = []
     if other_roots:
         other_previews = [
             preview_on(other, other_resolution)
@@ -1183,6 +1217,7 @@ def _create_project_from_run(
             list(
                 zip(list(runs or []), [root, *other_roots], [preview, *other_previews], strict=True)
             ),
+            samples_check_gaps,
         )
         # What the one ingestion will read: every run, each resolved as its own
         # run folder, counted together.
@@ -1196,6 +1231,7 @@ def _create_project_from_run(
         detected_runs=list(preview.detected_runs),
         runs=list(runs) if runs else None,
         shared_samples=shared_samples,
+        samples_check_gaps=samples_check_gaps,
         resolved_variables=dict(preview.resolved_variables),
         data_collections=_report_rows(preview.data_collections),
         pruned_optional_dcs=list(preview.pruned_optional_dcs),
@@ -1351,11 +1387,14 @@ def _report_sample_names(root, row) -> set[str] | None:
 
 
 def _samples_shared_across_runs(
-    tags: set[str], per_run: list[tuple[str, Any, Any]]
+    tags: set[str],
+    per_run: list[tuple[str, Any, Any]],
+    gaps: list[SamplesCheckGap] | None = None,
 ) -> list[SharedRunSamples]:
     """Per MultiQC collection, the samples more than one run's reports name.
 
-    ``per_run`` is ``(run name, its data root, its preview)``, in order.
+    ``per_run`` is ``(run name, its data root, its preview)``, in order. A
+    run's collection whose reports were not all read is added to ``gaps``.
     """
     shared_by_tag: list[SharedRunSamples] = []
     for tag in sorted(tags):
@@ -1366,6 +1405,9 @@ def _samples_shared_across_runs(
             if row is None or not row.matched:
                 continue
             names = _report_sample_names(root, row)
+            gap = samples_check_gap(tag, name, row, names)
+            if gap is not None and gaps is not None:
+                gaps.append(gap)
             if names is None:
                 continue
             for sample in names:
