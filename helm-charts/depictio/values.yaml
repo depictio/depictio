@@ -255,6 +255,12 @@ s3:
   # unless clients get SignatureDoesNotMatch through the ingress, then set e.g.
   # "https://<release>-minio.<domain>" (the public host keeps its legacy name).
   s3ExternalUrl: ""
+  # How browsers read indexed files (3D structures, GenomeSpy VCF/BAM tracks):
+  # "presigned" (a URL straight to this S3 store; browsers must reach it) or
+  # "proxy" (streamed through the API, for an S3 store with no public route).
+  # Empty: "presigned" when the chart routes the store (ingress or gateway, with
+  # global.domain set) or an external store has a public URL, "proxy" otherwise.
+  browserAccess: ""
   # Extra `weed mini` flags, e.g. ["-volume.index=leveldb"] for very large
   # object counts (the default in-memory index grows with the number of objects).
   extraArgs: []
