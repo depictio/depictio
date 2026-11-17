@@ -369,6 +369,41 @@ def test_preflight_without_a_sized_report_says_so_explicitly(
     assert resp.json()["size_estimate"] is None
 
 
+def test_preflight_defaults_to_the_python_runtime_a_build_defaults_to(
+    client, owner, monkeypatch: pytest.MonkeyPatch
+):
+    """A preflight and a build both called with their defaults must describe
+    the same bundle. The preflight defaulted to ``auto`` while the build
+    defaulted to ``off``: the preflight then called the Python-runtime tiles
+    live (code-mode figures the transpiler refuses, group comparisons) and the
+    build froze them — iris 2, penguins 2, viralrecon 9 in a live run."""
+    import inspect
+
+    seen: list[str] = []
+
+    def fake_export_static(
+        dashboard_id, out_path=None, mode=None, check=False, user=None, python_runtime="?"
+    ):
+        seen.append(python_runtime)
+        return _fake_export_result()
+
+    monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    _as_user(client, owner)
+
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 200
+    assert (
+        client.get(
+            f"/serverless/export-static/{DASHBOARD_OID}/preflight?python_runtime=auto"
+        ).status_code
+        == 200
+    )
+    build_default = (
+        inspect.signature(routes_mod.dispatch_export_static).parameters["python_runtime"].default
+    )
+    assert seen == [build_default, "auto"]
+    assert build_default == "off"
+
+
 def test_preflight_producer_error_is_404(client, stranger, monkeypatch: pytest.MonkeyPatch):
     def boom(*args, **kwargs):
         raise ProducerAError("permission denied: exporting needs 'viewer'")

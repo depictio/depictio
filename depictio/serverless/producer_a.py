@@ -1683,37 +1683,130 @@ def freeze_celery_compute(
     return frozen, CELERY_FROZEN_DETAIL.format(kind=kind)
 
 
-def _freeze_multiqc(
+#: Seconds a whole export may spend waiting on cold MultiQC pre-renders, and
+#: the pause between two asks. The wait is shared by every MultiQC tile of the
+#: export: one ``build_multiqc_prerender`` writes every figure of its data
+#: collection, so the first tile pays for the build and the rest find it warm.
+#: 150 s keeps the export task (soft limit 600 s) clear of its limit even with
+#: the 300 s Celery-compute budget spent too.
+DEFAULT_MULTIQC_WAIT_S = 150.0
+MULTIQC_WAIT_ENV = "DEPICTIO_SERVERLESS_MULTIQC_WAIT_S"
+MULTIQC_POLL_S = 3.0
+
+
+@dataclass
+class MultiQCWait:
+    """Time the export may spend waiting for MultiQC pre-renders to land."""
+
+    total: float = DEFAULT_MULTIQC_WAIT_S
+    poll: float = MULTIQC_POLL_S
+    spent: float = 0.0
+
+    @classmethod
+    def from_env(cls) -> MultiQCWait:
+        return cls(total=_env_seconds(MULTIQC_WAIT_ENV, DEFAULT_MULTIQC_WAIT_S))
+
+    @property
+    def remaining(self) -> float:
+        return max(0.0, self.total - self.spent)
+
+
+def multiqc_warming(payload: Any) -> bool:
+    """True when a MultiQC render endpoint answered "being prepared" (its 202).
+
+    ``render_multiqc_endpoint`` returns a ``JSONResponse`` instead of a dict
+    while the collection's pre-render is cold, and it enqueues
+    ``build_multiqc_prerender`` itself when no build holds the lock — so asking
+    again later is all a caller has to do.
+    """
+    if isinstance(payload, dict):
+        return False
+    return getattr(payload, "status_code", None) == 202
+
+
+def _multiqc_call(
     dashboard_oid: ObjectId, comp: dict[str, Any], user: ExportUser
+) -> tuple[str, Callable[[], Any]]:
+    """``(kind, ask)``: the endpoint a MultiQC component renders through
+    (General Stats or a plot, mirroring ``MultiQCDispatch``), as a call."""
+    routes = _routes()
+    component_id = str(comp.get("index"))
+    request = {"filters": [], "theme": "light"}
+    _, _, _, is_gs = routes._resolve_selected_keys(comp)
+    if is_gs:
+        return "multiqc-general-stats", lambda: routes.render_multiqc_general_stats_endpoint(
+            dashboard_oid, component_id, request, current_user=user
+        )
+    return "multiqc", lambda: routes.render_multiqc_endpoint(
+        dashboard_oid, component_id, request, current_user=user
+    )
+
+
+def _await_multiqc(ask: Callable[[], Any], component_id: str, wait: MultiQCWait) -> Any:
+    """Ask the endpoint until it hands back a figure or the shared wait runs out.
+
+    The first "being prepared" answer has already enqueued the pre-render (the
+    endpoint does that), so this only polls. Once the wait is spent the last
+    answer is returned as is and :func:`_multiqc_payload` names the condition.
+    """
+    payload = ask()
+    if not multiqc_warming(payload) or wait.remaining <= 0:
+        return payload
+    logger.info(
+        "producer A: MultiQC %s — pre-render not ready yet, waiting up to %.0fs for it",
+        component_id,
+        wait.remaining,
+    )
+    while multiqc_warming(payload) and wait.remaining > 0:
+        pause = min(wait.poll, wait.remaining)
+        time.sleep(pause)
+        wait.spent += pause
+        payload = ask()
+    return payload
+
+
+def _freeze_multiqc(
+    dashboard_oid: ObjectId,
+    comp: dict[str, Any],
+    user: ExportUser,
+    wait: MultiQCWait | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Freeze a MultiQC component via the endpoint its renderer would call.
 
     Returns ``(kind, payload)`` — General Stats components render through
     ``render_multiqc_general_stats``, everything else through
     ``render_multiqc`` (one of the two per component, mirroring
-    ``MultiQCDispatch``).
+    ``MultiQCDispatch``). A cold pre-render (an export right after ingestion)
+    is waited for, within ``wait``, rather than omitting the plot.
     """
-    routes = _routes()
     component_id = str(comp.get("index"))
-    request = {"filters": [], "theme": "light"}
-    _, _, _, is_gs = routes._resolve_selected_keys(comp)
-    if is_gs:
-        payload = routes.render_multiqc_general_stats_endpoint(
-            dashboard_oid, component_id, request, current_user=user
-        )
-        out = _multiqc_payload(payload, component_id)
-        expansion = multiqc_sample_expansion(str(comp.get("dc_id") or ""))
-        if expansion:
-            out = {**out, "sample_expansion": expansion}
-        return "multiqc-general-stats", out
-    payload = routes.render_multiqc_endpoint(
-        dashboard_oid, component_id, request, current_user=user
-    )
-    out = _multiqc_payload(payload, component_id)
+    kind, ask = _multiqc_call(dashboard_oid, comp, user)
+    wait = wait if wait is not None else MultiQCWait.from_env()
+    out = _multiqc_payload(_await_multiqc(ask, component_id, wait), component_id, wait)
     expansion = multiqc_sample_expansion(str(comp.get("dc_id") or ""))
     if expansion:
         out = {**out, "sample_expansion": expansion}
-    return "multiqc", out
+    return kind, out
+
+
+def multiqc_prerender_note(
+    dashboard_oid: ObjectId, comp: dict[str, Any], user: ExportUser, wait_s: float
+) -> str | None:
+    """The preflight's look at a MultiQC tile's pre-render: ``None`` when the
+    endpoint serves the figure now, else what the build will do about it.
+
+    One ask, no waiting. It is the endpoint the live tile calls, so a cold
+    answer also starts the build, and an export launched after the preflight
+    finds it further along.
+    """
+    _, ask = _multiqc_call(dashboard_oid, comp, user)
+    if not multiqc_warming(ask()):
+        return None
+    return (
+        "pre-render not ready yet: the MultiQC figures of this data collection are still "
+        f"being built; the export waits up to {wait_s:.0f}s for them and omits the plot "
+        "if they are still not ready"
+    )
 
 
 def multiqc_sample_expansion(dc_id: str) -> dict[str, list[str]]:
@@ -1812,24 +1905,26 @@ def expansion_from_mappings(mappings: dict[str, list[str]]) -> dict[str, list[st
     return out
 
 
-def _multiqc_payload(payload: Any, component_id: str) -> dict[str, Any]:
+def _multiqc_payload(
+    payload: Any, component_id: str, wait: MultiQCWait | None = None
+) -> dict[str, Any]:
     """The endpoint's dict, or a readable refusal when it answered otherwise.
 
     ``render_multiqc_endpoint`` returns a ``JSONResponse`` rather than a dict
     when the pre-render for that collection is not warm yet — the figures are
-    built by a Celery task on first use, and an export that lands in that
-    window gets a status body instead of a figure. Pydantic then rejects it
-    while validating ``FrozenPayload`` and the component is omitted with a
-    `dict_type` validation error in its detail, which tells a reader nothing.
-    Name the actual condition instead: it is transient, and re-exporting once
-    the pre-render has finished is the fix.
+    built by a Celery task on first use. :func:`_await_multiqc` waits for it
+    within the export's budget; this is what is left when even that ran out.
+    Pydantic would otherwise reject the response while validating
+    ``FrozenPayload`` and the component would carry a `dict_type` validation
+    error in its detail, which tells a reader nothing. Name the condition.
     """
     if isinstance(payload, dict):
         return payload
+    waited = f" after waiting {wait.spent:.0f}s" if wait is not None and wait.spent > 0 else ""
     raise ProducerAError(
         f"MultiQC component {component_id}: the endpoint returned no figure "
-        f"({type(payload).__name__}), which is what it does while the pre-render for this "
-        "data collection is still being built. Re-export once it has finished."
+        f"({type(payload).__name__}){waited}, which is what it does while the pre-render "
+        "for this data collection is still being built. Re-export once it has finished."
     )
 
 
@@ -3192,6 +3287,8 @@ def export_manifest(
     jbrowse_tiles: list[str] = []
     computes_frozen = 0
     computes_skipped = 0
+    # One wait for every cold MultiQC pre-render in the family (see MultiQCWait).
+    multiqc_wait = MultiQCWait.from_env()
 
     # Cards freeze per tab: bulk_compute_cards resolves component ids against
     # ONE dashboard document, so a family needs one call per tab. A card's tier
@@ -3224,6 +3321,21 @@ def export_manifest(
         # under the current filters, it cannot rebuild it. The payload is its
         # data source, not a snapshot of a dead tile.
         if row.tier is not ComponentTier.FROZEN and ctype != "multiqc":
+            continue
+        if decide_only and ctype == "multiqc":
+            # Not settled here (the build waits for a cold pre-render, then
+            # omits), but a cold one is something the reader should hear about
+            # before the build: one ask of the endpoint the tile calls.
+            try:
+                note = multiqc_prerender_note(ObjectId(tab.id), comp, user, multiqc_wait.total)
+            except Exception as exc:
+                note = None
+                logger.info(
+                    "producer A: MultiQC pre-render probe failed for %s: %s", component_id, exc
+                )
+            if note is not None:
+                row.detail = f"{row.detail}; {note}" if row.detail else note
+                row.provisional = True
             continue
         if decide_only and ctype not in ("figure", "jbrowse"):
             # A figure is the only tier this loop can still SETTLE cheaply, so
@@ -3279,7 +3391,7 @@ def export_manifest(
                         payload=_freeze_advanced_viz(comp, user),
                     )
             elif ctype == "multiqc":
-                kind, payload = _freeze_multiqc(dashboard_oid, comp, user)
+                kind, payload = _freeze_multiqc(dashboard_oid, comp, user, multiqc_wait)
                 frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
             elif ctype == "map":
                 try:
@@ -3297,6 +3409,15 @@ def export_manifest(
                 if note:
                     row.detail = f"{row.detail}; {note}"
             elif ctype == "jbrowse":
+                problem = jbrowse_dc_problem(comp, project_doc)
+                if problem is not None:
+                    # Said before the session endpoint is asked: its 400 ("not
+                    # a genomic_tracks collection") names the wrong cause when
+                    # the collection is simply not in the project.
+                    row.tier = ComponentTier.OMITTED
+                    row.reason = TierReason.JBROWSE
+                    row.detail = problem
+                    continue
                 payload, outcome = _freeze_jbrowse(
                     dashboard_oid,
                     component_id,
@@ -3382,6 +3503,16 @@ def export_manifest(
     objects, resolved_structures, addons = collect_objects_a(
         items, tier_by_id, pruned_frames, inline_blobs, user, object_budget
     )
+    # The gene tables the genome tiles draw from: the server serves them under
+    # its base URL, a bundle has to carry them (``gene_assets``).
+    from depictio.serverless.gene_assets import gene_blobs
+    from depictio.serverless.producer_b import _template_path
+
+    genes, _ = gene_blobs(
+        (comp for _tab, comp, cid in items if tier_by_id[cid].tier is not ComponentTier.OMITTED),
+        _template_path().parent,
+    )
+    inline_blobs.update(genes)
     if python_info.get("embedded"):
         addons.append(python_info["addon"])
     if jbrowse_tiles:
@@ -3518,6 +3649,46 @@ def _freeze_image(
             f"{len(kept)} of {len(rows)} images shipped (the rest did not fit or were unreadable)"
         )
     return payload, note
+
+
+def jbrowse_dc_problem(comp: dict[str, Any], project_doc: dict[str, Any] | None) -> str | None:
+    """Why a genome browser tile has no track collection to ship, or ``None``.
+
+    ``render_jbrowse`` answers every such case with the same 400, "not a
+    genomic_tracks collection" (``find_tracks_dc`` returns ``None`` for a
+    collection it cannot find as well as for one of another type). The usual
+    cause is the first: the dashboard names the template's ``tracks``
+    collection, but this instance's project holds no such collection (its track
+    files were never ingested). The live tile cannot draw either way; the
+    bundle says which. ``None`` when the project is unreadable: the endpoint
+    then gives its own answer.
+    """
+    if not project_doc:
+        return None
+    dc_id = str(comp.get("dc_id") or "")
+    tag = comp.get("data_collection_tag") or (comp.get("dc_config") or {}).get(
+        "data_collection_tag"
+    )
+    label = f"'{tag}' ({dc_id})" if tag else f"{dc_id or '?'}"
+    if not dc_id:
+        return "the genome browser names no track data collection"
+    for wf in project_doc.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            if str(dc.get("_id") or dc.get("id") or "") != dc_id:
+                continue
+            dc_type = str((dc.get("config") or {}).get("type") or "").lower()
+            if dc_type == "genomic_tracks":
+                return None
+            return (
+                f"its data collection {label} is a {dc_type or 'untyped'} collection, not "
+                "genomic_tracks: there are no track files to ship, and the live tile cannot "
+                "draw it either"
+            )
+    return (
+        f"its track data collection {label} is not in this project on the exporting "
+        "instance (its track files were never ingested), so there are no tracks to ship; "
+        "the live tile cannot draw it either"
+    )
 
 
 def _freeze_jbrowse(

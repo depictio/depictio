@@ -10,7 +10,9 @@
  * trace's rows (filter mask AND group predicates), projects the bound columns
  * and writes the arrays back into a clone of the scaffold. Layout is NEVER
  * touched; empty traces flip `visible:false` but are never dropped, so trace
- * indices (and trendline `on` references) stay stable.
+ * indices (and trendline `on` references) stay stable — except on a layout
+ * Plotly cannot draw hidden traces in (`readsHiddenTraces`), where they are
+ * dropped once refilling is done.
  *
  * Every bound array is REPLACED wholesale, in this side's own row order — so
  * the order the build-time figure happened to hold is discarded at first paint,
@@ -99,6 +101,7 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
   }
 
   // ---- raw traces ----------------------------------------------------------
+  const hidden = new Set<number>();
   const selectionByTrace = new Map<number, number[]>();
   let displayed = 0;
 
@@ -127,6 +130,7 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
       // Empty group under this filter: the server would render an empty
       // subframe → nothing visible. Hide, never drop — indices stay stable.
       trace.visible = false;
+      hidden.add(t.i);
     }
   }
 
@@ -147,13 +151,45 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
     if (fit === null) {
       // px leaves the trace empty below 2 usable (x, y) pairs.
       trace.visible = false;
+      hidden.add(tl.i);
       continue;
     }
     trace.x = fit.x;
     trace.y = fit.y;
   }
 
-  return { figure: { data, layout }, displayed, total };
+  // Indices only had to stay stable while refilling (trendlines name their
+  // source trace by index). Plotly itself cannot always take a hidden trace:
+  // see `readsHiddenTraces`. There the hidden ones are dropped, which draws
+  // the same figure (a hidden trace takes no bar slot and no legend entry) and
+  // is what px builds from the filtered frame anyway: no trace for an empty
+  // group.
+  const out = readsHiddenTraces(layout) ? data.filter((_t, i) => !hidden.has(i)) : data;
+  return { figure: { data: out, layout }, displayed, total };
+}
+
+/** Category orders Plotly resolves by reading every trace's coordinates
+ *  (`findCategories` in plotly.js `category_order_defaults.js`). */
+const DATA_CATEGORY_ORDER =
+  /^(category (ascending|descending)|(total|min|max|sum|mean|geometric mean|median) (ascending|descending))$/;
+
+/**
+ * True when Plotly would crash on a `visible: false` trace in this layout.
+ *
+ * A hidden trace's full data carries no `x` / `y` (Plotly stops coercing it at
+ * `visible: false`), but an axis ordered by its data (`categoryorder: "total
+ * descending"`, …) reads `x.length` of every trace on it while supplying
+ * defaults. That threw inside `Plotly.react`, left a half-built plot, and the
+ * next resize and the unmount threw again as page errors (`reading 'length'`,
+ * then `reading 'selectAll'` in `cleanPlot`): viralrecon's "Calls per gene"
+ * under a lineage that has no NONSENSE call.
+ */
+export function readsHiddenTraces(layout: Record<string, unknown>): boolean {
+  return Object.entries(layout).some(([key, axis]) => {
+    if (!/^[xy]axis\d*$/.test(key) || axis === null || typeof axis !== 'object') return false;
+    const order = (axis as { categoryorder?: unknown }).categoryorder;
+    return typeof order === 'string' && DATA_CATEGORY_ORDER.test(order);
+  });
 }
 
 // ---------------------------------------------------------------------------

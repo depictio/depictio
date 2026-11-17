@@ -89,6 +89,14 @@ export {
   themedIconSrc,
 } from './components/Glyph';
 export type { MultiqcLogoSources, MultiqcLogoVariant } from './components/Glyph';
+// Offline hosts (the static bundle): GenomeSpy fonts and gene tables without a
+// network (components/advanced_viz/genomespy/offlineAssets.ts).
+export {
+  setGeneAssetSource,
+  setGenomeSpyFontsEmbeddedOnly,
+  withEmbeddedFonts,
+} from './components/advanced_viz/genomespy/offlineAssets';
+export type { GeneAssetSource } from './components/advanced_viz/genomespy/offlineAssets';
 export {
   DEFAULT_PALETTE_SHADE,
   paletteHex,

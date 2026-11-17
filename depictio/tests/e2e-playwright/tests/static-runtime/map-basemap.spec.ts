@@ -89,6 +89,18 @@ for (const online of [false, true]) {
     const state = await mapState(page);
     expect(state?.style).toBe(online ? "fake-positron" : "depictio-offline-blank");
 
+    // A filter change re-renders the map with a fresh style object. Plotly
+    // relinks the old full layout onto it and deletes every empty object on
+    // the way: a blank style with `sources: {}` lost its `sources`, MapLibre
+    // refused it, and Plotly threw `Error: Map error.` (ampliseq, offline).
+    await page.locator("input.mantine-MultiSelect-inputField").first().click();
+    await page.getByRole("option").first().click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(/Samples/).first()).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect((await mapState(page))?.traceLayers ?? 0).toBeGreaterThan(0);
+    expect((await mapState(page))?.style).toBe(online ? "fake-positron" : "depictio-offline-blank");
+
     const hosts = attempts.map((u) => new URL(u).host);
     const stray = hosts.filter((h) => !BASEMAP_HOSTS.has(h));
     expect(stray, `requests outside the basemap hosts:\n${attempts.join("\n")}`).toHaveLength(0);

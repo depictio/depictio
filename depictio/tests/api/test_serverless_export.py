@@ -2141,26 +2141,89 @@ def test_export_check_against_live_instance():
     assert len(result.tier_rows) == len(doc.get("stored_metadata") or [])
 
 
-def test_a_cold_multiqc_prerender_is_named_not_leaked_as_a_validation_error(monkeypatch):
-    """`render_multiqc_endpoint` answers with a JSONResponse while the
-    pre-render for that collection is still building. Pydantic used to reject
-    it deep inside `FrozenPayload`, so the tile was omitted carrying a
-    `dict_type` validation error — true, and useless to the reader."""
+def _warming() -> Any:
     from starlette.responses import JSONResponse
 
+    return JSONResponse({"status": "preparing"}, status_code=202)
+
+
+def _stub_multiqc(monkeypatch, answers: list[Any]) -> list[int]:
+    """`render_multiqc_endpoint` answering ``answers`` in turn (the last one
+    repeats); returns the call log."""
     routes_mod = producer_a._routes()
+    calls: list[int] = []
+
+    def endpoint(*args, **kwargs):
+        calls.append(1)
+        return answers[min(len(calls), len(answers)) - 1]
+
     monkeypatch.setattr(
         routes_mod, "_resolve_selected_keys", lambda comp: (None, None, None, False)
     )
-    monkeypatch.setattr(
-        routes_mod,
-        "render_multiqc_endpoint",
-        lambda *a, **k: JSONResponse({"status": "building"}, status_code=202),
+    monkeypatch.setattr(routes_mod, "render_multiqc_endpoint", endpoint)
+    monkeypatch.setattr(producer_a, "multiqc_sample_expansion", lambda dc_id: {})
+    monkeypatch.setattr(producer_a.time, "sleep", lambda s: None)
+    return calls
+
+
+def test_a_cold_multiqc_prerender_is_waited_for_not_omitted(monkeypatch):
+    """Right after ingestion the pre-render is cold and the endpoint answers
+    202 "being prepared" (and enqueues the build). The export used to omit the
+    plot on that first answer; it now asks again until the figure lands."""
+    figure = {"figure": {"data": [], "layout": {}}, "metadata": {}}
+    calls = _stub_multiqc(monkeypatch, [_warming(), _warming(), figure])
+    wait = producer_a.MultiQCWait(total=60, poll=3)
+
+    kind, payload = producer_a._freeze_multiqc(
+        ObjectId(), {"index": "mqc-1"}, ExportUser(id=ObjectId(), is_admin=True), wait
     )
+
+    assert kind == "multiqc"
+    assert payload == figure
+    assert len(calls) == 3
+    assert wait.spent == 6  # two pauses, charged to the export's shared wait
+
+
+def test_the_multiqc_wait_is_bounded_and_named_when_it_runs_out(monkeypatch):
+    """Never past the budget: a pre-render that does not land in time omits the
+    plot with the condition named (not a `dict_type` validation error)."""
+    calls = _stub_multiqc(monkeypatch, [_warming()])
+    wait = producer_a.MultiQCWait(total=7, poll=3)
+
+    with pytest.raises(ProducerAError, match=r"after waiting 7s.*pre-render for this data"):
+        producer_a._freeze_multiqc(
+            ObjectId(), {"index": "mqc-1"}, ExportUser(id=ObjectId(), is_admin=True), wait
+        )
+    assert wait.spent == 7 and len(calls) == 4  # 3 + 3 + 1 s of pauses
+
+    # The wait is shared: the next cold tile of the same export asks once and
+    # stops, rather than starting a fresh wait of its own.
+    calls.clear()
     with pytest.raises(ProducerAError, match="pre-render for this data collection"):
         producer_a._freeze_multiqc(
-            ObjectId(), {"index": "mqc-1"}, ExportUser(id=ObjectId(), is_admin=True)
+            ObjectId(), {"index": "mqc-2"}, ExportUser(id=ObjectId(), is_admin=True), wait
         )
+    assert len(calls) == 1
+
+
+def test_the_multiqc_wait_reads_the_environment(monkeypatch):
+    monkeypatch.setenv(producer_a.MULTIQC_WAIT_ENV, "42")
+    assert producer_a.MultiQCWait.from_env().total == 42
+    monkeypatch.setenv(producer_a.MULTIQC_WAIT_ENV, "nope")
+    assert producer_a.MultiQCWait.from_env().total == producer_a.DEFAULT_MULTIQC_WAIT_S
+
+
+def test_the_preflight_says_a_cold_multiqc_prerender_is_not_ready(monkeypatch):
+    """The preflight asks the endpoint once: a warm one says nothing, a cold
+    one is reported as such, with what the build will do about it."""
+    user = ExportUser(id=ObjectId(), is_admin=True)
+    _stub_multiqc(monkeypatch, [_warming()])
+    note = producer_a.multiqc_prerender_note(ObjectId(), {"index": "mqc-1"}, user, 150)
+    assert note and note.startswith("pre-render not ready yet")
+    assert "waits up to 150s" in note
+
+    _stub_multiqc(monkeypatch, [{"figure": {}, "metadata": {}}])
+    assert producer_a.multiqc_prerender_note(ObjectId(), {"index": "mqc-1"}, user, 150) is None
 
 
 # ---------------------------------------------------------------------------
@@ -2282,3 +2345,106 @@ def test_bound_ui_figure_draws_in_the_family_colours(coloured_family):
     (fig_ui,) = [c for c in child.doc["stored_metadata"] if c["index"] == "fig-ui"]
     assert "color_discrete_map" not in fig_ui["dict_kwargs"]
     assert not any(k.startswith("__fold") for k in fig_ui)
+
+
+def _with_multiqc_tile(monkeypatch) -> None:
+    """The offline dashboard plus one MultiQC plot."""
+    from depictio.api.v1 import db as db_mod
+
+    doc = _dashboard_doc()
+    doc["stored_metadata"].append(
+        {"index": "mqc-1", "component_type": "multiqc", "title": "FastQC"}
+    )
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
+
+
+def test_preflight_and_build_on_a_cold_multiqc_prerender(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch
+):
+    """Export right after ingestion: the preflight says the pre-render is not
+    ready (an undecided row, not a promise), and the build waits for it and
+    ships the plot instead of omitting it."""
+    _with_multiqc_tile(monkeypatch)
+    figure = {"figure": {"data": [], "layout": {}}, "metadata": {}}
+
+    _stub_multiqc(monkeypatch, [_warming()])
+    row = {r.component_id: r for r in _preflight().tier_rows}["mqc-1"]
+    assert row.provisional is True
+    assert row.detail and "pre-render not ready yet" in row.detail
+
+    calls = _stub_multiqc(monkeypatch, [_warming(), figure])
+    built = export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True))
+    assert built.manifest is not None
+    assert built.manifest.tiers["mqc-1"].tier is ComponentTier.LIVE
+    assert built.manifest.frozen["mqc-1"].kind == "multiqc"
+    assert len(calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# A genome browser whose track collection is not in the project (viralrecon)
+# ---------------------------------------------------------------------------
+
+TRACKS_DC = "746b0f3c1e4a2d7f8e5b9c20"
+
+
+def _browser() -> dict[str, Any]:
+    return {
+        "index": "var-browser",
+        "component_type": "jbrowse",
+        "title": "Genome browser",
+        "data_collection_tag": "tracks",
+        "dc_id": TRACKS_DC,
+    }
+
+
+def _project(*dcs: dict[str, Any]) -> dict[str, Any]:
+    return {"_id": PROJECT_OID, "workflows": [{"_id": WF_OID, "data_collections": list(dcs)}]}
+
+
+def test_a_browser_over_a_collection_the_project_lacks_says_so():
+    """viralrecon's "Genome browser" reads the template's `tracks` collection;
+    an instance that never ingested the track files has no such collection, and
+    the session endpoint's 400 called that "not a genomic_tracks collection"."""
+    problem = producer_a.jbrowse_dc_problem(
+        _browser(), _project({"_id": ObjectId(), "config": {"type": "table"}})
+    )
+    assert problem and "'tracks' (746b0f3c1e4a2d7f8e5b9c20) is not in this project" in problem
+    assert "never ingested" in problem
+
+
+def test_a_browser_over_a_table_collection_names_its_type():
+    problem = producer_a.jbrowse_dc_problem(
+        _browser(), _project({"_id": ObjectId(TRACKS_DC), "config": {"type": "table"}})
+    )
+    assert problem and "is a table collection, not genomic_tracks" in problem
+
+
+def test_a_browser_over_a_tracks_collection_goes_to_the_endpoint():
+    project = _project({"_id": ObjectId(TRACKS_DC), "config": {"type": "genomic_tracks"}})
+    assert producer_a.jbrowse_dc_problem(_browser(), project) is None
+    # An unreadable project leaves the answer to the endpoint.
+    assert producer_a.jbrowse_dc_problem(_browser(), None) is None
+
+
+def test_the_export_omits_that_browser_with_the_real_reason(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch
+):
+    from depictio.api.v1 import db as db_mod
+
+    doc = _dashboard_doc()
+    doc["stored_metadata"].append(_browser())
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
+
+    def no_session(*args, **kwargs):
+        raise AssertionError("the session endpoint must not be asked")
+
+    monkeypatch.setattr(producer_a._routes(), "render_jbrowse_endpoint", no_session)
+    for result in (
+        _preflight(),
+        export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True)),
+    ):
+        row = {r.component_id: r for r in result.tier_rows}["var-browser"]
+        assert row.tier is ComponentTier.OMITTED
+        assert row.reason is TierReason.JBROWSE
+        assert row.detail and "not in this project" in row.detail
+        assert "genomic_tracks collection" not in row.detail

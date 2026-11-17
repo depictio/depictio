@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { BindingTable, BundleManifest } from '../src/manifest';
-import { refillFigure, type RefillInput } from '../src/refill';
+import { readsHiddenTraces, refillFigure, type RefillInput } from '../src/refill';
 import { runPrologue } from '../src/prologue';
 import { HyparquetEngine } from '../src/engine/hyparquet/index';
 
@@ -179,6 +179,31 @@ describe('refillFigure — masked', () => {
 
     expect(displayed).toBe(4);
     expect(total).toBe(4);
+  });
+
+  it('drops the hidden traces on an axis Plotly orders by its data', async () => {
+    // viralrecon's "Calls per gene": bars per functional class on an x axis
+    // ordered "total descending". Plotly reads `x.length` of every trace on
+    // such an axis, and a hidden trace's full data has no `x`: the refill's
+    // `visible:false` threw inside Plotly.react. Dropped instead (once the
+    // trendline, which names its source by index, is refit).
+    const binding = fixtureBinding();
+    (binding.scaffold as { layout: Record<string, unknown> }).layout = {
+      xaxis: { categoryorder: 'total descending' },
+    };
+    const mask = new Uint8Array([1, 1, 0, 1, 0, 0, 1, 0]); // B empties
+    const { figure } = await refill(binding, mask);
+    const names = (figure.data as Trace[]).map((t) => t.name);
+    expect(names).toEqual(['A', 'trend-A']);
+    for (const trace of figure.data as Trace[]) expect(trace.visible).not.toBe(false);
+  });
+
+  it('keeps hidden traces in place on any other layout', () => {
+    expect(readsHiddenTraces({ xaxis: { categoryorder: 'trace' } })).toBe(false);
+    expect(readsHiddenTraces({ xaxis: { categoryorder: 'array', categoryarray: ['a'] } })).toBe(false);
+    expect(readsHiddenTraces({ yaxis2: { categoryorder: 'category ascending' } })).toBe(true);
+    expect(readsHiddenTraces({ xaxis: { categoryorder: 'median descending' } })).toBe(true);
+    expect(readsHiddenTraces({ legend: { categoryorder: 'total descending' } })).toBe(false);
   });
 
   it('hides the trendline when its source trace has fewer than 2 usable points', async () => {

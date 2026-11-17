@@ -522,45 +522,20 @@
   color: var(--gl-rail-fg);
 }
 
-/* The way to the project, where the live foot has "All dashboards": a small
-   eyebrow over the project's name, left-aligned like a navigation row (a
-   long name centred reads as a caption). Folded, the folder glyph alone. */
-.hy-row--project {
-  height: auto;
-  min-height: 52px;
-  padding-block: 8px;
-  text-align: left;
-}
+/* The way to the project, where the live foot has "All dashboards": one row
+   of the same height, the folder glyph and the project's name, left-aligned
+   like a navigation row (a long name centred reads as a caption) and cut with
+   an ellipsis. Folded, the folder glyph alone. */
 .hy-shell:not([data-side='folded']) .hy-side-foot .hy-row--project {
   justify-content: flex-start;
-}
-.hy-row-label--stacked {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  line-height: 1.15;
-}
-.hy-row-eyebrow {
-  color: var(--gl-rail-faint);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-align: left;
 }
 .hy-row-name {
-  max-width: 100%;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--gl-rail-fg);
-  font-size: 14px;
-}
-.hy-shell[data-side='folded'] .hy-row--project {
-  height: 44px;
-  min-height: 44px;
-  padding: 0;
 }
 
 .hy-side-spacer {

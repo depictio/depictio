@@ -206,6 +206,9 @@ exclude = [
   # Its conditional add-ons (3Dmol.js, 0.54 MB raw / 0.16 MB deflated), appended
   # only to bundles that need one (depictio/serverless/addons.py).
   "viewer/dist-static/addons/*",
+  # Gene tables a bundle's genome tiles draw (hg38/hg19/mm10, ~0.8 MB each),
+  # shipped inside a bundle that names the assembly (serverless/gene_assets.py).
+  "viewer/public/assets/genomes/*.genes.json",
   # The optional Python runtime's pin (Pyodide version, files, sha256): the
   # assets themselves are fetched and verified at export, never shipped here.
   "serverless/pyodide/pin.json",

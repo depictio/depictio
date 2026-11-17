@@ -36,6 +36,8 @@ COMPUTE_SPEC = EXAMPLES / "compute.yaml"
 COMPUTE_OUT = OUT.parent / "compute.json"
 MAP_SPEC = EXAMPLES / "map.yaml"
 MAP_OUT = OUT.parent / "map.json"
+GENOMESPY_SPEC = EXAMPLES / "genomespy.yaml"
+GENOMESPY_OUT = OUT.parent / "genomespy.json"
 MAP_DATA = REPO_ROOT / "depictio" / "projects" / "test" / "map_demo" / "sampling_locations.csv"
 SHOWCASE_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "advanced_viz_showcase" / "data"
 
@@ -106,6 +108,15 @@ def map_data_dir(root: Path) -> Path:
     return root
 
 
+def genomespy_data_dir(root: Path) -> Path:
+    """The GenomeSpy example's data dir: the showcase's locus coverage as Parquet."""
+    wf = root / "genomespy_demo"
+    wf.mkdir(parents=True)
+    tag = "locus_coverage_demo"
+    pl.read_csv(SHOWCASE_DATA / f"{tag}.tsv", separator="\t").write_parquet(wf / f"{tag}.parquet")
+    return root
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         dc_dir = Path(tmp) / WF_TAG
@@ -135,6 +146,13 @@ def main() -> None:
             build_manifest(load_spec(MAP_SPEC), map_data_dir(Path(tmp)), python_runtime="off"),
             MAP_OUT,
         )
+    with tempfile.TemporaryDirectory() as tmp:
+        result = build_manifest(
+            load_spec(GENOMESPY_SPEC), genomespy_data_dir(Path(tmp)), python_runtime="off"
+        )
+        if "genes_hg38" not in result.manifest.inline_blobs:
+            raise SystemExit("the hg38 gene table was not shipped (serverless/gene_assets.py)")
+        _write(result, GENOMESPY_OUT)
 
 
 if __name__ == "__main__":

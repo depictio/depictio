@@ -28,5 +28,11 @@
     "title": "Genome browser \u2014 JBrowse over bundled files, a BAM sliced to its opening locus (JBrowse add-on)",
     "manifest": "demo/manifests/genome.json",
     "description": "The real JBrowse 2 view, offline. The session producer A froze is rewritten so every file it reads (a FASTA and its index, a BED, a bedGraph, a BAM and its BAI) points at bytes shipped inside the HTML; the runtime answers JBrowse's range requests from memory. The BAM is sliced: only the 256 KiB pages its index names for the opening locus (and its header) are shipped, and a read past them fails in the track with the region the bundle holds. JBrowse itself is a conditional add-on embedded only into bundles with a genome browser. Regenerate with depictio/serverless/examples/genome_demo.py. No network."
+  },
+  {
+    "id": "genomespy-offline",
+    "title": "Genome tracks offline \u2014 GenomeSpy fonts and the hg38 gene table inside the file",
+    "manifest": "demo/manifests/genomespy.json",
+    "description": "Built by producer B from the advanced-visualisation showcase's locus coverage. A genome_view tile draws one lane per ChIP-seq track over the hg38 gene lane. Live, its bold lane titles make GenomeSpy fetch a font from GitHub and the gene lane fetches the server's gene table; here every label uses the font GenomeSpy embeds and the gene table (gzip, base64) travels in the HTML, so the gene search works offline too. Regenerate with depictio/serverless/examples/generate_demo_manifest.py. No network."
   }
 ]

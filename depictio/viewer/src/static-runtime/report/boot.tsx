@@ -50,6 +50,7 @@ import {
 
 import paper from '../../chrome/variants/glass/glass';
 import { installInlineMultiqcLogos } from '../../chrome/multiqcLogo';
+import { installOfflineGenomeAssets } from '../genomeAssets';
 import { loadBundleFromDocument, setActiveTab } from '../bundle';
 import ReportRuntime, { type ReportPanel, type ReportTile } from './ReportRuntime';
 import type { FilterChannel } from 'depictio-static-core';
@@ -112,6 +113,9 @@ export function bootReport(options: BootReportOptions = {}): BootedReport | null
   // file:// cannot reach `/dashboard/logos/...`: MultiQC tab icons use the
   // inlined copies instead.
   installInlineMultiqcLogos();
+  // GenomeSpy tiles: the embedded font only (any other weight is fetched from
+  // GitHub), and the gene tables the producer shipped (never `./assets/genomes`).
+  installOfflineGenomeAssets();
 
   const tiles: ReportTile[] = [];
   for (const host of Array.from(document.querySelectorAll<HTMLElement>(`[${REPORT_TILE_ATTR}]`))) {

@@ -4,7 +4,6 @@ import { useBrandScopeAttributes, useIsStaticBundle, Z_LAYERS } from 'depictio-r
 import {
   ArrowLeft,
   BookOpenText,
-  CalendarClock,
   ChevronRight,
   Compass,
   FolderKanban,
@@ -598,24 +597,31 @@ export const SideStatus: React.FC<{ open: boolean }> = ({ open }) =>
 
 /**
  * The snapshot card at the foot of a static bundle's sidebar, where the live
- * app shows its server card ("● Online v1.21.0", the instance mode). A file
- * has no server to be online: the card says what the file is instead — a
- * static snapshot, built with which depictio, exported on which day — and
- * opens the whole provenance (who, from where, the live copy) in a popover,
- * as the server card opens the server's. Folded, the package glyph alone.
+ * app shows its server card ("● Online v1.21.0"). A file has no server to be
+ * online: the card says what the file is instead, on ONE line like the live
+ * card — "Static snapshot" and the export day — and opens the whole provenance
+ * (who, from where, which depictio built it, the live copy) in a popover, as
+ * the server card opens the server's. Folded, the package glyph alone.
+ *
+ * One line, not two: with the project row below it, a two-line card made the
+ * bundle's foot taller than the live one, and the tab list above scrolled where
+ * the live rail shows every tab (ampliseq's last tab, Phylogeny, went under).
  */
 export const SnapshotStatus: React.FC<{ open: boolean }> = ({ open }) => {
   const manifest = useStaticManifest();
   if (!manifest) return null;
   const day = exportedDay(manifest);
   const version = manifest.depictio_version ? `v${manifest.depictio_version}` : null;
-  const label = `Static snapshot${day ? `, exported ${day}` : ''}. Show export details`;
+  const summary = [day ? `exported ${day}` : null, version ? `depictio ${version}` : null]
+    .filter(Boolean)
+    .join(', ');
+  const label = `Static snapshot${summary ? `, ${summary}` : ''}. Show export details`;
   return (
     <div className="hy-status-card hy-status-card--static" data-testid="hy-snapshot-card">
       <Popover position="right-end" withArrow width={300} shadow="md" offset={12}>
         <Popover.Target>
           <Tooltip
-            label={day ? `Static snapshot · ${day}` : 'Static snapshot'}
+            label={[`Static snapshot`, day, version].filter(Boolean).join(' · ')}
             withArrow
             openDelay={200}
             disabled={open}
@@ -631,7 +637,11 @@ export const SnapshotStatus: React.FC<{ open: boolean }> = ({ open }) => {
               <Package size={14} strokeWidth={STROKE} aria-hidden className="hy-status-glyph" />
               <span className="hy-status-text">
                 <span>Static snapshot</span>
-                {version && <span className="hy-status-ver">{version}</span>}
+                {day && (
+                  <span className="hy-status-ver" title={`Exported ${day}`}>
+                    {day}
+                  </span>
+                )}
               </span>
             </button>
           </Tooltip>
@@ -640,12 +650,6 @@ export const SnapshotStatus: React.FC<{ open: boolean }> = ({ open }) => {
           <StaticSnapshotDetails manifest={manifest} />
         </Popover.Dropdown>
       </Popover>
-      {open && day && (
-        <span className="hy-mode">
-          <CalendarClock size={14} strokeWidth={STROKE} aria-hidden />
-          Exported {day}
-        </span>
-      )}
     </div>
   );
 };
@@ -705,7 +709,7 @@ export const ProjectRow: React.FC<{
     label={project.open ? 'Back to the dashboard' : `Project: ${project.name}`}
     withArrow
     openDelay={200}
-    disabled={open}
+    disabled={open && !project.open}
   >
     <button
       type="button"
@@ -720,11 +724,10 @@ export const ProjectRow: React.FC<{
       <span className="hy-row-icon">
         <FolderKanban size={20} strokeWidth={STROKE} aria-hidden />
       </span>
-      <span className="hy-row-label hy-row-label--stacked">
-        <span className="hy-row-eyebrow">Project</span>
-        <span className="hy-row-name" title={project.name}>
-          {project.name}
-        </span>
+      {/* One line, as "All dashboards" is in the live foot: the folder glyph
+          and the tooltip say it is the project. */}
+      <span className="hy-row-label hy-row-name" title={`Project: ${project.name}`}>
+        {project.name}
       </span>
     </button>
   </Tooltip>

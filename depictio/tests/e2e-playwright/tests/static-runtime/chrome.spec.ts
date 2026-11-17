@@ -103,11 +103,16 @@ test("the sidebar foot is a static snapshot's, not a server's", async ({ page })
   await expect(foot.getByText("Online")).toHaveCount(0);
   await expect(foot.getByText("All dashboards")).toHaveCount(0);
 
-  // The snapshot card: what the file is, its depictio, its export day.
+  // The snapshot card: what the file is and its export day, on one line like
+  // the live server card; its depictio is named for assistive tech and in the
+  // details it opens.
   const card = foot.getByTestId("hy-snapshot-card");
   await expect(card).toContainText("Static snapshot");
-  await expect(card).toContainText("v0.0.0-fixture");
-  await expect(card).toContainText("Exported 2026-08-03");
+  await expect(card).toContainText("2026-08-03");
+  await expect(foot.getByTestId("hy-snapshot")).toHaveAttribute(
+    "aria-label",
+    /exported 2026-08-03, depictio v0\.0\.0-fixture/,
+  );
 
   // It opens the whole provenance, the live copy link included.
   await foot.getByTestId("hy-snapshot").click();
@@ -124,6 +129,14 @@ test("the sidebar foot is a static snapshot's, not a server's", async ({ page })
 
   // The project row, where the live foot has "All dashboards".
   await expect(foot.getByTestId("glass-project")).toContainText("Fixture project");
+
+  // As tall as the live foot (a one-line server card and one 44px row), so
+  // the tab list above gets the same room: a taller foot made the rail scroll
+  // and hid a tab the live app shows.
+  const cardBox = await card.boundingBox();
+  const rowBox = await foot.getByTestId("glass-project").boundingBox();
+  expect(cardBox?.height).toBeLessThanOrEqual(56);
+  expect(rowBox?.height).toBeLessThanOrEqual(44);
 
   // Folded: icons only, named for assistive tech, nothing cut in half.
   await page.getByTestId("glass-side-toggle").click();
@@ -154,6 +167,9 @@ test("the project page opens from the sidebar and the Settings drawer", async ({
   const collections = projectPage.getByTestId("bundle-project-collections");
   const penguins = collections.locator("tr", { hasText: "penguins" });
   await expect(penguins).toContainText("In this file");
+  // Whole, not "In this…": the column is as wide as its badge.
+  const presence = penguins.locator(".mantine-Badge-label", { hasText: "In this file" });
+  expect(await presence.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(penguins).toContainText("3 rows · 2 columns");
   await expect(collections.locator("tr", { hasText: "multiqc_report" })).toContainText(
     "Not included",
