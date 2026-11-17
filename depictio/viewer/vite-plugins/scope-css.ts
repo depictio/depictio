@@ -23,17 +23,11 @@
  */
 import type { Plugin as PostcssPlugin, Rule } from 'postcss';
 
-const HEAD_ROOT = /^(?::root|html|body)(?![\w-])/i;
-const HEAD_ELEMENT = /^(?:\*|[a-z][\w-]*)/i;
+import { scopeSelector } from '../../../packages/depictio-static-core/src/combined';
 
-/** One selector of a rule, rewritten onto `rootSelector`. */
-export function scopeSelector(selector: string, rootSelector: string): string {
-  const s = selector.trim();
-  if (!s) return s;
-  if (HEAD_ROOT.test(s)) return s.replace(HEAD_ROOT, rootSelector);
-  if (HEAD_ELEMENT.test(s)) return `${rootSelector} ${s}`;
-  return s;
-}
+// One implementation for the build (the report runtime) and the page (the
+// combined runtime scopes the App's stylesheet in the report it is hosted by).
+export { scopeSelector } from '../../../packages/depictio-static-core/src/combined';
 
 function insideKeyframes(rule: Rule): boolean {
   let node = rule.parent;

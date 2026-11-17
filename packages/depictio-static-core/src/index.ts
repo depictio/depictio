@@ -16,3 +16,4 @@ export * from './multiqcSamples';
 export * from './contactMap';
 export * from './reportMount';
 export * from './bundledFiles';
+export * from './combined';
