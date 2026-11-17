@@ -1370,6 +1370,7 @@ export type {
   MigrationInviteDefaults,
   MigrationInviteList,
   NotebookRenderStatus,
+  NotebookPdfStyle,
   NotebookTheme,
   // MultiQC management types
   CreateMultiQCDCInput,

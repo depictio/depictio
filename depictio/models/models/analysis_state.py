@@ -198,6 +198,10 @@ class NotebookExportRequest(BaseModel):
     # Also a PDF (Quarto's typst, static figures) beside the HTML report; the
     # document then carries a `typst` format too. Off by default.
     pdf: bool = False
+    # The PDF's colours: "colour" keeps each tab's colour on its headings and
+    # in the contents and tints the notes; "mono" prints them in the text
+    # colour (print-friendly; figures are left as they are).
+    pdf_style: Literal["colour", "mono"] = "colour"
 
 
 class NotebookPreflightComponent(BaseModel):

@@ -100,17 +100,26 @@ class QuartoFrontMatter:
             # The HTML is one self-contained file: a link to "the other
             # format" beside it would point at nothing once it is moved.
             doc["format"]["html"]["format-links"] = False
-            doc["format"]["typst"] = {
-                "toc": True,
-                "toc-depth": 3,
+            typst: dict[str, Any] = {
+                # The title page and the contents page are the document's own
+                # (``pdf_typst``, a raw typst block opening the body): Quarto's
+                # centred title block and its contents are left out.
+                "title": "",
+                "subtitle": "",
+                "author": "",
+                "date": "",
+                "toc": False,
+                # The document's parts are h2 (no h1: the title is the page's),
+                # typst's are level 1: the results, a tab at 2, a section at 3.
+                "shift-heading-level-by": -1,
                 "papersize": "a4",
-                "margin": {"x": "1.8cm", "y": "2cm"},
-                "fontsize": "10pt",
+                "margin": {"x": "1.9cm", "top": "2.3cm", "bottom": "2.1cm"},
                 "fig-format": "png",
                 # The references are inline CSL (``references:``), which
                 # typst's own bibliography cannot read: pandoc resolves them.
                 "citeproc": True,
             }
+            doc["format"]["typst"] = typst
         if self.brand and self.brand_dark:
             doc["brand"] = {"light": self.brand, "dark": self.brand_dark}
             doc["format"]["html"]["respect-user-color-scheme"] = True

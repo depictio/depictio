@@ -28,6 +28,7 @@ import {
   type NotebookInclusion,
   type NotebookPreflight,
   type NotebookRenderStatus,
+  type NotebookPdfStyle,
   type NotebookTheme,
   Z_LAYERS,
 } from 'depictio-react-core';
@@ -88,6 +89,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   const [theme, setTheme] = useState<NotebookTheme>('paper');
   // Advanced: a PDF beside the HTML report (off by default).
   const [pdf, setPdf] = useState(false);
+  const [pdfStyle, setPdfStyle] = useState<NotebookPdfStyle>('colour');
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState<string | null>(null);
   const [job, setJob] = useState<NotebookRenderStatus | null>(null);
@@ -151,7 +153,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setDownloading(true);
     setError(null);
     try {
-      const filename = await exportNotebook(dashboardId, state, theme, pdf);
+      const filename = await exportNotebook(dashboardId, state, theme, pdf, pdfStyle);
       setDownloaded(filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -166,7 +168,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setError(null);
     setDownloaded(null);
     try {
-      const started = await startNotebookRender(dashboardId, state, theme, pdf);
+      const started = await startNotebookRender(dashboardId, state, theme, pdf, pdfStyle);
       setStartedAt(Date.now());
       setElapsed(0);
       setJob(started);
@@ -389,6 +391,26 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                 }
                 data-testid="notebook-export-pdf"
               />
+              <Stack gap={4} mt="sm">
+                <Text size="sm" fw={500} c={pdf ? undefined : 'dimmed'}>
+                  PDF colours
+                </Text>
+                <SegmentedControl
+                  value={pdfStyle}
+                  onChange={(v) => setPdfStyle(v as NotebookPdfStyle)}
+                  disabled={!pdf}
+                  data={[
+                    { label: 'Colour', value: 'colour' },
+                    { label: 'Monochrome', value: 'mono' },
+                  ]}
+                  data-testid="notebook-export-pdf-style"
+                />
+                <Text size="xs" c="dimmed">
+                  {pdfStyle === 'colour'
+                    ? 'Tab colours on headings and in the contents, tinted notes.'
+                    : 'Print-friendly: headings, contents and notes in the text colour. Figures keep theirs.'}
+                </Text>
+              </Stack>
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>

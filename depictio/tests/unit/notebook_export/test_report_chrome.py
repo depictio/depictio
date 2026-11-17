@@ -325,3 +325,79 @@ def test_a_tab_description_equal_to_the_subtitle_is_not_repeated(ampliseq_tabs):
     # A different subtitle leaves the tab's own description in place.
     body = _body(generate_qmd(_plan(ampliseq_tabs, subtitle="Something else")))
     assert f"*{subtitle}*" in body
+
+
+# ── The PDF's page ──────────────────────────────────────────────────────────
+
+
+def _typst_block(src: str) -> str:
+    m = re.search(r"````\{=typst\}\n(.*?)\n````", src, re.S)
+    assert m, "the PDF's page opens the body as a raw typst block"
+    return m.group(1)
+
+
+def _png_uri(w: int = 4, h: int = 2) -> str:
+    import base64
+    import struct
+
+    head = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", w, h)
+    return "data:image/png;base64," + base64.b64encode(head + b"\x08\x02\x00\x00\x00").decode()
+
+
+def test_the_pdf_carries_its_page(ampliseq_tabs):
+    plan = _plan(
+        ampliseq_tabs,
+        pdf=True,
+        depictio_mark=MARK,
+        logos={"ov-hero": {"light": _png_uri()}},
+    )
+    src = generate_qmd(plan)
+    typst = _front(src)["format"]["typst"]
+    # Quarto's centred title block and contents are left out: the page's own.
+    assert typst["title"] == "" and typst["toc"] is False
+    assert typst["shift-heading-level-by"] == -1
+    block = _typst_block(_body(src))
+    # Inter first, a fallback chain after it, a matching mono for code.
+    assert '#let dpx-sans = ("Inter", "Inter Variable", "Roboto"' in block
+    assert '"DejaVu Sans")' in block and '#let dpx-mono = ("JetBrains Mono"' in block
+    # Page 1 the title page, page 2 the contents alone, then the body.
+    title_page = block.index("#page(header: none, footer: none, numbering: none)[")
+    contents = block.index("#outline(title: text(size: 17pt)[Contents]")
+    body_pages = block.index('#set page(numbering: "1", header: context')
+    assert title_page < contents < body_pages
+    assert block.count("#page(header: none, footer: none, numbering: none)[") == 2
+    # The running header (mark + title, the tab in view) and footer.
+    assert "query(heading.where(level: 2))" in block and "dpx-title" in block
+    assert "Powered by" in block and "counter(page).display()" in block
+    # The title page shows the dashboard's logo (as SVG text typst can read).
+    assert "#dpx-logo(54pt)" in block and "<svg" in block
+    # Tab colours by heading label.
+    assert "\"tab-multiqc\": rgb(" in block
+
+
+def test_the_mono_pdf_emits_no_tab_colours(ampliseq_tabs):
+    block = _typst_block(_body(generate_qmd(_plan(ampliseq_tabs, pdf=True, pdf_style="mono"))))
+    assert "#let dpx-colors = (:)" in block
+    assert '#let dpx-accent = rgb("#212529")' in block
+    colour = _typst_block(_body(generate_qmd(_plan(ampliseq_tabs, pdf=True))))
+    assert "#let dpx-colors = (:)" not in colour
+
+
+def test_no_typst_page_without_the_pdf(ampliseq_tabs):
+    assert "{=typst}" not in generate_qmd(_plan(ampliseq_tabs))
+
+
+def test_the_pdf_style_is_validated():
+    import pytest
+    from pydantic import ValidationError
+
+    from depictio.models.models.analysis_state import NotebookExportRequest
+
+    state = {"context": {"dashboard_id": "646b0f3c1e4a2d7f8e5b8ca2"}}
+    assert NotebookExportRequest.model_validate({"state": state}).pdf_style == "colour"
+    assert (
+        NotebookExportRequest.model_validate({"state": state, "pdf_style": "mono"}).pdf_style
+        == "mono"
+    )
+    with pytest.raises(ValidationError):
+        NotebookExportRequest.model_validate({"state": state, "pdf_style": "sepia"})

@@ -190,10 +190,13 @@ def header_markdown(
         if wf_bits:
             proj_val += (" — " if proj_val else "") + ", ".join(wf_bits)
         meta_rows.append(("Project", proj_val))
-    parts.append("| | |\n|---|---|\n" + "\n".join(f"| **{k}** | {v} |" for k, v in meta_rows))
+    # The HTML's: a PDF opens on a title page that carries the same record.
     parts.append(
-        "Every cell below is what the dashboard computed for that view: the same table, "
-        "the same filters, in the same order."
+        '::: {.content-visible when-format="html"}\n'
+        + "| | |\n|---|---|\n"
+        + "\n".join(f"| **{k}** | {v} |" for k, v in meta_rows)
+        + "\n\nEvery cell below is what the dashboard computed for that view: the same "
+        "table, the same filters, in the same order.\n:::"
     )
 
     origin = project.get("template_origin") or {}
