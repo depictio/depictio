@@ -381,10 +381,23 @@ function figureDcIdFor(componentId: string): string {
 }
 
 export async function renderFigure(
-  _dashboardId: string,
+  dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[] = [],
   theme: 'light' | 'dark' = 'light',
+): Promise<FigureResponse> {
+  // A figure tile can draw on a map too (`px.scatter_map` in a code figure):
+  // its basemap gets the same offline fallback as a map tile's, or the style
+  // fetch fails offline and Plotly throws `Map error.` (`./mapBasemap.ts`).
+  const figure = await renderFigureUnmapped(dashboardId, componentId, filters, theme);
+  return withReachableBasemap(figure, theme, { retheme: false });
+}
+
+async function renderFigureUnmapped(
+  _dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
+  theme: 'light' | 'dark',
 ): Promise<FigureResponse> {
   // Live path (phase 5b): a figure with a binding table refills from the
   // bundled Parquet under the current filter state — the RFC §4

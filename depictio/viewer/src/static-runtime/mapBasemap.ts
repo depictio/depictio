@@ -59,6 +59,8 @@ const STYLE_URLS: Record<string, string> = {
 };
 
 const MAP_SUBPLOTS = ['map', 'mapbox'] as const;
+/** `layout.map.style` when the figure sets none (plotly.js 2.35). */
+const PLOTLY_DEFAULT_STYLE = 'basic';
 const PROBE_TIMEOUT_MS = 4000;
 /** Where an inlined style keeps the name it was resolved from (read back by
  *  `MapRenderer`'s basemap picker). */
@@ -82,15 +84,61 @@ export function probeUrlFor(style: unknown): string | null {
   return /^https?:\/\//.test(style) ? style : null;
 }
 
-/** A background-only MapLibre style: no source, no glyphs, no network. */
+/** The one source a blank style carries: an empty, inline GeoJSON. */
+export const BLANK_SOURCE_ID = 'depictio-blank';
+
+/**
+ * A background-only MapLibre style: no glyphs, no tiles, no network.
+ *
+ * `sources` must never be an empty object. On every update after the first,
+ * Plotly carries the old full layout over with `relinkPrivateKeys`, which
+ * deletes any plain object left empty — and `map.style` is the user's own
+ * object, held by reference. The style then reached MapLibre's `setStyle`
+ * without `sources` ("missing required property"), MapLibre fired `error`,
+ * and Plotly rejected with `Error: Map error.` as a page error: the first
+ * filter change after an offline open did it, on the floating map and on any
+ * grid map alike. One inline, empty GeoJSON source keeps it non-empty.
+ */
 export function blankStyle(theme: ThemeName): Record<string, unknown> {
   const colour = theme === 'dark' ? DEFAULT_THEME.colors.dark[7] : DEFAULT_THEME.white;
   return {
     version: 8,
     name: 'depictio-offline-blank',
-    sources: {},
+    sources: {
+      [BLANK_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    },
     layers: [{ id: 'blank-bg', type: 'background', paint: { 'background-color': colour } }],
   };
+}
+
+/**
+ * Drop the empty plain objects of an inlined style document, the ones Plotly
+ * would delete on the next update anyway (see `blankStyle`), and give it a
+ * `sources` entry if it would otherwise be left without one. Arrays are kept
+ * as they are: MapLibre reads their positions.
+ */
+export function plotlySafeStyle(style: Record<string, unknown>): Record<string, unknown> {
+  const prune = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(prune);
+    if (value === null || typeof value !== 'object') return value;
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const kept = prune(child);
+      if (
+        kept !== null &&
+        typeof kept === 'object' &&
+        !Array.isArray(kept) &&
+        Object.keys(kept as Record<string, unknown>).length === 0
+      ) {
+        continue;
+      }
+      out[key] = kept;
+    }
+    return out;
+  };
+  const safe = prune(style) as Record<string, unknown>;
+  if (!safe.sources) safe.sources = blankStyle('light').sources;
+  return safe;
 }
 
 /** What a probe learned: the style document (a Carto style.json, fetched with
@@ -134,17 +182,34 @@ async function runProbe(url: string): Promise<Probe> {
   }
 }
 
+/** True when a figure draws on a MapLibre subplot (`map` / legacy `mapbox`). */
+export function hasMapSubplot(layout: Record<string, unknown> | undefined): boolean {
+  return MAP_SUBPLOTS.some((key) => {
+    const sub = layout?.[key];
+    return sub !== null && typeof sub === 'object';
+  });
+}
+
 /** Theme the frozen map's basemap, then swap it for a blank one if its host
- *  cannot be reached. Returns a new payload; the manifest stays pristine. */
+ *  cannot be reached. Returns a new payload; the manifest stays pristine.
+ *
+ *  `retheme: false` is for a figure tile that happens to draw a map (a
+ *  `px.scatter_map` in a code figure): the server never swaps its style by
+ *  colour scheme, only `render_map` does, so only the reachability half
+ *  applies. Every path that hands Plotly a map goes through here, or offline
+ *  the style fetch fails and Plotly throws `Map error.`. */
 export async function withReachableBasemap<
   T extends { figure?: { data?: unknown[]; layout?: Record<string, unknown> } },
->(payload: T, theme: ThemeName): Promise<T> {
+>(payload: T, theme: ThemeName, { retheme = true }: { retheme?: boolean } = {}): Promise<T> {
+  if (!hasMapSubplot(payload.figure?.layout)) return payload;
   const layout = { ...(payload.figure?.layout ?? {}) };
   for (const key of MAP_SUBPLOTS) {
     const sub = layout[key];
     if (sub === null || typeof sub !== 'object') continue;
     const subplot = { ...(sub as Record<string, unknown>) };
-    const name = themedMapStyle(subplot.style, theme);
+    // An unset style is Plotly's default, which is a network style too.
+    const own = subplot.style ?? (key === 'map' ? PLOTLY_DEFAULT_STYLE : undefined);
+    const name = retheme ? themedMapStyle(own, theme) : own;
     subplot.style = name;
     const url = probeUrlFor(name);
     if (url !== null) {
@@ -157,13 +222,13 @@ export async function withReachableBasemap<
         // `Plotly.react` without waiting for it ("Style is not done loading",
         // an uncaught rejection that drops the markers); an inline document
         // is in place by then. The name rides along for the basemap picker.
-        subplot.style = {
+        subplot.style = plotlySafeStyle({
           ...probe,
           metadata: {
             ...((probe.metadata as Record<string, unknown> | undefined) ?? {}),
             [STYLE_NAME_KEY]: name,
           },
-        };
+        });
       }
     }
     layout[key] = subplot;
