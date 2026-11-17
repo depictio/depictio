@@ -493,11 +493,21 @@ class TestServerSettings:
     def _settings(self, monkeypatch, **env):
         from depictio.api.v1.configs.settings_models import Settings
 
-        for name in ("DEPICTIO_S3_ROOT_PASSWORD", "DEPICTIO_MINIO_ROOT_PASSWORD"):
+        # The secret checks run on a server boot outside single-user mode only:
+        # other tests in the same worker may have left either in the environment.
+        for name in (
+            "DEPICTIO_S3_ROOT_PASSWORD",
+            "DEPICTIO_MINIO_ROOT_PASSWORD",
+            "DEPICTIO_AUTH_SINGLE_USER_MODE",
+            "DEPICTIO_AUTH_UNAUTHENTICATED_MODE",
+            "DEPICTIO_STORAGE_BACKEND",
+            "DEPICTIO_GCS_BUCKET",
+        ):
             monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
         for name, value in env.items():
             monkeypatch.setenv(name, value)
-        return Settings()
+        return Settings(context="server")
 
     def test_an_instance_on_gcs_needs_no_s3_secret(self, monkeypatch):
         settings = self._settings(
