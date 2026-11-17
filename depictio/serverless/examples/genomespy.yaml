@@ -1,0 +1,48 @@
+# Worked producer-B example — GenomeSpy tiles with no network.
+#
+# A genome_view tile, one lane per track with its name as a bold lane title,
+# over the hg38 gene lane. Live, a bold title makes GenomeSpy fetch Lato bold
+# from raw.githubusercontent.com and the gene lane fetches
+# `assets/genomes/hg38.genes.json` from the server. In a bundle neither is
+# reachable: the runtime draws every label in the font GenomeSpy embeds, and
+# the producer ships the hg38 gene table inside the file
+# (depictio/serverless/gene_assets.py, static-runtime/genomeAssets.ts).
+#
+# Data (advanced_viz_showcase), laid out by generate_demo_manifest.py:
+#   <data_dir>/genomespy_demo/locus_coverage_demo.parquet
+
+title: "Genome tracks offline — static bundle example"
+subtitle: "Producer B worked example (GenomeSpy fonts and gene table in the file)"
+
+components:
+  - tag: viz-genome-depth
+    component_type: advanced_viz
+    workflow_tag: genomespy_demo
+    data_collection_tag: locus_coverage_demo
+    title: "ChIP-seq depth over the genes"
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: start
+      end_col: end
+      score_col: coverage
+      sample_col: sample
+      mark: bar
+      score_title: depth
+      facet_by_sample: true
+      max_facets: 4
+      annotation: hg38
+      assembly: hg38
+    layout: {x: 0, y: 0, w: 8, h: 8}
+
+  - tag: filter-sample
+    component_type: interactive
+    workflow_tag: genomespy_demo
+    data_collection_tag: locus_coverage_demo
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    title: "Track"
+    placement: left
+    layout: {x: 0, y: 0, w: 1, h: 3}

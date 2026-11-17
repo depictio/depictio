@@ -20,6 +20,7 @@
  */
 
 import type { GeneRow } from './genomeSpySpec';
+import { currentGeneAssetSource } from './offlineAssets';
 
 interface GeneAssetPayload {
   assembly?: string;
@@ -99,10 +100,13 @@ export function loadGeneAnnotation(assembly: string | null | undefined): Promise
   if (!assembly || !GENE_ASSET_ASSEMBLIES.includes(assembly)) return Promise.resolve(null);
   const hit = cache.get(assembly);
   if (hit) return hit;
-  const pending = fetch(geneAssetUrl(assembly))
-    .then((res) => (res.ok ? res.json() : null))
-    .then((json) => decodeGeneAsset(json))
-    .catch(() => null);
+  // A host that serves the tables itself (a static bundle) is asked instead,
+  // and its null means "not shipped": no request is made either way.
+  const source = currentGeneAssetSource();
+  const payload = source
+    ? Promise.resolve().then(() => source(assembly))
+    : fetch(geneAssetUrl(assembly)).then((res) => (res.ok ? res.json() : null));
+  const pending = payload.then((json) => decodeGeneAsset(json)).catch(() => null);
   cache.set(assembly, pending);
   return pending;
 }

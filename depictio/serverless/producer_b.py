@@ -1184,6 +1184,12 @@ def build_manifest(
             frozen[row.component_id] = FrozenPayload(kind="figure", payload=payload)
 
     objects, addons = _collect_objects_b(components, tier_by_id, data_path, inline_blobs)
+    # Gene tables for the genome tiles (``gene_assets``): file:// cannot fetch
+    # `./assets/genomes/...`, so the bundle carries the ones its tiles name.
+    from depictio.serverless.gene_assets import gene_blobs
+
+    genes, _ = gene_blobs(components, _template_path().parent)
+    inline_blobs.update(genes)
     python_components, python_addon = _settle_python_b(
         components, tier_by_id, bindings, data_refs, python_candidates, python_runtime, spec
     )

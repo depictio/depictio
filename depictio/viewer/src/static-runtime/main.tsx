@@ -39,10 +39,14 @@ import { installBundleNavigation } from './tabNav';
 import { installInlineMultiqcLogos } from '../chrome/multiqcLogo';
 import { BundleProjectPageContext, type BundleProjectPage } from '../chrome/bundlePage';
 import ProjectPage from './ProjectPage';
+import { installOfflineGenomeAssets } from './genomeAssets';
 
 // file:// cannot reach `/dashboard/logos/...`: MultiQC tab icons use the
 // inlined copies instead (react-core's themedIconSrc reads this).
 installInlineMultiqcLogos();
+// GenomeSpy tiles: the embedded font only (any other weight is fetched from
+// GitHub), and the gene tables the producer shipped (never `./assets/genomes`).
+installOfflineGenomeAssets();
 
 // Also sets window.__DEPICTIO_STATIC_DASHBOARD_ID__ (via setActiveTab below /
 // loadBundleFromDocument's seed): App has no /dashboard/<id> route to read on

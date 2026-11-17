@@ -3503,6 +3503,16 @@ def export_manifest(
     objects, resolved_structures, addons = collect_objects_a(
         items, tier_by_id, pruned_frames, inline_blobs, user, object_budget
     )
+    # The gene tables the genome tiles draw from: the server serves them under
+    # its base URL, a bundle has to carry them (``gene_assets``).
+    from depictio.serverless.gene_assets import gene_blobs
+    from depictio.serverless.producer_b import _template_path
+
+    genes, _ = gene_blobs(
+        (comp for _tab, comp, cid in items if tier_by_id[cid].tier is not ComponentTier.OMITTED),
+        _template_path().parent,
+    )
+    inline_blobs.update(genes)
     if python_info.get("embedded"):
         addons.append(python_info["addon"])
     if jbrowse_tiles:
