@@ -59,6 +59,7 @@ def test_the_shipped_table_decodes_to_the_served_one():
 
 def test_a_table_this_process_cannot_read_is_left_out(monkeypatch, tmp_path):
     monkeypatch.setattr(gene_assets, "_SOURCE_DIR", tmp_path)
+    monkeypatch.setattr(gene_assets, "_DIST_DIR", tmp_path / "dist")
     blobs, missing = gene_assets.gene_blobs(ADVVIZ, template_dir=tmp_path)
     assert blobs == {} and missing == ["hg38"]
 
@@ -68,3 +69,13 @@ def test_a_table_this_process_cannot_read_is_left_out(monkeypatch, tmp_path):
     (genomes / "hg38.genes.json").write_text('{"columns": [], "genes": []}')
     blobs, missing = gene_assets.gene_blobs(ADVVIZ, template_dir=tmp_path)
     assert set(blobs) == {"genes_hg38"} and missing == []
+
+
+def test_a_wheel_reads_the_table_from_the_spa_build(monkeypatch, tmp_path):
+    """A wheel ships viewer/dist (Vite copies public/ into it), not public/."""
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "hg38.genes.json").write_text('{"columns": [], "genes": []}')
+    monkeypatch.setattr(gene_assets, "_SOURCE_DIR", tmp_path / "absent")
+    monkeypatch.setattr(gene_assets, "_DIST_DIR", dist)
+    assert gene_assets.gene_asset_path("hg38") == dist / "hg38.genes.json"
