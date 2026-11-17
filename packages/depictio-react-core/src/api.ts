@@ -1326,6 +1326,10 @@ function filenameFromDisposition(header: string | null, fallback: string): strin
  *  instance brand), or the classic one (Quarto's stock page, Plotly's figures). */
 export type NotebookTheme = 'paper' | 'classic';
 
+/** The PDF's colours: tab colours on headings and in the contents, or the
+ *  print-friendly neutral text colour throughout. */
+export type NotebookPdfStyle = 'colour' | 'mono';
+
 /** Download the dashboard as a Quarto document (`.qmd`). The server never
  *  executes it: the document is generated text, run by whoever renders it. */
 export async function exportNotebook(
@@ -1333,10 +1337,11 @@ export async function exportNotebook(
   state: unknown,
   theme: NotebookTheme = 'paper',
   pdf = false,
+  pdfStyle: NotebookPdfStyle = 'colour',
 ): Promise<string> {
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}`, {
     method: 'POST',
-    body: JSON.stringify({ state, theme, pdf }),
+    body: JSON.stringify({ state, theme, pdf, pdf_style: pdfStyle }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to export the notebook');
   const blob = await res.blob();
@@ -1369,12 +1374,14 @@ export async function startNotebookRender(
     output?: NotebookRenderOutput;
     defaultView?: CombinedDefaultView;
     pdf?: boolean;
+    pdfStyle?: NotebookPdfStyle;
   } = {},
 ): Promise<NotebookRenderStatus> {
   const body: Record<string, unknown> = { state, theme };
   if (options.output) body.output = options.output;
   if (options.defaultView) body.default_view = options.defaultView;
   if (options.pdf) body.pdf = true;
+  if (options.pdfStyle) body.pdf_style = options.pdfStyle;
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
     method: 'POST',
     body: JSON.stringify(body),

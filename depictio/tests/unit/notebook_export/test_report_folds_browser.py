@@ -164,3 +164,28 @@ def test_the_contents_follow_the_tab_in_view(page):
     assert current.get_attribute("href") == "#tab-overview"
     multiqc = page.locator("#TOC a[href='#tab-multiqc']").first.locator("xpath=..")
     assert not multiqc.locator(":scope > ul").is_visible()
+
+
+def test_a_missing_font_falls_back_without_failing(tmp_path):
+    """The PDF's fonts are a preference: a machine without Inter (or without
+    any of the chain) still produces the PDF, typst only warns."""
+    from depictio.api.v1.services.notebook_export.pdf_typst import typst_preamble
+
+    preamble = typst_preamble(title="T", subtitle="S", primary="#228be6").replace(
+        '"Inter"', '"No Such Font"'
+    )
+    (tmp_path / "t.qmd").write_text(
+        "---\ntitle: T\nformat:\n  typst:\n    title: ''\n    toc: false\n"
+        "    shift-heading-level-by: -1\n---\n\n"
+        f"````{{=typst}}\n{preamble}\n````\n\n## Results\n\n### A tab {{#tab-a}}\n\ntext\n"
+    )
+    proc = subprocess.run(
+        [str(quarto_binary()), "render", "t.qmd", "--to", "typst"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert (tmp_path / "t.pdf").exists()
+    assert "unknown font family" in (proc.stdout + proc.stderr).lower()

@@ -57,7 +57,11 @@ WORKDIR /app
 # screenshot renders in Times. `fonts-roboto` matches the stack's named
 # family, `fonts-liberation` covers Arial-metric text (Plotly's default
 # `arial, sans-serif`), and `fontconfig` builds the cache so the generic
-# `sans-serif` keyword also resolves to a real sans face.
+# `sans-serif` keyword also resolves to a real sans face. `fonts-inter` and
+# `fonts-jetbrains-mono` are the report PDF's type (typst and the static
+# figures read installed fonts only, no web font): Inter for text, as in the
+# app, JetBrains Mono for code. Without them the PDF falls back to Roboto /
+# Liberation / DejaVu, never fails.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl \
         netcat-openbsd \
@@ -65,6 +69,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         fontconfig \
         fonts-roboto \
         fonts-liberation \
+        fonts-inter \
+        fonts-jetbrains-mono \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \

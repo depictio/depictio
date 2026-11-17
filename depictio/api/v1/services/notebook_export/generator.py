@@ -36,6 +36,7 @@ from .aggregations import agg_expr_source
 from .cells import Cell, md_cell, render_qmd
 from .classify import Classification, classify
 from .names import NameAllocator, slug
+from .pdf_typst import typst_preamble
 from .predicates import PredicateSource, emit_filter_expr, emit_predicate
 from .provenance import (
     EXPORT_DETAILS_ICON,
@@ -182,6 +183,7 @@ body table:not(.dpx-plain) { border-collapse: collapse; }
 body table:not(.dpx-plain) th { border-bottom: 1px solid #ced4da; }
 body table:not(.dpx-plain) td { border-bottom: 1px solid #f1f3f5; }
 .dpx-h { cursor: pointer; }
+.dpx-hc { color: var(--dpx-hc); }
 .dpx-chev {
   display: inline-block; width: .8em; font-size: .65em; opacity: .45;
   margin-inline-end: .28em; transition: transform .15s ease;
@@ -985,6 +987,9 @@ class ExportPlan:
     dashboard_public: bool = False
     # Also a PDF: the document carries a typst format beside the HTML one.
     pdf: bool = False
+    # The PDF's colours: ``colour`` (tab colours on headings and in the
+    # contents, tinted notes) or ``mono`` (print-friendly, the text colour).
+    pdf_style: str = "colour"
 
     @property
     def dashboard_id(self) -> str:
@@ -1327,6 +1332,11 @@ class NotebookBuilder:
     # ------------------------------------------------------------------ build
     def build(self) -> str:
         cells: list[Cell] = []
+        if self.plan.pdf:
+            # The PDF's page, first in the body: a raw typst block, which only
+            # the typst writer reads. Not a format option: it holds the marks
+            # as text, too long for the command line Quarto passes those on.
+            cells.append(md_cell(f"````{{=typst}}\n{self._typst_preamble()}\n````"))
         cells.append(self._imports_cell())
         cells.append(self._theme_cell())
         cells.append(self._connection_cell())
@@ -1369,10 +1379,63 @@ class NotebookBuilder:
             accent = self._accent()
             body = (
                 f"{'#' * RESULTS_LEVEL} {self._icon_html(METHODS_ICON, accent)}"
-                f'<span style="color:{accent}">{METHODS_HEADING}</span> {{#methods}}\n\n' + body
+                f'<span class="dpx-hc" style="--dpx-hc:{accent}">{METHODS_HEADING}</span> '
+                "{#methods}\n\n" + body
             )
         self._methods_cache = (body, refs)
         return self._methods_cache
+
+    def _heading_colors(self) -> dict[str, str]:
+        """Each tab's and section's heading label, with its colour (as the HTML
+        draws it): what the PDF colours its headings and contents by."""
+        # The document's own parts wear the primary, as on the page.
+        out: dict[str, str] = {k: self._accent() for k in ("filters", "results", "methods")}
+        seq = iter(self._section_anchor_seq)
+        for unit in ordered_units(self.plan.tabs):
+            if not isinstance(unit, MarkdownUnit):
+                continue
+            if unit.kind == "tab":
+                brand = self.plan.tab_brands.get(unit.dashboard_id or "") or self.plan.brand or {}
+                accent = _resolve_accent_hex(unit.color, brand.get("primary") or "")
+                anchor = self.tab_anchors.get(unit.dashboard_id or unit.text)
+            else:
+                accent = _resolve_accent_hex(unit.color, "")
+                anchor = next(seq, None)
+            if anchor and accent:
+                out[anchor] = accent
+        return out
+
+    def _typst_preamble(self) -> str:
+        plan = self.plan
+        project = plan.project or {}
+        exported = f"{plan.exported_at:%Y-%m-%d %H:%M} UTC"
+        if plan.exported_by:
+            exported += f" by {plan.exported_by}"
+        if plan.instance:
+            exported += f" from {plan.instance}"
+        state = (
+            "; ".join(f"{s.label}: {self._filter_value_text(s)}" for s in plan.stages)
+            or "No filter active"
+        )
+        rows = [
+            ("Exported", exported),
+            ("Project", str(project.get("name") or "")),
+            ("Exported state", state),
+            ("Depictio", plan.depictio_version or ""),
+            ("Live dashboard", self._dashboard_url() if plan.dashboard_public else ""),
+        ]
+        hero = self.hero
+        return typst_preamble(
+            title=plan.title,
+            subtitle=plan.subtitle,
+            primary=self._accent(),
+            style=plan.pdf_style,
+            dashboard_mark=plan.dashboard_logo,
+            title_logo=hero[1] if hero else None,
+            depictio_mark=plan.depictio_mark,
+            provenance=rows,
+            heading_colors=self._heading_colors(),
+        )
 
     def _dashboard_url(self) -> str:
         return f"{self.plan.api_url.rstrip('/')}/dashboard/{self.plan.dashboard_id}"
@@ -2694,7 +2757,15 @@ fig_funnel"""
         # tab in the report" lands on it.
         tab = f' data-depictio-tab="{_esc(tab_id)}"' if tab_id else ""
         mark = f'<span data-dpx-accent="{accent}" data-dpx-kind="{kind}"{fold}{tab}>{icon}</span>'
-        title = f'<span style="color:{accent}">{_esc(text)}</span>' if accent else _esc(text)
+        # The colour as a custom property the page's stylesheet reads, not a
+        # `color:` of its own: Quarto turns an inline colour into a typst fill,
+        # and the PDF colours its headings itself (``pdf_typst``, by label),
+        # so its monochrome style can leave them in the text colour.
+        title = (
+            f'<span class="dpx-hc" style="--dpx-hc:{accent}">{_esc(text)}</span>'
+            if accent
+            else _esc(text)
+        )
         aside = f' <span class="dpx-h-note">{_esc(note)}</span>' if note else ""
         return f"{'#' * max(1, min(6, level))} {mark}{title}{aside}"
 

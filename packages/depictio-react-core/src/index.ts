@@ -1416,6 +1416,7 @@ export type {
   MigrationInviteDefaults,
   MigrationInviteList,
   NotebookRenderStatus,
+  NotebookPdfStyle,
   NotebookTheme,
   NotebookRenderOutput,
   CombinedDefaultView,

@@ -55,11 +55,24 @@ def static_figures() -> bool:
     return os.environ.get(STATIC_FIGURES_ENV, "") not in ("", "0", "false")
 
 
+#: A static figure's width in CSS pixels: a PDF page's text column is about
+#: this wide at Plotly's 12 px labels, so the figure's text prints at the size
+#: the body's does (8-9 pt) rather than shrunk from a 1000 px canvas.
+STATIC_FIGURE_WIDTH = 720
+
+
 def figure_png(fig) -> str | None:
-    """The figure as a base64 PNG (kaleido), or ``None`` when it cannot be drawn."""
+    """The figure as a base64 PNG (kaleido), or ``None`` when it cannot be drawn.
+
+    In the report's type (Inter, then the system's sans), like the page around it.
+    """
     try:
-        height = getattr(fig.layout, "height", None) or 460
-        data = fig.to_image(format="png", width=1000, height=int(height), scale=2)
+        import plotly.graph_objects as go
+
+        fig = go.Figure(fig)
+        fig.update_layout(font_family=_theme.sans_stack())
+        height = getattr(fig.layout, "height", None) or 420
+        data = fig.to_image(format="png", width=STATIC_FIGURE_WIDTH, height=int(height), scale=3)
     except Exception:  # noqa: BLE001 - no kaleido, no browser: the figure is left out
         return None
     return base64.b64encode(data).decode("ascii")
@@ -213,11 +226,17 @@ def use_document_renderer() -> bool:
         try:
             png = pio.renderers["png"]
             if not getattr(png, "_dpx_theme", False):
-                png.width, png.scale = 1000, 2
+                png.width, png.scale = STATIC_FIGURE_WIDTH, 3
                 inner_png = png.to_mimebundle
-                png.to_mimebundle = lambda fig_dict, _inner=inner_png: _inner(
-                    _theme.apply_theme(fig_dict)
-                )
+
+                def static_bundle(fig_dict, _inner=inner_png):
+                    themed = _theme.apply_theme(fig_dict)
+                    themed.setdefault("layout", {}).setdefault("font", {})["family"] = (
+                        _theme.sans_stack()
+                    )
+                    return _inner(themed)
+
+                png.to_mimebundle = static_bundle
                 png._dpx_theme = True
             pio.renderers.default = "png"
         except (KeyError, ValueError, ImportError):

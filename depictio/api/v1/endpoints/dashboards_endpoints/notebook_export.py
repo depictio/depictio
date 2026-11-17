@@ -560,6 +560,7 @@ def build_export_plan(
     theme: str = "paper",
     embed_runtime: bool = False,
     pdf: bool = False,
+    pdf_style: str = "colour",
 ) -> ExportPlan:
     family_id, raw_tabs = routes._resolve_tab_family(dashboard_id, current_user, TAB_PROJECTION)
     tabs = [convert_objectid_to_str(t) for t in raw_tabs]
@@ -718,6 +719,7 @@ def build_export_plan(
         theme=theme,
         embed_runtime=embed_runtime,
         pdf=pdf,
+        pdf_style=pdf_style,
     )
 
 
@@ -809,6 +811,7 @@ def notebook_export_preflight(
         access_token,
         theme=request.theme,
         pdf=request.pdf,
+        pdf_style=request.pdf_style,
     )
     # Whether the *worker* can render is not something the API can see (Quarto
     # lives in the worker image), so this is the operator's switch, not a probe.
@@ -847,6 +850,7 @@ def notebook_export(
         # runtime from this API, which only works for an owner with access.
         embed_runtime=_embed_runtime(request, dashboard_id, current_user, default=False),
         pdf=request.pdf,
+        pdf_style=request.pdf_style,
     )
     source = NotebookBuilder(plan).build()
     return Response(
@@ -975,6 +979,7 @@ async def notebook_export_render(
         theme=request.theme,
         embed_runtime=embed_runtime,
         pdf=request.pdf,
+        pdf_style=request.pdf_style,
     )
     builder = NotebookBuilder(plan)
     _require_owner_for_authored_code(dashboard_id, current_user, builder)
