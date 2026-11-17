@@ -301,3 +301,19 @@ def test_cli_against_a_newer_schema(monkeypatch, tmp_path):
     result = _cli(monkeypatch, "nf-core/rnaseq/3.26.0", "--schema", str(old), "--against", str(new))
     assert result.exit_code == 1, result.output
     assert "PSEUDOALIGNER_ONLY reads skip_alignment, gone from the release" in result.output
+
+
+@pytest.mark.parametrize("name", ["samplesheet.csv", "samplesheet.yaml", "samplesheet.json"])
+def test_cli_finds_the_run_samplesheet_as_ingest_does(monkeypatch, tmp_path, name):
+    """`--run` reports SAMPLESHEET_FILE as set for a YAML/JSON sheet in `input/` too,
+    as `depictio ingest` detects it (#1280)."""
+    run = tmp_path / "run"
+    (run / "input").mkdir(parents=True)
+    (run / "input" / name).write_text("sample\ntest\n" if name.endswith(".csv") else "[]\n")
+    schema = tmp_path / "nextflow_schema.json"
+    schema.write_text(json.dumps({"properties": {}}))
+    result = _cli(
+        monkeypatch, "nf-core/rnafusion/latest", "--run", str(run), "--schema", str(schema)
+    )
+    row = next(line for line in result.output.splitlines() if "SAMPLESHEET_FILE" in line)
+    assert [cell.strip() for cell in row.split("│")][4] == "set", result.output
