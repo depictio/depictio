@@ -162,7 +162,7 @@ services:
         # dashboard author's own code on the worker, and only a worker image
         # built with Quarto can serve it. Backend and worker must agree, or the
         # export modal offers a format the job cannot produce.
-        DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED: "${DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED:-false}"
+        DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED: "${DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED:-true}"
         # Anonymous installation telemetry. Off by default in the DEV stack: this
         # compose file is what maintainers and contributors run, and counting our
         # own development boots as installations would be the fastest way to make
@@ -293,9 +293,10 @@ services:
       dockerfile: docker-images/Dockerfile.worker
       context: .
       args:
-        # Quarto (~250 MB) only for a worker that renders notebook reports
-        # (DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED); see Dockerfile.worker.
-        WITH_QUARTO: "${DEPICTIO_WORKER_WITH_QUARTO:-false}"
+        # Quarto (~250 MB): the worker renders the reports and the default
+        # combined export. false for a lighter worker, with
+        # DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED=false; see Dockerfile.worker.
+        WITH_QUARTO: "${DEPICTIO_WORKER_WITH_QUARTO:-true}"
     volumes:
       - ./depictio:/app/depictio
       # Mêmes raisons que le backend, plus depictio/tests : en dev mode le worker
@@ -347,7 +348,7 @@ services:
         DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
         # Match the backend flag: the API only offers the rendered report when
         # this is on, and this worker is what actually runs `quarto render`.
-        DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED: "${DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED:-false}"
+        DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED: "${DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED:-true}"
         # Mirror the backend mount so both processes write to the same dir.
         DEPICTIO_MULTIQC_PRERENDER_DIR: "/app/multiqc_prerender"
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"

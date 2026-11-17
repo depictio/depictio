@@ -436,7 +436,7 @@ def test_preflight_verdicts(patched_env):
     assert [s.index for s in pre.stages] == ["comp-habitat", "comp-temp", "comp-depth"]
     assert pre.dcs[0].tag == "samples" and pre.dcs[0].rows == BASE_DF.height
     assert pre.counts["code"] == 5 and pre.counts["api"] == 2
-    assert pre.render_available is False  # the report is opt-in per deployment
+    assert pre.render_available is True  # on by default; a deployment turns it off
 
 
 def test_inactive_filters_are_not_stages(patched_env):
@@ -536,8 +536,12 @@ def _render(state):
     )
 
 
-def test_render_off_by_default_is_501(patched_env):
-    with pytest.raises(HTTPException) as exc:
+def test_render_turned_off_is_501(patched_env):
+    """On by default; a deployment whose worker has no Quarto turns it off."""
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", False),
+        pytest.raises(HTTPException) as exc,
+    ):
         _render(_state([]))
     assert exc.value.status_code == 501
 

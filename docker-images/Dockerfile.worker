@@ -58,15 +58,17 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 
 # Quarto renders the exported notebook into the HTML report
 # (`render_notebook_report`). It is a binary with its own pandoc, not a
-# library, so it is installed rather than depended on: ~250 MB, for a feature
-# that is off by default (DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED). So it is
-# opt-in here too: build with `--build-arg WITH_QUARTO=true` for a worker that
-# renders reports (compose: DEPICTIO_WORKER_WITH_QUARTO=true). Without it the
-# notebook export, the `.qmd` download and figure extraction all work; only the
-# rendered report is refused, with a message naming this build arg. It ships
+# library, so it is installed rather than depended on: ~250 MB. It is in by
+# default, as the rendered report is: the default export is the combined report
+# + dashboard file, which the worker renders. Build with `--build-arg
+# WITH_QUARTO=false` (compose: DEPICTIO_WORKER_WITH_QUARTO=false) for a lighter
+# worker, and set DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED=false with it: the
+# notebook export, the `.qmd` download, figure extraction and the dashboard-only
+# bundle all still work; only the rendered report and the combined file are
+# refused, with a message naming this build arg. It ships
 # here and not in the API image: the render is worker work, minutes long and a
 # browser pass per rendered tile.
-ARG WITH_QUARTO=false
+ARG WITH_QUARTO=true
 ARG QUARTO_VERSION=1.9.37
 RUN if [ "${WITH_QUARTO}" = "true" ]; then \
         arch="$(dpkg --print-architecture)" \

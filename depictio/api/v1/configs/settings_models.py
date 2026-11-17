@@ -2906,11 +2906,13 @@ class NotebookExportConfig(BaseSettings):
         ),
     )
     render_enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Offer the rendered HTML report as well as the Quarto document. Off by default: "
-            "the render executes the exported document on a worker, which needs Quarto and a "
-            "Jupyter kernel in the worker image and costs a browser pass per rendered tile. "
+            "Offer the rendered HTML report (and the combined report + dashboard file, the "
+            "default export) as well as the Quarto document. On by default: the worker image "
+            "ships Quarto and the Jupyter kernel (`WITH_QUARTO`, `--extra render`). Turn it "
+            "off for a worker built without them; the render executes the exported document "
+            "on a worker and costs a browser pass per rendered tile. "
             "A dashboard carrying code-mode figures is only rendered for its owners, since "
             "their Python runs on the worker."
         ),
