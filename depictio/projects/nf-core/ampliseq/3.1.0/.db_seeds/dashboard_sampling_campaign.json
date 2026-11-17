@@ -320,7 +320,7 @@
       "filterable": true,
       "compact": false,
       "row_selection_enabled": true,
-      "row_selection_column": "sampleID",
+      "row_selection_column": "sample",
       "wf_tag": "nextflow/ampliseq"
     }
   ],

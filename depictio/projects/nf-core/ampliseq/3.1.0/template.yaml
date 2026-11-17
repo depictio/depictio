@@ -11,7 +11,8 @@
 # ⚠️  METADATA IS OPTIONAL in this template.
 # Without --var METADATA_FILE=...: metadata DC and ancombc_results DC are excluded.
 # With metadata: extended analysis (grouping by any metadata col, ANCOM-BC) is enabled.
-# Required metadata column: "ID" — must match the sampleID in the samplesheet.
+# Required metadata column: "ID" — must match the samplesheet's `sample` column
+# (ampliseq 3.x renamed sampleID/forwardReads/reverseReads to sample/fastq_1/fastq_2).
 # All other metadata columns are passed through and available for dashboard grouping.
 template:
   template_id: "nf-core/ampliseq/3.1.0"
@@ -370,7 +371,9 @@ workflows:
           dc_specific_properties:
             format: "CSV"
             columns_description:
-              "sampleID": "Sample identifier (used for cross-DC filtering via links)"
+              "sample": "Sample identifier (used for cross-DC filtering via links; sampleID before ampliseq 3.0)"
+              "fastq_1": "Forward reads"
+              "fastq_2": "Reverse reads (empty for single-end)"
 
       - data_collection_tag: "metadata"
         optional: true
@@ -388,7 +391,7 @@ workflows:
               separator: "\t"
               try_parse_dates: true
             columns_description:
-              "sample": "Sample identifier — must match samplesheet sampleID. All other columns are passed through."
+              "sample": "Sample identifier — must match the samplesheet `sample`. All other columns are passed through."
 
       # Reads through the run, from overall_summary.tsv. Every route writes the
       # file but with different columns (see the recipe), so the recipe derives
@@ -893,7 +896,7 @@ workflows:
 links:
   # Link 1 (always present): Samplesheet -> MultiQC (primary sample filter)
   - source_dc_tag: "samplesheet"
-    source_column: "sampleID"
+    source_column: "sample"
     target_dc_tag: "multiqc_data"
     target_type: "multiqc"
     link_config:
@@ -921,7 +924,7 @@ links:
   # Link 1c/1d: Samplesheet + Metadata -> Read tracking (the Overview's reads-kept
   # card and the MultiQC tab's read figures narrow with the sample filters).
   - source_dc_tag: "samplesheet"
-    source_column: "sampleID"
+    source_column: "sample"
     target_dc_tag: "read_tracking"
     target_type: "table"
     link_config:
@@ -988,7 +991,7 @@ links:
   # Mirror the QIIME2 taxonomy_rel_abundance links so the Community tab's sample /
   # group filters narrow the sintax-derived bars/table on --skip_qiime runs.
   - source_dc_tag: "samplesheet"
-    source_column: "sampleID"
+    source_column: "sample"
     target_dc_tag: "sintax_rel_abundance"
     target_type: "table"
     link_config:
@@ -1010,7 +1013,7 @@ links:
   # Link 5d/5e: Samplesheet + Metadata -> sidle_reconstructed (multiregion path),
   # so the persistent sample filters reach the SIDLE tab as well.
   - source_dc_tag: "samplesheet"
-    source_column: "sampleID"
+    source_column: "sample"
     target_dc_tag: "sidle_reconstructed"
     target_type: "table"
     link_config:
@@ -1031,7 +1034,7 @@ links:
 
   # Link 6: Samplesheet -> Taxonomy Heatmap (always present, base filtering)
   - source_dc_tag: "samplesheet"
-    source_column: "sampleID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_heatmap"
     target_type: "table"
     link_config:

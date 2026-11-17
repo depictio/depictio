@@ -129,7 +129,7 @@ main_dashboard:
   - component_type: text
     surface: card
     values:
-      samples: {dc: samplesheet, column: sampleID, aggregation: nunique, format: integer}
+      samples: {dc: samplesheet, column: sample, aggregation: nunique, format: integer}
       groups: {dc: metadata, column: '{GROUP_COL}', aggregation: nunique, format: integer}
       top_group: {dc: metadata, column: '{GROUP_COL}', aggregation: top}
       n_meta: {dc: metadata, column: '{METADATA_ID_COL}', aggregation: nunique, format: integer}

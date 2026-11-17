@@ -147,7 +147,7 @@ main_dashboard:
     values:
       samples:
         dc: samplesheet
-        column: sampleID
+        column: sample
         aggregation: nunique
         format: integer
       groups:
@@ -2932,7 +2932,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: samplesheet
     row_selection_enabled: true
-    row_selection_column: sampleID
+    row_selection_column: sample
     section: Run manifest
     tag: am-ref-table-campaign-samplesheet
     index: ref-campaign-samplesheet

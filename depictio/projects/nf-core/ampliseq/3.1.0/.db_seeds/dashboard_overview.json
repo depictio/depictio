@@ -172,7 +172,7 @@
       "values": {
         "samples": {
           "dc": "samplesheet",
-          "column": "sampleID",
+          "column": "sample",
           "aggregation": "nunique",
           "format": "integer",
           "wf_id": {

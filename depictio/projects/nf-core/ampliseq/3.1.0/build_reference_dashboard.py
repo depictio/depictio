@@ -567,7 +567,7 @@ fig.update_layout(
                 # Second selection source on this tab, beside the map: tick
                 # libraries here and save them as a group in the Analysis panel.
                 "row_selection_enabled": True,
-                "row_selection_column": "sampleID",
+                "row_selection_column": "sample",
                 "section": "Run manifest",
                 "tag": "am-ref-table-campaign-samplesheet",
                 "index": "ref-campaign-samplesheet",
