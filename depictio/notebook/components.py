@@ -238,6 +238,30 @@ def data_html(df: pl.DataFrame) -> str:
         return df._repr_html_()
 
 
+# What an error may say once it is written into a document that travels: its
+# first line, without the paths of the machine that raised it. A worker's
+# Playwright error once put `/opt/pw-browsers/chromium_headless_shell-…` and
+# an install banner into every report it rendered.
+_ABS_PATH = re.compile(
+    r"(?<![\w:/.])(?:/(?:[\w.+-]+/)+[\w.+-]*|[A-Za-z]:\\(?:[\w.+ -]+\\)*[\w.+-]*)"
+)
+_BANNER = re.compile(r"[\u2500-\u257f]")
+
+
+def public_reason(text: str, limit: int = 300) -> str:
+    """``text`` as a reader of an exported file may see it.
+
+    The first line only (stack traces and install banners stay in the logs),
+    absolute filesystem paths replaced by ``<path>``, at most ``limit``
+    characters. URLs keep their paths: ``https://host/x`` is not a file.
+    """
+    lines = [ln.strip() for ln in str(text).splitlines() if ln.strip()]
+    lines = [ln for ln in lines if not _BANNER.search(ln)]
+    first = lines[0] if lines else "unavailable"
+    first = _ABS_PATH.sub("<path>", first)
+    return first if len(first) <= limit else first[: limit - 1] + "\u2026"
+
+
 class TableView:
     """A DataFrame displayed whole: what a table tile shows (``show_table``)."""
 
@@ -573,8 +597,7 @@ class DepictioComponent:
 
     @staticmethod
     def _reason(exc: BaseException) -> str:
-        text = str(exc).strip() or type(exc).__name__
-        return text if len(text) <= 400 else text[:399] + "…"
+        return public_reason(str(exc).strip() or type(exc).__name__)
 
     def _display_html(self) -> str:
         """HTML for the default display; subclasses override for lighter renderings."""
@@ -1418,7 +1441,7 @@ class JBrowseComponent(DepictioComponent):
         else:
             picture = (
                 '<div style="font-size:12px;color:#868e96;margin:6px 0">No snapshot of the view '
-                f"({_html.escape(str(snap.get('reason') or 'unavailable'))}). "
+                f"({_html.escape(public_reason(str(snap.get('reason') or 'unavailable')))}). "
                 f"{self._live_link('Browse it in the live dashboard')}</div>"
             )
         listing = shown.select([c for c in ("name", "type", "category") if c in shown.columns])
