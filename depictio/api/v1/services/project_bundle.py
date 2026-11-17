@@ -41,6 +41,7 @@ from depictio.api.v1.services.mongo_json import (
     restore_complex_objects,
 )
 from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
+from depictio.models.models.data_collections_types.indexed_file import indexed_file_s3_prefix
 from depictio.models.models.migration import BUNDLE_FORMAT_VERSION, ImportHop
 
 BundleMode = Literal["all", "metadata", "dashboard", "files"]
@@ -142,6 +143,7 @@ class ProjectScope:
             prefixes.append(f"{dc}/")
             prefixes.append(f"phylogeny/{dc}/")
             prefixes.append(genomic_tracks_s3_prefix(dc))
+            prefixes.append(indexed_file_s3_prefix(dc, ""))
         prefixes.extend(self.extra_prefixes)
         return prefixes
 
