@@ -10,15 +10,20 @@
  *     live app says "Online", and leads to the project where it has "All
  *     dashboards";
  *   - every way the live app has to the project (the sidebar, the Settings
- *     drawer) opens a read-only project page drawn from the manifest, and a
- *     project link never navigates.
+ *     drawer) opens the live project page, read-only and offline: the
+ *     collections table, a collection's rows from the bundled table, its
+ *     schema, the links map; a project link never navigates.
  *
  * All of it with zero network and no page error.
  */
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import {
   FIXTURE_MANIFEST,
+  PENGUINS_MANIFEST,
   TABS_MANIFEST,
   blockNetwork,
   injectedBundleUrl,
@@ -148,8 +153,31 @@ test("the sidebar foot is a static snapshot's, not a server's", async ({ page })
   expect(attempts, `unexpected network attempts:\n${attempts.join("\n")}`).toHaveLength(0);
 });
 
-test("the project page opens from the sidebar and the Settings drawer", async ({ page }) => {
-  const { url, side, attempts, pageErrors } = await openBundle(page);
+/** The tab fixture with a real table behind its `penguins` collection (the
+ *  hand-written fixture's own blob is a placeholder), so the project page's
+ *  data preview has rows to read. */
+function tabsManifestWithTable(): string {
+  const manifest = JSON.parse(readFileSync(TABS_MANIFEST, "utf-8"));
+  const penguins = JSON.parse(readFileSync(PENGUINS_MANIFEST, "utf-8"));
+  const ref = Object.values(penguins.data_refs as Record<string, { uri: string; rows: number }>).find(
+    (r) => r.rows > 100,
+  )!;
+  const dcId = "dc00000000000000000000a1";
+  manifest.data_refs[dcId] = { ...ref, uri: `inline:dc_${dcId}` };
+  manifest.inline_blobs[`dc_${dcId}`] = penguins.inline_blobs[ref.uri.replace("inline:", "")];
+  const out = join(mkdtempSync(join(tmpdir(), "depictio-projpage-")), "manifest.json");
+  writeFileSync(out, JSON.stringify(manifest));
+  return out;
+}
+
+test("the project page is the live one, offline", async ({ page }) => {
+  const { url, side, attempts, pageErrors } = await openBundle(page, tabsManifestWithTable());
+  // Every file the page asks for besides the bundle itself (a workflow logo
+  // next to the file would be a broken image, or a leak on a static host).
+  const fileRequests: string[] = [];
+  page.on("request", (req) => {
+    if (req.url().startsWith("file://") && !req.url().startsWith(url)) fileRequests.push(req.url());
+  });
 
   await side.getByTestId("glass-project").click();
   const projectPage = page.getByTestId("bundle-project-page");
@@ -158,40 +186,66 @@ test("the project page opens from the sidebar and the Settings drawer", async ({
   await expect(projectPage).toContainText(
     "A hand-written project around the penguin fixture table.",
   );
-  // The canvas underneath is hidden while the page is up; no tab is current.
-  await expect(page.getByTestId("dashboard-content")).toBeHidden();
-  await expect(side.locator(".hy-tablist-item[data-active]")).toHaveCount(0);
-  await expect(side.getByTestId("glass-project")).toHaveAttribute("data-active", "true");
-
-  // What the file carries of each collection.
-  const collections = projectPage.getByTestId("bundle-project-collections");
-  const penguins = collections.locator("tr", { hasText: "penguins" });
-  await expect(penguins).toContainText("In this file");
-  // Whole, not "In this…": the column is as wide as its badge.
-  const presence = penguins.locator(".mantine-Badge-label", { hasText: "In this file" });
-  expect(await presence.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await expect(penguins).toContainText("3 rows · 2 columns");
-  await expect(collections.locator("tr", { hasText: "multiqc_report" })).toContainText(
-    "Not included",
-  );
-  // The MultiQC type icon is the inlined logo too.
-  await expectDecoded(collections.locator('tr:has-text("multiqc_report") img').first());
-
-  await expect(projectPage.getByTestId("bundle-project-workflows")).toContainText(
-    "fixture-pipeline",
-  );
-  await expect(projectPage.getByTestId("bundle-project-workflows")).toContainText(
-    "Nextflow 24.10.0",
-  );
-  await expect(projectPage.getByTestId("bundle-project-links")).toContainText("penguins");
-  await expect(projectPage.getByTestId("bundle-project-params")).toContainText("island");
-  await expect(projectPage.getByTestId("bundle-project-export")).toContainText(
-    "curator@example.org",
+  await expect(projectPage.getByTestId("bundle-project-snapshot")).toContainText(
+    "Static snapshot",
   );
   await expect(projectPage.getByRole("link", { name: /Live project/ })).toHaveAttribute(
     "href",
     "https://demo.depictio.example/projects/f1x7000000000000000000p1",
   );
+  // The canvas underneath is hidden while the page is up; no tab is current.
+  await expect(page.getByTestId("dashboard-content")).toBeHidden();
+  await expect(side.locator(".hy-tablist-item[data-active]")).toHaveCount(0);
+  await expect(side.getByTestId("glass-project")).toHaveAttribute("data-active", "true");
+
+  // The live page's parts: its summary, its dashboards (this file's family),
+  // its workflows. Nothing that needs a server is offered.
+  await expect(projectPage.getByTestId("project-summary")).toContainText("Data collections");
+  await expect(projectPage.getByTestId("project-dashboards")).toContainText("Fixture dashboard");
+  await expect(projectPage.locator(".pd-workflows")).toContainText("nf-core/fixture");
+  for (const absent of [
+    "project-settings-button",
+    "project-create-dashboard",
+    "project-tab-activity",
+    "project-tab-runs",
+    "add-link-btn",
+  ]) {
+    await expect(projectPage.getByTestId(absent)).toHaveCount(0);
+  }
+  await expect(projectPage.getByRole("link", { name: "Permissions" })).toHaveCount(0);
+
+  // Each collection says what the file holds of it.
+  const penguinsRow = projectPage.locator('[data-testid="dc-row"]', { hasText: "penguins" });
+  await expect(penguinsRow).toContainText("In this file");
+  await expect(
+    projectPage.locator('[data-testid="dc-row"]', { hasText: "multiqc_report" }),
+  ).toContainText("Not included");
+
+  // A collection opens on its rows, read from the bundled table.
+  await penguinsRow.click();
+  const viewer = projectPage.getByTestId("dc-viewer");
+  await expect(viewer.getByRole("heading", { name: "penguins" })).toBeVisible();
+  await expect(viewer.getByTestId("dc-fact-rows")).toContainText("3");
+  const data = viewer.getByTestId("table-data-section");
+  await expect(data).toContainText(/Showing \d+ of 342 rows/);
+  await expect(data.locator(".ag-cell").first()).toBeVisible();
+  // Its whole recorded schema, the columns the file does not carry included.
+  await viewer.getByTestId("dc-section-columns").getByRole("button").first().click();
+  await expect(viewer.getByTestId("dc-viewer-columns")).toContainText("island");
+  await expect(viewer.getByTestId("dc-viewer-columns")).toContainText("Penguin species");
+
+  // The links map: a node opens its connections, and the collection itself.
+  await projectPage.getByTestId("links-section-toggle").click();
+  const map = projectPage.getByTestId("connections-map");
+  await expect(map).toBeVisible();
+  await map.locator('.cm-node[title^="multiqc_report"]').click();
+  await expect(projectPage.getByTestId("connections-detail")).toContainText("penguins");
+  await projectPage.getByTestId("connections-open-dc").click();
+  await expect(viewer.getByRole("heading", { name: "multiqc_report" })).toBeVisible();
+  // Not in the file: said where its rows would be, never fetched.
+  await expect(viewer.getByTestId("dc-not-in-bundle")).toContainText("Not included in this file");
+
+  expect(fileRequests, `files requested next to the bundle:\n${fileRequests.join("\n")}`).toHaveLength(0);
 
   // Back to the tab it was opened over.
   await projectPage.getByTestId("bundle-project-close").click();

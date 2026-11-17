@@ -2698,6 +2698,38 @@ def _fetch_project(project_id: Any) -> dict[str, Any] | None:
         return None
 
 
+def _fetch_last_aggregations(project_doc: dict[str, Any] | None) -> dict[str, Any]:
+    """``dc_id -> newest aggregation entry`` for the project's collections.
+
+    The project page of a bundle lists what each collection's last ingestion
+    recorded (rows, schema, time, version); those live in ``deltatables``, not
+    in the project document. Only the entry is returned: the summary's
+    allow-list then keeps the display facts of it. Best-effort like
+    :func:`_fetch_project` — a failed read leaves the facts out, nothing else.
+    """
+    ids: list[ObjectId] = []
+    for dc_id in workflow_ids_by_dc(project_doc):
+        try:
+            ids.append(ObjectId(dc_id))
+        except Exception:
+            continue
+    if not ids:
+        return {}
+    out: dict[str, Any] = {}
+    try:
+        cursor = _db().deltatables_collection.find(
+            {"data_collection_id": {"$in": ids}},
+            {"data_collection_id": 1, "aggregation": {"$slice": -1}},
+        )
+        for entry in cursor:
+            aggregation = entry.get("aggregation") or []
+            if aggregation:
+                out[str(entry.get("data_collection_id"))] = aggregation[-1]
+    except Exception:
+        return {}
+    return out
+
+
 def project_links(project_doc: dict[str, Any] | None) -> list[dict[str, Any]]:
     """The project's ``links`` list, as stored (list of ``DCLink`` dicts)."""
     links = (project_doc or {}).get("links") or []
@@ -3542,7 +3574,9 @@ def export_manifest(
         # ``tabs`` is empty there and ``dashboard`` is the whole story.
         tabs=[tab.tab_entry() for tab in tabs] if len(tabs) > 1 else [],
         provenance=build_provenance(user, built_at, project_doc, entry_tab),
-        project=build_project_summary(project_doc, _public_base_url()),
+        project=build_project_summary(
+            project_doc, _public_base_url(), _fetch_last_aggregations(project_doc)
+        ),
         data_refs=data_refs,
         tiers={
             row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)

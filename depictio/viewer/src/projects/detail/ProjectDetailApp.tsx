@@ -30,7 +30,7 @@ import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef } from 'ag-grid-community';
-import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import { GlassPage, GlassPageInset, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
 import '../../chrome/variants/glass/pages/project-detail.css';
 import {
   Check,
@@ -71,6 +71,7 @@ import {
   listLinkResolvers,
   renameDataCollection,
   useBrandAccents,
+  useIsStaticBundle,
 } from 'depictio-react-core';
 import type {
   TableEditStatus,
@@ -158,6 +159,8 @@ import { ProjectTimelinePanel } from './ProjectTimelinePanel';
 import { readTabRequest, resolveTab, type ActivityView } from './projectChanges';
 import { useProjectChanges } from './useProjectChanges';
 import DerivedLineage from './DerivedLineage';
+import RunProvenanceCard from './RunProvenanceCard';
+import { groupRunProvenance } from '../../chrome/DashboardInfoBody';
 
 interface DataCollectionShape {
   _id?: string;
@@ -375,8 +378,91 @@ function flattenDataCollections(
   return workflows.flatMap((wf) => wf.data_collections ?? []);
 }
 
-const ProjectDetailApp: React.FC = () => {
+/**
+ * The page drawn inside another one's frame instead of at `/projects/<id>`:
+ * a static bundle's project page, laid over the dashboard canvas. The frame
+ * owns the way back and the scrolling; the page brings its head and body.
+ */
+export interface ProjectDetailEmbed {
+  projectId: string;
+  /** The heading while the project loads (it is known before it is fetched). */
+  title: string;
+  /** One line under the heading. */
+  description?: React.ReactNode;
+  /** The head's actions (the bundle's "Back to <tab>"). */
+  actions?: React.ReactNode;
+  /** Attributes for the heading (its id, to move focus to it). */
+  titleProps?: Record<string, string>;
+}
+
+/** What a static bundle holds of one collection (stamped by its api shim). */
+interface BundleFacts {
+  presence: 'bundled' | 'snapshot' | 'absent';
+  rows: number | null;
+  columns: string[];
+}
+
+function bundleFacts(dc: DataCollectionShape): BundleFacts | null {
+  const facts = dc.bundle as BundleFacts | undefined;
+  return facts && typeof facts === 'object' && typeof facts.presence === 'string' ? facts : null;
+}
+
+/** What the file holds of a collection, in the bundle's own words. */
+const BUNDLE_PRESENCE: Record<
+  BundleFacts['presence'],
+  { label: string; color: string; icon: string; hint: string }
+> = {
+  bundled: {
+    label: 'In this file',
+    color: 'teal',
+    icon: 'mdi:database-check-outline',
+    hint: 'The table travels with this file: its rows show below, and the dashboard recomputes from it.',
+  },
+  snapshot: {
+    label: 'Snapshots only',
+    color: 'blue',
+    icon: 'mdi:camera-outline',
+    hint: 'The views that read it were frozen at export; the table itself is not in this file.',
+  },
+  absent: {
+    label: 'Not included',
+    color: 'gray',
+    icon: 'mdi:database-off-outline',
+    hint: 'Part of the project, but no view of this dashboard reads it, so the export left it out.',
+  },
+};
+
+const BundlePresenceBadge: React.FC<{ facts: BundleFacts; size?: 'xs' | 'sm' }> = ({
+  facts,
+  size = 'sm',
+}) => {
+  const meta = BUNDLE_PRESENCE[facts.presence];
+  return (
+    <Tooltip label={meta.hint} multiline w={280} withArrow withinPortal>
+      <Badge
+        size={size}
+        variant="light"
+        color={meta.color}
+        radius="sm"
+        tt="none"
+        miw="max-content"
+        leftSection={<Icon icon={meta.icon} width={12} />}
+        data-testid="dc-bundle-presence"
+        data-presence={facts.presence}
+      >
+        {meta.label}
+      </Badge>
+    </Tooltip>
+  );
+};
+
+const ProjectDetailApp: React.FC<{ embed?: ProjectDetailEmbed }> = ({ embed }) => {
   const accent = useBrandAccents();
+  // A static bundle (the project page of an exported dashboard): read-only and
+  // offline. What needs a server — editing, ingestion, runs, history,
+  // settings, permissions — is not offered (and not compiled in: see
+  // static-runtime/projectServerStubs.tsx).
+  const offline = useIsStaticBundle();
   const [project, setProject] = useState<ProjectListEntry | null>(null);
   const [deltaLocations, setDeltaLocations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -463,12 +549,12 @@ const ProjectDetailApp: React.FC = () => {
   const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(true);
 
   const { user, isPublicMode, loading: userLoading } = useCurrentUser();
-  const projectId = readProjectIdFromPath();
+  const projectId = embed?.projectId ?? readProjectIdFromPath();
   // "Changed since your last visit" and the Activity timeline (#1397): inert
   // unless the server turns the feature on.
   const changes = useProjectChanges(projectId);
 
-  usePageTitle('Project Data Collections');
+  usePageTitle('Project Data Collections', { enabled: !embed });
   const glass = useGlassPages();
 
   useEffect(() => {
@@ -722,6 +808,19 @@ const ProjectDetailApp: React.FC = () => {
                 }}
               />
             ) : null;
+          // Open a collection in the viewer from elsewhere on the page (the
+          // links map), and bring the viewer into view.
+          const openDc = (id: string) => {
+            scrollToDcRef.current = true;
+            setSelectedWorkflowId(null);
+            setSelectedDcId(id);
+          };
+          const runProvenance = (
+            (project as Record<string, unknown>).template_origin as
+              | { run_provenance?: Array<{ group?: string; key: string; value: string }>; run_provenance_files?: string[] }
+              | null
+              | undefined
+          );
           const overviewSections = (
             <Stack gap="lg">
               <DataCollectionsManagerSection
@@ -759,6 +858,7 @@ const ProjectDetailApp: React.FC = () => {
                   canMutate={canMutate}
                   onLinksChange={setProjectLinks}
                   reloadKey={linksReload}
+                  onOpenDc={openDc}
                   joins={
                     ((project as Record<string, unknown>).joins as ProjectJoin[] | undefined) || []
                   }
@@ -785,7 +885,7 @@ const ProjectDetailApp: React.FC = () => {
                     published={!!project?.published_lock}
                     onLinkSaved={() => setLinksReload((k) => k + 1)}
                     onDcChanged={refreshQuietly}
-                    onShowRuns={hasRuns ? () => showRuns() : undefined}
+                    onShowRuns={hasRuns && !offline ? () => showRuns() : undefined}
                     onOpenDc={(id) => {
                       scrollToDcRef.current = true;
                       setSelectedDcId(id);
@@ -814,8 +914,8 @@ const ProjectDetailApp: React.FC = () => {
               <ProjectHeader
                 project={project}
                 projectId={projectId}
-                onShowIngestion={showIngestion}
-                onShowRuns={showRuns}
+                onShowIngestion={offline ? undefined : showIngestion}
+                onShowRuns={offline ? undefined : showRuns}
                 refreshKey={refreshKey}
               />
               {projectId && <ProjectDashboardsPanel projectId={projectId} />}
@@ -828,7 +928,20 @@ const ProjectDetailApp: React.FC = () => {
               >
                 <Stack gap="lg">
                   {workflowsPanel}
-                  {projectId ? (
+                  {offline ? (
+                    // A bundle has no runs, ingestion reports or timeline to
+                    // show: the collections, then the run's recorded
+                    // parameters (on a server, the latest ingestion's report).
+                    <Stack gap="lg">
+                      {overviewSections}
+                      {(runProvenance?.run_provenance?.length ?? 0) > 0 && (
+                        <RunProvenanceCard
+                          groups={groupRunProvenance(runProvenance?.run_provenance ?? [])}
+                          files={runProvenance?.run_provenance_files ?? []}
+                        />
+                      )}
+                    </Stack>
+                  ) : projectId ? (
                     <Tabs
                       value={tabValue}
                       onChange={setActiveTab}
@@ -1003,7 +1116,7 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
-  const modals = (
+  const modals = offline ? null : (
     <>
       {/* Outside the loading switch, so reloading the project after a
           refresh keeps the dialog, and the run it follows, mounted. */}
@@ -1092,6 +1205,41 @@ const ProjectDetailApp: React.FC = () => {
       Create a dashboard
     </Button>
   );
+
+  if (embed) {
+    const title = project?.name || embed.title;
+    if (glass) {
+      return (
+        <GlassPageInset
+          section="projects"
+          title={title}
+          description={embed.description}
+          actions={embed.actions}
+          titleProps={embed.titleProps}
+        >
+          {body}
+        </GlassPageInset>
+      );
+    }
+    return (
+      <Box px="lg" py="md">
+        <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md" mb="lg">
+          <Box style={{ minWidth: 0 }}>
+            <Title order={1} size="h2" {...embed.titleProps}>
+              {title}
+            </Title>
+            {embed.description && (
+              <Box c="dimmed" fz="sm" mt={4}>
+                {embed.description}
+              </Box>
+            )}
+          </Box>
+          {embed.actions}
+        </Group>
+        {body}
+      </Box>
+    );
+  }
 
   if (glass) {
     const name = project?.name || 'Project';
@@ -1385,12 +1533,16 @@ const DeleteDataCollectionModal: React.FC<{
 const ProjectHeader: React.FC<{
   project: ProjectListEntry;
   projectId: string | null;
-  onShowIngestion: () => void;
-  onShowRuns: (run?: string) => void;
+  /** Absent in a static bundle, which has no ingestion report or runs. */
+  onShowIngestion?: () => void;
+  onShowRuns?: (run?: string) => void;
   refreshKey: number;
 }> = ({ project, projectId, onShowIngestion, onShowRuns, refreshKey }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
+  // A bundle's project carries no provenance or publishing lock (both are the
+  // instance's): no "Depictio: unknown" badge.
+  const offline = useIsStaticBundle();
   const summary = (
     <ProjectSummary
       project={project}
@@ -1400,7 +1552,7 @@ const ProjectHeader: React.FC<{
       refreshKey={refreshKey}
     />
   );
-  const badges = (
+  const badges = offline ? null : (
     <Group gap="xs" wrap="wrap">
       <ProvenanceBadge provenance={project.provenance} />
       <PublishedLockBadge lock={project.published_lock} />
@@ -1474,7 +1626,12 @@ const WorkflowsPanel: React.FC<{
   onSelect: (id: string | null) => void;
 }> = ({ workflows, templateSource, selectedWorkflowId, scope, onSelect }) => {
   const glass = useGlassPages();
-  const brandImage = templateSource ? WORKFLOW_BRAND_IMAGE[templateSource] : undefined;
+  // A static bundle opens from file://, where `logos/workflows/*` resolves to
+  // nothing next to the file: the generic mark and the engine stand in (as
+  // the template chip's initials do).
+  const offline = useIsStaticBundle();
+  const brandImage =
+    templateSource && !offline ? WORKFLOW_BRAND_IMAGE[templateSource] : undefined;
   if (glass) {
     // A lone workflow is the scope whether or not it was clicked, so it
     // always shows as selected and cannot be toggled off.
@@ -1730,6 +1887,8 @@ const DataCollectionsManagerSection: React.FC<{
 }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
+  // Nothing is added to a static bundle's project.
+  const offline = useIsStaticBundle();
   if (glass) {
     const n = dataCollections.length;
     return (
@@ -1751,15 +1910,17 @@ const DataCollectionsManagerSection: React.FC<{
             </div>
           </UnstyledButton>
           <Group gap="xs" wrap="nowrap">
-            <AddDataButton
-              projectId={projectId}
-              project={project}
-              canMutate={canMutate}
-              onAdded={onAdded}
-              onOpen={() => {
-                if (!opened) onToggle();
-              }}
-            />
+            {!offline && (
+              <AddDataButton
+                projectId={projectId}
+                project={project}
+                canMutate={canMutate}
+                onAdded={onAdded}
+                onOpen={() => {
+                  if (!opened) onToggle();
+                }}
+              />
+            )}
             <ActionIcon
               variant="subtle"
               color="gray"
@@ -1838,17 +1999,19 @@ const DataCollectionsManagerSection: React.FC<{
           </Group>
         </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
-          <AddDataButton
-            projectId={projectId}
-            project={project}
-            canMutate={canMutate}
-            color={accent.secondary}
-            onAdded={onAdded}
-            onOpen={() => {
-              // Expand the section too, so the new DC lands in view.
-              if (!opened) onToggle();
-            }}
-          />
+          {!offline && (
+            <AddDataButton
+              projectId={projectId}
+              project={project}
+              canMutate={canMutate}
+              color={accent.secondary}
+              onAdded={onAdded}
+              onOpen={() => {
+                // Expand the section too, so the new DC lands in view.
+                if (!opened) onToggle();
+              }}
+            />
+          )}
           <ActionIcon
             variant="subtle"
             color="gray"
@@ -2018,6 +2181,8 @@ const DataCollectionsTable: React.FC<{
 }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
+  // A static bundle: no row actions, and each row says what the file holds.
+  const offline = useIsStaticBundle();
   const [filter, setFilter] = useState('');
   const [sortKey, setSortKey] = useState<DcSortKey>('tag');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -2121,7 +2286,7 @@ const DataCollectionsTable: React.FC<{
               onSort={onSort}
               w={160}
             />
-            <Table.Th w={100} />
+            <Table.Th w={offline ? 130 : 100}>{offline ? 'In this file' : null}</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -2146,6 +2311,9 @@ const DataCollectionsTable: React.FC<{
             return (
               <Table.Tr
                 key={id}
+                data-testid="dc-row"
+                data-dc-id={id}
+                aria-selected={isSelected}
                 onClick={() => onSelect(isSelected ? null : id)}
                 style={{
                   cursor: 'pointer',
@@ -2189,45 +2357,52 @@ const DataCollectionsTable: React.FC<{
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  <Group gap={2} wrap="nowrap" justify="flex-end">
-                    {onManage && (
+                  {offline ? (
+                    (() => {
+                      const facts = bundleFacts(dc);
+                      return facts ? <BundlePresenceBadge facts={facts} size="xs" /> : null;
+                    })()
+                  ) : (
+                    <Group gap={2} wrap="nowrap" justify="flex-end">
+                      {onManage && (
+                        <ActionIcon
+                          data-testid="manage-dc-btn"
+                          variant="subtle"
+                          color={glass ? 'gray' : accent.secondary}
+                          size="sm"
+                          disabled={!canMutate}
+                          onClick={guard(() => onManage(dc))}
+                          title={
+                            canMutate
+                              ? 'Manage data (append / replace / clear)'
+                              : 'Owner permission required'
+                          }
+                        >
+                          <Icon icon="mdi:database-cog-outline" width={16} />
+                        </ActionIcon>
+                      )}
                       <ActionIcon
-                        data-testid="manage-dc-btn"
                         variant="subtle"
-                        color={glass ? 'gray' : accent.secondary}
+                        color={glass ? 'gray' : 'blue'}
                         size="sm"
                         disabled={!canMutate}
-                        onClick={guard(() => onManage(dc))}
-                        title={
-                          canMutate
-                            ? 'Manage data (append / replace / clear)'
-                            : 'Owner permission required'
-                        }
+                        onClick={guard(() => onRename(dc))}
+                        title={canMutate ? 'Rename' : 'Owner permission required'}
                       >
-                        <Icon icon="mdi:database-cog-outline" width={16} />
+                        <Icon icon="mdi:pencil" width={16} />
                       </ActionIcon>
-                    )}
-                    <ActionIcon
-                      variant="subtle"
-                      color={glass ? 'gray' : 'blue'}
-                      size="sm"
-                      disabled={!canMutate}
-                      onClick={guard(() => onRename(dc))}
-                      title={canMutate ? 'Rename' : 'Owner permission required'}
-                    >
-                      <Icon icon="mdi:pencil" width={16} />
-                    </ActionIcon>
-                    <ActionIcon
-                      variant="subtle"
-                      color="red"
-                      size="sm"
-                      disabled={!canMutate}
-                      onClick={guard(() => onDelete(dc))}
-                      title={canMutate ? 'Delete' : 'Owner permission required'}
-                    >
-                      <Icon icon="mdi:delete" width={16} />
-                    </ActionIcon>
-                  </Group>
+                      <ActionIcon
+                        variant="subtle"
+                        color="red"
+                        size="sm"
+                        disabled={!canMutate}
+                        onClick={guard(() => onDelete(dc))}
+                        title={canMutate ? 'Delete' : 'Owner permission required'}
+                      >
+                        <Icon icon="mdi:delete" width={16} />
+                      </ActionIcon>
+                    </Group>
+                  )}
                 </Table.Td>
               </Table.Tr>
             );
@@ -2285,6 +2460,10 @@ const DataCollectionViewer: React.FC<{
   onClearHighlight,
 }) => {
   const dcId = (dc._id ?? dc.id) as string;
+  // A static bundle: only what the file carries can be read, and nothing is
+  // edited. `shipped` says what the file holds of this collection.
+  const offline = useIsStaticBundle();
+  const shipped = offline ? bundleFacts(dc) : null;
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const format =
     (dc.config?.dc_specific_properties?.format as string | undefined) || null;
@@ -2300,7 +2479,9 @@ const DataCollectionViewer: React.FC<{
   const isGeoJson = type.toLowerCase() === 'geojson';
   const isMapPreview = isCoordTable || isGeoJson;
   let previewBody: React.ReactNode = null;
-  if (isMultiQC) previewBody = <MultiQCViewerPreview dcId={dcId} />;
+  // Offline, every preview but a table's rows reads object storage.
+  if (offline) previewBody = null;
+  else if (isMultiQC) previewBody = <MultiQCViewerPreview dcId={dcId} />;
   else if (isGeoJson) previewBody = <GeoJsonPreview dc={dc} />;
   else if (isCoordTable) previewBody = <CoordinatesMapPreview dc={dc} />;
   else if (type.toLowerCase() === 'image') previewBody = <ImagesPreview dc={dc} />;
@@ -2314,7 +2495,7 @@ const DataCollectionViewer: React.FC<{
   // new version from the table itself, or the "Version" fact stays behind.
   const [editedVersion, setEditedVersion] = useState<number | null>(null);
   useEffect(() => {
-    if (editTick === 0) return;
+    if (editTick === 0 || offline) return;
     let cancelled = false;
     fetchDeltaHistory(dcId, 1)
       .then((h) => {
@@ -2324,7 +2505,7 @@ const DataCollectionViewer: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [dcId, editTick]);
+  }, [dcId, editTick, offline]);
   const shownVersion = editedVersion ?? deltaVersion;
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
@@ -2333,7 +2514,7 @@ const DataCollectionViewer: React.FC<{
   const [vizSuggestions, setVizSuggestions] =
     useState<VizSuggestionsResponse | null>(null);
   useEffect(() => {
-    if (!isTable) {
+    if (!isTable || offline) {
       setVizSuggestions(null);
       return;
     }
@@ -2348,7 +2529,7 @@ const DataCollectionViewer: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [dcId, isTable]);
+  }, [dcId, isTable, offline]);
   // Only surface strong matches as "compatible" chips — mirrors the builder's
   // recommended threshold (RECOMMENDED_SCORE in schemas.py).
   const detectedVizKinds = (vizSuggestions?.viz_kinds ?? []).filter((v) => v.score >= 0.8);
@@ -2431,7 +2612,8 @@ const DataCollectionViewer: React.FC<{
 
   // A derived collection says where it comes from: the recipe and its
   // inputs live in the ingestion report, read once it is selected.
-  const isDerived = (dc.config as { source?: string } | undefined)?.source === 'transformed';
+  const isDerived =
+    !offline && (dc.config as { source?: string } | undefined)?.source === 'transformed';
   const [lineage, setLineage] = useState<{
     entry: IngestionDataCollection;
     typeByTag: Record<string, string>;
@@ -2468,9 +2650,11 @@ const DataCollectionViewer: React.FC<{
   // Map coordinates only where it means something: a table already marked,
   // or one whose columns look like a lat/lon pair.
   const showCoordsButton =
-    isTable && (isCoordTable || detectCoordinatesColumns(shownColumns.map((c) => c.name)) != null);
+    !offline &&
+    isTable &&
+    (isCoordTable || detectCoordinatesColumns(shownColumns.map((c) => c.name)) != null);
   const coordsGuess =
-    isTable && !isCoordTable && canMutate
+    !offline && isTable && !isCoordTable && canMutate
       ? detectCoordinatesColumns(shownColumns.map((c) => c.name))
       : null;
   const [inspecting, setInspecting] = useState<string | null>(null);
@@ -2487,8 +2671,20 @@ const DataCollectionViewer: React.FC<{
   const by = (agg?.aggregation_by as { email?: string } | undefined)?.email;
   const details: DetailItem[] = [
     { label: 'Collection id', value: dcId, mono: true },
-    { label: 'Stored at', value: getDcStorageLocation(dc), mono: true },
-    { label: 'Read from', value: scanSource(doc), mono: true },
+    // Where the table lives is the instance's business: a bundle never says.
+    { label: 'Stored at', value: offline ? null : getDcStorageLocation(dc), mono: true },
+    { label: 'Read from', value: offline ? null : scanSource(doc), mono: true },
+    ...(shipped
+      ? [
+          {
+            label: 'In this file',
+            value:
+              shipped.presence === 'bundled'
+                ? `Yes: ${(shipped.rows ?? 0).toLocaleString()} rows, ${shipped.columns.length} of its columns (those the dashboard reads)`
+                : BUNDLE_PRESENCE[shipped.presence].label,
+          },
+        ]
+      : []),
     { label: origin?.label === 'Upload' ? 'Uploaded file' : 'Origin', value: origin?.location },
     { label: 'Added', value: origin?.addedAt },
     { label: 'Last ingestion by', value: by },
@@ -2500,12 +2696,32 @@ const DataCollectionViewer: React.FC<{
   ];
 
   const hasData = !isMultiQC && (isTable || isTracks);
+  // Offline, the rows come from the file: a collection it does not carry says
+  // so where its rows would be (every type, so a report or an image set is not
+  // silently missing its data).
+  const offlineNotice =
+    shipped && shipped.presence !== 'bundled' ? (
+      <Alert
+        variant="light"
+        color="gray"
+        icon={<Icon icon={BUNDLE_PRESENCE[shipped.presence].icon} width={18} />}
+        data-testid="dc-not-in-bundle"
+      >
+        <Text size="sm" fw={600}>
+          Not included in this file
+        </Text>
+        <Text size="sm" c="dimmed">
+          {BUNDLE_PRESENCE[shipped.presence].hint} The live project has its rows.
+        </Text>
+      </Alert>
+    ) : null;
+  const showData = hasData || !!offlineNotice;
   const [opened, setOpened] = useState<string[]>([]);
   // A newly selected collection opens on what it shows.
   useEffect(() => {
     const first = [
       ...(isDerived ? ['lineage'] : []),
-      ...(previewBody ? ['preview'] : hasData ? ['data'] : []),
+      ...(previewBody ? ['preview'] : showData ? ['data'] : []),
     ];
     // A table asked for by the URL opens on its rows.
     setOpened(autoLoadPreview && hasData && !first.includes('data') ? [...first, 'data'] : first);
@@ -2554,6 +2770,7 @@ const DataCollectionViewer: React.FC<{
             </Stack>
           </Group>
           <Group gap="xs" wrap="nowrap">
+            {shipped && <BundlePresenceBadge facts={shipped} />}
             {showCoordsButton && (
               <Tooltip
                 label={
@@ -2591,7 +2808,11 @@ const DataCollectionViewer: React.FC<{
         </Group>
 
         {/* A report's figures come from the report itself, not the collection. */}
-        {isMultiQC ? <MultiQCSummaryCard dc={dc} bare /> : facts.length > 0 && <DcFacts facts={facts} />}
+        {isMultiQC && !offline ? (
+          <MultiQCSummaryCard dc={dc} bare />
+        ) : (
+          facts.length > 0 && <DcFacts facts={facts} />
+        )}
 
         {coordsGuess && (
           <Alert
@@ -2663,13 +2884,13 @@ const DataCollectionViewer: React.FC<{
             )}
           {previewBody &&
             section('preview', isMapPreview ? GEO_ICON : 'mdi:eye-outline', isMapPreview ? 'Map' : 'Preview', previewBody)}
-          {hasData &&
+          {showData &&
             section(
               'data',
               'mdi:table',
               'Data',
               // Read the rows once the section is open, not on every selection.
-              opened.includes('data') ? (
+              offlineNotice ?? (opened.includes('data') ? (
                 <TableDataSection
                   key={dcId}
                   dcId={dcId}
@@ -2679,10 +2900,11 @@ const DataCollectionViewer: React.FC<{
                   onClearHighlight={onClearHighlight}
                   onEdited={() => setEditTick((n) => n + 1)}
                 />
-              ) : null,
+              ) : null),
               rows != null ? count(rows) : undefined,
             )}
           {isMultiQC &&
+            !offline &&
             section('samples', 'mdi:format-list-bulleted', 'Samples, modules and plots', <MultiQCReportsCard dcId={dcId} bare />)}
           {shownColumns.length > 0 &&
             section('columns', 'mdi:table-column', 'Columns', <DcColumnsTable columns={columns} rows={rows} />, count(shownColumns.length))}
@@ -2691,18 +2913,26 @@ const DataCollectionViewer: React.FC<{
                 rows={linkRows}
                 inspecting={inspecting}
                 onInspect={setInspecting}
-                mapping={(id) =>
-                  projectId ? <LinkMappingInspector projectId={projectId} linkId={id} collapsible={false} /> : null
+                // A link's value mapping is computed on the server.
+                mapping={
+                  offline
+                    ? undefined
+                    : (id) =>
+                        projectId ? (
+                          <LinkMappingInspector projectId={projectId} linkId={id} collapsible={false} />
+                        ) : null
                 }
-                onEdit={projectId ? openLinkEdit : undefined}
+                onEdit={projectId && !offline ? openLinkEdit : undefined}
                 canEdit={canMutate}
               />, count(linkRows.length))}
           {section('details', 'mdi:information-outline', 'Details', <DcDetailsGrid items={details} />)}
         </Accordion>
 
-        {hasData && <DeltaVersionHistory key={`history-${dcId}-${editTick}`} dcId={dcId} />}
+        {hasData && !offline && (
+          <DeltaVersionHistory key={`history-${dcId}-${editTick}`} dcId={dcId} />
+        )}
       </Stack>
-      {isTable && (
+      {isTable && !offline && (
         <MapCoordinatesModal
           opened={coordsOpen}
           onClose={() => setCoordsOpen(false)}
@@ -2711,7 +2941,7 @@ const DataCollectionViewer: React.FC<{
           onChanged={onDcChanged}
         />
       )}
-      {projectId && (
+      {projectId && !offline && (
         <LinkEditModal
           key={editingLink?.id ?? 'none'}
           opened={!!editingLink}
@@ -3219,9 +3449,12 @@ const TableDataSection: React.FC<{
   highlightRuns?: string[];
   onClearHighlight?: () => void;
   onEdited: () => void;
-}> = ({ dcId, checkEditable, autoLoad, highlightRuns, onClearHighlight, onEdited }) => {
+}> = ({ dcId, checkEditable: checkEditableProp, autoLoad, highlightRuns, onClearHighlight, onEdited }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
+  // Nothing is edited in a static bundle: straight to the read-only rows.
+  const offline = useIsStaticBundle();
+  const checkEditable = checkEditableProp && !offline;
   const [status, setStatus] = useState<TableEditStatus | null>(null);
   // Until the answer is in, neither grid: one would flash and give way to the other.
   const [statusKnown, setStatusKnown] = useState(!checkEditable);
@@ -3408,6 +3641,8 @@ const DataPreviewPanel: React.FC<{
 }> = ({ dcId, autoLoad = false, restore }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
+  // A bundle carries only the columns its dashboard reads: say so.
+  const offline = useIsStaticBundle();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3521,6 +3756,7 @@ const DataPreviewPanel: React.FC<{
         <Text size="xs" c="dimmed">
           Showing {rows.length} of {preview.total_rows ?? rows.length} rows ·{' '}
           {preview.total_columns ?? columns.length} columns
+          {offline ? ' in this file (those the dashboard reads)' : ''}
         </Text>
         {showVersionPicker && (
           <Group gap={6} wrap="nowrap">

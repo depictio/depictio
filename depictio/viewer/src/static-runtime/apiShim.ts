@@ -17,9 +17,14 @@
  * SHIM SURFACE. The rule is: every api.ts export that touches the network AND
  * sits in the static entry's module graph must be overridden here. That graph
  * was walked from `static-runtime/main.tsx` (which mounts App directly — no
- * router, so builder/, dashboards/, projects/, admin/, profile/, cli-agents/
- * and auth/ are absent from the bundle entirely, and their api calls are
- * unreachable by construction, not by luck). Two traps that walk found:
+ * router, so builder/, dashboards/, admin/, profile/, cli-agents/ and auth/
+ * are absent from the bundle entirely, and their api calls are unreachable by
+ * construction, not by luck). The one management page a bundle mounts is the
+ * project page (`ProjectPage` -> the live `ProjectDetailApp`): its reads are
+ * answered below from the manifest, its server-only parts are swapped out at
+ * build time (projectServerStubs.tsx) and its write paths refuse here.
+ * `scripts/check-static-shim.mjs` walks the same graph. Two traps the first
+ * walk found:
  *   - reachability is not "fires on page load". `fetchMapData` and
  *     `fetchProject` are one user click deep (a map's data popover; the
  *     header's Settings gear, which unlike Edit carries no `isStaticBundle`
@@ -54,6 +59,8 @@ import type {
   AdvancedVizDataResponse,
   CrossTabComponentsResponse,
   DashboardData,
+  DashboardListEntry,
+  DCLink,
   DashboardSummary,
   FigureResponse,
   FloatingComponent,
@@ -65,10 +72,13 @@ import type {
   JBrowseCallsResponse,
   JBrowseGeneHit,
   PersistentSection,
+  PreviewResult,
   ProjectListEntry,
+  ResolverInfo,
   ResolvedGroupsResult,
   StoredMetadata,
   TextFilterMatchesResult,
+  VizSuggestionsResponse,
 } from '../../../../packages/depictio-react-core/src/api';
 
 import { base64ToBytes, scopeRegionFilters } from 'depictio-static-core';
@@ -81,13 +91,14 @@ import {
   interactiveIndexFor,
   rawBundle,
 } from './bundle';
-import { projectAsApiProject } from './projectModel';
+import { bundleDashboards, linkAsApiLink, projectAsApiProject } from './projectModel';
 import {
   columnRangeLive,
   computeCardsLive,
   contactMapLive,
   coverageTrackLive,
   dataRefFor,
+  previewLive,
   fetchAdvancedVizDataLive,
   renderFigureLive,
   renderPrologueFigureLive,
@@ -349,16 +360,96 @@ export async function fetchProject(
   _projectId: string,
   _options: { skipEnrichment?: boolean } = {},
 ): Promise<{ project: ProjectListEntry; delta_locations: Record<string, string> }> {
-  const project = rawBundle().project;
+  const manifest = rawBundle();
+  const project = manifest.project;
   if (!project) throw new Error('static bundle: no project backend');
   return {
-    project: projectAsApiProject(project) as unknown as ProjectListEntry,
+    project: projectAsApiProject(project, manifest) as unknown as ProjectListEntry,
     delta_locations: {},
   };
 }
 
 export async function fetchIngestionHealth(_projectId: string) {
   throw new Error('static bundle: no ingestion backend');
+}
+
+// ---- the project page (the live ProjectDetailApp, mounted by ProjectPage) ---
+
+/** Ingestion reports live on the server. Their readers on the project page
+ *  (the header's run names, a derived collection's lineage) keep the facts
+ *  the project document gives them on a rejection. */
+export async function fetchIngestionReport(_projectId: string): Promise<never> {
+  throw new Error('static bundle: no ingestion reports');
+}
+
+/** The links section and the collection viewer's Links: the summary's links,
+ *  without their value mappings (never shipped). */
+export async function listProjectLinks(_projectId: string): Promise<DCLink[]> {
+  return (rawBundle().project?.links ?? []).map(linkAsApiLink) as unknown as DCLink[];
+}
+
+/** Resolvers only matter to the link editor, which a bundle never opens. */
+export async function listLinkResolvers(_projectId: string): Promise<ResolverInfo[]> {
+  return [];
+}
+
+/** A link's resolved mapping is computed on the server from its value
+ *  mappings, which a bundle does not carry. */
+export async function fetchLinkMappingPreview(): Promise<never> {
+  throw new Error(`Link mappings are ${READ_ONLY}.`);
+}
+
+/** A MultiQC collection's reports and samples are read from object storage;
+ *  the viewer shows the collection's facts instead in a bundle. */
+export async function fetchMultiQCByDataCollection(): Promise<never> {
+  throw new Error(`MultiQC reports are ${READ_ONLY}.`);
+}
+
+// The project page's write paths. Their controls are not offered in a bundle
+// (`useIsStaticBundle`); these refuse all the same, without a request.
+export async function renameDataCollection(): Promise<never> {
+  throw new Error(`Editing the project is ${READ_ONLY}.`);
+}
+export async function deleteDataCollection(): Promise<never> {
+  throw new Error(`Editing the project is ${READ_ONLY}.`);
+}
+export async function updateProjectLink(): Promise<never> {
+  throw new Error(`Editing the project is ${READ_ONLY}.`);
+}
+export async function deleteProjectLink(): Promise<never> {
+  throw new Error(`Editing the project is ${READ_ONLY}.`);
+}
+export async function setTableEditLock(): Promise<never> {
+  throw new Error(`Table editing is ${READ_ONLY}.`);
+}
+export async function restoreTableVersion(): Promise<never> {
+  throw new Error(`Data history is ${READ_ONLY}.`);
+}
+
+/** The "Recommended advanced charts" pills score the collection's schema on
+ *  the server: offline, no pills rather than a guess. */
+export async function fetchVizSuggestions(dcId: string): Promise<VizSuggestionsResponse> {
+  return { data_collection_id: dcId, schema: {}, viz_kinds: [] };
+}
+
+/** The project's dashboards: this bundle's tab family, each a link the
+ *  bundle's navigation answers in place. */
+export async function listDashboards(): Promise<DashboardListEntry[]> {
+  return bundleDashboards(rawBundle()) as unknown as DashboardListEntry[];
+}
+
+/** A collection's first rows: read from its bundled Parquet through the same
+ *  engine the dashboard uses. A collection the file does not carry is refused
+ *  with what to say (the project page shows "not included" before asking). */
+export async function fetchDataCollectionPreview(
+  dcId: string,
+  limit = 100,
+  _filters: InteractiveFilter[] = [],
+  version?: number | null,
+): Promise<PreviewResult> {
+  if (version != null) throw new Error(`Past versions are ${READ_ONLY}.`);
+  if (!dataRefFor(dcId)) throw new Error('This data collection is not included in this file.');
+  return { ...(await previewLive(dcId, limit)), filter_applied: false, version: null };
 }
 
 // ---- "changes since" (notifications bell, component diff) ------------------
@@ -1318,9 +1409,6 @@ export async function patchTableCells(): Promise<never> {
 }
 export async function mergeTableFile(): Promise<never> {
   throw new Error(`Table editing is ${READ_ONLY}.`);
-}
-export async function fetchDataCollectionPreview(): Promise<never> {
-  throw new Error(`The data preview is ${READ_ONLY}.`);
 }
 /** `{}` is what the real call answers on a miss: the spatial underlay (the
  *  one caller) then draws the cells without a background image. */

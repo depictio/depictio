@@ -93,12 +93,15 @@ const DEFAULT_APP_NAME = 'Depictio';
  * one-off assignment: the title re-renders when the branding lands, or when an
  * admin renames the instance without a reload.
  *
- * Pass no `page` for a title that is just the instance name.
+ * Pass no `page` for a title that is just the instance name, and
+ * `enabled: false` from a page drawn inside another one (a static bundle's
+ * project page), which leaves the title to its host.
  */
-export function usePageTitle(page?: string | null): void {
+export function usePageTitle(page?: string | null, { enabled = true }: { enabled?: boolean } = {}): void {
   const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
   const appName = branding?.app_name || DEFAULT_APP_NAME;
   React.useEffect(() => {
+    if (!enabled) return;
     document.title = page ? `${appName} — ${page}` : appName;
-  }, [appName, page]);
+  }, [appName, page, enabled]);
 }

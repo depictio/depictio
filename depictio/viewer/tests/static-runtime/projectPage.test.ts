@@ -10,9 +10,11 @@ import { describe, expect, it } from 'vitest';
 import type { BundleManifest } from 'depictio-static-core';
 
 import {
+  DIRECT_WORKFLOW_ID,
+  bundleDashboards,
   collectionRows,
-  collectionTotals,
   collectionsReadByViews,
+  linkAsApiLink,
   projectAsApiProject,
   userColumns,
 } from '../../src/static-runtime/projectModel';
@@ -35,7 +37,6 @@ describe('collectionRows', () => {
     expect(penguins.rows).toBe(3);
     expect(penguins.columns).toEqual(['species', 'bill_length_mm']);
     expect(penguins.workflow).toBe('fixture-pipeline');
-    expect(collectionTotals(rows)).toEqual({ total: 2, bundled: 1, snapshot: 0, rows: 3 });
   });
 
   it('marks a collection only seen through frozen views as snapshots', () => {
@@ -86,6 +87,132 @@ describe('projectAsApiProject', () => {
     expect(api.name).toBe('Fixture project');
     expect(api.template_origin.template_id).toBe('nf-core/fixture/1.0.0');
     expect(api.template_origin.run_provenance.map((p) => p.key)).toEqual(['island', 'input']);
+  });
+});
+
+type ApiDc = {
+  _id: string;
+  data_collection_tag: string;
+  config: { type: string; metatype?: string; dc_specific_properties: { format?: string } };
+  last_aggregation?: {
+    rows_total: number | null;
+    delta_version: number | null;
+    aggregation_time?: string;
+    aggregation_columns_specs: { name: string; type: string | null; specs?: { nunique: number } }[];
+  };
+  flexible_metadata: Record<string, number> | null;
+  bundle: { presence: string; rows: number | null; columns: string[] };
+};
+type ApiProject = {
+  workflows: {
+    _id: string;
+    name: string;
+    engine?: { name: string };
+    catalog?: { name: string };
+    data_collections: ApiDc[];
+  }[];
+  joins: { left_dc: string; right_dc: string }[];
+  links: { id: string; link_config: { resolver: string } }[];
+};
+
+describe('projectAsApiProject: the live project page, offline', () => {
+  const manifest = load('manifest-tabs.json');
+  const api = projectAsApiProject(manifest.project!, manifest) as unknown as ApiProject;
+  const dcs = api.workflows.flatMap((w) => w.data_collections);
+  const byTag = Object.fromEntries(dcs.map((d) => [d.data_collection_tag, d]));
+
+  it('nests the collections under their workflow, as the enriched project does', () => {
+    expect(api.workflows.map((w) => w.name)).toEqual(['fixture-pipeline']);
+    expect(api.workflows[0].engine?.name).toBe('nextflow');
+    expect(api.workflows[0].catalog?.name).toBe('nf-core');
+    expect(dcs.map((d) => d.data_collection_tag)).toEqual(['penguins', 'multiqc_report']);
+    expect(api.joins[0]).toMatchObject({ left_dc: 'penguins', right_dc: 'multiqc_report' });
+    expect(api.links[0].link_config.resolver).toBe('sample_mapping');
+  });
+
+  it("gives each collection its last ingestion's facts, the whole schema included", () => {
+    const penguins = byTag.penguins;
+    expect(penguins.config).toMatchObject({ type: 'table', metatype: 'Aggregate' });
+    expect(penguins.config.dc_specific_properties.format).toBe('csv');
+    expect(penguins.last_aggregation).toMatchObject({ rows_total: 3, delta_version: 2 });
+    expect(penguins.last_aggregation!.aggregation_columns_specs.map((c) => c.name)).toEqual([
+      'species',
+      'bill_length_mm',
+      'island',
+    ]);
+    expect(penguins.last_aggregation!.aggregation_columns_specs[0].specs).toEqual({ nunique: 2 });
+    expect(penguins.flexible_metadata).toEqual({ deltatable_size_bytes: 2048 });
+    // A report's size is its files'.
+    expect(byTag.multiqc_report.flexible_metadata).toEqual({ total_file_size_bytes: 4096 });
+    expect(byTag.multiqc_report.last_aggregation).toBeUndefined();
+  });
+
+  it('says what the file holds of each collection', () => {
+    expect(byTag.penguins.bundle).toEqual({
+      presence: 'bundled',
+      rows: 3,
+      columns: ['species', 'bill_length_mm'],
+    });
+    expect(byTag.multiqc_report.bundle).toEqual({ presence: 'absent', rows: null, columns: [] });
+  });
+
+  it("reads a bundled table's schema from the file when the summary has none", () => {
+    const old = structuredClone(manifest);
+    for (const dc of old.project!.data_collections) delete dc.columns;
+    const doc = (projectAsApiProject(old.project!, old) as unknown as ApiProject).workflows[0]
+      .data_collections[0];
+    expect(doc.last_aggregation!.aggregation_columns_specs).toEqual([
+      { name: 'species', type: 'string' },
+      { name: 'bill_length_mm', type: 'float64' },
+    ]);
+  });
+
+  it('wraps direct collections and bundled tables the summary misses in a non-workflow', () => {
+    const basic = load('manifest-basic.json');
+    const api2 = projectAsApiProject(
+      { ...manifest.project!, workflows: [], data_collections: [] },
+      basic,
+    ) as unknown as ApiProject;
+    expect(api2.workflows.map((w) => w._id)).toEqual([DIRECT_WORKFLOW_ID]);
+    expect(api2.workflows[0].engine).toBeUndefined();
+    expect(api2.workflows[0].data_collections[0]).toMatchObject({
+      _id: 'dc00000000000000000000a1',
+      bundle: { presence: 'bundled', rows: 3 },
+    });
+  });
+
+  it('answers links without value mappings', () => {
+    const link = linkAsApiLink(manifest.project!.links[0]);
+    expect(link).toMatchObject({
+      source_column: 'species',
+      link_config: { resolver: 'sample_mapping', target_field: 'sample_name' },
+      enabled: true,
+    });
+    expect(JSON.stringify(link)).not.toContain('mappings');
+  });
+});
+
+describe('bundleDashboards', () => {
+  it("lists the bundle's family as the project's dashboards", () => {
+    const manifest = load('manifest-tabs.json');
+    const rows = bundleDashboards(manifest) as {
+      dashboard_id: string;
+      parent_dashboard_id: string | null;
+      project_id: string;
+    }[];
+    expect(rows).toHaveLength(manifest.tabs.length);
+    const main = manifest.tabs.find((t) => t.is_main_tab)!;
+    expect(rows.filter((r) => r.parent_dashboard_id === null).map((r) => r.dashboard_id)).toEqual([
+      main.id,
+    ]);
+    expect(rows.every((r) => r.project_id === manifest.project!.id)).toBe(true);
+  });
+
+  it('makes a single-tab bundle its own main dashboard', () => {
+    const basic = load('manifest-basic.json');
+    expect(bundleDashboards(basic)).toEqual([
+      expect.objectContaining({ dashboard_id: basic.dashboard.id, parent_dashboard_id: null }),
+    ]);
   });
 });
 
