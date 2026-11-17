@@ -92,9 +92,7 @@ class StorageBackend(Protocol):
 
     def put_bytes(self, key: str, data: bytes, *, content_type: str | None = None) -> None: ...
 
-    def upload_file(
-        self, key: str, path: str | Path, *, content_type: str | None = None
-    ) -> None:
+    def upload_file(self, key: str, path: str | Path, *, content_type: str | None = None) -> None:
         """Upload a local file (multipart when the backend needs it)."""
         ...
 

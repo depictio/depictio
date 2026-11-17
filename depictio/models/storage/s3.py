@@ -173,9 +173,7 @@ class S3Backend:
         except Exception as exc:
             raise _wrap(exc, f"writing {self.url(key)}") from exc
 
-    def upload_file(
-        self, key: str, path: str | Path, *, content_type: str | None = None
-    ) -> None:
+    def upload_file(self, key: str, path: str | Path, *, content_type: str | None = None) -> None:
         extra = {"ExtraArgs": {"ContentType": content_type}} if content_type else {}
         try:
             self.client.upload_file(str(path), self.bucket, key, **extra)
