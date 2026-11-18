@@ -149,7 +149,7 @@ any drift.
 **Administration → Log & Task → Watchers** lists every live watcher, and each card
 has a **Run now** button that starts a cycle without waiting for a change.
 
-![How a Run now request reaches a watcher](https://depictio.github.io/depictio-docs/images/design/v0.12/react/schema_watch_trigger.png)
+![How a Run now request reaches a watcher](https://depictio.github.io/depictio-docs/images/guides/versioning/schema_watch_trigger.svg)
 
 The registry is one-way — a watcher on a login node heartbeats out, and the
 server has no route back in — so the button records a request that the watcher

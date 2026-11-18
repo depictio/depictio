@@ -65,4 +65,4 @@ must match the project YAML, or the import fails naming the component.
 ## What it does not show
 
 Authentication beyond the default config file, running the CLI from a container,
-and multi-user provisioning are in `docs/nextflow-trigger.md`.
+and multi-user provisioning are in the Nextflow trigger page of the docs (https://depictio.github.io/depictio-docs/workflows/nextflow/trigger/).

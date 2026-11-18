@@ -50,7 +50,7 @@ them (a comment next to `CONDA_SPECS` says so). The specs and the conda platform
 are recorded next to the binaries, so changing either reinstalls them on the next
 `up`.
 
-![one server, two ways to run it](https://depictio.github.io/depictio-docs/images/design/v1.4/local/schema_same_code.png)
+![one server, two ways to run it](https://depictio.github.io/depictio-docs/images/installation/local/schema_same_code_docs.png)
 
 ![what depictio local up does](https://depictio.github.io/depictio-docs/images/design/v1.4/local/schema_up_flow.png)
 
