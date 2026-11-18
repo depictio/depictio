@@ -275,6 +275,11 @@ body.quarto-dark .dpx-scheme-toggle .dpx-icon-moon {{ display: none; }}
 }}
 .quarto-figure:hover .anchorjs-link, div[id^="tbl-"]:hover .anchorjs-link,
 .quarto-float-caption > .anchorjs-link:focus {{ opacity: 1; }}
+/* A tile the export could not draw (its placeholder on screen, no runtime
+   drawing it instead) has no data to date: its caption drops the badge. */
+:is(.quarto-float, div[id^="fig-"], div[id^="tbl-"]):has(.dpx-unavailable):not(:has([data-depictio-mounted])) .dpx-asof {{
+  display: none;
+}}
 /* The title block's subtitle under the dashboard's name. */
 .quarto-title-block .subtitle {{ margin-top: .25rem; }}
 </style>"""
@@ -373,12 +378,18 @@ CHROME_JS = r"""<script>
     }
     return row;
   }
+  // The tile a note describes: the runtime's placeholder when the report
+  // carries one, else the output right above the note (its figure, its
+  // table, the cell that drew it), in a report rendered without the runtime.
   function tileFor(note) {
+    // The nearest output above the note, never one past it: a note whose
+    // own tile has no placeholder must not land on the tile before it.
     var n = note.previousElementSibling;
     for (var steps = 0; n && steps < 3; steps++, n = n.previousElementSibling) {
       if (n.matches('.depictio-tile')) return n;
       var inner = n.querySelectorAll('.depictio-tile');
       if (inner.length) return inner[inner.length - 1];
+      if (n.matches('.quarto-float, div[id^="fig-"], div[id^="tbl-"], .cell')) return n;
     }
     return null;
   }
@@ -475,11 +486,11 @@ CHROME_JS = r"""<script>
           continue;
         }
         // A card of a row: its own "i", on the card the export drew.
-        var pos = -1;
-        for (var k = 0; k < refs.length; k++) {
-          if (refs[k].split(':').pop() === index) { pos = k; break; }
+        var pos = parseInt(item.getAttribute('data-dpx-pos') || '-1', 10);
+        for (var k = 0; pos < 0 && k < refs.length; k++) {
+          if (refs[k].split(':').pop() === index) pos = k;
         }
-        var strip = tile.querySelector('.depictio-fallback .dpx-cards');
+        var strip = tile.querySelector('.dpx-cards');
         var card = strip && pos >= 0 ? strip.children[pos] : null;
         if (card) {
           card.classList.add('dpx-card-host');

@@ -144,7 +144,7 @@ def about_markdown(description: str, *, rewrite: Callable[[str], str] = lambda s
     return "\n\n".join(parts)
 
 
-def _about_item(body: str, *, name: str = "", index: str = "") -> str:
+def _about_item(body: str, *, name: str = "", index: str = "", pos: int | None = None) -> str:
     """One component's description inside an about note, marked for the page's
     "i" buttons (``report_theme``): its name heads the popover, its index ties
     it to its card in a row. A fenced div, so a page without the script (the
@@ -154,6 +154,8 @@ def _about_item(body: str, *, name: str = "", index: str = "") -> str:
         attrs += f' data-dpx-name="{_attr(name)}"'
     if index:
         attrs += f' data-dpx-index="{_attr(index)}"'
+    if pos is not None:
+        attrs += f' data-dpx-pos="{pos}"'
     longest = max((len(m.group(0)) for m in re.finditer(r":{3,}", body)), default=2)
     fence = ":" * max(3, longest + 1)
     return f"{fence} {{{attrs}}}\n{body}\n{fence}"
@@ -606,12 +608,21 @@ def about_callout_many(
     An item may carry the card's index as a third value: the page then gives
     that card its own "i" button, opening its own part of the note."""
     parts = []
-    for item in items:
+    for pos, item in enumerate(items):
         name, description = item[0], item[1]
         index = item[2] if len(item) > 2 else ""  # type: ignore[misc]
         body = about_markdown(description.strip(), rewrite=rewrite) if description else ""
         if body.strip():
-            parts.append(_about_item(f"**{name}**\n\n{body}", name=name, index=index))
+            # Its place in the row too: a report rendered without the runtime
+            # has no tile placeholder to read the cards' order from.
+            parts.append(
+                _about_item(
+                    f"**{name}**\n\n{body}",
+                    name=name,
+                    index=index,
+                    pos=pos if index else None,
+                )
+            )
     if not parts:
         return ""
     body = "\n\n".join(parts)
