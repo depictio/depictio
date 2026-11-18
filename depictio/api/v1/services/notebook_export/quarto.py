@@ -95,7 +95,7 @@ class QuartoFrontMatter:
         if self.favicon_data_uri:
             header.insert(0, {"text": f'<link rel="icon" href="{self.favicon_data_uri}">'})
         if header:
-            doc["format"]["html"]["include-in-header"] = header[0] if len(header) == 1 else header
+            doc["format"]["html"]["include-in-header"] = header
         if self.before_body:
             doc["format"]["html"]["include-before-body"] = {"text": self.before_body}
         if self.after_body:
