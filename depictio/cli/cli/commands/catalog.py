@@ -412,7 +412,7 @@ def catalog_validate(
                 # otherwise a missing or broken recipe passes CI unnoticed.
                 if out.recipe:
                     try:
-                        produced = recipe_output_columns(out.recipe)
+                        produced = recipe_output_columns(out.recipe, search_dir=out._source_dir)
                     except Exception as exc:
                         problems.append(f"{out.id}: recipe {out.recipe} → {exc}")
                         continue
@@ -425,7 +425,7 @@ def catalog_validate(
                         )
             elif out.recipe:
                 try:
-                    available = set(recipe_output_columns(out.recipe))
+                    available = set(recipe_output_columns(out.recipe, search_dir=out._source_dir))
                     source = f"recipe {out.recipe}"
                 except Exception as exc:
                     problems.append(f"{out.id}: recipe {out.recipe} → {exc}")

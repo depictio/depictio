@@ -56,7 +56,9 @@ _RENAMED_CONSTANTS = {
 # ---------------------------------------------------------------------------
 
 
-def resolve_recipe_path(recipe_ref: str, pipeline_version: str | None = None) -> Path:
+def resolve_recipe_path(
+    recipe_ref: str, pipeline_version: str | None = None, search_dir: Path | None = None
+) -> Path:
     """Resolve the filesystem path for a recipe using versioned-then-shared fallback.
 
     Args:
@@ -71,6 +73,13 @@ def resolve_recipe_path(recipe_ref: str, pipeline_version: str | None = None) ->
     """
     *pipeline_parts, name = recipe_ref.split("/")
     pipeline = "/".join(pipeline_parts)
+
+    # A tool folder validated outside the catalog (a contribution not yet in the
+    # repo, `catalog validate --path <dir>`): its module-owned recipe sits next to
+    # its YAML. Only when the ref's module is that folder, so it cannot shadow
+    # another module's recipe.
+    if search_dir is not None and pipeline == search_dir.name and (search_dir / name).exists():
+        return search_dir / name
 
     if pipeline_version:
         versioned = PROJECTS_DIR / pipeline / pipeline_version / "recipes" / name
@@ -101,7 +110,9 @@ def resolve_recipe_path(recipe_ref: str, pipeline_version: str | None = None) ->
 # ---------------------------------------------------------------------------
 
 
-def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> ModuleType:
+def load_recipe(
+    recipe_name: str, pipeline_version: str | None = None, search_dir: Path | None = None
+) -> ModuleType:
     """Load a recipe Python module by name.
 
     Args:
@@ -111,7 +122,7 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
     Validates that the module has SOURCES, OUTPUT_SCHEMA, and a callable transform(),
     and rejects the pre-rename constant names (EXPECTED_SCHEMA, OPTIONAL_SCHEMA).
     """
-    recipe_path = resolve_recipe_path(recipe_name, pipeline_version)
+    recipe_path = resolve_recipe_path(recipe_name, pipeline_version, search_dir)
 
     spec = importlib.util.spec_from_file_location(
         f"depictio.recipes.{recipe_name.replace('/', '.')}", recipe_path
