@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import re
 
 import yaml
@@ -600,3 +601,128 @@ def test_the_pdf_holds_the_parameters_its_links_point_to(ampliseq_tabs):
     assert "## Run parameters {#export-parameters}" in body
     assert "#dpx-table(" in body.split("{#export-parameters}")[1]
     assert "## Run parameters" not in _body(generate_qmd(_plan(ampliseq_tabs, project=project)))
+
+
+def test_static_figures_give_crowded_category_labels_room(monkeypatch):
+    import plotly.graph_objects as go
+
+    from depictio.notebook import components as c
+
+    # MultiQC's FastQC status heatmap: ten wrapped labels, a fixed flat angle.
+    labels = [
+        "Basic <br>Statistics",
+        "Per Base <br>Sequence <br>Quality",
+        "Per <br>Sequence <br>Quality <br>Scores",
+        "Per Base <br>Sequence <br>Content",
+        "Per <br>Sequence <br>GC Content",
+        "Per Base N<br> Content",
+        "Sequence <br>Length <br>Distribution",
+        "Sequence <br>Duplication<br> Levels",
+        "Overrepresented<br> Sequences",
+        "Adapter <br>Content",
+    ]
+    fig = go.Figure(go.Heatmap(z=[[0] * 10] * 4, y=[f"SRR1007013{i}_1" for i in range(4)]))
+    fig.update_layout(
+        height=400,
+        xaxis={
+            "type": "category",
+            "tickmode": "array",
+            "tickvals": list(range(10)),
+            "ticktext": labels,
+            "tickangle": 0,
+        },
+    )
+    c.fit_category_axes(fig, 720)
+    assert fig.layout.xaxis.tickangle == -45
+    assert fig.layout.xaxis.automargin and fig.layout.yaxis.automargin
+    assert "Per Sequence Quality Scores" in fig.layout.xaxis.ticktext
+    assert not any("<br>" in t for t in fig.layout.xaxis.ticktext)
+    assert fig.layout.height > 400  # the plot keeps its height under the labels
+
+    # Slots narrower than a line of text: upright labels.
+    many = go.Figure(go.Bar(x=[f"sample_number_{i}" for i in range(80)], y=[1] * 80))
+    many.update_layout(height=400)
+    c.fit_category_axes(many, 720)
+    assert many.layout.xaxis.tickangle == -90
+
+    # Labels that fit, numbers and dates are left as the author drew them.
+    for x in (["A", "B", "C"], [1, 2, 3], ["2023-01-01", "2023-02-01", "2023-03-01"]):
+        f = go.Figure(go.Bar(x=x, y=[1, 2, 3]))
+        f.update_layout(height=400)
+        c.fit_category_axes(f, 720)
+        assert f.layout.xaxis.tickangle is None and f.layout.height == 400
+
+    # A figure in a row is drawn at its share of the column.
+    seen = {}
+    monkeypatch.setattr(
+        go.Figure, "to_image", lambda self, **kw: seen.update(kw) or b"png", raising=True
+    )
+    c.set_static_width(360)
+    try:
+        assert c.figure_png(go.Figure(go.Bar(x=[1], y=[1])))
+        assert seen["width"] == 360
+    finally:
+        c.set_static_width(None)
+
+
+def test_a_section_description_and_its_note_stay_two_lines(penguins_tabs):
+    for pdf in (False, True):
+        body = _body(generate_qmd(_plan(penguins_tabs, pdf=pdf)))
+        note = "*On the dashboard this section is shown on every tab"
+        assert note in body
+        before = body.split(note, 1)[0]
+        # A markdown hard break, which a typst page keeps; never a bare <br>.
+        assert before.endswith("*\\\n"), before[-80:]
+        assert "*<br>*On the dashboard" not in body
+
+
+def test_a_pdf_card_prints_its_value_in_the_cards_own_format():
+    from depictio.notebook.components import CardComponent
+
+    def card(value, **meta):
+        comp = CardComponent.__new__(CardComponent)
+        comp.meta = {"index": "c1", "title": "Shannon", "aggregation": "median", **meta}
+        comp._data = {"value": value, "secondary": None, "icon_svg": None}
+        return comp
+
+    assert '"7.70"' in card(7.7049, decimals=2)._typst_card_()
+    assert '"61.5"' in card(61.52, decimals=1)._typst_card_()
+    assert '"41%"' in card(0.41, format="percent")._typst_card_()
+    assert '"214.3k"' in card(214321, format="si")._typst_card_()
+    # No format: the dashboard's magnitude-aware rounding, not four digits.
+    assert '"7.71"' in card(7.7051)._typst_card_()
+    assert '"12"' in card(12)._typst_card_()
+    # `format` wins over `decimals`, as in the app.
+    assert '"41%"' in card(0.41, format="percent", decimals=2)._typst_card_()
+    # The box-plot strip reads the same format.
+    boxed = card(
+        7.7049,
+        decimals=2,
+        secondary_layout="box_plot",
+    )
+    boxed._data["secondary"] = {"box_plot_stats": {"min": 5.2511, "median": 7.7049, "max": 9.4}}
+    assert 'dpx-range("5.25", "7.70", "9.40")' in boxed._typst_card_()
+
+
+def test_a_failed_tiles_caption_does_not_claim_data(ampliseq_tabs):
+    from depictio.api.v1.services.notebook_export.pdf_typst import DEFINITIONS, TYPST_TILE_DONE
+
+    body = _body(generate_qmd(_plan(ampliseq_tabs, pdf=True)))
+    # The PDF's badge is typst, silent under a tile that failed; the HTML's
+    # is the same span as ever.
+    assert re.search(
+        r'\[<span class="dpx-asof">Data: [^<]+</span>\]\{\.content-visible when-format="html"\}'
+        r'`#dpx-asof\("Data: [^"]+"\)`\{=typst\}',
+        body,
+    )
+    assert "dpx-failed.update(true)" in DEFINITIONS.split("#let dpx-note", 1)[1].split("#let", 1)[0]
+    assert "if not dpx-failed.get()" in DEFINITIONS
+    # A tile with no caption (here a card on its own) clears the mark itself.
+    tabs = copy.deepcopy(ampliseq_tabs)
+    lone = next(m for m in tabs[0]["stored_metadata"] if m.get("component_type") == "figure")
+    lone.update(component_type="card", aggregation="count", column_name="sample")
+    assert TYPST_TILE_DONE in _body(generate_qmd(_plan(tabs, pdf=True)))
+    assert TYPST_TILE_DONE not in _body(generate_qmd(_plan(tabs)))
+    html_only = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert "dpx-asof(" not in html_only and TYPST_TILE_DONE not in html_only
+    assert '<span class="dpx-asof">Data: ' in html_only
