@@ -149,7 +149,7 @@ any drift.
 **Administration → Log & Task → Watchers** lists every live watcher, and each card
 has a **Run now** button that starts a cycle without waiting for a change.
 
-![How a Run now request reaches a watcher](images/v0.12/react/schema_watch_trigger.png)
+![How a Run now request reaches a watcher](https://depictio.github.io/depictio-docs/images/design/v0.12/react/schema_watch_trigger.png)
 
 The registry is one-way — a watcher on a login node heartbeats out, and the
 server has no route back in — so the button records a request that the watcher
@@ -158,7 +158,7 @@ until it does. The request is a flag, not a queue — pressing repeatedly still
 produces one cycle — and it is only polled between cycles, so a request made
 while one is already running is honoured once that one finishes.
 
-![Watchers pane with a watcher expanded](images/v0.12/react/admin_monitoring_agents_light.png)
+![Watchers pane with a watcher expanded](https://depictio.github.io/depictio-docs/images/design/v0.12/react/admin_monitoring_agents_light.png)
 
 Cycles started this way are recorded with trigger `ui` rather than `watch`, in
 both the ingestion history and the Delta commit metadata, so a hand-started
@@ -238,7 +238,7 @@ loop should decide to do.
 
 ### Rewriting only the runs that changed
 
-![What a cycle costs, before and after](images/v0.12/react/schema_cycle_cost.png)
+![What a cycle costs, before and after](https://depictio.github.io/depictio-docs/images/design/v0.12/react/schema_cycle_cost.png)
 
 
 `--write-mode replace-runs` on its own partitions the table, but still rebuilds
@@ -272,7 +272,7 @@ in the log — whenever a partial write could not be trusted:
 
 Declining is always the safe direction: it does *more* work, never less.
 
-![How each write is chosen](images/v0.12/react/schema_write_decision.png)
+![How each write is chosen](https://depictio.github.io/depictio-docs/images/design/v0.12/react/schema_write_decision.png)
 
 ### Untouched collections are left alone
 
@@ -294,7 +294,7 @@ step timeline.
 Between two scans of the same collection, a source file can gain a column, lose
 one, or change a column's type.
 
-![What each schema change does](images/v0.12/react/schema_column_drift.png)
+![What each schema change does](https://depictio.github.io/depictio-docs/images/design/v0.12/react/schema_column_drift.png)
 
 | Change | What happens |
 |---|---|

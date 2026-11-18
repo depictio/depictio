@@ -11,11 +11,11 @@ It replaces the 0.13.x Dash port (an iframe to a separately deployed JBrowse on
 shipped anymore. Nothing else has to run: the browser is a lazy chunk of the
 SPA and the track bytes come through the API.
 
-![Strand-seq showcase in Depictio](../images/jbrowse/strandseq_context.png)
+![Strand-seq showcase in Depictio](https://depictio.github.io/depictio-docs/images/design/jbrowse/strandseq_context.png)
 
 Closer, the same tiles:
 
-![Strand-seq overview](../images/jbrowse/strandseq_overview.png)
+![Strand-seq overview](https://depictio.github.io/depictio-docs/images/design/jbrowse/strandseq_overview.png)
 
 ## Architecture
 
@@ -378,17 +378,17 @@ version's tracks and locus and never writes the viewer's remembered ones.
   (`DEPICTIO_JBROWSE_UCSC_CATALOG_TTL_S`); the builder searches it through
   `GET /jbrowse/ucsc/{assembly}/tracks?q=`.
 
-![Tracks menu](../images/jbrowse/track_menu.png)
-![Force load: limit reached](../images/jbrowse/force_load_before.png)
-![Force load: toggle on](../images/jbrowse/force_load_after.png)
-![UCSC tracks](../images/jbrowse/ucsc_tracks.png)
+![Tracks menu](https://depictio.github.io/depictio-docs/images/design/jbrowse/track_menu.png)
+![Force load: limit reached](https://depictio.github.io/depictio-docs/images/design/jbrowse/force_load_before.png)
+![Force load: toggle on](https://depictio.github.io/depictio-docs/images/design/jbrowse/force_load_after.png)
+![UCSC tracks](https://depictio.github.io/depictio-docs/images/design/jbrowse/ucsc_tracks.png)
 
 **Builder:** the component builder has a *Genome browser* type with the
 assembly, locus, tracks, display toggles, cross-filtering, "follow filtered
 rows", preset and a JSON override editor, plus a live summary of the tracks the
 current filters would show.
 
-![Builder](../images/jbrowse/builder_jbrowse.png)
+![Builder](https://depictio.github.io/depictio-docs/images/design/jbrowse/builder_jbrowse.png)
 
 ### Opening locus
 
@@ -741,34 +741,34 @@ key of `backend.env`), `.env.example` and `depictio local up`.
    files uploaded). 4 HGSVC samples and 384 cells with their ASHLEYS call;
    213 MosaiCatcher SV BEDs coloured by call class. Lasso cells in the scatter →
    their SV tracks; click an SV → the cell is picked everywhere.
-   ![filter in context](../images/jbrowse/strandseq_filter_context.png)
-   ![filter](../images/jbrowse/strandseq_filter.png)
-   ![click](../images/jbrowse/strandseq_click.png)
-   ![compact](../images/jbrowse/strandseq_compact.png)
+   ![filter in context](https://depictio.github.io/depictio-docs/images/design/jbrowse/strandseq_filter_context.png)
+   ![filter](https://depictio.github.io/depictio-docs/images/design/jbrowse/strandseq_filter.png)
+   ![click](https://depictio.github.io/depictio-docs/images/design/jbrowse/strandseq_click.png)
+   ![compact](https://depictio.github.io/depictio-docs/images/design/jbrowse/strandseq_compact.png)
 2. **SARS-CoV-2 amplicons** (same project, custom `MN908947.3` assembly, read
    in place from the viralrecon megatest). iVar VCFs + primer-trimmed BAMs,
    `locus_from` jumps to the picked variant, a custom `compact_amplicons`
    preset and an extra UCSC gene track from `config_overrides`.
-   ![variant in context](../images/jbrowse/sarscov2_context.png)
-   ![variant](../images/jbrowse/sarscov2_variant.png)
+   ![variant in context](https://depictio.github.io/depictio-docs/images/design/jbrowse/sarscov2_context.png)
+   ![variant](https://depictio.github.io/depictio-docs/images/design/jbrowse/sarscov2_variant.png)
 3. **nf-core/cutandrun 3.1**: *Genome tracks* tab: bigWig per sample coloured
    per target, SEACR and MACS2 peaks, deduplicated BAM, driven by the target
    filter; cards, a SEACR Manhattan and a region table on the same tab.
-   ![cutandrun in context](../images/jbrowse/nfcore_cutandrun_context.png)
-   ![cutandrun](../images/jbrowse/nfcore_cutandrun.png)
+   ![cutandrun in context](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_cutandrun_context.png)
+   ![cutandrun](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_cutandrun.png)
    A region picked in the table (or on the Manhattan) opens its sample's
    tracks on it (`seacr_peaks -> tracks` link + `locus_from`), and every other
    component of the tab narrows with it:
-   ![peak picked in context](../images/jbrowse/nfcore_cutandrun_peak_context.png)
-   ![peak picked](../images/jbrowse/nfcore_cutandrun_peak.png)
+   ![peak picked in context](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_cutandrun_peak_context.png)
+   ![peak picked](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_cutandrun_peak.png)
 4. **nf-core/chipseq 1.2.0**: ChIP and input bigWigs, MACS2 narrowPeak calls
    and BAM per antibody (hg19 megatest), with cards, a MACS2 Manhattan and a
-   peak table that drive it the same way. ![chipseq in context](../images/jbrowse/nfcore_chipseq_context.png)
-   ![chipseq](../images/jbrowse/nfcore_chipseq.png)
+   peak table that drive it the same way. ![chipseq in context](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_chipseq_context.png)
+   ![chipseq](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_chipseq.png)
 5. **nf-core/rnaseq 3.26.0**: strand-specific bigWig coverage and BAM per
    sample (hg19 megatest), with cards and two lassoable sample scatters.
-   ![rnaseq in context](../images/jbrowse/nfcore_rnaseq_context.png)
-   ![rnaseq](../images/jbrowse/nfcore_rnaseq.png)
+   ![rnaseq in context](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_rnaseq_context.png)
+   ![rnaseq](https://depictio.github.io/depictio-docs/images/design/jbrowse/nfcore_rnaseq.png)
 
 The nf-core templates read the tracks in place when `TRACKS_URI` is set
 (`depictio run --var TRACKS_URI=s3://…/results/`; the template turns it into

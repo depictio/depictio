@@ -8,7 +8,7 @@ variables whose presence drops or repoints collections. The template reads which
 route a run took from the run itself, `pipeline_info/params_<timestamp>.json`.
 Nobody passes a flag.
 
-![from params_<ts>.json to the dashboard](images/template-params/schema_from_params.png)
+![from params_<ts>.json to the dashboard](https://depictio.github.io/depictio-docs/images/design/template-params/schema_from_params.png)
 
 ## Check your pipeline in three commands
 
