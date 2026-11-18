@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
+from . import text as _text
 from . import theme as _theme
 from . import typst as _typst
 
@@ -81,6 +82,10 @@ def _hex_color(color: str | None, fallback: str) -> str:
         return color
     shades = _theme.MANTINE_SHADES.get(color.split(".")[0].strip().lower())
     return shades[0] if shades else fallback
+
+
+#: "No argument given", where ``None`` is a value (a card with no value).
+_MISSING: Any = object()
 
 
 class StaticCard:
@@ -141,6 +146,100 @@ def set_static_width(px: int | None = None) -> None:
     _STATIC_WIDTH["px"] = int(px) if px else STATIC_FIGURE_WIDTH
 
 
+_BR_RE = re.compile(r"<br\s*/?>", re.I)
+_MARKUP_RE = re.compile(r"<[^>]+>")
+# Inter's average glyph is a little over half its size; a label's width in px
+# is about this times its length times the font size.
+_GLYPH = 0.58
+
+
+def _axis_labels(fig, name: str) -> list[str]:
+    """What a categorical axis prints: its ``ticktext`` when it sets one, else
+    the string values its traces put on it. Empty for a numeric or date axis."""
+    axis = fig.layout[name]
+    if axis.type not in (None, "-", "category", "multicategory"):
+        return []
+    if axis.ticktext is not None and len(axis.ticktext):
+        return [str(t) for t in axis.ticktext]
+    letter, suffix = name[0], name[5:]
+    seen: dict[str, None] = {}
+    for trace in fig.data:
+        if (getattr(trace, f"{letter}axis", None) or letter) != letter + suffix:
+            continue
+        values = getattr(trace, letter, None)
+        if values is None:
+            continue
+        for v in values:
+            if isinstance(v, str):
+                seen.setdefault(v, None)
+            elif axis.type != "category":
+                return []  # numbers on an auto axis: not categorical
+    labels = list(seen)
+    if axis.type != "category" and labels:
+        # Plotly reads ISO dates and numbers held as strings as such.
+        if all(re.match(r"^-?[\d.]+$|^\d{4}-\d{2}-\d{2}", v) for v in labels):
+            return []
+    return labels
+
+
+def fit_category_axes(fig, width: int) -> None:
+    """Give a static figure's categorical axes room for their labels.
+
+    In a browser a crowded axis is read by hovering; on paper its labels run
+    into each other. A categorical x axis whose widest label does not fit its
+    slot is turned to 45 degrees (90 when the slots are narrower than a line),
+    its wrapped labels set on one line, the font made smaller only when even
+    that does not fit; the figure grows by what the turned labels take, so the
+    plot keeps its height. Every categorical axis gets ``automargin``. In place.
+    """
+    layout = fig.layout
+    base = (layout.font.size if layout.font and layout.font.size else None) or 12
+    margin = layout.margin
+    side = (margin.l if margin.l is not None else 80) + (margin.r if margin.r is not None else 80)
+    names = {"xaxis", "yaxis"}
+    for trace in fig.data:
+        for letter in ("x", "y"):
+            ref = getattr(trace, f"{letter}axis", None)
+            if ref:
+                names.add(f"{letter}axis{ref[1:]}")
+    extra = 0.0
+    for name in sorted(names):
+        try:
+            axis = layout[name]
+        except (KeyError, ValueError):
+            continue
+        labels = _axis_labels(fig, name)
+        if not labels:
+            continue
+        axis.automargin = True
+        if name[0] != "x" or (axis.tickangle not in (None, 0)):
+            continue
+        size = (axis.tickfont.size if axis.tickfont and axis.tickfont.size else None) or base
+        lines = [_MARKUP_RE.sub("", part).strip() for lab in labels for part in _BR_RE.split(lab)]
+        widest = max((len(t) for t in lines), default=0) * _GLYPH * size
+        domain = axis.domain or (0, 1)
+        slot = max(1.0, (width - side) * (domain[1] - domain[0]) * 0.9) / len(labels)
+        if widest + 4 <= slot:
+            continue
+        flat = [
+            " ".join(_MARKUP_RE.sub("", p).strip() for p in _BR_RE.split(lab)) for lab in labels
+        ]
+        flat = [t if len(t) <= 40 else t[:39] + "\u2026" for t in flat]
+        angle = -45 if slot >= 1.7 * size else -90
+        if angle == -90 and slot < 1.25 * size:
+            size = max(7.0, slot / 1.25)
+        if axis.ticktext is not None and len(axis.ticktext):
+            axis.ticktext = flat
+        elif any(_BR_RE.search(lab) for lab in labels) or flat != labels:
+            axis.tickmode, axis.tickvals, axis.ticktext = "array", labels, flat
+        axis.tickangle = angle
+        axis.tickfont.size = size
+        reach = max(len(t) for t in flat) * _GLYPH * size * (0.71 if angle == -45 else 1.0)
+        extra = max(extra, reach - 2 * size)
+    if extra > 0 and layout.height:
+        layout.height = int(layout.height + min(extra, 240))
+
+
 def figure_png(fig) -> str | None:
     """The figure as a base64 PNG (kaleido), or ``None`` when it cannot be drawn.
 
@@ -151,8 +250,11 @@ def figure_png(fig) -> str | None:
 
         fig = go.Figure(fig)
         fig.update_layout(font_family=_theme.sans_stack())
-        height = getattr(fig.layout, "height", None) or 420
-        data = fig.to_image(format="png", width=STATIC_FIGURE_WIDTH, height=int(height), scale=3)
+        width = _STATIC_WIDTH["px"]
+        if not getattr(fig.layout, "height", None):
+            fig.layout.height = 420
+        fit_category_axes(fig, width)
+        data = fig.to_image(format="png", width=width, height=int(fig.layout.height), scale=3)
     except Exception:  # noqa: BLE001 - no kaleido, no browser: the figure is left out
         return None
     return base64.b64encode(data).decode("ascii")
@@ -309,12 +411,19 @@ def use_document_renderer() -> bool:
                 png.width, png.scale = STATIC_FIGURE_WIDTH, 3
                 inner_png = png.to_mimebundle
 
-                def static_bundle(fig_dict, _inner=inner_png):
+                def static_bundle(fig_dict, _inner=inner_png, _png=png):
+                    import plotly.graph_objects as go
+
                     themed = _theme.apply_theme(fig_dict)
                     themed.setdefault("layout", {}).setdefault("font", {})["family"] = (
                         _theme.sans_stack()
                     )
-                    return _inner(themed)
+                    fig = go.Figure(themed)
+                    if not fig.layout.height:
+                        fig.layout.height = 500  # kaleido's own default
+                    _png.width = _STATIC_WIDTH["px"]
+                    fit_category_axes(fig, _png.width)
+                    return _inner(fig.to_dict())
 
                 png.to_mimebundle = static_bundle
                 png._dpx_theme = True
@@ -1162,6 +1271,29 @@ class CardComponent(DepictioComponent):
     def value(self) -> Any:
         return self.data.get("value")
 
+    @property
+    def number_format(self) -> str | None:
+        """The format the app prints this card's value in (``cardNumberFormat``):
+        its ``format``, else its ``decimals`` as ``decimals:N``."""
+        explicit = self.meta.get("format")
+        if isinstance(explicit, str) and explicit.strip():
+            return explicit.strip()
+        decimals = self.meta.get("decimals")
+        if isinstance(decimals, (int, float)) and not isinstance(decimals, bool):
+            return f"decimals:{min(6, max(0, round(decimals)))}"
+        return None
+
+    def value_text(self, value: Any = _MISSING) -> str:
+        """``value`` (the card's own by default) as the dashboard prints it:
+        ``formatValue`` with the card's format, so 7.7049 reads 7.70 under
+        ``decimals: 2`` and 61.52 reads 61.5 with no format at all."""
+        v = self.value if value is _MISSING else value
+        if v is None:
+            return "–"
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return _text.format_number(float(v), self.number_format)
+        return str(v)
+
     @staticmethod
     def _fmt(value: Any) -> str:
         if isinstance(value, float):
@@ -1215,9 +1347,9 @@ class CardComponent(DepictioComponent):
         elif layout == "box_plot" and sec.get("box_plot_stats"):
             b = sec["box_plot_stats"]
             secondary = (
-                f"dpx-range({_typst.tstr(self._fmt(b.get('min')))}, "
-                f"{_typst.tstr(self._fmt(b.get('median')))}, "
-                f"{_typst.tstr(self._fmt(b.get('max')))})"
+                f"dpx-range({_typst.tstr(self.value_text(b.get('min')))}, "
+                f"{_typst.tstr(self.value_text(b.get('median')))}, "
+                f"{_typst.tstr(self.value_text(b.get('max')))})"
             )
         elif layout == "coverage" and isinstance(self.value, (int, float)):
             top = float(self.meta.get("coverage_max") or 100) or 100.0
@@ -1226,7 +1358,7 @@ class CardComponent(DepictioComponent):
         caption = str(self.meta.get("caption") or "").strip() or None
         return _typst.kpi(
             title=self.title,
-            value=_typst.fmt_number(self.value) if self.value is not None else "–",
+            value=self.value_text(),
             caption=caption,
             icon_svg=_typst.colored_svg(self.data.get("icon_svg"), accent),
             secondary=secondary,
