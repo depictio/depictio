@@ -27,7 +27,7 @@ import {
   type StudioDraft,
 } from './catalog/draft';
 import { parseIndex, validateTool, sha256Hex, type Diagnostic } from './catalog/diagnostics';
-import { generateEntry } from './catalog/yamlGen';
+import { appendRenders, generateEntry } from './catalog/yamlGen';
 import { kindsMapFrom } from './catalog/kinds';
 import type { CatalogManifest } from './catalog/catalog';
 import type { KindsMap, RenderSpec } from './types';
@@ -74,6 +74,44 @@ function currentDraft(): StudioDraft {
   return toDraft(useStudioStore.getState());
 }
 
+let catalogReady: Promise<CatalogManifest | undefined> | undefined;
+
+/** Put a (normalized) draft in the store. A draft carrying `appendTo`
+ *  re-enters append mode on that catalog output, which needs the catalog
+ *  snapshot: when the output is not in it, the draft is refused rather than
+ *  silently turned into a new tool. Renders from a draft are untrusted
+ *  (catalog/trust.ts): code-mode figures wait for a click. */
+export function applyDraft(draft: StudioDraft, opts?: { step?: number }): void {
+  const a = draft.appendTo;
+  if (!a) {
+    useStudioStore.getState().loadDraft(draft, opts?.step);
+    return;
+  }
+  if (!catalog)
+    throw new Error(
+      `This draft appends to ${a.outputId} (${a.yamlPath}), which needs the catalog snapshot; it is not loaded yet (await toolStudio.ready).`,
+    );
+  const tool = catalog.tools.find((t) => t.id === a.toolId);
+  const output = tool?.outputs.find((o) => o.id === a.outputId);
+  if (!tool || !output)
+    throw new Error(
+      `This draft appends to ${a.outputId} of ${a.toolId}, which is not in this build's catalog, so it cannot be re-entered in append mode.`,
+    );
+  if (output.yamlPath && a.yamlPath && output.yamlPath !== a.yamlPath)
+    throw new Error(`This draft appends to ${a.yamlPath}, but ${a.outputId} now lives at ${output.yamlPath}.`);
+  useStudioStore.getState().loadAppendDraft(tool, output, draft, opts?.step);
+}
+
+/** Test seam: the catalog snapshot applyDraft resolves `appendTo` against. */
+export function __setAgentCatalogForTests(c: CatalogManifest | undefined): void {
+  catalog = c;
+}
+
+/** Resolves with the catalog snapshot once it has loaded (or failed to). */
+export function catalogLoaded(): Promise<CatalogManifest | undefined> {
+  return catalogReady ?? Promise.resolve(catalog);
+}
+
 function diagnosticsFor(shas: Record<string, string> = {}): Diagnostic[] {
   const s = useStudioStore.getState();
   return validateTool(
@@ -83,9 +121,18 @@ function diagnosticsFor(shas: Record<string, string> = {}): Diagnostic[] {
 }
 
 /** Every file of the tool folder: module.yaml (unless the tool already
- *  exists) and, per output, its YAML and fixture. */
+ *  exists) and, per output, its YAML and fixture. In append mode, the one file
+ *  that changes: the output's YAML with the new renders spliced in, under its
+ *  repo path (as the Export step downloads and the PR commits it). */
 export function toolFiles(): Record<string, string> {
   const s = useStudioStore.getState();
+  if (s.existing) {
+    const { yamlPath, rawYaml } = s.existing;
+    if (!yamlPath) throw new Error(`The output ${s.existing.outputId} has no YAML path in this catalog snapshot.`);
+    const res = appendRenders(rawYaml, s.renders);
+    if (res.problem) throw new Error(`${yamlPath}: ${res.problem}`);
+    return { [yamlPath]: res.yaml };
+  }
   const dir = s.tool.id;
   const out: Record<string, string> = {};
   for (const o of allOutputs(s)) {
@@ -102,7 +149,9 @@ export function toolFiles(): Record<string, string> {
 export function installAgentApi(version: string): ToolStudioApi {
   const ready = Promise.all([
     getJson('kinds.json').then((k) => (kinds = kindsMapFrom(k.kinds))),
-    getJson('catalog.json').then((c) => (catalog = c)).catch(() => undefined),
+    (catalogReady = getJson('catalog.json')
+      .then((c: CatalogManifest) => (catalog = c))
+      .catch(() => undefined)),
     Promise.all([getText('nf_core_modules.txt'), getText('edam_terms.txt')]).then(
       ([n, e]) => (indices = { nfCoreModules: parseIndex(n), edamTerms: parseIndex(e) }),
     ),
@@ -115,12 +164,12 @@ export function installAgentApi(version: string): ToolStudioApi {
     getDraft: currentDraft,
     load(draft, opts) {
       const d = normalizeDraft(typeof draft === 'string' ? JSON.parse(draft) : draft);
-      useStudioStore.getState().loadDraft(d, opts?.step);
+      applyDraft(d, opts);
       return currentDraft();
     },
     loadFiles(f, opts) {
       const res = draftFromCatalogFiles(f, opts?.output);
-      useStudioStore.getState().loadDraft(res.draft);
+      applyDraft(res.draft);
       return res;
     },
     async loadZip(data, opts) {

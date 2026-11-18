@@ -24,6 +24,7 @@ import type { ParsedFixture, RenderSpec } from '../types';
 import { STUDIO_DASHBOARD_ID, metadataFromRender } from './renderMetadata';
 import { usePreviewFilters } from './previewFilters';
 import { requestExactFigures, useExactFigures } from './exactFigures';
+import { needsConsent } from '../catalog/trust';
 
 /** How depictio frames a component that is NOT sitting in a dashboard grid.
  *
@@ -120,6 +121,16 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
       previewWidth: undefined,
     };
   }, [metadata.component_type]);
+
+  // Code from a link or an import is never mounted: its card offers to run it
+  // (VizDesigner's UntrustedCode), and the shim refuses it regardless.
+  if (needsConsent(render)) {
+    return (
+      <Alert color="yellow" variant="light" icon={<Icon icon="mdi:shield-alert-outline" />} data-testid="untrusted-preview">
+        This figure's code came from a link or an import and has not been run.
+      </Alert>
+    );
+  }
 
   if (!fixture.rows.length) {
     return (

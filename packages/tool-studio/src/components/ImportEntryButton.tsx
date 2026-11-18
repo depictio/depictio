@@ -3,6 +3,7 @@ import { Button } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { draftFromCatalogFiles, filesFromZip, normalizeDraft, DRAFT_FORMAT } from '../catalog/draft';
+import { applyDraft } from '../agentApi';
 import { useStudioStore } from '../state/useStudioStore';
 
 /** Load a catalog entry back in: the Studio's own zip, a tool folder's files
@@ -25,7 +26,7 @@ export default function ImportEntryButton({ onLoaded, variant = 'default' }: { o
       }
       const json = Object.entries(files).find(([p]) => /\.json$/i.test(p));
       if (json) {
-        loadDraft(normalizeDraft(JSON.parse(json[1])));
+        applyDraft(normalizeDraft(JSON.parse(json[1])));
         notifications.show({ color: 'teal', message: `Loaded draft (${DRAFT_FORMAT}).` });
       } else {
         const { draft, notes } = draftFromCatalogFiles(files);

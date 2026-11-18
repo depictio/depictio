@@ -23,6 +23,31 @@ function loadIndices(): Promise<ExistenceIndices> {
   return indicesPromise;
 }
 
+/** fixture text → its sha256, shared by every hook instance. Promises, so two
+ *  instances (Export, the entry panel) hash a fixture once; pruned to the
+ *  fixtures of the current draft so a session of edits does not keep every
+ *  version of every fixture alive. */
+const shaCache = new Map<string, Promise<string>>();
+
+export function fixtureShas(raws: string[]): Promise<Record<string, string>> {
+  const keep = new Set(raws);
+  for (const k of [...shaCache.keys()]) if (!keep.has(k)) shaCache.delete(k);
+  return Promise.all(
+    [...keep].map(async (raw) => {
+      let p = shaCache.get(raw);
+      if (!p) {
+        p = sha256Hex(raw);
+        shaCache.set(raw, p);
+        p.catch(() => shaCache.delete(raw));
+      }
+      return [raw, await p] as const;
+    }),
+  ).then((pairs) => Object.fromEntries(pairs));
+}
+
+/** Test seam. */
+export const __shaCacheSize = () => shaCache.size;
+
 /** Live diagnostics for the current draft (see catalog/diagnostics.ts). */
 export function useDiagnostics(kinds: KindsMap, catalog?: CatalogManifest): Diagnostic[] {
   const tool = useStudioStore((s) => s.tool);
@@ -52,17 +77,14 @@ export function useDiagnostics(kinds: KindsMap, catalog?: CatalogManifest): Diag
   useEffect(() => {
     let live = true;
     if (typeof crypto === 'undefined' || !crypto.subtle) return;
-    for (const o of outputs) {
-      const raw = o.fixture?.raw;
-      if (raw && !(raw in shas))
-        sha256Hex(raw)
-          .then((h) => live && setShas((m) => ({ ...m, [raw]: h })))
-          .catch(() => undefined);
-    }
+    const raws = outputs.map((o) => o.fixture?.raw).filter((r): r is string => Boolean(r));
+    fixtureShas(raws)
+      .then((m) => live && setShas(m))
+      .catch(() => undefined);
     return () => {
       live = false;
     };
-  }, [outputs, shas]);
+  }, [outputs]);
 
   return useMemo(
     () =>

@@ -2,8 +2,10 @@
  * Generate the on-disk catalog files for a tool entry, matching the format the
  * loader (`_load_tool_dir`) + Pydantic models expect and the aesthetic of the
  * committed examples (flow-style `renders_as` items, `# yaml-language-server`
- * header). `columns` is deliberately OMITTED — the exported fixture grounds the
- * bindings in CI (schema-ownership rule: fixture present ⇒ grounding deferred).
+ * header). `columns` is not authored — the exported fixture grounds the
+ * bindings in CI (schema-ownership rule: fixture present ⇒ grounding deferred)
+ * — but an imported entry's declared `columns` is written back (recipe-free
+ * outputs only).
  */
 import type { CardRender, OutputMeta, RenderSpec, TableRender, ToolMeta } from '../types';
 import { canonicalNfCoreUrl } from './fromNfCore';
@@ -49,6 +51,20 @@ function flowMap(pairs: [string, string | string[]][]): string {
 const flowValue = (v: string | string[]): string =>
   Array.isArray(v) ? flowList(v) : flowScalar(v);
 
+/** Fields every render type accepts beyond its own: `section`, and
+ *  `priority` (the card writer emits its own priority, in its own place). */
+function commonFragments(render: RenderSpec): string[] {
+  const bits: string[] = [];
+  if (render.component !== 'card' && typeof render.priority === 'number') bits.push(`priority: ${render.priority}`);
+  if (render.section) bits.push(`section: ${flowScalar(render.section)}`);
+  return bits;
+}
+
+const tail = (render: RenderSpec) => {
+  const bits = commonFragments(render);
+  return bits.length ? `, ${bits.join(', ')}` : '';
+};
+
 /** One `renders_as` list item as a compact flow mapping. When set, the optional
  *  `id` is emitted first (matching the catalog convention) so the render is
  *  addressable by a dashboard via `use: <tool>/<id>`. */
@@ -59,10 +75,10 @@ export function renderToFlow(render: RenderSpec): string {
     // Code mode: emit the snippet as `code` (a double-quoted scalar preserves
     // its newlines via \n). UI mode: visu_type + dict_kwargs.
     if (render.code != null) {
-      return `{ ${idp}component: figure, code: ${flowScalar(render.code)} }`;
+      return `{ ${idp}component: figure, code: ${flowScalar(render.code)}${tail(render)} }`;
     }
     const kwargs = flowMap(Object.entries(render.dict_kwargs ?? {}).map(([k, v]) => [k, v]));
-    return `{ ${idp}component: figure, visu_type: ${render.visu_type}, dict_kwargs: ${kwargs} }`;
+    return `{ ${idp}component: figure, visu_type: ${render.visu_type}, dict_kwargs: ${kwargs}${tail(render)} }`;
   }
   if (render.component === 'card') {
     const head: [string, string][] = [
@@ -74,21 +90,21 @@ export function renderToFlow(render: RenderSpec): string {
       ...head.map(([k, v]) => `${k}: ${flowScalar(v)}`),
       ...cardFieldFragments(render),
     ];
-    return `{ ${idp}${parts.join(', ')} }`;
+    return `{ ${idp}${parts.join(', ')}${tail(render)} }`;
   }
   if (render.component === 'table') {
     const parts = ['component: table', ...tableFieldFragments(render)];
-    return `{ ${idp}${parts.join(', ')} }`;
+    return `{ ${idp}${parts.join(', ')}${tail(render)} }`;
   }
   if (render.component === 'interactive') {
     return (
       `{ ${idp}component: interactive, interactive_type: ${render.interactive_type}, ` +
-      `column_name: ${flowScalar(render.column_name)} }`
+      `column_name: ${flowScalar(render.column_name)}${tail(render)} }`
     );
   }
   // advanced_viz
   const roles = flowMap(Object.entries(render.roles).map(([k, v]) => [k, v]));
-  return `{ ${idp}component: advanced_viz, kind: ${render.kind}, roles: ${roles} }`;
+  return `{ ${idp}component: advanced_viz, kind: ${render.kind}, roles: ${roles}${tail(render)} }`;
 }
 
 /** Every optional card field, as ordered `key: value` fragments.
@@ -151,7 +167,7 @@ function renderToBlock(render: RenderSpec): string[] {
       lines.push('dict_kwargs:');
       for (const k of keys) lines.push(`  ${k}: ${flowScalar(kw[k])}`);
     }
-    return lines;
+    return [...lines, ...commonFragments(render)];
   }
   if (render.component === 'card') {
     return [
@@ -160,10 +176,11 @@ function renderToBlock(render: RenderSpec): string[] {
       `column: ${flowScalar(render.column)}`,
       `aggregation: ${render.aggregation}`,
       ...cardFieldFragments(render),
+      ...commonFragments(render),
     ];
   }
   if (render.component === 'table') {
-    return [...idLine, 'component: table', ...tableFieldFragments(render)];
+    return [...idLine, 'component: table', ...tableFieldFragments(render), ...commonFragments(render)];
   }
   if (render.component === 'advanced_viz') {
     const lines = [...idLine, 'component: advanced_viz', `kind: ${render.kind}`];
@@ -171,10 +188,21 @@ function renderToBlock(render: RenderSpec): string[] {
     if (roles.length) {
       lines.push('roles:');
       for (const [k, v] of roles) lines.push(`  ${k}: ${flowValue(v)}`);
-    }
-    return lines;
+    } else lines.push('roles: {}'); // as the flow form writes it
+    return [...lines, ...commonFragments(render)];
   }
   return [renderToFlow(render)];
+}
+
+/** `code: |…` as a literal block whose chomping keeps the snippet byte-exact
+ *  (`|-` none, `|` one, `|+` several trailing newlines), with an explicit
+ *  indentation indicator when the first line itself starts with a space. */
+function codeBlock(code: string): string[] {
+  const trailing = code.length - code.replace(/\n+$/, '').length;
+  const body = trailing ? code.slice(0, -1) : code;
+  const chomp = trailing === 0 ? '-' : trailing === 1 ? '' : '+';
+  const indent = /^\s*$/.test(body.split('\n')[0] ?? '') || /^ /.test(body) ? '2' : '';
+  return [`code: |${indent}${chomp}`, ...body.split('\n').map((l) => (l ? `  ${l}` : ''))];
 }
 
 /** The `renders_as` list-item body WITHOUT the leading "- ". Multi-line for
@@ -183,7 +211,7 @@ function renderToBlock(render: RenderSpec): string[] {
 export function renderItemLines(render: RenderSpec): string[] {
   if (render.component === 'figure' && render.code != null) {
     const idLine = render.id ? [`id: ${flowScalar(render.id)}`] : [];
-    return [...idLine, 'component: figure', 'code: |-', ...render.code.split('\n').map((l) => `  ${l}`)];
+    return [...idLine, 'component: figure', ...commonFragments(render), ...codeBlock(render.code)];
   }
   const flow = renderToFlow(render);
   if (`- ${flow}`.length <= MAX_FLOW_WIDTH) return [flow];
@@ -360,13 +388,28 @@ export function genOutputYaml(
     `id: ${flowScalar(outputId(tool.id, output.slug))}`,
   ];
   if (output.name) lines.push(`name: ${flowScalar(output.name)}`);
+  if (output.origin_tool) lines.push(`origin_tool: ${flowScalar(output.origin_tool)}`);
+  if (output.mode) lines.push(`mode: ${flowScalar(output.mode)}`);
+  if (output.stage) lines.push(`stage: ${output.stage}`);
   if (output.description) lines.push(`description: ${flowScalar(output.description)}`);
+  if (output.nf_core_url) lines.push(`nf_core_url: ${flowScalar(output.nf_core_url)}`);
+  if (output.biotools_url) lines.push(`biotools_url: ${flowScalar(output.biotools_url)}`);
+  if (output.edam_operations?.length) lines.push(`edam_operations: ${flowList(output.edam_operations)}`);
+  if (output.edam_formats?.length) lines.push(`edam_formats: ${flowList(output.edam_formats)}`);
   const find: [string, string | string[]][] = [];
   if (output.filename) find.push(['filename', output.filename]);
   if (output.path_glob) find.push(['path_glob', output.path_glob]);
   if (output.path_glob_alt?.length && output.path_glob) find.push(['path_glob_alt', output.path_glob_alt]);
   lines.push(`find: ${flowMap(find)}`);
-  if (output.recipe) lines.push(`recipe: ${recipeRef(tool.id, output.slug)}`);
+  if (output.recipe) lines.push(`recipe: ${flowScalar(recipeRefOf(tool.id, output))}`);
+  // recipe XOR columns: a recipe owns the output columns, so declared ones are
+  // only written for a recipe-free output (and only when it declares some —
+  // the fixture grounds a new entry's bindings in CI).
+  const cols = !output.recipe ? Object.entries(output.columns ?? {}) : [];
+  if (cols.length) {
+    lines.push('columns:');
+    for (const [k, v] of cols) lines.push(`  ${flowScalar(k)}: ${flowScalar(v)}`);
+  }
   lines.push(`fixture: ${flowScalar(fixtureFileName)}`);
   lines.push('renders_as:');
   for (const r of renders) {
@@ -379,6 +422,25 @@ export function genOutputYaml(
 
 /** `recipe:` value: module-owned, co-located `<tool>/<slug>.py`. */
 export const recipeRef = (toolId: string, slug: string) => `${toolId}/${slug}.py`;
+
+/** The `recipe:` an output is exported with: the reference it was imported
+ *  with when that is not the default (another module-owned file name, or a
+ *  pipeline-keyed `nf-core/<pipeline>/<name>.py`), else `<tool>/<slug>.py`. */
+export function recipeRefOf(toolId: string, output: OutputMeta): string {
+  return output.recipe?.ref?.trim() || recipeRef(toolId, output.slug);
+}
+
+/** The `.py` written next to the YAML, if any: only a module-owned recipe
+ *  (`<tool>/<name>.py`) with code in hand. A reference elsewhere in the
+ *  catalog, or one imported without its file, is kept but not written. */
+export function recipeFileOf(toolId: string, output: OutputMeta): { name: string; content: string } | undefined {
+  if (!output.recipe || !output.recipe.code.trim()) return undefined;
+  const ref = recipeRefOf(toolId, output);
+  const parts = ref.split('/');
+  if (parts.length !== 2 || parts[0] !== toolId) return undefined;
+  const code = output.recipe.code;
+  return { name: parts[1], content: code.endsWith('\n') ? code : code + '\n' };
+}
 
 export interface GeneratedEntry {
   /** The output's recipe module, when it has one (`<slug>.py`). */
@@ -408,9 +470,7 @@ export function generateEntry(args: {
     outputYamlName: `${output.slug}.yaml`,
     fixtureName: fixtureFileName,
     fixtureContent,
-    ...(output.recipe
-      ? { recipeFile: { name: `${output.slug}.py`, content: output.recipe.code.endsWith('\n') ? output.recipe.code : output.recipe.code + '\n' } }
-      : {}),
+    ...(recipeFileOf(tool.id, output) ? { recipeFile: recipeFileOf(tool.id, output) } : {}),
   };
 }
 /** Starting point for a new recipe, in the shape `load_recipe` checks. */

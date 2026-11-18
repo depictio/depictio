@@ -42,7 +42,14 @@ export function metadataFromRender(
       visu_type: render.visu_type ?? 'scatter',
       dict_kwargs: render.dict_kwargs ?? {},
       ...(render.code
-        ? { mode: 'code', code_content: render.code, _previewFigure: render._previewFigure }
+        ? {
+            mode: 'code',
+            code_content: render.code,
+            _previewFigure: render._previewFigure,
+            // Code from a link or an import: the shim refuses to run it until
+            // the author has pressed "Run this code" (catalog/trust.ts).
+            ...(render._untrusted ? { _untrusted: true } : {}),
+          }
         : { mode: 'ui' }),
     };
   }

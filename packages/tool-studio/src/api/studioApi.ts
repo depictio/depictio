@@ -482,6 +482,12 @@ async function figureFrom(
       }
       throw new StudioPreviewError('Write some code, then press Execute.');
     }
+    // Code that came from a link or an import is never run on its own: the
+    // render card shows it and waits for "Run this code" (catalog/trust.ts).
+    // Checked here too, so no path into the shim can run it unseen.
+    if (metadata._untrusted) {
+      throw new StudioPreviewError('This code came from a link or an import. Read it, then press "Run this code" to run it.');
+    }
     // depictio executes Code Mode on the server; here it runs in the browser
     // under Pyodide, which is why this is the one preview that is not instant.
     const { runCodeToFigure } = await import('../builder/pyodideRunner');
@@ -515,10 +521,19 @@ async function figureFrom(
 
 /** The figure builder's live preview (depictio's FigurePreview, which sends
  *  no theme: the app's scheme is used). */
+let builderPreview: AbortController | null = null;
+
 export async function previewFigure(body: FigurePreviewRequest): Promise<FigureResponse> {
+  // The builder's previews share one supersession key, and each call aborts
+  // the one before it: a slow exact render of an earlier state must not
+  // resolve after (and over) the current one.
+  builderPreview?.abort();
+  const controller = new AbortController();
+  builderPreview = controller;
   return figureFrom(body.metadata, body.theme ?? appScheme(), body.filters ?? [], {
     key: 'builder',
     style: body.style,
+    signal: controller.signal,
   });
 }
 

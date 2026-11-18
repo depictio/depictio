@@ -40,7 +40,16 @@ export function renderSpecFromManifest(
   uid: string,
 ): RenderSpec | null {
   const id = str(raw.id);
-  const base = { uid, ...(id ? { id } : {}) };
+  // `section` and `priority` are accepted on every render type; carried so an
+  // imported entry re-exports them (cards set priority below, as before).
+  const section = str(raw.section);
+  const priority = typeof raw.priority === 'number' && Number.isInteger(raw.priority) ? raw.priority : undefined;
+  const base = {
+    uid,
+    ...(id ? { id } : {}),
+    ...(section ? { section } : {}),
+    ...(priority !== undefined && raw.component !== 'card' ? { priority } : {}),
+  };
 
   switch (raw.component) {
     case 'figure': {
@@ -103,6 +112,8 @@ export function renderSpecFromManifest(
         component: 'table',
         ...(strList(raw.columns) ? { columns: strList(raw.columns) } : {}),
         ...(num(raw.page_size) != null ? { page_size: num(raw.page_size) } : {}),
+        ...(typeof raw.sortable === 'boolean' ? { sortable: raw.sortable } : {}),
+        ...(typeof raw.filterable === 'boolean' ? { filterable: raw.filterable } : {}),
         ...(typeof raw.row_selection_enabled === 'boolean'
           ? { row_selection_enabled: raw.row_selection_enabled }
           : {}),

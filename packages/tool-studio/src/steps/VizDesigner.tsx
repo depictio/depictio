@@ -33,9 +33,45 @@ import { usePreviewFilters } from '../viz/previewFilters';
 import { STUDIO_TONE } from '../theme';
 import StepHead from '../components/StepHead';
 import { InstancePrimary } from '../components/Tone';
+import { needsConsent } from '../catalog/trust';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+/** A code-mode figure whose code came from a link or an import: shown, not
+ *  run. Python runs in this page (Pyodide), so it could read anything the page
+ *  can; the author decides, having read it. */
+function UntrustedCode({ code, onRun }: { code: string; onRun: () => void }) {
+  return (
+    <Stack gap="xs" data-testid="untrusted-code">
+      <Alert
+        color="yellow"
+        variant="light"
+        icon={<Icon icon="mdi:shield-alert-outline" />}
+        title="Code from a link or an imported file"
+      >
+        <Text size="sm">
+          This figure is drawn by Python that you did not write in this session. It runs in this
+          page, with access to everything the page can reach, so it is not run until you have read
+          it and choose to.
+        </Text>
+      </Alert>
+      <CodeHighlight code={code} language="python" withCopyButton />
+      <Group>
+        <Button
+          size="xs"
+          variant="light"
+          color={STUDIO_TONE}
+          leftSection={<Icon icon="mdi:play" width={14} />}
+          onClick={onRun}
+          data-testid="run-untrusted"
+        >
+          Run this code
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
 
 /** One added visualization, styled like the depictio Catalog `ComponentCard`
  *  (colored type icon + name/variant + render index, role→column binds, a
@@ -132,14 +168,21 @@ function RenderCard({
             How this renders on a dashboard.
           </Text>
           <Paper withBorder radius="sm" p="xs" bg="var(--app-subtle-bg)">
-            <InstancePrimary>
-              <RenderPreview
-                fixture={fixture}
-                render={render}
-                index={index}
-                position={position}
+            {needsConsent(render) && render.component === 'figure' ? (
+              <UntrustedCode
+                code={render.code ?? ''}
+                onRun={() => onUpdate({ _untrusted: undefined } as Partial<RenderSpec>)}
               />
-            </InstancePrimary>
+            ) : (
+              <InstancePrimary>
+                <RenderPreview
+                  fixture={fixture}
+                  render={render}
+                  index={index}
+                  position={position}
+                />
+              </InstancePrimary>
+            )}
           </Paper>
           {issues.length > 0 && (
             <Stack gap={4} mt="sm">

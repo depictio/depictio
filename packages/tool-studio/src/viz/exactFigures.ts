@@ -128,20 +128,26 @@ export async function exactFigure(req: ExactRequest): Promise<ExactFigure> {
     req.style ?? null,
     req.fixture.keep ?? null,
   ]);
+  // Every request takes a token, a cache hit included: an older request still
+  // in flight must see that it was replaced, or its late answer would draw over
+  // the newer (cached) one.
+  const token = ++seq;
+  latest.set(req.key, token);
+  const superseded = () => latest.get(req.key) !== token || Boolean(req.signal?.aborted);
   const hit = cache.get(cacheKey);
   if (hit) {
     cache.delete(cacheKey);
     cache.set(cacheKey, hit);
     return hit;
   }
-  const token = ++seq;
-  latest.set(req.key, token);
   await sleep(EXACT_DEBOUNCE_MS);
-  if (latest.get(req.key) !== token || req.signal?.aborted) throw new SupersededRender();
+  if (superseded()) throw new SupersededRender();
   const engine = await loadEngineModule();
   const result = await engine.renderFigure(req.spec, req.fixture, req.theme, req.style);
+  // The figure is still right for its request, so it is cached either way.
   cache.set(cacheKey, result);
   if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value as string);
+  if (superseded()) throw new SupersededRender();
   return result;
 }
 

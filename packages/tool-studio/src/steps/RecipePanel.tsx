@@ -17,6 +17,9 @@ import { useComputedColorScheme } from '@mantine/core';
 import { useStudioStore } from '../state/useStudioStore';
 import { parseFixture } from '../catalog/parseFixture';
 import { recipeOutputColumns } from '../catalog/diagnostics';
+import { recipeRefOf } from '../catalog/yamlGen';
+import { readRawSample } from '../catalog/rawSample';
+
 
 type RunState =
   | { status: 'idle' }
@@ -27,7 +30,8 @@ type RunState =
 export default function RecipePanel() {
   const output = useStudioStore((s) => s.output);
   const setOutput = useStudioStore((s) => s.setOutput);
-  const setFixture = useStudioStore((s) => s.setFixture);
+  const setFixtureAt = useStudioStore((s) => s.setFixtureAt);
+  const toolId = useStudioStore((s) => s.tool.id);
   const scheme = useComputedColorScheme('light');
   const [run, setRun] = useState<RunState>({ status: 'idle' });
   const recipe = output.recipe;
@@ -37,11 +41,22 @@ export default function RecipePanel() {
   const declared = recipeOutputColumns(recipe.code);
 
   const addInputs = async (files: File[]) => {
-    const read = await Promise.all(files.map(async (f) => ({ fileName: f.name, text: await f.text() })));
-    setOutput({ recipe: { ...recipe, inputs: [...inputs.filter((i) => !read.some((r) => r.fileName === i.fileName)), ...read] } });
+    try {
+      const read = await Promise.all(files.map(readRawSample));
+      setOutput({ recipe: { ...recipe, inputs: [...inputs.filter((i) => !read.some((r) => r.fileName === i.fileName)), ...read] } });
+    } catch (e) {
+      setRun({ status: 'error', message: `Could not read the sample: ${(e as Error).message}` });
+    }
   };
 
   const execute = async () => {
+    // The output this run is for: the author can switch outputs while Python
+    // loads, and the result must land on the output that asked for it.
+    const { activeIndex: runIndex, output: runOutput } = useStudioStore.getState();
+    const runSlug = runOutput.slug;
+    // Pressing Run on an imported recipe, with the notice above it, is the
+    // author's consent to running it; from here on it is theirs.
+    if (recipe._untrusted) setOutput({ recipe: { ...recipe, _untrusted: undefined } });
     setRun({ status: 'running', phase: 'Loading Python (first run only)…' });
     try {
       const engine = await import('../pyodide/engine');
@@ -53,7 +68,15 @@ export default function RecipePanel() {
         return;
       }
       // The recipe's output IS the fixture: what the renders bind, and what CI grounds against.
-      setFixture(parseFixture(`${output.slug || 'output'}.tsv`, res.tsv));
+      const applied = setFixtureAt(runIndex, runSlug, parseFixture(`${runSlug || 'output'}.tsv`, res.tsv));
+      if (!applied) {
+        setRun({
+          status: 'error',
+          message: `The output this run was for (${runSlug || 'unnamed'}) was removed or renamed while it ran, so its result was discarded. Run it again.`,
+          stdout: res.stdout,
+        });
+        return;
+      }
       setRun({ status: 'ok', rows: res.rowCount, columns: res.columns, stdout: res.stdout });
     } catch (e) {
       setRun({ status: 'error', message: (e as Error).message });
@@ -67,7 +90,7 @@ export default function RecipePanel() {
           <Group gap="xs">
             <Icon icon="mdi:language-python" width={20} />
             <Title order={2} size="h5">
-              Recipe <Code>{output.slug || '<slug>'}.py</Code>
+              Recipe <Code>{recipeRefOf(toolId || '<tool>', output).split('/').pop()}</Code>
             </Title>
           </Group>
           {declared && (
@@ -82,8 +105,22 @@ export default function RecipePanel() {
         <Text size="sm" c="dimmed">
           The raw file is reshaped at ingestion by this module. Drop a sample of the raw file, then run
           the recipe here: its result becomes the committed fixture the renders bind against. The raw
-          sample stays in your browser.
+          sample stays in this tab: it is not exported, shared in links or saved with the draft, so add
+          it again after a reload.
         </Text>
+
+        {recipe._untrusted && (
+          <Alert
+            color="yellow"
+            variant="light"
+            icon={<Icon icon="mdi:shield-alert-outline" />}
+            title="Recipe from a link or an imported file"
+            data-testid="recipe-untrusted"
+          >
+            You did not write this recipe in this session. Running it executes its Python in this
+            page, with access to everything the page can reach. Read it below before you run it.
+          </Alert>
+        )}
 
         <Group gap="xs">
           <FileButton onChange={(f) => f.length && void addInputs(f)} multiple accept=".csv,.tsv,.txt,.tab,.tsv.gz">
@@ -131,7 +168,7 @@ export default function RecipePanel() {
             disabled={!inputs.length}
             data-testid="recipe-run"
           >
-            Run in the browser
+            {recipe._untrusted ? 'Run this code' : 'Run in the browser'}
           </Button>
           <Text size="xs" c="dimmed">
             {run.status === 'running'

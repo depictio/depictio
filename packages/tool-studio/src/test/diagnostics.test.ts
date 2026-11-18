@@ -137,4 +137,35 @@ describe('recipe diagnostics', () => {
     d.output = { ...d.output, recipe: { code } };
     expect(codes(d).filter((c) => c.startsWith('recipe.'))).toEqual([]);
   });
+
+  it('does not swallow OPTIONAL_OUTPUT_SCHEMA after a one-line OUTPUT_SCHEMA', async () => {
+    const { recipeOutputColumns } = await import('../catalog/diagnostics');
+    const oneLine = [
+      'OUTPUT_SCHEMA = {"sample": pl.Utf8, "value": pl.List(pl.Float64)}',
+      'OPTIONAL_OUTPUT_SCHEMA = {',
+      '    "extra": pl.Utf8,',
+      '}',
+    ].join('\n');
+    expect(recipeOutputColumns(oneLine)).toEqual(['sample', 'value']);
+  });
+
+  it('skips strings, comments and nested braces inside the literal', async () => {
+    const { recipeOutputColumns } = await import('../catalog/diagnostics');
+    const tricky = [
+      'OUTPUT_SCHEMA = {',
+      '    "a}b": pl.Utf8,  # a "fake": key } in a comment',
+      "    'nested': pl.Struct({'inner': pl.Utf8}),",
+      '    """doc: not a key""" "c": pl.Int64,',
+      '}',
+      'OPTIONAL_OUTPUT_SCHEMA = {"d": pl.Utf8}',
+    ].join('\n');
+    expect(recipeOutputColumns(tricky)).toEqual(['a}b', 'nested', 'c']);
+    expect(recipeOutputColumns('OUTPUT_SCHEMA = {"a": pl.Utf8')).toBeNull();
+  });
+
+  it('keeps an external recipe reference as a warning, not an empty-recipe error', () => {
+    const d = base();
+    d.output = { ...d.output, recipe: { code: '', ref: 'nf-core/ampliseq/x.py' } };
+    expect(validateDraft(d).find((x) => x.code.startsWith('recipe.'))).toMatchObject({ code: 'recipe.external', severity: 'warning' });
+  });
 });

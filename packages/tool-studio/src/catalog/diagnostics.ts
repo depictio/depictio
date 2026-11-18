@@ -193,11 +193,52 @@ function fixtureDiagnostics(d: DraftToValidate): Diagnostic[] {
 }
 
 /** Keys of a recipe's `OUTPUT_SCHEMA = {...}` literal, read statically (the
- *  shape every catalog recipe uses). null when the literal cannot be found. */
+ *  shape every catalog recipe uses). null when the literal cannot be found.
+ *
+ *  The literal is delimited by a brace-depth scan from its opening `{`, which
+ *  skips string literals (single, double, triple-quoted) and `#` comments: a
+ *  regex up to the next column-0 `}` swallowed `OPTIONAL_OUTPUT_SCHEMA` after a
+ *  one-line `OUTPUT_SCHEMA = {...}`. Only top-level keys (depth 1) count. */
 export function recipeOutputColumns(code: string): string[] | null {
-  const m = code.match(/^OUTPUT_SCHEMA[^=\n]*=\s*\{([\s\S]*?)^\}/m);
-  if (!m) return null;
-  return [...m[1].replace(/#.*$/gm, '').matchAll(/["']([^"']+)["']\s*:/g)].map((x) => x[1]);
+  const head = /^OUTPUT_SCHEMA\b[^=\n]*=\s*\{/m.exec(code);
+  if (!head) return null;
+  const keys: string[] = [];
+  let depth = 1;
+  let i = head.index + head[0].length;
+  // The last string literal closed at depth 1, waiting for a `:` to make it a key.
+  let pending: string | null = null;
+  while (i < code.length && depth > 0) {
+    const c = code[i];
+    if (c === '#') {
+      while (i < code.length && code[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      const triple = code.startsWith(c.repeat(3), i);
+      const quote = triple ? c.repeat(3) : c;
+      let j = i + quote.length;
+      let text = '';
+      while (j < code.length && !code.startsWith(quote, j)) {
+        if (code[j] === '\\') {
+          text += code[j + 1] ?? '';
+          j += 2;
+          continue;
+        }
+        if (!triple && code[j] === '\n') break; // unterminated: stop at the line end
+        text += code[j];
+        j++;
+      }
+      i = j + quote.length;
+      if (depth === 1) pending = text;
+      continue;
+    }
+    if (c === '{' || c === '[' || c === '(') depth++;
+    else if (c === '}' || c === ']' || c === ')') depth--;
+    if (c === ':' && depth === 1 && pending !== null) keys.push(pending);
+    if (!/\s/.test(c)) pending = null;
+    i++;
+  }
+  return depth === 0 ? keys : null;
 }
 
 /** `load_recipe` (depictio/recipes/__init__.py) refuses a module without these. */
@@ -214,6 +255,13 @@ function recipeDiagnostics(d: DraftToValidate): Diagnostic[] {
   const push = (code: string, message: string, severity: Severity = 'error', step: 0 | 1 = 1) =>
     out.push({ code, severity, path: 'output.recipe', message, step });
   if (!recipe.code.trim()) {
+    // An imported reference whose file is not here (a pipeline-keyed
+    // `nf-core/<pipeline>/<name>.py`, or a module file left out of the
+    // import): kept verbatim, and only CI can check it.
+    if (recipe.ref?.trim()) {
+      push('recipe.external', `The recipe ${recipe.ref} is not loaded here; it is exported as a reference and checked by CI only.`, 'warning');
+      return out;
+    }
     push('recipe.empty', 'The recipe is empty.');
     return out;
   }
@@ -235,6 +283,18 @@ function recipeDiagnostics(d: DraftToValidate): Diagnostic[] {
       );
   }
   return out;
+}
+
+/** Declared `columns` (an imported recipe-free output) against the fixture:
+ *  the bindings are grounded against both in CI, so a gap is worth a word. */
+function columnsDiagnostics(d: DraftToValidate): Diagnostic[] {
+  const cols = Object.keys(d.output.columns ?? {});
+  if (!cols.length || d.output.recipe || !d.fixture?.columns.length) return [];
+  const have = new Set(d.fixture.columns.map((c) => c.name));
+  const absent = cols.filter((c) => !have.has(c));
+  return absent.length
+    ? [{ code: 'output.columns_mismatch', severity: 'warning', path: 'output.columns', step: 1, message: `The output declares ${absent.join(', ')} in columns, which the fixture lacks.` }]
+    : [];
 }
 
 function idDiagnostics(d: DraftToValidate): Diagnostic[] {
@@ -271,6 +331,7 @@ export function validateDraft(d: DraftToValidate): Diagnostic[] {
   }
   all.push(...fixtureDiagnostics(d));
   all.push(...recipeDiagnostics(d));
+  all.push(...columnsDiagnostics(d));
   if (!d.renders.length && !d.appendMode)
     all.push({ code: 'renders.empty', severity: 'error', path: 'renders', message: 'Add at least one visualization.', step: 2 });
   if (d.fixture) {

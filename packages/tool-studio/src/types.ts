@@ -100,6 +100,10 @@ export interface FigureRender {
   uid: string;
   component: 'figure';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   /** UI mode: plotly-express visu type. Omitted for code-mode figures. */
   visu_type?: FigureVisuType;
   /** UI mode: column-valued kwargs (x/y/color/…) + free kwargs (title, log_x…). */
@@ -109,6 +113,11 @@ export interface FigureRender {
   /** Preview-only: the Plotly {data,layout} produced by executing a code-mode
    *  figure in-browser. NOT exported — lets the render list show the real plot. */
   _previewFigure?: { data: unknown[]; layout: Record<string, unknown> };
+  /** Runtime-only: the code came from outside this session (a `#draft=` link,
+   *  an imported zip/folder/draft JSON, `toolStudio.load*`) and is NOT run
+   *  until the author reads it and presses "Run this code" on its card. Kept
+   *  across a reload (still untrusted), never exported. */
+  _untrusted?: boolean;
 }
 
 export interface CardRender {
@@ -139,6 +148,8 @@ export interface CardRender {
   headline?: boolean;
   /** Order among headline cards (lower first). */
   priority?: number;
+  /** e.g. the MultiQC section name. */
+  section?: string;
 }
 
 /** Display options, mirroring `TableLiteComponent`. All optional: a bare
@@ -148,6 +159,10 @@ export interface TableRender {
   uid: string;
   component: 'table';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   /** Displayed columns. Omitted (not an empty list) when all are visible. */
   columns?: string[];
   page_size?: number;
@@ -166,6 +181,10 @@ export interface InteractiveRender {
   uid: string;
   component: 'interactive';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   interactive_type: InteractiveVariant;
   column_name: string;
 }
@@ -177,6 +196,10 @@ export interface AdvancedVizRender {
   uid: string;
   component: 'advanced_viz';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   kind: string;
   /** role → column, or → ordered column list for the few list-typed roles
    *  (`sankey.steps`, `sunburst.ranks`, ComplexHeatmap's column lists) and
@@ -207,13 +230,34 @@ export interface OutputMeta {
    *  below are only for running it here, and the recipe ships as
    *  `<tool>/<slug>.py` (`recipe:` in the output YAML). */
   recipe?: RecipeDraft;
+  /** Declared bindable columns (polars dtype names). Only meaningful — and
+   *  only emitted — when there is no recipe (SCHEMA.md: recipe XOR columns). */
+  columns?: Record<string, string>;
+  /** Per-output overrides and identity fields, carried through import →
+   *  export (see SCHEMA.md `outputs[]`). */
+  stage?: Stage;
+  origin_tool?: string;
+  mode?: string;
+  nf_core_url?: string;
+  biotools_url?: string;
+  edam_operations?: string[];
+  edam_formats?: string[];
 }
 
 export interface RecipeDraft {
   /** Python module: SOURCES, OUTPUT_SCHEMA, transform(sources). */
   code: string;
-  /** Samples of the raw file(s) the recipe reads; not committed. */
-  inputs?: Array<{ ref?: string; fileName: string; text: string }>;
+  /** The committed `recipe:` reference when it is not the default
+   *  `<tool>/<slug>.py` (a differently named module-owned file such as
+   *  `mosdepth/coverage_track_canonical.py`, or a pipeline-keyed
+   *  `nf-core/<pipeline>/<name>.py`). Kept verbatim on export. */
+  ref?: string;
+  /** Samples of the raw file(s) the recipe reads. In memory only: never
+   *  exported, linked, returned by getDraft() or saved with the draft. */
+  inputs?: Array<{ ref?: string; fileName: string; text: string; sourcePath?: string }>;
+  /** Runtime-only: the recipe came from a link or an import (see
+   *  FigureRender._untrusted). Cleared when the author runs it. */
+  _untrusted?: boolean;
 }
 
 /** A file output channel parsed from a tool source's metadata (nf-core

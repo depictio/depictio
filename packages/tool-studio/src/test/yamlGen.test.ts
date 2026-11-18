@@ -335,3 +335,18 @@ describe('appendRenders — shapes it must NOT corrupt', () => {
     expect(appendRenders(src, add).yaml.endsWith('}\n')).toBe(true);
   });
 });
+
+describe('code-mode figures keep their snippet byte-exact', () => {
+  it.each(['fig = 1', 'fig = 1\n', 'fig = 1\n\n', '  indented = 1\nfig = 2\n', 'a = 1\n\n\nfig = 2'])('%j', async (code) => {
+    const { default: yaml } = await import('js-yaml');
+    const { genOutputYaml } = await import('../catalog/yamlGen');
+    const text = genOutputYaml(
+      { id: 't', name: 'T', source: 'nf-core' },
+      { slug: 'o', path_glob: '*' },
+      'o.csv',
+      [{ uid: 'u', component: 'figure', code, section: 'S', priority: 1 }],
+    );
+    const doc = yaml.load(text) as { renders_as: Array<Record<string, unknown>> };
+    expect(doc.renders_as[0]).toEqual({ component: 'figure', code, section: 'S', priority: 1 });
+  });
+});

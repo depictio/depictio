@@ -18,6 +18,7 @@ import JSZip from 'jszip';
 import type { OutputMeta, RenderSpec, Stage, ToolMeta } from '../types';
 import { renderSpecFromManifest } from './fromManifestRender';
 import type { ManifestRender } from './catalog';
+import { stripOutputRuntime, stripRenderRuntime } from './trust';
 
 export const DRAFT_FORMAT = 'depictio-tool-studio/draft@1';
 
@@ -32,6 +33,16 @@ export interface StudioDraft {
   renders: DraftRender[];
   /** The tool's other outputs, in order after this one. */
   moreOutputs?: Array<{ output: OutputMeta; fixture?: { fileName: string; content: string }; renders: DraftRender[] }>;
+  /** Set when the draft adds renders to an output already in the catalog
+   *  (append mode): `renders` are the NEW ones, spliced into `yamlPath` on
+   *  export. Loading it re-enters append mode from the catalog snapshot. */
+  appendTo?: DraftAppendTarget;
+}
+
+export interface DraftAppendTarget {
+  toolId: string;
+  outputId: string;
+  yamlPath: string;
 }
 
 export interface ImportResult {
@@ -41,7 +52,7 @@ export interface ImportResult {
 }
 
 let importCounter = 0;
-const mintUid = () => `i${Date.now().toString(36)}${++importCounter}`;
+const mintUid = () => `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}${++importCounter}`;
 
 type OutputState = {
   output: OutputMeta;
@@ -49,25 +60,24 @@ type OutputState = {
   renders: RenderSpec[];
 };
 
-const cleanRenders = (rs: RenderSpec[]): DraftRender[] =>
-  rs.map((r) => {
-    const { uid: _uid, ...rest } = r as RenderSpec & { _previewFigure?: unknown };
-    delete (rest as { _previewFigure?: unknown })._previewFigure;
-    return rest;
-  });
+const cleanRenders = (rs: RenderSpec[]): DraftRender[] => rs.map((r) => stripRenderRuntime(r) as DraftRender);
 
 const outPart = (o: OutputState) => ({
-  output: o.output,
+  // Raw recipe samples stay in the tab: they are the user's unreduced data and
+  // can be large, and nothing downstream (export, CI) reads them.
+  output: stripOutputRuntime(o.output),
   ...(o.fixture?.raw ? { fixture: { fileName: o.fixture.fileName, content: o.fixture.raw } } : {}),
   renders: cleanRenders(o.renders),
 });
 
-/** Strip runtime-only fields (uid, executed code-mode previews). Outputs are
- *  written in order: the first is the draft's own, the rest `moreOutputs`. */
+/** Strip runtime-only fields (uid, executed code-mode previews, trust flags,
+ *  raw recipe samples). Outputs are written in order: the first is the
+ *  draft's own, the rest `moreOutputs`. */
 export function toDraft(state: OutputState & {
   tool: ToolMeta;
   siblings?: OutputState[];
   activeIndex?: number;
+  existing?: { toolId: string; outputId: string; yamlPath: string } | null;
 }): StudioDraft {
   const active: OutputState = { output: state.output, fixture: state.fixture, renders: state.renders };
   const sib = state.siblings ?? [];
@@ -78,39 +88,74 @@ export function toDraft(state: OutputState & {
     tool: state.tool,
     ...outPart(first),
     ...(rest.length ? { moreOutputs: rest.map(outPart) } : {}),
+    ...(state.existing
+      ? { appendTo: { toolId: state.existing.toolId, outputId: state.existing.outputId, yamlPath: state.existing.yamlPath } }
+      : {}),
   };
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
+function checkFixture(f: unknown, where: string): StudioDraft['fixture'] {
+  if (f == null) return undefined;
+  if (!isObj(f) || typeof f.fileName !== 'string' || !f.fileName || typeof f.content !== 'string')
+    throw new Error(`${where} needs a fileName and a content string.`);
+  return { fileName: f.fileName, content: f.content };
+}
+
+function checkRenders(rs: unknown, where: string): DraftRender[] {
+  if (rs == null) return [];
+  if (!Array.isArray(rs)) throw new Error(`${where} must be a list.`);
+  return rs.map((r, i) => {
+    if (!isObj(r)) throw new Error(`${where}[${i}] must be an object.`);
+    if (typeof r.component !== 'string' || !r.component)
+      throw new Error(`${where}[${i}].component must be a string (figure, card, table, interactive, advanced_viz).`);
+    return { ...(r as DraftRender), uid: typeof r.uid === 'string' && r.uid ? r.uid : mintUid() };
+  });
+}
+
+function checkOutput(o: unknown, where: string): OutputMeta {
+  if (!isObj(o) || typeof o.slug !== 'string') throw new Error(`${where}.slug is required.`);
+  if (o.recipe != null && (!isObj(o.recipe) || typeof o.recipe.code !== 'string'))
+    throw new Error(`${where}.recipe needs a code string.`);
+  return { ...(o as unknown as OutputMeta), path_glob: typeof o.path_glob === 'string' ? o.path_glob : '' };
 }
 
 /** Validate the envelope of an untrusted draft and give every render a uid. */
 export function normalizeDraft(input: unknown): StudioDraft {
-  if (!input || typeof input !== 'object') throw new Error('A draft must be a JSON object.');
-  const d = input as Partial<StudioDraft>;
+  if (!isObj(input)) throw new Error('A draft must be a JSON object.');
+  const d = input as Partial<StudioDraft> & Record<string, unknown>;
   if (d.format !== DRAFT_FORMAT) throw new Error(`Unknown draft format "${String(d.format)}" (expected ${DRAFT_FORMAT}).`);
-  if (!d.tool || typeof d.tool !== 'object' || typeof d.tool.id !== 'string')
-    throw new Error('draft.tool.id is required.');
-  if (!d.output || typeof d.output !== 'object' || typeof d.output.slug !== 'string')
-    throw new Error('draft.output.slug is required.');
-  if (d.renders != null && !Array.isArray(d.renders)) throw new Error('draft.renders must be a list.');
-  if (d.fixture && (typeof d.fixture.fileName !== 'string' || typeof d.fixture.content !== 'string'))
-    throw new Error('draft.fixture needs fileName and content strings.');
+  if (!isObj(d.tool) || typeof d.tool.id !== 'string') throw new Error('draft.tool.id is required.');
+  const output = checkOutput(d.output, 'draft.output');
+  const fixture = checkFixture(d.fixture, 'draft.fixture');
+  const renders = checkRenders(d.renders, 'draft.renders');
+  if (d.moreOutputs != null && !Array.isArray(d.moreOutputs)) throw new Error('draft.moreOutputs must be a list.');
+  const more = (d.moreOutputs ?? []).map((o, i) => {
+    const where = `draft.moreOutputs[${i}]`;
+    if (!isObj(o)) throw new Error(`${where} must be an object.`);
+    const f = checkFixture(o.fixture, `${where}.fixture`);
+    return {
+      output: checkOutput(o.output, `${where}.output`),
+      ...(f ? { fixture: f } : {}),
+      renders: checkRenders(o.renders, `${where}.renders`),
+    };
+  });
+  let appendTo: DraftAppendTarget | undefined;
+  if (d.appendTo != null) {
+    const a = d.appendTo as unknown;
+    if (!isObj(a) || typeof a.toolId !== 'string' || typeof a.outputId !== 'string' || typeof a.yamlPath !== 'string')
+      throw new Error('draft.appendTo needs toolId, outputId and yamlPath strings.');
+    appendTo = { toolId: a.toolId, outputId: a.outputId, yamlPath: a.yamlPath };
+  }
   return {
     format: DRAFT_FORMAT,
-    tool: { ...d.tool, source: d.tool.source ?? 'nf-core', name: d.tool.name ?? '' },
-    output: { ...d.output, path_glob: d.output.path_glob ?? '' },
-    ...(d.fixture ? { fixture: d.fixture } : {}),
-    renders: (d.renders ?? []).map((r) => ({ ...r, uid: r.uid || mintUid() })),
-    ...(Array.isArray(d.moreOutputs) && d.moreOutputs.length
-      ? {
-          moreOutputs: d.moreOutputs.map((o, i) => {
-            if (!o?.output || typeof o.output.slug !== 'string') throw new Error(`draft.moreOutputs[${i}].output.slug is required.`);
-            return {
-              ...o,
-              output: { ...o.output, path_glob: o.output.path_glob ?? '' },
-              renders: (o.renders ?? []).map((r) => ({ ...r, uid: r.uid || mintUid() })),
-            };
-          }),
-        }
-      : {}),
+    tool: { ...(d.tool as ToolMeta), source: (d.tool.source as ToolMeta['source']) ?? 'nf-core', name: typeof d.tool.name === 'string' ? d.tool.name : '' },
+    output,
+    ...(fixture ? { fixture } : {}),
+    renders,
+    ...(more.length ? { moreOutputs: more } : {}),
+    ...(appendTo ? { appendTo } : {}),
   };
 }
 
@@ -157,14 +202,35 @@ export function draftFromCatalogFiles(files: Record<string, string>, outputSlug?
   const readOutput = (o: Record<string, unknown>) => {
     const slug = slugOf(o.id as string);
     let recipe: OutputMeta['recipe'];
-    if (typeof o.recipe === 'string') {
-      // Module-owned recipes sit next to the YAML (`<tool>/<name>.py`).
-      const name = o.recipe.split('/').pop()!;
-      const hit = Object.entries(files).find(([p]) => base(p) === name);
-      if (hit) recipe = { code: hit[1] };
-      else notes.push(`${slug}: recipe ${o.recipe} was not among the files; add the .py to edit it.`);
+    if (typeof o.recipe === 'string' && o.recipe.trim()) {
+      const ref = o.recipe.trim();
+      const name = ref.split('/').pop()!;
+      // A module-owned recipe sits next to the YAML (`<tool>/<name>.py`); a
+      // pipeline-keyed one (`nf-core/<pipeline>/<name>.py`) lives elsewhere in
+      // the catalog. Either way the reference is kept as written: rewriting it
+      // to `<tool>/<slug>.py` would point CI at a file that does not exist.
+      const moduleOwned = ref === `${toolId}/${name}`;
+      const hit = moduleOwned ? Object.entries(files).find(([p]) => base(p) === name) : undefined;
+      const keepRef = ref !== `${toolId}/${slug}.py` ? { ref } : {};
+      if (hit) recipe = { code: hit[1], ...keepRef };
+      else {
+        recipe = { code: '', ref };
+        notes.push(
+          moduleOwned
+            ? `${slug}: recipe ${ref} was not among the files; the reference is kept, add the .py to edit it.`
+            : `${slug}: recipe ${ref} lives outside this tool's folder; the reference is kept as-is.`,
+        );
+      }
     }
     const find = (o.find ?? {}) as Record<string, unknown>;
+    const columns =
+      o.columns && typeof o.columns === 'object' && !Array.isArray(o.columns)
+        ? Object.fromEntries(
+            Object.entries(o.columns as Record<string, unknown>)
+              .filter(([, v]) => typeof v === 'string')
+              .map(([k, v]) => [k, v as string]),
+          )
+        : undefined;
     const output: OutputMeta = {
       slug,
       path_glob: str(find.path_glob) ?? '',
@@ -173,6 +239,15 @@ export function draftFromCatalogFiles(files: Record<string, string>, outputSlug?
       name: str(o.name),
       description: str(o.description),
       recipe,
+      // recipe XOR columns (SCHEMA.md); a file carrying both keeps the recipe.
+      columns: !recipe && columns && Object.keys(columns).length ? columns : undefined,
+      stage: str(o.stage) as Stage | undefined,
+      origin_tool: str(o.origin_tool),
+      mode: str(o.mode),
+      nf_core_url: str(o.nf_core_url),
+      biotools_url: str(o.biotools_url),
+      edam_operations: strList(o.edam_operations),
+      edam_formats: strList(o.edam_formats),
     };
     for (const k of Object.keys(output) as (keyof OutputMeta)[]) if (output[k] === undefined) delete output[k];
     const renders: DraftRender[] = [];
@@ -238,16 +313,28 @@ async function pipe(bytes: Uint8Array, stream: CompressionStream | Decompression
  *  and a browser URL tops out around a few hundred KB. */
 export const LINK_FIXTURE_ROWS = 200;
 
+const trimFixture = (f: { fileName: string; content: string }) => ({
+  ...f,
+  content: f.content.split('\n').slice(0, LINK_FIXTURE_ROWS + 1).join('\n'),
+});
+
 export async function encodeDraftForUrl(draft: StudioDraft): Promise<string> {
-  const slim: StudioDraft = draft.fixture
-    ? {
-        ...draft,
-        fixture: {
-          ...draft.fixture,
-          content: draft.fixture.content.split('\n').slice(0, LINK_FIXTURE_ROWS + 1).join('\n'),
-        },
-      }
-    : draft;
+  // Every output's fixture is trimmed, and no raw recipe sample rides along
+  // (toDraft already drops them; this guards a hand-built draft too).
+  const slim: StudioDraft = {
+    ...draft,
+    output: stripOutputRuntime(draft.output),
+    ...(draft.fixture ? { fixture: trimFixture(draft.fixture) } : {}),
+    ...(draft.moreOutputs
+      ? {
+          moreOutputs: draft.moreOutputs.map((o) => ({
+            ...o,
+            output: stripOutputRuntime(o.output),
+            ...(o.fixture ? { fixture: trimFixture(o.fixture) } : {}),
+          })),
+        }
+      : {}),
+  };
   const json = new TextEncoder().encode(JSON.stringify(slim));
   return toB64Url(await pipe(json, new CompressionStream('gzip')));
 }

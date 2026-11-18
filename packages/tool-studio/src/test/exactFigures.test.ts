@@ -170,4 +170,54 @@ describe('exact figure previews', () => {
     expect(spec).toEqual({ visu_type: 'histogram', dict_kwargs: { x: 'log2fc' }, figure_style: 'minimal' });
     expect(useExactFigures.getState().fidelity.builder?.fidelity).toBe('exact');
   });
+
+  it('a cache hit supersedes an older render still in flight', async () => {
+    await becomeReady();
+    // Warm the cache for S2.
+    await renderFigure('d', 'fig-1', [pick(['S2'])], 'light');
+    // A slow S1 render starts, then S2 (cached) answers at once.
+    let release!: (v: unknown) => void;
+    engine.renderFigure.mockImplementationOnce(() => new Promise((r) => (release = r)));
+    const slow = renderFigure('d', 'fig-1', [pick(['S1'])], 'light');
+    await vi.waitFor(() => expect(engine.renderFigure).toHaveBeenCalledTimes(2));
+    const fresh = await renderFigure('d', 'fig-1', [pick(['S2'])], 'light');
+    expect(fresh.figure).toEqual(exactResult().figure);
+    release(exactResult('stale'));
+    // The stale S1 answer is not handed out as an exact figure.
+    const late = await slow;
+    expect(late.figure).not.toEqual(exactResult('stale').figure);
+  });
+
+  it('an aborted render is not served after the engine answers', async () => {
+    await becomeReady();
+    const { exactFigure, SupersededRender } = await import('../viz/exactFigures');
+    let release!: (v: unknown) => void;
+    engine.renderFigure.mockImplementationOnce(() => new Promise((r) => (release = r)));
+    const ctrl = new AbortController();
+    const fixture = parseFixture('golden.csv', CSV);
+    const p = exactFigure({
+      key: 'k',
+      spec: { visu_type: 'bar', dict_kwargs: {} },
+      fixtureRef: fixture,
+      fixture: { fileName: 'golden.csv', text: CSV, keep: null, rows: 4 },
+      theme: 'light',
+      signal: ctrl.signal,
+    });
+    await vi.waitFor(() => expect(engine.renderFigure).toHaveBeenCalled());
+    ctrl.abort();
+    release(exactResult());
+    await expect(p).rejects.toBeInstanceOf(SupersededRender);
+  });
+
+  it('a newer builder preview aborts the one before it', async () => {
+    await becomeReady();
+    let release!: (v: unknown) => void;
+    engine.renderFigure.mockImplementationOnce(() => new Promise((r) => (release = r)));
+    const older = previewFigure({ metadata: { visu_type: 'histogram', dict_kwargs: { x: 'log2fc' } } });
+    await vi.waitFor(() => expect(engine.renderFigure).toHaveBeenCalledTimes(1));
+    const newer = await previewFigure({ metadata: { visu_type: 'bar', dict_kwargs: { x: 'gene' } } });
+    expect(newer.figure).toEqual(exactResult().figure);
+    release(exactResult('stale'));
+    expect((await older).figure).not.toEqual(exactResult('stale').figure);
+  });
 });

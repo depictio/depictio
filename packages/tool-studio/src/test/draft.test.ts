@@ -6,9 +6,11 @@ import {
   draftFromCatalogFiles,
   encodeDraftForUrl,
   filesFromZip,
+  LINK_FIXTURE_ROWS,
   normalizeDraft,
   toDraft,
 } from '../catalog/draft';
+import yaml from 'js-yaml';
 import { generateEntry } from '../catalog/yamlGen';
 import { parseFixture } from '../catalog/parseFixture';
 import JSZip from 'jszip';
@@ -103,5 +105,118 @@ describe('recipes round-trip', () => {
     expect(notes).toEqual([]);
     // Raw samples are never committed, so they do not come back.
     expect(draft.output.recipe).toEqual({ code });
+  });
+});
+
+describe('raw recipe samples never leave the tab', () => {
+  const code = 'SOURCES = [1]\nOUTPUT_SCHEMA = {"gene": 1}\ndef transform(s):\n    return s\n';
+  const withInputs: OutputMeta = { ...output, recipe: { code, inputs: [{ fileName: 'raw.txt', text: 'SECRET-RAW' }] } };
+
+  it('toDraft drops recipe.inputs on every output', () => {
+    const d = toDraft({
+      tool,
+      output: withInputs,
+      fixture,
+      renders,
+      siblings: [{ output: { ...withInputs, slug: 'b' }, fixture: null, renders: [] }],
+      activeIndex: 0,
+    });
+    expect(JSON.stringify(d)).not.toContain('SECRET-RAW');
+    expect(d.output.recipe).toEqual({ code });
+  });
+
+  it('a link trims every output fixture and strips samples from a hand-built draft', async () => {
+    const big = ['a,b', ...Array.from({ length: 500 }, (_, i) => `${i},x`)].join('\n');
+    const token = await encodeDraftForUrl({
+      format: DRAFT_FORMAT,
+      tool,
+      output: withInputs,
+      renders: [],
+      moreOutputs: [{ output: withInputs, fixture: { fileName: 'b.csv', content: big }, renders: [] }],
+    });
+    const back = await decodeDraftFromUrl(token);
+    expect(JSON.stringify(back)).not.toContain('SECRET-RAW');
+    expect(back.moreOutputs![0].fixture!.content.split('\n')).toHaveLength(LINK_FIXTURE_ROWS + 1);
+  });
+});
+
+describe('normalizeDraft shapes', () => {
+  const base = { format: DRAFT_FORMAT, tool: { id: 't' }, output: { slug: 's' } };
+  it('names the bad field', () => {
+    expect(() => normalizeDraft({ ...base, renders: ['x'] })).toThrow(/draft\.renders\[0\] must be an object/);
+    expect(() => normalizeDraft({ ...base, renders: [{ kind: 'volcano' }] })).toThrow(/draft\.renders\[0\]\.component must be a string/);
+    expect(() => normalizeDraft({ ...base, moreOutputs: [{ output: { slug: 'o' }, fixture: { fileName: 'a.csv' } }] })).toThrow(
+      /draft\.moreOutputs\[0\]\.fixture needs a fileName and a content string/,
+    );
+    expect(() => normalizeDraft({ ...base, moreOutputs: [{ output: { slug: 'o' }, renders: [{ component: 3 }] }] })).toThrow(
+      /draft\.moreOutputs\[0\]\.renders\[0\]\.component/,
+    );
+    expect(() => normalizeDraft({ ...base, moreOutputs: {} })).toThrow(/moreOutputs must be a list/);
+    expect(() => normalizeDraft({ ...base, appendTo: { toolId: 't' } })).toThrow(/appendTo needs/);
+  });
+  it('keeps a well-formed appendTo', () => {
+    const d = normalizeDraft({ ...base, appendTo: { toolId: 't', outputId: 't_s', yamlPath: 'depictio/catalog/t/s.yaml' } });
+    expect(d.appendTo).toEqual({ toolId: 't', outputId: 't_s', yamlPath: 'depictio/catalog/t/s.yaml' });
+  });
+});
+
+describe('import keeps what export writes back', () => {
+  const mod = 'id: mytool\nname: My Tool\ndescription: d\nhomepage: https://x.org\nbiotools_url: null\n';
+  it('carries output identity fields, columns, table options and render section/priority', () => {
+    const yml = [
+      'id: mytool_res',
+      'name: Res',
+      'origin_tool: Cutadapt',
+      'mode: amplicon',
+      'stage: qc',
+      'description: d',
+      'nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cutadapt',
+      'biotools_url: https://bio.tools/cutadapt',
+      'edam_operations: [http://edamontology.org/operation_3192]',
+      'edam_formats: [http://edamontology.org/format_3475]',
+      'find: { path_glob: "**/*.tsv" }',
+      'columns:',
+      '  gene: String',
+      '  "log 2": Float64',
+      'fixture: res.csv',
+      'renders_as:',
+      '  - { component: table, sortable: false, filterable: true, section: Stats, priority: 2 }',
+      '  - { component: figure, visu_type: bar, dict_kwargs: {x: gene}, section: Bars, priority: 0 }',
+      '  - { component: card, column: gene, aggregation: nunique, secondary_layout: vertical, section: S, priority: 1 }',
+    ].join('\n');
+    const files = { 'mytool/module.yaml': mod, 'mytool/res.yaml': yml, 'mytool/res.csv': 'gene,log 2\nA,1\n' };
+    const { draft } = draftFromCatalogFiles(files);
+    const e = generateEntry({
+      tool: draft.tool,
+      output: draft.output,
+      fixtureFileName: draft.fixture!.fileName,
+      fixtureContent: draft.fixture!.content,
+      renders: draft.renders as RenderSpec[],
+    });
+    expect(yaml.load(e.outputYaml)).toEqual(yaml.load(yml));
+  });
+
+  it('keeps a recipe reference that is not <tool>/<slug>.py, and writes columns only without a recipe', () => {
+    const yml = (recipe: string) =>
+      `id: mytool_res\nfind: { path_glob: "*" }\nrecipe: ${recipe}\ncolumns: {a: String}\nfixture: res.csv\nrenders_as: [{component: table}]\n`;
+    const files = (recipe: string, extra: Record<string, string> = {}) => ({
+      'mytool/module.yaml': mod,
+      'mytool/res.yaml': yml(recipe),
+      'mytool/res.csv': 'a\nx\n',
+      ...extra,
+    });
+    // Pipeline-keyed: kept, no .py written.
+    const ext = draftFromCatalogFiles(files('nf-core/ampliseq/x.py'));
+    expect(ext.draft.output.recipe).toEqual({ code: '', ref: 'nf-core/ampliseq/x.py' });
+    expect(ext.draft.output.columns).toBeUndefined();
+    const e1 = generateEntry({ tool: ext.draft.tool, output: ext.draft.output, fixtureFileName: 'res.csv', fixtureContent: 'a\nx\n', renders: [] });
+    expect(yaml.load(e1.outputYaml)).toMatchObject({ recipe: 'nf-core/ampliseq/x.py' });
+    expect((yaml.load(e1.outputYaml) as Record<string, unknown>).columns).toBeUndefined();
+    expect(e1.recipeFile).toBeUndefined();
+    // Module-owned under another name: kept, written under that name.
+    const own = draftFromCatalogFiles(files('mytool/shared_canonical.py', { 'mytool/shared_canonical.py': 'X = 1\n' }));
+    const e2 = generateEntry({ tool: own.draft.tool, output: own.draft.output, fixtureFileName: 'res.csv', fixtureContent: '', renders: [] });
+    expect(yaml.load(e2.outputYaml)).toMatchObject({ recipe: 'mytool/shared_canonical.py' });
+    expect(e2.recipeFile).toEqual({ name: 'shared_canonical.py', content: 'X = 1\n' });
   });
 });

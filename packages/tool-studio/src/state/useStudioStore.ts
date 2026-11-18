@@ -8,9 +8,27 @@ import { defaultRenderId } from '../viz/renderMeta';
 import { fetchUpstreamFile } from '../catalog/upstreamFile';
 import { renderIdsIn } from '../catalog/github';
 import type { StudioDraft } from '../catalog/draft';
+import { untrustedOutput, untrustedRender } from '../catalog/trust';
 
+/** Render uids must stay unique across reloads: a restored draft keeps its
+ *  uids, and a counter that restarts at 1 handed a new render the uid of an
+ *  old one (React keys, updateRender and removeRender all address by uid). */
 let uidCounter = 0;
-export const nextUid = () => `r${++uidCounter}`;
+export const nextUid = () =>
+  `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}${(++uidCounter).toString(36)}`;
+
+/** Renders arriving from outside the session (a link, an import, the agent's
+ *  load*): a uid each, and code-mode figures marked untrusted (see trust.ts). */
+const importRenders = (rs: StudioDraft['renders']): RenderSpec[] => {
+  const seen = new Set<string>();
+  return rs.map((r) => {
+    // A draft's own uids are kept (an agent may address them), unless one
+    // repeats: every store action addresses a render by its uid.
+    const uid = r.uid && !seen.has(r.uid) ? r.uid : nextUid();
+    seen.add(uid);
+    return { ...untrustedRender(r), uid } as RenderSpec;
+  });
+};
 
 /** Set when the wizard is adding renders to an already-published tool/output
  *  (rather than authoring a new tool). Drives read-only base renders + the
@@ -90,6 +108,11 @@ interface StudioState {
   setTool: (patch: Partial<ToolMeta>) => void;
   setOutput: (patch: Partial<OutputMeta>) => void;
   setFixture: (fixture: ParsedFixture | null) => void;
+  /** Set the fixture of output `index` (allOutputs order), whichever is
+   *  active — for async work that started on an output the author has since
+   *  switched away from. Returns false (and changes nothing) when that output
+   *  is gone or is no longer the one with `slug`. */
+  setFixtureAt: (index: number, slug: string, fixture: ParsedFixture | null) => boolean;
   addRender: (render: RenderSpec) => void;
   updateRender: (uid: string, patch: Partial<RenderSpec>) => void;
   removeRender: (uid: string) => void;
@@ -101,6 +124,9 @@ interface StudioState {
   setDismissedMatch: (toolId: string | null) => void;
   /** Replace the whole draft at once (import, `#draft=` link, agent API). */
   loadDraft: (draft: StudioDraft, step?: number) => void;
+  /** Re-enter append mode on a catalog output with a draft's new renders
+   *  (a draft carrying `appendTo`). */
+  loadAppendDraft: (tool: ManifestTool, output: ManifestOutput, draft: StudioDraft, step?: number) => void;
   /** Park the active output and start a blank one (lands on the Tool step). */
   addOutput: () => void;
   /** Make output `index` (in allOutputs order) the active one. */
@@ -115,6 +141,18 @@ export function allOutputs(s: Pick<StudioState, 'output' | 'fixture' | 'renders'
   const active: OutputDraft = { output: s.output, fixture: s.fixture, renders: s.renders };
   const i = Math.min(s.activeIndex, s.siblings.length);
   return [...s.siblings.slice(0, i), active, ...s.siblings.slice(i)];
+}
+
+/** Outputs that have nothing to export (no fixture), named for the Export
+ *  step, which refuses to drop them silently. Empty in append mode, where the
+ *  committed output brings its own. */
+export function outputsWithoutFixture(
+  s: Pick<StudioState, 'output' | 'fixture' | 'renders' | 'siblings' | 'activeIndex' | 'existing'>,
+): string[] {
+  if (s.existing) return [];
+  return allOutputs(s)
+    .map((o, i) => (o.fixture ? null : o.output.slug || `output ${i + 1}`))
+    .filter((x): x is string => x !== null);
 }
 
 const emptyTool: ToolMeta = { id: '', name: '', source: 'nf-core' };
@@ -216,8 +254,15 @@ const draftStorage: Storage = {
       /* too big — fall through and retry without the fixture text */
     }
     try {
-      const parsed = JSON.parse(v) as { state?: { fixture?: { raw?: string } } };
-      if (parsed.state?.fixture?.raw) parsed.state.fixture.raw = '';
+      type Slim = { fixture?: { raw?: string } | null; output?: OutputMeta };
+      const parsed = JSON.parse(v) as { state?: Slim & { siblings?: Slim[] } };
+      // Every output's fixture text and raw recipe samples go, not just the
+      // active one's: a multi-output draft's bulk is mostly in the siblings.
+      for (const o of [parsed.state, ...(parsed.state?.siblings ?? [])]) {
+        if (!o) continue;
+        if (o.fixture?.raw) o.fixture.raw = '';
+        if (o.output?.recipe?.inputs) delete o.output.recipe.inputs;
+      }
       localStorage.setItem(k, JSON.stringify(parsed));
     } catch {
       /* draft persistence is best-effort; the session itself still works */
@@ -239,6 +284,15 @@ type PersistedFixture = Omit<ParsedFixture, 'rows'>;
 function stripRows(fixture: ParsedFixture): PersistedFixture {
   const { rows: _rows, ...rest } = fixture;
   return rest;
+}
+
+/** Raw recipe samples are not persisted (they can be large, and they are the
+ *  user's unreduced data); the recipe's trust flag IS, so an imported recipe
+ *  stays untrusted across a reload. */
+function persistedOutput(output: OutputMeta): OutputMeta {
+  if (!output.recipe?.inputs) return output;
+  const { inputs: _inputs, ...recipe } = output.recipe;
+  return { ...output, recipe };
 }
 
 type PersistedDraft = {
@@ -315,11 +369,11 @@ export const useStudioStore = create<StudioState>()(
     loadDraft: (draft, step) =>
       set(() => {
         const fixture = draft.fixture ? parseFixture(draft.fixture.fileName, draft.fixture.content) : null;
-        const renders = draft.renders.map((r) => ({ ...r, uid: r.uid || nextUid() }) as RenderSpec);
+        const renders = importRenders(draft.renders);
         const siblings: OutputDraft[] = (draft.moreOutputs ?? []).map((o) => ({
-          output: { ...emptyOutput, ...o.output },
+          output: untrustedOutput({ ...emptyOutput, ...o.output }),
           fixture: o.fixture ? parseFixture(o.fixture.fileName, o.fixture.content) : null,
-          renders: o.renders.map((r) => ({ ...r, uid: r.uid || nextUid() }) as RenderSpec),
+          renders: importRenders(o.renders),
         }));
         return {
           siblings,
@@ -328,7 +382,7 @@ export const useStudioStore = create<StudioState>()(
           // Land on the first step that still needs something.
           step: step ?? (!draft.tool.id || !draft.output.slug ? 0 : !fixture ? 1 : renders.length ? 3 : 2),
           tool: { ...emptyTool, ...draft.tool },
-          output: { ...emptyOutput, ...draft.output },
+          output: untrustedOutput({ ...emptyOutput, ...draft.output }),
           fixture,
           renders,
           existing: null,
@@ -338,7 +392,32 @@ export const useStudioStore = create<StudioState>()(
       }),
     setTool: (patch) => set((s) => ({ tool: { ...s.tool, ...patch } })),
     setOutput: (patch) => set((s) => ({ output: { ...s.output, ...patch } })),
+    loadAppendDraft: (tool, output, draft, step) => {
+      get().startExisting(tool, output);
+      set((s) => ({
+        started: true,
+        step: step ?? 2,
+        // The committed sample is what the base renders were authored on; the
+        // draft's own copy only stands in when the manifest has none (parquet).
+        fixture: s.fixture ?? (draft.fixture ? parseFixture(draft.fixture.fileName, draft.fixture.content) : null),
+        renders: importRenders(draft.renders),
+        dismissedMatchId: tool.id,
+      }));
+    },
     setFixture: (fixture) => set({ fixture }),
+    setFixtureAt: (index, slug, fixture) => {
+      const s = get();
+      if (index === s.activeIndex) {
+        if (s.output.slug !== slug) return false;
+        set({ fixture });
+        return true;
+      }
+      const list = allOutputs(s);
+      if (!list[index] || list[index].output.slug !== slug) return false;
+      const i = index < s.activeIndex ? index : index - 1;
+      set({ siblings: s.siblings.map((o, k) => (k === i ? { ...o, fixture } : o)) });
+      return true;
+    },
     addRender: (render) =>
       set((s) => {
         // Give every render a default, editable, tool-unique id so it's reusable
@@ -348,8 +427,13 @@ export const useStudioStore = create<StudioState>()(
           const base = defaultRenderId(render) || 'render';
           // Avoid colliding with sibling new renders AND the existing tool's
           // render ids (unique within a tool → the `use: <tool>/<id>` handle).
+          // Sibling outputs count too: ids are unique within the whole tool.
           const taken = new Set(
-            [...s.renders.map((r) => r.id), ...(s.existing?.baseRenderIds ?? [])].filter(Boolean),
+            [
+              ...s.renders.map((r) => r.id),
+              ...s.siblings.flatMap((o) => o.renders.map((r) => r.id)),
+              ...(s.existing?.baseRenderIds ?? []),
+            ].filter(Boolean),
           );
           let id = base;
           for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
@@ -441,7 +525,7 @@ export const useStudioStore = create<StudioState>()(
         started: state.started,
         step: state.step,
         tool: state.tool,
-        output: state.output,
+        output: persistedOutput(state.output),
         fixture: state.fixture ? stripRows(state.fixture) : null,
         // `_previewFigure` is the executed code-mode plot — a trace array that
         // can rival the fixture in size, and it is re-derivable by pressing
@@ -451,7 +535,7 @@ export const useStudioStore = create<StudioState>()(
           '_previewFigure' in r ? { ...r, _previewFigure: undefined } : r,
         ),
         siblings: state.siblings.map((o) => ({
-          output: o.output,
+          output: persistedOutput(o.output),
           fixture: o.fixture ? stripRows(o.fixture) : null,
           renders: o.renders.map((r) => ('_previewFigure' in r ? { ...r, _previewFigure: undefined } : r)),
         })),

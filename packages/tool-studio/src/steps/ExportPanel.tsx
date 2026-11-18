@@ -4,7 +4,7 @@ import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import JSZip from 'jszip';
-import { allOutputs, useStudioStore } from '../state/useStudioStore';
+import { allOutputs, outputsWithoutFixture, useStudioStore } from '../state/useStudioStore';
 import { generateEntry, appendRenders } from '../catalog/yamlGen';
 import AppendedYamlPreview from './AppendedYamlPreview';
 import { useDiagnostics } from '../hooks/useDiagnostics';
@@ -96,7 +96,14 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
 
   const diagnostics = useDiagnostics(kinds, catalog);
   const errors = diagnostics.filter((d) => d.severity === 'error');
-  const blocked = errors.length > 0 && !override;
+  // An output with no fixture has nothing to export: it used to be dropped
+  // from the zip/PR without a word under "Export anyway". Named here, and it
+  // blocks export whatever the override says.
+  const withoutFixture = useMemo(
+    () => outputsWithoutFixture({ output, fixture, renders, siblings, activeIndex, existing }),
+    [output, fixture, renders, siblings, activeIndex, existing],
+  );
+  const blocked = (errors.length > 0 && !override) || withoutFixture.length > 0;
   // The textual splice refuses a few legal YAML shapes rather than corrupting
   // them; when it does, there is nothing valid to download or commit.
   const appendProblem = append?.problem ?? null;
@@ -120,7 +127,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
         downloadBlob(`${existing.outputSlug}.yaml`, new Blob([updatedYaml], { type: 'text/yaml' }));
         return;
       }
-      if (!entry) return;
+      if (!entry || withoutFixture.length) return;
       const zip = new JSZip();
       const dir = zip.folder(tool.id)!;
       // New output on an existing tool: only the new files — module.yaml already exists.
@@ -154,6 +161,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
   };
 
   const doOpenPr = async () => {
+    if (withoutFixture.length) return;
     // Enter the working state up-front so the button is disabled during the
     // OAuth popup too — a second click would open a second popup + listener and
     // trip the state check.
@@ -241,6 +249,28 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
       />
 
       {diagnostics.length > 0 && <DiagnosticsList diagnostics={diagnostics} onGoTo={setStep} />}
+      {withoutFixture.length > 0 && (
+        <Alert
+          color="red"
+          variant="light"
+          icon={<Icon icon="mdi:table-off" />}
+          title="Some outputs have no fixture"
+          data-testid="missing-fixtures"
+          data-count={withoutFixture.length}
+        >
+          <Text size="sm">
+            {withoutFixture.map((slug, k) => (
+              <span key={slug + k}>
+                {k ? ', ' : ''}
+                <Code>{slug}</Code>
+              </span>
+            ))}{' '}
+            {withoutFixture.length > 1 ? 'have' : 'has'} no fixture, so there is nothing to export for{' '}
+            {withoutFixture.length > 1 ? 'them' : 'it'}. Add a fixture (Fixture step) or remove the output; export stays
+            blocked until then, even with &ldquo;Export anyway&rdquo;.
+          </Text>
+        </Alert>
+      )}
       {errors.length > 0 ? (
         <Checkbox
           checked={override}

@@ -18,22 +18,42 @@ import './styles/studio.css';
 
 import { studioCssVariablesResolver, studioTheme } from './theme';
 import App from './App';
-import { installAgentApi } from './agentApi';
+import { notifications } from '@mantine/notifications';
+import { applyDraft, catalogLoaded, installAgentApi } from './agentApi';
 import { decodeDraftFromUrl } from './catalog/draft';
-import { useStudioStore } from './state/useStudioStore';
+import { backupCurrentDraft, discardDraftBackup } from './state/draftBackup';
 
 installAgentApi(__STUDIO_VERSION__);
 
 // A `#draft=` link (toolStudio.link(), or "Copy link" in Export) loads that
 // draft and then clears the hash, so a reload does not re-apply it over edits.
+// Whatever this browser had restored is backed up first, and App offers it
+// back ("Restore previous draft"). A link's code-mode figures and recipes are
+// untrusted: they are shown, not run, until the author says so.
 const hashDraft = new URLSearchParams(location.hash.slice(1)).get('draft');
 if (hashDraft) {
   decodeDraftFromUrl(hashDraft)
-    .then((draft) => {
-      useStudioStore.getState().loadDraft(draft);
+    .then(async (draft) => {
+      // Append-mode drafts re-enter on a catalog output: wait for the snapshot.
+      if (draft.appendTo) await catalogLoaded();
+      const backedUp = backupCurrentDraft();
+      try {
+        applyDraft(draft);
+      } catch (e) {
+        if (backedUp) discardDraftBackup(); // nothing was replaced
+        throw e;
+      }
       sessionStorage.setItem('tool-studio-loaded-from-link', '1');
     })
-    .catch((e) => console.error('[tool-studio] could not load #draft:', e))
+    .catch((e) => {
+      console.error('[tool-studio] could not load #draft:', e);
+      notifications.show({
+        color: 'red',
+        autoClose: false,
+        title: 'Could not open this link',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    })
     .finally(() => history.replaceState(null, '', location.pathname + location.search));
 }
 

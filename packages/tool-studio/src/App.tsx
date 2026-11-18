@@ -19,6 +19,7 @@ import OutputsBar from './components/OutputsBar';
 import EntryPanel from './components/EntryPanel';
 import { useDiagnostics } from './hooks/useDiagnostics';
 import { useMediaQuery } from '@mantine/hooks';
+import { discardDraftBackup, restoreDraftBackup, useDraftBackup } from './state/draftBackup';
 
 const STEPS = ['Tool', 'Fixture', 'Visualizations', 'Export'] as const;
 
@@ -43,6 +44,8 @@ export default function App() {
   const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
   const reset = useStudioStore((s) => s.reset);
   const diagnostics = useDiagnostics(kinds, catalog);
+  // The draft a #draft= link replaced (state/draftBackup.ts).
+  const backup = useDraftBackup();
   // The entry panel sits beside the steps on wide screens; on narrower ones it
   // is a toggle, so the form keeps its width.
   const wide = useMediaQuery('(min-width: 75em)');
@@ -176,7 +179,44 @@ export default function App() {
                 </Button>
               </div>
 
-              {restored && (
+              {backup.available && (
+                <Alert
+                  color="gray"
+                  variant="light"
+                  mb="md"
+                  withCloseButton
+                  onClose={discardDraftBackup}
+                  icon={<Icon icon="mdi:backup-restore" />}
+                  title="Opened from a link"
+                  data-testid="draft-backup"
+                >
+                  <Group justify="space-between" wrap="nowrap" gap="md">
+                    <span>
+                      The link replaced the draft you had here
+                      {backup.toolId ? (
+                        <>
+                          {' '}
+                          (<Code>{backup.toolId}</Code>)
+                        </>
+                      ) : null}
+                      . It is kept until you dismiss this.
+                    </span>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      data-testid="restore-backup"
+                      onClick={() => {
+                        restoreDraftBackup();
+                        setRestored(false);
+                      }}
+                    >
+                      Restore previous draft
+                    </Button>
+                  </Group>
+                </Alert>
+              )}
+
+              {restored && !backup.available && (
                 <Alert
                   color="gray"
                   variant="light"
