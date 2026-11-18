@@ -279,6 +279,33 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
       ? 'dark'
       : 'light';
 
+  // The dashboard opens in the report's scheme and follows the report's
+  // toggle while it is hidden; it shares the file's storage, and Mantine's
+  // own manager reads its key and listens for `storage` events on it (as the
+  // app's theme toggle replays one, `chrome/variants/glass/parts.tsx`).
+  const MANTINE_SCHEME_KEY = 'mantine-color-scheme-value';
+  function frameFollowsReport(): void {
+    const scheme = reportScheme();
+    const win = frame?.contentWindow as (Window & typeof globalThis) | null | undefined;
+    if (!win || frameScheme() === scheme) return;
+    storageSet(MANTINE_SCHEME_KEY, scheme);
+    try {
+      win.dispatchEvent(
+        new win.StorageEvent('storage', {
+          key: MANTINE_SCHEME_KEY,
+          newValue: scheme,
+          storageArea: win.localStorage,
+        }),
+      );
+    } catch {
+      /* storage blocked: the dashboard keeps its own scheme */
+    }
+  }
+  new MutationObserver(frameFollowsReport).observe(document.body, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+
   function syncChrome(): void {
     document.documentElement.classList.toggle('dpx-view-dashboard', view === 'dashboard');
     if (frame) {
@@ -300,6 +327,7 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
 
   // ── The dashboard view ──────────────────────────────────────────────────
   function buildFrame(): HTMLIFrameElement {
+    storageSet(MANTINE_SCHEME_KEY, reportScheme());
     const el = document.createElement('iframe');
     el.className = 'dpx-dashboard-frame';
     el.title = 'Dashboard';
