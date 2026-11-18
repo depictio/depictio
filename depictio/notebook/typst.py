@@ -45,8 +45,8 @@ def note(title: str, detail: str = "") -> str:
     return raw(f"#dpx-note({tstr(title)}, {tstr(detail)})")
 
 
-def _breakable(text: str) -> str:
-    if len(text) <= _LONG_TOKEN:
+def _breakable(text: str, limit: int = _LONG_TOKEN) -> str:
+    if len(text) <= limit:
         return text
     # A zero-width space after the separators a long token has.
     return re.sub(r"([_/.\-:,])", "\\1\u200b", text)
@@ -90,10 +90,13 @@ def table(df: pl.DataFrame, *, rows: int = TABLE_ROWS, cols: int = TABLE_COLS) -
     for i, name in enumerate(view.columns):
         lengths = sorted(len(r[i]) for r in body) or [0]
         typical = lengths[int(0.9 * (len(lengths) - 1))]
-        weights.append(max(4, min(28, max(len(str(name)) * 0.8, typical))))
+        longest_part = max((len(p) for p in re.split(r"[_/.\-:, ]", str(name))), default=0)
+        weights.append(max(4, min(28, max(longest_part + 1, typical))))
     columns = "(" + ", ".join(f"{w:.1f}fr" for w in weights) + ",)"
     align = "(" + ", ".join("right" if n else "left" for n in numeric) + ",)"
-    header = "(" + ", ".join(tstr(_breakable(str(c))) for c in view.columns) + ",)"
+    # A header always breaks at its separators: `bill_length_mm` over a column
+    # of three-digit numbers would otherwise run into its neighbour.
+    header = "(" + ", ".join(tstr(_breakable(str(c), 0)) for c in view.columns) + ",)"
     cells = "(" + ", ".join("(" + ", ".join(tstr(v) for v in r) + ",)" for r in body) + ",)"
     shown = []
     if total_rows > view.height:

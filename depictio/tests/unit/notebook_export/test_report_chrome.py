@@ -449,3 +449,139 @@ def test_a_headings_aside_is_the_pages_only(ampliseq_tabs):
     assert (
         '[<span class="dpx-h-note">none active</span>]{.content-visible when-format="html"}' in line
     )
+
+
+# ── The PDF's structure (round 3) ───────────────────────────────────────────
+
+
+def _pdf_src(ampliseq_tabs, **extra):
+    project = {
+        "name": "Ampliseq",
+        "workflows": [
+            {
+                "name": "ampliseq",
+                "version": "3.1.0",
+                "engine": {"name": "nextflow"},
+                "catalog": {"name": "nf-core"},
+            }
+        ],
+        "template_origin": {"template_id": "nf-core/ampliseq/3.1.0"},
+    }
+    return generate_qmd(_plan(ampliseq_tabs, pdf=True, project=project, **extra))
+
+
+def test_the_cover_says_what_the_file_is_and_carries_the_real_fields(ampliseq_tabs):
+    block = _typst_block(_body(_pdf_src(ampliseq_tabs, dashboard_public=True)))
+    assert "DASHBOARD REPORT" in block
+    assert "A static report of the interactive Depictio dashboard" in block
+    assert "live at" in block
+    for label, value in (
+        ("Project", "Ampliseq"),
+        ("Pipeline", "nf-core/ampliseq 3.1.0 (nextflow)"),
+        ("Template", "nf-core/ampliseq/3.1.0"),
+        ("Exported state", "No filter active"),
+    ):
+        assert f'[#"{label}"]' in block and value in block, label
+    assert '[#"Tabs"]' in block and "Overview, MultiQC" in block
+    assert '[#"Data read"]' in block and "data collections" in block
+    # Nothing made up: a private dashboard has no live link, a project with
+    # no workflow no pipeline row.
+    private = _typst_block(_body(generate_qmd(_plan(ampliseq_tabs, pdf=True))))
+    assert "live at" not in private and '[#"Pipeline"]' not in private
+
+
+def test_the_running_header_names_the_report(ampliseq_tabs):
+    block = _typst_block(_body(_pdf_src(ampliseq_tabs)))
+    assert "#dpx-title] · Dashboard report" in block
+    assert "tabs.last().body" in block
+
+
+def test_the_contents_are_in_the_text_colour(ampliseq_tabs):
+    for style in ("colour", "mono"):
+        block = _typst_block(_body(_pdf_src(ampliseq_tabs, pdf_style=style)))
+        assert "#show outline.entry: it =>" not in block  # no per-entry colouring
+
+
+def test_every_tab_after_the_first_is_an_appendix(ampliseq_tabs):
+    body = _body(_pdf_src(ampliseq_tabs))
+    assert '## Appendices {#appendices}' in body
+    assert body.count("{#appendices}") == 1
+    assert '[Appendix A — MultiQC]{.content-visible when-format="typst"}' in body
+    assert '[MultiQC]{.content-visible when-format="html"}' in body
+    assert "Appendix A — Overview" not in body  # the overview is the report
+    # The page keeps its tabs: no appendices without the PDF.
+    plain = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert "Appendix" not in plain and "{#appendices}" not in plain
+
+
+def test_headings_carry_their_icon_in_the_pdf(ampliseq_tabs):
+    plan = _plan(ampliseq_tabs, pdf=True)
+    plan.icons = {"mdi:counter": '<svg viewBox="0 0 24 24"><path fill="currentColor"/></svg>'}
+    block = _typst_block(_body(generate_qmd(plan)))
+    m = re.search(r'#let dpx-icons = \((.*?)\)\n', block)
+    assert m and '"sec-key-figures": "<svg' in m.group(1)
+    # In the heading's colour, as an SVG typst reads (xmlns added).
+    assert "xmlns=" in m.group(1) and "currentColor" not in m.group(1)
+
+
+def test_the_stepper_and_fact_list_are_drawn_for_the_pdf(ampliseq_tabs):
+    body = _body(_pdf_src(ampliseq_tabs))
+    assert "#dpx-steps((" in body and "#dpx-facts((" in body
+    # The page keeps its own markup for them.
+    assert ':::: {.content-visible when-format="html"}' in body
+    assert "#dpx-steps" not in _body(generate_qmd(_plan(ampliseq_tabs)))
+
+
+def test_the_kpi_strip_is_a_card_grid_in_the_pdf():
+    from depictio.notebook import StaticCard, static_card_row
+
+    out = static_card_row([StaticCard("Samples", "12"), StaticCard("Phyla", "57")])
+    assert '#dpx-kpis(dpx-kpi("Samples", "12"), dpx-kpi("Phyla", "57"))' in out
+    assert out.strip().startswith("````{=typst}")
+
+
+def test_icons_are_svg_typst_can_read_without_the_network():
+    from depictio.notebook.typst import colored_svg
+
+    svg = colored_svg('<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0"/></svg>', "#fd7e14")
+    assert 'xmlns="http://www.w3.org/2000/svg"' in svg and "#fd7e14" in svg
+    assert colored_svg(None, "#000") is None
+
+
+def test_the_table_builder():
+    import polars as pl
+
+    from depictio.notebook.typst import table
+
+    df = pl.DataFrame(
+        {
+            "sample": [f"SRR100701{i:02d}" for i in range(40)],
+            "count": list(range(1000, 1040)),
+            "share": [0.123456] * 40,
+            **{f"c{i}": ["x"] * 40 for i in range(9)},
+        }
+    )
+    out = table(df)
+    assert out.strip().startswith("````{=typst}") and "#dpx-table(" in out
+    # Numbers right-aligned and formatted like the dashboard's.
+    assert "align: (left, right, right, left," in out
+    assert '"1,000"' in out and '"0.1235"' in out
+    # Widths from what the columns hold, never more than the page.
+    assert re.search(r"columns: \((\d+\.\d+fr, ?)+\)", out)
+    assert "Showing 30 of 40 rows · 8 of 12 columns" in out
+
+
+def test_a_tile_that_cannot_be_drawn_is_named_not_numbered():
+    from depictio.notebook.components import DepictioComponent, readable_name
+
+    assert readable_name("general_stats") == "General statistics"
+    assert readable_name("Per Base N Content") == "Per Base N Content"
+
+    class _C(DepictioComponent):
+        pass
+
+    comp = _C.__new__(_C)
+    comp.meta = {"index": "1bba76a2-2824-46b9-bad2-0add3f6fc001", "selected_plot": "general_stats"}
+    assert comp.title == "General statistics"
+    comp.meta = {"index": "1bba76a2-2824-46b9-bad2-0add3f6fc001", "component_type": "multiqc"}
+    assert "1bba76a2" not in comp.title
