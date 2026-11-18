@@ -193,9 +193,10 @@ def header_markdown(
     # The HTML's: a PDF opens on a title page that carries the same record.
     parts.append(
         '::: {.content-visible when-format="html"}\n'
+        + "::: {.dpx-provenance}\n"
         + "| | |\n|---|---|\n"
         + "\n".join(f"| **{k}** | {v} |" for k, v in meta_rows)
-        + "\n\nEvery cell below is what the dashboard computed for that view: the same "
+        + "\n:::\n\nEvery cell below is what the dashboard computed for that view: the same "
         "table, the same filters, in the same order.\n:::"
     )
 

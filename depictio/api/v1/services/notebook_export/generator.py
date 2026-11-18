@@ -73,6 +73,7 @@ from .report_chrome import (
     stepper_markdown,
     title_logo_css,
 )
+from .report_theme import BRAND_DEFAULTS, CHROME_CSS, CHROME_JS, brand_rules
 
 # What a highlight can show (``highlightTile.ts``: ``HIGHLIGHTABLE_TYPES``).
 _HIGHLIGHTABLE = frozenset({"figure", "advanced_viz"})
@@ -723,17 +724,7 @@ nav[role="doc-toc"] a.active {
       }
       link.insertBefore(chev, link.firstChild);
     }
-    var head = toc.querySelector('h2'), list = toc.querySelector(':scope > ul');
-    if (!head || !list || head.hasAttribute('data-dpx-toc')) return;
-    head.setAttribute('data-dpx-toc', '1');
-    var top = document.createElement('span');
-    top.className = 'dpx-chev';
-    top.textContent = '\\u25BE';
-    head.insertBefore(top, head.firstChild);
-    head.classList.add('dpx-h');
-    head.addEventListener('click', function () {
-      list.style.display = head.classList.toggle('dpx-folded') ? 'none' : '';
-    });
+    // The list as a whole folds from its title's own button (``report_theme``).
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', enhance);
@@ -1467,6 +1458,8 @@ class NotebookBuilder:
             logo_dark=None,
             accent=accent,
             has_mark=bool(plan.depictio_mark),
+            # Paper has a dark theme, and with it Quarto's scheme toggle.
+            scheme_toggle=self.paper,
         )
 
     @property
@@ -1545,7 +1538,8 @@ class NotebookBuilder:
             # nf-core apple), the app's otherwise.
             favicon_data_uri=plan.dashboard_logo or plan.favicon_data_uri,
             before_body=self._appbar(),
-            after_body=self._footer(),
+            after_body=self._footer() + "\n" + CHROME_JS,
+            in_header=[CHROME_CSS],
             pdf=self.plan.pdf,
             extra={"references": refs} if (refs := self._methods()[1]) else {},
             brand=(
@@ -1553,6 +1547,8 @@ class NotebookBuilder:
                     primary=self._primary()[0],
                     font_family=brand.get("font_family"),
                     headings_font_family=brand.get("headings_font_family"),
+                    rules=brand_rules("light"),
+                    extra_defaults=BRAND_DEFAULTS,
                 )
                 if self.paper
                 else None
@@ -1563,6 +1559,8 @@ class NotebookBuilder:
                     primary=self._primary()[0],
                     font_family=brand.get("font_family"),
                     headings_font_family=brand.get("headings_font_family"),
+                    rules=brand_rules("dark"),
+                    extra_defaults=BRAND_DEFAULTS,
                 )
                 if self.paper
                 else None
@@ -2562,6 +2560,7 @@ fig_funnel"""
                 (
                     str(e.unit.meta.get("title") or e.unit.meta.get("index") or ""),
                     str(e.unit.meta.get("description") or ""),
+                    str(e.unit.meta.get("index") or ""),
                 )
                 for e in row
             ],
@@ -2661,7 +2660,11 @@ fig_funnel"""
             out.append(md_cell(f"::: {{#{label}}}"))
             out.extend(tiles)
             out.append(md_cell(f"{caption}\n\n:::"))
-        about = about_callout(str(meta.get("description") or ""), rewrite=self._rewrite_links)
+        about = about_callout(
+            str(meta.get("description") or ""),
+            name=str(meta.get("title") or ""),
+            rewrite=self._rewrite_links,
+        )
         if about:
             out.append(md_cell(about))
         return out

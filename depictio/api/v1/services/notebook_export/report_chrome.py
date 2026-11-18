@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from html import escape as _esc
 from typing import Any
 
+from .report_theme import SCHEME_TOGGLE
+
 # ``descriptionText.ts`` LABELS: the paragraph labels a description may open
 # with, as the popover shows them.
 _LABELS: dict[str, tuple[str, str]] = {
@@ -142,20 +144,46 @@ def about_markdown(description: str, *, rewrite: Callable[[str], str] = lambda s
     return "\n\n".join(parts)
 
 
+def _about_item(body: str, *, name: str = "", index: str = "") -> str:
+    """One component's description inside an about note, marked for the page's
+    "i" buttons (``report_theme``): its name heads the popover, its index ties
+    it to its card in a row. A fenced div, so a page without the script (the
+    PDF, a reader without JavaScript) shows the text as written."""
+    attrs = ".dpx-about-item"
+    if name:
+        attrs += f' data-dpx-name="{_attr(name)}"'
+    if index:
+        attrs += f' data-dpx-index="{_attr(index)}"'
+    longest = max((len(m.group(0)) for m in re.finditer(r":{3,}", body)), default=2)
+    fence = ":" * max(3, longest + 1)
+    return f"{fence} {{{attrs}}}\n{body}\n{fence}"
+
+
+def _attr(value: str) -> str:
+    """A value for a pandoc attribute: no quote or brace to end it early."""
+    return re.sub(r'["{}\n]', " ", value).strip()
+
+
 def about_callout(
     description: str,
     *,
     title: str = "About this component",
+    name: str = "",
     rewrite: Callable[[str], str] = lambda s: s,
 ) -> str:
     """A collapsed Quarto callout holding a tile's description, or ``""``.
 
     Collapsed, as the live popover is closed at rest: the report reads as the
-    dashboard does, and the text is one click away (and printed open).
+    dashboard does, and the text is one click away (and printed open). On
+    screen the page's "i" button in the tile's action row opens the same text
+    as a popover (``report_theme``); the callout is what prints, and what a
+    reader without JavaScript gets. ``name`` is the tile's title, heading that
+    popover.
     """
     body = about_markdown(description.strip(), rewrite=rewrite) if description else ""
     if not body.strip():
         return ""
+    body = _about_item(body, name=name)
     # A colon run longer than any inside the body, so the author's own fenced
     # divs (`::: steps`) cannot close the callout.
     longest = max((len(m.group(0)) for m in re.finditer(r":{3,}", body)), default=2)
@@ -251,9 +279,11 @@ def appbar_html(
     logo_dark: str | None,
     accent: str,
     has_mark: bool,
+    scheme_toggle: bool = False,
 ) -> str:
     """The app header, as a report's top bar: the dashboard's mark on the left,
-    "Powered by Depictio" on the right.
+    "Powered by Depictio" on the right, then the colour-scheme button when the
+    report has a dark theme (``scheme_toggle``, ``report_theme.SCHEME_TOGGLE``).
 
     ``title`` is the dashboard's name beside the mark, or ``None`` when the
     title block right under the bar already says it (it always does in a
@@ -271,7 +301,8 @@ def appbar_html(
     return (
         '<header class="dpx-appbar" role="banner"><div class="dpx-appbar-inner">'
         f'<span class="dpx-appbar-brand">{marks}{name}</span>'
-        f"{powered_by_html(has_mark)}</div></header>"
+        f'<span class="dpx-appbar-end">{powered_by_html(has_mark)}'
+        f"{SCHEME_TOGGLE if scheme_toggle else ''}</span></div></header>"
     )
 
 
@@ -550,18 +581,23 @@ body.quarto-dark .dpx-light-only { display: none !important; }
 
 
 def about_callout_many(
-    items: list[tuple[str, str]],
+    items: list[tuple[str, str]] | list[tuple[str, str, str]],
     *,
     title: str = "About these components",
     rewrite: Callable[[str], str] = lambda s: s,
 ) -> str:
     """One folded note for a row of cards: each card's description under its
-    name, so a strip of four does not grow four notes under it."""
+    name, so a strip of four does not grow four notes under it.
+
+    An item may carry the card's index as a third value: the page then gives
+    that card its own "i" button, opening its own part of the note."""
     parts = []
-    for name, description in items:
+    for item in items:
+        name, description = item[0], item[1]
+        index = item[2] if len(item) > 2 else ""  # type: ignore[misc]
         body = about_markdown(description.strip(), rewrite=rewrite) if description else ""
         if body.strip():
-            parts.append(f"**{name}**\n\n{body}")
+            parts.append(_about_item(f"**{name}**\n\n{body}", name=name, index=index))
     if not parts:
         return ""
     body = "\n\n".join(parts)
@@ -742,15 +778,9 @@ TOC_SCOPE_JS = """<script>
 # ink-coloured text: their text and grid follow the page here. Tiles drawn by
 # the report runtime follow the same class on their own.
 DARK_CSS = """<style>
-html:has(body.quarto-dark) { background: #1f1f1f; }
-body.quarto-dark {
-  --gl-fg: #c9c9c9; --gl-muted: #828282; --gl-faint: #696969; --gl-paper: #1f1f1f;
-  --gl-hair: rgba(255, 255, 255, 0.1); --gl-well: rgba(255, 255, 255, 0.06);
-  --gl-shade-a: rgba(0, 0, 0, 0.3); --gl-shade-b: rgba(0, 0, 0, 0.5);
-  --gl-accent-fg: color-mix(in srgb, var(--gl-accent) 75%, #fff);
-  --gl-tile-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a);
-  color: var(--gl-fg);
-}
+/* The scheme's tokens (--gl-*) and the page colour come from the dark brand's
+   SCSS rules layer (report_theme.brand_rules), compiled into Quarto's dark
+   stylesheet: what is left here is what no stylesheet of Quarto's reaches. */
 body.quarto-dark :not(pre) > code, body.quarto-dark pre { background: var(--gl-well); color: var(--gl-fg); }
 body.quarto-dark table:not(.dpx-plain) th, body.quarto-dark table:not(.dpx-plain) td {
   border-color: var(--gl-hair);

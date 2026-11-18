@@ -51,6 +51,9 @@ class QuartoFrontMatter:
     # Markup at the very end of the page, below it: the report's footer
     # (``report_chrome.footer_html``), outside every fold.
     after_body: str | None = None
+    # Markup for the page's <head>, after Quarto's own stylesheets: the
+    # report's controls and its one Quarto-DOM layer (``report_theme``).
+    in_header: list[str] = field(default_factory=list)
     # A PDF beside the HTML (``quarto render --to typst``): Quarto's bundled
     # typst, so no TeX. Static figures and tables come from the notebook
     # client when the render asks for them (``DEPICTIO_STATIC_FIGURES``).
@@ -88,10 +91,11 @@ class QuartoFrontMatter:
                 },
             }
         }
+        header = [{"text": t} for t in self.in_header if t]
         if self.favicon_data_uri:
-            doc["format"]["html"]["include-in-header"] = {
-                "text": f'<link rel="icon" href="{self.favicon_data_uri}">'
-            }
+            header.insert(0, {"text": f'<link rel="icon" href="{self.favicon_data_uri}">'})
+        if header:
+            doc["format"]["html"]["include-in-header"] = header[0] if len(header) == 1 else header
         if self.before_body:
             doc["format"]["html"]["include-before-body"] = {"text": self.before_body}
         if self.after_body:
@@ -147,6 +151,8 @@ def paper_brand(
     primary: str,
     font_family: str | None = None,
     headings_font_family: str | None = None,
+    rules: str | None = None,
+    extra_defaults: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Depictio's Paper look as a Quarto brand, for one export.
 
@@ -157,6 +163,10 @@ def paper_brand(
     hairlines. The rest of the chrome (sections as paper panels, tiles as
     cards) is CSS the document's header carries, since it styles markup
     Bootstrap has no variable for.
+
+    ``rules`` is the brand's SCSS rules layer (``defaults.bootstrap.rules``,
+    ``report_theme.brand_rules``), compiled into this scheme's stylesheet
+    after Bootstrap's; ``extra_defaults`` more Bootstrap/Quarto variables.
     """
     sans = font_family or f"'Inter Variable', Inter, {_SYSTEM_SANS}"
     defaults: dict[str, Any] = {
@@ -175,9 +185,13 @@ def paper_brand(
     }
     if headings_font_family:
         defaults["headings-font-family"] = headings_font_family
+    defaults.update(extra_defaults or {})
+    bootstrap: dict[str, Any] = {"defaults": defaults}
+    if rules:
+        bootstrap["rules"] = rules
     return {
         "color": {"primary": primary, "background": "#ffffff", "foreground": _INK},
-        "defaults": {"bootstrap": {"defaults": defaults}},
+        "defaults": {"bootstrap": bootstrap},
     }
 
 
@@ -194,11 +208,17 @@ def paper_brand_dark(
     primary: str,
     font_family: str | None = None,
     headings_font_family: str | None = None,
+    rules: str | None = None,
+    extra_defaults: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """``paper_brand`` for the dark scheme: the same type and radii, Mantine's
     dark page and ink, the same primary."""
     brand = paper_brand(
-        primary=primary, font_family=font_family, headings_font_family=headings_font_family
+        primary=primary,
+        font_family=font_family,
+        headings_font_family=headings_font_family,
+        rules=rules,
+        extra_defaults=extra_defaults,
     )
     brand["color"] = {"primary": primary, "background": _DARK_BG, "foreground": _DARK_INK}
     boot = brand["defaults"]["bootstrap"]["defaults"]
