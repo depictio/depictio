@@ -113,7 +113,7 @@ def test_branding_header_and_footer(ampliseq_tabs):
     assert 'class="dpx-appbar"' in bar and f'src="{LOGO}"' in bar
     assert "Powered by" in bar and 'class="dpx-mark"' in bar
     # The dashboard's mark is the tab icon too.
-    assert LOGO in html["include-in-header"][0]["text"]
+    assert LOGO in html["include-in-header"]["text"]
     # No big instance logo block in the header any more: the wordmark is only
     # ever the small "Powered by" mark, drawn once from the stylesheet.
     body = _body(src)

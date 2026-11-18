@@ -50,8 +50,6 @@ def _document() -> str:
             has_mark=False,
             scheme_toggle=True,
         ),
-        after_body=CHROME_JS,
-        in_header=[CHROME_CSS],
         brand=paper_brand(
             primary="#1c7ed6", rules=brand_rules("light"), extra_defaults=BRAND_DEFAULTS
         ),
@@ -66,6 +64,9 @@ def _document() -> str:
     meta["engine"] = "markdown"
     about = about_callout("The demo tile. How to read: it is a box.", name="Demo")
     body = f"""
+{CHROME_CSS}
+{CHROME_JS}
+
 ## Results
 
 ### A tab {{#tab-a}}
