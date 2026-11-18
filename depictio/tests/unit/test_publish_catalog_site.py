@@ -64,3 +64,28 @@ def test_a_directory_that_is_not_an_export_is_refused(tmp_path) -> None:
     (tmp_path / "empty").mkdir()
     with pytest.raises(SystemExit):
         publish_catalog_site.publish(tmp_path / "site", tmp_path / "empty", "latest", keep=10)
+
+
+def test_betas_do_not_push_stable_releases_out() -> None:
+    present = ["v1.22.0-b1", "v1.21.0", "v1.21.0-b6", "v1.21.0-b5", "v1.20.0", "v1.19.0"]
+    assert publish_catalog_site.prunable(present, keep=2) == [
+        "v1.21.0-b6",
+        "v1.21.0-b5",
+        "v1.19.0",
+    ]
+
+
+def test_a_release_older_than_the_kept_ones_is_refused_not_published(tmp_path) -> None:
+    site = tmp_path / "site"
+    for version in ["v1.21.0", "v1.22.0"]:
+        publish_catalog_site.publish(site, _export(tmp_path, version), version, keep=2)
+
+    with pytest.raises(SystemExit, match="older than"):
+        publish_catalog_site.publish(site, _export(tmp_path, "old"), "v1.20.6", keep=2)
+    assert not (site / "v1.20.6").exists()
+    assert (site / "v1.21.0").exists()
+
+
+def test_a_trailing_newline_is_not_a_release() -> None:
+    with pytest.raises(ValueError):
+        publish_catalog_site.release_key("v1.22.0\n")

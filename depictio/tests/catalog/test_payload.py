@@ -19,6 +19,7 @@ from depictio.catalog.payload import (
     advanced_viz_persist_config,
     build_payload,
     export_site_data,
+    json_safe,
 )
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 from depictio.models.components.advanced_viz.configs import VizConfig
@@ -320,13 +321,11 @@ def test_each_site_output_file_holds_what_the_gallery_embeds(tmp_path) -> None:
     entry = _flagship_entry()
     export_site_data([entry], tmp_path, "dev")
 
-    expected = build_payload(_get_output(FLAGSHIP), "light", entry)
+    expected = json_safe(build_payload(_get_output(FLAGSHIP), "light", entry))
     written = json.loads((tmp_path / "outputs" / f"{FLAGSHIP}.json").read_text())
-    assert written["fixturePreview"] == json.loads(
-        json.dumps(expected["fixturePreview"], default=str)
-    )
-    assert written["data"].keys() == expected["data"].keys()
-    assert written["data"]["figures"].keys() == expected["data"]["figures"].keys()
+    roundtrip = json.loads(json.dumps(expected, default=str))
+    assert written["fixturePreview"] == roundtrip["fixturePreview"]
+    assert written["data"] == roundtrip["data"]
     # Browser JSON.parse rejects NaN / Infinity tokens.
     text = (tmp_path / "outputs" / f"{FLAGSHIP}.json").read_text()
     assert "NaN" not in text and "Infinity" not in text

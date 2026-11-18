@@ -292,6 +292,10 @@ def catalog_export_site(
             "--version", help="Version recorded in the site's index (default: this depictio's)"
         ),
     ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Fail when an output's previews cannot be built (for CI)"),
+    ] = False,
 ) -> None:
     """Export the catalog as a static site: the gallery, one output at a time.
 
@@ -330,10 +334,12 @@ def catalog_export_site(
         typer.echo("No catalog entries found.")
         raise typer.Exit(code=1)
 
-    # A previous export's per-output files would linger next to the new ones.
+    # A previous export's per-output files and hashed chunks would linger next
+    # to the new ones.
     data_dir = out_dir / "data"
-    if data_dir.exists():
-        shutil.rmtree(data_dir)
+    for stale in (data_dir, out_dir / "assets"):
+        if stale.exists():
+            shutil.rmtree(stale)
     shutil.copytree(SITE_BUNDLE_DIR, out_dir, dirs_exist_ok=True)
     try:
         with _quiet_multiqc():
@@ -343,6 +349,12 @@ def catalog_export_site(
         raise typer.Exit(code=1)
 
     failed = f", {stats['failed']} without a preview" if stats["failed"] else ""
+    if strict and stats["failed"]:
+        typer.echo(
+            f"  {stats['failed']} output(s) could not be previewed; their entries in "
+            f"{data_dir / 'index.json'} carry the error"
+        )
+        raise typer.Exit(code=1)
     typer.echo(
         f"  Wrote catalog site ({stats['tools']} tools, {stats['outputs']} outputs{failed}) "
         f"to {out_dir}: index {stats['index_bytes'] / 1e6:.1f} MB, "

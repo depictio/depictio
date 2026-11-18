@@ -1406,7 +1406,7 @@ def export_site_data(entries: Any, out_dir: Path, version: str) -> dict[str, int
         listed = []
         for output in entry.outputs:
             _claim_output_id(output.id, seen_ids)
-            if not _SITE_OUTPUT_ID.match(output.id):
+            if not _SITE_OUTPUT_ID.fullmatch(output.id):
                 raise CatalogPayloadError(
                     f"output id {output.id!r} cannot name a file of the catalog site"
                 )

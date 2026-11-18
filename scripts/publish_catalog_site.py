@@ -3,7 +3,8 @@
 The Pages repository holds one directory per published slot: ``latest/`` (the
 catalog on ``main``) and ``v<version>/`` for each release. This script copies an
 export (``depictio catalog export-site``) into its slot, keeps only the newest
-``--keep`` release directories, and rewrites the two files at the root:
+``--keep`` stable releases (a beta is kept only while it is newer than every
+kept release), and rewrites the two files at the root:
 
 - ``versions.json``: ``{"latest": "latest", "versions": ["v1.22.0", ...]}``,
   newest first, which the documentation reads to link a release's catalog;
@@ -36,7 +37,7 @@ _REDIRECT = """<!doctype html>
 
 def release_key(name: str) -> tuple[int, int, int, int]:
     """Sort key of a release slot; a beta sorts before its release."""
-    m = _RELEASE.match(name)
+    m = _RELEASE.fullmatch(name)
     if m is None:
         raise ValueError(f"not a release slot: {name!r}")
     major, minor, patch, beta = m.groups()
@@ -45,8 +46,25 @@ def release_key(name: str) -> tuple[int, int, int, int]:
 
 def releases(site: Path) -> list[str]:
     """Release slots present in the site, newest first."""
-    names = [p.name for p in site.iterdir() if p.is_dir() and _RELEASE.match(p.name)]
+    names = [p.name for p in site.iterdir() if p.is_dir() and _RELEASE.fullmatch(p.name)]
     return sorted(names, key=release_key, reverse=True)
+
+
+def prunable(present: list[str], keep: int) -> list[str]:
+    """Release slots to drop from ``present`` (newest first).
+
+    The ``keep`` newest stable releases stay, and a beta only while it is newer
+    than all of them: betas come six to a release and would otherwise push the
+    stable releases out.
+    """
+    stable = [n for n in present if "-b" not in n]
+    kept = set(stable[:keep])
+    newest = release_key(stable[0]) if stable else None
+    return [
+        n
+        for n in present
+        if n not in kept and ("-b" not in n or (newest is not None and release_key(n) < newest))
+    ]
 
 
 def publish(site: Path, export: Path, slot: str, keep: int) -> list[str]:
@@ -67,12 +85,16 @@ def publish(site: Path, export: Path, slot: str, keep: int) -> list[str]:
         shutil.rmtree(target)
     shutil.copytree(export, target)
 
-    present = releases(site)
-    removed = present[keep:]
+    removed = prunable(releases(site), keep)
+    if slot in removed:
+        shutil.rmtree(target)
+        raise SystemExit(
+            f"{slot} is older than the {keep} newest releases the site keeps: not published"
+        )
     for name in removed:
         shutil.rmtree(site / name)
 
-    kept = present[:keep]
+    kept = releases(site)
     (site / "versions.json").write_text(
         json.dumps({"latest": LATEST if (site / LATEST).is_dir() else None, "versions": kept})
         + "\n"
