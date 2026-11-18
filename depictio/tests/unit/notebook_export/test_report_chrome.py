@@ -196,6 +196,9 @@ def test_figures_and_tables_are_numbered_with_stable_labels(ampliseq_tabs):
     assert "#fig-ov-tree" in "#" + " #".join(figs) or any(f.startswith("fig-ov-") for f in figs)
     # Each caption says where the data came from.
     assert '<span class="dpx-asof">Data: ' in src
+    # A MultiQC tile is captioned by its plot's name, never its raw key.
+    assert "**General statistics**." in src
+    assert "**general_stats**" not in src
 
 
 def test_stepper_markup():

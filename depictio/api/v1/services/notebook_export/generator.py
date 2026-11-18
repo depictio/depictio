@@ -24,6 +24,7 @@ from depictio.models.models.analysis_state import (
     NotebookPreflightDC,
     NotebookPreflightStage,
 )
+from depictio.notebook.components import readable_name
 from depictio.notebook.theme import resolve_primary
 
 from .aggregations import agg_expr_source
@@ -2733,9 +2734,11 @@ fig_funnel"""
         if label is None:
             out.append(tile)
         else:
-            title = str(
-                meta.get("title") or meta.get("selected_plot") or meta.get("selected_module") or ""
-            ).strip()
+            # A MultiQC tile has no title: its plot or module names it, as the
+            # reader would ("general_stats" -> "General statistics").
+            title = str(meta.get("title") or "").strip() or readable_name(
+                meta.get("selected_plot") or meta.get("selected_module")
+            )
             caption_bits = []
             if title:
                 caption_bits.append(f"**{_esc(title)}**.")
