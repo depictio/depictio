@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import polars as pl
 
 from . import theme as _theme
+from . import typst as _typst
 
 if TYPE_CHECKING:  # pragma: no cover
     from .client import DepictioClient
@@ -50,6 +51,75 @@ STATIC_FIGURES_ENV = "DEPICTIO_STATIC_FIGURES"
 STATIC_TABLE_ROWS = 30
 
 
+# What a MultiQC plot or module id reads as, where the id alone does not.
+_READABLE: dict[str, str] = {
+    "general_stats": "General statistics",
+    "multiqc": "MultiQC",
+    "fastqc": "FastQC",
+    "advanced_viz": "Visualisation",
+}
+
+
+def readable_name(value: Any) -> str:
+    """``general_stats`` -> "General statistics"; "Per Base N Content" stays."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.lower() in _READABLE:
+        return _READABLE[text.lower()]
+    if "_" in text and " " not in text:
+        text = text.replace("_", " ")
+        return text[:1].upper() + text[1:]
+    return text
+
+
+def _hex_color(color: str | None, fallback: str) -> str:
+    """A Mantine palette name (shade 6) or a CSS hex, as a hex."""
+    if not color:
+        return fallback
+    if color.startswith("#"):
+        return color
+    shades = _theme.MANTINE_SHADES.get(color.split(".")[0].strip().lower())
+    return shades[0] if shades else fallback
+
+
+class StaticCard:
+    """A code-mode card (``metric_card``) on a static page: a title over a value."""
+
+    def __init__(self, title: str, text: str) -> None:
+        self.title, self.text = title, text
+
+    def _repr_markdown_(self) -> str:
+        return _typst.kpis([self._typst_card_()])
+
+    def _typst_card_(self, mono: bool = False) -> str:
+        return _typst.kpi(title=self.title, value=self.text)
+
+
+def static_card_row(cards: list[Any], mono: bool = False) -> str:
+    """A strip of cards as the PDF draws it: each card's ``_typst_card_`` when
+    it has one, its text otherwise."""
+    out = []
+    for card in cards:
+        fn = getattr(card, "_typst_card_", None)
+        if fn is not None:
+            try:
+                out.append(fn(mono))
+                continue
+            except Exception:  # noqa: BLE001 - a card that cannot be computed reads as one
+                out.append(
+                    _typst.kpi(
+                        title=str(getattr(card, "title", "")),
+                        value="–",
+                        caption="Could not be computed for this report.",
+                    )
+                )
+                continue
+        html = getattr(card, "_repr_html_", lambda: "")() or ""
+        out.append(_typst.kpi(title=str(getattr(card, "title", "")), value=html_text(html)))
+    return _typst.kpis(out)
+
+
 def static_figures() -> bool:
     """Whether this render wants static figures (``STATIC_FIGURES_ENV``)."""
     return os.environ.get(STATIC_FIGURES_ENV, "") not in ("", "0", "false")
@@ -59,6 +129,16 @@ def static_figures() -> bool:
 #: this wide at Plotly's 12 px labels, so the figure's text prints at the size
 #: the body's does (8-9 pt) rather than shrunk from a 1000 px canvas.
 STATIC_FIGURE_WIDTH = 720
+
+
+_STATIC_WIDTH = {"px": STATIC_FIGURE_WIDTH}
+
+
+def set_static_width(px: int | None = None) -> None:
+    """The width static figures are drawn at from now on (``None``: the full
+    column's). A row of tiles draws each at its share of the column, so its
+    labels print at the same size as a full-width figure's."""
+    _STATIC_WIDTH["px"] = int(px) if px else STATIC_FIGURE_WIDTH
 
 
 def figure_png(fig) -> str | None:
@@ -383,7 +463,7 @@ class TableView:
     def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
         bundle = {HTML_MIME: self._repr_html_(), PLAIN_MIME: repr(self.df)}
         if static_figures():
-            bundle[MARKDOWN_MIME] = table_markdown(self.df)
+            bundle[MARKDOWN_MIME] = _typst.table(self.df)
         return bundle
 
     def __repr__(self) -> str:
@@ -584,7 +664,20 @@ class DepictioComponent:
 
     @property
     def title(self) -> str:
-        return str(self.meta.get("title") or self.index)
+        """The tile's name: its title, else what it shows (a MultiQC plot or
+        module, a column), never its index (a UUID means nothing to a reader)."""
+        title = str(self.meta.get("title") or "").strip()
+        if title:
+            return title
+        return (
+            readable_name(
+                self.meta.get("selected_plot")
+                or self.meta.get("selected_module")
+                or self.meta.get("column_name")
+            )
+            or readable_name(self.component_type)
+            or "This tile"
+        )
 
     @property
     def component_type(self) -> str:
@@ -703,7 +796,7 @@ class DepictioComponent:
             '<div class="dpx-unavailable" data-dpx-unavailable="1" style="border:1px dashed '
             "#adb5bd;border-radius:8px;padding:10px 14px;margin:4px 0;font-size:13px;"
             'color:#495057">'
-            f"<b>{_html.escape(self.title)}</b> could not be shown here."
+            f"<b>{_html.escape(self.title)}</b> could not be drawn in this report."
             f'<div style="margin-top:4px;color:#868e96">{_html.escape(reason)}</div>'
             '<div style="margin-top:6px;font-size:12px">'
             + (f"{link} · " if link else "")
@@ -731,7 +824,7 @@ class DepictioComponent:
             if isinstance(df, pl.DataFrame):
                 out = {HTML_MIME: data_html(df), PLAIN_MIME: repr(df)}
                 if static_figures():
-                    out[MARKDOWN_MIME] = table_markdown(df)
+                    out[MARKDOWN_MIME] = _typst.table(df)
                 return out
             return {PLAIN_MIME: repr(df)}
         if mode == "markdown":
@@ -754,10 +847,16 @@ class DepictioComponent:
             return bundle
         except Exception as exc:  # noqa: BLE001 - a tile must never break the document
             reason = self._reason(exc)
-            return {
+            out = {
                 HTML_MIME: self._placeholder_html(reason),
-                PLAIN_MIME: f"{self.title}: not available ({reason})",
+                PLAIN_MIME: f"{self.title} could not be drawn in this report ({reason}).",
             }
+            if static_figures():
+                out[MARKDOWN_MIME] = _typst.note(
+                    f"{self.title} could not be drawn in this report.",
+                    "The HTML report and the live dashboard show it.",
+                )
+            return out
 
     def _repr_html_(self) -> str | None:
         try:
@@ -872,6 +971,9 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
             fig = _theme.apply_to_figure(fig)
             html += fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
         bundle[HTML_MIME] = html
+        if static_figures() and isinstance(df, pl.DataFrame):
+            # A page: the table as a table (the violins stay the HTML's).
+            bundle[MARKDOWN_MIME] = _typst.table(df)
         return bundle
 
 
@@ -1116,6 +1218,41 @@ class CardComponent(DepictioComponent):
             f"{self._fmt(self.value)}</div>"
             f'<div style="font-size:11px;color:#adb5bd">{agg} · {column}</div>'
             f"{self._secondary_html()}</div>"
+        )
+
+    def _typst_card_(self, mono: bool = False) -> str:
+        """The card on a static page: its icon, title, value, caption and
+        secondary numbers (a top-N breakdown as bars, a box plot's summary,
+        a coverage share), drawn by the PDF's ``dpx-kpi``."""
+        accent = "#868e96" if mono else _hex_color(self._accent_color, "#868e96")
+        sec = self.data.get("secondary") or {}
+        layout = str(self.meta.get("secondary_layout") or "")
+        secondary = None
+        if layout in ("top_n", "concentration", "composition", "donut"):
+            top = ((sec.get("__breakdown__") or {}).get("top")) or []
+            if top:
+                secondary = _typst.bars(
+                    [(str(i["name"]), float(i["percent"]), f"{i['count']:,}") for i in top],
+                    accent,
+                )
+        elif layout == "box_plot" and sec.get("box_plot_stats"):
+            b = sec["box_plot_stats"]
+            secondary = (
+                f"dpx-range({_typst.tstr(self._fmt(b.get('min')))}, "
+                f"{_typst.tstr(self._fmt(b.get('median')))}, "
+                f"{_typst.tstr(self._fmt(b.get('max')))})"
+            )
+        elif layout == "coverage" and isinstance(self.value, (int, float)):
+            top = float(self.meta.get("coverage_max") or 100) or 100.0
+            frac = max(0.0, min(1.0, float(self.value) / top))
+            secondary = _typst.bars([("", frac, f"{frac:.0%} of {top:g}")], accent)
+        caption = str(self.meta.get("caption") or "").strip() or None
+        return _typst.kpi(
+            title=self.title,
+            value=_typst.fmt_number(self.value) if self.value is not None else "–",
+            caption=caption,
+            icon_svg=_typst.colored_svg(self.data.get("icon_svg"), accent),
+            secondary=secondary,
         )
 
     @property
