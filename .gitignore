@@ -495,3 +495,6 @@ depictio/cli/uv.lock
 # gene tables beside them are).
 depictio/viewer/public/assets/genomes/*.gff3.gz
 depictio/viewer/public/assets/genomes/*.gff3.gz.tbi
+
+# Claude Code per-user settings
+.claude/settings.local.json

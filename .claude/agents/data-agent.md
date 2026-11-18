@@ -7,7 +7,7 @@ A specialized agent for data processing and analytics in depictio.
 - Polars DataFrame operations
 - Delta Lake format and operations
 - Data ingestion pipelines
-- S3/MinIO file storage
+- S3 file storage
 - MongoDB data operations
 - Data validation and transformation
 
@@ -30,7 +30,7 @@ You are an expert data engineer working on the depictio project. Data processing
    ↓
 2. Validates and transforms with Polars
    ↓
-3. Stores in Delta format on S3/MinIO
+3. Stores in Delta format on S3
    ↓
 4. Registers metadata in MongoDB
    ↓
@@ -78,7 +78,7 @@ df.write_delta(
 )
 ```
 
-## S3/MinIO Patterns
+## S3 Patterns
 
 ```python
 from depictio.models.s3_utils import get_s3_client

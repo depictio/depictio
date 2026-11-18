@@ -8,7 +8,7 @@ Help understand the codebase architecture:
 
 1. **Component overview**:
    - `depictio/api/` - FastAPI backend (REST API, auth, background tasks)
-   - `depictio/dash/` - Plotly Dash frontend (interactive dashboards)
+   - `depictio/viewer/` - React + Mantine SPA (dashboards, editor, project builder)
    - `depictio/cli/` - Typer CLI tool (data management)
    - `depictio/models/` - Shared Pydantic models
 
@@ -19,14 +19,13 @@ Help understand the codebase architecture:
    - JWT authentication with role-based access
    - Beanie ODM for async MongoDB
 
-   **Dashboard Components** (`depictio/dash/modules/`):
-   - Figure, Table, Card, Interactive, Text, JBrowse, MultiQC
-   - Each has frontend.py, callbacks/, utils.py
+   **Dashboard Components** (`depictio/viewer/src/`, models in `depictio/models/components/`):
+   - Figure, Table, Card, Interactive, Text, JBrowse, MultiQC, advanced viz
 
    **Data Flow**:
    1. CLI ingests data -> Delta format -> MongoDB registration
    2. API serves metadata and data access
-   3. Dash renders interactive visualizations
+   3. The React viewer renders interactive visualizations
 
 3. **Exploration commands**:
    - Show directory structure
@@ -41,7 +40,7 @@ Help understand the codebase architecture:
 - `models` - Data model relationships
 - `auth` - Authentication flow
 - `data` - Data ingestion pipeline
-- `storage` - S3/MinIO file storage
+- `storage` - S3 file storage
 - `callbacks` - Dash callback patterns
 
 ## Usage

@@ -3,8 +3,8 @@
 ## Overview
 
 Production dashboard screenshots drive the **React SPA** at
-`{settings.fastapi.url}/dashboard-beta/{id}` via Playwright. The Dash path
-(`/dashboard/{id}`) is deprecated and retained only for emergency rollback.
+`{settings.fastapi.url}/dashboard/{id}` via Playwright. The Dash-targeted
+capture (`generate_dual_theme_screenshots`) is deprecated and kept only for emergency rollback.
 
 ## Active Pipeline
 
@@ -12,7 +12,7 @@ Production dashboard screenshots drive the **React SPA** at
 save.py (or auto-screenshot trigger)
   └─ generate_dashboard_screenshot_dual.delay(dashboard_id, user_id)   (Celery)
        └─ screenshot_service.generate_react_dual_theme_screenshots()
-            └─ Playwright → /dashboard-beta/{id} (light + dark)
+            └─ Playwright → /dashboard/{id} (light + dark)
                  └─ writes {dashboard_id}_{theme}.png to static/screenshots/
 ```
 
@@ -31,7 +31,7 @@ shots from the same folder — no frontend lookup change was needed.
   `generate_react_dual_theme_screenshots()` (active),
   `generate_dual_theme_screenshots()` (Dash, **deprecated**, logs warning),
   `get_admin_auth_token()` (MongoDB-backed, runs in API container).
-- **`depictio/dash/celery_app.py`** —
+- **`depictio/api/celery_app.py`** —
   `generate_dashboard_screenshot_dual` (active task; signature preserved
   for existing callers; body now calls the React variant).
 - **`depictio/api/v1/endpoints/utils_endpoints/routes.py`** —

@@ -19,7 +19,7 @@ You are a DevOps expert working on the depictio infrastructure. The project uses
 
 - `docker-compose.dev.yaml` - Development compose
 - `docker-compose.yaml` - Production compose
-- `Dockerfile_depictio.dockerfile` - Main Dockerfile
+- `docker-images/Dockerfile.api` - API image (also `Dockerfile.viewer`, `Dockerfile.worker`, `Dockerfile.cli`)
 - `helm-charts/depictio/` - Helm charts
 - `.github/workflows/` - CI/CD workflows
 - `.devcontainer/` - Devcontainer config
@@ -29,10 +29,9 @@ You are a DevOps expert working on the depictio infrastructure. The project uses
 | Service | Port | Description |
 |---------|------|-------------|
 | backend (FastAPI) | 8058 | REST API |
-| dash | 5080 | Dash frontend |
 | mongodb | 27018 | Database |
 | redis | 6379 | Cache |
-| minio | 9000/9001 | Object storage |
+| s3 (SeaweedFS) | 9000 | Object storage |
 | celery_worker | - | Background tasks |
 
 ## Docker Patterns

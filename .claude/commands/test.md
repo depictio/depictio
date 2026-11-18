@@ -17,7 +17,6 @@ Run pytest with the specified scope:
 - `api` - Run API tests: `pytest depictio/tests/api/ -xvs -n auto`
 - `models` - Run model tests: `pytest depictio/tests/models/ -xvs -n auto`
 - `cli` - Run CLI tests: `pytest depictio/tests/cli/ -xvs -n auto`
-- `dash` - Run Dash tests: `pytest depictio/tests/dash/ -xvs -n auto`
 - `all` - Run all tests: `pytest depictio/tests/ -xvs -n auto`
 - Specific file - Run tests in that file
 

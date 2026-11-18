@@ -7,7 +7,6 @@
       "Bash(ty:*)",
       "Bash(pre-commit:*)",
       "Bash(uv:*)",
-      "Bash(pip:*)",
       "Bash(git:*)",
       "Bash(docker logs:*)",
       "Bash(docker ps:*)",

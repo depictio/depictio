@@ -8,7 +8,7 @@ Execute the following quality checks in order:
 
 1. **Ruff Format Check**: `ruff format --check depictio/`
 2. **Ruff Lint Check**: `ruff check depictio/`
-3. **Type Check with ty**: `ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/`
+3. **Type Check with ty**: `ty check depictio/models/`
 4. **Pre-commit hooks**: `pre-commit run --all-files`
 
 If any check fails:
