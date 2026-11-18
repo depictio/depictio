@@ -57,3 +57,25 @@
 .depictio-tile[data-depictio-mounted] [data-testid='advanced-viz-caption'] {
   display: none;
 }
+
+/* "About this component". A card's own info action stays on screen in a
+   report (on the dashboard it waits for a hover, with the rest of the row): a
+   reader of a document has no reason to hover a number to find its text. */
+.depictio-tile[data-depictio-mounted]
+  .depictio-component-chrome[data-component-type='card']
+  > .depictio-component-actions
+  > [data-tile-action='description'] {
+  opacity: 1;
+  pointer-events: auto;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+}
+
+/* Any other tile's "i" is the report's own, in the tile's action row above it
+   (the export's chrome script): the renderer's hover copy would be a second. */
+.depictio-tile:has(> .dpx-tile-links .dpx-info)
+  .depictio-component-chrome:not([data-component-type='card'])
+  > .depictio-component-actions
+  > [data-tile-action='description'] {
+  display: none;
+}

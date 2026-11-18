@@ -97,15 +97,15 @@ html.dpx-view-dashboard{overflow:hidden}
 html.dpx-view-dashboard .dpx-dashboard-frame{visibility:visible}
 .dpx-open-dashboard{display:inline-flex;align-items:center;gap:6px;margin-inline-end:8px}
 .dpx-open-dashboard svg{width:14px;height:14px;flex:none}
-.dpx-tile-links{display:flex;justify-content:flex-end;margin:0 0 4px}
-.dpx-tile-links button{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:5px;
+.dpx-tile-links{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:0 0 4px}
+.dpx-tile-links .dpx-tile-open{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:5px;
   cursor:pointer;height:26px;padding:0 10px;border-radius:999px;
   font:600 12px/1 var(--dpx-font,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif);
   color:var(--gl-muted,#868e96);border:1px solid var(--gl-hair,rgba(33,37,41,.11));
   background:var(--gl-paper,#fff);transition:color .12s ease,background-color .12s ease}
-.dpx-tile-links button svg{width:13px;height:13px;flex:none}
-.dpx-tile-links button:hover{color:var(--gl-accent-fg,#1c7ed6);background:var(--gl-accent-soft,rgba(28,126,214,.08))}
-.dpx-tile-links button:focus-visible{outline:2px solid var(--gl-accent,#228be6);outline-offset:2px}
+.dpx-tile-links .dpx-tile-open svg{width:13px;height:13px;flex:none}
+.dpx-tile-links .dpx-tile-open:hover{color:var(--gl-accent-fg,#1c7ed6);background:var(--gl-accent-soft,rgba(28,126,214,.08))}
+.dpx-tile-links .dpx-tile-open:focus-visible{outline:2px solid var(--gl-accent,#228be6);outline-offset:2px}
 .dpx-flash{animation:dpx-flash 1.6s ease-out 1}
 @keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px rgba(34,139,230,.55)}100%{box-shadow:0 0 0 3px rgba(34,139,230,0)}}
 @media print{.dpx-open-dashboard,.dpx-dashboard-frame,.dpx-tile-links{display:none!important}
@@ -468,15 +468,24 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
   }
 
   // ── Cross-links from the report ─────────────────────────────────────────
+  // Each tile's action row: the report's own (its "i", written by the
+  // export's chrome script) when it has one, so the tile keeps one row with
+  // "Open in dashboard" first and the "i" at the end, as the dashboard orders
+  // a tile's actions.
   for (const host of new Set(hosts.values())) {
     const refs = parseTileRefs(host.getAttribute(REPORT_TILE_ATTR));
     const ref = refs.find((r) => componentFor(manifest, r));
     if (!ref) continue;
-    const row = document.createElement('div');
-    row.className = 'dpx-tile-links';
+    let row = host.querySelector<HTMLElement>(':scope > .dpx-tile-links');
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'dpx-tile-links';
+      host.insertBefore(row, host.firstChild);
+    }
     row.setAttribute(RUNTIME_ATTR, 'tile-links');
     const open = document.createElement('button');
     open.type = 'button';
+    open.className = 'dpx-tile-open';
     open.innerHTML = GRID_ICON;
     open.append(document.createTextNode('Open in dashboard'));
     open.title = 'Show this tile in the interactive dashboard';
@@ -484,9 +493,11 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
     open.addEventListener('click', () => {
       show('dashboard', { view: 'dashboard', tab: ref.tabId, component: ref.index }, true);
     });
-    row.appendChild(open);
-    host.insertBefore(row, host.firstChild);
+    row.insertBefore(open, row.firstChild);
   }
+  // The report's chrome script places what it owns in those rows (the "i",
+  // the figures' anchors) whenever they change.
+  document.dispatchEvent(new Event('dpx:tile-actions'));
 
   const api: CombinedHostApi = {
     filters: channel,
