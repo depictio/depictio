@@ -191,6 +191,11 @@ export interface CatalogGlobal {
   initialRenderId?: string | null;
   tools: ToolEntry[];
   data: unknown;
+  /** Set ONLY by the multi-file site entry (siteMain.tsx): `data` is empty and each
+   *  output's payload is fetched on demand from `<dataBase>outputs/<id>.json`.
+   *  Absent in the single-file bundle, whose embedded payload is complete. */
+  lazyOutputs?: boolean;
+  dataBase?: string;
 }
 
 /** A render's copyable `renders_as` YAML, joined across an output's renders. */

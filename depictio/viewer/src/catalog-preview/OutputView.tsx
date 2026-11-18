@@ -8,7 +8,7 @@
  * each render's copyable `renders_as` YAML, and a collapsible fixture-data preview.
  * Styling mirrors the Depictio viewer (Card/ThemeIcon/Mantine tokens, no hex chrome).
  */
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -17,11 +17,13 @@ import {
   Box,
   Button,
   Card,
+  Center,
   Code,
   Collapse,
   Divider,
   Group,
   Image,
+  Loader,
   Paper,
   Popover,
   Stack,
@@ -30,7 +32,6 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { AgGridReact } from 'ag-grid-react';
 import { Icon } from '@iconify/react';
 import { ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
 import type { CatalogRender, StoredMetadata } from 'depictio-react-core';
@@ -49,7 +50,8 @@ import {
   metaFor,
   nfCoreLabel,
 } from './shared';
-import type { FixturePreview, OutputEntry, OutputInfo } from './shared';
+import type { CatalogGlobal, FixturePreview, OutputEntry, OutputInfo } from './shared';
+import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 
 const DASHBOARD_ID = 'catalog-preview';
 
@@ -128,6 +130,9 @@ const OutputInfoPanel: React.FC<{ out: OutputInfo }> = ({ out }) => (
   </Paper>
 );
 
+// ag-grid is only needed once a fixture panel is shown — keep it off the first paint.
+const FixtureGrid = lazy(() => import('./FixtureGrid'));
+
 const FixturePreviewPanel: React.FC<{ fixture: FixturePreview; theme?: string }> = ({
   fixture,
   theme,
@@ -148,18 +153,9 @@ const FixturePreviewPanel: React.FC<{ fixture: FixturePreview; theme?: string }>
           className={theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
           style={{ height: 360, width: '100%' }}
         >
-          <AgGridReact
-            rowData={fixture.rows}
-            columnDefs={fixture.columns.map((c) => ({
-              field: c,
-              headerName: c,
-              sortable: true,
-              filter: true,
-              resizable: true,
-            }))}
-            defaultColDef={{ flex: 1, minWidth: 110, resizable: true }}
-            suppressFieldDotNotation
-          />
+          <Suspense fallback={<Loader size="xs" m="md" />}>
+            <FixtureGrid fixture={fixture} />
+          </Suspense>
         </div>
       </Accordion.Panel>
     </Accordion.Item>
@@ -524,4 +520,55 @@ const OutputView: React.FC<{
   );
 };
 
-export default OutputView;
+/** Loads the output's payload first when running as the multi-file site
+ *  (`g.lazyOutputs`); in the single-file bundle it is a pass-through. */
+const LazyOutputView: React.FC<React.ComponentProps<typeof OutputView>> = (props) => {
+  const g = window.__CATALOG_PREVIEW__ as unknown as CatalogGlobal | undefined;
+  const id = props.entry.output.id;
+  // ok:false outputs have no data file (the entry carries `error`): never fetch.
+  const lazy = isLazy(g) && props.entry.ok !== false;
+  const [state, setState] = useState<{ id: string; error?: string } | null>(
+    !lazy || isOutputLoaded(id) ? { id } : null,
+  );
+  useEffect(() => {
+    if (!lazy || !g || isOutputLoaded(id)) {
+      setState({ id });
+      return;
+    }
+    let cancelled = false;
+    setState(null);
+    ensureOutputLoaded(g, props.entry).then(
+      () => !cancelled && setState({ id }),
+      (e) => !cancelled && setState({ id, error: e instanceof Error ? e.message : String(e) }),
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, lazy]);
+
+  if (state === null || state.id !== id) {
+    return (
+      <Center h={props.variant === 'pane' ? '60%' : '100vh'} p="xl">
+        <Stack align="center" gap="xs">
+          <Loader size="sm" />
+          <Text size="sm" c="dimmed">
+            Loading {props.entry.output.name || id}…
+          </Text>
+        </Stack>
+      </Center>
+    );
+  }
+  if (state.error) {
+    return (
+      <Box p="lg">
+        <Alert color="red" variant="light" title="Could not load this output">
+          {state.error}
+        </Alert>
+      </Box>
+    );
+  }
+  return <OutputView {...props} />;
+};
+
+export default LazyOutputView;

@@ -589,11 +589,13 @@ const Gallery: React.FC<{
   selected?: string | null;
   onOpen: (id: string | null) => void;
   theme?: string;
-}> = ({ tools, selected = null, onOpen, theme }) => {
+  /** Tool ids to pre-filter on (from a `#tool=` deep link). */
+  initialToolFilter?: string[];
+}> = ({ tools, selected = null, onOpen, theme, initialToolFilter }) => {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
-  const [toolFilter, setToolFilter] = useState<string[]>([]);
+  const [toolFilter, setToolFilter] = useState<string[]>(initialToolFilter ?? []);
   const [fixtureOnly, setFixtureOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
