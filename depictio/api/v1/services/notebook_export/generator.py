@@ -1362,7 +1362,38 @@ class NotebookBuilder:
         methods_md = self._methods()[0]
         if methods_md:
             cells.append(md_cell(methods_md))
+        if self.plan.pdf:
+            params = self._pdf_parameters()
+            if params:
+                cells.append(md_cell(params))
         return render_qmd(cells, front_matter=self.front_matter().to_yaml())
+
+    def _pdf_parameters(self) -> str:
+        """The run's parameters as the PDF's last part: the target of every
+        ``[Settings](params:…)`` link, which the page opens as a fold of its
+        header, a page has no fold for."""
+        origin = (self.plan.project or {}).get("template_origin") or {}
+        entries = origin.get("run_provenance") if isinstance(origin, dict) else None
+        if not entries:
+            return ""
+        from depictio.notebook.typst import table as typst_table
+
+        rows = sorted(
+            (e for e in entries if isinstance(e, dict)),
+            key=lambda e: not bool(e.get("highlight")),
+        )
+        df = pl.DataFrame(
+            {
+                "Group": [str(e.get("group") or "") for e in rows],
+                "Parameter": [str(e.get("key") or "") for e in rows],
+                "Value": ["null" if e.get("value") is None else str(e.get("value")) for e in rows],
+            }
+        )
+        return (
+            ':::: {.content-visible when-format="typst"}\n'
+            f"## Run parameters {{#{PARAMS_ANCHOR}}}\n\n"
+            f"{typst_table(df, rows=60)}\n::::"
+        )
 
     # ------------------------------------------------------------ the chrome
     def _methods(self) -> tuple[str, list[dict[str, Any]]]:

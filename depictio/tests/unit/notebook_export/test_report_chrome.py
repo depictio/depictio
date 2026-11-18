@@ -504,7 +504,7 @@ def test_the_contents_are_in_the_text_colour(ampliseq_tabs):
 
 def test_every_tab_after_the_first_is_an_appendix(ampliseq_tabs):
     body = _body(_pdf_src(ampliseq_tabs))
-    assert '## Appendices {#appendices}' in body
+    assert "## Appendices {#appendices}" in body
     assert body.count("{#appendices}") == 1
     assert '[Appendix A — MultiQC]{.content-visible when-format="typst"}' in body
     assert '[MultiQC]{.content-visible when-format="html"}' in body
@@ -518,7 +518,7 @@ def test_headings_carry_their_icon_in_the_pdf(ampliseq_tabs):
     plan = _plan(ampliseq_tabs, pdf=True)
     plan.icons = {"mdi:counter": '<svg viewBox="0 0 24 24"><path fill="currentColor"/></svg>'}
     block = _typst_block(_body(generate_qmd(plan)))
-    m = re.search(r'#let dpx-icons = \((.*?)\)\n', block)
+    m = re.search(r"#let dpx-icons = \((.*?)\)\n", block)
     assert m and '"sec-key-figures": "<svg' in m.group(1)
     # In the heading's colour, as an SVG typst reads (xmlns added).
     assert "xmlns=" in m.group(1) and "currentColor" not in m.group(1)
@@ -543,7 +543,9 @@ def test_the_kpi_strip_is_a_card_grid_in_the_pdf():
 def test_icons_are_svg_typst_can_read_without_the_network():
     from depictio.notebook.typst import colored_svg
 
-    svg = colored_svg('<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0"/></svg>', "#fd7e14")
+    svg = colored_svg(
+        '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0"/></svg>', "#fd7e14"
+    )
     assert 'xmlns="http://www.w3.org/2000/svg"' in svg and "#fd7e14" in svg
     assert colored_svg(None, "#000") is None
 
@@ -585,3 +587,13 @@ def test_a_tile_that_cannot_be_drawn_is_named_not_numbered():
     assert comp.title == "General statistics"
     comp.meta = {"index": "1bba76a2-2824-46b9-bad2-0add3f6fc001", "component_type": "multiqc"}
     assert "1bba76a2" not in comp.title
+
+
+def test_the_pdf_holds_the_parameters_its_links_point_to(ampliseq_tabs):
+    project = {"template_origin": {"run_provenance": [{"group": "g", "key": "input", "value": 1}]}}
+    body = _body(generate_qmd(_plan(ampliseq_tabs, project=project, pdf=True)))
+    assert "[Run parameters](#export-parameters)" in body
+    # The page's target is its header fold; the PDF's a part of its own.
+    assert "## Run parameters {#export-parameters}" in body
+    assert "#dpx-table(" in body.split("{#export-parameters}")[1]
+    assert "## Run parameters" not in _body(generate_qmd(_plan(ampliseq_tabs, project=project)))
