@@ -56,7 +56,7 @@ def test_export_site_copies_the_bundle_and_replaces_stale_data(tmp_path):
     bundle = tmp_path / "bundle"
     (bundle / "assets").mkdir(parents=True)
     (bundle / "index.html").write_text("<html></html>")
-    (bundle / "assets" / "app.js").write_text("//")
+    (bundle / "assets" / "app.js").write_text('"/dashboard/logos/multiqc_icon_dark.svg"')
     site = tmp_path / "site"
     (site / "data" / "outputs").mkdir(parents=True)
     (site / "data" / "outputs" / "gone.json").write_text("{}")
@@ -74,7 +74,7 @@ def test_export_site_copies_the_bundle_and_replaces_stale_data(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert (site / "index.html").exists()
-    assert (site / "assets" / "app.js").exists()
+    assert "data:image/svg+xml" in (site / "assets" / "app.js").read_text()
     assert (site / "data" / "index.json").read_text() == "1.2.3"
     assert not (site / "data" / "outputs" / "gone.json").exists()
     assert "1 tools, 2 outputs" in result.output

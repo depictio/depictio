@@ -1247,8 +1247,18 @@ def _logo_data_uris() -> dict[str, str]:
         path = logos_dir / name
         if path.exists():
             b64 = base64.b64encode(path.read_bytes()).decode()
-            result[f"/dashboard-beta/logos/{name}"] = f"data:image/svg+xml;base64,{b64}"
+            # The viewer serves them under /dashboard/logos/ (earlier under
+            # /dashboard-beta/); a static page has neither.
+            for prefix in ("/dashboard/logos/", "/dashboard-beta/logos/"):
+                result[f"{prefix}{name}"] = f"data:image/svg+xml;base64,{b64}"
     return result
+
+
+def inline_logos(text: str) -> str:
+    """Swap the server-relative MultiQC logo paths in a bundle for data URIs."""
+    for server_path, data_uri in _logo_data_uris().items():
+        text = text.replace(server_path, data_uri)
+    return text
 
 
 def json_safe(o: Any) -> Any:
@@ -1307,9 +1317,7 @@ def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
             )
         html = html.replace(marker, f'<script nonce="{nonce}" type="module"', 1)
     # Patch server-relative logo paths → inline data URIs so they render offline.
-    for server_path, data_uri in _logo_data_uris().items():
-        html = html.replace(server_path, data_uri)
-    return html
+    return inline_logos(html)
 
 
 def render_html(

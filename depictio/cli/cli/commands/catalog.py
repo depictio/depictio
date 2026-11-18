@@ -316,6 +316,7 @@ def catalog_export_site(
         SITE_BUNDLE_DIR,
         CatalogPayloadError,
         export_site_data,
+        inline_logos,
     )
     from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
@@ -341,6 +342,12 @@ def catalog_export_site(
         if stale.exists():
             shutil.rmtree(stale)
     shutil.copytree(SITE_BUNDLE_DIR, out_dir, dirs_exist_ok=True)
+    # The MultiQC logo paths point at the depictio server; a static host has none.
+    for chunk in (out_dir / "assets").glob("*.js"):
+        text = chunk.read_text()
+        inlined = inline_logos(text)
+        if inlined != text:
+            chunk.write_text(inlined)
     try:
         with _quiet_multiqc():
             stats = export_site_data(entries, data_dir, version or get_version())

@@ -19,6 +19,7 @@ from depictio.catalog.payload import (
     advanced_viz_persist_config,
     build_payload,
     export_site_data,
+    inline_logos,
     json_safe,
 )
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
@@ -357,3 +358,11 @@ def test_a_reused_output_id_stops_the_site_export(tmp_path) -> None:
     entry = _flagship_entry()
     with pytest.raises(CatalogPayloadError, match="more than one tool"):
         export_site_data([entry, entry], tmp_path, "dev")
+
+
+def test_multiqc_logo_paths_become_data_uris() -> None:
+    """A static page has no /dashboard/logos/ to serve them from."""
+    text = 'src="/dashboard/logos/multiqc_icon_dark.svg" b="/dashboard-beta/logos/multiqc_icon_white.svg"'
+    out = inline_logos(text)
+    assert "/dashboard" not in out
+    assert out.count("data:image/svg+xml;base64,") == 2
