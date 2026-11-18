@@ -63,6 +63,8 @@ def _document() -> str:
     meta.pop("execute", None)
     meta["engine"] = "markdown"
     about = about_callout("The demo tile. How to read: it is a box.", name="Demo")
+    # A figure with no runtime placeholder, as a report rendered without it.
+    failed_about = about_callout("Why it broke.", name="Broken")
     body = f"""
 {CHROME_CSS}
 {CHROME_JS}
@@ -84,6 +86,16 @@ A tile.
 :::
 
 {about}
+
+::: {{#fig-failed}}
+
+<div class="dpx-unavailable" data-dpx-unavailable="1"><b>Broken</b> could not be drawn.</div>
+
+**Broken**. <span class="dpx-asof">Data: x · 3 rows</span>
+
+:::
+
+{failed_about}
 """
     return "---\n" + yaml.safe_dump(meta, sort_keys=False) + "---\n" + body
 
@@ -184,15 +196,19 @@ def test_the_chrome_in_a_browser(rendered):
         page.locator(".dpx-toc-toggle").click()
         assert page.locator("#TOC > ul").is_visible()
         # The figure's anchor sits in its caption, not over the tile.
-        assert page.locator(".quarto-float-caption .anchorjs-link").count() == 1
+        assert page.locator("#fig-demo .quarto-float-caption .anchorjs-link").count() == 1
         # The tile's "i": in its action row, opening the description.
-        info = page.locator(".depictio-tile > .dpx-tile-links .dpx-info")
+        info = page.locator("#fig-demo .depictio-tile > .dpx-tile-links .dpx-info")
         assert info.get_attribute("aria-label") == "About Demo"
-        assert not page.locator(".callout.dpx-about").is_visible()
+        assert not page.locator(".callout.dpx-about").first.is_visible()
         info.click()
         pop = page.locator(".dpx-pop")
         assert pop.is_visible() and "it is a box" in pop.inner_text()
         page.keyboard.press("Escape")
         assert pop.count() == 0
+        # Without a runtime placeholder the "i" sits on the figure itself, and
+        # a tile the export could not draw keeps no data badge.
+        assert page.locator("#fig-failed > .dpx-tile-links .dpx-info").count() == 1
+        assert not page.locator("#fig-failed .dpx-asof").is_visible()
         assert not errors, errors
         browser.close()

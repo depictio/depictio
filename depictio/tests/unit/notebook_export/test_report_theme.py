@@ -139,10 +139,12 @@ def test_a_card_rows_note_gives_each_described_card_its_own_item():
         ]
     )
     items = re.findall(
-        r'\{\.dpx-about-item data-dpx-name="([^"]+)" data-dpx-index="([^"]+)"\}', note
+        r'\{\.dpx-about-item data-dpx-name="([^"]+)" data-dpx-index="([^"]+)"'
+        r' data-dpx-pos="(\d+)"\}',
+        note,
     )
-    # Only the cards with text get an "i".
-    assert items == [("Samples", "kf-samples"), ("Reads", "kf-reads")]
+    # Only the cards with text get an "i", each with its place in the row.
+    assert items == [("Samples", "kf-samples", "0"), ("Reads", "kf-reads", "2")]
     assert about_callout_many([("A", "", "a")]) == ""
 
 
@@ -174,3 +176,10 @@ def test_the_contents_title_no_longer_folds_on_its_own(ampliseq_tabs):
     # One control for the list as a whole: the theme's button.
     assert "head.classList.toggle('dpx-folded')" not in body
     assert "depictio-report:toc-collapsed" in CHROME_JS
+
+
+def test_a_failed_tiles_caption_drops_its_data_badge():
+    # The placeholder is on screen and no runtime drew the tile instead.
+    rule = re.search(r"([^}]*\.dpx-unavailable[^{]*)\{\s*display: none;", CHROME_CSS)
+    assert rule and ":not(:has([data-depictio-mounted]))" in rule.group(1)
+    assert ".dpx-asof" in rule.group(1)
