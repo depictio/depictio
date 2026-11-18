@@ -24,6 +24,7 @@ from depictio.models.models.analysis_state import (
     NotebookPreflightDC,
     NotebookPreflightStage,
 )
+from depictio.notebook.components import readable_name
 from depictio.notebook.theme import resolve_primary
 
 from .aggregations import agg_expr_source
@@ -54,6 +55,7 @@ from .report_chrome import (
     DIV_CLOSE,
     ORPHAN,
     REPORT_CSS,
+    SURFACE_OPEN,
     TOC_SCOPE_JS,
     about_callout,
     about_callout_many,
@@ -64,6 +66,7 @@ from .report_chrome import (
     grid_open,
     mark_css,
     methods,
+    pdf_structures,
     stepper_markdown,
     title_logo_css,
 )
@@ -124,6 +127,20 @@ RESULTS_ICON = "mdi:view-dashboard-outline"
 FILTERS_ICON = "mdi:filter-variant"
 SUMMARY_ICON = "mdi:format-list-bulleted"
 FUNNEL_ICON = "mdi:filter-check-outline"
+# The PDF's appendices: every tab after the first, under one heading.
+APPENDICES_HEADING = '::: {.content-visible when-format="typst"}\n## Appendices {#appendices}\n:::'
+
+
+def _appendix_letter(n: int) -> str:
+    """0 -> A, 25 -> Z, 26 -> AA."""
+    out = ""
+    n += 1
+    while n:
+        n, r = divmod(n - 1, 26)
+        out = chr(65 + r) + out
+    return out
+
+
 # The closing part: what produced the data and the report, and what to cite.
 METHODS_HEADING = "Methods and citations"
 METHODS_ICON = "mdi:book-open-variant"
@@ -1337,7 +1354,38 @@ class NotebookBuilder:
         methods_md = self._methods()[0]
         if methods_md:
             cells.append(md_cell(methods_md))
+        if self.plan.pdf:
+            params = self._pdf_parameters()
+            if params:
+                cells.append(md_cell(params))
         return render_qmd(cells, front_matter=self.front_matter().to_yaml())
+
+    def _pdf_parameters(self) -> str:
+        """The run's parameters as the PDF's last part: the target of every
+        ``[Settings](params:…)`` link, which the page opens as a fold of its
+        header, a page has no fold for."""
+        origin = (self.plan.project or {}).get("template_origin") or {}
+        entries = origin.get("run_provenance") if isinstance(origin, dict) else None
+        if not entries:
+            return ""
+        from depictio.notebook.typst import table as typst_table
+
+        rows = sorted(
+            (e for e in entries if isinstance(e, dict)),
+            key=lambda e: not bool(e.get("highlight")),
+        )
+        df = pl.DataFrame(
+            {
+                "Group": [str(e.get("group") or "") for e in rows],
+                "Parameter": [str(e.get("key") or "") for e in rows],
+                "Value": ["null" if e.get("value") is None else str(e.get("value")) for e in rows],
+            }
+        )
+        return (
+            ':::: {.content-visible when-format="typst"}\n'
+            f"## Run parameters {{#{PARAMS_ANCHOR}}}\n\n"
+            f"{typst_table(df, rows=60)}\n::::"
+        )
 
     # ------------------------------------------------------------ the chrome
     def _methods(self) -> tuple[str, list[dict[str, Any]]]:
@@ -1368,11 +1416,16 @@ class NotebookBuilder:
         self._methods_cache = (body, refs)
         return self._methods_cache
 
-    def _heading_colors(self) -> dict[str, str]:
-        """Each tab's and section's heading label, with its colour (as the HTML
-        draws it): what the PDF colours its headings and contents by."""
-        # The document's own parts wear the primary, as on the page.
-        out: dict[str, str] = {k: self._accent() for k in ("filters", "results", "methods")}
+    def _heading_marks(self) -> tuple[dict[str, str], dict[str, str]]:
+        """Each heading label with its colour and its icon's SVG (as the HTML
+        draws them): what the PDF draws its headings with."""
+        icons = self.plan.icons
+        colors: dict[str, str] = {k: self._accent() for k in ("filters", "results", "methods")}
+        marks: dict[str, str] = {
+            "filters": icons.get(FILTERS_ICON, ""),
+            "results": icons.get(RESULTS_ICON, ""),
+            "methods": icons.get(METHODS_ICON, ""),
+        }
         seq = iter(self._section_anchor_seq)
         for unit in ordered_units(self.plan.tabs):
             if not isinstance(unit, MarkdownUnit):
@@ -1384,11 +1437,19 @@ class NotebookBuilder:
             else:
                 accent = _resolve_accent_hex(unit.color, "")
                 anchor = next(seq, None)
-            if anchor and accent:
-                out[anchor] = accent
-        return out
+            if not anchor:
+                continue
+            if accent:
+                colors[anchor] = accent
+            if unit.icon and icons.get(unit.icon):
+                marks[anchor] = icons[unit.icon]
+        return colors, {k: v for k, v in marks.items() if v}
 
-    def _typst_preamble(self) -> str:
+    def _heading_colors(self) -> dict[str, str]:
+        return self._heading_marks()[0]
+
+    def _cover_fields(self) -> list[tuple[str, str]]:
+        """The cover's record, from the export's own data only."""
         plan = self.plan
         project = plan.project or {}
         exported = f"{plan.exported_at:%Y-%m-%d %H:%M} UTC"
@@ -1396,18 +1457,66 @@ class NotebookBuilder:
             exported += f" by {plan.exported_by}"
         if plan.instance:
             exported += f" from {plan.instance}"
+        pipelines = []
+        for wf in project.get("workflows") or []:
+            if not isinstance(wf, dict) or not wf.get("name"):
+                continue
+            catalog = wf.get("catalog") if isinstance(wf.get("catalog"), dict) else {}
+            engine = wf.get("engine") if isinstance(wf.get("engine"), dict) else {}
+            name = f"{catalog['name']}/{wf['name']}" if catalog.get("name") else str(wf["name"])
+            if wf.get("version"):
+                name += f" {wf['version']}"
+            if engine.get("name"):
+                name += f" ({engine['name']})"
+            pipelines.append(name)
+        origin = (
+            project.get("template_origin")
+            if isinstance(project.get("template_origin"), dict)
+            else {}
+        )
+        tabs = [
+            u.text
+            for u in ordered_units(plan.tabs)
+            if isinstance(u, MarkdownUnit) and u.kind == "tab"
+        ]
+        tab_line = ", ".join(tabs[:8]) + (f" and {len(tabs) - 8} more" if len(tabs) > 8 else "")
+        rows = [r for dc in plan.dcs if (r := dc.initial_rows) is not None]
+        data = f"{len(plan.dcs)} data collection" + ("" if len(plan.dcs) == 1 else "s")
+        if rows:
+            data += f", {sum(rows):,} rows"
         state = (
             "; ".join(f"{s.label}: {self._filter_value_text(s)}" for s in plan.stages)
-            or "No filter active"
+            or "No filter active: every tile reads the whole data"
         )
-        rows = [
-            ("Exported", exported),
+        return [
             ("Project", str(project.get("name") or "")),
+            ("Pipeline", ", ".join(pipelines)),
+            ("Template", str(origin.get("template_id") or "")),
+            ("Tabs", f"{len(tabs)}: {tab_line}" if tabs else ""),
+            ("Data read", data if plan.dcs else ""),
             ("Exported state", state),
+            ("Exported", exported),
             ("Depictio", plan.depictio_version or ""),
             ("Live dashboard", self._dashboard_url() if plan.dashboard_public else ""),
         ]
+
+    def _cover_statement(self) -> str:
+        plan = self.plan
+        tabs = [
+            u for u in ordered_units(plan.tabs) if isinstance(u, MarkdownUnit) and u.kind == "tab"
+        ]
+        out = f"A static report of the interactive Depictio dashboard “{plan.title}”"
+        out += f", live at {self._dashboard_url()}." if plan.dashboard_public else "."
+        if len(tabs) > 1:
+            out += (
+                f" Its {tabs[0].text.lower()} is the report; each other tab follows as an appendix."
+            )
+        return out
+
+    def _typst_preamble(self) -> str:
+        plan = self.plan
         hero = self.hero
+        colors, icons = self._heading_marks()
         return typst_preamble(
             title=plan.title,
             subtitle=plan.subtitle,
@@ -1416,8 +1525,10 @@ class NotebookBuilder:
             dashboard_mark=plan.dashboard_logo,
             title_logo=hero[1] if hero else None,
             depictio_mark=plan.depictio_mark,
-            provenance=rows,
-            heading_colors=self._heading_colors(),
+            provenance=self._cover_fields(),
+            heading_colors=colors,
+            heading_icons=icons,
+            statement=self._cover_statement(),
         )
 
     def _dashboard_url(self) -> str:
@@ -1566,9 +1677,11 @@ class NotebookBuilder:
             "    fill_text,\n"
             "    funnel_rest,\n"
             "    funnel_stage,\n"
-            "    html_text,\n"
+            "    StaticCard,\n"
             "    init_tables,\n"
+            "    set_static_width,\n"
             "    show_table,\n"
+            "    static_card_row,\n"
             "    static_figures,\n"
             "    use_document_renderer,\n"
             "    use_theme,\n"
@@ -1650,10 +1763,8 @@ class NotebookBuilder:
     else:
         text = str(value)
     if static_figures():
-        # A page with no browser (the PDF): the card as a line of text.
-        from IPython.display import Markdown
-
-        return Markdown(f"**{title}** {text}")
+        # A page with no browser (the PDF): the card as the PDF draws one.
+        return StaticCard(title, text)
     return HTML(
         f'<div class="dpx-card" style="display:inline-block;min-width:11rem;margin:0 0.5rem 0.5rem 0;'
         f'padding:0.85rem 1.1rem;border:1px solid #e3e3e8;border-radius:12px;'
@@ -1678,13 +1789,10 @@ def card_row(cards):
     `.html` on a Depictio component is a different thing, an embeddable tile.
     """
     if static_figures():
+        # The PDF: a strip of cards, each with its icon, value and numbers.
         from IPython.display import Markdown
 
-        def line(c):
-            md = getattr(c, "_repr_markdown_", None)
-            return md() if md else html_text(c._repr_html_() or "")
-
-        return Markdown("\\n".join(f"- {line(c)}" for c in cards))
+        return Markdown(static_card_row(cards, mono=__MONO__))
     n = len(cards)
     cols = n if n <= 4 else (4 if n % 4 == 0 else 3)
     items = "".join(c._repr_html_() for c in cards)
@@ -1692,6 +1800,8 @@ def card_row(cards):
         f'<div class="dpx-cards" style="display:grid;grid-template-columns:'
         f'repeat({cols},minmax(0,1fr));gap:0.75rem;margin:0 0 0.5rem">{items}</div>'
     )'''
+        plan = getattr(self, "plan", None)
+        body = body.replace("__MONO__", repr(getattr(plan, "pdf_style", "") == "mono"))
         return Cell(body)
 
     def _header(self) -> str:
@@ -2439,10 +2549,20 @@ fig_funnel"""
                         ),
                         tab_doc,
                     )
+                # In the PDF the first tab is the report and every other one an
+                # appendix, under a heading of their own (the page keeps its tabs).
+                appendix = None
+                if self.plan.pdf and entry.kind == "tab" and tabs_seen > 1:
+                    appendix = _appendix_letter(tabs_seen - 2)
+                    if tabs_seen == 2:
+                        cells.append(md_cell(APPENDICES_HEADING))
                 cells.append(
                     md_cell(
                         self._markdown_unit_html(
-                            entry, folded=entry.kind == "tab" and tabs_seen > 1, tab=tab_doc
+                            entry,
+                            folded=entry.kind == "tab" and tabs_seen > 1,
+                            tab=tab_doc,
+                            appendix=appendix,
                         )
                     )
                 )
@@ -2501,13 +2621,19 @@ fig_funnel"""
         if len(row) > 1 and all(self._is_card(e) for e in row):
             return self._card_row_cells(row)
         if len(row) == 1:
-            return self._entry_cells(row[0])
-        out = [md_cell(grid_open([int(self._layout_of(e).get("w") or 1) for e in row]))]
-        for entry in row:
+            return self._entry_cells(row[0], in_row=False)
+        widths = [int(self._layout_of(e).get("w") or 1) for e in row]
+        out = [md_cell(grid_open(widths))]
+        for entry, w in zip(row, widths, strict=True):
             out.append(md_cell(cell_open()))
-            out.extend(self._entry_cells(entry))
+            if self.plan.pdf:
+                # Its share of the column: the PDF draws its figure that wide.
+                out.append(Cell(f"set_static_width({int(720 * w / sum(widths))})"))
+            out.extend(self._entry_cells(entry, in_row=True))
             out.append(md_cell(DIV_CLOSE))
         out.append(md_cell(DIV_CLOSE))
+        if self.plan.pdf:
+            out.append(Cell("set_static_width(None)"))
         return out
 
     def _card_row_cells(self, row: list[ComponentEntry]) -> list[Cell]:
@@ -2580,7 +2706,7 @@ fig_funnel"""
         bits.append(f"as of {self.plan.exported_at:%Y-%m-%d}")
         return f'<span class="dpx-asof">{" · ".join(bits)}</span>'
 
-    def _entry_cells(self, entry: ComponentEntry) -> list[Cell]:
+    def _entry_cells(self, entry: ComponentEntry, *, in_row: bool = False) -> list[Cell]:
         """One tile: its highlight line, the tile (numbered when it is a figure
         or a table, with its caption), then its "About this component"."""
         out: list[Cell] = []
@@ -2594,9 +2720,13 @@ fig_funnel"""
             surface = str(meta.get("surface") or "")
             if surface == "card":
                 accent = _resolve_accent_hex(str(meta.get("accent") or "") or None, "")
+                if not in_row:
+                    out.append(md_cell(SURFACE_OPEN))
                 out.append(md_cell(cell_open("dpx-surface-card", accent or None)))
                 out.append(tile)
                 out.append(md_cell(DIV_CLOSE))
+                if not in_row:
+                    out.append(md_cell(DIV_CLOSE))
             else:
                 out.append(tile)
             return out
@@ -2604,9 +2734,11 @@ fig_funnel"""
         if label is None:
             out.append(tile)
         else:
-            title = str(
-                meta.get("title") or meta.get("selected_plot") or meta.get("selected_module") or ""
-            ).strip()
+            # A MultiQC tile has no title: its plot or module names it, as the
+            # reader would ("general_stats" -> "General statistics").
+            title = str(meta.get("title") or "").strip() or readable_name(
+                meta.get("selected_plot") or meta.get("selected_module")
+            )
             caption_bits = []
             if title:
                 caption_bits.append(f"**{_esc(title)}**.")
@@ -2653,8 +2785,12 @@ fig_funnel"""
         kind: str,
         folded: bool = False,
         note: str = "",
+        printed_text: str | None = None,
     ) -> str:
         """One heading line: a real ATX heading, decorated inline.
+
+        ``printed_text`` is the heading's text in the PDF when it differs from
+        the page's (an appendix there: "Appendix A — MultiQC").
 
         The `#`s have to stay: the table of contents, the anchor links and (in
         Quarto) the section wrappers the fold script reads are all built from
@@ -2668,10 +2804,14 @@ fig_funnel"""
         # `color:` of its own: Quarto turns an inline colour into a typst fill,
         # and the PDF colours its headings itself (``pdf_typst``, by label),
         # so its monochrome style can leave them in the text colour.
+        shown = _esc(text)
+        if printed_text and printed_text != text:
+            shown = (
+                f'[{shown}]{{.content-visible when-format="html"}}'
+                f'[{_esc(printed_text)}]{{.content-visible when-format="typst"}}'
+            )
         title = (
-            f'<span class="dpx-hc" style="--dpx-hc:{accent}">{_esc(text)}</span>'
-            if accent
-            else _esc(text)
+            f'<span class="dpx-hc" style="--dpx-hc:{accent}">{shown}</span>' if accent else shown
         )
         # The page's muted aside ("none active"); a printed heading has no
         # aside, so the PDF leaves it out rather than read it as the title.
@@ -2684,11 +2824,16 @@ fig_funnel"""
         return f"{'#' * max(1, min(6, level))} {mark}{title}{aside}"
 
     def _markdown_unit_html(
-        self, unit: MarkdownUnit, *, folded: bool = False, tab: dict[str, Any] | None = None
+        self,
+        unit: MarkdownUnit,
+        *,
+        folded: bool = False,
+        tab: dict[str, Any] | None = None,
+        appendix: str | None = None,
     ) -> str:
         if unit.kind == "section":
             return self._section_header_html(unit, tab=tab)
-        return self._tab_header_html(unit, folded=folded)
+        return self._tab_header_html(unit, folded=folded, appendix=appendix)
 
     def _results_header_html(self) -> str:
         """The one heading every tab hangs off: the dashboard itself."""
@@ -2795,7 +2940,9 @@ fig_funnel"""
         self._section_i += 1
         return f" {{#{anchor}}}"
 
-    def _tab_header_html(self, unit: MarkdownUnit, *, folded: bool = False) -> str:
+    def _tab_header_html(
+        self, unit: MarkdownUnit, *, folded: bool = False, appendix: str | None = None
+    ) -> str:
         # Each tab of a multi-tab family is its own dashboard_id with its own
         # possible brand_theme override — the live sidebar shows a different
         # icon/colour per tab, so the export's per-tab part gets its own
@@ -2812,6 +2959,7 @@ fig_funnel"""
                 icon=self._icon_html(unit.icon, accent),
                 kind="tab",
                 folded=folded,
+                printed_text=f"Appendix {appendix} — {unit.text}" if appendix else None,
             )
             + (f" {{#{anchor}}}" if anchor else "")
         ]
@@ -2969,6 +3117,15 @@ fig_funnel"""
             # the tab around it, and listed itself among the tabs.
             parts.append(demote_headings(body, level + 1 if title else level))
         text = "\n\n".join(parts) or "*(empty text tile)*"
+        if self.plan.pdf:
+            # The PDF draws the stepper and the fact lists itself.
+            accent = _resolve_accent_hex(str(meta.get("accent") or "") or None, self._accent())
+            text = pdf_structures(
+                text,
+                lambda icon: self.plan.icons.get(icon),
+                accent=accent,
+                mono=self.plan.pdf_style == "mono",
+            )
         text = stepper_markdown(
             text,
             lambda icon: self._inline_icons(f"![](icon:{icon})"),

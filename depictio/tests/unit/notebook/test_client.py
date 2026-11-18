@@ -489,10 +489,10 @@ def test_a_tile_that_cannot_be_fetched_shows_a_placeholder_not_an_error(monkeypa
     for title in ("Bill shape", "Raw data", "Species mix", "Embedding", "Genome"):
         comp = client.component(DASH, title)
         bundle = comp._repr_mimebundle_()
-        assert "could not be shown here" in bundle["text/html"], title
+        assert "could not be drawn in this report" in bundle["text/html"], title
         assert "JBrowse is disabled" in bundle["text/html"], title
         assert f"https://depictio.test/dashboard/{DASH}" in bundle["text/html"]
-        assert "could not be shown here" in comp._repr_html_()
+        assert "could not be drawn in this report" in comp._repr_html_()
     with pytest.raises(DepictioClientError):
         client.component(DASH, "Bill shape").figure
 

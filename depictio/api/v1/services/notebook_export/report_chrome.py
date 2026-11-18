@@ -392,9 +392,18 @@ def mark_css(light_uri: str | None) -> str:
 
 
 def grid_open(widths: list[int]) -> str:
-    """A row of tiles side by side, each as wide as its grid columns."""
-    cols = " ".join(f"minmax(0,{max(1, int(w))}fr)" for w in widths)
-    return f'::: {{.dpx-grid style="--dpx-cols: {cols}"}}'
+    """A row of tiles side by side, each as wide as its grid columns.
+
+    Quarto's own layout (``layout="[5,3]"``), which every format draws: a flex
+    row on the page, a typst grid in the PDF (each cell a card there).
+    """
+    cols = ",".join(str(max(1, int(w))) for w in widths)
+    return f'::: {{.dpx-grid layout="[{cols}]"}}'
+
+
+#: A tile on a card surface outside a row: one cell of its own, so the PDF
+#: draws it as a card too (the page draws the inner div).
+SURFACE_OPEN = '::: {.dpx-grid layout="[1]"}'
 
 
 def cell_open(extra_class: str = "", accent: str | None = None) -> str:
@@ -435,14 +444,19 @@ body.quarto-dark .dpx-light-only { display: none !important; }
   .dpx-powered-label { display: none; }
 }
 /* The dashboard's grid rows: tiles side by side, as wide as their columns. */
-.dpx-grid {
-  display: grid; grid-template-columns: var(--dpx-cols); gap: 16px; align-items: stretch;
-  margin: 0 0 16px;
+.dpx-grid.quarto-layout-panel { margin: 0 0 16px; }
+.dpx-grid .quarto-layout-row { gap: 16px; align-items: stretch; }
+.dpx-grid .quarto-layout-cell {
+  min-width: 0; margin: 0 !important; padding: 0 !important; display: flex; flex-direction: column;
 }
-.dpx-grid > .dpx-cell { min-width: 0; display: flex; flex-direction: column; }
-.dpx-grid > .dpx-cell > .dpx-surface-card { flex: 1 1 auto; }
+.dpx-grid .quarto-layout-cell > .dpx-surface-card,
+.dpx-grid .quarto-layout-cell > .dpx-cell > .dpx-surface-card { flex: 1 1 auto; }
+.dpx-grid .quarto-layout-cell > .dpx-cell { display: flex; flex-direction: column; flex: 1 1 auto; }
 .dpx-grid .cell-output-display { margin-bottom: 0; }
-@media (max-width: 760px) { .dpx-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .dpx-grid .quarto-layout-row { flex-direction: column; }
+  .dpx-grid .quarto-layout-cell { flex-basis: auto !important; }
+}
 /* A text tile drawn on a card surface (`surface: card`). */
 .dpx-surface-card {
   background: var(--gl-paper, #fff); border: 1px solid var(--gl-hair, #dee2e6);
@@ -839,3 +853,109 @@ def drop_orphan_links(text: str) -> str:
                 continue  # the item was its link
         lines.append(line)
     return "\n".join(lines)
+
+
+# ── The PDF's own drawing of a text tile's structures ───────────────────────
+
+_FACT_ITEM = re.compile(
+    r"^\s*[-*+]\s+!\[[^\]]*\]\(icon:(?P<icon>[a-z0-9-]+:[a-z0-9-]+)\)\s*"
+    r"\*\*(?P<label>[^*\n]+)\*\*\s*(?P<rest>.*)$"
+)
+_MD_LINK = re.compile(r"\[([^\]\n]+)\]\([^)\n]*(?:\([^)\n]*\))?[^)\n]*\)")
+
+
+def _plain(text: str) -> str:
+    """A line of markdown as the plain text a typst string holds."""
+    text = _MD_LINK.sub(r"\1", text)
+    text = re.sub(
+        r"\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`", lambda m: next(g for g in m.groups() if g), text
+    )
+    return re.sub(r"\s+", " ", text).strip(" ·")
+
+
+def _typst_str(text: str) -> str:
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _typst_icon(svg: str | None, color: str) -> str:
+    if not svg:
+        return "none"
+    out = svg.replace("currentColor", color)
+    if "xmlns=" not in out:
+        out = out.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+    return _typst_str(out)
+
+
+def _typst_only(code: str) -> str:
+    return f':::: {{.content-visible when-format="typst"}}\n````{{=typst}}\n{code}\n````\n::::'
+
+
+def _html_only(markdown: str) -> str:
+    return f':::: {{.content-visible when-format="html"}}\n{markdown}\n::::'
+
+
+def pdf_structures(
+    markdown: str,
+    icon_svg: Callable[[str], str | None],
+    *,
+    accent: str,
+    mono: bool = False,
+) -> str:
+    """A text tile's stepper (``::: steps``) and fact lists ("The run": icon,
+    bold label, value) twice: as written, for the page, and as the PDF's
+    ``dpx-steps`` / ``dpx-facts``, which pandoc's own list would flatten.
+    The values (``{{name}}``) stay placeholders, filled when the document runs.
+    """
+    lines = markdown.split("\n")
+    out: list[str] = []
+    i = 0
+    disc = "#495057" if mono else accent
+    while i < len(lines):
+        line = lines[i]
+        if _STEPS_OPEN.match(line):
+            j = i + 1
+            while j < len(lines) and not _DIV_CLOSE.match(lines[j]):
+                j += 1
+            block = lines[i : j + 1]
+            steps = []
+            for item in block[1:-1]:
+                m = _STEP_ITEM.match(item)
+                if not m or not (m.group("icon") or m.group("label")):
+                    continue
+                bits = [b for b in re.split(r"\s+·\s+", m.group("rest").strip()) if b.strip()]
+                text = " · ".join(_plain(b) for b in bits if not _LINK_ONLY.match(b))
+                icon = _typst_icon(
+                    icon_svg(m.group("icon")) if m.group("icon") else None, "#ffffff"
+                )
+                steps.append(
+                    f"({icon}, {_typst_str(_plain(m.group('label') or ''))}, {_typst_str(text)})"
+                )
+            out.append(_html_only("\n".join(block)))
+            if steps:
+                out.append(
+                    _typst_only(f"#dpx-steps(({', '.join(steps)},), rgb({_typst_str(disc)}))")
+                )
+            i = j + 1
+            continue
+        m = _FACT_ITEM.match(line)
+        if m and "{{legend:" not in line:
+            j = i
+            facts = []
+            while (
+                j < len(lines)
+                and (fm := _FACT_ITEM.match(lines[j]))
+                and "{{legend:" not in lines[j]
+            ):
+                icon = _typst_icon(icon_svg(fm.group("icon")), "#868e96")
+                facts.append(
+                    f"({icon}, {_typst_str(_plain(fm.group('label')))}, "
+                    f"{_typst_str(_plain(fm.group('rest')))})"
+                )
+                j += 1
+            out.append(_html_only("\n".join(lines[i:j])))
+            out.append(_typst_only(f"#dpx-facts(({', '.join(facts)},))"))
+            i = j
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
