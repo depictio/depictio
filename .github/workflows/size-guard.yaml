@@ -1,0 +1,61 @@
+name: Size guard
+
+# The pre-commit hooks do not run in CI, so the same check runs here on every pull request:
+# no added or modified file over 500 KB unless .large-files-allowlist covers it, plus a
+# size report in the job summary. Git keeps every version of every file for good, so a
+# big blob has to be stopped before it is merged.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  size-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Report what the pull request adds
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          {
+            echo "### Size of this pull request"
+            echo
+            echo "| change | tracked bytes |"
+            echo "| --- | ---: |"
+            added=0
+            removed=0
+            while IFS= read -r -d '' file; do
+              size=$(git cat-file -s "HEAD:${file}" 2>/dev/null || echo 0)
+              added=$((added + size))
+            done < <(git diff --name-only -z --diff-filter=AM "origin/${BASE_REF}...HEAD")
+            while IFS= read -r -d '' file; do
+              size=$(git cat-file -s "origin/${BASE_REF}:${file}" 2>/dev/null || echo 0)
+              removed=$((removed + size))
+            done < <(git diff --name-only -z --diff-filter=DM "origin/${BASE_REF}...HEAD")
+            echo "| files added or modified (new size) | ${added} |"
+            echo "| files deleted or modified (old size) | ${removed} |"
+            echo "| net | $((added - removed)) |"
+            echo
+            echo "Files over 500 KB added or modified:"
+            echo
+            echo '```'
+            git diff --name-only -z --diff-filter=AM "origin/${BASE_REF}...HEAD" \
+              | while IFS= read -r -d '' file; do
+                  size=$(git cat-file -s "HEAD:${file}" 2>/dev/null || echo 0)
+                  if [ "$size" -gt 512000 ]; then printf '%9d  %s\n' "$size" "$file"; fi
+                done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reject large files that are not allow-listed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: scripts/check-large-files.sh --base "origin/${BASE_REF}"

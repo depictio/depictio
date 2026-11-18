@@ -72,6 +72,19 @@ pre-commit run --all-files         # mandatory after all code changes
   `[tool.ty.src]`. `depictio/api/` and `depictio/cli/` carry known type-debt and are
   off the gate — don't widen the gate casually, don't add new debt
 
+### Keeping the repo light
+- Git keeps every version of every file in every clone (the history, not the tree, is what
+  weighed 350 MB). **No added or modified file over 500 KB**: `scripts/check-large-files.sh`
+  runs as a pre-commit hook and on every PR (`.github/workflows/size-guard.yaml`).
+  Shrink it (images: `magick ... -colors 128`), subsample it, or publish it as a release asset
+  and list it in `fixtures.lock` (`scripts/fetch_fixtures.py`: url, sha256, size, destination)
+- `.large-files-allowlist` is the exception list; keep it short, a test fails on an entry that
+  matches no tracked file
+- Don't re-commit the seeded thumbnails (`depictio/api/static/screenshots`) without need: PNGs
+  don't delta-compress, each regeneration adds ~10 MB to every clone
+- Contributors who only need the code can clone without file history:
+  `git clone --filter=blob:none https://github.com/depictio/depictio.git`
+
 ### Documentation
 - After significant PRs, update depictio-docs and Obsidian notes
 
