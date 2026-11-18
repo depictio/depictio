@@ -40,7 +40,6 @@ from .provenance import (
     header_markdown,
 )
 from .quarto import QuartoFrontMatter, paper_brand, paper_brand_dark
-from .report_theme import BRAND_DEFAULTS, CHROME_CSS, CHROME_JS, brand_rules
 from .reading_order import (
     ComponentUnit,
     MarkdownUnit,
@@ -68,6 +67,7 @@ from .report_chrome import (
     stepper_markdown,
     title_logo_css,
 )
+from .report_theme import BRAND_DEFAULTS, CHROME_CSS, CHROME_JS, brand_rules
 
 # What a highlight can show (``highlightTile.ts``: ``HIGHLIGHTABLE_TYPES``).
 _HIGHLIGHTABLE = frozenset({"figure", "advanced_viz"})
