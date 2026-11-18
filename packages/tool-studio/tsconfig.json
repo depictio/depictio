@@ -23,7 +23,9 @@
       "depictio-react-core": ["../depictio-react-core/src"],
       "depictio-react-core/*": ["../depictio-react-core/src/*"],
       "depictio-builder": ["../../depictio/viewer/src/builder"],
-      "depictio-builder/*": ["../../depictio/viewer/src/builder/*"]
+      "depictio-builder/*": ["../../depictio/viewer/src/builder/*"],
+      "depictio-chrome/*": ["../../depictio/viewer/src/chrome/*"],
+      "lucide-react": ["../../depictio/viewer/node_modules/lucide-react"]
     }
   },
   "include": ["src", "scripts", "e2e"],

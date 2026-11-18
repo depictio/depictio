@@ -63,6 +63,20 @@ export default defineConfig({
         find: 'depictio-builder',
         replacement: path.resolve(__dirname, '../../depictio/viewer/src/builder'),
       },
+      // depictio's chrome (the Paper/glass style, its CSS tokens, the
+      // "Powered by" credit and the rose), reused in place so the Studio wears
+      // the same shell as the viewer and the serverless bundles. Only leaf
+      // components are imported: the shells themselves read the server.
+      {
+        find: 'depictio-chrome',
+        replacement: path.resolve(__dirname, '../../depictio/viewer/src/chrome'),
+      },
+      // The chrome draws Lucide glyphs; the package is the viewer's, so the
+      // Studio's own chrome takes the same icons from the same copy.
+      {
+        find: /^lucide-react$/,
+        replacement: path.resolve(__dirname, '../../depictio/viewer/node_modules/lucide-react'),
+      },
       { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
     ],
     dedupe: [

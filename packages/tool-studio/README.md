@@ -41,7 +41,7 @@ whenever the draft is reset.
 
 | | |
 | --- | --- |
-| **0. Start** — what an entry does for people who run the tool, the four steps, and what it cannot describe yet (anything needing a parsing `recipe`). | ![Start screen](docs/screenshots/00-start.png) |
+| **0. Start** — what an entry does for people who run the tool, the four steps as tiles, and what it cannot describe yet (anything needing a parsing `recipe`). The app runs in depictio's Paper chrome: the same floating top bar, page heads, cards and step bar as the viewer and the serverless bundles. | ![Start screen](docs/screenshots/00-start.png) |
 | **1. Tool** — identity + the single output, 2-panel. Type both halves by hand, or import them. | ![Tool step](docs/screenshots/01-tool.png) |
 | **1b. Recognition** — when the id/name/nf-core module matches a catalog tool, its outputs surface inline, each with the renders already committed for it, and with **Add a visualization here** (append to that output) and **Add a new output to this tool** (a fresh `<output>.yaml`). | ![Recognized tool](docs/screenshots/01b-recognized.png) |
 | **1c. MultiQC advisory** — when MultiQC already ships a module for the tool, say so: its metrics usually reach depictio through the MultiQC integration. Advisory only, nothing is blocked. | ![MultiQC advisory](docs/screenshots/01c-multiqc.png) |
@@ -137,8 +137,26 @@ route `api.github.com` and the OAuth worker, so no token is involved.
   newick (a second file the Studio was never given), and exact figures — those
   are approximated client-side in `src/viz/figureBuilder.ts` because the
   authoritative figure is built by Python plotly-express.
-- **Theme** mirrors `depictio/viewer/src/theme.ts` (`src/theme.ts`) + the Virgil
-  brand font, so the app looks native to depictio.
+- **Look** — the Studio wears depictio's own chrome rather than a look of its
+  own. `src/theme.ts` builds the theme with `buildDepictioTheme` +
+  `brandCssVariablesResolver` (depictio-react-core, as the viewer's `main.tsx`
+  does) and switches on Paper, depictio's default chrome style
+  (`depictio/viewer/src/chrome/variants/glass/glass.ts`, through a narrow
+  `depictio-chrome` alias), which puts `data-chrome="glass"` on `<html>` so the
+  viewer's own sheets apply: `glass.css` (the `--gl-*` tokens), `layout.css`
+  (the dashboards' floating top bar and keys), `pages/pages.css` (the
+  management pages' shell, page head, cards, fields and pills) and
+  `builder/glass/builder-glass.css` (the component builder's stepper, step bar
+  and tiles). The shell in `App.tsx` is the component builder's
+  (`GlassBuilderShell`) with the entry panel docked on the right like the
+  dashboards' side panels; the top bar shows depictio's rose, the Studio's name
+  and step, the real `PoweredBy` credit, and the docs / GitHub / About / theme
+  keys. `src/styles/studio.css` only lays out what those sheets have no
+  counterpart for, from the same tokens. The page's hue is `violet`, the
+  colour depictio already gives the Tools Catalog (`builder/componentSource.ts`),
+  applied the way depictio tones its Projects and Dashboards pages
+  (`src/components/Tone.tsx`); previews and the embedded builder stay in the
+  instance primary, as on a dashboard.
 
 ### Build-time inputs (kept drift-free)
 
@@ -167,7 +185,8 @@ instead of leaving the check to pass against unchanged snapshots.
 
 ### Versioning
 
-The footer states which build is live, and it carries two independent numbers.
+The About key (ⓘ) in the top bar states which build is live, and it carries two
+independent numbers.
 
 **Tool Studio's own version** is the `version` field of this `package.json`. It
 moves on the app's own cadence and is the one you bump when the app changes:
@@ -181,16 +200,16 @@ pnpm --filter tool-studio run bump 1.0.0    # or set it outright
 That is the whole procedure. The script is `npm version --no-git-tag-version`,
 so it edits one field and stops: no commit, no tag, no lockfile churn. Commit
 the result with the change that earned the bump. `vite.config.ts` reads the
-field at build time and the footer renders it, so nothing else needs touching.
+field at build time and the About card renders it, so nothing else needs touching.
 
 **The depictio version** next to it comes from the repo's `.bumpversion.cfg` and
 is not bumped here. It records which release the build was cut from, which is
 what pins the catalog schema an export has to satisfy, so a depictio release
 carries into the site on its own.
 
-The footer also shows a **beta** badge. It is deliberately hardcoded rather than
+The About card also shows a **beta** badge. It is deliberately hardcoded rather than
 derived from the version number: it marks how finished the app is, which is a
-judgement, not an arithmetic fact about `0.x`. Remove it in `AppFooter.tsx` when
+judgement, not an arithmetic fact about `0.x`. Remove it in `AppHeader.tsx` when
 the app stops being a beta, whatever the version says by then.
 
 ### Deployment (GitHub Pages)

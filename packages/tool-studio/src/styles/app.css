@@ -1,31 +1,13 @@
 /*
- * Tool Studio global styles. The `--app-*` tokens + Virgil @font-face are
- * mirrored from depictio/viewer/src/styles/app.css so the app looks native to
- * depictio. Tokens are thin aliases over Mantine's native theme variables so
- * they flip with light/dark for free.
+ * Tool Studio global styles.
+ *
+ * The look is depictio's: the Paper chrome's tokens and sheets are imported in
+ * main.tsx straight from the viewer (glass.css, layout.css, pages.css,
+ * builder-glass.css), and studio.css lays the Studio's own pieces out on them.
+ * What is left here are the `--app-*` aliases a few Studio components still
+ * read, pointed at those tokens so they flip with light/dark and follow the
+ * chrome. No font is bundled: the theme's system stack is depictio's.
  */
-
-/* Virgil — hand-drawn (Excalidraw) display face. depictio's brand signature,
- * applied inline (fontFamily: 'Virgil') on the page title + primary CTAs.
- * Referenced RELATIVELY (from src/assets) so Vite resolves + fingerprints it
- * under the app base ('/depictio/') — an absolute '/fonts/…' URL would 404. */
-@font-face {
-  font-family: 'Virgil';
-  src: url('../assets/fonts/Virgil.ttf') format('truetype');
-  font-display: swap;
-}
-
-/* Outfit — the display face for page headings: a geometric sans in the shape
- * of Google's Product Sans, which is proprietary and cannot be redistributed.
- * Virgil is the wordmark's face and reads as decoration at heading size; the
- * system sans reads as a form label. One weight, one latin subset (~14 KB),
- * bundled rather than fetched from Google so the app keeps working offline. */
-@font-face {
-  font-family: 'Outfit';
-  src: url('../assets/fonts/Outfit-SemiBold.woff2') format('woff2');
-  font-weight: 600;
-  font-display: swap;
-}
 
 :root {
   --app-bg-color: var(--mantine-color-body);
@@ -36,6 +18,10 @@
   --app-accent: var(--mantine-primary-color-filled);
   --combobox-chevron-color: var(--mantine-color-text);
 }
+:root[data-chrome='glass'] {
+  --app-border-color: var(--gl-hair);
+  --app-subtle-bg: var(--gl-well);
+}
 
 html,
 body {
@@ -43,8 +29,6 @@ body {
   padding: 0;
   background: var(--app-bg-color);
   color: var(--app-text-color);
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow-x: hidden;
   max-width: 100vw;
 }

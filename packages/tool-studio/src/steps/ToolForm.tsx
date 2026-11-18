@@ -13,7 +13,8 @@ import { findDuplicateTool, type CatalogManifest } from '../catalog/catalog';
 import { useMultiqcModules, multiqcModuleFor } from '../catalog/multiqc';
 import RecognizedTool from './RecognizedTool';
 import type { ExtractedMeta, OutputChannel, ToolSource } from '../types';
-import { HEADING_FONT } from '../theme';
+import StepHead from '../components/StepHead';
+import { STUDIO_TONE } from '../theme';
 
 /** Client-side metadata extractor per tool source (the one-click Import). */
 const EXTRACTORS: Record<ToolSource, (url: string) => Promise<ExtractedMeta>> = {
@@ -160,7 +161,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
       const outMsg = meta.outputs.length
         ? `: ${meta.outputs.length} output${meta.outputs.length > 1 ? 's' : ''} found, pick one on the right.`
         : ' (no file outputs found, fill the Output manually).';
-      notifications.show({ color: 'accent', message: `Imported metadata for ${meta.name}${outMsg}` });
+      notifications.show({ color: 'teal', message: `Imported metadata for ${meta.name}${outMsg}` });
     } catch (e) {
       notifications.show({
         color: 'red',
@@ -472,7 +473,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     return (
       <Stack gap="lg">
         <Alert
-          color="brand"
+          color="blue"
           variant="light"
           icon={<Icon icon="mdi:playlist-plus" />}
           title={`Adding a visualization to ${existing.toolName}`}
@@ -483,7 +484,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
             <Code>{existing.yamlPath || `${existing.toolId}/${existing.outputSlug}.yaml`}</Code>.
           </Text>
           <Group mt="sm" gap="sm">
-            <Button size="xs" color="brand" onClick={() => setStep(2)} rightSection={<Icon icon="mdi:chevron-right" />}>
+            <Button size="xs" color={STUDIO_TONE} onClick={() => setStep(2)} rightSection={<Icon icon="mdi:chevron-right" />}>
               Continue to visualizations
             </Button>
             <Button size="xs" variant="subtle" color="gray" onClick={reset}>
@@ -503,7 +504,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     return (
       <Stack gap="lg">
         <Alert
-          color="accent"
+          color="teal"
           variant="light"
           icon={<Icon icon="mdi:file-plus-outline" />}
           title={`Adding a new output to ${newOutputTarget.toolName}`}
@@ -536,15 +537,11 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
   const match = duplicate && duplicate.tool.id !== dismissedMatchId ? duplicate : null;
 
   const header = (
-    <div>
-      <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
-        Tool
-      </Title>
-      <Text c="dimmed" size="sm">
-        Name the tool and the output file this entry describes. As you type we check the catalog:
-        if the tool is already there, you can add to it instead of starting a new entry.
-      </Text>
-    </div>
+    <StepHead
+      step={0}
+      title="Tool"
+      description="Name the tool and the output file this entry describes. As you type we check the catalog: if the tool is already there, you can add to it instead of starting a new entry."
+    />
   );
 
   // MultiQC already parses this tool: its metrics normally reach depictio
@@ -576,7 +573,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
         {/* The recognised entry renders below the identity form, under the fold
             on a laptop screen; announce it where the typing happens. */}
         <Alert
-          color="brand"
+          color="blue"
           variant="light"
           icon={<Icon icon="mdi:book-check-outline" />}
           title={`Found in the catalog: ${match.tool.name}`}

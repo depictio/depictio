@@ -30,7 +30,9 @@ import RenderPreview from '../viz/RenderPreview';
 import AddComponentModal from '../builder/AddComponentModal';
 import type { KindsMap, ParsedFixture, RenderSpec } from '../types';
 import { usePreviewFilters } from '../viz/previewFilters';
-import { HEADING_FONT } from '../theme';
+import { STUDIO_TONE } from '../theme';
+import StepHead from '../components/StepHead';
+import { InstancePrimary } from '../components/Tone';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -130,12 +132,14 @@ function RenderCard({
             How this renders on a dashboard.
           </Text>
           <Paper withBorder radius="sm" p="xs" bg="var(--app-subtle-bg)">
-            <RenderPreview
-              fixture={fixture}
-              render={render}
-              index={index}
-              position={position}
-            />
+            <InstancePrimary>
+              <RenderPreview
+                fixture={fixture}
+                render={render}
+                index={index}
+                position={position}
+              />
+            </InstancePrimary>
           </Paper>
           {issues.length > 0 && (
             <Stack gap={4} mt="sm">
@@ -257,7 +261,7 @@ function ExistingRenders({
 
   return (
     <Alert
-      color="brand"
+      color="blue"
       variant="light"
       icon={<Icon icon="mdi:playlist-edit" />}
       title={`Existing renders on ${toolId} / ${outputSlug} (read-only)`}
@@ -281,7 +285,9 @@ function ExistingRenders({
                   )}
                 </Group>
                 {spec && fixture ? (
-                  <RenderPreview fixture={fixture} render={spec} index={index} />
+                  <InstancePrimary>
+                    <RenderPreview fixture={fixture} render={spec} index={index} />
+                  </InstancePrimary>
                 ) : (
                   <Text size="xs" c="dimmed">
                     No preview for this render here — it still renders in depictio.
@@ -357,24 +363,20 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
-            Visualizations
-          </Title>
-          <Text c="dimmed" size="sm">
-            Add dashboard components with depictio's component builder. Each card mirrors how it
-            appears in the depictio Catalog.
-          </Text>
-        </div>
-        <Button leftSection={<Icon icon="mdi:plus" />} color="brand" onClick={() => setModalOpen(true)}>
-          Add visualization
-        </Button>
-      </Group>
+      <StepHead
+        step={2}
+        title="Visualizations"
+        description="Add dashboard components with depictio's component builder. Each card mirrors how it appears in the depictio Catalog."
+        actions={
+          <Button leftSection={<Icon icon="mdi:plus" />} color={STUDIO_TONE} onClick={() => setModalOpen(true)}>
+            Add visualization
+          </Button>
+        }
+      />
 
       {previewFilters.length > 0 && (
         <Alert
-          color="brand"
+          color="blue"
           variant="light"
           icon={<Icon icon="mdi:filter-outline" />}
           data-testid="preview-filters"
@@ -404,7 +406,7 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
       )}
 
       {renders.length === 0 && (
-        <Alert color="brand" variant="light" icon={<Icon icon="mdi:information-outline" />}>
+        <Alert color="blue" variant="light" icon={<Icon icon="mdi:information-outline" />}>
           {existing
             ? 'Add at least one new visualization to append to this tool.'
             : 'No visualizations yet. Add at least one to continue.'}

@@ -15,7 +15,8 @@ import { openCatalogPr, openAddRendersPr, openNewOutputPr, resolveTarget } from 
 import type { PrTarget } from '../catalog/github';
 import { useUpstreamFile } from '../catalog/upstreamFile';
 import type { KindsMap } from '../types';
-import { HEADING_FONT } from '../theme';
+import { STUDIO_TONE } from '../theme';
+import StepHead from '../components/StepHead';
 
 // Fallback when OAuth isn't configured for the deployment: point GitHub's web
 // uploader at the existing parent dir (a non-existent <tool>/ dir 404s) and have
@@ -109,7 +110,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
     a.download = name;
     a.click();
     URL.revokeObjectURL(url);
-    notifications.show({ color: 'accent', message: `Downloaded ${name}` });
+    notifications.show({ color: 'teal', message: `Downloaded ${name}` });
   };
 
   const doDownload = async () => {
@@ -193,7 +194,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
             ? await openNewOutputPr(token, entry!, newOutputTarget.dir, resolveTarget(), onProgress, moreEntries)
             : await openCatalogPr(token, entry!, resolveTarget(), onProgress, moreEntries);
       setPr({ status: 'done', url: result.prUrl });
-      notifications.show({ color: 'accent', message: 'Pull request opened.' });
+      notifications.show({ color: 'teal', message: 'Pull request opened.' });
     } catch (e) {
       const message = (e as Error).message;
       // Only an auth failure justifies dropping the token: doing it on ANY
@@ -221,11 +222,11 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
 
   return (
     <Stack gap="lg">
-      <div>
-        <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
-          Export
-        </Title>
-        <Text c="dimmed" size="sm">
+      <StepHead
+        step={3}
+        title="Export"
+        description={
+          <>
           {mode === 'append' && existing ? (
             <>Append {renders.length} render(s) to <Code>{existing.yamlPath}</Code>, </>
           ) : mode === 'newOutput' ? (
@@ -235,8 +236,9 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
           )}
           or open a pull request on GitHub. CI (<Code>dev catalog validate</Code>) is the
           authoritative check.
-        </Text>
-      </div>
+          </>
+        }
+      />
 
       {diagnostics.length > 0 && <DiagnosticsList diagnostics={diagnostics} onGoTo={setStep} />}
       {errors.length > 0 ? (
@@ -247,7 +249,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
           data-testid="export-anyway"
         />
       ) : (
-        <Alert color="accent" variant="light" icon={<Icon icon="mdi:check-circle-outline" />} data-testid="checks-pass">
+        <Alert color="teal" variant="light" icon={<Icon icon="mdi:check-circle-outline" />} data-testid="checks-pass">
           Client checks pass: {renders.length} render(s) grounded against{' '}
           <Badge variant="light" size="sm">
             {fixture.fileName}
@@ -260,7 +262,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
       <Group>
         <Button
           size="md"
-          color="brand"
+          color={STUDIO_TONE}
           disabled={Boolean(appendProblem) || blocked}
           data-testid="download"
           leftSection={<Icon icon={existing ? 'mdi:file-download-outline' : 'mdi:folder-zip-outline'} />}
@@ -273,7 +275,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
           pr.status === 'done' && pr.url ? (
             <Button
               size="md"
-              color="accent"
+              color="teal"
               component="a"
               href={pr.url}
               target="_blank"
@@ -320,7 +322,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
             const url = await window.toolStudio?.link();
             if (!url) return;
             await navigator.clipboard?.writeText(url).catch(() => undefined);
-            notifications.show({ color: 'accent', message: 'Link to this draft copied (fixture trimmed to 200 rows).' });
+            notifications.show({ color: 'teal', message: 'Link to this draft copied (fixture trimmed to 200 rows).' });
           }}
         >
           Copy a link to this draft
@@ -356,12 +358,12 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
       {canPr ? (
         <>
           {pr.status === 'working' && (
-            <Alert color="brand" variant="light" icon={<Icon icon="mdi:loading" />}>
+            <Alert color="blue" variant="light" icon={<Icon icon="mdi:loading" />}>
               {pr.message ?? 'Working…'}
             </Alert>
           )}
           {pr.status === 'done' && pr.url && (
-            <Alert color="accent" variant="light" icon={<Icon icon="mdi:check-circle" />} title="Pull request opened">
+            <Alert color="teal" variant="light" icon={<Icon icon="mdi:check-circle" />} title="Pull request opened">
               <Anchor href={pr.url} target="_blank" rel="noopener noreferrer">
                 {pr.url}
               </Anchor>
@@ -389,7 +391,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
           )}
         </>
       ) : existing ? (
-        <Alert color="brand" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
+        <Alert color="blue" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
           <List size="sm" spacing={2} type="ordered">
             <List.Item>
               <strong>Contribute on GitHub</strong> downloads the updated{' '}
@@ -402,7 +404,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
           </List>
         </Alert>
       ) : (
-        <Alert color="brand" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
+        <Alert color="blue" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
           <List size="sm" spacing={2} type="ordered">
             <List.Item>
               <strong>Contribute on GitHub</strong> downloads the zip and opens GitHub's file uploader.
@@ -442,7 +444,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
         )}
         {existing && upstream.status === 'ok' && upstream.drifted && (
           <Alert
-            color="brand"
+            color="blue"
             variant="light"
             mb="sm"
             icon={<Icon icon="mdi:source-branch-sync" />}

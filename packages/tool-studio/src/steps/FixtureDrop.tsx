@@ -22,7 +22,7 @@ import { parseFixture, headerLooksLikeData } from '../catalog/parseFixture';
 import { fetchFixtureText, TABULAR_EXT_RE } from '../catalog/fetchFixture';
 import TablePreviewLocal from '../builder/TablePreviewLocal';
 import type { Dtype } from '../types';
-import { HEADING_FONT } from '../theme';
+import StepHead from '../components/StepHead';
 
 const DTYPE_COLOR: Record<Dtype, string> = {
   String: 'gray',
@@ -113,7 +113,7 @@ export default function FixtureDrop() {
       });
     }
     notifications.show({
-      color: parsed.parseWarnings?.length ? 'yellow' : 'accent',
+      color: parsed.parseWarnings?.length ? 'yellow' : 'teal',
       message: parsed.parseWarnings?.length
         ? `${fileName}: parsed with ${parsed.parseWarnings.length} problem(s), see below.`
         : `${fileName}: ${parsed.columns.length} columns, ${parsed.rows.length} rows.`,
@@ -174,16 +174,15 @@ export default function FixtureDrop() {
 
   return (
     <Stack gap="lg">
-      <div>
-        <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
-          Fixture
-        </Title>
-        <Text c="dimmed" size="sm">
-          {output.recipe
+      <StepHead
+        step={1}
+        title="Fixture"
+        description={
+          output.recipe
             ? "This output is reshaped by a recipe, so the fixture is the recipe's output: run the recipe on a raw sample below, or drop its expected output. A dropped file never leaves your browser."
-            : "Provide the tool's output file. It's bundled verbatim as the fixture and grounds your bindings in CI. A dropped file never leaves your browser."}
-        </Text>
-      </div>
+            : "Provide the tool's output file. It's bundled verbatim as the fixture and grounds your bindings in CI. A dropped file never leaves your browser."
+        }
+      />
 
       <RecipePanel />
 
@@ -200,11 +199,15 @@ export default function FixtureDrop() {
           width: '100%',
           borderWidth: 2,
           borderStyle: 'dashed',
-          borderRadius: 8,
-          borderColor: dragActive ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-default-border)',
+          // The Paper tile radius and hairline (glass.css), so the drop zone
+          // reads as one of the page's cards waiting to be filled.
+          borderRadius: 'var(--gl-tile-radius, 8px)',
+          borderColor: dragActive
+            ? 'var(--mantine-primary-color-filled)'
+            : 'var(--gp-input-line, var(--mantine-color-default-border))',
           padding: '40px 20px',
           cursor: 'pointer',
-          background: dragActive ? 'var(--mantine-primary-color-light)' : 'transparent',
+          background: dragActive ? 'var(--mantine-primary-color-light)' : 'var(--gp-card-bg, transparent)',
           color: 'inherit',
           transition: 'border-color 120ms, background-color 120ms',
         }}

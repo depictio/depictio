@@ -26,12 +26,12 @@ export default function ImportEntryButton({ onLoaded, variant = 'default' }: { o
       const json = Object.entries(files).find(([p]) => /\.json$/i.test(p));
       if (json) {
         loadDraft(normalizeDraft(JSON.parse(json[1])));
-        notifications.show({ color: 'accent', message: `Loaded draft (${DRAFT_FORMAT}).` });
+        notifications.show({ color: 'teal', message: `Loaded draft (${DRAFT_FORMAT}).` });
       } else {
         const { draft, notes } = draftFromCatalogFiles(files);
         loadDraft(draft);
         notifications.show({
-          color: notes.length ? 'yellow' : 'accent',
+          color: notes.length ? 'yellow' : 'teal',
           autoClose: notes.length ? 12000 : 4000,
           title: `Loaded ${draft.tool.id} / ${draft.output.slug}`,
           message: notes.length ? notes.join(' ') : `${draft.renders.length} visualization(s).`,

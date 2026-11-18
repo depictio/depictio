@@ -15,6 +15,7 @@ import type { ParsedFixture, RenderSpec } from '../types';
 import { getComponentTypeMeta } from 'depictio-builder/componentTypes';
 import TypeGrid from './TypeGrid';
 import DesignArea from './DesignArea';
+import { InstancePrimary } from '../components/Tone';
 import { seedBuilderStore } from './seedStore';
 import { renderSpecFromStore } from '../catalog/fromBuilderStore';
 
@@ -64,7 +65,7 @@ export default function AddComponentModal({
     }
     onAdd(spec);
     notifications.clean();
-    notifications.show({ color: 'accent', message: 'Visualization added.', autoClose: 2500 });
+    notifications.show({ color: 'teal', message: 'Visualization added.', autoClose: 2500 });
     close();
   };
 
@@ -113,7 +114,10 @@ export default function AddComponentModal({
             </Text>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '1rem 0' }}>
-            <DesignArea type={type} />
+            {/* depictio's builder, in the instance primary as on a dashboard. */}
+            <InstancePrimary>
+              <DesignArea type={type} />
+            </InstancePrimary>
           </div>
           <Divider />
           <Group justify="space-between" pt="sm" style={{ flexShrink: 0 }}>
@@ -127,7 +131,6 @@ export default function AddComponentModal({
                 </Text>
               )}
               <Button
-                color="brand"
                 leftSection={<Icon icon="mdi:plus" />}
                 onClick={confirm}
                 data-testid="add-to-output"

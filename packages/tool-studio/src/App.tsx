@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { AppShell, Stepper, Container, Group, Button, Box, Alert, Code, Text } from '@mantine/core';
+import { useEffect, useState } from 'react';
+import { Stepper, Group, Button, Alert, Code, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { ArrowLeft, ArrowRight, PanelRight } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import AppHeader from './components/AppHeader';
-import AppFooter from './components/AppFooter';
+import { STUDIO_TONE } from './theme';
+import { BaseThemeContext, useStudioTone } from './components/Tone';
+import { MantineThemeContext, useMantineTheme } from '@mantine/core';
 import { useStudioStore, newOutputSlugClash } from './state/useStudioStore';
 import { useKinds } from './catalog/kinds';
 import { useCatalog } from './catalog/catalog';
@@ -84,157 +87,185 @@ export default function App() {
     return i;
   })();
 
+  // Below `sm` the bar turns compact and the entry panel becomes a sheet, as
+  // depictio's chrome does on a phone.
+  const compact = Boolean(useMediaQuery('(max-width: 47.99em)'));
+
+  // Portalled surfaces (menus, modals, popovers) are styled for depictio's
+  // pages through a mark on <html>; `builder` is the component builder's,
+  // whose dropdown and chip rules are the ones the Studio's builder needs.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-gp-page', 'builder');
+    return () => root.removeAttribute('data-gp-page');
+  }, []);
+  // While the step bar is docked, toasts rise above it (styles/studio.css).
+  useEffect(() => {
+    const root = document.documentElement;
+    if (started) root.setAttribute('data-ts-foot', '');
+    else root.removeAttribute('data-ts-foot');
+  }, [started]);
+
+  const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+
+  // The Studio's section tone (theme.ts): the page's primary, as GlassPage
+  // tones Projects and Dashboards. Previews opt back out (components/Tone.tsx).
+  const baseTheme = useMantineTheme();
+  const tonedTheme = useStudioTone(STUDIO_TONE);
+
   return (
-    // Header and footer are both AppShell slots, so both stay pinned while only
-    // the wizard scrolls between them. AppShell reserves padding for each on the
-    // main column, so no step can end up hidden underneath either bar.
-    <AppShell
-      header={{ height: 56 }}
-      footer={{ height: 44 }}
-      aside={{ width: { base: 320, xl: 400 }, breakpoint: 'md', collapsed: { desktop: !showPanel, mobile: !showPanel } }}
-      padding={0}
+    <BaseThemeContext.Provider value={baseTheme}>
+    <MantineThemeContext.Provider value={tonedTheme}>
+    {/* depictio's component-builder shell (builder/glass/GlassBuilderShell.tsx):
+        the Paper top bar, a canvas that scrolls on its own, and the step bar
+        docked under it, so Back/Next sit in the same place on every step. The
+        entry panel docks on the right like the dashboards' side panels. */}
+    <div
+      className="gp-shell bgl-shell ts-shell ts-tone"
+      data-testid="app-shell"
+      data-foot={started ? '' : undefined}
+      data-panel={showPanel && !compact ? '' : undefined}
     >
-      <AppShell.Header>
-        <AppHeader />
-      </AppShell.Header>
-      {/* The start screen replaces the whole wizard chrome — a stepper and a
-          disabled Back/Next band around an explanation would say "you are
-          already in the middle of something", which is exactly the confusion it
-          exists to remove. */}
-      {!started ? (
-        <AppShell.Main>
-          <StartScreen onStart={start} resuming={Boolean(tool.id || renders.length)} />
-        </AppShell.Main>
-      ) : (
-        /* One viewport-tall column: stepper on top, step content scrolling in
-           the middle, Back/Next in a band at the bottom. The nav used to sit
-           after the content, so it landed at a different height on every step
-           and moved again as a step grew; pinning it to the column means it is
-           always in the same place and always reachable without scrolling. */
-        <AppShell.Main
-          style={{ height: '100dvh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}
-        >
-          <Container size="lg" pt="lg" w="100%">
-            <Stepper
-              active={step}
-              onStepClick={setStep}
-              allowNextStepsSelect={false}
-              size="sm"
-              mb="lg"
-            >
-              <Stepper.Step data-testid="step-0" label="Tool" description="Identity & output" icon={<Icon icon="mdi:tools" />} />
-              <Stepper.Step data-testid="step-1" label="Fixture" description="Drop a CSV/TSV" icon={<Icon icon="mdi:file-delimited-outline" />} />
-              <Stepper.Step data-testid="step-2" label="Visualizations" description="Bind columns" icon={<Icon icon="mdi:chart-box-outline" />} />
-              <Stepper.Step data-testid="step-3" label="Export" description="Zip or PR" icon={<Icon icon="mdi:download" />} />
-            </Stepper>
+      <AppHeader context={started ? STEPS[step] : undefined} compact={compact} />
 
-            <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
-              {!existing ? <OutputsBar diagnostics={diagnostics} /> : <span />}
-              <Button
-                size="compact-sm"
-                variant={showPanel ? 'light' : 'default'}
-                leftSection={<Icon icon="mdi:file-tree-outline" width={14} />}
-                onClick={() => setPanelOpen(!showPanel)}
-                data-testid="toggle-entry-panel"
-                aria-pressed={showPanel}
+      <main className="gp-main bgl-main">
+        <div className="gp-page">
+          {/* The start screen replaces the whole wizard chrome: a stepper and a
+              disabled Back/Next bar around an explanation would say "you are
+              already in the middle of something", which is exactly the
+              confusion it exists to remove. */}
+          {!started ? (
+            <StartScreen onStart={start} resuming={Boolean(tool.id || renders.length)} />
+          ) : (
+            <>
+              <Stepper
+                active={step}
+                onStepClick={setStep}
+                allowNextStepsSelect={false}
+                size="lg"
+                iconSize={38}
+                className="bgl-stepper"
+                styles={{
+                  stepLabel: { fontSize: '16px', fontWeight: 700 },
+                  stepDescription: { fontSize: '14px', color: 'var(--mantine-color-dimmed)' },
+                }}
               >
-                Entry
-                {diagnostics.some((d) => d.severity === 'error') ? (
-                  <Text span size="xs" c="red" ml={6}>
-                    {diagnostics.filter((d) => d.severity === 'error').length}
-                  </Text>
-                ) : null}
-              </Button>
-            </Group>
+                <Stepper.Step data-testid="step-0" label="Tool" description="Identity & output" />
+                <Stepper.Step data-testid="step-1" label="Fixture" description="Drop a CSV/TSV" />
+                <Stepper.Step data-testid="step-2" label="Visualizations" description="Bind columns" />
+                <Stepper.Step data-testid="step-3" label="Export" description="Zip or PR" />
+              </Stepper>
 
-            {restored && (
-              <Alert
-                color="gray"
-                variant="light"
-                mb="md"
-                withCloseButton
-                onClose={() => setRestored(false)}
-                icon={<Icon icon="mdi:content-save-outline" />}
-                title="Draft restored"
-              >
-                <Group justify="space-between" wrap="nowrap" gap="md">
-                  <span>
-                    Picking up where you left off
-                    {tool.id ? (
-                      <>
-                        {' '}
-                        (<Code>{tool.id}</Code>)
-                      </>
-                    ) : null}
-                    . Drafts stay in this browser and never leave it.
-                  </span>
-                  <Button
-                    size="xs"
-                    variant="default"
-                    onClick={() => {
-                      reset();
-                      setRestored(false);
-                    }}
-                  >
-                    Start over
-                  </Button>
-                </Group>
-              </Alert>
-            )}
-          </Container>
+              <div className="ts-toolbar">
+                {!existing ? <OutputsBar diagnostics={diagnostics} /> : <span />}
+                <Button
+                  size="compact-md"
+                  variant={showPanel ? 'light' : 'default'}
+                  className="ts-panel-toggle"
+                  leftSection={<PanelRight size={16} strokeWidth={1.8} aria-hidden />}
+                  onClick={() => setPanelOpen(!showPanel)}
+                  data-testid="toggle-entry-panel"
+                  aria-pressed={showPanel}
+                >
+                  Entry
+                  {errorCount ? (
+                    <Text span size="xs" c="red" fw={700} ml={6}>
+                      {errorCount}
+                    </Text>
+                  ) : null}
+                </Button>
+              </div>
 
-          {/* minHeight:0 so this flex child may shrink below its content and
-              actually scroll, rather than stretching the column past the viewport. */}
-          <Box style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            <Container size="lg" pb="lg" w="100%">
+              {restored && (
+                <Alert
+                  color="gray"
+                  variant="light"
+                  mb="md"
+                  withCloseButton
+                  onClose={() => setRestored(false)}
+                  icon={<Icon icon="mdi:content-save-outline" />}
+                  title="Draft restored"
+                >
+                  <Group justify="space-between" wrap="nowrap" gap="md">
+                    <span>
+                      Picking up where you left off
+                      {tool.id ? (
+                        <>
+                          {' '}
+                          (<Code>{tool.id}</Code>)
+                        </>
+                      ) : null}
+                      . Drafts stay in this browser and never leave it.
+                    </span>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={() => {
+                        reset();
+                        setRestored(false);
+                      }}
+                    >
+                      Start over
+                    </Button>
+                  </Group>
+                </Alert>
+              )}
+
               {step === 0 && <ToolForm catalog={catalog} />}
               {step === 1 && <FixtureDrop />}
               {step === 2 && <VizDesigner kinds={kinds} />}
               {step === 3 && <ExportPanel kinds={kinds} catalog={catalog} />}
-            </Container>
-          </Box>
+            </>
+          )}
+        </div>
+      </main>
 
-          <Box style={{ borderTop: '1px solid var(--app-border-color)' }}>
-            <Container size="lg" py="sm" w="100%">
-              <Group justify="space-between">
-                <Button
-                  variant="default"
-                  leftSection={<Icon icon="mdi:chevron-left" />}
-                  disabled={step === 0}
-                  onClick={() => setStep(step - 1)}
-                >
-                  Back
-                </Button>
-                {step < STEPS.length - 1 && (
-                  <Group gap="sm" wrap="nowrap">
-                  {!canLeave(step) && (
-                    <Text size="sm" c="dimmed" ta="right" data-testid="next-missing" visibleFrom="xs">
-                      Still needed: {missing(step).join(', ')}
-                    </Text>
-                  )}
-                  <Button
-                    data-testid="next"
-                    rightSection={<Icon icon="mdi:chevron-right" />}
-                    disabled={!canLeave(step) || step > maxReachable}
-                    onClick={() => setStep(step + 1)}
-                  >
-                    Next
-                  </Button>
-                  </Group>
-                )}
-              </Group>
-            </Container>
-          </Box>
-        </AppShell.Main>
-      )}
       {started && (
-        <AppShell.Aside>
-          <EntryPanel diagnostics={diagnostics} />
-        </AppShell.Aside>
+        <aside className="ts-panel" aria-label="Catalog entry" hidden={!showPanel}>
+          <EntryPanel diagnostics={diagnostics} onClose={() => setPanelOpen(false)} />
+        </aside>
       )}
-      <AppShell.Footer>
-        <AppFooter />
-      </AppShell.Footer>
-    </AppShell>
+
+      {started && (
+        <footer className="bgl-foot">
+          <div className="bgl-foot-inner">
+            <span className="bgl-foot-step">
+              Step {step + 1} of {STEPS.length}
+              <span className="bgl-foot-name"> · {STEPS[step]}</span>
+            </span>
+            <div className="bgl-foot-actions">
+              {step < STEPS.length - 1 && !canLeave(step) && (
+                <Text size="sm" c="dimmed" ta="right" data-testid="next-missing" visibleFrom="md" lineClamp={1}>
+                  Still needed: {missing(step).join(', ')}
+                </Text>
+              )}
+              <Button
+                variant="default"
+                size="md"
+                leftSection={<ArrowLeft size={18} strokeWidth={1.9} aria-hidden />}
+                disabled={step === 0}
+                onClick={() => setStep(step - 1)}
+              >
+                Back
+              </Button>
+              {step < STEPS.length - 1 && (
+                <Button
+                  data-testid="next"
+                  size="md"
+                  color={STUDIO_TONE}
+                  rightSection={<ArrowRight size={18} strokeWidth={1.9} aria-hidden />}
+                  disabled={!canLeave(step) || step > maxReachable}
+                  onClick={() => setStep(step + 1)}
+                >
+                  Next
+                </Button>
+              )}
+            </div>
+          </div>
+        </footer>
+      )}
+    </div>
+    </MantineThemeContext.Provider>
+    </BaseThemeContext.Provider>
   );
 }

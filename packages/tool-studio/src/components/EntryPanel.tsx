@@ -4,15 +4,24 @@
  * step (and output) that fixes it. It replaces finding out at Export.
  */
 import { useMemo, useState } from 'react';
-import { Badge, Group, NavLink, ScrollArea, Stack, Text, Title } from '@mantine/core';
+import { Badge, NavLink, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
 import { allOutputs, useStudioStore } from '../state/useStudioStore';
 import { generateEntry, genModuleYaml } from '../catalog/yamlGen';
 import type { Diagnostic } from '../catalog/diagnostics';
 import DiagnosticsList from './DiagnosticsList';
+import { ShieldCheck, X } from 'lucide-react';
+import { PRIVACY_LINE } from './AppHeader';
 
-export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
+export default function EntryPanel({
+  diagnostics,
+  onClose,
+}: {
+  diagnostics: Diagnostic[];
+  /** Hides the panel (its key in the step's toolbar brings it back). */
+  onClose?: () => void;
+}) {
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const fixture = useStudioStore((s) => s.fixture);
@@ -54,20 +63,28 @@ export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] 
     setStep(step);
   };
 
+  const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+
   return (
-    <ScrollArea h="100%" type="auto" data-testid="entry-panel">
+    <div className="ts-panel-card">
+      {/* The dashboards' side-panel head (layout.css .hy-drawer-head): the
+          title, its count, then the close key. */}
+      <div className="hy-drawer-head">
+        <span className="hy-drawer-title">Entry</span>
+        <Badge variant="light" color={errorCount ? 'red' : 'teal'} data-testid="entry-status">
+          {errorCount ? `${errorCount} error${errorCount > 1 ? 's' : ''}` : 'Ready'}
+        </Badge>
+        <span className="hy-flex" />
+        {onClose && (
+          <Tooltip label="Hide the entry" withArrow openDelay={250}>
+            <button type="button" className="hy-close" onClick={onClose} aria-label="Hide the entry panel">
+              <X size={18} strokeWidth={1.8} aria-hidden />
+            </button>
+          </Tooltip>
+        )}
+      </div>
+    <ScrollArea className="ts-panel-body" type="auto" data-testid="entry-panel">
       <Stack gap="sm" p="md">
-        <Group justify="space-between">
-          <Title order={2} size="h5">
-            Entry
-          </Title>
-          <Badge variant="light" color={diagnostics.some((d) => d.severity === 'error') ? 'red' : 'teal'} data-testid="entry-status">
-            {(() => {
-              const n = diagnostics.filter((d) => d.severity === 'error').length;
-              return n ? `${n} error${n > 1 ? 's' : ''}` : 'Ready';
-            })()}
-          </Badge>
-        </Group>
         {existing ? (
           <Text size="sm" c="dimmed">
             Appending to <code>{existing.yamlPath}</code>; the updated file is shown at Export.
@@ -125,5 +142,10 @@ export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] 
         )}
       </Stack>
     </ScrollArea>
+      <div className="ts-panel-foot">
+        <ShieldCheck size={14} strokeWidth={1.8} aria-hidden />
+        <span>{PRIVACY_LINE}</span>
+      </div>
+    </div>
   );
 }
