@@ -769,3 +769,43 @@ body.quarto-dark .js-plotly-plot .main-svg .zerolinelayer path { stroke: rgba(25
 body.quarto-dark .dataTables_wrapper, body.quarto-dark .dt-container { color: var(--gl-fg); }
 body.quarto-dark .callout.dpx-about { background: none; }
 </style>"""
+
+
+# ── Links the document cannot hold ──────────────────────────────────────────
+
+#: Stands where a link was whose target the document does not hold (a tab the
+#: export left out, a section it does not draw, run parameters it has none of).
+ORPHAN = "\x00dpx-orphan\x00"
+
+_ORPHAN_ITEM = re.compile(r"^(\s*(?:[-*+]|\d+[.)]))(?:\s+(.*))?$")
+_ORPHAN_SEP = re.compile(r"\s*·\s*" + re.escape(ORPHAN))
+_ORPHAN_CLAUSE = re.compile(r",[^,.;:·\n\[\]]*?" + re.escape(ORPHAN))
+_ORPHAN_BARE = re.compile(r"[ \t]*" + re.escape(ORPHAN))
+# What a list item may hold besides its link and still say nothing: an
+# inline icon (markdown or already drawn), a bold label, punctuation.
+_ITEM_NOISE = re.compile(
+    r"!\[[^\]]*\]\(icon:[^)]*\)|<span[^>]*>.*?</span>|\*\*[^*]+\*\*|[\s·,;:.\-–—]+"
+)
+
+
+def drop_orphan_links(text: str) -> str:
+    """Take out every link marked :data:`ORPHAN`, its label with it.
+
+    A dangling label reads as stray text ("…between groups. Run parameters"),
+    so the label goes too, and with it what only introduced it: the `·` before
+    a step's link, the clause it ended (", its path in the run parameters"),
+    a list item left with nothing but its icon and bold label.
+    """
+    if ORPHAN not in text:
+        return text
+    lines = []
+    for line in text.split("\n"):
+        if ORPHAN in line:
+            line = _ORPHAN_SEP.sub("", line)
+            line = _ORPHAN_CLAUSE.sub("", line)
+            line = _ORPHAN_BARE.sub("", line)
+            m = _ORPHAN_ITEM.match(line)
+            if m and not _ITEM_NOISE.sub("", m.group(2) or "").strip():
+                continue  # the item was its link
+        lines.append(line)
+    return "\n".join(lines)
