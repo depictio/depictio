@@ -386,3 +386,66 @@ def test_a_run_folder_missing_on_this_host_is_unreachable(tmp_path):
         RunRoot("run_B", LocalDataRoot(str(present)), str(present)),
     ]
     assert [r.tag for r in unreachable_runs(runs)] == ["run_A"]
+
+
+# ── a recipe streamed a batch at a time (#1418) ──────────────────────────────
+
+from depictio.cli.cli.utils.recipe_runs import StreamFallback, stream_recipe  # noqa: E402
+
+
+def _fake_batches(computed: list):
+    def execute_batches(recipe_name, root, extra_sources=None, params=None, **kwargs):
+        if root.name == "run_missing":
+            raise Missing("file not found: x.tsv")
+        computed.append(root.name)
+
+        def batches():
+            for i in range(2):
+                yield pl.DataFrame({"sample": [f"{root.name}_{i}"]})
+
+        return batches()
+
+    return execute_batches
+
+
+def test_a_stream_tags_each_batch_with_its_run_and_computes_runs_one_after_the_other():
+    computed: list = []
+    stream = stream_recipe(
+        _fake_batches(computed), "r.py", [_run("run_a"), _run("run_b")], {}, lambda r: None, Missing
+    )
+    # Only the first run is computed before anything is written.
+    assert computed == ["run_a"]
+    assert stream.first.to_dicts() == [{"sample": "run_a_0", "depictio_run_id": "run_a"}]
+    rows = pl.concat(list(stream.frames()))
+    assert rows["depictio_run_id"].to_list() == ["run_a", "run_a", "run_b", "run_b"]
+    assert stream.ran == ["run_a", "run_b"]
+
+
+def test_a_streamed_run_without_its_inputs_falls_back_when_others_have_them():
+    stream = stream_recipe(
+        _fake_batches([]), "r.py", [_run("run_a"), _run("run_missing")], {}, lambda r: None, Missing
+    )
+    with pytest.raises(StreamFallback, match="run_missing"):
+        list(stream.frames())
+    with pytest.raises(StreamFallback):
+        stream_recipe(
+            _fake_batches([]),
+            "r.py",
+            [_run("run_missing"), _run("run_a")],
+            {},
+            lambda r: None,
+            Missing,
+        )
+
+
+def test_a_single_streamed_run_without_its_inputs_still_fails():
+    with pytest.raises(Missing):
+        stream_recipe(_fake_batches([]), "r.py", [_run("run_missing")], {}, lambda r: None, Missing)
+
+
+def test_a_batch_may_not_tag_its_own_run():
+    def execute_batches(recipe_name, root, **kwargs):
+        return iter([pl.DataFrame({"sample": ["s"], "depictio_run_id": ["mine"]})])
+
+    with pytest.raises(ValueError, match="depictio_run_id"):
+        stream_recipe(execute_batches, "r.py", [_run("run_a")], {}, lambda r: None, Missing)

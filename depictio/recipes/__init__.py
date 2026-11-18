@@ -6,6 +6,7 @@ import importlib.util
 import inspect
 import re
 import weakref
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -582,12 +583,19 @@ def validate_schema(
 ) -> None:
     """Validate that the result DataFrame matches the recipe's output schema.
 
+    The schemas describe the stored table: a ``pl.Utf8`` column may be held as
+    Categorical or Enum to save memory, it is written as String (#1418).
+
     Args:
         result: Output DataFrame from transform().
         output_schema: Dict of column_name → polars dtype. All must be present.
         recipe_name: Recipe name used in error messages.
         optional_output_schema: Dict of column_name → polars dtype. Validated only if present.
     """
+
+    def stored(dtype: pl.DataType) -> pl.DataType:
+        return pl.String() if isinstance(dtype, pl.Categorical | pl.Enum) else dtype
+
     for col_name, expected_type in output_schema.items():
         if col_name not in result.columns:
             raise RecipeError(
@@ -595,7 +603,7 @@ def validate_schema(
                 f"Got columns: {result.columns}"
             )
         actual_type = result[col_name].dtype
-        if actual_type != expected_type:
+        if stored(actual_type) != expected_type:
             raise RecipeError(
                 f"Recipe {recipe_name}: column '{col_name}' expected {expected_type}, "
                 f"got {actual_type}"
@@ -604,7 +612,7 @@ def validate_schema(
         for col_name, expected_type in optional_output_schema.items():
             if col_name in result.columns:
                 actual_type = result[col_name].dtype
-                if actual_type != expected_type:
+                if stored(actual_type) != expected_type:
                     raise RecipeError(
                         f"Recipe {recipe_name}: optional column '{col_name}' expected "
                         f"{expected_type}, got {actual_type}"
@@ -652,15 +660,17 @@ def call_transform(
     sources: dict,
     params: dict[str, str] | None = None,
     context: RecipeContext | None = None,
+    entry: str = "transform",
 ) -> Any:
-    """Call ``module.transform``, passing template ``params`` and the run context when it takes them.
+    """Call ``module.transform`` (or ``entry``), passing template ``params`` and the run context when it takes them.
 
     A recipe opts in to ``params`` by declaring a ``params`` keyword. Values that are
     still an unresolved ``{VAR}`` placeholder (the template variable was not set) are
     dropped, so the recipe sees the parameter as absent and uses its own fallback.
     A recipe opts in to the context with a second positional argument.
     """
-    declared = inspect.signature(module.transform).parameters
+    fn = getattr(module, entry)
+    declared = inspect.signature(fn).parameters
     args: list[Any] = [sources]
     if context is not None and len([n for n in declared if n != "params"]) >= 2:
         args.append(context)
@@ -670,8 +680,21 @@ def call_transform(
             for k, v in params.items()
             if v is not None and not _UNRESOLVED_PLACEHOLDER.match(str(v).strip())
         }
-        return module.transform(*args, params=clean)
-    return module.transform(*args)
+        return fn(*args, params=clean)
+    return fn(*args)
+
+
+def streams_batches(module: Any) -> bool:
+    """Whether a recipe can hand its output over in batches (``transform_batches``).
+
+    A recipe whose table is too large to hold next to its inputs (#1418) may
+    define ``transform_batches(sources)``, a generator of frames that together
+    make the table ``transform`` returns. Ingestion then writes each batch as
+    it comes (``execute_recipe_batches``); every other caller (preview, an
+    aggregate over runs, the tests) keeps calling ``transform``. A batch must
+    not carry ``depictio_run_id``: ingestion tags the rows with their run.
+    """
+    return callable(getattr(module, "transform_batches", None))
 
 
 def execute_recipe(
@@ -702,29 +725,9 @@ def execute_recipe(
     Returns:
         Validated output DataFrame.
     """
-    # Checkpoint 1: load
-    module = load_recipe(recipe_name, pipeline_version)
-
-    # Checkpoint 2: resolve
-    sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
-
-    # Inject dc_ref sources
-    if extra_sources:
-        sources.update(extra_sources)
-
-    # Check all sources are resolved; optional missing dc_ref sources are injected as None
-    for source in module.SOURCES:
-        if source.ref not in sources:
-            if source.dc_ref is not None and source.optional:
-                sources[source.ref] = None  # type: ignore[assignment]
-            else:
-                raise RecipeError(
-                    f"Source '{source.ref}' not resolved. "
-                    f"If it uses dc_ref, provide it via extra_sources."
-                )
-
-    # Checkpoint 3: input schema
-    validate_sources(module, sources, recipe_name)
+    module, sources = _prepared_sources(
+        recipe_name, data_dir, overrides, extra_sources, pipeline_version, sources
+    )
 
     # Checkpoint 4: transform. A recipe whose transform() takes a second
     # argument also receives the run folder, for recipes that describe files
@@ -748,6 +751,92 @@ def execute_recipe(
     )
 
     return result
+
+
+def execute_recipe_batches(
+    recipe_name: str,
+    data_dir: str | Path | DataRoot,
+    overrides: dict[str, str] | None = None,
+    extra_sources: dict[str, pl.DataFrame] | None = None,
+    pipeline_version: str | None = None,
+    params: dict[str, str] | None = None,
+    properties: dict | None = None,
+    sources: dict[str, pl.DataFrame] | None = None,
+) -> Iterator[pl.DataFrame]:
+    """``execute_recipe`` for a recipe that ``streams_batches``: its table, a batch at a time.
+
+    Loading, reading the sources and checking them happen at the call, so a
+    missing input raises here (``RecipeSourceMissing``) as it does for
+    ``execute_recipe``. Each batch is checked against the output schema as it
+    comes; empty ones are dropped, and a recipe that yields no row at all
+    raises once its batches are spent, as an empty table does.
+    """
+    module, sources = _prepared_sources(
+        recipe_name, data_dir, overrides, extra_sources, pipeline_version, sources
+    )
+    if not streams_batches(module):
+        raise RecipeError(f"Recipe {recipe_name} has no transform_batches()")
+    batches = call_transform(
+        module,
+        sources,
+        params,
+        RecipeContext.of(data_dir, properties),
+        entry="transform_batches",
+    )
+    optional = getattr(module, "OPTIONAL_OUTPUT_SCHEMA", None)
+
+    def checked() -> Iterator[pl.DataFrame]:
+        produced = False
+        for batch in batches:
+            if not isinstance(batch, pl.DataFrame):
+                raise RecipeError(
+                    f"Recipe {recipe_name}: transform_batches() must yield pl.DataFrame, "
+                    f"got {type(batch).__name__}"
+                )
+            if batch.is_empty():
+                continue
+            validate_schema(batch, module.OUTPUT_SCHEMA, recipe_name, optional)
+            produced = True
+            yield batch
+        if not produced:
+            raise RecipeError(f"Recipe {recipe_name}: transform_batches() produced no row")
+
+    return checked()
+
+
+def _prepared_sources(
+    recipe_name: str,
+    data_dir: str | Path | DataRoot,
+    overrides: dict[str, str] | None,
+    extra_sources: dict[str, pl.DataFrame] | None,
+    pipeline_version: str | None,
+    sources: dict[str, pl.DataFrame] | None,
+) -> tuple[ModuleType, dict[str, pl.DataFrame]]:
+    """Checkpoints 1 to 3 of ``execute_recipe``: the loaded recipe and its checked sources."""
+    # Checkpoint 1: load
+    module = load_recipe(recipe_name, pipeline_version)
+
+    # Checkpoint 2: resolve
+    sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
+
+    # Inject dc_ref sources
+    if extra_sources:
+        sources.update(extra_sources)
+
+    # Check all sources are resolved; optional missing dc_ref sources are injected as None
+    for source in module.SOURCES:
+        if source.ref not in sources:
+            if source.dc_ref is not None and source.optional:
+                sources[source.ref] = None  # type: ignore[assignment]
+            else:
+                raise RecipeError(
+                    f"Source '{source.ref}' not resolved. "
+                    f"If it uses dc_ref, provide it via extra_sources."
+                )
+
+    # Checkpoint 3: input schema
+    validate_sources(module, sources, recipe_name)
+    return module, sources
 
 
 # ---------------------------------------------------------------------------

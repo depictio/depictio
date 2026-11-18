@@ -84,6 +84,7 @@ def plan_inline(
         "detected_runs": list(preview.detected_runs),
         "runs": None,
         "shared_samples": [],
+        "samples_check_gaps": [],
         "resolved_variables": declared_variables(preview.resolved_variables, metadata),
         "data_collections": [row.model_dump() for row in report_rows(preview.data_collections)],
         "dashboards": [],

@@ -227,8 +227,8 @@
       "content_hash": "53fd9c0346199b30843dafa6f9a7cb5acda9861aff8c8ba6e4f0c2351b9a670e"
     },
     "hmmer": {
-      "version": "1.0.0",
-      "content_hash": "e50ea330adf794f1912708f77a3c278e4a2525d27fcc7a22c89806cb6b05a917"
+      "version": "1.1.0",
+      "content_hash": "0e84ab81e5933d04ea0c3aa123a49d941471a7d5dca35b515d310d6d4f952683"
     },
     "homer": {
       "version": "1.0.0",

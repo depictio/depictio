@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "2.2.2",
-      "content_hash": "b37cdf9b63587e18e3395ee9ac6f555d35aa1a5076e80fedbcc035feaf7d4c42",
+      "version": "2.3.0",
+      "content_hash": "18ef2116079b6a93d076942f9a85e0747ec1d0065d7cdefd7d27182241f5f0fc",
       "catalog": {
         "adapterremoval": "1.0.0",
         "agat": "1.0.0",
@@ -65,7 +65,7 @@
         "hicexplorer": "1.0.0",
         "hicpro": "1.0.0",
         "hmf_bamtools": "1.0.0",
-        "hmmer": "1.0.0",
+        "hmmer": "1.1.0",
         "homer": "1.0.0",
         "interop": "1.0.0",
         "interproscan": "1.0.0",
@@ -524,9 +524,9 @@
     },
     "nf-core/proteinannotator/1.1.0": {
       "version": "2.1.0",
-      "content_hash": "9114fb7a7fffc1f2d10193aaa317b4deeefcb2ed3d747bf30cda9026f448c7bf",
+      "content_hash": "615eedc30cf0244cd2683ff7682340389ca7cb455cc47baaf4523045b958460b",
       "catalog": {
-        "hmmer": "1.0.0",
+        "hmmer": "1.1.0",
         "interproscan": "1.0.0",
         "proteinannotator": "1.1.0",
         "s4pred": "1.0.0",
@@ -535,21 +535,21 @@
       }
     },
     "nf-core/proteinfamilies/2.5.0": {
-      "version": "1.1.2",
-      "content_hash": "affdc8d694ee6a23647150d60a8d4de4375bb20550f7300ecd763b1af5a9af9b",
+      "version": "1.2.0",
+      "content_hash": "0865297f9945e9b6e7707f7b36c73973c52426a73179b9e9b34a2f05a2d9405f",
       "catalog": {
         "famsa": "1.0.0",
-        "hmmer": "1.0.0",
+        "hmmer": "1.1.0",
         "proteinfamilies": "1.0.0",
         "seqfu": "1.0.0"
       }
     },
     "nf-core/proteinfamilies/2.6.0": {
-      "version": "1.1.2",
-      "content_hash": "6223deebbda0b6769155925e33c42f96c5174394c55527efd5c0a6a5989e752e",
+      "version": "1.2.0",
+      "content_hash": "d1bedafe17d34bbf4062559134694c1a245f246eff96e3f8d720d533f4d7a132",
       "catalog": {
         "famsa": "1.0.0",
-        "hmmer": "1.0.0",
+        "hmmer": "1.1.0",
         "proteinfamilies": "1.0.0",
         "seqfu": "1.0.0"
       }

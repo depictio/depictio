@@ -30,6 +30,9 @@ class RunScan(BaseModel):
 class ProjectRun(BaseModel):
     run_tag: str
     workflow: str | None
+    #: Two workflows can each hold a run with the same tag: this tells them
+    #: apart when the run's files are read (``run_files``).
+    workflow_id: str | None = None
     run_location: str | None
     folder_created: str | None
     folder_modified: str | None
@@ -129,6 +132,7 @@ def build_project_runs(
             ProjectRun(
                 run_tag=str(run["run_tag"]),
                 workflow=workflow.get("name"),
+                workflow_id=str(run["workflow_id"]) if run.get("workflow_id") else None,
                 run_location=run.get("run_location"),
                 folder_created=run.get("creation_time"),
                 folder_modified=run.get("last_modification_time"),
@@ -331,12 +335,17 @@ def build_run_files(
     file_docs: Iterable[dict[str, Any]],
     run_tag: str,
     report_changes: dict[str, dict[str, Any]] | None = None,
+    workflow_id: str | None = None,
 ) -> RunFiles:
     """The files of ``run_tag`` in ``project``, each with the scans that brought,
-    changed or failed it. The scans of every workflow's run with
-    that tag are read together, oldest first. ``report_changes`` maps a
-    report's location to its ``last_change``."""
+    changed or failed it, oldest first. ``workflow_id`` names the workflow
+    whose run it is: two workflows can each hold a run with the same tag, and
+    without it the scans of every workflow's run with that tag are read
+    together. ``report_changes`` maps a report's location to its
+    ``last_change``."""
     workflow_ids = {str(wf.get("_id") or wf.get("id")) for wf in project.get("workflows") or []}
+    if workflow_id is not None:
+        workflow_ids &= {str(workflow_id)}
     tags = {
         str(dc.get("_id") or dc.get("id")): dc.get("data_collection_tag")
         for wf in project.get("workflows") or []
@@ -426,10 +435,14 @@ def _report_changes(project: dict[str, Any], locations: list[str]) -> dict[str, 
     }
 
 
-def run_files(project: dict[str, Any], run_tag: str) -> RunFiles:
+def run_files(project: dict[str, Any], run_tag: str, workflow_id: str | None = None) -> RunFiles:
     from depictio.api.v1.db import files_collection
 
-    ids = [ObjectId(wf["_id"]) for wf in project.get("workflows") or [] if wf.get("_id")]
+    ids = [
+        ObjectId(wf["_id"])
+        for wf in project.get("workflows") or []
+        if wf.get("_id") and (workflow_id is None or str(wf["_id"]) == str(workflow_id))
+    ]
     docs = (
         list(runs_collection.find({"workflow_id": {"$in": ids}, "run_tag": run_tag})) if ids else []
     )
@@ -445,4 +458,6 @@ def run_files(project: dict[str, Any], run_tag: str) -> RunFiles:
         else []
     )
     locations = [str(d.get("file_location") or "") for d in file_docs]
-    return build_run_files(project, docs, file_docs, run_tag, _report_changes(project, locations))
+    return build_run_files(
+        project, docs, file_docs, run_tag, _report_changes(project, locations), workflow_id
+    )

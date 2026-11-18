@@ -15,6 +15,7 @@ import { apiErrorCode, attachRun, isS3Location } from 'depictio-react-core';
 import type { AttachRunReport, ManifestRefreshReport } from 'depictio-react-core';
 
 import { plural } from '../../fromRun/plural';
+import { samplesCheckGapText } from '../../samplesCheckGaps';
 import { formatElapsed, manifestRunOutcome, summarizeManifestRun, useElapsedMs, useManifestRunPoll } from '../../manifestRun';
 import type { ManifestRunOutcome } from '../../manifestRun';
 import { FoundCard, SourceValue } from '../FoundCard';
@@ -56,6 +57,22 @@ interface Refusal {
  *  one MultiQC collection would merge them, so the run is not added. */
 function samplesRows(report: AttachRunReport): FoundRow[] {
   const shared = report.shared_samples ?? [];
+  const gaps = report.samples_check_gaps ?? [];
+  if (shared.length === 0 && gaps.length > 0) {
+    return [
+      {
+        key: 'samples',
+        label: 'Samples',
+        value: (
+          <Text size="sm" data-testid="attach-run-samples-check-gaps">
+            No sample already in the project among the reports read
+          </Text>
+        ),
+        status: 'warn',
+        hint: `Not every report was read: ${samplesCheckGapText(gaps)}`,
+      },
+    ];
+  }
   if (shared.length === 0) return [];
   return [
     {
@@ -79,7 +96,9 @@ function samplesRows(report: AttachRunReport): FoundRow[] {
         </Stack>
       ),
       status: 'warn',
-      hint: 'One MultiQC collection would merge them. Rename the samples in this run, or read it as its own project.',
+      hint: `One MultiQC collection would merge them. Rename the samples in this run, or read it as its own project.${
+        gaps.length > 0 ? ` Not every report was read: ${samplesCheckGapText(gaps)}` : ''
+      }`,
     },
   ];
 }

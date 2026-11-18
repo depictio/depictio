@@ -1216,6 +1216,7 @@ export type {
   FromRunRequest,
   FromRunReport,
   SharedRunSamples,
+  SamplesCheckGap,
   FromRunDCPreview,
   FromRunRecipePreview,
   FromRunRecipeSource,

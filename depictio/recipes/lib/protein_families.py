@@ -6,7 +6,8 @@ formats involved (aligned FASTA, HMMER3 models, Newick trees) are not tables.
 This module turns such a scan back into whole files and holds the per-family
 computations more than one recipe needs:
 
-- ``texts_by_file``: ``{source_path: text}`` in scan order;
+- ``texts_by_file``: ``{source_path: text}`` in scan order; ``iter_texts_by_file``
+  the same one file at a time, for a scan too large to hold as text;
 - ``family_id`` / ``sample_from_path`` / ``origin_from_path``: the keys the
   pipeline writes into its paths (``<step>/<sample>/<family>.<ext>``, with
   the families an update run extends under ``update_families/``);
@@ -24,7 +25,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 
 import polars as pl
 
@@ -96,6 +97,45 @@ def texts_by_file(
     for path, line in zip(paths, raw[text_col].to_list(), strict=True):
         texts.setdefault(path or "", []).append(line or "")
     return {path: "\n".join(lines) for path, lines in texts.items()}
+
+
+def iter_texts_by_file(
+    raw: pl.DataFrame | None,
+    text_col: str = "raw",
+    path_col: str = "source_path",
+    *,
+    order: Callable[[str], object] | None = None,
+) -> Iterator[tuple[str, str]]:
+    """``texts_by_file`` one file at a time: ``(path, text)``, the same texts.
+
+    Only the file being read is held as Python text, so a scan of thousands of
+    files (a family alignment or model per file) never sits in memory twice,
+    once as the scan and once as ``{file: text}``. Files come in scan order,
+    or sorted by ``order`` (a key on the path; stable, so scan order within
+    equal keys).
+    """
+    if raw is None or raw.height == 0 or text_col not in raw.columns:
+        return
+    lines = raw.get_column(text_col)
+    if path_col not in raw.columns:
+        yield "", "\n".join(line or "" for line in lines.to_list())
+        return
+    files = (
+        raw.select(
+            pl.col(path_col).cast(pl.Utf8).fill_null(""),
+            pl.int_range(pl.len(), dtype=pl.UInt32).alias("_row"),
+        )
+        .group_by(path_col, maintain_order=True)
+        .agg("_row")
+    )
+    paths = files.get_column(path_col).to_list()
+    rows = files.get_column("_row")
+    indices = range(len(paths))
+    if order is not None:
+        indices = sorted(indices, key=lambda i: order(paths[i]))
+    for i in indices:
+        text = "\n".join(line or "" for line in lines.gather(rows[i]).to_list())
+        yield paths[i], text
 
 
 def ungapped(sequence: str) -> str:
