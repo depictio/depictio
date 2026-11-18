@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -25,6 +27,10 @@ from depictio.models.components.advanced_viz.catalog import CATALOG_DIR, role_co
 
 # Prebuilt single-file viewer bundle (`pnpm run build:catalog-preview`).
 TEMPLATE_PATH = CATALOG_DIR.parent / "viewer" / "dist-catalog-preview" / "catalog-preview.html"
+
+# Prebuilt multi-file catalog site (`pnpm run build:catalog-site`): the bundle
+# `depictio catalog export-site` copies next to the per-output JSON it writes.
+SITE_BUNDLE_DIR = CATALOG_DIR.parent / "viewer" / "dist-catalog-site"
 
 # depictio brand colourway (from depictio/dash/colors.py — inlined to stay Dash-free).
 _DEPICTIO_COLORWAY = [
@@ -1185,6 +1191,22 @@ def _tool_dict(tool: Any, outputs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _claim_output_id(output_id: str, seen_ids: set[str]) -> None:
+    """Record an output id, refusing one another tool already used.
+
+    Every output's data lands in one map keyed by output id (the gallery merges
+    them, the site names a file after each), so an id reused across tools would
+    silently overwrite. IDs are unique within a tool (validated); this enforces
+    it across tools too.
+    """
+    if output_id in seen_ids:
+        raise CatalogPayloadError(
+            f"output id {output_id!r} appears in more than one tool — "
+            "catalog output ids must be globally unique for the gallery"
+        )
+    seen_ids.add(output_id)
+
+
 def build_gallery_payload(entries: Any, theme: str = "light") -> dict[str, Any]:
     """Compute the full multi-output ``window.__CATALOG_PREVIEW__`` blob.
 
@@ -1197,15 +1219,7 @@ def build_gallery_payload(entries: Any, theme: str = "light") -> dict[str, Any]:
     for entry in entries:
         outputs = []
         for output in entry.outputs:
-            # _merge_data folds all outputs into one data map keyed by output id —
-            # an id reused across tools would silently overwrite. IDs are unique
-            # within a tool (validated); enforce it across tools here too.
-            if output.id in seen_ids:
-                raise CatalogPayloadError(
-                    f"output id {output.id!r} appears in more than one tool — "
-                    "catalog output ids must be globally unique for the gallery"
-                )
-            seen_ids.add(output.id)
+            _claim_output_id(output.id, seen_ids)
             out_entry, out_data = _output_entry(output, entry, theme)
             _merge_data(data, out_data)
             outputs.append(out_entry)
@@ -1275,7 +1289,11 @@ def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
             f"`cd depictio/viewer && pnpm run build:catalog-preview`"
         )
     blob = json.dumps(json_safe(payload), default=str).replace("</", "<\\/")
-    html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob)
+    # Exactly one replacement: the sentinel is the payload <script>'s body. Any
+    # other occurrence (a comment quoting it, say) would get the whole payload
+    # too: the template once named it in a comment and every gallery shipped
+    # its ~26 MB JSON twice.
+    html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob, 1)
     if nonce is not None:
         # Only the module tag: it is the bundle's sole executable script, and
         # matching bare "<script" would also rewrite the tag strings that appear
@@ -1341,3 +1359,76 @@ def render_html(
 def render_gallery_html(entries: Any, theme: str = "light", nonce: str | None = None) -> str:
     """Inject the whole catalog (gallery + every output's live payload)."""
     return _inject(build_gallery_payload(entries, theme), nonce)
+
+
+# ---------------------------------------------------------------------------
+# Static catalog site (`depictio catalog export-site`)
+# ---------------------------------------------------------------------------
+
+# Output ids name files on a static host, so keep them to a plain filename.
+_SITE_OUTPUT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+def _write_json(path: Path, payload: Any) -> int:
+    """Write compact JSON (NaN-free, numpy-free) and return its size in bytes."""
+    body = json.dumps(json_safe(payload), default=str, separators=(",", ":"))
+    path.write_text(body)
+    return len(body.encode("utf-8"))
+
+
+def export_site_data(entries: Any, out_dir: Path, version: str) -> dict[str, int]:
+    """Write the catalog as an index plus one JSON file per output.
+
+    The gallery puts every output's payload in one page, ~26 MB of JSON before
+    the bundle. The site (``build:catalog-site``) opens on ``index.json`` alone,
+    the gallery payload minus every output's fixture and data, and fetches
+    ``outputs/<output_id>.json`` (``{fixturePreview, data}``) when that output
+    is shown. Same entries, same renders, same data as the gallery: only when
+    it is downloaded changes.
+
+    The payload does not depend on the theme (the bundle applies it), so one
+    export serves both; the site takes the theme from its URL.
+
+    An output whose payload cannot be built is still listed, with ``ok: false``
+    and its error, as in the gallery; it gets no file.
+
+    Returns counts and sizes: ``tools``, ``outputs``, ``failed``,
+    ``index_bytes``, ``outputs_bytes``.
+    """
+    out_dir = Path(out_dir)
+    outputs_dir = out_dir / "outputs"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    tools: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    stats = {"tools": 0, "outputs": 0, "failed": 0, "index_bytes": 0, "outputs_bytes": 0}
+    for entry in entries:
+        listed = []
+        for output in entry.outputs:
+            _claim_output_id(output.id, seen_ids)
+            if not _SITE_OUTPUT_ID.match(output.id):
+                raise CatalogPayloadError(
+                    f"output id {output.id!r} cannot name a file of the catalog site"
+                )
+            out_entry, out_data = _output_entry(output, entry, "light")
+            if out_entry["ok"]:
+                stats["outputs_bytes"] += _write_json(
+                    outputs_dir / f"{output.id}.json",
+                    {"fixturePreview": out_entry["fixturePreview"], "data": out_data},
+                )
+            else:
+                stats["failed"] += 1
+            listed.append({**out_entry, "fixturePreview": None})
+            stats["outputs"] += 1
+        tools.append(_tool_dict(entry, listed))
+        stats["tools"] += 1
+
+    index = {
+        "version": version,
+        "theme": "light",
+        "initialOutputId": None,
+        "tools": tools,
+        "data": _empty_data(),
+    }
+    stats["index_bytes"] = _write_json(out_dir / "index.json", index)
+    return stats

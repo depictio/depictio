@@ -1,4 +1,4 @@
-"""`depictio catalog preview` and `gallery`: the bundle they need, and MultiQC's logs."""
+"""`depictio catalog preview`, `gallery` and `export-site`: the bundle they need, and MultiQC's logs."""
 
 from __future__ import annotations
 
@@ -36,6 +36,48 @@ def test_without_the_bundle_it_stops_before_building(tmp_path, args, build):
     message = " ".join(result.output.split())
     assert "catalog-preview bundle is not built" in message
     assert "pnpm run build:catalog-preview" in message
+
+
+def test_export_site_without_the_bundle_stops_before_building(tmp_path):
+    with (
+        patch("depictio.catalog.payload.SITE_BUNDLE_DIR", tmp_path / "missing"),
+        patch("depictio.catalog.payload.export_site_data") as export,
+    ):
+        result = runner.invoke(app, ["export-site", "--out-dir", str(tmp_path / "site")])
+
+    assert result.exit_code == 1
+    export.assert_not_called()
+    message = " ".join(result.output.split())
+    assert "catalog site bundle is not built" in message
+    assert "pnpm run build:catalog-site" in message
+
+
+def test_export_site_copies_the_bundle_and_replaces_stale_data(tmp_path):
+    bundle = tmp_path / "bundle"
+    (bundle / "assets").mkdir(parents=True)
+    (bundle / "index.html").write_text("<html></html>")
+    (bundle / "assets" / "app.js").write_text("//")
+    site = tmp_path / "site"
+    (site / "data" / "outputs").mkdir(parents=True)
+    (site / "data" / "outputs" / "gone.json").write_text("{}")
+
+    def fake_export(entries, out_dir, version):
+        out_dir.mkdir(parents=True)
+        (out_dir / "index.json").write_text(version)
+        return {"tools": 1, "outputs": 2, "failed": 0, "index_bytes": 1, "outputs_bytes": 2}
+
+    with (
+        patch("depictio.catalog.payload.SITE_BUNDLE_DIR", bundle),
+        patch("depictio.catalog.payload.export_site_data", side_effect=fake_export),
+    ):
+        result = runner.invoke(app, ["export-site", "--out-dir", str(site), "--version", "1.2.3"])
+
+    assert result.exit_code == 0, result.output
+    assert (site / "index.html").exists()
+    assert (site / "assets" / "app.js").exists()
+    assert (site / "data" / "index.json").read_text() == "1.2.3"
+    assert not (site / "data" / "outputs" / "gone.json").exists()
+    assert "1 tools, 2 outputs" in result.output
 
 
 @pytest.fixture

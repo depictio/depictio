@@ -281,6 +281,75 @@ def catalog_gallery(
         _serve_html(html, label, no_open, port)
 
 
+@app.command("export-site")
+def catalog_export_site(
+    out_dir: Annotated[
+        Path, typer.Option("--out-dir", "-o", help="Directory to write the site into")
+    ],
+    version: Annotated[
+        str | None,
+        typer.Option(
+            "--version", help="Version recorded in the site's index (default: this depictio's)"
+        ),
+    ] = None,
+) -> None:
+    """Export the catalog as a static site: the gallery, one output at a time.
+
+    Writes the prebuilt site bundle plus data/index.json (every tool, output and
+    render, without their data) and data/outputs/<output_id>.json (each output's
+    fixture and render data, fetched when it is opened). Same content as
+    `catalog gallery`, which puts all of it in one page; serve the directory
+    from any static host. The theme comes from the URL (?theme=dark).
+
+    Needs the prebuilt site bundle
+    (cd depictio/viewer && pnpm run build:catalog-site).
+    """
+    import shutil
+
+    from rich.markup import escape
+
+    from depictio.catalog.payload import (
+        SITE_BUNDLE_DIR,
+        CatalogPayloadError,
+        export_site_data,
+    )
+    from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+    from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+    from depictio.version import get_version
+
+    if not (SITE_BUNDLE_DIR / "index.html").exists():
+        rich_print_checked_statement(
+            f"The catalog site bundle is not built: {escape(str(SITE_BUNDLE_DIR))} has no "
+            "index.html. Build it with `cd depictio/viewer && pnpm run build:catalog-site`.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    entries = load_catalog_entries()
+    if not entries:
+        typer.echo("No catalog entries found.")
+        raise typer.Exit(code=1)
+
+    # A previous export's per-output files would linger next to the new ones.
+    data_dir = out_dir / "data"
+    if data_dir.exists():
+        shutil.rmtree(data_dir)
+    shutil.copytree(SITE_BUNDLE_DIR, out_dir, dirs_exist_ok=True)
+    try:
+        with _quiet_multiqc():
+            stats = export_site_data(entries, data_dir, version or get_version())
+    except CatalogPayloadError as exc:
+        typer.echo(f"  could not export the catalog site: {exc}")
+        raise typer.Exit(code=1)
+
+    failed = f", {stats['failed']} without a preview" if stats["failed"] else ""
+    typer.echo(
+        f"  Wrote catalog site ({stats['tools']} tools, {stats['outputs']} outputs{failed}) "
+        f"to {out_dir}: index {stats['index_bytes'] / 1e6:.1f} MB, "
+        f"outputs {stats['outputs_bytes'] / 1e6:.1f} MB"
+    )
+
+
 @dev_app.command("columns")
 def catalog_columns(
     recipe: Annotated[str, typer.Argument(help="Recipe ref, e.g. qiime2/ancombc.py")],
