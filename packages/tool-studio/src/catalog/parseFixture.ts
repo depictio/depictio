@@ -13,31 +13,40 @@
 import Papa from 'papaparse';
 import type { Dtype, FixtureColumn, ParsedFixture } from '../types';
 
+// Mirrors `pl.read_csv(..., infer_schema_length=10_000)`, which is what
+// `catalog validate` grounds against (read_fixture_schema). Probed against
+// polars rather than guessed: no trimming (" 1" is a String), a bare "+1" is a
+// String while "+1.5" is a Float, booleans match in any case, NaN/inf (exact
+// spellings) are floats while "nan"/"Infinity" are Strings, and dates are NOT
+// parsed (try_parse_dates is off), so an ISO date column is a String.
 const INT_RE = /^-?\d+$/;
-const FLOAT_RE = /^-?(\d+\.\d*|\.\d+|\d+)(e[-+]?\d+)?$/i;
+const FLOAT_RE = /^[-+]?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?$/;
+const FLOAT_SPECIAL = new Set(['NaN', '-NaN', '+NaN', 'inf', '-inf', '+inf']);
 const BOOL_RE = /^(true|false)$/i;
-// ISO-ish date / datetime — cheap heuristic, CI re-derives the real dtype.
-const DATE_RE = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?/;
+/** Rows polars samples for inference in `read_fixture_schema`. */
+export const INFER_SCHEMA_LENGTH = 10_000;
 
-function inferDtype(values: string[]): Dtype {
+/** Polars dtype of one CSV column. Empty cells are nulls and do not vote. */
+export function inferDtype(values: Array<string | null | undefined>): Dtype {
+  let sawInt = false;
   let sawFloat = false;
-  let sawAny = false;
-  for (const raw of values) {
-    const v = raw?.trim();
-    if (v === '' || v == null) continue;
-    sawAny = true;
-    if (BOOL_RE.test(v)) return 'Boolean';
-    if (DATE_RE.test(v)) return 'Datetime';
-    if (INT_RE.test(v)) continue;
-    if (FLOAT_RE.test(v)) {
-      sawFloat = true;
-      continue;
-    }
-    return 'String';
+  let sawBool = false;
+  for (const v of values) {
+    if (v == null || v === '') continue;
+    if (BOOL_RE.test(v)) sawBool = true;
+    else if (INT_RE.test(v)) sawInt = true;
+    else if (FLOAT_SPECIAL.has(v) || (FLOAT_RE.test(v) && !/^\+\d+$/.test(v))) sawFloat = true;
+    else return 'String';
+    if (sawBool && (sawInt || sawFloat)) return 'String';
   }
-  if (!sawAny) return 'String';
-  return sawFloat ? 'Float64' : 'Int64';
+  if (sawBool) return 'Boolean';
+  if (sawFloat) return 'Float64';
+  if (sawInt) return 'Int64';
+  return 'String'; // all-null column
 }
+
+/** Kept for the header heuristic below (numeric-looking column names). */
+const NUMERIC_NAME_RE = /^-?(\d+\.\d*|\.\d+|\d+)(e[-+]?\d+)?$/i;
 
 /** Delimiter of the first non-comment, non-empty line, by count. A tie, or a
  *  line with neither, falls back to comma, which is what a genuinely
@@ -65,7 +74,7 @@ function sniffDelimiter(raw: string): ',' | '\t' {
  */
 export function headerLooksLikeData(names: string[]): boolean {
   if (names.length < 2) return false;
-  const numeric = names.filter((n) => n.trim() !== '' && FLOAT_RE.test(n.trim())).length;
+  const numeric = names.filter((n) => n.trim() !== '' && NUMERIC_NAME_RE.test(n.trim())).length;
   return numeric >= Math.ceil(names.length / 3);
 }
 
@@ -108,8 +117,8 @@ export function parseFixture(fileName: string, raw: string): ParsedFixture {
   const fields = parsed.meta.fields ?? [];
   const rows = (parsed.data as Record<string, string>[]).filter((r) => r && Object.keys(r).length);
 
-  // Sample up to 500 rows for dtype inference (fixtures are small anyway).
-  const sample = rows.slice(0, 500);
+  // Same sample size polars uses in `read_fixture_schema`.
+  const sample = rows.slice(0, INFER_SCHEMA_LENGTH);
   const columns: FixtureColumn[] = fields.map((name) => ({
     name,
     dtype: inferDtype(sample.map((r) => r[name])),

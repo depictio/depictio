@@ -124,6 +124,21 @@ jobs:
           pnpm --filter tool-studio exec tsx scripts/genGolden.ts "$RUNNER_TEMP/golden"
           depictio dev catalog validate --path "$RUNNER_TEMP/golden"
 
+      - name: Parity, every case the Studio flags must fail catalog validate
+        # genNegatives exits 1 if the Studio misses a case; each folder must then
+        # be rejected by the CLI too, or the client is stricter than CI.
+        run: |
+          source venv/bin/activate
+          pnpm --filter tool-studio exec tsx scripts/genNegatives.ts "$RUNNER_TEMP/negatives"
+          status=0
+          for dir in "$RUNNER_TEMP"/negatives/neg*/; do
+            if depictio dev catalog validate --path "$dir" > /dev/null 2>&1; then
+              echo "::error::catalog validate ACCEPTED $(basename "$dir"), which the Studio rejects"
+              status=1
+            fi
+          done
+          exit $status
+
   e2e:
     runs-on: ubuntu-22.04
     steps:

@@ -74,9 +74,18 @@ describe('validateRender', () => {
     const r: RenderSpec = { uid: 'r', component: 'advanced_viz', kind: 'embedding', roles: { sample_id: 'gene', dim_1: 'lfc', dim_2: 'p', compute_method: 'pca' } };
     expect(validateRender(r, columns, kinds)).toHaveLength(0);
   });
-  it('warns on a dtype mismatch', () => {
+  // `catalog validate` exits 1 on this (ground_render_dtypes), so it is an
+  // error here too; it used to be a warning that CI then rejected.
+  it('errors on a dtype mismatch, like the CLI', () => {
     const r: RenderSpec = { uid: 'r', component: 'advanced_viz', kind: 'volcano', roles: { feature_id: 'gene', effect_size: 'gene', significance: 'p' } };
     const issues = validateRender(r, columns, kinds);
-    expect(issues.some((i) => i.severity === 'warning' && /expects/.test(i.message))).toBe(true);
+    expect(issues.some((i) => i.severity === 'error' && i.code === 'render.role_dtype')).toBe(true);
+  });
+
+  it('errors when a single-column role gets a list, or a list role a column', () => {
+    const one: RenderSpec = { uid: 'r', component: 'advanced_viz', kind: 'volcano', roles: { feature_id: ['gene'], effect_size: 'lfc', significance: 'p' } };
+    expect(validateRender(one, columns, kinds).some((i) => i.code === 'render.role_shape')).toBe(true);
+    const sankey: RenderSpec = { uid: 's', component: 'advanced_viz', kind: 'sankey', roles: { steps: 'gene' } };
+    expect(validateRender(sankey, columns, { ...kinds, sankey: { roles: {}, required_roles: [], heavy: true, label: 'Sankey', list_roles: ['steps'] } }).some((i) => i.code === 'render.role_shape')).toBe(true);
   });
 });

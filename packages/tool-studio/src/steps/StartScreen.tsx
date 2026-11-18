@@ -25,6 +25,7 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import ImportEntryButton from '../components/ImportEntryButton';
 import { HEADING_FONT } from '../theme';
 
 /** One colour per step, carried by its icon tile, its border and the arrow
@@ -107,7 +108,7 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
             ready-made dashboard components for everyone who runs it.
           </Text>
         </Stack>
-        <Group justify="center">
+        <Group justify="center" gap="md">
           <Button
             size="lg"
             px={44}
@@ -117,6 +118,7 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
           >
             {resuming ? 'Continue' : 'Start'}
           </Button>
+          <ImportEntryButton variant="default" />
         </Group>
 
       </Stack>

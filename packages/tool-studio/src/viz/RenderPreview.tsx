@@ -22,6 +22,7 @@ import type { StoredMetadata } from 'depictio-react-core';
 import { registerComponent, unregisterComponent } from '../api/fixtureRegistry';
 import type { ParsedFixture, RenderSpec } from '../types';
 import { STUDIO_DASHBOARD_ID, metadataFromRender } from './renderMetadata';
+import { usePreviewFilters } from './previewFilters';
 
 /** How depictio frames a component that is NOT sitting in a dashboard grid.
  *
@@ -69,6 +70,11 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
 
   // Cards are the one type whose value the parent owns rather than the
   // renderer fetching it — same contract as the dashboard's bulk compute.
+  // Controls in the list filter every other preview, as on a dashboard; the
+  // shim applies them through depictio-static-core like the exported bundle.
+  const filters = usePreviewFilters((s) => s.filters);
+  const upsertFilter = usePreviewFilters((s) => s.upsert);
+
   const [card, setCard] = useState<{
     value?: unknown;
     secondary?: Record<string, unknown>;
@@ -76,7 +82,7 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
   useEffect(() => {
     if (metadata.component_type !== 'card' || !registered) return;
     let cancelled = false;
-    bulkComputeCards(STUDIO_DASHBOARD_ID, [], [metadata.index])
+    bulkComputeCards(STUDIO_DASHBOARD_ID, filters, [metadata.index])
       .then((res) => {
         if (cancelled) return;
         setCard({
@@ -90,7 +96,7 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
     return () => {
       cancelled = true;
     };
-  }, [metadata, registered]);
+  }, [metadata, registered, filters]);
 
   // A dashboard box's height for the types that get one; depictio's own
   // preview width — and its natural height — for the two that never do.
@@ -128,7 +134,8 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
         <ComponentRenderer
           dashboardId={STUDIO_DASHBOARD_ID}
           metadata={metadata as StoredMetadata}
-          filters={[]}
+          filters={filters}
+          onFilterChange={upsertFilter}
           cardValue={card?.value}
           cardSecondaryValues={card?.secondary}
           cardLoading={metadata.component_type === 'card' && card === null}

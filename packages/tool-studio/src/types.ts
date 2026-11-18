@@ -240,5 +240,9 @@ export interface KindDescriptor {
   required_roles: string[];
   heavy: boolean;
   label: string;
+  /** Roles bound to an ordered column list (generated from `_LIST_ROLES`). */
+  list_roles?: string[];
+  /** Roles that pick a setting, not a column (`_NON_COLUMN_ROLES`). */
+  setting_roles?: string[];
 }
 export type KindsMap = Record<string, KindDescriptor>;

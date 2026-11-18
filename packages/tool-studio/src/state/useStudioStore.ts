@@ -7,6 +7,7 @@ import { setActiveFixture } from '../api/fixtureRegistry';
 import { defaultRenderId } from '../viz/renderMeta';
 import { fetchUpstreamFile } from '../catalog/upstreamFile';
 import { renderIdsIn } from '../catalog/github';
+import type { StudioDraft } from '../catalog/draft';
 
 let uidCounter = 0;
 export const nextUid = () => `r${++uidCounter}`;
@@ -51,6 +52,13 @@ export function newOutputSlugClash(target: NewOutputTarget | null, slug: string)
   return Boolean(slug && target?.existingOutputSlugs.includes(slug));
 }
 
+/** One output of the tool being authored: its identity, sample and renders. */
+export interface OutputDraft {
+  output: OutputMeta;
+  fixture: ParsedFixture | null;
+  renders: RenderSpec[];
+}
+
 interface StudioState {
   /** False until the author leaves the start screen. Persisted, so a refresh
    *  mid-entry returns to the work rather than to the pitch; `reset` clears it
@@ -61,6 +69,12 @@ interface StudioState {
   output: OutputMeta;
   fixture: ParsedFixture | null;
   renders: RenderSpec[];
+  /** The tool's other outputs. `output`/`fixture`/`renders` above are the
+   *  active one, which every step edits; switching swaps it with a sibling, so
+   *  the steps never need to know there is more than one. */
+  siblings: OutputDraft[];
+  /** Position of the active output in the full, ordered list. */
+  activeIndex: number;
   existing: ExistingTarget | null;
   newOutputTarget: NewOutputTarget | null;
   /** Catalog tool id the author dismissed as "not my tool" — kept in the store
@@ -85,7 +99,22 @@ interface StudioState {
   startNewOutput: (tool: ManifestTool) => void;
   /** Dismiss the recognized match for a catalog tool id (or clear with null). */
   setDismissedMatch: (toolId: string | null) => void;
+  /** Replace the whole draft at once (import, `#draft=` link, agent API). */
+  loadDraft: (draft: StudioDraft, step?: number) => void;
+  /** Park the active output and start a blank one (lands on the Tool step). */
+  addOutput: () => void;
+  /** Make output `index` (in allOutputs order) the active one. */
+  switchOutput: (index: number) => void;
+  /** Drop output `index`; the last remaining output cannot be removed. */
+  removeOutput: (index: number) => void;
   reset: () => void;
+}
+
+/** Every output in order, the active one in its place. */
+export function allOutputs(s: Pick<StudioState, 'output' | 'fixture' | 'renders' | 'siblings' | 'activeIndex'>): OutputDraft[] {
+  const active: OutputDraft = { output: s.output, fixture: s.fixture, renders: s.renders };
+  const i = Math.min(s.activeIndex, s.siblings.length);
+  return [...s.siblings.slice(0, i), active, ...s.siblings.slice(i)];
 }
 
 const emptyTool: ToolMeta = { id: '', name: '', source: 'nf-core' };
@@ -219,6 +248,8 @@ type PersistedDraft = {
   output: OutputMeta;
   fixture: PersistedFixture | null;
   renders: RenderSpec[];
+  siblings?: Array<Omit<OutputDraft, 'fixture'> & { fixture: PersistedFixture | null }>;
+  activeIndex?: number;
   existing: ExistingTarget | null;
   newOutputTarget: NewOutputTarget | null;
   dismissedMatchId: string | null;
@@ -233,6 +264,8 @@ export const useStudioStore = create<StudioState>()(
     output: { ...emptyOutput },
     fixture: null,
     renders: [],
+    siblings: [],
+    activeIndex: 0,
     existing: null,
     newOutputTarget: null,
     dismissedMatchId: null,
@@ -240,6 +273,69 @@ export const useStudioStore = create<StudioState>()(
     start: () => set({ started: true }),
     showIntro: () => set({ started: false }),
     setStep: (step) => set({ step }),
+    addOutput: () =>
+      set((s) => {
+        const list = allOutputs(s);
+        return {
+          siblings: list,
+          activeIndex: list.length,
+          output: { ...emptyOutput },
+          fixture: null,
+          renders: [],
+          step: 0,
+        };
+      }),
+    switchOutput: (index) =>
+      set((s) => {
+        const list = allOutputs(s);
+        const next = list[index];
+        if (!next || index === s.activeIndex) return {};
+        return {
+          siblings: list.filter((_, i) => i !== index),
+          activeIndex: index,
+          output: next.output,
+          fixture: next.fixture,
+          renders: next.renders,
+        };
+      }),
+    removeOutput: (index) =>
+      set((s) => {
+        const list = allOutputs(s);
+        if (list.length < 2 || !list[index]) return {};
+        const kept = list.filter((_, i) => i !== index);
+        const active = Math.min(index === s.activeIndex ? Math.max(0, index - 1) : s.activeIndex - (index < s.activeIndex ? 1 : 0), kept.length - 1);
+        return {
+          siblings: kept.filter((_, i) => i !== active),
+          activeIndex: active,
+          output: kept[active].output,
+          fixture: kept[active].fixture,
+          renders: kept[active].renders,
+        };
+      }),
+    loadDraft: (draft, step) =>
+      set(() => {
+        const fixture = draft.fixture ? parseFixture(draft.fixture.fileName, draft.fixture.content) : null;
+        const renders = draft.renders.map((r) => ({ ...r, uid: r.uid || nextUid() }) as RenderSpec);
+        const siblings: OutputDraft[] = (draft.moreOutputs ?? []).map((o) => ({
+          output: { ...emptyOutput, ...o.output },
+          fixture: o.fixture ? parseFixture(o.fixture.fileName, o.fixture.content) : null,
+          renders: o.renders.map((r) => ({ ...r, uid: r.uid || nextUid() }) as RenderSpec),
+        }));
+        return {
+          siblings,
+          activeIndex: 0,
+          started: true,
+          // Land on the first step that still needs something.
+          step: step ?? (!draft.tool.id || !draft.output.slug ? 0 : !fixture ? 1 : renders.length ? 3 : 2),
+          tool: { ...emptyTool, ...draft.tool },
+          output: { ...emptyOutput, ...draft.output },
+          fixture,
+          renders,
+          existing: null,
+          newOutputTarget: null,
+          dismissedMatchId: draft.tool.id || null,
+        };
+      }),
     setTool: (patch) => set((s) => ({ tool: { ...s.tool, ...patch } })),
     setOutput: (patch) => set((s) => ({ output: { ...s.output, ...patch } })),
     setFixture: (fixture) => set({ fixture }),
@@ -272,6 +368,8 @@ export const useStudioStore = create<StudioState>()(
       // catalog today, not against a copy that may be weeks old.
       if (output.yamlPath) void refreshExistingFromUpstream(set, get, output.yamlPath);
       return set(() => ({
+        siblings: [],
+        activeIndex: 0,
         step: 2, // jump straight to Visualizations — identity & fixture come from the catalog
         tool: identityFromManifest(tool),
         output: {
@@ -306,6 +404,8 @@ export const useStudioStore = create<StudioState>()(
         output: { ...emptyOutput },
         fixture: null,
         renders: [],
+        siblings: [],
+        activeIndex: 0,
         existing: null,
         newOutputTarget: {
           toolId: tool.id,
@@ -323,6 +423,8 @@ export const useStudioStore = create<StudioState>()(
         output: { ...emptyOutput },
         fixture: null,
         renders: [],
+        siblings: [],
+        activeIndex: 0,
         existing: null,
         newOutputTarget: null,
         dismissedMatchId: null,
@@ -348,6 +450,12 @@ export const useStudioStore = create<StudioState>()(
         renders: state.renders.map((r) =>
           '_previewFigure' in r ? { ...r, _previewFigure: undefined } : r,
         ),
+        siblings: state.siblings.map((o) => ({
+          output: o.output,
+          fixture: o.fixture ? stripRows(o.fixture) : null,
+          renders: o.renders.map((r) => ('_previewFigure' in r ? { ...r, _previewFigure: undefined } : r)),
+        })),
+        activeIndex: state.activeIndex,
         existing: state.existing,
         newOutputTarget: state.newOutputTarget,
         dismissedMatchId: state.dismissedMatchId,
@@ -367,7 +475,10 @@ export const useStudioStore = create<StudioState>()(
         // flag; anything with content in it is work in progress, so resume it
         // rather than showing its author the pitch again.
         const started = draft.started ?? Boolean(draft.tool?.id || draft.renders?.length);
-        return { ...current, ...draft, started, fixture };
+        const revive = (f: PersistedFixture | null): ParsedFixture | null =>
+          f ? (f.raw ? parseFixture(f.fileName, f.raw) : { ...f, rows: [] }) : null;
+        const siblings: OutputDraft[] = (draft.siblings ?? []).map((o) => ({ ...o, fixture: revive(o.fixture) }));
+        return { ...current, ...draft, started, fixture, siblings, activeIndex: draft.activeIndex ?? 0 };
       },
     },
   ),

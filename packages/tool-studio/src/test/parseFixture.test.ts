@@ -14,9 +14,33 @@ describe('parseFixture', () => {
     expect(f.delimiter).toBe('\t');
     expect(f.columns.map((c) => c.name)).toEqual(['a', 'b']);
   });
-  it('infers Datetime for ISO dates', () => {
+  // polars read_csv (what `catalog validate` grounds against) does not parse
+  // dates, so an ISO date column is a String; inferring Datetime here used to
+  // pass dtype checks the CLI then failed.
+  it('keeps ISO dates as String, like polars read_csv', () => {
     const f = parseFixture('d.csv', ['ts', '2026-05-21 19:31:50', '2026-05-22 10:00:00'].join('\n'));
-    expect(f.columns[0].dtype).toBe('Datetime');
+    expect(f.columns[0].dtype).toBe('String');
+  });
+
+  it.each([
+    ['1|2|-3', 'Int64'],
+    ['1.5|2|3', 'Float64'],
+    ['1e5|2E-3|3', 'Float64'],
+    ['TRUE|false|True', 'Boolean'],
+    ['NaN|1|2', 'Float64'],
+    ['nan|1|2', 'String'],
+    ['-inf|1|2', 'Float64'],
+    ['Infinity|1|2', 'String'],
+    ['+1|2|3', 'String'],
+    ['+1.5|2|3', 'Float64'],
+    [' 1|2|3', 'String'],
+    ['1||3', 'Int64'],
+    ['||', 'String'],
+    ['1|true|2', 'String'],
+    ['NA|1|2', 'String'],
+  ])('infers %s as %s (probed against polars)', (vals, dtype) => {
+    const f = parseFixture('p.tsv', ['c', ...vals.split('|')].join('\n') + '\n');
+    expect(f.columns[0].dtype).toBe(dtype);
   });
 
   it('sniffs the delimiter when the extension does not state one', () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Stack,
   Title,
@@ -29,6 +29,7 @@ import type { ManifestRender } from '../catalog/catalog';
 import RenderPreview from '../viz/RenderPreview';
 import AddComponentModal from '../builder/AddComponentModal';
 import type { KindsMap, ParsedFixture, RenderSpec } from '../types';
+import { usePreviewFilters } from '../viz/previewFilters';
 import { HEADING_FONT } from '../theme';
 
 const slugify = (s: string) =>
@@ -301,6 +302,10 @@ function ExistingRenders({
 
 export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
   const fixture = useStudioStore((s) => s.fixture);
+  const previewFilters = usePreviewFilters((s) => s.filters);
+  const clearPreviewFilters = usePreviewFilters((s) => s.clear);
+  // A new fixture (or another output) invalidates the picks.
+  useEffect(() => clearPreviewFilters(), [fixture, clearPreviewFilters]);
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const renders = useStudioStore((s) => s.renders);
@@ -366,6 +371,27 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
           Add visualization
         </Button>
       </Group>
+
+      {previewFilters.length > 0 && (
+        <Alert
+          color="brand"
+          variant="light"
+          icon={<Icon icon="mdi:filter-outline" />}
+          data-testid="preview-filters"
+          data-count={previewFilters.length}
+        >
+          <Group justify="space-between" wrap="nowrap">
+            <Text size="sm">
+              {previewFilters.length} control filter{previewFilters.length > 1 ? 's' : ''} applied to the
+              previews below, as on a dashboard ({previewFilters.map((f) => f.column_name).filter(Boolean).join(', ')}).
+              Previews only; nothing is exported.
+            </Text>
+            <Button size="xs" variant="light" onClick={clearPreviewFilters}>
+              Clear filters
+            </Button>
+          </Group>
+        </Alert>
+      )}
 
       {existing && (
         <ExistingRenders

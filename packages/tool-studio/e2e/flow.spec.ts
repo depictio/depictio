@@ -77,7 +77,8 @@ test('recognition routes an existing tool to a new output', async ({ page }) => 
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // ── Step 3: Export — only the new <slug>.yaml (module.yaml is untouched) ─────
-  await expect(page.getByText('id: mosdepth_custom_track')).toBeVisible();
+  // Scoped to the step: the entry panel beside it shows the same YAML.
+  await expect(page.getByRole('main').getByText('id: mosdepth_custom_track')).toBeVisible();
   await expect(page.getByRole('tab', { name: 'module.yaml' })).toHaveCount(0);
   const [download] = await Promise.all([
     page.waitForEvent('download'),

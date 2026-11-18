@@ -23,11 +23,26 @@
  *   - figures, which are approximated client-side (`src/viz/figureBuilder.ts`)
  *     because the authoritative figure is built by Python plotly-express.
  *
- * Filter arguments are accepted and ignored throughout: a Studio preview has no
- * dashboard, so there is never an active filter to apply.
+ * Filters are applied the way the exported serverless dashboard applies them:
+ * the `InteractiveFilter[]` list is bound by depictio-static-core's
+ * `bindFilters` (the port of the server's `add_filter`), scoped per component
+ * type (`scopeRegionFilters`), and turned into a row mask by the bundle's own
+ * engine running over the fixture (`frameEngine.ts`). Cards, figures, tables
+ * and advanced-viz rows all read that mask. Not applied: a filter's or card's
+ * `filter_expr` — a Polars expression the bundle evaluates at export time into
+ * a `__fe__` companion, and the Studio has no Polars to evaluate it with.
  */
 export * from 'depictio-react-core/api';
 
+import {
+  bindFilters,
+  roundSigFigs,
+  scopeRegionFilters,
+  sortSlice,
+  type Bitmask,
+  type BoundFilter,
+  type FilterLike,
+} from 'depictio-static-core';
 import type {
   AdvancedVizDataRequest,
   AuthStatusResponse,
@@ -40,6 +55,7 @@ import type {
   ColumnRange,
   FigurePreviewRequest,
   FigureResponse,
+  InteractiveFilter,
   PreviewResult,
   TableResponse,
   VizKindSuggestion,
@@ -49,11 +65,12 @@ import type {
 import { fixtureToColumnSpecs } from '../builder/columnSpecs';
 import { buildPreview, isUnavailable } from '../viz/figureBuilder';
 import { applyPlotlyTheme } from '../viz/plotlyTheme';
-import type { RenderSpec } from '../types';
+import type { ParsedFixture, RenderSpec } from '../types';
 import { aggregate } from './aggregations';
 import { computeBreakdown, numericLayoutPayload } from './cardMetrics';
-import type { FrameValue, StudioFrame } from './frame';
-import { frameRows, isNumericKind } from './frame';
+import type { StudioFrame } from './frame';
+import { isNumericKind } from './frame';
+import { frameEngine, frameTable, maskedRows } from './frameEngine';
 import type { ComponentMetadata } from './fixtureRegistry';
 import {
   allComponents,
@@ -77,7 +94,7 @@ class StudioPreviewError extends Error {}
  *  renderer: switching a card from `threshold` to `completeness` fed the
  *  completeness strip a threshold payload, and it crashed the whole builder on
  *  a missing field. */
-function settle<T>(compute: () => T, signal?: AbortSignal): Promise<T> {
+function settle<T>(compute: () => T | Promise<T>, signal?: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const abort = () =>
       reject(new DOMException('The operation was aborted.', 'AbortError'));
@@ -105,6 +122,49 @@ function requireFrame(): StudioFrame {
   return frame;
 }
 
+// ---- filters ---------------------------------------------------------------
+
+/** What one component sees of the active filters: the bound filter list and
+ *  the row mask it selects (`null` when nothing applies — every row, and the
+ *  cards' precomputed-spec path). */
+interface FilterScope {
+  bound: BoundFilter[];
+  mask: Bitmask | null;
+}
+
+/** React filter payloads → engine BoundFilters, as the viewer's static runtime
+ *  does (`liveData.toBoundFilters`). The Studio has one data collection, so no
+ *  cross-DC link resolution applies and every filter targets the fixture. */
+export function toBoundFilters(filters: readonly unknown[] | null | undefined): BoundFilter[] {
+  if (!Array.isArray(filters) || filters.length === 0) return [];
+  return bindFilters(filters as FilterLike[], {
+    onUnsupported: (type) => console.warn(`tool studio: unsupported filter type "${type}" skipped`),
+  });
+}
+
+async function filterScope(
+  frame: StudioFrame,
+  filters: unknown,
+  componentType?: string,
+  component?: Record<string, unknown>,
+): Promise<FilterScope> {
+  let list = Array.isArray(filters) ? (filters as InteractiveFilter[]) : [];
+  if (componentType && list.length) {
+    list = scopeRegionFilters(list as FilterLike[], componentType, component) as InteractiveFilter[];
+  }
+  const bound = toBoundFilters(list);
+  if (bound.length === 0) return { bound, mask: null };
+  const { mask } = await frameEngine.mask(frameEngine.openFrame(frame), bound);
+  return { bound, mask };
+}
+
+/** The fixture with only the rows `mask` keeps — what the client-side figure
+ *  approximation and Code Mode are handed. */
+function filteredFixture(fixture: ParsedFixture, mask: Bitmask | null): ParsedFixture {
+  if (mask === null) return fixture;
+  return { ...fixture, rows: fixture.rows.filter((_, i) => mask[i] === 1) };
+}
+
 // ---- data collection: specs, schema, unique values -------------------------
 
 export async function fetchSpecs(_dcId: string): Promise<Record<string, unknown>> {
@@ -122,16 +182,18 @@ export async function fetchColumnRange(
   const frame = getActiveFrame();
   const col = frame?.byName.get(columnName);
   if (!col) return { min: null, max: null, dtype: null, unique: null };
-  const min = aggregate(frame!, columnName, 'min');
-  const max = aggregate(frame!, columnName, 'max');
+  // Options and ranges are of the whole collection, as `/deltatables/
+  // unique_values` and the column specs are: a control's choices do not shrink
+  // under the other filters.
+  const [min, max] = await frameEngine.minMax(frameEngine.openFrame(frame!), null, columnName);
   return {
-    min: typeof min === 'number' ? min : null,
-    max: typeof max === 'number' ? max : null,
+    min: isNumericKind(col.kind) ? min : null,
+    max: isNumericKind(col.kind) ? max : null,
     // The dtype and the distinct count are what tell a three-year survey column
     // apart from a continuous measurement, so the slider stops on 2008 rather
     // than 2007.34 (see `buildNumericScale`).
     dtype: col.kind,
-    unique: new Set(col.present).size,
+    unique: aggregate(frame!, columnName, 'nunique') as number,
   };
 }
 
@@ -152,10 +214,8 @@ export async function fetchUniqueValues(
   columnName: string,
 ): Promise<string[]> {
   const frame = getActiveFrame();
-  const col = frame?.byName.get(columnName);
-  if (!col) return [];
-  const seen = new Set(col.present.map(String));
-  return [...seen].sort();
+  if (!frame?.byName.has(columnName)) return [];
+  return (await frameEngine.unique(frameEngine.openFrame(frame), null, columnName)) as string[];
 }
 
 // ---- cards -----------------------------------------------------------------
@@ -170,10 +230,11 @@ function secondaryValues(
   frame: StudioFrame,
   card: Record<string, unknown>,
   column: string,
+  mask: Bitmask | null,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const aggregations = (card.aggregations as string[] | undefined) ?? [];
-  for (const agg of aggregations) out[agg] = aggregate(frame, column, agg);
+  for (const agg of aggregations) out[agg] = aggregate(frame, column, agg, mask);
 
   const layout = String(card.secondary_layout || 'vertical');
   const breakdownCol = card.breakdown_col as string | undefined;
@@ -184,10 +245,11 @@ function secondaryValues(
       breakdownCol,
       String(card.aggregation || 'count'),
       Number(card.top_n_count || 3),
+      mask,
     );
     if (payload) out.__breakdown__ = payload;
   }
-  const numeric = numericLayoutPayload(frame, card, column, layout);
+  const numeric = numericLayoutPayload(frame, card, column, layout, mask);
   if (numeric) out[`__${layout}__`] = numeric;
   return out;
 }
@@ -212,10 +274,14 @@ export function fetchCardHeroValue(
   _dcId: string,
   column: string,
   aggregation: string,
-  _filters?: unknown,
+  filters?: unknown,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  return settle(() => aggregate(requireFrame(), column, aggregation), signal);
+  return settle(async () => {
+    const frame = requireFrame();
+    const { mask } = await filterScope(frame, filters, 'card');
+    return aggregate(frame, column, aggregation, mask);
+  }, signal);
 }
 
 export function fetchBreakdown(
@@ -241,13 +307,15 @@ export function fetchBreakdown(
 
 export async function bulkComputeCards(
   _dashboardId: string,
-  _filters: unknown,
+  filters: unknown,
   componentIds?: string[],
 ): Promise<BulkComputeResponse> {
   const frame = getActiveFrame();
   const values: Record<string, unknown> = {};
   const secondary: Record<string, Record<string, unknown>> = {};
   const aggregations: Record<string, string[]> = {};
+  // Reported from the user's filters, as the server counts the entries sent.
+  const bound = toBoundFilters(filters as unknown[]);
   if (frame) {
     const cards = componentIds
       ? (componentIds.map(getComponent).filter(Boolean) as ComponentMetadata[])
@@ -256,8 +324,11 @@ export async function bulkComputeCards(
       const cfg = cardConfig(card);
       const column = String(cfg.column_name || '');
       if (!column) continue;
-      values[card.index] = aggregate(frame, column, String(cfg.aggregation || 'count'));
-      const sec = secondaryValues(frame, cfg, column);
+      // A genome region / residue pick is a place to look, not a subset to
+      // summarise: a card drops it unless it opts in (`scope_region_filters`).
+      const { mask } = await filterScope(frame, filters, 'card', cfg);
+      values[card.index] = aggregate(frame, column, String(cfg.aggregation || 'count'), mask);
+      const sec = secondaryValues(frame, cfg, column, mask);
       if (Object.keys(sec).length) secondary[card.index] = sec;
       const declared = cfg.aggregations as string[] | undefined;
       if (declared?.length) aggregations[card.index] = declared;
@@ -267,8 +338,8 @@ export async function bulkComputeCards(
     values,
     secondary_values: secondary,
     aggregations,
-    filter_applied: false,
-    filter_count: 0,
+    filter_applied: bound.length > 0,
+    filter_count: bound.length,
   };
 }
 
@@ -298,9 +369,13 @@ function themed(
 async function figureFrom(
   metadata: Record<string, unknown>,
   theme: 'light' | 'dark' = 'light',
+  filters: unknown = [],
 ): Promise<FigureResponse> {
-  const fixture = getActiveFixture();
-  if (!fixture) throw new StudioPreviewError('Drop a fixture to preview this figure.');
+  const fullFixture = getActiveFixture();
+  if (!fullFixture) throw new StudioPreviewError('Drop a fixture to preview this figure.');
+  const { bound, mask } = await filterScope(requireFrame(), filters, 'figure', metadata);
+  const fixture = filteredFixture(fullFixture, mask);
+  const filterApplied = bound.length > 0;
 
   if (metadata.mode === 'code' || metadata.code_content) {
     const code = String(metadata.code_content ?? '').trim();
@@ -311,7 +386,7 @@ async function figureFrom(
       if (cached) {
         return {
           figure: themed(cached, theme),
-          metadata: { visu_type: 'code', filter_applied: false },
+          metadata: { visu_type: 'code', filter_applied: filterApplied },
         };
       }
       throw new StudioPreviewError('Write some code, then press Execute.');
@@ -323,7 +398,7 @@ async function figureFrom(
     if (result.error) throw new StudioPreviewError(result.error);
     return {
       figure: themed(result.figure!, theme),
-      metadata: { visu_type: 'code', filter_applied: false },
+      metadata: { visu_type: 'code', filter_applied: filterApplied },
     };
   }
 
@@ -333,7 +408,7 @@ async function figureFrom(
     figure: themed(result, theme),
     metadata: {
       visu_type: String(metadata.visu_type ?? ''),
-      filter_applied: false,
+      filter_applied: filterApplied,
       was_sampled: false,
       full_data_loaded: true,
     },
@@ -341,18 +416,18 @@ async function figureFrom(
 }
 
 export async function previewFigure(body: FigurePreviewRequest): Promise<FigureResponse> {
-  return figureFrom(body.metadata, body.theme ?? 'light');
+  return figureFrom(body.metadata, body.theme ?? 'light', body.filters ?? []);
 }
 
 export async function renderFigure(
   _dashboardId: string,
   componentId: string,
-  _filters: unknown,
+  filters: unknown,
   theme: 'light' | 'dark' = 'light',
 ): Promise<FigureResponse> {
   const metadata = getComponent(componentId);
   if (!metadata) throw new StudioPreviewError('This figure is no longer on screen.');
-  return figureFrom(metadata as Record<string, unknown>, theme);
+  return figureFrom(metadata as Record<string, unknown>, theme, filters);
 }
 
 // ---- tables ----------------------------------------------------------------
@@ -368,18 +443,26 @@ export async function fetchDataCollectionPreview(
 ): Promise<PreviewResult> {
   const frame = getActiveFrame();
   if (!frame) return { columns: [], rows: [], total_rows: 0, total_columns: 0 };
+  const { columns } = frameTable(frame);
+  // The head of the table in file order, unsorted and unfiltered.
+  const { rows } = sortSlice(columns, null, [], 0, Math.max(1, Math.floor(limit) || 100));
   return {
     columns: frame.columns.map((c) => c.name),
-    rows: frameRows(frame).slice(0, limit) as Record<string, unknown>[],
+    rows,
     total_rows: frame.height,
     total_columns: frame.columns.length,
   };
 }
 
+/** `render_table_endpoint` over the fixture, as the bundle's
+ *  `renderTableLive` does it: filter → sort → slice through static-core's
+ *  `sortSlice` (single sort key, nulls last in both directions, stable,
+ *  code-point string order), `total` = the FILTERED row count, limit clamped
+ *  to 1..500, a sort column the table lacks silently dropped. */
 export async function renderTable(
   _dashboardId: string,
   componentId: string,
-  _filters: unknown,
+  filters: unknown,
   start = 0,
   limit = 100,
   sortBy?: string | null,
@@ -388,28 +471,31 @@ export async function renderTable(
   const frame = requireFrame();
   const metadata = getComponent(componentId);
   const names = visibleColumns(frame, metadata);
-  let rows = frameRows(frame) as Record<string, unknown>[];
-  if (sortBy && frame.byName.has(sortBy)) {
-    const dir = sortDir === 'asc' ? 1 : -1;
-    rows = [...rows].sort((a, b) => {
-      const av = a[sortBy] as FrameValue;
-      const bv = b[sortBy] as FrameValue;
-      if (av === null) return 1;
-      if (bv === null) return -1;
-      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
-      return String(av) < String(bv) ? -dir : String(av) > String(bv) ? dir : 0;
-    });
-  }
+  const table = frameTable(frame);
+  const { mask } = await filterScope(frame, filters, 'table', metadata);
+  const s = Math.max(0, Math.floor(start) || 0);
+  const l = Math.max(1, Math.min(Math.floor(limit) || 100, 500));
+  const dir: 'asc' | 'desc' = sortDir === 'asc' ? 'asc' : 'desc';
+  const chosen = sortBy && frame.byName.has(sortBy) ? sortBy : null;
+  const cols: Record<string, ArrayLike<unknown>> = {};
+  for (const name of names) cols[name] = table.columns[name];
+  const { rows, total } = sortSlice(
+    cols,
+    mask,
+    chosen ? [{ column: chosen, desc: dir === 'desc' }] : [],
+    s,
+    l,
+  );
   return {
     columns: names.map((name) => ({
       field: name,
       headerName: name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
       type: isNumericKind(frame.byName.get(name)!.kind) ? 'numericColumn' : 'text',
     })),
-    rows: rows.slice(start, start + limit),
-    total: frame.height,
-    sort_by: sortBy ?? null,
-    sort_dir: sortDir,
+    rows,
+    total,
+    sort_by: chosen,
+    sort_dir: dir,
   };
 }
 
@@ -419,21 +505,43 @@ export function fetchAdvancedVizData(
   req: AdvancedVizDataRequest,
   signal?: AbortSignal,
 ): Promise<AdvancedVizDataResponse> {
-  return settle(() => {
+  return settle(async () => {
     const frame = requireFrame();
-  // A Studio fixture is capped at a few thousand rows, so there is nothing to
-  // sample: every renderer gets the whole frame and its aggregates are exact.
+    const table = frameTable(frame);
+    // The rows the global filters keep (`fetchAdvancedVizDataLive`'s mask).
+    // A Studio fixture is capped at a few thousand rows, so there is nothing to
+    // sample: every renderer gets every kept row and its aggregates are exact.
+    const { bound, mask } = await filterScope(frame, req.filters ?? []);
+    const kept = maskedRows(mask, frame.height);
+    const total = kept.length;
+    // An explicit cap (heatmap/upset previews) is a PREFIX of the filtered
+    // frame, never a sample (routes.py), and not exact once it is reached.
+    const n =
+      typeof req.limitRows === 'number' ? Math.max(0, Math.min(Math.floor(req.limitRows), total)) : total;
     const present = req.columns.filter((c) => frame.byName.has(c));
     const rows: Record<string, unknown[]> = {};
-    for (const name of present) rows[name] = frame.byName.get(name)!.values;
+    for (const name of present) {
+      const src = table.columns[name];
+      const isFloat = table.dtypes.get(name) === 'Float64';
+      const out: unknown[] = new Array(n);
+      for (let k = 0; k < n; k += 1) {
+        const v = src[kept[k]] ?? null;
+        // Floats to 6 significant figures, as the server serialises them.
+        out[k] = isFloat ? roundSigFigs(v) : v;
+      }
+      rows[name] = out;
+    }
+    const explicit = typeof req.limitRows === 'number';
     return {
       columns: present,
       rows,
-      row_count: frame.height,
-      total_rows: frame.height,
+      row_count: n,
+      total_rows: total,
       sampled: false,
-      sampling: { policy: 'none', exact: true, degraded: false },
-      filter_applied: false,
+      sampling: explicit
+        ? { policy: 'explicit', exact: total < (req.limitRows as number), degraded: false }
+        : { policy: 'none', exact: true, degraded: false },
+      filter_applied: bound.length > 0,
     };
   }, signal);
 }

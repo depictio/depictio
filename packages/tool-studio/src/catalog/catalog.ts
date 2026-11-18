@@ -32,6 +32,8 @@ export interface ManifestOutput {
   yamlPath?: string | null;
   /** The output YAML's raw text (append target). */
   rawYaml?: string | null;
+  /** sha256 of the full fixture file (cross-tool copy check). */
+  fixtureSha256?: string | null;
 }
 
 export interface ManifestTool {

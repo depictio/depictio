@@ -12,6 +12,10 @@ import FixtureDrop from './steps/FixtureDrop';
 import VizDesigner from './steps/VizDesigner';
 import ExportPanel from './steps/ExportPanel';
 import StartScreen from './steps/StartScreen';
+import OutputsBar from './components/OutputsBar';
+import EntryPanel from './components/EntryPanel';
+import { useDiagnostics } from './hooks/useDiagnostics';
+import { useMediaQuery } from '@mantine/hooks';
 
 const STEPS = ['Tool', 'Fixture', 'Visualizations', 'Export'] as const;
 
@@ -35,6 +39,12 @@ export default function App() {
   const existing = useStudioStore((s) => s.existing);
   const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
   const reset = useStudioStore((s) => s.reset);
+  const diagnostics = useDiagnostics(kinds, catalog);
+  // The entry panel sits beside the steps on wide screens; on narrower ones it
+  // is a toggle, so the form keeps its width.
+  const wide = useMediaQuery('(min-width: 75em)');
+  const [panelOpen, setPanelOpen] = useState<boolean | null>(null);
+  const showPanel = started && (panelOpen ?? Boolean(wide));
 
   // A draft is restored from localStorage on load. Say so once, with a way out:
   // silently resuming someone else's half-finished entry is worse than losing it.
@@ -78,7 +88,12 @@ export default function App() {
     // Header and footer are both AppShell slots, so both stay pinned while only
     // the wizard scrolls between them. AppShell reserves padding for each on the
     // main column, so no step can end up hidden underneath either bar.
-    <AppShell header={{ height: 56 }} footer={{ height: 44 }} padding={0}>
+    <AppShell
+      header={{ height: 56 }}
+      footer={{ height: 44 }}
+      aside={{ width: { base: 320, xl: 400 }, breakpoint: 'md', collapsed: { desktop: !showPanel, mobile: !showPanel } }}
+      padding={0}
+    >
       <AppShell.Header>
         <AppHeader />
       </AppShell.Header>
@@ -107,11 +122,30 @@ export default function App() {
               size="sm"
               mb="lg"
             >
-              <Stepper.Step label="Tool" description="Identity & output" icon={<Icon icon="mdi:tools" />} />
-              <Stepper.Step label="Fixture" description="Drop a CSV/TSV" icon={<Icon icon="mdi:file-delimited-outline" />} />
-              <Stepper.Step label="Visualizations" description="Bind columns" icon={<Icon icon="mdi:chart-box-outline" />} />
-              <Stepper.Step label="Export" description="Zip or PR" icon={<Icon icon="mdi:download" />} />
+              <Stepper.Step data-testid="step-0" label="Tool" description="Identity & output" icon={<Icon icon="mdi:tools" />} />
+              <Stepper.Step data-testid="step-1" label="Fixture" description="Drop a CSV/TSV" icon={<Icon icon="mdi:file-delimited-outline" />} />
+              <Stepper.Step data-testid="step-2" label="Visualizations" description="Bind columns" icon={<Icon icon="mdi:chart-box-outline" />} />
+              <Stepper.Step data-testid="step-3" label="Export" description="Zip or PR" icon={<Icon icon="mdi:download" />} />
             </Stepper>
+
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
+              {!existing ? <OutputsBar diagnostics={diagnostics} /> : <span />}
+              <Button
+                size="compact-sm"
+                variant={showPanel ? 'light' : 'default'}
+                leftSection={<Icon icon="mdi:file-tree-outline" width={14} />}
+                onClick={() => setPanelOpen(!showPanel)}
+                data-testid="toggle-entry-panel"
+                aria-pressed={showPanel}
+              >
+                Entry
+                {diagnostics.some((d) => d.severity === 'error') ? (
+                  <Text span size="xs" c="red" ml={6}>
+                    {diagnostics.filter((d) => d.severity === 'error').length}
+                  </Text>
+                ) : null}
+              </Button>
+            </Group>
 
             {restored && (
               <Alert
@@ -156,7 +190,7 @@ export default function App() {
               {step === 0 && <ToolForm catalog={catalog} />}
               {step === 1 && <FixtureDrop />}
               {step === 2 && <VizDesigner kinds={kinds} />}
-              {step === 3 && <ExportPanel kinds={kinds} />}
+              {step === 3 && <ExportPanel kinds={kinds} catalog={catalog} />}
             </Container>
           </Box>
 
@@ -192,6 +226,11 @@ export default function App() {
             </Container>
           </Box>
         </AppShell.Main>
+      )}
+      {started && (
+        <AppShell.Aside>
+          <EntryPanel diagnostics={diagnostics} />
+        </AppShell.Aside>
       )}
       <AppShell.Footer>
         <AppFooter />
