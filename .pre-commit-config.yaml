@@ -19,7 +19,7 @@ repos:
     -   id: end-of-file-fixer
         exclude: ^dev/
     -   id: check-yaml
-        exclude: ^(dev/|helm-charts/|kubernetes/)
+        exclude: ^(dev/|helm-charts/)
     -   id: check-added-large-files
         # bundled gene annotations (hg38/mm10, ~0.9 MB) and the cnv_profile showcase fixture
         args: ['--maxkb=1100']
