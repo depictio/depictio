@@ -56,8 +56,9 @@ def _plan(tabs, **extra) -> ExportPlan:
 def test_the_overview_keeps_its_grid_rows(ampliseq_tabs):
     """About + The run share a row 5:3 as on the dashboard; the steps are a stepper."""
     src = _body(generate_qmd(_plan(ampliseq_tabs)))
-    assert '::: {.dpx-grid style="--dpx-cols: minmax(0,5fr) minmax(0,3fr)"}' in src
-    grid = src.index("minmax(0,5fr) minmax(0,3fr)")
+    # Quarto's own layout: a flex row on the page, a typst grid in the PDF.
+    assert '::: {.dpx-grid layout="[5,3]"}' in src
+    grid = src.index('layout="[5,3]"')
     assert src.index("About this dashboard") > grid
     assert src.index("'ov-run'") > grid
     # Both are card surfaces, as `surface: card` draws them.
@@ -370,7 +371,7 @@ def test_the_pdf_carries_its_page(ampliseq_tabs):
     assert "query(heading.where(level: 2))" in block and "dpx-title" in block
     assert "Powered by" in block and "counter(page).display()" in block
     # The title page shows the dashboard's logo (as SVG text typst can read).
-    assert "#dpx-logo(54pt)" in block and "<svg" in block
+    assert "#dpx-logo(84pt)" in block and "<svg" in block
     # Tab colours by heading label.
     assert '"tab-multiqc": rgb(' in block
 

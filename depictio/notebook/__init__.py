@@ -29,9 +29,11 @@ In a ``.qmd``::
 from .client import DepictioClient, DepictioClientError
 from .components import (
     DepictioComponent,
+    StaticCard,
     html_text,
     init_tables,
     show_table,
+    static_card_row,
     static_figures,
     use_document_renderer,
 )
@@ -49,7 +51,9 @@ __all__ = [
     "html_text",
     "funnel_stage",
     "init_tables",
+    "StaticCard",
     "show_table",
+    "static_card_row",
     "static_figures",
     "use_document_renderer",
     "use_native",
