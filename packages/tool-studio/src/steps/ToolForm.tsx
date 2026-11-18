@@ -1,4 +1,6 @@
-import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid, Alert, Input } from '@mantine/core';
+import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid, Alert, Input, Accordion, TagsInput } from '@mantine/core';
+import { STAGES } from '../catalog/generated/renderSpec';
+import type { Stage } from '../types';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
@@ -100,6 +102,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
   const dismissedMatchId = useStudioStore((s) => s.dismissedMatchId);
   const setDismissedMatch = useStudioStore((s) => s.setDismissedMatch);
   const multiqcModules = useMultiqcModules();
+  const [idRewrite, setIdRewrite] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   // File output channels parsed from the last Import — populate the
   // output-channel picker so slug / path_glob / description can be auto-filled.
@@ -191,7 +194,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     <Paper withBorder p="md" radius="md" h="100%">
       <Group gap="xs" mb="xs">
         <Icon icon="mdi:tag-outline" width={18} />
-        <Title order={5}>Identity</Title>
+        <Title order={2} size="h5">Identity</Title>
       </Group>
       <Text size="xs" c="dimmed" mb="md">
         Which tool this catalog entry belongs to, and where its metadata is imported from.
@@ -281,7 +284,20 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
           placeholder="mosdepth"
           required
           value={tool.id}
-          onChange={(e) => setTool({ id: slugify(e.currentTarget.value) })}
+          onChange={(e) => {
+            const raw = e.currentTarget.value;
+            setTool({ id: slugify(raw) });
+            setIdRewrite(raw && slugify(raw) !== raw ? raw : null);
+          }}
+          inputWrapperOrder={['label', 'description', 'input', 'error']}
+          error={
+            idRewrite ? (
+              <Text size="xs" c="orange" component="span" data-testid="id-rewritten">
+                Saved as <Code fz="xs">{tool.id}</Code>: ids are lowercase letters, digits and _.
+              </Text>
+            ) : undefined
+          }
+          styles={idRewrite ? { input: { borderColor: 'var(--mantine-color-orange-6)' } } : undefined}
         />
         <TextInput
           label="Tool name"
@@ -310,6 +326,40 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
         value={tool.homepage ?? ''}
         onChange={(e) => setTool({ homepage: e.currentTarget.value || undefined })}
       />
+      <Accordion variant="contained" radius="md" data-testid="identity-more">
+        <Accordion.Item value="more">
+          <Accordion.Control icon={<Icon icon="mdi:tune-variant" width={16} />}>
+            Classification (optional): stage, EDAM topics, version
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="sm">
+              <Select
+                label="Stage"
+                description="the dashboard tab a composed dashboard places this tool's components under"
+                placeholder="other"
+                clearable
+                data={STAGES.map((v) => ({ value: v, label: v }))}
+                value={tool.stage ?? null}
+                onChange={(v) => setTool({ stage: (v ?? undefined) as Stage | undefined })}
+              />
+              <TagsInput
+                label="EDAM topics"
+                description="topic ids such as topic_0102 (written as edamontology.org URLs); press Enter after each"
+                placeholder="topic_0102"
+                value={tool.edam_topics ?? []}
+                onChange={(v) => setTool({ edam_topics: v.length ? v : undefined })}
+              />
+              <TextInput
+                label="Entry version"
+                description="semver; bump it when you change an existing entry (default 1.0.0)"
+                placeholder="1.0.0"
+                value={tool.version ?? ''}
+                onChange={(e) => setTool({ version: e.currentTarget.value || undefined })}
+              />
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
       </Stack>
     </Paper>
   );
@@ -318,7 +368,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     <Paper withBorder p="md" radius="md" h="100%">
       <Group gap="xs" mb="xs">
         <Icon icon="mdi:file-document-outline" width={18} />
-        <Title order={5}>Output</Title>
+        <Title order={2} size="h5">Output</Title>
       </Group>
       <Text size="xs" c="dimmed" mb="md">
         The single file this catalog entry describes, recognized in a run by its path glob.
@@ -354,9 +404,16 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
           label="Path glob"
           description="how a run's file is recognized"
           placeholder="**/mosdepth/*.coverage.tsv"
-          required
+          required={!output.filename}
           value={output.path_glob}
           onChange={(e) => setOutput({ path_glob: e.currentTarget.value })}
+        />
+        <TextInput
+          label="Output name (optional)"
+          description="label in depictio's output picker; unique within the tool"
+          placeholder="Per-sample coverage summary"
+          value={output.name ?? ''}
+          onChange={(e) => setOutput({ name: e.currentTarget.value || undefined })}
         />
         <Textarea
           label="Output description (optional)"
@@ -365,6 +422,31 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
           value={output.description ?? ''}
           onChange={(e) => setOutput({ description: e.currentTarget.value })}
         />
+        <Accordion variant="contained" radius="md" data-testid="output-more">
+          <Accordion.Item value="find">
+            <Accordion.Control icon={<Icon icon="mdi:file-find-outline" width={16} />}>
+              More ways to recognise the file (optional)
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Stack gap="sm">
+                <TagsInput
+                  label="Alternative globs"
+                  description="for runs that name or place the file differently; press Enter after each"
+                  placeholder="**/mosdepth/*.summary.txt"
+                  value={output.path_glob_alt ?? []}
+                  onChange={(v) => setOutput({ path_glob_alt: v.length ? v : undefined })}
+                />
+                <TextInput
+                  label="Exact file name"
+                  description="when the file always has the same name (can replace the path glob)"
+                  placeholder="multiqc_general_stats.txt"
+                  value={output.filename ?? ''}
+                  onChange={(e) => setOutput({ filename: e.currentTarget.value || undefined })}
+                />
+              </Stack>
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
       </Stack>
     </Paper>
   );
@@ -441,7 +523,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
 
   const header = (
     <div>
-      <Title order={3} style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
+      <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
         Tool
       </Title>
       <Text c="dimmed" size="sm">
@@ -477,8 +559,32 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     return (
       <Stack gap="lg">
         {header}
+        {/* The recognised entry renders below the identity form, under the fold
+            on a laptop screen; announce it where the typing happens. */}
+        <Alert
+          color="brand"
+          variant="light"
+          icon={<Icon icon="mdi:book-check-outline" />}
+          title={`Found in the catalog: ${match.tool.name}`}
+          data-testid="recognized-banner"
+          role="status"
+        >
+          <Group justify="space-between" wrap="nowrap" gap="md">
+            <Text size="sm">You can add a visualization or a new output to it instead of starting over.</Text>
+            <Button
+              size="xs"
+              variant="light"
+              onClick={() =>
+                document.getElementById('recognized-tool')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+            >
+              Show the entry
+            </Button>
+          </Group>
+        </Alert>
         {multiqcWarning}
         {identityFields}
+        <div id="recognized-tool" />
         <RecognizedTool
           tool={match.tool}
           reason={match.reason}

@@ -109,6 +109,10 @@ jobs:
             packages/tool-studio/public/figureParams.json \
             packages/tool-studio/public/catalog.json \
             packages/tool-studio/public/catalog.schema.json \
+            packages/tool-studio/public/module.schema.json \
+            packages/tool-studio/public/output.schema.json \
+            packages/tool-studio/public/nf_core_modules.txt \
+            packages/tool-studio/public/edam_terms.txt \
             packages/tool-studio/public/multiqc_modules.txt \
             packages/tool-studio/src/catalog/generated/ \
             packages/tool-studio/src/test/generated/ \

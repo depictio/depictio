@@ -292,7 +292,7 @@ const MatchRow: React.FC<MatchRowProps> = ({ match, selected, vizKinds, onClick 
         py={7}
         style={{
           borderLeft: `3px solid ${selected ? 'var(--mantine-color-violet-6)' : 'transparent'}`,
-          background: selected ? 'var(--mantine-color-violet-0)' : 'transparent',
+          background: selected ? 'var(--mantine-color-violet-light)' : 'transparent',
           transition: 'background 120ms',
         }}
       >

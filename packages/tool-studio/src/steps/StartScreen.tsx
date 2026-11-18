@@ -107,6 +107,17 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
             ready-made dashboard components for everyone who runs it.
           </Text>
         </Stack>
+        <Group justify="center">
+          <Button
+            size="lg"
+            px={44}
+            onClick={onStart}
+            rightSection={<Icon icon="mdi:arrow-right" width={20} />}
+            data-testid="start"
+          >
+            {resuming ? 'Continue' : 'Start'}
+          </Button>
+        </Group>
 
       </Stack>
 
@@ -247,17 +258,6 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
           </Paper>
         </SimpleGrid>
 
-        <Group justify="center">
-          <Button
-            size="lg"
-            px={44}
-            onClick={onStart}
-            rightSection={<Icon icon="mdi:arrow-right" width={20} />}
-            data-testid="start"
-          >
-            {resuming ? 'Continue' : 'Start'}
-          </Button>
-        </Group>
       </Stack>
     </Container>
   );

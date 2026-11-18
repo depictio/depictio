@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { AppShell, Stepper, Container, Group, Button, Box, Alert, Code } from '@mantine/core';
+import { AppShell, Stepper, Container, Group, Button, Box, Alert, Code, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { notifications } from '@mantine/notifications';
 import AppHeader from './components/AppHeader';
 import AppFooter from './components/AppFooter';
 import { useStudioStore, newOutputSlugClash } from './state/useStudioStore';
@@ -20,7 +21,13 @@ export default function App() {
   const started = useStudioStore((s) => s.started);
   const start = useStudioStore((s) => s.start);
   const step = useStudioStore((s) => s.step);
-  const setStep = useStudioStore((s) => s.setStep);
+  const setStepRaw = useStudioStore((s) => s.setStep);
+  // Toasts belong to the step that raised them; carrying them across steps left
+  // stale messages ("golden.csv: 5 columns") sitting over the next one.
+  const setStep = (i: number) => {
+    notifications.clean();
+    setStepRaw(i);
+  };
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const fixture = useStudioStore((s) => s.fixture);
@@ -35,25 +42,32 @@ export default function App() {
     () => useStudioStore.getState().renders.length > 0 || Boolean(useStudioStore.getState().tool.id),
   );
 
-  // Gate forward navigation on the minimum each step needs.
-  const canLeave = (i: number): boolean => {
+  // Gate forward navigation on the minimum each step needs. Each gate returns
+  // what is missing, so the disabled Next can say why instead of just greying out.
+  const missing = (i: number): string[] => {
     if (i === 0) {
       // Append mode: identity + output come from the catalog (not authored in
       // the Tool form, and an existing output may recognise its file by
       // `filename` rather than `path_glob`), so the Tool step is always
       // satisfied — otherwise maxReachable stalls at 0 and blocks Next→Export.
-      if (existing) return true;
-      if (!(tool.id && tool.name && output.slug && output.path_glob)) return false;
+      if (existing) return [];
+      const out: string[] = [];
+      if (!tool.id) out.push('tool id');
+      if (!tool.name) out.push('tool name');
       // The catalog card shows both; `catalog validate` rejects a module without them.
-      if (!(tool.description && tool.homepage)) return false;
+      if (!tool.description) out.push('tool description');
+      if (!tool.homepage) out.push('homepage');
+      if (!output.slug) out.push('output slug');
+      if (!output.path_glob && !output.filename) out.push('path glob (or file name)');
       // A new output must not reuse an existing output's slug (would overwrite its file).
-      if (newOutputSlugClash(newOutputTarget, output.slug)) return false;
-      return true;
+      if (newOutputSlugClash(newOutputTarget, output.slug)) out.push('an output slug not already used by this tool');
+      return out;
     }
-    if (i === 1) return Boolean(fixture || existing); // existing tools bring their own fixture
-    if (i === 2) return renders.length > 0;
-    return true;
+    if (i === 1) return fixture || existing ? [] : ['a fixture file']; // existing tools bring their own fixture
+    if (i === 2) return renders.length > 0 ? [] : ['at least one visualization'];
+    return [];
   };
+  const canLeave = (i: number): boolean => missing(i).length === 0;
   const maxReachable = (() => {
     let i = 0;
     while (i < STEPS.length - 1 && canLeave(i)) i++;
@@ -158,13 +172,21 @@ export default function App() {
                   Back
                 </Button>
                 {step < STEPS.length - 1 && (
+                  <Group gap="sm" wrap="nowrap">
+                  {!canLeave(step) && (
+                    <Text size="sm" c="dimmed" ta="right" data-testid="next-missing" visibleFrom="xs">
+                      Still needed: {missing(step).join(', ')}
+                    </Text>
+                  )}
                   <Button
+                    data-testid="next"
                     rightSection={<Icon icon="mdi:chevron-right" />}
                     disabled={!canLeave(step) || step > maxReachable}
                     onClick={() => setStep(step + 1)}
                   >
                     Next
                   </Button>
+                  </Group>
                 )}
               </Group>
             </Container>

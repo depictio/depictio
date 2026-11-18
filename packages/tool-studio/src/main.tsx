@@ -12,7 +12,7 @@ import App from './App';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <MantineProvider theme={depictioTheme} defaultColorScheme="light">
+    <MantineProvider theme={depictioTheme} defaultColorScheme="auto">
       {/* top-right so toasts never overlap the bottom Back/Next footer nav. */}
       <Notifications position="top-right" />
       <App />

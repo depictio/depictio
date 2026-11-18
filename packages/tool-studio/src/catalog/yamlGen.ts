@@ -115,6 +115,8 @@ function cardFieldFragments(render: CardRender): string[] {
     bits.push(`attrition_cols: ${flowList(render.attrition_cols)}`);
   if (render.trend_col) bits.push(`trend_col: ${flowScalar(render.trend_col)}`);
   if (render.filter_expr) bits.push(`filter_expr: ${flowScalar(render.filter_expr)}`);
+  if (render.headline) bits.push('headline: true');
+  if (typeof render.priority === 'number') bits.push(`priority: ${render.priority}`);
   return bits;
 }
 
@@ -320,6 +322,7 @@ export function genModuleYaml(tool: ToolMeta): string {
     `id: ${flowScalar(tool.id)}`,
     `name: ${flowScalar(tool.name)}`,
   ];
+  if (tool.version && tool.version !== '1.0.0') lines.push(`version: ${flowScalar(tool.version)}`);
   if (tool.description) lines.push(`description: ${flowScalar(tool.description)}`);
   if (tool.homepage) lines.push(`homepage: ${flowScalar(tool.homepage)}`);
   if (tool.source_url) lines.push(`source_url: ${flowScalar(tool.source_url)}`);
@@ -332,7 +335,18 @@ export function genModuleYaml(tool: ToolMeta): string {
       ? `biotools_url: ${flowScalar(tool.biotools_url)}`
       : 'biotools_url: null  # no bio.tools entry for this tool',
   );
+  if (tool.edam_topics?.length)
+    lines.push(`edam_topics: ${flowList(tool.edam_topics.map(canonicalEdamTopic))}`);
+  if (tool.stage) lines.push(`stage: ${tool.stage}`);
   return lines.join('\n') + '\n';
+}
+
+/** `topic_0203` / `edam:topic_0203` / an edamontology.org URL → the URL form
+ *  `catalog validate` requires (http://edamontology.org/topic_NNNN). Anything
+ *  else is passed through untouched so validation can name it. */
+export function canonicalEdamTopic(value: string): string {
+  const m = value.trim().match(/(?:^|[/:])(topic_\d{4})$/);
+  return m ? `http://edamontology.org/${m[1]}` : value.trim();
 }
 
 export function genOutputYaml(
@@ -345,8 +359,13 @@ export function genOutputYaml(
     '# yaml-language-server: $schema=../output.schema.json',
     `id: ${flowScalar(outputId(tool.id, output.slug))}`,
   ];
+  if (output.name) lines.push(`name: ${flowScalar(output.name)}`);
   if (output.description) lines.push(`description: ${flowScalar(output.description)}`);
-  lines.push(`find: ${flowMap([['path_glob', output.path_glob]])}`);
+  const find: [string, string | string[]][] = [];
+  if (output.filename) find.push(['filename', output.filename]);
+  if (output.path_glob) find.push(['path_glob', output.path_glob]);
+  if (output.path_glob_alt?.length && output.path_glob) find.push(['path_glob_alt', output.path_glob_alt]);
+  lines.push(`find: ${flowMap(find)}`);
   lines.push(`fixture: ${flowScalar(fixtureFileName)}`);
   lines.push('renders_as:');
   for (const r of renders) {

@@ -69,6 +69,30 @@ export function headerLooksLikeData(names: string[]): boolean {
   return numeric >= Math.ceil(names.length / 3);
 }
 
+/** Collapse papaparse's per-row errors into a few readable lines (row numbers
+ *  are 1-based and count the header, like an editor would). */
+function describeParseErrors(errors: Papa.ParseError[]): string[] {
+  const byKind = new Map<string, number[]>();
+  for (const e of errors) {
+    if (e.code === 'UndetectableDelimiter') continue; // delimiter is always given
+    const label =
+      e.code === 'TooFewFields'
+        ? 'fewer fields than the header'
+        : e.code === 'TooManyFields'
+          ? 'more fields than the header'
+          : e.type === 'Quotes'
+            ? 'an unterminated or misplaced quote'
+            : e.message;
+    const rows = byKind.get(label) ?? [];
+    if (typeof e.row === 'number') rows.push(e.row + 2);
+    byKind.set(label, rows);
+  }
+  return [...byKind].map(([label, rows]) => {
+    const where = rows.length ? ` (line ${rows.slice(0, 5).join(', ')}${rows.length > 5 ? ', …' : ''})` : '';
+    return `${rows.length || 1} row${rows.length > 1 ? 's' : ''} with ${label}${where}.`;
+  });
+}
+
 export function parseFixture(fileName: string, raw: string): ParsedFixture {
   const lower = fileName.toLowerCase();
   const delimiter: ',' | '\t' = lower.endsWith('.tsv')
@@ -101,8 +125,15 @@ export function parseFixture(fileName: string, raw: string): ParsedFixture {
   const needsTsvName = delimiter === '\t' && !lower.endsWith('.tsv');
   const committedName = needsTsvName ? `${fileName.replace(/\.[^./]*$/, '')}.tsv` : fileName;
 
+  const parseWarnings = describeParseErrors(parsed.errors);
+  if (fields.length > 0 && rows.length === 0) {
+    // `catalog validate` needs a header plus at least one data line.
+    parseWarnings.push('The file has a header but no data rows; CI rejects a fixture without data.');
+  }
+
   return {
     fileName: committedName,
+    ...(parseWarnings.length ? { parseWarnings } : {}),
     ...(needsTsvName ? { renamedFrom: fileName } : {}),
     delimiter,
     columns,

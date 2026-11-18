@@ -112,14 +112,20 @@ export default function FixtureDrop() {
       });
     }
     notifications.show({
-      color: 'accent',
-      message: `${fileName}: ${parsed.columns.length} columns, ${parsed.rows.length} rows.`,
+      color: parsed.parseWarnings?.length ? 'yellow' : 'accent',
+      message: parsed.parseWarnings?.length
+        ? `${fileName}: parsed with ${parsed.parseWarnings.length} problem(s), see below.`
+        : `${fileName}: ${parsed.columns.length} columns, ${parsed.rows.length} rows.`,
     });
   };
 
   const ingest = async (file: File) => {
     if (!TABULAR_EXT_RE.test(file.name)) {
-      notifications.show({ color: 'red', message: 'Drop a .csv, .tsv, .txt or .tab file.' });
+      notifications.show({
+        color: 'red',
+        autoClose: 8000,
+        message: `${file.name} was not loaded: drop a .csv, .tsv, .txt or .tab file.${fixture ? ` ${fixture.fileName} is still the fixture.` : ''}`,
+      });
       return;
     }
     let raw: string;
@@ -168,7 +174,7 @@ export default function FixtureDrop() {
   return (
     <Stack gap="lg">
       <div>
-        <Title order={3} style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
+        <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
           Fixture
         </Title>
         <Text c="dimmed" size="sm">
@@ -308,10 +314,32 @@ export default function FixtureDrop() {
         </Alert>
       )}
 
+      {fixture?.parseWarnings?.length ? (
+        <Alert
+          color="orange"
+          variant="light"
+          icon={<Icon icon="mdi:alert-outline" />}
+          title="The file did not parse cleanly"
+          data-testid="parse-warnings"
+        >
+          <Stack gap={4}>
+            {fixture.parseWarnings.map((w) => (
+              <Text size="sm" key={w}>
+                {w}
+              </Text>
+            ))}
+            <Text size="sm" c="dimmed">
+              Rows that do not match the header are previewed as best they can be, but CI reads the
+              file strictly. Fix the file and drop it again.
+            </Text>
+          </Stack>
+        </Alert>
+      ) : null}
+
       {fixture && (
         <Paper withBorder p="md" radius="md">
           <Group justify="space-between" mb="sm">
-            <Title order={5}>Columns</Title>
+            <Title order={2} size="h5">Columns</Title>
             <Group gap="xs">
               <Badge variant="light">{fixture.columns.length} cols</Badge>
               <Badge variant="light" color="gray">

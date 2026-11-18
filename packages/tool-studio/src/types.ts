@@ -32,6 +32,10 @@ export interface ParsedFixture {
   rows: Record<string, unknown>[];
   /** Raw file text, exported verbatim as the fixture. */
   raw: string;
+  /** Structural problems found while parsing (ragged rows, unclosed quotes,
+   *  no data rows). Shown next to the preview: a file that parses here with a
+   *  row silently dropped will not ground the same way in CI. */
+  parseWarnings?: string[];
 }
 
 /** Where the tool comes from — drives the picker favicon + which module.yaml
@@ -50,13 +54,22 @@ export interface ToolMeta {
   homepage?: string;
   biotools_url?: string;
   description?: string;
+  /** Semver of the entry (model default 1.0.0, omitted when unchanged). */
+  version?: string;
+  /** Pipeline stage: drives tab placement in `template compose`. */
+  stage?: Stage;
+  /** EDAM topic URIs or `topic_NNNN` ids. */
+  edam_topics?: string[];
 }
 
 // ── Render specs (one per catalog `renders_as` entry) ──────────────────────
 // Discriminated union on `component`. Only the subset the client can author is
 // modelled; each maps 1:1 to a catalog Render.
 
-export type FigureVisuType = 'scatter' | 'line' | 'bar' | 'box' | 'histogram' | 'heatmap';
+// Derived from the catalog schema (13 types); a hand-copied list had fallen to 6.
+import type { VisuType, InteractiveType, Stage } from './catalog/generated/renderSpec';
+export type FigureVisuType = VisuType;
+export type { Stage };
 
 // The card enums come from `generated/cardSpec.ts`, derived from
 // catalog.schema.json at build time — they used to be hand-copied here and fell
@@ -122,6 +135,10 @@ export interface CardRender {
   trend_col?: string;
   /** Optional polars pre-filter applied before the aggregation. */
   filter_expr?: string;
+  /** Promote to a composed dashboard's Overview strip. */
+  headline?: boolean;
+  /** Order among headline cards (lower first). */
+  priority?: number;
 }
 
 /** Display options, mirroring `TableLiteComponent`. All optional: a bare
@@ -153,16 +170,8 @@ export interface InteractiveRender {
   column_name: string;
 }
 
-/** depictio's `InteractiveType` literal (models/components/types.py). */
-export type InteractiveVariant =
-  | 'Select'
-  | 'MultiSelect'
-  | 'SegmentedControl'
-  | 'Slider'
-  | 'RangeSlider'
-  | 'DateRangePicker'
-  | 'Timeline'
-  | 'Switch';
+/** depictio's `InteractiveType` literal, generated from the catalog schema. */
+export type InteractiveVariant = InteractiveType;
 
 export interface AdvancedVizRender {
   uid: string;
@@ -186,6 +195,12 @@ export interface OutputMeta {
   /** Short output slug, e.g. "coverage" → output id "<tool>_<slug>". */
   slug: string;
   path_glob: string;
+  /** Alternative globs for runs that name the file differently (needs path_glob). */
+  path_glob_alt?: string[];
+  /** Exact file name, the other `find` key (used when no glob is needed). */
+  filename?: string;
+  /** Display name in the output picker; unique within the tool. */
+  name?: string;
   description?: string;
 }
 

@@ -190,7 +190,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   return (
     <Stack gap="lg">
       <div>
-        <Title order={3} style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
+        <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
           Export
         </Title>
         <Text c="dimmed" size="sm">

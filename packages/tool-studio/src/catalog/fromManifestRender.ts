@@ -8,6 +8,7 @@
  * narrow returns null and is listed without a preview, which is the honest
  * outcome for a render written against a model this build does not know.
  */
+import { INTERACTIVE_TYPES, VISU_TYPES } from './generated/renderSpec';
 import type { ManifestRender } from './catalog';
 import type {
   Aggregation,
@@ -30,18 +31,9 @@ const strList = (v: unknown): string[] | undefined =>
 const oneOf = <T extends string>(v: unknown, allowed: readonly string[]): T | undefined =>
   typeof v === 'string' && allowed.includes(v) ? (v as T) : undefined;
 
-const INTERACTIVE_VARIANTS = [
-  'Select',
-  'MultiSelect',
-  'SegmentedControl',
-  'Slider',
-  'RangeSlider',
-  'DateRangePicker',
-  'Timeline',
-  'Switch',
-] as const;
-
-const VISU_TYPES = ['scatter', 'line', 'bar', 'box', 'histogram', 'heatmap'] as const;
+// Generated from the schema, so every type the catalog accepts re-imports as
+// an editable spec instead of being dropped (violin, ecdf, TextInput, ...).
+const INTERACTIVE_VARIANTS = INTERACTIVE_TYPES;
 
 export function renderSpecFromManifest(
   raw: ManifestRender,
@@ -101,6 +93,8 @@ export function renderSpecFromManifest(
         ...(strList(raw.attrition_cols) ? { attrition_cols: strList(raw.attrition_cols) } : {}),
         ...(str(raw.trend_col) ? { trend_col: str(raw.trend_col) } : {}),
         ...(str(raw.filter_expr) ? { filter_expr: str(raw.filter_expr) } : {}),
+        ...(raw.headline === true ? { headline: true } : {}),
+        ...(typeof raw.priority === 'number' ? { priority: raw.priority } : {}),
       };
     }
     case 'table':

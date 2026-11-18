@@ -15,6 +15,8 @@ import {
   Paper,
   TextInput,
   Divider,
+  Switch,
+  NumberInput,
 } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
@@ -187,6 +189,29 @@ function RenderCard({
             size="xs"
             mb="sm"
           />
+          {render.component === 'card' && (
+            <Group gap="md" mb="sm" align="flex-end">
+              <Switch
+                size="xs"
+                label="Headline card (shown in a composed dashboard's Overview)"
+                checked={Boolean(render.headline)}
+                onChange={(e) => onUpdate({ headline: e.currentTarget.checked || undefined } as Partial<RenderSpec>)}
+                data-testid="card-headline"
+              />
+              <NumberInput
+                size="xs"
+                w={140}
+                label="Priority"
+                description="lower first"
+                min={0}
+                allowDecimal={false}
+                value={render.priority ?? ''}
+                onChange={(v) =>
+                  onUpdate({ priority: typeof v === 'number' ? v : undefined } as Partial<RenderSpec>)
+                }
+              />
+            </Group>
+          )}
           <Text size="xs" c="dimmed" mb={6}>
             Catalog definition, written into <Code fz="xs">{fileName}</Code> under{' '}
             <Code fz="xs">renders_as</Code>:
@@ -329,7 +354,7 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
         <div>
-          <Title order={3} style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
+          <Title order={1} size="h3" style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
             Visualizations
           </Title>
           <Text c="dimmed" size="sm">
