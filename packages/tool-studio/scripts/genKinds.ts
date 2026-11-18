@@ -12,6 +12,9 @@
  *   src/pyodide/generated/pin.json ← depictio/serverless/pyodide/pin.json
  *   public/pyodide/depictio_modules.json ← depictio.recipes (+ lib, RecipeSource)
  *       for the in-browser recipe engine (src/pyodide/depictioModules.ts)
+ *   public/pyodide/depictio_figure_modules.json ← create_figure_from_data and
+ *       the figure path around it, for exact figure previews
+ *       (src/pyodide/figureModules.ts)
  *
  * All are also committed as snapshots. This script REGENERATES them from the
  * in-repo Python source when a depictio-capable Python is reachable (CI, dev
@@ -25,6 +28,7 @@ import { existsSync, copyFileSync, readFileSync, writeFileSync, mkdirSync } from
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectDepictioModules } from '../src/pyodide/depictioModules';
+import { collectFigureModules } from '../src/pyodide/figureModules';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(here, '..');
@@ -201,9 +205,10 @@ cardMetricsGolden();
 
 // 2c. The Pyodide engine's inputs (src/pyodide/engine.ts). Plain file work, no
 //     Python needed: the serverless bundle's pin (same Pyodide version and
-//     wheels as an exported dashboard), and the depictio modules a recipe
-//     imports (depictio.recipes + recipes.lib + RecipeSource), shipped verbatim
-//     as the serverless bundle ships its server modules.
+//     wheels as an exported dashboard), the depictio modules a recipe imports
+//     (depictio.recipes + recipes.lib + RecipeSource) and the ones a UI-mode
+//     figure is built with, shipped verbatim as the serverless bundle ships its
+//     server modules.
 mkdirSync(resolve(pkgRoot, 'src', 'pyodide', 'generated'), { recursive: true });
 copySnapshot(
   resolve(repoRoot, 'depictio', 'serverless', 'pyodide', 'pin.json'),
@@ -223,6 +228,25 @@ copySnapshot(
     console.log('[genKinds] depictio sources absent — keeping committed depictio_modules.json');
   } else {
     console.error('[genKinds] ERROR: cannot collect the depictio modules for the Pyodide engine');
+    process.exit(1);
+  }
+}
+// The figure builder's modules (create_figure_from_data, the aggregation fast
+// path, the mantine templates, the style presets), loaded only when a figure
+// preview asks for the exact rendering.
+{
+  const dst = resolve(publicDir, 'pyodide', 'depictio_figure_modules.json');
+  const files = collectFigureModules(repoRoot);
+  if (files) {
+    mkdirSync(dirname(dst), { recursive: true });
+    writeFileSync(dst, JSON.stringify({ files }) + '\n');
+    console.log(
+      `[genKinds] regenerated public/pyodide/depictio_figure_modules.json (${Object.keys(files).length} files)`,
+    );
+  } else if (existsSync(dst) && !STRICT) {
+    console.log('[genKinds] depictio sources absent — keeping committed depictio_figure_modules.json');
+  } else {
+    console.error('[genKinds] ERROR: cannot collect the figure modules for the Pyodide engine');
     process.exit(1);
   }
 }

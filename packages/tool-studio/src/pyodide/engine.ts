@@ -17,6 +17,7 @@
  */
 import pin from './generated/pin.json';
 import studioPy from './depictio_studio.py?raw';
+import studioFigurePy from './studio_figure.py?raw';
 
 export interface EngineProgress {
   phase: string;
@@ -65,6 +66,9 @@ export interface EngineHost {
   loadPyodide(): Promise<PyodideApi>;
   /** `{path: source}` of the depictio modules (depictio_modules.json `files`). */
   loadModules(): Promise<Record<string, string>>;
+  /** `{path: source}` of the figure modules (depictio_figure_modules.json
+   *  `files`, see ./figureModules.ts). Absent: no exact figure previews. */
+  loadFigureModules?(): Promise<Record<string, string>>;
   fetchBytes(url: string): Promise<Uint8Array>;
 }
 
@@ -92,6 +96,12 @@ const browserHost: EngineHost = {
     if (!res.ok) throw new Error(`could not load ${url} (${res.status})`);
     return ((await res.json()) as { files: Record<string, string> }).files;
   },
+  async loadFigureModules() {
+    const url = `${import.meta.env.BASE_URL}pyodide/depictio_figure_modules.json`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`could not load ${url} (${res.status})`);
+    return ((await res.json()) as { files: Record<string, string> }).files;
+  },
   async fetchBytes(url) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`could not download ${url} (${res.status})`);
@@ -103,6 +113,7 @@ let host: EngineHost = browserHost;
 let corePromise: Promise<PyodideApi> | null = null;
 let enginePromise: Promise<PyodideApi> | null = null;
 let plotlyPromise: Promise<void> | null = null;
+let figurePromise: Promise<PyodideApi> | null = null;
 const listeners = new Set<(p: EngineProgress) => void>();
 
 function emit(p: EngineProgress): void {
@@ -181,6 +192,14 @@ function ensurePlotly(py: PyodideApi): Promise<void> {
   );
 }
 
+function writeModules(py: PyodideApi, files: Record<string, string>): void {
+  for (const [path, source] of Object.entries(files)) {
+    const full = `${MODULE_ROOT}/${path}`;
+    py.FS.mkdirTree(full.slice(0, full.lastIndexOf('/')));
+    py.FS.writeFile(full, source);
+  }
+}
+
 function engine(): Promise<PyodideApi> {
   return once(
     () => enginePromise,
@@ -189,12 +208,7 @@ function engine(): Promise<PyodideApi> {
       const py = await core();
       await loadPackages(py, ['numpy', 'polars']);
       emit({ phase: 'modules', detail: 'depictio.recipes' });
-      const files = { ...(await host.loadModules()), 'depictio_studio.py': studioPy };
-      for (const [path, source] of Object.entries(files)) {
-        const full = `${MODULE_ROOT}/${path}`;
-        py.FS.mkdirTree(full.slice(0, full.lastIndexOf('/')));
-        py.FS.writeFile(full, source);
-      }
+      writeModules(py, { ...(await host.loadModules()), 'depictio_studio.py': studioPy });
       py.runPython(
         `import sys\nif ${JSON.stringify(MODULE_ROOT)} not in sys.path: sys.path.insert(0, ${JSON.stringify(MODULE_ROOT)})`,
       );
@@ -243,7 +257,11 @@ export function loadPython(
 }
 
 function call(py: PyodideApi, fn: string, ...args: string[]): string {
-  const mod = py.pyimport('depictio_studio');
+  return callIn(py, 'depictio_studio', fn, ...args);
+}
+
+function callIn(py: PyodideApi, module: string, fn: string, ...args: string[]): string {
+  const mod = py.pyimport(module);
   try {
     return String(mod[fn](...args));
   } finally {
@@ -283,6 +301,99 @@ export async function runRecipe(code: string, raw: RawRecipeFile[]): Promise<Rec
   return JSON.parse(call(py, 'run_recipe', code, JSON.stringify(raw))) as RecipeRunResult;
 }
 
+// ---- exact figures ----------------------------------------------------------
+
+/** The engine plus plotly and depictio's figure modules (./figureModules.ts),
+ *  imported once so the first figure does not pay for plotly.express. */
+function figureEngine(): Promise<PyodideApi> {
+  return once(
+    () => figurePromise,
+    (p) => (figurePromise = p),
+    async () => {
+      if (!host.loadFigureModules) throw new Error('this build ships no figure modules');
+      const py = await engine();
+      await loadPackages(py, ['pydantic']);
+      await ensurePlotly(py);
+      emit({ phase: 'modules', detail: 'depictio figure builder' });
+      writeModules(py, { ...(await host.loadFigureModules()), 'studio_figure.py': studioFigurePy });
+      py.pyimport('studio_figure');
+      py.runPython(
+        [
+          'import depictio.api.v1.services.figure.figure_builder',
+          'import depictio.api.v1.services.figure.aggregate',
+          'import depictio.api.v1.services.figure.style_presets',
+          'from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates',
+          'ensure_mantine_templates()',
+        ].join('\n'),
+      );
+      emit({ phase: 'ready' });
+      return py;
+    },
+  );
+}
+
+/** A UI-mode figure as depictio's API would return it for the component. */
+export interface FigureRenderSpec {
+  visu_type: string;
+  dict_kwargs: Record<string, unknown>;
+  /** Component fields `figure_style_payload` reads (figure_style, title,
+   *  hide_legend) and `max_points`. */
+  [field: string]: unknown;
+}
+
+export interface FigureFixture {
+  fileName: string;
+  /** The fixture file, read by polars as `catalog validate` reads it. */
+  text: string;
+  /** Row indices the preview filters keep (null/undefined: every row), over
+   *  `rows` rows. */
+  keep?: number[] | null;
+  rows?: number;
+}
+
+export interface ExactFigure {
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  metadata: {
+    visu_type: string;
+    was_sampled: boolean;
+    displayed_data_count: number;
+    total_data_count: number;
+    aggregated: boolean;
+  };
+  /** `create_figure_from_data` failed and returned its error figure; the
+   *  messages it logged. */
+  errors: string[];
+}
+
+/** Load the figure engine (Pyodide, polars, plotly and depictio's figure
+ *  modules) without rendering anything. */
+export function ensureFigureEngine(onProgress?: (p: EngineProgress) => void): Promise<void> {
+  return withProgress(onProgress, async () => {
+    await figureEngine();
+  });
+}
+
+/** Build a UI-mode figure with depictio's own code (`create_figure_from_data`,
+ *  the aggregation fast path, `tidy_facet_layout`, `apply_figure_style`) over
+ *  the fixture, themed with depictio's mantine_light / mantine_dark template.
+ *  Rejects when the engine cannot load or the request cannot be honoured (a
+ *  mask over a different row count); a figure depictio itself would draw as an
+ *  error comes back with `errors`. */
+export async function renderFigure(
+  spec: FigureRenderSpec,
+  fixture: FigureFixture,
+  theme: 'light' | 'dark',
+  style?: unknown,
+): Promise<ExactFigure> {
+  const py = await figureEngine();
+  const extra = JSON.parse(callIn(py, 'studio_figure', 'packages_needed', JSON.stringify(spec))) as string[];
+  if (extra.length) await loadPackages(py, extra);
+  const request = { metadata: spec, theme, style: style ?? null, keep: fixture.keep ?? null, rows: fixture.rows ?? null };
+  return JSON.parse(
+    callIn(py, 'studio_figure', 'render_figure', JSON.stringify(request), fixture.fileName, fixture.text),
+  ) as ExactFigure;
+}
+
 /** Test seam: swap the host (null restores the browser one) and forget any
  *  loaded runtime. */
 export function __setEngineHostForTests(next: EngineHost | null): void {
@@ -290,5 +401,6 @@ export function __setEngineHostForTests(next: EngineHost | null): void {
   corePromise = null;
   enginePromise = null;
   plotlyPromise = null;
+  figurePromise = null;
   listeners.clear();
 }

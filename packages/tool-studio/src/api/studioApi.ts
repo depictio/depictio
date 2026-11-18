@@ -19,9 +19,12 @@
  *   - the five Celery-computed advanced-viz kinds (embedding in live mode,
  *     complex_heatmap, upset_plot, coverage_track, sankey);
  *   - a phylogenetic tree's newick, which is a second file the Studio has not
- *     been given;
- *   - figures, which are approximated client-side (`src/viz/figureBuilder.ts`)
- *     because the authoritative figure is built by Python plotly-express.
+ *     been given.
+ *
+ * Figures are served twice over: a client-side approximation
+ * (`src/viz/figureBuilder.ts`) answers at once, and depictio's own figure code
+ * (`create_figure_from_data` & co. under Pyodide, `src/viz/exactFigures.ts`)
+ * replaces it once that engine has loaded in the background.
  *
  * Filters are applied the way the exported serverless dashboard applies them:
  * the `InteractiveFilter[]` list is bound by depictio-static-core's
@@ -57,6 +60,7 @@ import type {
   FigureResponse,
   InteractiveFilter,
   PreviewResult,
+  RenderFigureOptions,
   TableResponse,
   VizKindSuggestion,
   VizSuggestionsResponse,
@@ -65,6 +69,8 @@ import type {
 import { fixtureToColumnSpecs } from '../builder/columnSpecs';
 import { buildPreview, isUnavailable } from '../viz/figureBuilder';
 import { applyPlotlyTheme } from '../viz/plotlyTheme';
+import { SupersededRender, exactFigure, exactFiguresReady, recordFidelity } from '../viz/exactFigures';
+import type { FigureRenderSpec } from '../pyodide/engine';
 import type { ParsedFixture, RenderSpec } from '../types';
 import { aggregate } from './aggregations';
 import { computeBreakdown, numericLayoutPayload } from './cardMetrics';
@@ -357,8 +363,9 @@ function figureSpecFrom(metadata: Record<string, unknown>): RenderSpec {
   } as RenderSpec;
 }
 
-/** depictio's server builds a figure with the mantine template already
- *  applied, so `FigureRenderer` themes nothing itself — the shim has to. */
+/** The approximation is themed here: depictio's server builds a figure with
+ *  the mantine template already applied, so `FigureRenderer` themes nothing
+ *  itself. (An exact figure carries that template and is left alone.) */
 function themed(
   figure: { data?: unknown[]; layout?: Record<string, unknown> },
   theme: 'light' | 'dark',
@@ -366,10 +373,94 @@ function themed(
   return { data: figure.data ?? [], layout: applyPlotlyTheme(figure.layout ?? {}, theme) };
 }
 
+/** The app's colour scheme, for a builder preview that does not say. */
+function appScheme(): 'light' | 'dark' {
+  if (typeof document === 'undefined') return 'light';
+  return document.documentElement.getAttribute('data-mantine-color-scheme') === 'dark' ? 'dark' : 'light';
+}
+
+/** The component fields depictio's figure path reads (create_figure_from_data
+ *  via visu_type / dict_kwargs / max_points, figure_style_payload via
+ *  figure_style / title / hide_legend), without the Studio's own keys. */
+function exactSpec(metadata: Record<string, unknown>): FigureRenderSpec {
+  const spec: FigureRenderSpec = {
+    visu_type: String(metadata.visu_type ?? 'scatter'),
+    dict_kwargs: (metadata.dict_kwargs as Record<string, unknown>) ?? {},
+  };
+  for (const key of ['max_points', 'figure_style', 'title', 'hide_legend'] as const) {
+    if (metadata[key] != null) spec[key] = metadata[key];
+  }
+  return spec;
+}
+
+/** Messages of an error figure that come from this environment rather than
+ *  from the figure (a package Pyodide lacks): the approximation is the better
+ *  preview then. */
+const ENVIRONMENT_GAP = /No module named|ModuleNotFoundError|ImportError/;
+
+/** depictio's own figure for a UI-mode component, or null when the exact path
+ *  is not ready or cannot draw it (the caller falls back to the
+ *  approximation, and the status under the preview says so). */
+async function exactFigureFor(
+  key: string,
+  metadata: Record<string, unknown>,
+  fixture: ParsedFixture,
+  mask: Bitmask | null,
+  theme: 'light' | 'dark',
+  filterApplied: boolean,
+  style: unknown,
+  signal?: AbortSignal,
+): Promise<FigureResponse | null> {
+  if (!exactFiguresReady()) {
+    recordFidelity(key, 'approximate', 'loading');
+    return null;
+  }
+  let keep: number[] | null = null;
+  if (mask !== null) {
+    keep = [];
+    for (let i = 0; i < mask.length; i++) if (mask[i] === 1) keep.push(i);
+  }
+  try {
+    const res = await exactFigure({
+      key,
+      spec: exactSpec(metadata),
+      fixtureRef: fixture,
+      fixture: { fileName: fixture.fileName, text: fixture.raw, keep, rows: fixture.rows.length },
+      theme,
+      style,
+      signal,
+    });
+    if (res.errors.some((m) => ENVIRONMENT_GAP.test(m))) {
+      recordFidelity(key, 'approximate', res.errors.join('; '));
+      return null;
+    }
+    recordFidelity(key, 'exact');
+    return {
+      figure: res.figure as FigureResponse['figure'],
+      metadata: {
+        visu_type: res.metadata.visu_type,
+        filter_applied: filterApplied,
+        was_sampled: res.metadata.was_sampled,
+        displayed_data_count: res.metadata.displayed_data_count,
+        total_data_count: res.metadata.total_data_count,
+        full_data_loaded: !res.metadata.was_sampled,
+      },
+    };
+  } catch (err) {
+    // A newer render of the same figure replaced this one: the caller ignores
+    // this answer, so the approximation is good enough for it.
+    if (!(err instanceof SupersededRender)) {
+      recordFidelity(key, 'approximate', err instanceof Error ? err.message : String(err));
+    }
+    return null;
+  }
+}
+
 async function figureFrom(
   metadata: Record<string, unknown>,
   theme: 'light' | 'dark' = 'light',
   filters: unknown = [],
+  opts: { key?: string; style?: unknown; signal?: AbortSignal } = {},
 ): Promise<FigureResponse> {
   const fullFixture = getActiveFixture();
   if (!fullFixture) throw new StudioPreviewError('Drop a fixture to preview this figure.');
@@ -402,6 +493,13 @@ async function figureFrom(
     };
   }
 
+  // UI mode: depictio's own figure once the engine is loaded (see
+  // ../viz/exactFigures.ts), the client-side approximation until then and
+  // whenever the exact path cannot draw it.
+  const key = opts.key ?? String(metadata.index ?? 'preview');
+  const exact = await exactFigureFor(key, metadata, fullFixture, mask, theme, filterApplied, opts.style, opts.signal);
+  if (exact) return exact;
+
   const result = buildPreview(fixture, figureSpecFrom(metadata));
   if (isUnavailable(result)) throw new StudioPreviewError(result.reason);
   return {
@@ -415,8 +513,13 @@ async function figureFrom(
   };
 }
 
+/** The figure builder's live preview (depictio's FigurePreview, which sends
+ *  no theme: the app's scheme is used). */
 export async function previewFigure(body: FigurePreviewRequest): Promise<FigureResponse> {
-  return figureFrom(body.metadata, body.theme ?? 'light', body.filters ?? []);
+  return figureFrom(body.metadata, body.theme ?? appScheme(), body.filters ?? [], {
+    key: 'builder',
+    style: body.style,
+  });
 }
 
 export async function renderFigure(
@@ -424,10 +527,17 @@ export async function renderFigure(
   componentId: string,
   filters: unknown,
   theme: 'light' | 'dark' = 'light',
+  _fullLoad = false,
+  signal?: AbortSignal,
+  options?: RenderFigureOptions,
 ): Promise<FigureResponse> {
   const metadata = getComponent(componentId);
   if (!metadata) throw new StudioPreviewError('This figure is no longer on screen.');
-  return figureFrom(metadata as Record<string, unknown>, theme, filters);
+  return figureFrom(metadata as Record<string, unknown>, theme, filters, {
+    key: componentId,
+    style: options?.style,
+    signal,
+  });
 }
 
 // ---- tables ----------------------------------------------------------------
