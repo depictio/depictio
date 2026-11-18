@@ -23863,14 +23863,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_bcftools",
           "mode": "bcftools",
           "name": "Variant-call statistics",
           "origin_tool": "BCFtools",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_bcftools\nname: Variant-call statistics\norigin_tool: BCFtools\nmode: bcftools\ndescription: Variant-call statistics (substitution types, indel lengths, variant-quality counts) \u2014 bcftools stats, via MultiQC.\nstage: variants\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: bcftools }\n",
+          "rawYaml": "id: multiqc_bcftools\nname: Variant-call statistics\norigin_tool: BCFtools\nmode: bcftools\ndescription: Variant-call statistics (substitution types, indel lengths, variant-quality counts) \u2014 bcftools stats, via MultiQC.\nstage: variants\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: bcftools }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -23969,14 +23969,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_bowtie2",
           "mode": "bowtie2",
           "name": "Alignment summary",
           "origin_tool": "Bowtie 2",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_bowtie2\nname: Alignment summary\norigin_tool: Bowtie 2\nmode: bowtie2\ndescription: Read-alignment summary against the reference (paired-end alignment rates) \u2014 Bowtie2, via MultiQC.\nstage: alignment\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: bowtie2 }\n",
+          "rawYaml": "id: multiqc_bowtie2\nname: Alignment summary\norigin_tool: Bowtie 2\nmode: bowtie2\ndescription: Read-alignment summary against the reference (paired-end alignment rates) \u2014 Bowtie2, via MultiQC.\nstage: alignment\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: bowtie2 }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -24392,14 +24392,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_fastp",
           "mode": "fastp",
           "name": "Read pre-processing",
           "origin_tool": "fastp",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_fastp\nname: Read pre-processing\norigin_tool: fastp\nmode: fastp\ndescription: Read pre-processing QC (quality/adapter filtering, insert size, GC/N content) \u2014 fastp, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: fastp }\n",
+          "rawYaml": "id: multiqc_fastp\nname: Read pre-processing\norigin_tool: fastp\nmode: fastp\ndescription: Read pre-processing QC (quality/adapter filtering, insert size, GC/N content) \u2014 fastp, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: fastp }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -24708,14 +24708,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_ivar",
           "mode": "ivar",
           "name": "Primer trimming",
           "origin_tool": "iVar",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_ivar\nname: Primer trimming\norigin_tool: iVar\nmode: ivar\ndescription: Amplicon primer-trimming and variant section metrics \u2014 iVar, surfaced via MultiQC.\nstage: variants\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: ivar }\n",
+          "rawYaml": "id: multiqc_ivar\nname: Primer trimming\norigin_tool: iVar\nmode: ivar\ndescription: Amplicon primer-trimming and variant section metrics \u2014 iVar, surfaced via MultiQC.\nstage: variants\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: ivar }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -24780,14 +24780,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_kraken",
           "mode": "kraken",
           "name": "Read classification",
           "origin_tool": "Kraken 2",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_kraken\nname: Read classification\norigin_tool: Kraken 2\nmode: kraken\ndescription: Taxonomic read classification (top species/clades) \u2014 Kraken2, surfaced via MultiQC.\nstage: taxonomy\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: kraken }\n",
+          "rawYaml": "id: multiqc_kraken\nname: Read classification\norigin_tool: Kraken 2\nmode: kraken\ndescription: Taxonomic read classification (top species/clades) \u2014 Kraken2, surfaced via MultiQC.\nstage: taxonomy\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: kraken }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -25169,14 +25169,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_mosdepth",
           "mode": "mosdepth",
           "name": "Coverage distribution",
           "origin_tool": "mosdepth",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_mosdepth\nname: Coverage distribution\norigin_tool: mosdepth\nmode: mosdepth\ndescription: Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC.\nstage: alignment\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: mosdepth }\n",
+          "rawYaml": "id: multiqc_mosdepth\nname: Coverage distribution\norigin_tool: mosdepth\nmode: mosdepth\ndescription: Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC.\nstage: alignment\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: mosdepth }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -25557,14 +25557,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_quast",
           "mode": "quast",
           "name": "Assembly quality",
           "origin_tool": "QUAST",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_quast\nname: Assembly quality\norigin_tool: QUAST\nmode: quast\ndescription: Genome-assembly quality metrics (contig counts, lengths) \u2014 QUAST, surfaced via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: quast }\n",
+          "rawYaml": "id: multiqc_quast\nname: Assembly quality\norigin_tool: QUAST\nmode: quast\ndescription: Genome-assembly quality metrics (contig counts, lengths) \u2014 QUAST, surfaced via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: quast }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -25769,14 +25769,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_samtools",
           "mode": "samtools",
           "name": "Alignment flagstats",
           "origin_tool": "SAMtools",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_samtools\nname: Alignment flagstats\norigin_tool: SAMtools\nmode: samtools\ndescription: Alignment flagstat summaries (mapped %, properly paired) \u2014 samtools, via MultiQC.\nstage: alignment\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: samtools }\n",
+          "rawYaml": "id: multiqc_samtools\nname: Alignment flagstats\norigin_tool: SAMtools\nmode: samtools\ndescription: Alignment flagstat summaries (mapped %, properly paired) \u2014 samtools, via MultiQC.\nstage: alignment\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: samtools }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -25805,14 +25805,14 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_snpeff",
           "mode": "snpeff",
           "name": "Variant effects",
           "origin_tool": "SnpEff",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_snpeff\nname: Variant effects\norigin_tool: SnpEff\nmode: snpeff\ndescription: Variant functional-effect annotation summary (impact, class, region) \u2014 SnpEff, via MultiQC.\nstage: variants\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: snpeff }\n",
+          "rawYaml": "id: multiqc_snpeff\nname: Variant effects\norigin_tool: SnpEff\nmode: snpeff\ndescription: Variant functional-effect annotation summary (impact, class, region) \u2014 SnpEff, via MultiQC.\nstage: variants\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: snpeff }\n",
           "renders_as": [
             {
               "aggregations": [],
@@ -25983,13 +25983,13 @@
               "**/multiqc/*/*_data/multiqc.parquet"
             ]
           },
-          "fixture": "../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
           "fixtureContent": null,
           "id": "multiqc_summary",
           "mode": "summary",
           "name": "Pipeline summary",
           "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
-          "rawYaml": "id: multiqc_summary\nname: Pipeline summary\nmode: summary\ndescription: Per-sample pipeline summary metrics (assembly + variant calling) \u2014 viralrecon summary tables, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: summary }\n",
+          "rawYaml": "id: multiqc_summary\nname: Pipeline summary\nmode: summary\ndescription: Per-sample pipeline summary metrics (assembly + variant calling) \u2014 viralrecon summary tables, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: summary }\n",
           "renders_as": [
             {
               "aggregations": [],

@@ -149,8 +149,6 @@ dump.rdb
 # version segment so a bump never has to touch these rules)
 !depictio/projects/nf-core/ampliseq/*/run_1/multiqc_data/multiqc.parquet
 !depictio/projects/nf-core/ampliseq/*/multiqc/multiqc_data/multiqc.parquet
-# Allow nf-core viralrecon bundled run_1 (multiqc.parquet only — TSVs allow-listed below)
-!depictio/projects/nf-core/viralrecon/*/run_1/multiqc/multiqc_data/multiqc.parquet
 # Allow the catalog conformance project's synthetic MultiQC report (~70 KB,
 # generated from stub logs so the e2e suite can exercise the MultiQC catalog
 # outputs without vendoring a reference pipeline's 24 MB parquet)
@@ -166,13 +164,6 @@ dump.rdb
 !depictio/projects/nf-core/ampliseq/*/*.tsv
 !depictio/projects/nf-core/ampliseq/*/input/*.tsv
 !depictio/projects/nf-core/ampliseq/*/input/samplesheet.csv
-# Allow nf-core viralrecon bundled mosdepth TSVs (4 files under run_1/variants/bowtie2/mosdepth)
-!depictio/projects/nf-core/viralrecon/*/run_1/variants/bowtie2/mosdepth/amplicon/*.tsv
-!depictio/projects/nf-core/viralrecon/*/run_1/variants/bowtie2/mosdepth/genome/*.tsv
-# Allow nf-core viralrecon canonical seed TSVs (recipe outputs materialised once
-# and committed so init resolver can convert recipe DCs → file_scan instead of
-# pruning them on every fresh deploy)
-!depictio/projects/nf-core/viralrecon/*/*.tsv
 # Allow the nf-core template reference inputs that the megatest never publishes.
 # Each pipeline's megatest.yaml carries the curl lines that mirror these from
 # nf-core/test-datasets; they are committed so the template is self-describing and

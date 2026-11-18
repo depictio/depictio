@@ -108,7 +108,9 @@ def is_present(fixture: Fixture, root: Path) -> bool:
     if fixture.extract:
         stamp = _stamp(dest)
         return dest.is_dir() and stamp.is_file() and stamp.read_text().strip() == fixture.sha256
-    return dest.is_file() and dest.stat().st_size == fixture.size and _sha256(dest) == fixture.sha256
+    return (
+        dest.is_file() and dest.stat().st_size == fixture.size and _sha256(dest) == fixture.sha256
+    )
 
 
 def _download(url: str, target: Path) -> None:

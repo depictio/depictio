@@ -479,10 +479,8 @@ def test_ivar_roles_match_recipe_output():
 # ---------------------------------------------------------------------------
 
 
-def test_match_run_dir_recognises_bundled_viralrecon_files():
-    run = REPO_ROOT / "depictio" / "projects" / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
-    if not run.exists():
-        pytest.skip("bundled viralrecon run_1 not present")
+def test_match_run_dir_recognises_viralrecon_like_files(viralrecon_like_run):
+    run = viralrecon_like_run
     by_output = {m.output_id: m for m in match_run_dir(run)}
     assert "mosdepth_genome_coverage" in by_output
     # MultiQC is surfaced as one output per module (multiqc_fastqc, multiqc_samtools…)
@@ -491,12 +489,10 @@ def test_match_run_dir_recognises_bundled_viralrecon_files():
     assert "advanced_viz:coverage_track" in by_output["mosdepth_genome_coverage"].renders
 
 
-def test_compose_run_dir_groups_modules_with_their_viz():
+def test_compose_run_dir_groups_modules_with_their_viz(viralrecon_like_run):
     from depictio.models.components.advanced_viz.catalog import compose_run_dir
 
-    run = REPO_ROOT / "depictio" / "projects" / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
-    if not run.exists():
-        pytest.skip("bundled viralrecon run_1 not present")
+    run = viralrecon_like_run
     by_tool = compose_run_dir(run)
     # pipeline-agnostic composition: recognised modules grouped, each with renders
     assert "mosdepth" in by_tool and "multiqc" in by_tool
@@ -711,9 +707,9 @@ def test_cli_validate_exits_zero_on_bundled_catalog():
     assert result.exit_code == 0, result.stdout
 
 
-def test_cli_commands_smoke():
+def test_cli_commands_smoke(viralrecon_like_run):
     runner, app, dev_app = _cli()
-    run = REPO_ROOT / "depictio" / "projects" / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
+    run = viralrecon_like_run
     user_facing = (
         ["list"],
         ["info", "qiime2"],

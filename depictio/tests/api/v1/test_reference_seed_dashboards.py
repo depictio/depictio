@@ -6,13 +6,13 @@ static ID declared in
 — otherwise the dashboard 404s at render time on every fresh deploy (the
 auto-generated IDs from the source-of-truth instance don't reproduce).
 
-This test fired because viralrecon's seeds shipped with 46 auto-generated
-ObjectIds (prefix `6a0e2739...`) instead of the static `746b0f...` IDs. See
-`depictio/projects/nf-core/viralrecon/3.0.0/remap_seeds_to_static_ids.py`
-for the one-shot remap.
+This test fired because a reference project's seeds shipped with 46 auto-generated
+ObjectIds instead of the static IDs. See
+`depictio/projects/nf-core/ampliseq/*/remap_seeds_to_static_ids.py` for the one-shot
+remap.
 
-The same invariant covers ampliseq (already compliant) and any future
-reference project bundled under `depictio/projects/nf-core/`.
+The same invariant covers every reference project bundled under
+`depictio/projects/`.
 """
 
 from __future__ import annotations

@@ -619,9 +619,7 @@ def compute_verdict(
     if not new_data:
         return Verdict("unverified", "no usable megatest run for this release")
     if diff_errors:
-        return Verdict(
-            "review", f"{diff_errors} error(s) when the template is run on both runs"
-        )
+        return Verdict("review", f"{diff_errors} error(s) when the template is run on both runs")
     if structure is not None and structure.lost_paths:
         return Verdict(
             "review", f"{len(structure.lost_paths)} path(s) the template reads left the run folder"

@@ -69,9 +69,7 @@ for (label, d1), (_, d2) in zip(docs1, docs2):
     print(f"\n── {label}: DIFF ───────────────────────────────────────────")
     tags1, tags2 = set(comps1), set(comps2)
     if tags1 != tags2:
-        print(
-            f"  TAGS DIFFER: only in YAML_1={tags1 - tags2}  only in YAML_2={tags2 - tags1}"
-        )
+        print(f"  TAGS DIFFER: only in YAML_1={tags1 - tags2}  only in YAML_2={tags2 - tags1}")
         errors.append(f"  [{label}] component tags differ")
     else:
         print(f"  Tags match: {len(tags1)} components")
@@ -82,9 +80,7 @@ for (label, d1), (_, d2) in zip(docs1, docs2):
             for key in set(c1) | set(c2):
                 v1, v2 = c1.get(key), c2.get(key)
                 if v1 != v2:
-                    errors.append(
-                        f"  [{label}][{tag}] {key}:\n    YAML_1: {v1}\n    YAML_2: {v2}"
-                    )
+                    errors.append(f"  [{label}][{tag}] {key}:\n    YAML_1: {v1}\n    YAML_2: {v2}")
 
 if errors:
     print(f"\n  {len(errors)} field(s) differ:")

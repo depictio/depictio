@@ -192,9 +192,7 @@ def process_taxonomy_heatmap(output_dir: Path) -> pd.DataFrame:
 
     # Filter out Unclassified phyla and empty values
     df = df[
-        (df["Phylum"].notna())
-        & (df["Phylum"].str.strip() != "")
-        & (df["Phylum"] != "Unclassified")
+        (df["Phylum"].notna()) & (df["Phylum"].str.strip() != "") & (df["Phylum"] != "Unclassified")
     ].copy()
 
     # Aggregate: mean rel_abundance per sample × Phylum
@@ -245,18 +243,18 @@ def add_coordinates_to_metadata(output_dir: Path) -> pd.DataFrame:
     # Per-sample city assignment: habitats are spread across cities
     # (not same habitat → same city)
     sample_city = {
-        "SRR10070130": "Frankfurt",   # Riverwater
-        "SRR10070131": "Hamburg",      # Riverwater
-        "SRR10070132": "Munich",       # Groundwater
-        "SRR10070133": "Berlin",       # Groundwater
-        "SRR10070134": "Cologne",      # Riverwater
-        "SRR10070141": "Frankfurt",    # Groundwater
-        "SRR10070149": "Cuxhaven",     # Sediment
-        "SRR10070150": "Hamburg",      # Sediment
-        "SRR10070151": "Berlin",       # Sediment
-        "SRR10102392": "Munich",       # Soil
-        "SRR10102393": "Cologne",      # Soil
-        "SRR10102394": "Cuxhaven",     # Soil
+        "SRR10070130": "Frankfurt",  # Riverwater
+        "SRR10070131": "Hamburg",  # Riverwater
+        "SRR10070132": "Munich",  # Groundwater
+        "SRR10070133": "Berlin",  # Groundwater
+        "SRR10070134": "Cologne",  # Riverwater
+        "SRR10070141": "Frankfurt",  # Groundwater
+        "SRR10070149": "Cuxhaven",  # Sediment
+        "SRR10070150": "Hamburg",  # Sediment
+        "SRR10070151": "Berlin",  # Sediment
+        "SRR10102392": "Munich",  # Soil
+        "SRR10102393": "Cologne",  # Soil
+        "SRR10102394": "Cuxhaven",  # Soil
     }
 
     # Use fixed seed for reproducibility

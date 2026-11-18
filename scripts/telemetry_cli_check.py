@@ -155,7 +155,9 @@ def main() -> int:
             f"got {len(installs)}",
         )
         if not check(
-            f"{label}: emitted exactly one command event", len(commands) == 1, f"got {len(commands)}"
+            f"{label}: emitted exactly one command event",
+            len(commands) == 1,
+            f"got {len(commands)}",
         ):
             failures += 1
             continue

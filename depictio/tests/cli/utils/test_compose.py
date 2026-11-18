@@ -34,7 +34,6 @@ from depictio.models.components.advanced_viz.catalog import match_run_dir
 REPO = Path(__file__).resolve().parents[4]
 PROJECTS = REPO / "depictio" / "projects"
 CONFORMANCE = PROJECTS / "init" / "catalog_conformance" / "run_1"
-VIRALRECON = PROJECTS / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
 AMPLISEQ_214 = PROJECTS / "nf-core" / "ampliseq" / "2.14.0"
 AMPLISEQ_216 = PROJECTS / "nf-core" / "ampliseq" / "2.16.0"
 
@@ -89,8 +88,15 @@ def test_glob_regex_matches_like_pathlib(tmp_path, pattern):
     assert {f for f in walk(tmp_path) if regex.match(f)} == expected
 
 
-@pytest.mark.parametrize("run", [CONFORMANCE, VIRALRECON, AMPLISEQ_214, AMPLISEQ_216])
-def test_one_walk_finds_what_match_run_dir_finds(run):
+@pytest.mark.parametrize("run", ["conformance", "viralrecon", "ampliseq_214", "ampliseq_216"])
+def test_one_walk_finds_what_match_run_dir_finds(run, viralrecon_like_run):
+    run = {
+        "conformance": CONFORMANCE,
+        "viralrecon": viralrecon_like_run,
+        "ampliseq_214": AMPLISEQ_214,
+        "ampliseq_216": AMPLISEQ_216,
+    }[run]
+
     def key(matches):
         return {(m.tool_id, m.output_id, m.path) for m in matches}
 
@@ -203,9 +209,9 @@ def test_composing_twice_writes_the_same_dashboard(tmp_path):
     ).read_text()
 
 
-def test_a_recipe_reading_its_own_output_name_gets_a_raw_provider(tmp_path):
+def test_a_recipe_reading_its_own_output_name_gets_a_raw_provider(viralrecon_like_run):
     """mosdepth's recipes read a collection named like their own output."""
-    composition = compose_run(VIRALRECON)
+    composition = compose_run(viralrecon_like_run)
     by_tag = {c.tag: c for c in composition.collections}
     assert by_tag["mosdepth_genome_coverage"].kind == "provider"
     view = by_tag["mosdepth_genome_coverage_view"]
