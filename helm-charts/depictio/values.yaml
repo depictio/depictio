@@ -55,6 +55,30 @@ persistence:
     size: 5Gi
     accessMode: ReadWriteMany
 
+# MongoDB backups (Admin > Backups). Both halves are off by default: a
+# snapshot is the size of the whole database, so a deployment must size a
+# volume before the schedule starts filling it.
+backups:
+  # Volume for the backup files, mounted on the backend at
+  # /app/depictio/backups. Without it, backups are written inside the
+  # container and lost on the next restart.
+  persistence:
+    enabled: false
+    size: 5Gi
+    accessMode: ReadWriteMany
+  # Default schedule. An admin's change in Admin > Backups overrides it.
+  schedule:
+    enabled: false
+    intervalHours: 24
+    # "HH:MM" UTC anchors the runs on a fixed grid; empty = rolling interval.
+    timeOfDay: ""
+    # Delete backups older than N days (0 keeps everything).
+    retentionDays: 30
+    # Smart retention (grandfather-father-son): retentionDays daily, then
+    # one per ISO week for weeklyWeeks, then one per month for monthlyMonths.
+    weeklyWeeks: 0
+    monthlyMonths: 0
+
 # Secrets
 secrets:
   # Optionally override the generated S3 access key (bundled SeaweedFS).

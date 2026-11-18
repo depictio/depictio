@@ -653,6 +653,10 @@ spec:
               mountPath: /app/depictio/.depictio
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
+            {{- if ((.Values.backups | default dict).persistence | default dict).enabled }}
+            - name: depictio-backups
+              mountPath: /app/depictio/backups
+            {{- end }}
             {{- if .Values.local_development }}
             # DEV ONLY: mount the depictio source code for development
             ## Use minikube mount or similar to mount the local source code
@@ -672,6 +676,11 @@ spec:
         - name: depictio-uploads
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-uploads-pvc
+        {{- if ((.Values.backups | default dict).persistence | default dict).enabled }}
+        - name: depictio-backups
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-backups-pvc
+        {{- end }}
         {{- if .Values.local_development }}
         # DEV ONLY: mount the depictio source code for development
         ## Use minikube mount or similar to mount the local source code
