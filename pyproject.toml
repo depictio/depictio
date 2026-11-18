@@ -71,7 +71,9 @@ server = [
   # Dashboard thumbnails. The Chromium they drive is downloaded separately, by the
   # worker image or by `depictio local up --screenshots`.
   "playwright==1.62.0",
-  "plotly-express==0.4.1",
+  # plotly trendline='ols' / 'lowess' (figure UI and the penguins and iris dashboards)
+  # import it. It used to arrive only through plotly-express, a 2019 shim nothing imports.
+  "statsmodels==0.14.6",
   # In-tree packages (packages/): [tool.uv.sources] installs them from the
   # checkout; the pins are what a published depictio wheel requires.
   "plotly-complexheatmap==0.1.0",

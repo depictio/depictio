@@ -291,7 +291,6 @@ depictio/.depictio/*.yaml
 ## Screenshots
 screenshot_*.png
 # Ignore all screenshots recursively
-depictio/dash/**/screenshots/**
 # Dashboard screenshots are generated at runtime by the worker and served from
 # here; the backend mkdir's the dir at boot (depictio/api/main.py). Not tracked
 # by default — but the reference-dashboard thumbnails below are allow-listed so
@@ -307,21 +306,6 @@ depictio/api/static/dashboard_logos/**
 # panel (POST /utils/branding/logo/{variant}); the backend mkdir's the dir.
 depictio/api/static/branding/**
 
-# Allow reference dashboard screenshots (iris, penguins, ampliseq)
-# Iris dashboard (6824cb3b89d2b72169309737)
-!depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png
-!depictio/dash/static/screenshots/6824cb3b89d2b72169309737_light.png
-!depictio/dash/static/screenshots/6824cb3b89d2b72169309737_dark.png
-# Penguins dashboard (6824cb3b89d2b72169309738)
-!depictio/dash/static/screenshots/6824cb3b89d2b72169309738_light.png
-!depictio/dash/static/screenshots/6824cb3b89d2b72169309738_dark.png
-# Ampliseq main tab, the Overview (646b0f3c1e4a2d7f8e5b8ca2)
-!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2.png
-!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_light.png
-!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_dark.png
-# Ampliseq Analysis dashboard (646b0f3c1e4a2d7f8e5b8ca6)
-!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca6_light.png
-!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca6_dark.png
 
 # Allow reference dashboard screenshots served by the API (React viewer cards).
 # These are regenerated against real reference data and committed so fresh
@@ -338,11 +322,7 @@ depictio/api/static/branding/**
 
 # Ensure parent directories are also un-ignored
 !depictio/
-!depictio/dash/
-!depictio/dash/static/
-!depictio/dash/static/screenshots/
 
-depictio/tests/dash/screenshots/
 
 # Cloud Storage
 ## S3 (bundled SeaweedFS; legacy MinIO dir kept ignored)
@@ -362,8 +342,6 @@ target/
 
 # Application Specific
 ## Depictio
-# depictio/dash/static/
-# depictio/dash/assets/
 ldap_config/
 ldap_db/
 
@@ -385,10 +363,6 @@ dashboards/local/
 !sample_metadata.csv
 !test_data.csv
 
-# Cypress
-depictio/tests/e2e-tests/node_modules/
-depictio/tests/e2e-tests/cypress/screenshots/
-# depictio/tests/e2e-tests/package-lock.json
 
 # pnpm workspace root — `pnpm install` at the repo root creates a top-level
 # node_modules alongside the per-package ones already ignored in each
@@ -435,7 +409,6 @@ docker-compose.override.yaml
 # Only curated CLAUDE.md files are tracked — opt-in via negation below.
 **/CLAUDE.md
 !/CLAUDE.md
-!/depictio/dash/CLAUDE.md
 !/depictio/api/v1/endpoints/utils_endpoints/CLAUDE.md
 
 # Superseded skill definitions (now lives in .claude/)

@@ -131,9 +131,6 @@ importers:
       '@iconify-json/bx':
         specifier: ^1.2.3
         version: 1.2.3
-      '@iconify-json/carbon':
-        specifier: ^1.2.24
-        version: 1.2.24
       '@iconify-json/formkit':
         specifier: ^1.2.2
         version: 1.2.2
@@ -384,9 +381,6 @@ importers:
       '@mantine/notifications':
         specifier: ^7.14.0
         version: 7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@monaco-editor/react':
-        specifier: ^4.6.0
-        version: 4.7.0(monaco-editor@0.52.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       ag-grid-community:
         specifier: ^32.3.0
         version: 32.3.9
@@ -1555,9 +1549,6 @@ packages:
 
   '@iconify-json/bx@1.2.3':
     resolution: {integrity: sha512-ihvX+2d688otgW7MAvUEdKVln+fZ28BJTlygazKUU/+RCODWT+2KObjAHe8+KPs4VhC8V6Tgoy1qrX0Myn/upA==}
-
-  '@iconify-json/carbon@1.2.24':
-    resolution: {integrity: sha512-b7u/eTWE3xFa7UXlRJBSEm6At1y6+F0P3imBEip5/8QeRzouxVjBf80Y2xnu1GYsFo9MYlHA0bZfxxMd5givfw==}
 
   '@iconify-json/formkit@1.2.2':
     resolution: {integrity: sha512-vrv5X44zie1F46e1AsPjN2MEi8ui+6SA1EvWETphAbkd+MaXmxyD4vra3hdTOYYNJDn5dkC7vMGf5WieCMu9zA==}
@@ -6541,10 +6532,6 @@ snapshots:
     dependencies:
       '@iconify/types': 2.0.0
 
-  '@iconify-json/carbon@1.2.24':
-    dependencies:
-      '@iconify/types': 2.0.0
-
   '@iconify-json/formkit@1.2.2':
     dependencies:
       '@iconify/types': 2.0.0
@@ -8966,6 +8953,7 @@ snapshots:
       depictio-components: file:packages/depictio-components(@iconify/react@5.2.1(react@18.3.1))(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       mobx: 6.16.1
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      papaparse: 5.7.0
       plotly.js: 2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
