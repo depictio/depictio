@@ -407,6 +407,22 @@ def catalog_validate(
                     continue
                 # Author-declared dtypes are authoritative over CSV inference.
                 col_dtypes.update(out.columns)
+                # A fixture outranks the recipe for grounding, but the recipe must
+                # still load, and the fixture must be a sample of what it returns:
+                # otherwise a missing or broken recipe passes CI unnoticed.
+                if out.recipe:
+                    try:
+                        produced = recipe_output_columns(out.recipe)
+                    except Exception as exc:
+                        problems.append(f"{out.id}: recipe {out.recipe} → {exc}")
+                        continue
+                    absent = [c for c in produced if c not in available]
+                    if absent:
+                        problems.append(
+                            f"{out.id}: fixture {out.fixture} lacks {absent} from recipe "
+                            f"{out.recipe}'s OUTPUT_SCHEMA; the fixture must be a sample of "
+                            "the recipe's output"
+                        )
             elif out.recipe:
                 try:
                     available = set(recipe_output_columns(out.recipe))
