@@ -401,3 +401,50 @@ def test_the_pdf_style_is_validated():
     )
     with pytest.raises(ValidationError):
         NotebookExportRequest.model_validate({"state": state, "pdf_style": "sepia"})
+
+
+# ── No orphan text ──────────────────────────────────────────────────────────
+
+
+def test_a_link_with_no_target_goes_with_its_label():
+    from depictio.api.v1.services.notebook_export.report_chrome import ORPHAN, drop_orphan_links
+
+    assert drop_orphan_links(f"between groups. {ORPHAN}\n") == "between groups.\n"
+    assert drop_orphan_links(f"Trim · {ORPHAN} · [Tab](#t)") == "Trim · [Tab](#t)"
+    assert (
+        drop_orphan_links(f"- **Samplesheet** [12 rows](#s), its path in {ORPHAN}")
+        == "- **Samplesheet** [12 rows](#s)"
+    )
+    assert drop_orphan_links(f"- {ORPHAN}\n- [B](#b)") == "- [B](#b)"
+    assert drop_orphan_links(f"- ![](icon:mdi:x) **Tools** {ORPHAN}\nnext") == "next"
+    assert drop_orphan_links("untouched [a](#a)") == "untouched [a](#a)"
+
+
+def test_run_parameters_never_linger_as_stray_text(ampliseq_tabs):
+    # No parameters block in this export: the hero's "[Run parameters](params:)"
+    # goes, label and all, and no link is left pointing at nothing.
+    body = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert "Run parameters" not in body
+    assert "](params:" not in body and "\x00" not in body
+    assert "what differs between groups." in body
+    # With one, it is a link to it.
+    project = {"template_origin": {"run_provenance": [{"key": "a", "value": 1}]}}
+    body = _body(generate_qmd(_plan(ampliseq_tabs, project=project)))
+    assert "[Run parameters](#export-parameters)" in body
+
+
+def test_a_tab_name_with_parentheses_is_a_link_not_stray_text(ampliseq_tabs):
+    body = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert "(CTD))" not in body
+    assert "[Environment (CTD)](#tab-environment-ctd)" in body
+    # A tab the family does not hold (the how-to-read list names SIDLE) is
+    # left out rather than listed as plain text.
+    assert "\n- SIDLE" not in body
+
+
+def test_a_headings_aside_is_the_pages_only(ampliseq_tabs):
+    body = _body(generate_qmd(_plan(ampliseq_tabs)))
+    line = next(ln for ln in body.split("\n") if "{#filters}" in ln)
+    assert (
+        '[<span class="dpx-h-note">none active</span>]{.content-visible when-format="html"}' in line
+    )

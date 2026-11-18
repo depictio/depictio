@@ -52,12 +52,14 @@ from .reading_order import (
 from .report_chrome import (
     DARK_CSS,
     DIV_CLOSE,
+    ORPHAN,
     REPORT_CSS,
     TOC_SCOPE_JS,
     about_callout,
     about_callout_many,
     appbar_html,
     cell_open,
+    drop_orphan_links,
     footer_html,
     grid_open,
     mark_css,
@@ -92,9 +94,11 @@ _MANTINE_SHADE_6 = {
 }
 _CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()")
 # SectionAccordion's TAB_LINK: a markdown link whose target is another tab.
-_TAB_LINK_RE = re.compile(r"\[([^\]]+)\]\(tab:([^)]+)\)")
+# A target may hold one level of parentheses: `tab:Environment (CTD)`.
+_TARGET = r"((?:[^()\n]|\([^()\n]*\))+)"
+_TAB_LINK_RE = re.compile(r"\[([^\]]+)\]\(tab:" + _TARGET + r"\)")
 _PARAMS_LINK_RE = re.compile(r"\[([^\]]+)\]\(params:[^)]*\)")
-_SECTION_LINK_RE = re.compile(r"\[([^\]]+)\]\(section:([^)]+)\)")
+_SECTION_LINK_RE = re.compile(r"\[([^\]]+)\]\(section:" + _TARGET + r"\)")
 _LEGEND_RE = re.compile(r"\{\{legend:([A-Za-z0-9_.-]+)\}\}")
 # A text tile's inline icon, `![](icon:mdi:flask-outline)` (TextRenderer draws it).
 INLINE_ICON_RE = re.compile(r"!\[[^\]]*\]\(icon:([a-z0-9-]+:[a-z0-9-]+)\)")
@@ -1118,13 +1122,15 @@ class NotebookBuilder:
         return by_unit, by_name
 
     def _rewrite_tab_links(self, text: str) -> str:
-        """``[label](tab:Name)`` → ``[label](#tab-name)``; a tab not in the
-        document keeps its label and loses the link."""
+        """``[label](tab:Name)`` → ``[label](#tab-name)``; a link to a tab the
+        document does not hold goes, label and all (``drop_orphan_links``)."""
+        return drop_orphan_links(self._mark_tab_links(text))
 
+    def _mark_tab_links(self, text: str) -> str:
         def sub(m: re.Match[str]) -> str:
             label, name = m.group(1), m.group(2)
             anchor = self._anchor_by_tab_name.get(name.strip().lower())
-            return f"[{label}](#{anchor})" if anchor else label
+            return f"[{label}](#{anchor})" if anchor else ORPHAN
 
         return _TAB_LINK_RE.sub(sub, text)
 
@@ -1133,23 +1139,24 @@ class NotebookBuilder:
 
         ``tab:`` to the tab's part; ``section:`` to the section's heading;
         ``params:`` (the app opens its run-parameters dialog there) to the
-        header's parameters block when the export has one. A target the
-        document does not hold keeps its label and loses the link.
+        header's parameters block when the export has one. A link to a target
+        the document does not hold goes, label and all: an orphan label reads
+        as stray text (``drop_orphan_links``).
         """
-        text = self._rewrite_tab_links(text)
+        text = self._mark_tab_links(text)
         has_params = bool(
             ((self.plan.project or {}).get("template_origin") or {}).get("run_provenance")
         )
 
         def params(m: re.Match[str]) -> str:
-            return f"[{m.group(1)}](#{PARAMS_ANCHOR})" if has_params else m.group(1)
+            return f"[{m.group(1)}](#{PARAMS_ANCHOR})" if has_params else ORPHAN
 
         def section(m: re.Match[str]) -> str:
             anchor = self.section_anchors.get(m.group(2).strip().lower())
-            return f"[{m.group(1)}](#{anchor})" if anchor else m.group(1)
+            return f"[{m.group(1)}](#{anchor})" if anchor else ORPHAN
 
         text = _PARAMS_LINK_RE.sub(params, text)
-        return _SECTION_LINK_RE.sub(section, text)
+        return drop_orphan_links(_SECTION_LINK_RE.sub(section, text))
 
     def _inline_icons(self, text: str) -> str:
         """``![](icon:prefix:name)`` → the glyph as inline SVG (dropped when unknown)."""
@@ -2662,7 +2669,14 @@ fig_funnel"""
             if accent
             else _esc(text)
         )
-        aside = f' <span class="dpx-h-note">{_esc(note)}</span>' if note else ""
+        # The page's muted aside ("none active"); a printed heading has no
+        # aside, so the PDF leaves it out rather than read it as the title.
+        aside = (
+            f' [<span class="dpx-h-note">{_esc(note)}</span>]'
+            '{.content-visible when-format="html"}'
+            if note
+            else ""
+        )
         return f"{'#' * max(1, min(6, level))} {mark}{title}{aside}"
 
     def _markdown_unit_html(
