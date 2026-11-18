@@ -1,7 +1,7 @@
 """Shared Playwright primitives for screenshot capture.
 
 Sits below `screenshot_service.py` (which holds the public dual-theme
-generators) and `dev/playwright_debug/docs_screenshots.py` (which drives the
+generators) and `depictio/dev_scripts/docs_screenshots.py` (which drives the
 Vite dev server for documentation captures). Both call the same Mantine
 AppShell / SPA, so the wait / hide / inject patterns are identical.
 

@@ -59,7 +59,7 @@ Two loaders intentionally do NOT share a module:
 
 - **`get_admin_auth_token()`** (screenshot_service.py) — reads from MongoDB
   inside the API container. Used by the production service.
-- **`_load_token_payload()`** (`dev/playwright_debug/docs_screenshots.py`)
+- **`_load_token_payload()`** (`depictio/dev_scripts/docs_screenshots.py`)
   — reads `depictio/.depictio/admin_config.yaml` from disk. Host-only;
   used by the docs script.
 
@@ -92,7 +92,7 @@ let Plotly finish drawing before the capture.
 
 ## Debug / Manual Triggers
 
-- **`dev/playwright_debug/docs_screenshots.py`** — docs captures (Vite dev
+- **`depictio/dev_scripts/docs_screenshots.py`** — docs captures (Vite dev
   at `:5173`). Uses the file-based token loader and the shared helpers.
 - **`dev/advanced_viz_docs_screenshots/capture_react_screenshots.py`** —
   hits `/screenshot-react-dual/{id}` over HTTP, one viz_kind at a time.

@@ -413,16 +413,6 @@ helm-charts/depictio/*secrets*.yaml
 prof_files/
 
 # Development Environment
-## Dev directories
-dev/jbrowse_dev/assets/multiqc/
-dev/jbrowse_dev/assets/
-dev/flask-login/.env
-dev/celery/jobs.json
-dev/dev_design_visu/data/
-dev/dev_delta/
-dev/dev_minio/
-!dev/multiqc_parser
-dev/dev-multiqc-parquet/detailed_extraction_reports/
 depictio/api/v1/configs/pools_dataset/*.xlsx
 *.bak*
 cache/

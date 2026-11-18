@@ -1,2 +1,0 @@
-dash>=2.16.0
-dash-mantine-components>=0.12.0

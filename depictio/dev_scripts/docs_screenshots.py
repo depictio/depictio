@@ -7,14 +7,14 @@ Prerequisites:
     - depictio/.depictio/admin_config.yaml present (created on first stack boot)
 
 Usage:
-    python dev/playwright_debug/docs_screenshots.py list
-    python dev/playwright_debug/docs_screenshots.py run \\
+    python depictio/dev_scripts/docs_screenshots.py list
+    python depictio/dev_scripts/docs_screenshots.py run \\
         --project-id 646b0f3c1e4a2d7f8e5b8c9a \\
         --shot link_create_modal --shot manage_dc_modal --shot create_dc_modal_table
 
     # realtime shots need a dashboard in a `realtime.enabled` project, and a
     # journal export to populate the event log (see --journal)
-    python dev/playwright_debug/docs_screenshots.py run \\
+    python depictio/dev_scripts/docs_screenshots.py run \\
         --viewer-url http://localhost:5600 --no-seed-auth \\
         --project-id 750a1b2c3d4e5f6a7b8c9d0e --dashboard-id 6a5e584b269ea7d0acdc7ffa \\
         --journal /tmp/journal.json --theme dark --shot realtime_live_menu
@@ -40,7 +40,7 @@ import yaml
 from playwright.async_api import Locator, Page, async_playwright
 
 # Repo-rooted import so the script runs from anywhere (e.g. via `python
-# dev/playwright_debug/docs_screenshots.py ...`) without a packaged install.
+# depictio/dev_scripts/docs_screenshots.py ...`) without a packaged install.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from depictio.api.v1.services.screenshot_helpers import (  # noqa: E402
