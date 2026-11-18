@@ -73,14 +73,6 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: check-screenshot-churn
-        name: Guard default dashboard thumbnails
-        description: 'Block accidental commits of regenerated default screenshots (opt in with DEPICTIO_ALLOW_SCREENSHOT_UPDATE=1)'
-        entry: scripts/check-screenshot-churn.sh
-        language: system
-        files: ^depictio/api/static/screenshots/.*\.png$
-        pass_filenames: false
-
 # A template whose content changed must bump `template.version`: the lock holds the
 # version and content hash of every template (~0.3 s, runs only when a template file,
 # its dashboards, its recipes, a catalog module or a lock is staged). To fix a failure, bump

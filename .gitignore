@@ -284,9 +284,9 @@ screenshot_*.png
 # Ignore all screenshots recursively
 # Dashboard screenshots are generated at runtime by the worker and served from
 # here; the backend mkdir's the dir at boot (depictio/api/main.py). Not tracked
-# by default — but the reference-dashboard thumbnails below are allow-listed so
-# fresh deployments ship good cards (seeded onto the PVC by the helm
-# copy-screenshot-files init container).
+# at all: the seeded reference-dashboard thumbnails are downloaded at image build
+# (fixtures.lock, entry seed-thumbnails) and seeded onto the PVC by the helm
+# copy-screenshot-files init container.
 depictio/api/static/screenshots/**
 
 # Dashboard logos are uploaded at runtime through the editor's Settings drawer
@@ -297,19 +297,6 @@ depictio/api/static/dashboard_logos/**
 # panel (POST /utils/branding/logo/{variant}); the backend mkdir's the dir.
 depictio/api/static/branding/**
 
-
-# Allow reference dashboard screenshots served by the API (React viewer cards).
-# These are regenerated against real reference data and committed so fresh
-# deploys / rebuilt images carry correct thumbnails. Reference dashboards use
-# deterministic seed IDs sharing the body `46b0f3c1e4a2d7f8e5b` (ampliseq
-# 646b0f3c1e4a2d7f8e5b8..., viralrecon 746b0f3c1e4a2d7f8e5b9...); runtime
-# dashboards get random ObjectIds and stay ignored.
-!depictio/api/static/screenshots/?46b0f3c1e4a2d7f8e5b*.png
-# Iris Petal Analysis (6a720e8b59acf2d013e48100) — a static-ID init dashboard
-# like iris and penguins, but not yet created by db_init, so this thumbnail is
-# ahead of the seeding it belongs to.
-!depictio/api/static/screenshots/6a720e8b59acf2d013e48100_light.png
-!depictio/api/static/screenshots/6a720e8b59acf2d013e48100_dark.png
 
 # Ensure parent directories are also un-ignored
 !depictio/
@@ -462,3 +449,6 @@ depictio/viewer/public/assets/genomes/*.gff3.gz.tbi
 
 # Claude Code per-user settings
 .claude/settings.local.json
+
+# fetch_fixtures.py stamps
+.fixture-*.sha256

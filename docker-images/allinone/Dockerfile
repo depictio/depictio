@@ -24,6 +24,18 @@
 
 # Base images pinned by digest, the same as Dockerfile.api / Dockerfile.viewer.
 # -----------------------------
+# 0. Fixtures (arch-independent downloads)
+# -----------------------------
+# ---- Fixtures: example data pinned by fixtures.lock ----
+# The full ampliseq tables and the seeded dashboard thumbnails (not in git).
+# This stage depends only on the manifest and the fetch script, so a source change does
+# not download the data again. A checksum mismatch fails the build.
+FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS fixtures
+WORKDIR /fx
+COPY scripts/fetch_fixtures.py fixtures.lock ./
+RUN python3 fetch_fixtures.py --manifest fixtures.lock --root /fx/out
+
+# -----------------------------
 # 1. Viewer bundles: arch-independent, so built once on the build machine
 # -----------------------------
 # Same steps and pins as Dockerfile.viewer (the SPA) and Dockerfile.api (the
@@ -108,6 +120,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY VERSION ./
 COPY depictio ./depictio/
+# Example data over the repository's subsample (and the seeded thumbnails).
+COPY --from=fixtures /fx/out/depictio/ ./depictio/
 COPY packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server

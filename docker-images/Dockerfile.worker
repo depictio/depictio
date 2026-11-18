@@ -6,6 +6,15 @@
 # same Python codebase as the API.
 # -----------------------------
 
+# ---- Fixtures: example data pinned by fixtures.lock ----
+# The full ampliseq tables (the worker does not serve thumbnails).
+# This stage depends only on the manifest and the fetch script, so a source change does
+# not download the data again. A checksum mismatch fails the build.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS fixtures
+WORKDIR /fx
+COPY scripts/fetch_fixtures.py fixtures.lock ./
+RUN python3 fetch_fixtures.py --manifest fixtures.lock --root /fx/out --only ampliseq-3.1.0-data
+
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
 
 ARG VERSION=latest
@@ -108,6 +117,8 @@ RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
 # ---- Project layer (source + VERSION last) ----
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
+# Example data over the repository's subsample.
+COPY --from=fixtures --chown=depictio:depictio /fx/out/depictio/ ./depictio/
 COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server --group worker-reload \

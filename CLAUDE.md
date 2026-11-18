@@ -80,8 +80,14 @@ pre-commit run --all-files         # mandatory after all code changes
   and list it in `fixtures.lock` (`scripts/fetch_fixtures.py`: url, sha256, size, destination)
 - `.large-files-allowlist` is the exception list; keep it short, a test fails on an entry that
   matches no tracked file
-- Don't re-commit the seeded thumbnails (`depictio/api/static/screenshots`) without need: PNGs
-  don't delta-compress, each regeneration adds ~10 MB to every clone
+- **`fixtures.lock` holds what git does not**: the full ampliseq 3.1.0 tables (the repo keeps
+  a subsample of each big table, cut to its first N rows) and the seeded dashboard thumbnails
+  (`depictio/api/static/screenshots`, gitignored). Release `fixtures-v1`, downloaded at image
+  build by a `fixtures` stage in the api, worker and allinone Dockerfiles. A source checkout
+  has the subsample and no thumbnails (the viewer shows an icon): run
+  `python scripts/fetch_fixtures.py` to get the full set. To change one, pack it with
+  `scripts/package_fixture.py`, publish a new release (`fixtures-v2`, assets are immutable)
+  and update the lock. Thumbnails must be captured after the data is ingested
 - Contributors who only need the code can clone without file history:
   `git clone --filter=blob:none https://github.com/depictio/depictio.git`
 

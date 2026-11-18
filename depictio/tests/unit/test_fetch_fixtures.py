@@ -28,9 +28,17 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _fixture(src: Path, data: bytes, to: str, *, extract: bool = False, name: str = "f"):
+def _fixture(
+    src: Path, data: bytes, to: str, *, extract: bool = False, merge: bool = False, name: str = "f"
+):
     return ff.Fixture(
-        name=name, url=src.as_uri(), sha256=_sha(data), size=len(data), to=to, extract=extract
+        name=name,
+        url=src.as_uri(),
+        sha256=_sha(data),
+        size=len(data),
+        to=to,
+        extract=extract or merge,
+        merge=merge,
     )
 
 
@@ -183,3 +191,32 @@ def test_only_flag_limits_to_named_fixtures(tmp_path):
     assert ff.main(["--manifest", str(lock), "--root", str(root), "--only", "a"]) == 0
     assert (root / "a.bin").exists() and not (root / "b.bin").exists()
     assert ff.main(["--manifest", str(lock), "--root", str(root), "--only", "nope"]) == 2
+
+
+def test_merge_unpacks_over_the_existing_folder_and_keeps_its_files(tmp_path):
+    archive = _tar_bytes({"big.tsv": b"full\n", "sub/more.tsv": b"x\n"})
+    src = tmp_path / "pack.tar.gz"
+    src.write_bytes(archive)
+    root = tmp_path / "root"
+    dest = root / "tpl" / "3.1.0"
+    dest.mkdir(parents=True)
+    (dest / "template.yaml").write_text("id: tpl\n")  # tracked in git, not in the archive
+    (dest / "big.tsv").write_text("subsample\n")  # replaced by the full file
+
+    fixture = _fixture(src, archive, "tpl/3.1.0", merge=True)
+    ff.fetch(fixture, root, backoff=0)
+
+    assert (dest / "template.yaml").read_text() == "id: tpl\n"
+    assert (dest / "big.tsv").read_text() == "full\n"
+    assert (dest / "sub" / "more.tsv").read_text() == "x\n"
+    assert ff.is_present(fixture, root)
+
+
+def test_merge_manifest_key_implies_extract(tmp_path):
+    manifest = tmp_path / "fixtures.lock"
+    manifest.write_text(
+        '[{"name": "a", "url": "file:///x", "sha256": "' + "0" * 64 + '", "size": 1,'
+        ' "to": "p", "merge": true}]'
+    )
+    (fixture,) = ff.load_manifest(manifest)
+    assert fixture.extract and fixture.merge

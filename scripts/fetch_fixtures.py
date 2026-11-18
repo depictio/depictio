@@ -12,7 +12,9 @@ tampered asset fails loudly instead of shipping silently wrong data.
      "sha256": "<64 hex chars>",         # of the downloaded file
      "size": 12345,                      # bytes, of the downloaded file
      "to": "depictio/projects/nf-core/ampliseq/3.1.0",  # relative to --root
-     "extract": true}                    # optional: unpack a .tar.gz into ``to``
+     "extract": true,                    # optional: unpack a .tar.gz into ``to``
+     "merge": true}                      # optional: unpack over what ``to`` already holds
+                                         # (default: ``to`` is replaced by the archive)
 
 Usage::
 
@@ -57,6 +59,7 @@ class Fixture:
     size: int
     to: str
     extract: bool = False
+    merge: bool = False
 
 
 def load_manifest(path: Path) -> list[Fixture]:
@@ -77,7 +80,8 @@ def load_manifest(path: Path) -> list[Fixture]:
                 sha256=raw["sha256"].lower(),
                 size=int(raw["size"]),
                 to=raw["to"],
-                extract=bool(raw.get("extract", False)),
+                extract=bool(raw.get("extract", False) or raw.get("merge", False)),
+                merge=bool(raw.get("merge", False)),
             )
         )
     return fixtures
@@ -157,9 +161,12 @@ def fetch(fixture: Fixture, root: Path, *, retries: int = 5, backoff: float = 2.
                 staging = Path(tempfile.mkdtemp(dir=dest.parent, prefix=".extract-"))
                 try:
                     _safe_extract(tmp, staging)
-                    if dest.exists():
-                        shutil.rmtree(dest)
-                    os.replace(staging, dest)
+                    if fixture.merge:
+                        shutil.copytree(staging, dest, dirs_exist_ok=True)
+                    else:
+                        if dest.exists():
+                            shutil.rmtree(dest)
+                        os.replace(staging, dest)
                 finally:
                     shutil.rmtree(staging, ignore_errors=True)
                 _stamp(dest).write_text(fixture.sha256 + "\n")
