@@ -43,22 +43,78 @@ const PLOTLY_PATCHES = [
 /** `depictio-react-core`'s barrel imports four react-plotly prototype patches for
  *  their side effects, which drags plotly.js (~4.7 MB) onto the boot path even
  *  though the gallery shell renders no figure. Drop them from the barrel and
- *  attach them instead to every core module that actually imports react-plotly,
- *  so they still run before any Plot mounts (and load with the plotly chunk). */
+ *  attach them instead to every core module that imports react-plotly.js or
+ *  plotly.js at runtime (type-only imports excluded), so they still run before
+ *  any Plot mounts (and load with the plotly chunk).
+ *
+ *  Fails the build if the barrel no longer has exactly 4 such imports: a format
+ *  change would otherwise leave the replacement silently inoperative. */
 function plotlyPatchesWithPlotly(): Plugin {
   const barrel = path.join(CORE_SRC, 'index.ts');
+  const barrelRe = /^import '\.\/plotly(StrictMode|ZoomGate|SkipIdenticalUpdate|SkipIdleResize)';[ \t]*\r?\n/gm;
+  // Runtime (non `import type`) static imports, and dynamic imports.
+  const runtimeImportRe =
+    /^\s*import\s+(?!type\b)[^;'"]*?from\s+['"](?:react-plotly\.js|plotly\.js)['"]|\bimport\(\s*['"](?:react-plotly\.js|plotly\.js)['"]\s*\)/m;
   return {
     name: 'catalog-site-plotly-patches-lazy',
     enforce: 'pre',
     transform(code, id) {
       const file = id.split('?')[0];
       if (file === barrel) {
-        return code.replace(/^import '\.\/plotly(StrictMode|ZoomGate|SkipIdenticalUpdate|SkipIdleResize)';\n/gm, '');
+        const found = code.match(barrelRe)?.length ?? 0;
+        if (found !== PLOTLY_PATCHES.length) {
+          this.error(
+            `[catalog-site-plotly-patches-lazy] expected exactly ${PLOTLY_PATCHES.length} plotly patch imports ` +
+              `in ${barrel}, found ${found}. The barrel format changed: update PLOTLY_PATCHES / the ` +
+              `regex in vite.catalog-site.config.ts, otherwise plotly.js lands on the boot path.`,
+          );
+        }
+        return code.replace(barrelRe, '');
       }
       if (!file.startsWith(CORE_SRC) || /\/plotly[A-Z][^/]*$/.test(file)) return null;
-      if (!/from 'react-plotly\.js'/.test(code)) return null;
+      if (!runtimeImportRe.test(code)) return null;
       const pre = PLOTLY_PATCHES.map((n) => `import '${path.join(CORE_SRC, n)}';\n`).join('');
       return pre + code;
+    },
+  };
+}
+
+/** Boot-path guard: the entry chunk and `vendor-base` must never statically
+ *  import (directly or transitively) the heavy vendor chunks, which would void
+ *  the first-paint savings of this build. Walks Rollup's `chunk.imports` graph. */
+const FORBIDDEN_BOOT_CHUNKS = ['vendor-plotly', 'vendor-jbrowse', 'vendor-aggrid'];
+function bootPathGuard(): Plugin {
+  return {
+    name: 'catalog-site-boot-path-guard',
+    apply: 'build',
+    generateBundle(_opts, bundle) {
+      const chunks = Object.values(bundle).filter((c) => c.type === 'chunk');
+      const byFile = new Map(chunks.map((c) => [c.fileName, c]));
+      const isForbidden = (c: { name: string }) => FORBIDDEN_BOOT_CHUNKS.includes(c.name);
+      const roots = chunks.filter((c) => c.isEntry || c.name === 'vendor-base');
+      if (!roots.some((c) => c.isEntry)) this.error('[boot-path-guard] no entry chunk found in the bundle');
+      for (const root of roots) {
+        const seen = new Set<string>([root.fileName]);
+        const stack: string[][] = [[root.fileName]];
+        while (stack.length) {
+          const trail = stack.pop()!;
+          const cur = byFile.get(trail[trail.length - 1]);
+          if (!cur) continue;
+          for (const dep of cur.imports) {
+            if (seen.has(dep)) continue;
+            seen.add(dep);
+            const depChunk = byFile.get(dep);
+            if (depChunk && isForbidden(depChunk)) {
+              this.error(
+                `[boot-path-guard] ${root.name} statically imports ${depChunk.name}: ` +
+                  [...trail, dep].join(' -> ') +
+                  `. Heavy vendors must stay behind dynamic import().`,
+              );
+            }
+            stack.push([...trail, dep]);
+          }
+        }
+      }
     },
   };
 }
@@ -91,7 +147,7 @@ function manualChunks(id: string): string | undefined {
 
 export default defineConfig({
   base: './',
-  plugins: [react(), apiShimPlugin(SHIM), plotlyPatchesWithPlotly(), renameEntryToIndex()],
+  plugins: [react(), apiShimPlugin(SHIM), plotlyPatchesWithPlotly(), bootPathGuard(), renameEntryToIndex()],
   build: {
     outDir: OUT_DIR,
     emptyOutDir: true,

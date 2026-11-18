@@ -51,6 +51,7 @@ import {
   nfCoreLabel,
 } from './shared';
 import type { CatalogGlobal, FixturePreview, OutputEntry, OutputInfo } from './shared';
+import ChunkErrorBoundary from './ChunkErrorBoundary';
 import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 
 const DASHBOARD_ID = 'catalog-preview';
@@ -153,9 +154,11 @@ const FixturePreviewPanel: React.FC<{ fixture: FixturePreview; theme?: string }>
           className={theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
           style={{ height: 360, width: '100%' }}
         >
-          <Suspense fallback={<Loader size="xs" m="md" />}>
-            <FixtureGrid fixture={fixture} />
-          </Suspense>
+          <ChunkErrorBoundary>
+            <Suspense fallback={<Loader size="xs" m="md" />}>
+              <FixtureGrid fixture={fixture} />
+            </Suspense>
+          </ChunkErrorBoundary>
         </div>
       </Accordion.Panel>
     </Accordion.Item>
@@ -289,14 +292,16 @@ const OutputView: React.FC<{
     }
     return (
       <CellBoundary label={String(m.component_type)}>
-        <ComponentRenderer
-          metadata={m}
-          filters={[]}
-          dashboardId={DASHBOARD_ID}
-          cardValue={cardValues[m.index]}
-          cardSecondaryValues={cardSecondary[m.index]}
-          cardLoading={false}
-        />
+        <ChunkErrorBoundary>
+          <ComponentRenderer
+            metadata={m}
+            filters={[]}
+            dashboardId={DASHBOARD_ID}
+            cardValue={cardValues[m.index]}
+            cardSecondaryValues={cardSecondary[m.index]}
+            cardLoading={false}
+          />
+        </ChunkErrorBoundary>
       </CellBoundary>
     );
   };
@@ -527,6 +532,7 @@ const LazyOutputView: React.FC<React.ComponentProps<typeof OutputView>> = (props
   const id = props.entry.output.id;
   // ok:false outputs have no data file (the entry carries `error`): never fetch.
   const lazy = isLazy(g) && props.entry.ok !== false;
+  const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{ id: string; error?: string } | null>(
     !lazy || isOutputLoaded(id) ? { id } : null,
   );
@@ -545,7 +551,7 @@ const LazyOutputView: React.FC<React.ComponentProps<typeof OutputView>> = (props
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, lazy]);
+  }, [id, lazy, attempt]);
 
   if (state === null || state.id !== id) {
     return (
@@ -564,6 +570,11 @@ const LazyOutputView: React.FC<React.ComponentProps<typeof OutputView>> = (props
       <Box p="lg">
         <Alert color="red" variant="light" title="Could not load this output">
           {state.error}
+          <div>
+            <Button size="xs" mt="xs" variant="light" color="red" onClick={() => setAttempt((n) => n + 1)}>
+              Retry
+            </Button>
+          </div>
         </Alert>
       </Box>
     );
