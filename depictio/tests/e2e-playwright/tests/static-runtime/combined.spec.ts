@@ -101,7 +101,7 @@ test.describe("combined file — report + dashboard", () => {
     const attempts = await blockNetwork(page);
     await page.goto(combinedUrl());
     const tile = page.locator(`[data-depictio-tile~="${TAB}:scatter-mass-flipper"]`);
-    await tile.locator(".dpx-tile-links button").click();
+    await tile.locator(".dpx-tile-links .dpx-tile-open").click();
     const frame = await dashboardFrame(page);
     const target = frame.locator('[data-component-index="scatter-mass-flipper"]');
     await expect(target).toBeInViewport({ timeout: 30_000 });
