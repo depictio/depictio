@@ -73,14 +73,15 @@ def test_the_dark_tokens_live_in_the_dark_brand_only():
     assert "--dpx-info: #38d9a9" in brand_rules("dark")
 
 
-def test_the_chrome_layers_go_through_quartos_includes(ampliseq_tabs):
-    front, body = _split(generate_qmd(_plan(ampliseq_tabs)))
-    html = front["format"]["html"]
-    header = " ".join(h["text"] for h in html["include-in-header"])
-    assert 'name="depictio-report-chrome"' in header and QUARTO_TESTED in header
-    assert CHROME_JS in html["include-after-body"]["text"]
-    # Neither is inlined in the body as well.
-    assert "dpx-toc-toggle" not in body
+def test_the_chrome_opens_the_body_once_and_stays_out_of_the_front_matter(ampliseq_tabs):
+    src = generate_qmd(_plan(ampliseq_tabs))
+    front, body = _split(src)
+    # In the body: Quarto hands the front matter to pandoc as one argument,
+    # capped at 128 KB on Linux, and the header bar already uses most of it.
+    assert body.count(CHROME_CSS) == 1 and body.count(CHROME_JS) == 1
+    assert f'data-depictio-report-chrome="2; quarto {QUARTO_TESTED}"' in CHROME_CSS
+    head = yaml.safe_dump(front["format"]["html"])
+    assert "dpx-toc-toggle" not in head and "quartoToggleColorScheme" not in head
 
 
 def test_the_quarto_dom_layer_is_one_named_block():

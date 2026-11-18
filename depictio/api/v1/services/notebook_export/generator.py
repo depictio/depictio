@@ -1523,8 +1523,7 @@ class NotebookBuilder:
             # nf-core apple), the app's otherwise.
             favicon_data_uri=plan.dashboard_logo or plan.favicon_data_uri,
             before_body=self._appbar(),
-            after_body=self._footer() + "\n" + CHROME_JS,
-            in_header=[CHROME_CSS],
+            after_body=self._footer(),
             pdf=self.plan.pdf,
             extra={"references": refs} if (refs := self._methods()[1]) else {},
             brand=(
@@ -1718,6 +1717,8 @@ def card_row(cards):
             + REPORT_CSS
             + (DARK_CSS if self.paper else "")
             + TOC_SCOPE_JS
+            + CHROME_CSS
+            + CHROME_JS
             + mark_css(self.plan.depictio_mark)
             + (title_logo_css(self.hero[1], self.hero[2]) if self.hero else "")
             + "\n\n"

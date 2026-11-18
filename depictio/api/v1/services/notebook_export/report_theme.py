@@ -13,16 +13,23 @@ documents for it, from the most stable to the least:
    refinements written against Bootstrap's own variables (``$body-bg``,
    ``$primary``...). Compiled into each scheme's stylesheet, so the dark page
    needs no ``body.quarto-dark`` override.
-3. **``include-in-header``** (:data:`CHROME_CSS`): the report's own controls
-   (the colour-scheme button, the contents toggle, the tile's "i" and its
-   popover) on CSS custom properties, so they work in the classic look too.
-   The rules that have to name Quarto's internal markup (the contents, the
-   anchors, the title block) are the second half of it, one block, with the
-   Quarto version they were checked against (:data:`QUARTO_TESTED`).
-4. **``include-after-body``** (:data:`CHROME_JS`): the behaviours. They call
-   Quarto's own hooks (``window.quartoToggleColorScheme``, the
+3. **One stylesheet** (:data:`CHROME_CSS`): the report's own controls (the
+   colour-scheme button, the contents toggle, the tile's "i" and its popover)
+   on CSS custom properties, so they work in the classic look too. The rules
+   that have to name Quarto's internal markup (the contents, the anchors, the
+   title block) are its second half, one block, with the Quarto version they
+   were checked against (:data:`QUARTO_TESTED`).
+4. **One script** (:data:`CHROME_JS`): the behaviours. They call Quarto's own
+   hooks (``window.quartoToggleColorScheme``, the
    ``.quarto-color-scheme-toggle`` class its script keeps in step) instead of
    re-implementing them.
+
+3 and 4 open the document body, beside the rest of the report's CSS, rather
+than going through ``include-in-header``/``include-after-body``: Quarto 1.9
+hands a document's front matter to pandoc as one command-line argument, which
+Linux caps at 128 KB, and a report's header bar (its logo, the favicon)
+already takes most of that. A front-matter include that grew the report's
+YAML past it failed the render with "Argument list too long".
 
 ``test_quarto_hooks`` renders a small report with the Quarto on ``PATH`` and
 asserts every hook named here still exists, so an upgrade that renames one
@@ -167,8 +174,7 @@ BRAND_DEFAULTS: dict[str, str | int | float] = {
 }
 
 
-CHROME_CSS = f"""<meta name="depictio-report-chrome" content="{CHROME_VERSION}; quarto {QUARTO_TESTED}">
-<style>
+CHROME_CSS = f"""<style data-depictio-report-chrome="{CHROME_VERSION}; quarto {QUARTO_TESTED}">
 /* ── Depictio report chrome: the report's own controls ─────────────────────
    On Paper's tokens with the classic look's values as fallbacks, so they read
    the same with or without the brand. */

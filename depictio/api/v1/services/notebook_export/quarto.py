@@ -51,9 +51,6 @@ class QuartoFrontMatter:
     # Markup at the very end of the page, below it: the report's footer
     # (``report_chrome.footer_html``), outside every fold.
     after_body: str | None = None
-    # Markup for the page's <head>, after Quarto's own stylesheets: the
-    # report's controls and its one Quarto-DOM layer (``report_theme``).
-    in_header: list[str] = field(default_factory=list)
     # A PDF beside the HTML (``quarto render --to typst``): Quarto's bundled
     # typst, so no TeX. Static figures and tables come from the notebook
     # client when the render asks for them (``DEPICTIO_STATIC_FIGURES``).
@@ -91,11 +88,10 @@ class QuartoFrontMatter:
                 },
             }
         }
-        header = [{"text": t} for t in self.in_header if t]
         if self.favicon_data_uri:
-            header.insert(0, {"text": f'<link rel="icon" href="{self.favicon_data_uri}">'})
-        if header:
-            doc["format"]["html"]["include-in-header"] = header
+            doc["format"]["html"]["include-in-header"] = {
+                "text": f'<link rel="icon" href="{self.favicon_data_uri}">'
+            }
         if self.before_body:
             doc["format"]["html"]["include-before-body"] = {"text": self.before_body}
         if self.after_body:
