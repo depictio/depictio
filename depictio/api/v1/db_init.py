@@ -816,17 +816,22 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
         admin_email = settings.bootstrap.admin_email.strip()
         admin_password = settings.bootstrap.admin_password.get_secret_value()
         if not admin_email or not admin_password:
-            if settings.auth.is_single_user_mode:
+            if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
                 # Single-user mode has no login UI — the anonymous auto-login
                 # session maps to this admin (see _get_anonymous_user_session).
-                # Seed a default local admin so the zero-config quick start needs
-                # no secrets. The password is random (never used to log in) and
-                # is never logged. Multi-user mode still fails fast below.
+                # Public mode serves anonymous read-only visitors and needs an
+                # owner for the seeded content: a SciLifeLab Serve app created
+                # public starts on an empty database with no values to declare
+                # an admin, and an app switched from private (single-user) to
+                # public keeps exactly this seeded admin. Seed a default local
+                # admin so neither needs secrets. The password is random (never
+                # used to log in) and is never logged. Private multi-user mode
+                # still fails fast below.
                 admin_email = admin_email or "admin@example.com"
                 admin_password = admin_password or secrets.token_urlsafe(32)
                 logger.info(
-                    "Single-user mode: seeding default local admin '%s' "
-                    "(no DEPICTIO_BOOTSTRAP_ADMIN_* set)",
+                    "%s mode: seeding default local admin '%s' (no DEPICTIO_BOOTSTRAP_ADMIN_* set)",
+                    "Single-user" if settings.auth.is_single_user_mode else "Public",
                     admin_email,
                 )
             elif settings.auth.is_password_login_disabled and admin_email:
