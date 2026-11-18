@@ -35,6 +35,13 @@ await toolStudio.exportZip()    // Blob
 await toolStudio.link()         // URL with #draft=… (fixture trimmed to 200 rows)
 ```
 
+An output that needs reshaping carries a recipe: `output.recipe = { code,
+inputs? }`, where `code` is the Python module depictio runs at ingestion
+(`SOURCES`, `OUTPUT_SCHEMA`, `transform(sources)`) and `inputs` are raw samples
+(`{ fileName, text }`, never exported). It is exported as `<tool>/<slug>.py`
+with `recipe: <tool>/<slug>.py`, and the fixture must then be the recipe's
+output. In the UI, the Fixture step runs it in the browser (Pyodide + polars).
+
 A draft can carry several outputs: `moreOutputs: [{ output, fixture, renders }]`;
 `outputs()`, `addOutput()` and `switchOutput(i)` manage them (the steps always
 edit the active one).
@@ -64,6 +71,7 @@ row (with `data-code`, `data-severity`, `data-path`), `preview-filters`,
 | `fixture.*` | missing, no data rows, parse problems (warning), byte-identical to another tool's |
 | `schema.module`, `schema.output` | the generated YAML fails the catalog JSON Schema |
 | `render.*` | unbound column, role/dtype mismatch, role shape, card layout, id collisions |
+| `recipe.*` | empty recipe, missing `SOURCES`/`OUTPUT_SCHEMA`/`transform`, empty `SOURCES`, fixture lacking `OUTPUT_SCHEMA` columns |
 | `renders.empty` | no visualization yet |
 
 `depictio dev catalog validate` in CI stays the authoritative check; CI also

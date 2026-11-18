@@ -1,10 +1,10 @@
 /**
  * In-browser Python executor for the figure Code Mode, so a no-backend app can
  * still run Plotly-Express code. Pyodide (+ pandas/numpy/plotly) is lazily
- * loaded from the jsDelivr CDN on first Execute — nothing downloads until the
+ * loaded on first Execute (src/pyodide/engine.ts) — nothing downloads until the
  * user opens Code Mode. Mirrors depictio's server contract (`code_executor.py`)
  * as closely as the browser allows: the user's code gets `df` (a pandas
- * DataFrame of the fixture — Polars has no WebAssembly build) plus
+ * DataFrame of the fixture, as the Code Mode note in DesignArea promises) plus
  * `px`/`go`/`pd`/`np`, and must assign a Plotly figure to `fig`. `df.to_pandas()`
  * is a no-op so depictio's documented preprocessing idiom runs unchanged, and
  * `pl` is a stand-in that explains itself rather than raising a NameError.
@@ -34,18 +34,15 @@ export function isPyodideReady(): boolean {
 let ready = false;
 
 /** Lazily load Pyodide + pandas/numpy + plotly. Memoized: the heavy download
- *  happens once per session, on first Execute. */
+ *  happens once per session, on first Execute. The interpreter is the shared
+ *  one of src/pyodide/engine.ts (the serverless bundle's pinned Pyodide and
+ *  plotly 6.9.0, from the CDN / PyPI), so Code Mode and the recipe engine never
+ *  load two runtimes. */
 export async function getPyodide(): Promise<Pyodide> {
   if (!pyodidePromise) {
     pyodidePromise = (async () => {
-      const mod = await import('pyodide');
-      // Match the wheel CDN to the installed loader version so they never skew.
-      const pyodide = await mod.loadPyodide({
-        indexURL: `https://cdn.jsdelivr.net/pyodide/v${mod.version}/full/`,
-      });
-      await pyodide.loadPackage(['pandas', 'numpy', 'micropip']);
-      const micropip = pyodide.pyimport('micropip');
-      await micropip.install('plotly');
+      const { loadPython } = await import('../pyodide/engine');
+      const pyodide = await loadPython(['pandas', 'numpy'], { plotly: true });
       ready = true;
       return pyodide;
     })().catch((e) => {

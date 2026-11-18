@@ -366,6 +366,7 @@ export function genOutputYaml(
   if (output.path_glob) find.push(['path_glob', output.path_glob]);
   if (output.path_glob_alt?.length && output.path_glob) find.push(['path_glob_alt', output.path_glob_alt]);
   lines.push(`find: ${flowMap(find)}`);
+  if (output.recipe) lines.push(`recipe: ${recipeRef(tool.id, output.slug)}`);
   lines.push(`fixture: ${flowScalar(fixtureFileName)}`);
   lines.push('renders_as:');
   for (const r of renders) {
@@ -376,7 +377,12 @@ export function genOutputYaml(
   return lines.join('\n') + '\n';
 }
 
+/** `recipe:` value: module-owned, co-located `<tool>/<slug>.py`. */
+export const recipeRef = (toolId: string, slug: string) => `${toolId}/${slug}.py`;
+
 export interface GeneratedEntry {
+  /** The output's recipe module, when it has one (`<slug>.py`). */
+  recipeFile?: { name: string; content: string };
   toolId: string;
   outputSlug: string;
   moduleYaml: string;
@@ -402,5 +408,37 @@ export function generateEntry(args: {
     outputYamlName: `${output.slug}.yaml`,
     fixtureName: fixtureFileName,
     fixtureContent,
+    ...(output.recipe
+      ? { recipeFile: { name: `${output.slug}.py`, content: output.recipe.code.endsWith('\n') ? output.recipe.code : output.recipe.code + '\n' } }
+      : {}),
   };
+}
+/** Starting point for a new recipe, in the shape `load_recipe` checks. */
+export function recipeTemplate(toolId: string, slug: string, toolName?: string): string {
+  return `"""${toolName || toolId}: reshape the raw ${slug} file into the columns the renders bind.
+
+Runs at ingestion: SOURCES says what to read, transform() returns the table,
+and OUTPUT_SCHEMA is checked against it (depictio/recipes/__init__.py).
+"""
+
+import polars as pl
+
+from depictio.models.models.transforms import RecipeSource
+
+SOURCES: list[RecipeSource] = [
+    # The raw file this output's \`find\` matches, scanned as a data collection.
+    RecipeSource(ref="raw", dc_ref="${toolId}_${slug}_raw"),
+]
+
+# The columns transform() returns, checked after it runs.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    # "sample": pl.Utf8,
+}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
+
+
+def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+    df = sources["raw"]
+    return df
+`;
 }

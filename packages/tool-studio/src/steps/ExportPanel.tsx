@@ -127,6 +127,7 @@ export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catal
       for (const e of [entry, ...moreEntries]) {
         dir.file(e.outputYamlName, e.outputYaml);
         dir.file(e.fixtureName, e.fixtureContent);
+        if (e.recipeFile) dir.file(e.recipeFile.name, e.recipeFile.content);
       }
       const zipName = newOutputTarget ? `${tool.id}-${output.slug}.zip` : `${tool.id}-catalog.zip`;
       downloadBlob(zipName, await zip.generateAsync({ type: 'blob' }));

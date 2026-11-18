@@ -28,6 +28,9 @@ on:
       # A merged tool changes the committed catalog.json snapshot the app reads
       # for recognition and duplicate detection — redeploy so the live app sees it.
       - "depictio/catalog/**"
+      # The recipe runtime bundles depictio/recipes and the serverless Pyodide pin.
+      - "depictio/recipes/**"
+      - "depictio/serverless/pyodide/**"
       # The footer shows the depictio version the app was built from; a release
       # bump alone otherwise left the live site naming the previous one.
       - "VERSION"

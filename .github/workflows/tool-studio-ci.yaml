@@ -21,6 +21,9 @@ on:
       - "depictio/api/v1/services/figure/definitions.py"
       - "depictio/api/v1/services/figure/parameter_discovery.py"
       - "depictio/cli/cli/commands/catalog.py"
+      # Shipped verbatim into the in-browser recipe runtime (public/pyodide/).
+      - "depictio/recipes/**"
+      - "depictio/serverless/pyodide/**"
       - ".github/workflows/tool-studio-ci.yaml"
   push:
     branches: [main]
@@ -38,6 +41,9 @@ on:
       - "depictio/api/v1/services/figure/definitions.py"
       - "depictio/api/v1/services/figure/parameter_discovery.py"
       - "depictio/cli/cli/commands/catalog.py"
+      # Shipped verbatim into the in-browser recipe runtime (public/pyodide/).
+      - "depictio/recipes/**"
+      - "depictio/serverless/pyodide/**"
       - ".github/workflows/tool-studio-ci.yaml"
 
 jobs:
@@ -113,6 +119,8 @@ jobs:
             packages/tool-studio/public/output.schema.json \
             packages/tool-studio/public/nf_core_modules.txt \
             packages/tool-studio/public/edam_terms.txt \
+            packages/tool-studio/public/pyodide/ \
+            packages/tool-studio/src/pyodide/generated/ \
             packages/tool-studio/public/multiqc_modules.txt \
             packages/tool-studio/src/catalog/generated/ \
             packages/tool-studio/src/test/generated/ \

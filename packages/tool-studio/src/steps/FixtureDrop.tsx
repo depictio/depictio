@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
+import RecipePanel from './RecipePanel';
 import { useStudioStore } from '../state/useStudioStore';
 import { parseFixture, headerLooksLikeData } from '../catalog/parseFixture';
 import { fetchFixtureText, TABULAR_EXT_RE } from '../catalog/fetchFixture';
@@ -178,10 +179,13 @@ export default function FixtureDrop() {
           Fixture
         </Title>
         <Text c="dimmed" size="sm">
-          Provide the tool's output file. It's bundled verbatim as the fixture and grounds your
-          bindings in CI. A dropped file never leaves your browser.
+          {output.recipe
+            ? "This output is reshaped by a recipe, so the fixture is the recipe's output: run the recipe on a raw sample below, or drop its expected output. A dropped file never leaves your browser."
+            : "Provide the tool's output file. It's bundled verbatim as the fixture and grounds your bindings in CI. A dropped file never leaves your browser."}
         </Text>
       </div>
+
+      <RecipePanel />
 
       <button
         type="button"

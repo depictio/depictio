@@ -116,6 +116,30 @@ const entry = generateEntry({
     path_glob: '**/golden/*.csv',
     path_glob_alt: ['**/golden_alt/*.csv'],
     description: 'Golden round-trip fixture.',
+    // A module-owned recipe: written as <slug>.py, resolved by `validate --path`
+    // next to the YAML, and its OUTPUT_SCHEMA must be covered by the fixture.
+    recipe: {
+      code: [
+        'import polars as pl',
+        '',
+        'from depictio.models.models.transforms import RecipeSource',
+        '',
+        `SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref="${toolId}_results_raw")]`,
+        'OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {',
+        '    "gene": pl.Utf8,',
+        '    "log2fc": pl.Float64,',
+        '    "pvalue": pl.Float64,',
+        '    "sample": pl.Utf8,',
+        '    "coverage": pl.Int64,',
+        '}',
+        'OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}',
+        '',
+        '',
+        'def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:',
+        '    return sources["raw"]',
+        '',
+      ].join('\n'),
+    },
   },
   fixtureFileName: fixture.fileName,
   fixtureContent: fixture.raw,
@@ -127,6 +151,7 @@ mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, 'module.yaml'), entry.moduleYaml);
 writeFileSync(join(outDir, entry.outputYamlName), entry.outputYaml);
 writeFileSync(join(outDir, entry.fixtureName), entry.fixtureContent);
+if (entry.recipeFile) writeFileSync(join(outDir, entry.recipeFile.name), entry.recipeFile.content);
 
 console.log(`[genGolden] wrote entry to ${outDir}`);
 console.log('--- module.yaml ---\n' + entry.moduleYaml);

@@ -9,6 +9,9 @@
  *   src/test/generated/cardMetricsGolden.json ← the real card_metrics /
  *       card_breakdown output for e2e/golden/card_metrics.csv, which pins the
  *       TypeScript port in src/api/cardMetrics.ts to the server's numbers
+ *   src/pyodide/generated/pin.json ← depictio/serverless/pyodide/pin.json
+ *   public/pyodide/depictio_modules.json ← depictio.recipes (+ lib, RecipeSource)
+ *       for the in-browser recipe engine (src/pyodide/depictioModules.ts)
  *
  * All are also committed as snapshots. This script REGENERATES them from the
  * in-repo Python source when a depictio-capable Python is reachable (CI, dev
@@ -21,6 +24,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, copyFileSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectDepictioModules } from '../src/pyodide/depictioModules';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(here, '..');
@@ -194,6 +198,34 @@ function cardMetricsGolden(): void {
 }
 
 cardMetricsGolden();
+
+// 2c. The Pyodide engine's inputs (src/pyodide/engine.ts). Plain file work, no
+//     Python needed: the serverless bundle's pin (same Pyodide version and
+//     wheels as an exported dashboard), and the depictio modules a recipe
+//     imports (depictio.recipes + recipes.lib + RecipeSource), shipped verbatim
+//     as the serverless bundle ships its server modules.
+mkdirSync(resolve(pkgRoot, 'src', 'pyodide', 'generated'), { recursive: true });
+copySnapshot(
+  resolve(repoRoot, 'depictio', 'serverless', 'pyodide', 'pin.json'),
+  resolve(pkgRoot, 'src', 'pyodide', 'generated', 'pin.json'),
+  'pyodide pin.json',
+);
+{
+  const dst = resolve(publicDir, 'pyodide', 'depictio_modules.json');
+  const files = collectDepictioModules(repoRoot);
+  if (files) {
+    mkdirSync(dirname(dst), { recursive: true });
+    writeFileSync(dst, JSON.stringify({ files }) + '\n');
+    console.log(
+      `[genKinds] regenerated public/pyodide/depictio_modules.json (${Object.keys(files).length} files)`,
+    );
+  } else if (existsSync(dst) && !STRICT) {
+    console.log('[genKinds] depictio sources absent — keeping committed depictio_modules.json');
+  } else {
+    console.error('[genKinds] ERROR: cannot collect the depictio modules for the Pyodide engine');
+    process.exit(1);
+  }
+}
 
 // 3. Card spec: the enums the exporter must stay in step with, derived from the
 //    schema we just copied. They live in TS (not JSON) so a layout added on the

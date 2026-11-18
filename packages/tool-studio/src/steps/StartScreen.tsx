@@ -231,7 +231,7 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
               />
               <div>
                 <Text fw={600} size="md">
-                  Use this app
+                  Tables directly
                 </Text>
                 <Text size="md" c="dimmed">
                   when the output file is already a table with a header row.
@@ -242,18 +242,18 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
           <Paper withBorder radius="md" p="md">
             <Group gap={8} wrap="nowrap" align="flex-start">
               <Icon
-                icon="mdi:minus-circle-outline"
+                icon="mdi:language-python"
                 width={21}
-                color="var(--mantine-color-dimmed)"
+                color="var(--mantine-color-blue-6)"
                 style={{ marginTop: 2, flexShrink: 0 }}
               />
               <div>
                 <Text fw={600} size="md">
-                  Not yet
+                  Anything else, with a recipe
                 </Text>
                 <Text size="md" c="dimmed">
-                  when it needs reshaping first: hand-written in{' '}
-                  <Code fz="md">depictio/catalog/</Code>.
+                  when it needs reshaping first: write the polars recipe here and run it on a
+                  sample, in your browser.
                 </Text>
               </div>
             </Group>

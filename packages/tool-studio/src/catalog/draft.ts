@@ -156,7 +156,14 @@ export function draftFromCatalogFiles(files: Record<string, string>, outputSlug?
 
   const readOutput = (o: Record<string, unknown>) => {
     const slug = slugOf(o.id as string);
-    if (o.recipe) notes.push(`${slug}: uses a recipe (${String(o.recipe)}), which is not loaded.`);
+    let recipe: OutputMeta['recipe'];
+    if (typeof o.recipe === 'string') {
+      // Module-owned recipes sit next to the YAML (`<tool>/<name>.py`).
+      const name = o.recipe.split('/').pop()!;
+      const hit = Object.entries(files).find(([p]) => base(p) === name);
+      if (hit) recipe = { code: hit[1] };
+      else notes.push(`${slug}: recipe ${o.recipe} was not among the files; add the .py to edit it.`);
+    }
     const find = (o.find ?? {}) as Record<string, unknown>;
     const output: OutputMeta = {
       slug,
@@ -165,6 +172,7 @@ export function draftFromCatalogFiles(files: Record<string, string>, outputSlug?
       filename: str(find.filename),
       name: str(o.name),
       description: str(o.description),
+      recipe,
     };
     for (const k of Object.keys(output) as (keyof OutputMeta)[]) if (output[k] === undefined) delete output[k];
     const renders: DraftRender[] = [];
@@ -201,7 +209,7 @@ export async function filesFromZip(data: Blob | ArrayBuffer | Uint8Array): Promi
   const out: Record<string, string> = {};
   await Promise.all(
     Object.values(zip.files)
-      .filter((f) => !f.dir && /\.(ya?ml|csv|tsv|txt|tab)$/i.test(f.name))
+      .filter((f) => !f.dir && /\.(ya?ml|csv|tsv|txt|tab|py|json)$/i.test(f.name))
       .map(async (f) => {
         out[f.name] = await f.async('string');
       }),

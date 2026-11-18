@@ -202,6 +202,18 @@ export interface OutputMeta {
   /** Display name in the output picker; unique within the tool. */
   name?: string;
   description?: string;
+  /** A reshape the raw file needs before it is bindable. When set, the
+   *  fixture is the recipe's OUTPUT (what the renders bind), the raw samples
+   *  below are only for running it here, and the recipe ships as
+   *  `<tool>/<slug>.py` (`recipe:` in the output YAML). */
+  recipe?: RecipeDraft;
+}
+
+export interface RecipeDraft {
+  /** Python module: SOURCES, OUTPUT_SCHEMA, transform(sources). */
+  code: string;
+  /** Samples of the raw file(s) the recipe reads; not committed. */
+  inputs?: Array<{ ref?: string; fileName: string; text: string }>;
 }
 
 /** A file output channel parsed from a tool source's metadata (nf-core

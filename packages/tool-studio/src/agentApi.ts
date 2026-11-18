@@ -94,6 +94,7 @@ export function toolFiles(): Record<string, string> {
     if (!s.newOutputTarget && !out[`${dir}/module.yaml`]) out[`${dir}/module.yaml`] = e.moduleYaml;
     out[`${dir}/${e.outputYamlName}`] = e.outputYaml;
     out[`${dir}/${e.fixtureName}`] = e.fixtureContent;
+    if (e.recipeFile) out[`${dir}/${e.recipeFile.name}`] = e.recipeFile.content;
   }
   return out;
 }

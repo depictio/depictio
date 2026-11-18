@@ -86,3 +86,22 @@ describe('draft round-trip', () => {
     expect(ok.renders[0].uid).toBeTruthy();
   });
 });
+
+describe('recipes round-trip', () => {
+  it('exports <slug>.py with `recipe:` and reads it back', () => {
+    const code = 'import polars as pl\nSOURCES = []\nOUTPUT_SCHEMA = {"gene": pl.Utf8}\ndef transform(s):\n    return s["raw"]\n';
+    const out = { ...output, recipe: { code, inputs: [{ fileName: 'raw.txt', text: 'x' }] } };
+    const e = generateEntry({ tool, output: out, fixtureFileName: fixture.fileName, fixtureContent: fixture.raw, renders: [] });
+    expect(e.outputYaml).toContain('recipe: mytool/results.py');
+    expect(e.recipeFile).toEqual({ name: 'results.py', content: code });
+    const { draft, notes } = draftFromCatalogFiles({
+      'mytool/module.yaml': e.moduleYaml,
+      'mytool/results.yaml': e.outputYaml,
+      'mytool/results.csv': e.fixtureContent,
+      'mytool/results.py': e.recipeFile!.content,
+    });
+    expect(notes).toEqual([]);
+    // Raw samples are never committed, so they do not come back.
+    expect(draft.output.recipe).toEqual({ code });
+  });
+});

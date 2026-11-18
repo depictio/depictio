@@ -109,3 +109,32 @@ describe('validateDraft', () => {
     expect(diags.slice(firstWarning).every((x) => x.severity === 'warning')).toBe(true);
   });
 });
+
+describe('recipe diagnostics', () => {
+  const code = [
+    'import polars as pl',
+    'SOURCES = [RecipeSource(ref="raw")]',
+    'OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {',
+    '    "gene": pl.Utf8,  # id',
+    "    'log2fc': pl.Float64,",
+    '    # "commented": pl.Utf8,',
+    '}',
+    'def transform(sources):',
+    '    return sources["raw"]',
+  ].join('\n');
+
+  it('reads OUTPUT_SCHEMA keys statically', async () => {
+    const { recipeOutputColumns } = await import('../catalog/diagnostics');
+    expect(recipeOutputColumns(code)).toEqual(['gene', 'log2fc']);
+  });
+
+  it('requires the load_recipe symbols and a fixture that is the recipe output', () => {
+    const d = base();
+    d.output = { ...d.output, recipe: { code: code.replace('def transform', 'def other') } };
+    expect(codes(d)).toContain('recipe.missing_symbol');
+    d.output = { ...d.output, recipe: { code: code.replace("'log2fc'", "'depth'") } };
+    expect(validateDraft(d).find((x) => x.code === 'recipe.fixture_mismatch')?.message).toMatch(/depth/);
+    d.output = { ...d.output, recipe: { code } };
+    expect(codes(d).filter((c) => c.startsWith('recipe.'))).toEqual([]);
+  });
+});

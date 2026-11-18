@@ -266,6 +266,7 @@ export async function openCatalogPr(
     ...[entry, ...moreOutputs].flatMap((e) => [
       `| \`${e.outputYamlName}\` | Output definition + \`renders_as\` (the dashboard components). |`,
       `| \`${e.fixtureName}\` | Fixture that grounds the bindings in CI (nothing computed server-side). |`,
+      ...(e.recipeFile ? [`| \`${e.recipeFile.name}\` | Recipe: reshapes the raw file into the columns the renders bind. |`] : []),
     ]),
     '',
     '## Validation',
@@ -293,6 +294,7 @@ export async function openCatalogPr(
         ...[entry, ...moreOutputs].flatMap((e) => [
           { path: `${dir}/${e.outputYamlName}`, content: e.outputYaml },
           { path: `${dir}/${e.fixtureName}`, content: e.fixtureContent },
+          ...(e.recipeFile ? [{ path: `${dir}/${e.recipeFile.name}`, content: e.recipeFile.content }] : []),
         ]),
       ],
       branchSlug: entry.toolId,
@@ -344,6 +346,7 @@ export async function openNewOutputPr(
       files: [entry, ...moreOutputs].flatMap((e) => [
         { path: `${dir}/${e.outputYamlName}`, content: e.outputYaml },
         { path: `${dir}/${e.fixtureName}`, content: e.fixtureContent },
+        ...(e.recipeFile ? [{ path: `${dir}/${e.recipeFile.name}`, content: e.recipeFile.content }] : []),
       ]),
       branchSlug: `${entry.toolId}-${entry.outputSlug}`,
       commitMessage: `feat(catalog): add ${entry.outputSlug} output to ${entry.toolId}`,

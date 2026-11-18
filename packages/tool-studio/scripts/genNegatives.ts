@@ -65,6 +65,28 @@ const CASES: Case[] = [
     renders: [{ uid: 'c', component: 'card', column: 'nope', aggregation: 'average' }],
   },
   {
+    // The fixture must be a sample of the recipe's output (CLI loads the recipe).
+    name: 'recipemismatch',
+    expect: 'recipe.fixture_mismatch',
+    output: {
+      recipe: {
+        code:
+          'import polars as pl\nfrom depictio.models.models.transforms import RecipeSource\n' +
+          'SOURCES = [RecipeSource(ref="raw", dc_ref="negrecipemismatch_results_raw")]\n' +
+          'OUTPUT_SCHEMA = {\n    "depth": pl.Float64,\n}\ndef transform(sources):\n    return sources["raw"]\n',
+      },
+    },
+  },
+  {
+    name: 'recipenosources',
+    expect: 'recipe.empty_sources',
+    output: {
+      recipe: {
+        code: 'import polars as pl\nSOURCES = []\nOUTPUT_SCHEMA = {\n    "gene": pl.Utf8,\n}\ndef transform(sources):\n    return sources["raw"]\n',
+      },
+    },
+  },
+  {
     name: 'idcollision',
     expect: 'render.id_collides_output',
     renders: [{ ...volcano, id: '__OUTPUT_ID__' }],
@@ -104,6 +126,7 @@ for (const c of CASES) {
   writeFileSync(join(dir, 'module.yaml'), entry.moduleYaml);
   writeFileSync(join(dir, entry.outputYamlName), entry.outputYaml);
   writeFileSync(join(dir, entry.fixtureName), entry.fixtureContent);
+  if (entry.recipeFile) writeFileSync(join(dir, entry.recipeFile.name), entry.recipeFile.content);
   index.push({ dir, expect: c.expect, studioCodes });
 }
 writeFileSync(join(outDir, 'cases.json'), JSON.stringify(index, null, 2) + '\n');

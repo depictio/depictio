@@ -1,5 +1,6 @@
-import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid, Alert, Input, Accordion, TagsInput } from '@mantine/core';
+import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid, Alert, Input, Accordion, TagsInput, Switch } from '@mantine/core';
 import { STAGES } from '../catalog/generated/renderSpec';
+import { recipeTemplate } from '../catalog/yamlGen';
 import type { Stage } from '../types';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
@@ -421,6 +422,19 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
           minRows={2}
           value={output.description ?? ''}
           onChange={(e) => setOutput({ description: e.currentTarget.value })}
+        />
+        <Switch
+          label="The file needs reshaping first (recipe)"
+          description="Not a table with a header row, or not in the shape the renders need: a polars recipe reshapes it at ingestion. You write and run it on the Fixture step."
+          checked={Boolean(output.recipe)}
+          onChange={(e) =>
+            setOutput({
+              recipe: e.currentTarget.checked
+                ? { code: recipeTemplate(tool.id || 'tool', output.slug || 'output', tool.name) }
+                : undefined,
+            })
+          }
+          data-testid="needs-recipe"
         />
         <Accordion variant="contained" radius="md" data-testid="output-more">
           <Accordion.Item value="find">

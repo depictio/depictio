@@ -26,7 +26,7 @@ export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] 
   const [selected, setSelected] = useState<string>('module.yaml');
 
   const files = useMemo(() => {
-    const out: Array<{ name: string; text: string | null; outputIndex?: number; kind: 'module' | 'output' | 'fixture' }> = [];
+    const out: Array<{ name: string; text: string | null; outputIndex?: number; kind: 'module' | 'output' | 'fixture' | 'recipe' }> = [];
     if (existing) return out;
     if (!newOutputTarget && tool.id) out.push({ name: 'module.yaml', text: genModuleYaml(tool), kind: 'module' });
     allOutputs({ output, fixture, renders, siblings, activeIndex }).forEach((o, i) => {
@@ -40,6 +40,7 @@ export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] 
       });
       out.push({ name: e.outputYamlName, text: e.outputYaml, outputIndex: i, kind: 'output' });
       out.push({ name: o.fixture?.fileName ?? `${slug}.csv (missing)`, text: null, outputIndex: i, kind: 'fixture' });
+      if (e.recipeFile) out.push({ name: e.recipeFile.name, text: e.recipeFile.content, outputIndex: i, kind: 'recipe' });
     });
     return out;
   }, [tool, output, fixture, renders, siblings, activeIndex, existing, newOutputTarget]);
@@ -61,7 +62,10 @@ export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] 
             Entry
           </Title>
           <Badge variant="light" color={diagnostics.some((d) => d.severity === 'error') ? 'red' : 'teal'} data-testid="entry-status">
-            {diagnostics.filter((d) => d.severity === 'error').length || 'no'} error(s)
+            {(() => {
+              const n = diagnostics.filter((d) => d.severity === 'error').length;
+              return n ? `${n} error${n > 1 ? 's' : ''}` : 'Ready';
+            })()}
           </Badge>
         </Group>
         {existing ? (
@@ -84,7 +88,7 @@ export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] 
                     disabled={f.text == null}
                     leftSection={
                       <Icon
-                        icon={f.kind === 'fixture' ? 'mdi:file-delimited-outline' : 'mdi:file-code-outline'}
+                        icon={f.kind === 'fixture' ? 'mdi:file-delimited-outline' : f.kind === 'recipe' ? 'mdi:language-python' : 'mdi:file-code-outline'}
                         width={16}
                       />
                     }
@@ -108,7 +112,7 @@ export default function EntryPanel({ diagnostics }: { diagnostics: Diagnostic[] 
               })}
             </Stack>
             {current?.text && (
-              <CodeHighlight code={current.text} language="yaml" withCopyButton styles={{ code: { fontSize: 11 } }} />
+              <CodeHighlight code={current.text} language={current.kind === 'recipe' ? 'python' : 'yaml'} withCopyButton styles={{ code: { fontSize: 11 } }} />
             )}
           </>
         )}

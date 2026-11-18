@@ -192,6 +192,51 @@ function fixtureDiagnostics(d: DraftToValidate): Diagnostic[] {
   return out;
 }
 
+/** Keys of a recipe's `OUTPUT_SCHEMA = {...}` literal, read statically (the
+ *  shape every catalog recipe uses). null when the literal cannot be found. */
+export function recipeOutputColumns(code: string): string[] | null {
+  const m = code.match(/^OUTPUT_SCHEMA[^=\n]*=\s*\{([\s\S]*?)^\}/m);
+  if (!m) return null;
+  return [...m[1].replace(/#.*$/gm, '').matchAll(/["']([^"']+)["']\s*:/g)].map((x) => x[1]);
+}
+
+/** `load_recipe` (depictio/recipes/__init__.py) refuses a module without these. */
+const RECIPE_SYMBOLS: Array<[RegExp, string]> = [
+  [/^SOURCES\b/m, 'SOURCES'],
+  [/^OUTPUT_SCHEMA\b/m, 'OUTPUT_SCHEMA'],
+  [/^def transform\s*\(/m, 'transform()'],
+];
+
+function recipeDiagnostics(d: DraftToValidate): Diagnostic[] {
+  const recipe = d.output.recipe;
+  if (!recipe) return [];
+  const out: Diagnostic[] = [];
+  const push = (code: string, message: string, severity: Severity = 'error', step: 0 | 1 = 1) =>
+    out.push({ code, severity, path: 'output.recipe', message, step });
+  if (!recipe.code.trim()) {
+    push('recipe.empty', 'The recipe is empty.');
+    return out;
+  }
+  for (const [re, name] of RECIPE_SYMBOLS)
+    if (!re.test(recipe.code)) push('recipe.missing_symbol', `The recipe defines no ${name} (load_recipe requires it).`);
+  // load_recipe: "SOURCES must be a non-empty list".
+  if (/^SOURCES[^=\n]*=\s*\[\s*\]/m.test(recipe.code))
+    push('recipe.empty_sources', 'SOURCES is empty: declare at least one RecipeSource (load_recipe rejects an empty list).');
+  const declared = recipeOutputColumns(recipe.code);
+  if (declared && !declared.length)
+    push('recipe.empty_schema', 'OUTPUT_SCHEMA is empty: declare the columns transform() returns.', 'warning');
+  if (declared && d.fixture) {
+    const have = new Set(d.fixture.columns.map((c) => c.name));
+    const absent = declared.filter((c) => !have.has(c));
+    if (absent.length)
+      push(
+        'recipe.fixture_mismatch',
+        `The fixture lacks ${absent.join(', ')} from OUTPUT_SCHEMA; it must be a sample of the recipe's output (run the recipe to produce it).`,
+      );
+  }
+  return out;
+}
+
 function idDiagnostics(d: DraftToValidate): Diagnostic[] {
   const out: Diagnostic[] = [];
   const oid = outputId(d.tool.id, d.output.slug);
@@ -225,6 +270,7 @@ export function validateDraft(d: DraftToValidate): Diagnostic[] {
       );
   }
   all.push(...fixtureDiagnostics(d));
+  all.push(...recipeDiagnostics(d));
   if (!d.renders.length && !d.appendMode)
     all.push({ code: 'renders.empty', severity: 'error', path: 'renders', message: 'Add at least one visualization.', step: 2 });
   if (d.fixture) {

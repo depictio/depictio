@@ -52,7 +52,7 @@ export default function ImportEntryButton({ onLoaded, variant = 'default' }: { o
         ref={input}
         type="file"
         multiple
-        accept=".zip,.yaml,.yml,.csv,.tsv,.txt,.tab,.json"
+        accept=".zip,.yaml,.yml,.csv,.tsv,.txt,.tab,.json,.py"
         style={{ display: 'none' }}
         data-testid="import-input"
         onChange={(e) => void handle(e.currentTarget.files)}

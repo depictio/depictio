@@ -37,7 +37,7 @@
     "jszip": "^3.10.1",
     "papaparse": "^5.4.1",
     "plotly.js": "^2.35.0",
-    "pyodide": "^0.26.0",
+    "pyodide": "314.0.7",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-grid-layout": "^1.4.4",
