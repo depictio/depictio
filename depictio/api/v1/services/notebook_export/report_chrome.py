@@ -193,7 +193,7 @@ def about_callout(
     safe_title = title.replace('"', "'")
     return (
         f'{fence} {{.callout-note .dpx-about collapse="true" appearance="simple" '
-        f'icon="false" title="{safe_title}"}}\n{body}\n{fence}'
+        f'icon="false" title="{safe_title}"}}\n{body}\n\n{fence}'
     )
 
 
@@ -630,7 +630,7 @@ def about_callout_many(
     fence = ":" * max(4, longest + 1)
     return (
         f'{fence} {{.callout-note .dpx-about collapse="true" appearance="simple" '
-        f'icon="false" title="{title}"}}\n{body}\n{fence}'
+        f'icon="false" title="{title}"}}\n{body}\n\n{fence}'
     )
 
 

@@ -123,8 +123,8 @@ body .dpx-appbar.dpx-scrolled { box-shadow: 0 1px 0 var(--gl-hair), 0 8px 20px -
 body .dpx-appbar .dpx-appbar-inner { transition: min-height .2s ease, padding .2s ease; }
 body .dpx-appbar.dpx-scrolled .dpx-appbar-inner { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
 // Type: Paper's scale, one step quieter than the Mantine defaults the
-// notebook chrome sets for every renderer. The document's parts (Filters,
-// Results, Methods), a dashboard tab, a section: three clear levels.
+// notebook chrome sets for every renderer. The document's parts (filters,
+// results, methods), a dashboard tab, a section: three clear levels.
 body section[data-dpx-kind] > h2 {
   font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.015em;
   padding-bottom: .55rem; margin-top: 2.25rem; border-bottom: 1px solid var(--gl-hair);
@@ -476,7 +476,8 @@ CHROME_JS = r"""<script>
       var tile = tileFor(note);
       if (!items.length || !tile) continue;
       note.setAttribute('data-dpx-wired', '1');
-      var refs = (tile.getAttribute('data-depictio-tile') || '').split(/\s+/);
+      // The placeholder's refs (`<tab>:<index> ...`), when the note has one.
+      var refs = (tile.dataset.depictioTile || '').split(/\s+/);
       var placed = 0;
       for (var j = 0; j < items.length; j++) {
         var item = items[j], index = item.getAttribute('data-dpx-index');
