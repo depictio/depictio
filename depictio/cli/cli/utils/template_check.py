@@ -36,9 +36,10 @@ SCHEMA_URL = "https://raw.githubusercontent.com/nf-core/{pipeline}/{release}/nex
 # ``resolve_template_config`` and ``_introspect_pipeline_params``).
 AUTO_VARIABLES = {
     "DATA_ROOT": "the results directory given to `depictio ingest`",
-    "SAMPLESHEET_FILE": "found in `input/` (samplesheet*.csv|tsv)",
+    "SAMPLESHEET_FILE": "found in `input/` (samplesheet*.csv|tsv, else .yaml|.yml|.json)",
     "METADATA_FILE": "found in `input/` when the run had `--metadata`",
     "PPLACE_TREE_FILE": "found in `pplace/` when the run had `--pplace_tree`",
+    "DADA2_REF_DB": "ampliseq: the first `--dada_ref_taxonomy` database, or the consolidated one",
     "PHYLUM_LEVEL": "read from the QIIME2 barplots / DADA2 taxonomy",
     "CLASS_LEVEL": "PHYLUM_LEVEL + 1",
     "ORDER_LEVEL": "PHYLUM_LEVEL + 2",

@@ -8,7 +8,7 @@
     },
     "init/catalog_conformance": {
       "version": "2.3.0",
-      "content_hash": "729265318770650c543b6ba46462d93fadd0693e7c804448542cca3e7a3f503f",
+      "content_hash": "18ef2116079b6a93d076942f9a85e0747ec1d0065d7cdefd7d27182241f5f0fc",
       "catalog": {
         "adapterremoval": "1.0.0",
         "agat": "1.0.0",
@@ -44,7 +44,7 @@
         "dbcan": "1.0.0",
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
-        "dexseq": "1.0.0",
+        "dexseq": "1.1.0",
         "edger": "1.0.0",
         "enchantr": "1.0.0",
         "endorspy": "1.0.0",
@@ -112,7 +112,7 @@
         "ribocode": "1.0.0",
         "ribotish": "1.0.0",
         "ribowaltz": "1.0.0",
-        "rmats": "1.0.0",
+        "rmats": "1.1.0",
         "rseqc": "1.0.0",
         "rtgtools": "1.0.0",
         "s4pred": "1.0.0",
@@ -131,7 +131,7 @@
         "star": "1.0.0",
         "starfusion": "1.0.0",
         "subread": "1.0.0",
-        "suppa": "1.0.0",
+        "suppa": "1.1.0",
         "svanalyzer": "1.0.0",
         "sylph": "1.0.0",
         "tama": "1.0.0",
@@ -171,15 +171,15 @@
       }
     },
     "nf-core/ampliseq/2.14.0": {
-      "version": "1.2.0",
-      "content_hash": "ffa75e49b80a34515a48e9b26d41cad94837685018988435d7352c800a0fa615",
+      "version": "1.2.1",
+      "content_hash": "f94837463591784ef5d5af7ff73c96d79c2b3381386b2d579469f82b02d6ac86",
       "catalog": {
         "qiime2": "2.0.0"
       }
     },
     "nf-core/ampliseq/2.16.0": {
-      "version": "1.3.0",
-      "content_hash": "c4c8b33cdd453b7bfdbb4dd6e8c278cadae46661e2d33cc5949d2207085d528f",
+      "version": "1.3.1",
+      "content_hash": "f9cf19188d9120fa8637ff33043fac2c9946566192850e4f26248ddb6effb284",
       "catalog": {
         "multiqc": "1.0.0",
         "qiime2": "2.0.0",
@@ -188,8 +188,18 @@
       }
     },
     "nf-core/ampliseq/2.18.0": {
-      "version": "1.4.0",
-      "content_hash": "244823be1ca54e8e8cc99229699dc73287d752f08b6f07f9cd19e2c171c73e4c",
+      "version": "1.4.1",
+      "content_hash": "f8ac8b6b67b807d06ad38095cabb0c0be9e2d566bd2f64d3d06a7d306267989b",
+      "catalog": {
+        "multiqc": "1.0.0",
+        "qiime2": "2.0.0",
+        "sidle": "1.0.0",
+        "vsearch": "1.0.0"
+      }
+    },
+    "nf-core/ampliseq/3.1.0": {
+      "version": "3.0.0",
+      "content_hash": "5d9eab94e003f4bdf83fc59be18fa2f30f727cbcf3681279ba00c353bd0ea788",
       "catalog": {
         "multiqc": "1.0.0",
         "qiime2": "2.0.0",
@@ -305,8 +315,23 @@
       "content_hash": "5e684d5eea58107bf73ecf44c21563de512c342f4690bfff7a0fa17bc8d682d7"
     },
     "nf-core/eager/2.4.5": {
-      "version": "1.3.1",
-      "content_hash": "65598232c5f686095954a60149cd744ee9f8065c4593b7b21d237581acdca9b3",
+      "version": "1.3.2",
+      "content_hash": "ef56b6f94388f17ff8266deee1896c25b41c60ed9abc208f254ddbbedf904070",
+      "catalog": {
+        "adapterremoval": "1.0.0",
+        "bcftools": "1.0.0",
+        "damageprofiler": "1.0.0",
+        "endorspy": "1.0.0",
+        "multiqc": "1.0.0",
+        "picard": "1.1.0",
+        "preseq": "1.0.0",
+        "qualimap": "1.0.0",
+        "samtools": "1.1.0"
+      }
+    },
+    "nf-core/eager/2.5.3": {
+      "version": "1.5.0",
+      "content_hash": "4d967b28e94ea91917327986eca3391dcf8b614290c76f0ac9bfa059a1b6ba6b",
       "catalog": {
         "adapterremoval": "1.0.0",
         "bcftools": "1.0.0",
@@ -442,13 +467,22 @@
         "openms": "1.0.0"
       }
     },
+    "nf-core/mhcquant/3.3.0": {
+      "version": "1.2.0",
+      "content_hash": "b2292171934504169246762396a7e75d8b794931d3d5ca6290077e7e158faf3c",
+      "catalog": {
+        "mhcquant": "1.0.0",
+        "multiqc": "1.0.0",
+        "openms": "1.0.0"
+      }
+    },
     "nf-core/nanoseq/3.0.0": {
-      "version": "3.0.0",
-      "content_hash": "10aeef2d07355f1728e2e36a83f2658d9eae1691db3833ede1da2d25def5e22c",
+      "version": "3.0.1",
+      "content_hash": "f791293abdd7bf4cb23102c566c8d45a89225c27b745318fba42860efdc8f4b2",
       "catalog": {
         "bambu": "1.0.0",
         "deseq2": "1.0.0",
-        "dexseq": "1.0.0",
+        "dexseq": "1.1.0",
         "gtf": "1.0.0",
         "multiqc": "1.0.0",
         "nanoplot": "1.0.0",
@@ -510,6 +544,16 @@
         "seqfu": "1.0.0"
       }
     },
+    "nf-core/proteinfamilies/2.6.0": {
+      "version": "1.2.0",
+      "content_hash": "d1bedafe17d34bbf4062559134694c1a245f246eff96e3f8d720d533f4d7a132",
+      "catalog": {
+        "famsa": "1.0.0",
+        "hmmer": "1.1.0",
+        "proteinfamilies": "1.0.0",
+        "seqfu": "1.0.0"
+      }
+    },
     "nf-core/proteinfold/2.1.0": {
       "version": "1.1.2",
       "content_hash": "1f2a38897dbf7730a95aac3dbdf2f45e70e775c8e69b3dace666c46b860cfcb5",
@@ -518,8 +562,12 @@
       }
     },
     "nf-core/quantms/1.1.1": {
-      "version": "1.1.1",
-      "content_hash": "f6f764d65e93f268bcde10d4f3d9746d2d3200df8077e76c6810c1146d9916b3"
+      "version": "1.1.2",
+      "content_hash": "ca5ed95b05540040a4a46ebc95d96a09b2ca49a04f57f44160b197b842c9c0b3"
+    },
+    "nf-core/quantms/1.2.0": {
+      "version": "1.2.0",
+      "content_hash": "d691439687a3dcb015ce9efaf8847c327b8e397493f5994beb5008bf7d9606f1"
     },
     "nf-core/raredisease/3.1.2": {
       "version": "2.0.0",
@@ -555,8 +603,18 @@
       }
     },
     "nf-core/rnaseq/3.26.0": {
-      "version": "2.3.0",
-      "content_hash": "67d45c6d9ee80d57cc46aea40153490810b439601c4d0dbaaac2bbc39a28e86b",
+      "version": "2.4.0",
+      "content_hash": "00bc7c97b3f6ec327a040f6bc9e1960fc07e46ff97e16a9adcfaa5b091cabb18",
+      "catalog": {
+        "deseq2": "1.0.0",
+        "multiqc": "1.0.0",
+        "rseqc": "1.0.0",
+        "salmon": "1.0.0"
+      }
+    },
+    "nf-core/rnaseq/3.28.0": {
+      "version": "2.4.0",
+      "content_hash": "88683df7ca86d757dd3030e5f34d265e2df870445d79ba7bd52485c22348c512",
       "catalog": {
         "deseq2": "1.0.0",
         "multiqc": "1.0.0",
@@ -565,15 +623,27 @@
       }
     },
     "nf-core/rnasplice/1.0.4": {
-      "version": "3.0.0",
-      "content_hash": "d3138c744666aeb9282bf5931447bb72c30e84ef1cb1003eb9bab85ccdad2b11",
+      "version": "3.0.1",
+      "content_hash": "20ae628bfa2974203608edcbbb3f9a293b49d2d296d43cc8830e0ecc22fe9577",
       "catalog": {
-        "dexseq": "1.0.0",
+        "dexseq": "1.1.0",
         "edger": "1.0.0",
         "multiqc": "1.0.0",
-        "rmats": "1.0.0",
+        "rmats": "1.1.0",
         "salmon": "1.0.0",
-        "suppa": "1.0.0"
+        "suppa": "1.1.0"
+      }
+    },
+    "nf-core/rnasplice/2.0.0": {
+      "version": "4.0.0",
+      "content_hash": "640527572c3e2de8a6d8949566da67db0010ac1617a3ff388d7115fc8c771159",
+      "catalog": {
+        "dexseq": "1.1.0",
+        "edger": "1.0.0",
+        "multiqc": "1.0.0",
+        "rmats": "1.1.0",
+        "salmon": "1.0.0",
+        "suppa": "1.1.0"
       }
     },
     "nf-core/rnavar/1.3.0": {
@@ -603,6 +673,18 @@
     "nf-core/sarek/3.11.0": {
       "version": "3.2.1",
       "content_hash": "b6672b80a3518d2649bf36dd314877ced508d9cc24502ee6d80e8e6d7f9a3f82",
+      "catalog": {
+        "bcftools": "1.0.0",
+        "mosdepth": "1.1.0",
+        "multiqc": "1.0.0",
+        "snpeff": "1.0.1",
+        "vcf": "1.0.0",
+        "vcftools": "1.0.0"
+      }
+    },
+    "nf-core/sarek/3.12.0": {
+      "version": "3.2.1",
+      "content_hash": "c2cbba090aebc1d708e473b6bf6966f02b17d6b3c519052d9c2c3499819b7158",
       "catalog": {
         "bcftools": "1.0.0",
         "mosdepth": "1.1.0",
@@ -684,6 +766,43 @@
     "nf-core/variantbenchmarking/1.4.0/categories/structural": {
       "version": "1.0.0",
       "content_hash": "91383b9a494ddb09c23313a1cf817cb6eaf93a7bfdd333c6e4ff7531920dd01c",
+      "catalog": {
+        "multiqc": "1.0.0"
+      }
+    },
+    "nf-core/variantbenchmarking/1.6.1": {
+      "version": "2.0.0",
+      "content_hash": "46cb774c8ed4b2ce96e5dc22054be15df3fe51db06b2d40ffa98bcb720133917",
+      "catalog": {
+        "happy": "1.0.0",
+        "rtgtools": "1.0.0",
+        "sompy": "1.0.0",
+        "svanalyzer": "1.0.0",
+        "truvari": "1.0.0",
+        "wittyer": "1.0.0"
+      }
+    },
+    "nf-core/variantbenchmarking/1.6.1/categories/indel": {
+      "version": "1.0.1",
+      "content_hash": "84b69c9a95c0f07578abde360dce8b96ef88c9e78e622ced5ad7407f8bc29e27",
+      "catalog": {
+        "multiqc": "1.0.0",
+        "rtgtools": "1.0.0",
+        "sompy": "1.0.0"
+      }
+    },
+    "nf-core/variantbenchmarking/1.6.1/categories/small": {
+      "version": "1.0.0",
+      "content_hash": "55e6bf9009d75249a3f8a4db0d405dc448fbb513d323279083ac6b8dc57af516",
+      "catalog": {
+        "happy": "1.0.0",
+        "multiqc": "1.0.0",
+        "rtgtools": "1.0.0"
+      }
+    },
+    "nf-core/variantbenchmarking/1.6.1/categories/structural": {
+      "version": "1.0.0",
+      "content_hash": "76535fda82b26c0ffbdb0de86b08fa01b60c0320af461dcfef968f1871413a29",
       "catalog": {
         "multiqc": "1.0.0"
       }

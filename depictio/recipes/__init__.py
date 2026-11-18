@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import re
+import weakref
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -198,6 +199,7 @@ def _read_source_file(
     source: RecipeSource,
     storage_options: dict | None = None,
     rel_path: str | None = None,
+    root: DataRoot | None = None,
 ) -> pl.DataFrame:
     """Read a single source file into a DataFrame.
 
@@ -223,7 +225,18 @@ def _read_source_file(
     holding ``rel_path``, the file's path relative to the data root (the full
     location when the caller has none, e.g. an absolute override outside the
     root), so the recipe can derive a key the content lacks.
+
+    A source declared as a CSV/TSV file, repointed at a YAML or JSON
+    samplesheet (``--var SAMPLESHEET_FILE=sheet.yaml``), is read as a list of
+    records (``record_sheets``), through ``root`` when the file is under it.
     """
+    if _repointed_at_record_sheet(source, rel_path or location):
+        return _mark_record_sheet(
+            _with_source_path(
+                _read_record_source(location, source, root, rel_path), source, location, rel_path
+            )
+        )
+
     kwargs = dict(source.read_kwargs or {})
     remote = _is_remote_location(location)
     if remote and storage_options is not None:
@@ -235,6 +248,55 @@ def _read_source_file(
     else:
         df = read(location, **format_kwargs, **kwargs)
     return _with_source_path(df, source, location, rel_path)
+
+
+# Frames read from a YAML/JSON samplesheet, by id: such a sheet has keys, not
+# columns, and ``validate_sources`` says so. Weak, so a frame's entry goes with it.
+_RECORD_SHEET_FRAMES: weakref.WeakValueDictionary[int, pl.DataFrame] = weakref.WeakValueDictionary()
+
+
+def _mark_record_sheet(df: pl.DataFrame) -> pl.DataFrame:
+    _RECORD_SHEET_FRAMES[id(df)] = df
+    return df
+
+
+def _from_record_sheet(df: pl.DataFrame) -> bool:
+    return _RECORD_SHEET_FRAMES.get(id(df)) is df
+
+
+def _repointed_at_record_sheet(source: RecipeSource, location: str | Path) -> bool:
+    """Whether ``location`` is a YAML/JSON samplesheet standing in for a CSV/TSV ``source``.
+
+    Only a repointed ``path`` source qualifies. Recipes that read their own
+    ``.json`` outputs as one text column (isoseq, crisprseq, pairgenomealign)
+    declare that ``.json`` path or glob themselves, and keep that read.
+    """
+    # Lazily, for the same reason as in ``_as_data_root``.
+    from depictio.cli.cli.utils.record_sheets import is_record_sheet
+
+    return (
+        source.format in ("csv", "tsv")
+        and source.glob_pattern is None
+        and source.path is not None
+        and not is_record_sheet(source.path)
+        and is_record_sheet(location)
+    )
+
+
+def _read_record_source(
+    location: str | Path, source: RecipeSource, root: DataRoot | None, rel_path: str | None
+) -> pl.DataFrame:
+    """A YAML/JSON samplesheet ``source`` points at, read through ``root`` when under it."""
+    from depictio.cli.cli.utils.record_sheets import RecordSheetError, read_record_sheet
+
+    if root is not None and rel_path is not None:
+        data = root.read_bytes(rel_path)
+    else:
+        data = Path(location).read_bytes()
+    try:
+        return read_record_sheet(data, str(location))
+    except RecordSheetError as exc:
+        raise RecipeError(f"Source '{source.ref}': {exc}") from exc
 
 
 def _format_readers(source: RecipeSource) -> tuple[Any, Any, dict]:
@@ -287,15 +349,23 @@ def _read_source_outside_root(
     """
     if _is_remote_location(location):
         from depictio.cli.cli.utils.deltatables import _read_remote_file_lazy
+        from depictio.cli.cli.utils.record_sheets import RecordSheetError
 
         _scan, _read, format_kwargs = _format_readers(source)
         kwargs = {**format_kwargs, **(source.read_kwargs or {})}
-        if source.format == "csv":
+        if _repointed_at_record_sheet(source, location):
+            # No CSV options, so the remote reader reads it as records.
+            kwargs = {}
+        elif source.format == "csv":
             # The format the recipe declared, as on every other read of it: the
             # remote reader would otherwise pick tabs for a ``.tsv`` name.
             kwargs.setdefault("separator", ",")
-        frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
-        return _with_source_path(frame.collect(), source, location, None)
+        try:
+            frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
+        except RecordSheetError as exc:
+            raise RecipeError(f"Source '{source.ref}': {exc}") from exc
+        df = _with_source_path(frame.collect(), source, location, None)
+        return _mark_record_sheet(df) if _repointed_at_record_sheet(source, location) else df
 
     from depictio.cli.cli.utils.templates import _local_fallback_allowed
 
@@ -342,7 +412,9 @@ def _resolve_glob_source(
         # A zero-byte output has no header for polars to parse; it holds no rows.
         if root.size(rel_path) == 0:
             continue
-        df = _read_source_file(root.url(rel_path), source, storage_options, rel_path=rel_path)
+        df = _read_source_file(
+            root.url(rel_path), source, storage_options, rel_path=rel_path, root=root
+        )
         if not df.is_empty():
             frames.append(df)
 
@@ -427,7 +499,9 @@ def resolve_sources(
                     sources[source.ref] = None  # type: ignore[assignment]
                     continue
                 raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {file_location}")
-            df = _read_source_file(file_location, source, storage_options, rel_path=rel_path)
+            df = _read_source_file(
+                file_location, source, storage_options, rel_path=rel_path, root=root
+            )
 
         if df.is_empty():
             raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_location}")
@@ -482,17 +556,19 @@ def validate_sources(
         df = sources.get(source.ref)
         if not source.input_schema or df is None or df.is_empty():
             continue
+        # A YAML/JSON samplesheet names its fields keys, a table columns.
+        field = "key" if _from_record_sheet(df) else "column"
         missing = [c for c in source.input_schema if c not in df.columns]
         if missing:
             raise RecipeError(
-                f"Recipe {recipe_name}: source '{source.ref}' lacks input column(s) "
-                f"{missing}. Got columns: {df.columns}"
+                f"Recipe {recipe_name}: source '{source.ref}' lacks input {field}(s) "
+                f"{missing}. Got {field}s: {df.columns}"
             )
         for col_name, declared in source.input_schema.items():
             actual = df[col_name].dtype
             if not _dtype_compatible(actual, declared):
                 raise RecipeError(
-                    f"Recipe {recipe_name}: source '{source.ref}' input column "
+                    f"Recipe {recipe_name}: source '{source.ref}' input {field} "
                     f"'{col_name}' expected {declared}, got {actual}"
                 )
         checked.append(source.ref)

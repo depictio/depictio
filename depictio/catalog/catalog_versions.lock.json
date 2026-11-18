@@ -143,8 +143,8 @@
       "content_hash": "f1ab25d1daa84d86f87335b61007ed98a4df41796239203ab45668de797c364d"
     },
     "dexseq": {
-      "version": "1.0.0",
-      "content_hash": "e40a5e9d9f5c737b57991b855339e2445940915b7cd70dae8ce499013f977d43"
+      "version": "1.1.0",
+      "content_hash": "605b3f837d2e90ac1da1718f9895a33f4c710835262d1ad345f59dab0dba9153"
     },
     "edger": {
       "version": "1.0.0",
@@ -415,8 +415,8 @@
       "content_hash": "92e238de974e9ec2ef18bab11cdc89f1a1f481bde9237ae72d7f9d6b0b04d1c2"
     },
     "rmats": {
-      "version": "1.0.0",
-      "content_hash": "a1742a8c4f7ed408adf15267b46656f80b3607b21a4e8aca92dc6b3d88156b6f"
+      "version": "1.1.0",
+      "content_hash": "975532b028c06a4002c4057fdc51932b08e89ce24383e2b94f5b761ad7669118"
     },
     "rseqc": {
       "version": "1.0.0",
@@ -491,8 +491,8 @@
       "content_hash": "71ca2e62ba9df6660f803a37f36db3d1a21875992a400ae4ddefc8bcfd7a199f"
     },
     "suppa": {
-      "version": "1.0.0",
-      "content_hash": "431a114249f7e0416bccd81589f4dfac4db50fb130f4e8d1409dec20f632e02e"
+      "version": "1.1.0",
+      "content_hash": "74c3b24c21c7a734a0cf7ce8824ee3971b39eca85838c924437d4cde64e4eb03"
     },
     "svanalyzer": {
       "version": "1.0.0",
