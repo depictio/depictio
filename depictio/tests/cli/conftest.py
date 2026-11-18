@@ -25,6 +25,13 @@ def _no_real_local_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_services_prefix(monkeypatch):
+    """`depictio local` downloads its services unless DEPICTIO_SERVICES_PREFIX (set
+    in the all-in-one image) names preinstalled ones: tests opt in themselves."""
+    monkeypatch.delenv("DEPICTIO_SERVICES_PREFIX", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_state_dir(tmp_path, monkeypatch):
     """A scan cache and lock directory of the test's own: `ingest` takes the
     project lock, and the developer's ~/.depictio/state must not hold it."""
