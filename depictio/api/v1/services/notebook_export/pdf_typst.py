@@ -45,6 +45,11 @@ TAB_LEVEL = 2
 CONTENTS_DEPTH = 3
 
 
+#: A raw typst block that clears a tile's failure mark (``dpx-failed``),
+#: after a tile with no caption to read it.
+TYPST_TILE_DONE = "```{=typst}\n#dpx-tile-done\n```"
+
+
 def tstr(text: str) -> str:
     """A typst string literal."""
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
@@ -150,10 +155,20 @@ DEFINITIONS = """
     ..rows.flatten().map(c => [#c]))
   if note != none { v(-4pt); text(size: 6.8pt, fill: dpx-muted, style: "italic")[#note] }
 }
-// A tile that could not be drawn: its name, one neutral sentence.
+// A tile that could not be drawn: its name, one neutral sentence. It marks
+// itself, so the caption under it does not claim to show data.
+#let dpx-failed = state("dpx-failed", false)
 #let dpx-note(title, detail) = block(width: 100%, inset: 8pt, radius: 4pt,
   stroke: (paint: dpx-hair, dash: "dashed"))[
-  #text(size: 8pt, weight: "semibold")[#title] #text(size: 8pt, fill: dpx-muted)[#detail]]
+  #text(size: 8pt, weight: "semibold")[#title] #text(size: 8pt, fill: dpx-muted)[#detail]
+  #dpx-failed.update(true)]
+// A caption's "Data: ... as of" badge, left out under a tile that failed;
+// read once, so the next tile starts clear.
+#let dpx-asof(badge) = {
+  context if not dpx-failed.get() { text(fill: dpx-muted)[#badge] }
+  dpx-failed.update(false)
+}
+#let dpx-tile-done = dpx-failed.update(false)
 // The stepper (`::: steps`): a disc with the step's icon, the line to the
 // next, the label over the step's text.
 #let dpx-steps(steps, color) = grid(columns: (1fr,) * steps.len(), column-gutter: 6pt,

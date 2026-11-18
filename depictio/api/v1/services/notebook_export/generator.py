@@ -37,7 +37,8 @@ from .aggregations import agg_expr_source
 from .cells import Cell, md_cell, render_qmd
 from .classify import Classification, classify
 from .names import NameAllocator, slug
-from .pdf_typst import typst_preamble
+from .pdf_typst import TYPST_TILE_DONE, typst_preamble
+from .pdf_typst import tstr as _typst_str
 from .predicates import PredicateSource, emit_filter_expr, emit_predicate
 from .provenance import (
     EXPORT_DETAILS_ICON,
@@ -2725,11 +2726,15 @@ fig_funnel"""
     def _data_badge(self, meta: dict[str, Any]) -> str:
         """Where the tile's data came from: its collection, the rows it read,
         and as of when (the pinned commit, else the export)."""
+        text = self._data_badge_text(meta)
+        return f'<span class="dpx-asof">{_esc(text)}</span>' if text else ""
+
+    def _data_badge_text(self, meta: dict[str, Any]) -> str:
         dc = self.dc_by_id.get(str(meta.get("dc_id") or ""))
         tag = dc.tag if dc else str(meta.get("data_collection_tag") or "")
         if not tag:
             return ""
-        bits = [f"Data: {_esc(tag)}"]
+        bits = [f"Data: {tag}"]
         if dc is not None:
             rows = dc.initial_rows
             for stage in self.plan.stages:
@@ -2741,7 +2746,7 @@ fig_funnel"""
             if dc.version is not None:
                 bits.append(f"commit v{dc.version}")
         bits.append(f"as of {self.plan.exported_at:%Y-%m-%d}")
-        return f'<span class="dpx-asof">{" · ".join(bits)}</span>'
+        return " · ".join(bits)
 
     def _entry_cells(self, entry: ComponentEntry, *, in_row: bool = False) -> list[Cell]:
         """One tile: its highlight line, the tile (numbered when it is a figure
@@ -2775,6 +2780,9 @@ fig_funnel"""
         label = self._float_label(entry)
         if label is None:
             out.extend(tiles)
+            if self.plan.pdf:
+                # No caption to read the tile's failure mark: clear it here.
+                out.append(md_cell(TYPST_TILE_DONE))
         else:
             # A MultiQC tile has no title: its plot or module names it, as the
             # reader would ("general_stats" -> "General statistics").
@@ -2787,7 +2795,15 @@ fig_funnel"""
             if entry.highlight is None and str(meta.get("caption") or "").strip():
                 caption_bits.append(self._rewrite_links(str(meta["caption"]).strip()))
             badge = self._data_badge(meta)
-            if badge:
+            if badge and self.plan.pdf:
+                # The PDF's badge is typst: it stays silent under a tile that
+                # could not be drawn (``dpx-asof``).
+                caption_bits.append(
+                    f'[{badge}]{{.content-visible when-format="html"}}'
+                    f"`#dpx-asof({_typst_str(self._data_badge_text(meta).replace('`', ''))})`"
+                    "{=typst}"
+                )
+            elif badge:
                 caption_bits.append(badge)
             caption = " ".join(caption_bits) or _esc(ctype)
             out.append(md_cell(f"::: {{#{label}}}"))
@@ -3031,7 +3047,9 @@ fig_funnel"""
                 + ".*"
             )
         if lines:
-            parts.append("<br>".join(lines) if len(lines) > 1 else lines[0])
+            # Markdown's hard break, not ``<br>``: a typst page drops raw HTML,
+            # and the two sentences would run into each other there.
+            parts.append("\\\n".join(lines))
         bar = self._section_filter_bar(unit, tab)
         if bar:
             parts.append(bar)
