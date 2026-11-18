@@ -1681,6 +1681,7 @@ class NotebookBuilder:
             "    funnel_stage,\n"
             "    StaticCard,\n"
             "    init_tables,\n"
+            "    set_static_width,\n"
             "    show_table,\n"
             "    static_card_row,\n"
             "    static_figures,\n"
@@ -2621,12 +2622,18 @@ fig_funnel"""
             return self._card_row_cells(row)
         if len(row) == 1:
             return self._entry_cells(row[0], in_row=False)
-        out = [md_cell(grid_open([int(self._layout_of(e).get("w") or 1) for e in row]))]
-        for entry in row:
+        widths = [int(self._layout_of(e).get("w") or 1) for e in row]
+        out = [md_cell(grid_open(widths))]
+        for entry, w in zip(row, widths, strict=True):
             out.append(md_cell(cell_open()))
+            if self.plan.pdf:
+                # Its share of the column: the PDF draws its figure that wide.
+                out.append(Cell(f"set_static_width({int(720 * w / sum(widths))})"))
             out.extend(self._entry_cells(entry, in_row=True))
             out.append(md_cell(DIV_CLOSE))
         out.append(md_cell(DIV_CLOSE))
+        if self.plan.pdf:
+            out.append(Cell("set_static_width(None)"))
         return out
 
     def _card_row_cells(self, row: list[ComponentEntry]) -> list[Cell]:

@@ -131,6 +131,16 @@ def static_figures() -> bool:
 STATIC_FIGURE_WIDTH = 720
 
 
+_STATIC_WIDTH = {"px": STATIC_FIGURE_WIDTH}
+
+
+def set_static_width(px: int | None = None) -> None:
+    """The width static figures are drawn at from now on (``None``: the full
+    column's). A row of tiles draws each at its share of the column, so its
+    labels print at the same size as a full-width figure's."""
+    _STATIC_WIDTH["px"] = int(px) if px else STATIC_FIGURE_WIDTH
+
+
 def figure_png(fig) -> str | None:
     """The figure as a base64 PNG (kaleido), or ``None`` when it cannot be drawn.
 
@@ -938,6 +948,9 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
             fig = _theme.apply_to_figure(fig)
             html += fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
         bundle[HTML_MIME] = html
+        if static_figures() and isinstance(df, pl.DataFrame):
+            # A page: the table as a table (the violins stay the HTML's).
+            bundle[MARKDOWN_MIME] = _typst.table(df)
         return bundle
 
 
