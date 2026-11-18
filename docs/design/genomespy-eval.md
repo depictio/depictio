@@ -208,6 +208,6 @@ something JBrowse does not draw in one view.
   redraw what a `coverage_track` with `mark: rect` already follows, and the GenomeSpy
   toggle of a Plotly tile in a template that has a `jbrowse`.
 - The navigator and the browser now talk: the browser follows the brush of its tab
-  (`docs/design/jbrowse-genome-tracks.md`, "The browser follows the navigator").
+  (https://depictio.github.io/depictio-docs/features/genome-browser/navigator/).
 - The roles and the lints that hold them are in `depictio/projects/nf-core/RULES.md`
   section 16.

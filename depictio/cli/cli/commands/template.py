@@ -320,7 +320,7 @@ def _print_check(result, *, verbose: bool) -> None:
         console.print(
             "  [dim]a run with one of them may lack files the template reads: check with "
             "`depictio ingest <run> --dry-run`, then add a rule and a conditional "
-            "(docs/template-params.md)[/dim]"
+            "(https://depictio.github.io/depictio-docs/usage/projects/templates/)[/dim]"
         )
     others = len(result.unread_skip_params) - len(result.suspect_skip_params)
     if others:

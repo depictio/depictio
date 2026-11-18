@@ -142,7 +142,7 @@ genome-browser component draws. The manifest is ingested like a table DC; the
 files it points at are either uploaded to Depictio's bucket at ingestion
 (relative paths found under the data location) or read in place from a remote
 `s3://` / `https://` location. Full reference and examples:
-[`docs/design/jbrowse-genome-tracks.md`](design/jbrowse-genome-tracks.md).
+[the genome browser page of the docs](https://depictio.github.io/depictio-docs/features/genome-browser/).
 
 ```yaml
 - data_collection_tag: tracks
