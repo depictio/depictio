@@ -6,7 +6,7 @@ process DEPICTIO_INGEST {
     // The all-in-one image: the CLI, the server and MongoDB, Redis and SeaweedFS
     // preinstalled (DEPICTIO_SERVICES_PREFIX), so the artifact's stack starts with
     // no download, and the same image reopens the artifact.
-    container "ghcr.io/depictio/depictio-allinone:1.21.0"
+    container "ghcr.io/depictio/depictio-allinone:1.22.0"
     // The image's ENTRYPOINT serves a home, and execs any other command; cleared
     // anyway, so `docker run <image> /bin/bash .command.run` is plain bash.
     // Singularity and Apptainer `exec` ignore the entrypoint already.
