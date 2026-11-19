@@ -78,6 +78,27 @@ backups:
     # one per ISO week for weeklyWeeks, then one per month for monthlyMonths.
     weeklyWeeks: 0
     monthlyMonths: 0
+  # Nightly off-cluster copy with rclone (CronJob): the MongoDB backup files
+  # and, with data.enabled, the instance's S3 data, which MongoDB backups do
+  # not contain. Needs backups.persistence. Credentials: existingSecret (keys
+  # ACCESS_KEY_ID, SECRET_ACCESS_KEY) or secrets.backupS3AccessKey/SecretKey.
+  offsite:
+    enabled: false
+    schedule: "0 4 * * *"  # UTC, after the MongoDB backup
+    endpoint: ""           # e.g. https://buckets.embl.de
+    bucket: ""
+    region: us-east-1
+    prefix: ""             # defaults to the release name
+    existingSecret: ""
+    image: rclone/rclone:1.68.2
+    mongo:
+      retentionDays: 365   # in the bucket, independent of the volume's retention
+    data:
+      enabled: true
+      # Defaults to DEPICTIO_S3_PUBLIC_URL; set for a bundled S3 store.
+      sourceEndpoint: ""
+      # Files overwritten or deleted since the last run, kept this long.
+      archiveDays: 90
 
 # Secrets
 secrets:
@@ -98,6 +119,9 @@ secrets:
   # `helm install --set-file secrets.bootstrapAdminPassword=./admin.pw`.
   bootstrapAdminEmail: ""
   bootstrapAdminPassword: ""
+  # Off-site backup bucket keys (backups.offsite), when no existingSecret.
+  backupS3AccessKey: ""
+  backupS3SecretKey: ""
   # Optional CI / Cypress fixture user. Leave seedTestUser=false in any
   # public-facing deployment so a known-credentials account never ships.
   seedTestUser: false
