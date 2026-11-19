@@ -608,10 +608,8 @@ DIGEST_VOLATILE_COLUMNS = frozenset({"aggregation_time"})
 DIGEST_SIG_FIGS = 10
 
 
-#: Rows handed to deltalake, and hashed for the digest, at a time. polars'
-#: ``write_delta`` exports the whole frame in one go, which costs about as much
-#: memory again as the frame (4 GB more on a 25M-row recipe table, #1418);
-#: sliced, the write adds a few hundred MB, whatever the frame's size.
+#: Rows hashed for the digest at a time, so the rounded copy of the floats
+#: never exists whole.
 WRITE_SLICE_ROWS = 1_000_000
 
 
@@ -676,16 +674,21 @@ class _Tally:
 def _arrow_stream(frames: Iterable[pl.DataFrame], schema: pl.Schema, tally: _Tally | None = None):
     """``frames`` as one Arrow stream for deltalake, each held to ``schema``.
 
-    Each frame goes through ``to_arrow()``, which shares its buffers: the frame's
-    own Arrow C stream (what ``write_delta`` hands deltalake) costs about as
-    much memory again as the frame, even a slice at a time (#1418). Categorical
-    and Enum columns are written as String (``as_stored``), so the table holds
-    plain strings and no polars metadata. ``tally`` counts what went through.
+    Each frame is **one** Arrow batch. deltalake (measured on 1.6.2) writes the
+    batches of a stream concurrently and puts them in the file in whatever order
+    they finish: rows keep their order inside a batch, never across batches.
+    A frame of many chunks (a scan of thousands of files) handed over chunk by
+    chunk came back shuffled, file lines included (#1418). So a frame's rows
+    keep their order, and the frames themselves may not. Each frame goes
+    through polars' own export, one batch that shares the text of its string
+    views. Categorical and Enum columns are written as String (``as_stored``),
+    so the table holds plain strings and no polars metadata. ``tally`` counts
+    what went through.
     """
     import pyarrow as pa
 
     columns = list(schema)
-    arrow_schema = as_stored(pl.DataFrame(schema=schema)).to_arrow().schema
+    arrow_schema = pa.RecordBatchReader.from_stream(as_stored(pl.DataFrame(schema=schema))).schema
 
     def batches():
         try:
@@ -694,18 +697,13 @@ def _arrow_stream(frames: Iterable[pl.DataFrame], schema: pl.Schema, tally: _Tal
                     part = part.select(columns).cast(dict(schema))  # type: ignore[arg-type]
                 if tally is not None:
                     tally.add(part)
-                yield from as_stored(part).to_arrow().cast(arrow_schema).to_batches()
+                yield from pa.RecordBatchReader.from_stream(as_stored(part))
         except BaseException as exc:
             if tally is not None:
                 tally.source_error = exc
             raise
 
     return pa.RecordBatchReader.from_batches(arrow_schema, batches())
-
-
-def frame_stream(df: pl.DataFrame, rows: int = WRITE_SLICE_ROWS):
-    """``df`` as an Arrow stream for deltalake, ``rows`` at a time (``_arrow_stream``)."""
-    return _arrow_stream(df.iter_slices(rows), df.schema)
 
 
 def _refuse_unwritable_types(schema: pl.Schema) -> None:
@@ -758,6 +756,29 @@ def content_digest(df: pl.DataFrame) -> str | None:
     return digest.hexdigest()
 
 
+def _start_write(
+    schema: pl.Schema,
+    write_mode: WriteMode,
+    replace_run_tags: list[str] | None,
+    scoped: bool,
+) -> _Tally:
+    """Refuse a write that cannot be made, before any row is read; else the
+    tally that counts it. See ``write_delta_frames_versioned`` for the modes."""
+    predicated = write_mode == "replace-runs" and bool(replace_run_tags)
+    if scoped and not predicated:
+        # Invariant, deliberately an exception rather than a fall-back: with a
+        # subset frame, "overwrite the whole table" is data loss.
+        raise ValueError(
+            "a scoped write must be predicate-scoped to its runs; "
+            "refusing to overwrite the whole table with a subset of its runs"
+        )
+    if replace_run_tags and write_mode != "replace-runs":
+        raise ValueError("replace_run_tags needs replace-runs")
+    _refuse_unwritable_types(schema)
+    # A scoped write holds only some runs: its digest would not be the table's.
+    return _Tally(digest=None if scoped else _Digest(schema))
+
+
 def write_delta_table_versioned(
     aggregated_df: pl.DataFrame,
     destination_file: str,
@@ -769,10 +790,22 @@ def write_delta_table_versioned(
     replace_run_tags: list[str] | None = None,
     scoped: bool = False,
 ) -> DeltaWriteResult:
-    """Write the aggregated frame, a slice at a time: ``write_delta_frames_versioned``."""
-    return write_delta_frames_versioned(
-        aggregated_df.iter_slices(WRITE_SLICE_ROWS),
-        aggregated_df.schema,
+    """Write the aggregated frame as one table, in its row order.
+
+    The frame goes to deltalake whole, as one batch of polars' own export
+    (``DataFrame.write_delta`` did the same), so the table keeps its row
+    order: see ``_arrow_stream``. A one-line-per-row scan is only readable in
+    that order (#1418). The export copies the frame's string views, not their
+    text, but a Categorical or Enum column becomes a String column for the
+    whole frame. See ``write_delta_frames_versioned`` for the modes and
+    ``scoped``.
+    """
+    tally = _start_write(aggregated_df.schema, write_mode, replace_run_tags, scoped)
+    for part in aggregated_df.iter_slices(WRITE_SLICE_ROWS):
+        tally.add(part)
+    return _write_versioned(
+        as_stored(aggregated_df),
+        tally,
         destination_file,
         storage_options,
         write_mode=write_mode,
@@ -797,11 +830,12 @@ def write_delta_frames_versioned(
 ) -> DeltaWriteResult:
     """Write ``frames`` (each of ``schema``) as one table, recording what the commit was.
 
-    The frames are slices of one table, or the batches a recipe yields
-    (``transform_batches``, #1418): only the frame being written is held. The
-    rows, their runs and the digest are counted as they go, and it is one
-    commit either way. A frame source that raises stops the write before
-    anything is committed: the table stays at its last version.
+    The frames are the batches a recipe yields (``transform_batches``, #1418):
+    only the frame being written is held. The rows, their runs and the digest
+    are counted as they go, and it is one commit. A frame source that raises
+    stops the write before anything is committed: the table stays at its last
+    version. Each frame keeps its row order, the frames may land in any order
+    (``_arrow_stream``).
 
     ``overwrite`` reproduces the historical behaviour exactly. ``replace-runs``
     scopes the overwrite to the runs present in ``aggregated_df`` so untouched
@@ -831,19 +865,39 @@ def write_delta_frames_versioned(
       unreadable on 0.24. ``merge`` keeps the column, and turns a genuine type
       conflict into a loud failure instead of a corrupt table.
     """
-    predicated = write_mode == "replace-runs" and bool(replace_run_tags)
-    if scoped and not predicated:
-        # Invariant, deliberately an exception rather than a fall-back: with a
-        # subset frame, "overwrite the whole table" is data loss.
-        raise ValueError(
-            "a scoped write must be predicate-scoped to its runs; "
-            "refusing to overwrite the whole table with a subset of its runs"
-        )
-    if replace_run_tags and write_mode != "replace-runs":
-        raise ValueError("replace_run_tags needs replace-runs")
+    tally = _start_write(schema, write_mode, replace_run_tags, scoped)
+    return _write_versioned(
+        _arrow_stream(frames, schema, tally),
+        tally,
+        destination_file,
+        storage_options,
+        write_mode=write_mode,
+        commit_metadata=commit_metadata,
+        partition=partition,
+        replace_run_tags=replace_run_tags,
+        scoped=scoped,
+    )
 
+
+def _write_versioned(
+    data: Any,
+    tally: _Tally,
+    destination_file: str,
+    storage_options: PolarsStorageOptions,
+    *,
+    write_mode: WriteMode,
+    commit_metadata: dict[str, str] | None,
+    partition: bool,
+    replace_run_tags: list[str] | None,
+    scoped: bool,
+) -> DeltaWriteResult:
+    """The commit both writers make: ``data`` (an Arrow stream or a polars frame)
+    with the options ``write_mode`` and ``scoped`` call for, ``tally`` saying
+    what it held."""
+    predicated = write_mode == "replace-runs" and bool(replace_run_tags)
     # Replacing the schema is only correct when the frame *is* the table; a
-    # subset has to merge into the schema it finds. See the docstring.
+    # subset has to merge into the schema it finds. See
+    # ``write_delta_frames_versioned``.
     delta_write_options: dict[str, Any] = {
         "schema_mode": "merge" if scoped else "overwrite",
         **commit_write_options(commit_metadata),
@@ -861,15 +915,10 @@ def write_delta_frames_versioned(
     )
     from deltalake import write_deltalake
 
-    _refuse_unwritable_types(schema)
-    # A scoped write holds only some runs: its digest would not be the table's.
-    tally = _Tally(digest=None if scoped else _Digest(schema))
-    # What ``DataFrame.write_delta(..., mode="overwrite")`` does, but fed a
-    # frame at a time (``_arrow_stream``).
     try:
         write_deltalake(
             _delta_uri(destination_file),
-            _arrow_stream(frames, schema, tally),
+            data,
             mode="overwrite",
             storage_options=_delta_options(storage_options),
             **delta_write_options,
