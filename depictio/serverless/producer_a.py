@@ -979,25 +979,121 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
-    """One ``init_data`` entry for a component's DC — ``dc_config`` first, the
-    ``deltatables_collection`` lookup as fallback (the exact pattern of every
-    render endpoint)."""
+    """One ``init_data`` entry for a component's DC.
+
+    The Delta location always comes from ``deltatables_collection``, never from
+    the component's ``dc_config.delta_location``: that is a copy held in the
+    dashboard document, which its editors write, and a bundle ships the table
+    it points at whole. The collection itself is checked to belong to the
+    dashboard's project before anything reaches here (:func:`scope_to_project`).
+    """
     dc_id = comp.get("dc_id")
     if not dc_id:
         return None
-    dc_config = comp.get("dc_config") or {}
-    delta_loc = dc_config.get("delta_location")
-    if not delta_loc:
+    try:
         dt = _db().deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-        if dt:
-            delta_loc = dt.get("delta_table_location")
+    except Exception as exc:
+        if _is_time_limit(exc):
+            raise
+        return None
+    delta_loc = (dt or {}).get("delta_table_location")
     if not delta_loc:
         return None
+    dc_config = comp.get("dc_config") or {}
     return {
         "delta_location": delta_loc,
         "dc_type": dc_config.get("type") or "table",
         "size_bytes": dc_config.get("size_bytes", 0),
     }
+
+
+def collection_refs(comp: dict[str, Any]) -> list[tuple[str, str]]:
+    """Every ``(wf_id, dc_id)`` a component reads, ``wf_id`` ``""`` when unnamed.
+
+    Its own collection (``dc_id``, or MultiQC's ``data_collection_id``), every
+    ``<base>_dc_id`` an advanced_viz config binds (companion tables, the
+    phylogenetic tree, object files, the MA table) with its ``<base>_wf_id``, and
+    the collections a text tile's live values read.
+    """
+    refs: list[tuple[str, str]] = []
+    own = comp.get("dc_id") or comp.get("data_collection_id")
+    if own:
+        refs.append((str(comp.get("wf_id") or ""), str(own)))
+    config = comp.get("config")
+    if isinstance(config, dict):
+        for key, value in config.items():
+            if key.endswith("_dc_id") and isinstance(value, (str, ObjectId)) and str(value):
+                wf_id = config.get(f"{key[: -len('_dc_id')]}_wf_id")
+                refs.append((str(wf_id or ""), str(value)))
+    if comp.get("component_type") == "text" and comp.get("values"):
+        for card in text_value_cards([comp]):
+            if card.get("dc_id"):
+                refs.append((str(card.get("wf_id") or ""), str(card["dc_id"])))
+    return refs
+
+
+def foreign_collections(comp: dict[str, Any], project_dcs: dict[str, str]) -> list[str]:
+    """The collections ``comp`` reads that are not in its project, in order.
+
+    ``project_dcs`` is :func:`workflow_ids_by_dc` of the project: a collection
+    must be listed there, under the workflow the component names when it names
+    one (``routes._collection_in_project``, applied to every reference).
+    """
+    out: list[str] = []
+    for wf_id, dc_id in collection_refs(comp):
+        known = project_dcs.get(dc_id)
+        if known is None or (wf_id and known and wf_id != known):
+            if dc_id not in out:
+                out.append(dc_id)
+    return out
+
+
+def scope_to_project(
+    items: list[tuple["FamilyTab", dict[str, Any], str]],
+    tier_by_id: dict[str, TierRow],
+    project_docs: dict[str, dict[str, Any] | None],
+) -> set[str]:
+    """Omit every component that reads a collection outside its tab's project.
+
+    A dashboard document names its collections by id, and ``/save`` does not
+    check them; the server's render endpoints answer for whatever a component
+    names. A bundle turns that into whole-table Parquet in a file, so producer A
+    ships only the collections of the dashboard's own project. A component that
+    names another is omitted, with the ids in its detail, and never reaches the
+    loader or an endpoint body. ``project_docs`` maps a tab's ``project_id`` to
+    its project (``None`` when unreadable: then nothing can be shown to belong).
+    Returns the omitted component ids.
+    """
+    dcs_by_project = {pid: workflow_ids_by_dc(doc) for pid, doc in project_docs.items()}
+    omitted: set[str] = set()
+    for tab, comp, cid in items:
+        pid = str(tab.doc.get("project_id") or "")
+        foreign = foreign_collections(comp, dcs_by_project.get(pid, {}))
+        if not foreign:
+            continue
+        row = tier_by_id[cid]
+        row.tier = ComponentTier.OMITTED
+        row.reason = TierReason.UNSUPPORTED
+        row.detail = (
+            f"reads data collection(s) {', '.join(foreign)}, which are not in this "
+            "dashboard's project; a bundle only carries the project's own collections"
+        )
+        if comp.get("component_type") == "jbrowse":
+            # The usual cause has a better name: track files never ingested.
+            problem = jbrowse_dc_problem(comp, project_docs.get(pid))
+            if problem is not None:
+                row.reason = TierReason.JBROWSE
+                row.detail = problem
+        row.provisional = False
+        omitted.add(cid)
+    if omitted:
+        logger.warning(
+            "producer A: %d component(s) name collections outside their project and are "
+            "omitted: %s",
+            len(omitted),
+            ", ".join(sorted(omitted)),
+        )
+    return omitted
 
 
 def text_value_cards(stored_metadata: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1235,7 +1331,11 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
         "metadata": {
             "wf_id": str(comp.get("wf_id")),
             "dc_id": str(comp.get("dc_id")),
-            "dc_config": convert_objectid_to_str(comp.get("dc_config") or {}),
+            # Without its document copy of the Delta location: the task then
+            # looks it up from the collection, as `_dc_init_entry` does.
+            "dc_config": convert_objectid_to_str(
+                {k: v for k, v in (comp.get("dc_config") or {}).items() if k != "delta_location"}
+            ),
             "visu_type": comp.get("visu_type", "scatter"),
             "dict_kwargs": render_kwargs(comp),
             "mode": comp.get("mode", "ui"),
@@ -2494,6 +2594,8 @@ def apply_dc_outcomes(
             continue
         dc_id = str(comp.get("dc_id") or "")
         row = tier_by_id[component_id]
+        if row.tier is ComponentTier.OMITTED:
+            continue  # already settled (a collection outside the project)
         if dc_id in dc_failures:
             row.tier = ComponentTier.OMITTED
             row.reason = TierReason.UNSUPPORTED
@@ -2725,14 +2827,17 @@ LINK_TABLE_MAX_PAIRS = 50_000
 def _fetch_project(project_id: Any) -> dict[str, Any] | None:
     """The dashboard's project document — where ``links`` live (projects.py:33).
 
-    Best-effort: a bundle whose project cannot be read still builds, it just
-    carries no links (and the check output shows none).
+    Best-effort: a bundle whose project cannot be read still builds, but it
+    carries no links and no data (:func:`scope_to_project` can then show no
+    collection to belong to the project).
     """
     if not project_id:
         return None
     try:
         return _db().projects_collection.find_one({"_id": ObjectId(str(project_id))})
-    except Exception:
+    except Exception as exc:
+        if _is_time_limit(exc):
+            raise
         return None
 
 
@@ -3120,13 +3225,53 @@ def _fetch_dashboard(dashboard_id: str) -> dict[str, Any]:
     return doc
 
 
-def _check_permission(dashboard_data: dict[str, Any], user: ExportUser, required: str) -> None:
+def _permission_denial(dashboard_data: dict[str, Any], user: Any, required: str) -> str | None:
+    """Why ``user`` may not export this tab, or ``None``: ``required`` on its project."""
     project_id = dashboard_data.get("project_id")
-    if not project_id or not _routes().check_project_permission(project_id, user, required):
-        raise ProducerAError(
-            f"permission denied: exporting needs '{required}' on the dashboard's project "
-            "(RFC §8 — a bundle is bulk data exfiltration)"
-        )
+    if project_id and _routes().check_project_permission(project_id, user, required):
+        return None
+    return (
+        f"permission denied: exporting needs '{required}' on the dashboard's project "
+        "(RFC §8 — a bundle is bulk data exfiltration)"
+    )
+
+
+def _check_permission(dashboard_data: dict[str, Any], user: Any, required: str) -> None:
+    denial = _permission_denial(dashboard_data, user, required)
+    if denial is not None:
+        raise ProducerAError(denial)
+
+
+def _entry_for_export(
+    dashboard_id: str, user: Any, required: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """``(dashboard document, None)`` when ``user`` may export it, else ``(None, why)``."""
+    try:
+        doc = _fetch_dashboard(dashboard_id)
+    except ProducerAError as exc:
+        return None, str(exc)
+    denial = _permission_denial(doc, user, required)
+    return (None, denial) if denial is not None else (doc, None)
+
+
+def export_denial(dashboard_id: str, user: Any, required: str = "owner") -> str | None:
+    """Why ``user`` may not export ``dashboard_id``, or ``None`` when they may.
+
+    The one export rule (RFC §8): ``required`` on the dashboard's *project*,
+    ``owner`` to build a bundle, ``viewer`` to preflight one. The build, the
+    dispatch endpoint and the UI's ``can_export`` all ask this, so the button a
+    user sees enabled is the request the server accepts. An unknown or invalid
+    id is a denial like any other: callers answer all of them alike.
+    """
+    return _entry_for_export(dashboard_id, user, required)[1]
+
+
+def _require_entry(dashboard_id: str, user: Any, required: str) -> dict[str, Any]:
+    """The entry tab's document, or :class:`ProducerAError` with the denial."""
+    doc, denial = _entry_for_export(dashboard_id, user, required)
+    if doc is None:
+        raise ProducerAError(denial or "permission denied")
+    return doc
 
 
 def _public_base_url() -> str | None:
@@ -3290,8 +3435,7 @@ def export_manifest(
     # deciding needs *viewer*, since every row it reads is a row the normal
     # render endpoints would already hand that viewer.
     required = "viewer" if decide_only else "owner"
-    entry_doc = _fetch_dashboard(dashboard_id)
-    _check_permission(entry_doc, user, required)
+    entry_doc = _require_entry(dashboard_id, user, required)
     tabs, entry_tab = family_from_doc(entry_doc, single_tab=single_tab)
     for tab in tabs:
         _check_permission(tab.doc, user, required)
@@ -3312,12 +3456,22 @@ def export_manifest(
     for tab in tabs:
         tier_rows.extend(classify_stored_metadata(tab.components, tab_id=tab.id))
     tier_by_id = {row.component_id: row for row in tier_rows}
-    stored_metadata: list[dict[str, Any]] = [comp for _tab, comp, _cid in items]
 
     # Cross-DC links (RFC §8): read from the PROJECT, filtered to the ones that
     # can land a filter on this dashboard, and folded into the column sets
     # before anything is bundled — a join column pruned away is a dead filter.
     project_doc = _fetch_project(entry_tab.doc.get("project_id"))
+    # Only the project's own collections ship: a component naming another one
+    # is omitted here, before any loader or endpoint body sees it.
+    project_docs: dict[str, dict[str, Any] | None] = {
+        str(entry_tab.doc.get("project_id") or ""): project_doc
+    }
+    for pid in project_ids - set(project_docs):
+        project_docs[pid] = _fetch_project(pid)
+    foreign = scope_to_project(items, tier_by_id, project_docs)
+    stored_metadata: list[dict[str, Any]] = [
+        comp for _tab, comp, cid in items if cid not in foreign
+    ]
     # `{{param:KEY}}` in a text tile reads the run's recorded parameters —
     # constants, so the bundle carries them on the tile itself (the runtime
     # folds them in beside the computed values, as bulk_compute_cards does).
@@ -3332,7 +3486,9 @@ def export_manifest(
 
     # Python-runtime candidates (RFC §13.6) ship their whole table: the build
     # below decides which of them the runtime really serves.
-    python_candidates = mark_python_candidates(items, python_runtime)
+    python_candidates = mark_python_candidates(
+        [item for item in items if item[2] not in foreign], python_runtime
+    )
 
     # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
     # live advanced_viz kinds) read — keyed by dc_id, so a DC read on three tabs
@@ -3390,7 +3546,9 @@ def export_manifest(
         # A live MultiQC still ships a payload: the runtime re-slices that figure
         # under the current filters, it cannot rebuild it. The payload is its
         # data source, not a snapshot of a dead tile.
-        if row.tier is not ComponentTier.FROZEN and ctype != "multiqc":
+        if row.tier is ComponentTier.OMITTED or (
+            row.tier is not ComponentTier.FROZEN and ctype != "multiqc"
+        ):
             continue
         if decide_only and ctype == "multiqc":
             # Not settled here (the build waits for a cold pre-render, then
@@ -4348,8 +4506,7 @@ def export_static(
         )
 
     if check:
-        entry_doc = _fetch_dashboard(dashboard_id)
-        _check_permission(entry_doc, export_user, "viewer")
+        entry_doc = _require_entry(dashboard_id, export_user, "viewer")
         tabs, entry_tab = family_from_doc(entry_doc, single_tab=single_tab)
         for tab in tabs:
             _check_permission(tab.doc, export_user, "viewer")

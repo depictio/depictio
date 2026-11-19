@@ -204,10 +204,25 @@ def jobs(monkeypatch: pytest.MonkeyPatch) -> _FakeJobs:
 
 @pytest.fixture
 def dashboards(monkeypatch: pytest.MonkeyPatch):
+    """The dashboard as ``producer_a.export_denial`` reads it (``db`` at call time).
+
+    Its document lists the stranger as an owner: the export rule is the
+    *project* owner, whoever the dashboard document names.
+    """
+    from depictio.api.v1 import db as db_mod
+
     monkeypatch.setattr(
-        routes_mod,
+        db_mod,
         "dashboards_collection",
-        _FakeCollection([{"dashboard_id": DASHBOARD_OID, "project_id": PROJECT_OID}]),
+        _FakeCollection(
+            [
+                {
+                    "dashboard_id": DASHBOARD_OID,
+                    "project_id": PROJECT_OID,
+                    "permissions": {"owners": [{"_id": OTHER_OID}]},
+                }
+            ]
+        ),
     )
 
 
@@ -509,6 +524,31 @@ def test_dispatch_non_owner_is_404_without_dispatch(
     assert resp.json()["detail"] == "Dashboard not found or access denied"
     assert task.calls == []
     assert jobs.docs == {}
+
+
+def test_can_export_is_the_dispatch_rule(
+    client, owner, stranger, dashboards, monkeypatch: pytest.MonkeyPatch
+):
+    """The UI's button asks the same rule the dispatch applies: the project
+    owner can export; a dashboard-document owner who is not one cannot, and an
+    unknown id is just "no"."""
+    _patch_project(monkeypatch, [OWNER_OID])
+
+    _as_user(client, owner)
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export")
+    assert resp.status_code == 200
+    assert resp.json() == {"can_export": True}
+    assert client.get(f"/serverless/export-static/{ObjectId()}/can-export").json() == {
+        "can_export": False
+    }
+    assert client.get("/serverless/export-static/not-an-id/can-export").json() == {
+        "can_export": False
+    }
+
+    _as_user(client, stranger)  # owns the dashboard document, not the project
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export").json() == {
+        "can_export": False
+    }
 
 
 def test_dispatch_unknown_dashboard_is_404(

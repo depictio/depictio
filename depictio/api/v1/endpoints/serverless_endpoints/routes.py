@@ -1,6 +1,6 @@
 """HTTP surface for the serverless static-bundle exporter (producer A).
 
-Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
+Five thin endpoints around ``depictio.serverless.producer_a.export_static``:
 
 * ``GET  /export-static/{dashboard_id}/preflight`` — the ``--check`` tier table,
   per component and per tab of the dashboard's family, plus the bundle's
@@ -9,6 +9,8 @@ Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
   bind-and-refill builder over the frame the bundle would carry, so this is a
   seconds-long call, not an instant one — and it is bounded by the same hard
   size ceiling the build is, which it reports as a 413 rather than a 404.
+* ``GET  /export-static/{dashboard_id}/can-export`` — whether the dispatch would
+  accept this caller (the UI's button state); the same rule, no data read.
 * ``POST /export-static/{dashboard_id}`` — owner-gated; enqueues the build as a
   Celery task and returns a ``job_id``. The bundle carries the whole tab family,
   entered on the requested tab.
@@ -31,7 +33,6 @@ from uuid import uuid4
 
 import anyio.to_thread
 import boto3
-from bson import ObjectId
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -40,8 +41,7 @@ from depictio.api.celery_app import celery_app
 from depictio.api.v1.celery_tasks import export_static_bundle as export_static_bundle_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import dashboards_collection, static_exports_collection
-from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+from depictio.api.v1.db import static_exports_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
 from depictio.serverless.preflight import rows_for_tab, tier_counts
@@ -50,6 +50,7 @@ from depictio.serverless.producer_a import (
     BundleSize,
     BundleTooLargeError,
     ProducerAError,
+    export_denial,
     export_static,
 )
 
@@ -388,6 +389,20 @@ async def preflight_export_static(
     }
 
 
+@serverless_endpoint_router.get("/export-static/{dashboard_id}/can-export")
+def can_export_static(
+    dashboard_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, bool]:
+    """Whether the dispatch below would accept this caller, for the UI's button.
+
+    The same :func:`producer_a.export_denial` the dispatch and the build ask, so
+    the button is enabled exactly when the export would be accepted (project
+    owner), whoever owns the dashboard document. Reads two documents, no data.
+    """
+    return {"can_export": export_denial(dashboard_id, current_user, "owner") is None}
+
+
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
 def dispatch_export_static(
     dashboard_id: str,
@@ -399,17 +414,9 @@ def dispatch_export_static(
     Owner-gated (RFC §8 — a bundle is bulk data exfiltration). Denials return 404
     rather than 403 so the endpoint cannot be used to enumerate dashboards.
     """
-    try:
-        oid = ObjectId(str(dashboard_id))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
-
-    dashboard = dashboards_collection.find_one({"dashboard_id": oid})
-    if not dashboard:
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
-
-    project_id = dashboard.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "owner"):
+    denial = export_denial(dashboard_id, current_user, "owner")
+    if denial is not None:
+        logger.info(f"Static export refused for {dashboard_id}: {denial}")
         raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
 
     job_id = uuid4().hex
