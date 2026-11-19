@@ -9,32 +9,437 @@ description: >-
 find:
   path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
 recipe: cellranger/cell_qc.py
+# The fixture is enriched synthetically from 25 real rows (copies with seeded noise), so the preview shows several QC outcomes.
 fixture: cell_qc.tsv
 renders_as:
-  - { id: umap_qc, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, color: log10_n_genes, cluster: graphclust} }
-  - { id: umap_label, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster_label, color: cluster_label} }
-  - { id: tsne_label, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster_label, color: cluster_label} }
-  - { id: umi_vs_genes, component: advanced_viz, kind: scatter_xy, roles: {x: n_umi, y: n_genes, color: qc_status} }
-  - { id: cluster_stability, component: advanced_viz, kind: sankey, roles: {steps: [graphclust, kmeans_6, kmeans_10]} }
-  - { id: umi_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: n_umi, title: UMI counts per cell} }
-  - { id: genes_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: n_genes, title: Genes detected per cell} }
-  - { id: mito_box, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: pct_mito, title: Mitochondrial fraction by cluster} }
-  - { id: ribo_box, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: pct_ribo, title: Ribosomal fraction by cluster} }
-  - { id: umi_box, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: log10_n_umi, title: log10 UMI count by cluster} }
-  - { id: qc_status_by_cluster, component: figure, visu_type: bar, dict_kwargs: {x: cluster_label, color: qc_status, title: QC status per cluster} }
-  - { id: qc_reason_picker, component: interactive, interactive_type: MultiSelect, column_name: qc_reason }
-  - { id: cluster_picker, component: interactive, interactive_type: MultiSelect, column_name: cluster_label }
-  - { id: qc_status_picker, component: interactive, interactive_type: SegmentedControl, column_name: qc_status }
-  - { id: n_umi_filter, component: interactive, interactive_type: RangeSlider, column_name: n_umi }
-  - { id: n_genes_filter, component: interactive, interactive_type: RangeSlider, column_name: n_genes }
-  - { id: top20_share_filter, component: interactive, interactive_type: RangeSlider, column_name: pct_top20 }
-  - { component: card, column: n_umi, aggregation: median, secondary_layout: histogram }
-  - { component: card, column: n_genes, aggregation: median, secondary_layout: histogram }
-  - { component: card, column: pct_mito, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: qc_flagged, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: pct_top20, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: pct_ribo, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: log10_n_umi, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: log10_n_genes, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: cellbender_cell, aggregation: count, secondary_layout: composition, breakdown_col: cellbender_cell }
-  - { component: table, row_selection_enabled: true, row_selection_column: barcode }
+  - id: umap_qc
+    component: advanced_viz
+    kind: embedding
+    title: UMAP coloured by genes detected
+    roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, color: log10_n_genes, cluster: graphclust}
+    config:
+      axis_prefix: UMAP
+    description: >-
+      Each point is a cell on the UMAP, coloured by the log10 of the genes it detects. It
+      answers whether depth or quality follows the cell groups.
+
+      How to read: a smooth colour within each island is expected. A whole island of low
+      values is a cluster of poor cells or a low-RNA cell type, so check the mitochondrial
+      and UMI tiles before trusting it.
+  - id: umap_label
+    component: advanced_viz
+    kind: embedding
+    title: UMAP coloured by cluster
+    roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster_label, color: cluster_label}
+    config:
+      axis_prefix: UMAP
+    description: >-
+      Each point is a cell on the UMAP, coloured by its graph-based cluster and named by its
+      top two marker genes. It answers how the cells group by expression.
+
+      How to read: compact, separated islands are distinct populations. A cluster split across
+      the map, or mixed with another, is weakly defined, so compare it with the k-means
+      resolutions in the stability tile.
+  - id: tsne_label
+    component: advanced_viz
+    kind: embedding
+    title: t-SNE coloured by cluster
+    roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster_label, color: cluster_label}
+    config:
+      axis_prefix: t-SNE
+    description: >-
+      Each point is a cell on the t-SNE map, coloured by its graph-based cluster. It answers
+      whether the grouping seen on the UMAP also holds on a second embedding.
+
+      How to read: clusters that stay compact on both maps are robust. Distances between
+      islands are not meaningful on a t-SNE, so judge membership, not proximity.
+  - id: umi_vs_genes
+    component: advanced_viz
+    kind: scatter_xy
+    title: Genes detected against UMI counts
+    roles: {x: n_umi, y: n_genes, color: qc_status}
+    config:
+      log_x: true
+      x_title: UMI counts per cell
+      y_title: Genes detected per cell
+    description: >-
+      Each point is a cell: its total UMI count on the horizontal axis and the number of genes
+      it detects on the vertical axis, coloured by its QC status. It answers whether cells
+      follow the expected relation between depth and complexity.
+
+      How to read: genes detected rise with UMIs and flatten at high depth. Cells that sit far
+      below the cloud have many UMIs from few genes, which points to low-complexity cells or
+      doublets, and flagged cells should lie at the edges.
+
+      Lines and annotations: no cut-off is drawn. The QC flags come from limits of 5 median
+      absolute deviations on log counts and genes, set per sample.
+
+      Source: https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - id: cluster_stability
+    component: advanced_viz
+    kind: sankey
+    title: Cluster stability across resolutions
+    roles: {steps: [graphclust, kmeans_6, kmeans_10]}
+    config:
+      color_mode: source
+    description: >-
+      Each band is a group of cells that moves from a graph-based cluster to a k-means cluster
+      with 6 groups and then one with 10, sized by cell count. It answers how stable the
+      clusters are when the method and the resolution change.
+
+      How to read: a cluster that flows into one group at every step is stable. A cluster that
+      splits evenly across several groups is weakly defined, so treat its identity with care.
+  - id: umi_histogram
+    component: figure
+    visu_type: histogram
+    title: UMI counts per cell
+    dict_kwargs:
+      x: n_umi
+      color: qc_status
+      labels: {n_umi: UMI counts per cell, qc_status: QC status}
+    reference_lines:
+      - axis: x
+        stat: median
+        column: n_umi
+    description: >-
+      Each bar counts the cells with a total UMI count in a range, split by QC
+      status. It answers how deep the cells are and where the low-depth tail lies.
+
+      How to read: a single peak with a short left tail is a healthy library. A
+      second peak at low counts is empty droplets or debris that the filter
+      flagged.
+
+      The QC filter flags cells below 5 median absolute deviations under the
+      median of log counts, computed per sample.
+
+      Lines and annotations: The dashed line is the median UMI count per cell of
+      this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of the QC filter.
+
+      Source:
+      https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - id: genes_histogram
+    component: figure
+    visu_type: histogram
+    title: Genes detected per cell
+    dict_kwargs:
+      x: n_genes
+      color: qc_status
+      labels: {n_genes: Genes detected per cell, qc_status: QC status}
+    reference_lines:
+      - axis: x
+        stat: median
+        column: n_genes
+    description: >-
+      Each bar counts the cells with a number of detected genes in a range, split
+      by QC status. It answers how complex the cells are.
+
+      How to read: one peak is a healthy library, and a tail of few genes marks
+      poor cells. Complexity depends on the cell type, so compare it across
+      clusters before filtering.
+
+      The QC filter flags cells below 5 median absolute deviations under the
+      median of log genes, computed per sample.
+
+      Lines and annotations: The dashed line is the median number of genes
+      detected per cell of this table, a reference computed from the rows on show
+      (it follows the filters), not a cut-off of the QC filter.
+
+      Source:
+      https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - id: mito_box
+    component: figure
+    visu_type: box
+    title: Mitochondrial fraction by cluster
+    dict_kwargs:
+      x: cluster_label
+      y: pct_mito
+      color: cluster_label
+      labels: {cluster_label: Cluster, pct_mito: Mitochondrial UMIs (%)}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: pct_mito
+    description: >-
+      Each box is a cluster and shows the percent of UMIs from mitochondrial genes
+      in its cells. It answers which clusters carry stressed or dying cells.
+
+      How to read: a cluster with a high box is a candidate for broken cells, but
+      some cell types are naturally rich in mitochondria. Check its markers before
+      removing it.
+
+      The QC filter flags a cell when it exceeds 3 median absolute deviations and
+      a fixed 8 percent, a limit the source calls not universal.
+
+      Lines and annotations: The dashed line is the median mitochondrial fraction
+      of a cell of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of the QC filter.
+
+      Source:
+      https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - id: ribo_box
+    component: figure
+    visu_type: box
+    title: Ribosomal fraction by cluster
+    dict_kwargs:
+      x: cluster_label
+      y: pct_ribo
+      color: cluster_label
+      labels: {cluster_label: Cluster, pct_ribo: Ribosomal UMIs (%)}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: pct_ribo
+    description: >-
+      Each box is a cluster and shows the percent of UMIs from ribosomal genes in
+      its cells. It answers which clusters are dominated by ribosomal transcripts.
+
+      How to read: ribosomal content varies a lot between cell types, such as T
+      cells against myeloid cells. A cluster far above the rest is worth a look at
+      its markers, since it may reflect cell type and not quality.
+
+      Lines and annotations: The dashed line is the median ribosomal fraction of a
+      cell of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of the QC filter.
+  - id: umi_box
+    component: figure
+    visu_type: box
+    title: UMI counts by cluster
+    dict_kwargs:
+      x: cluster_label
+      y: log10_n_umi
+      color: cluster_label
+      labels: {cluster_label: Cluster, log10_n_umi: UMI counts (log10)}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: log10_n_umi
+    description: >-
+      Each box is a cluster and shows the log10 of the UMI counts of its cells. It
+      answers whether any cluster is much shallower than the others.
+
+      How to read: a cluster well below the rest is either a low-RNA cell type or
+      poor cells. Compare it with the genes detected and the mitochondrial
+      fraction.
+
+      Lines and annotations: The dashed line is the median log10 UMI count per
+      cell of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of the QC filter.
+  - id: qc_status_by_cluster
+    component: figure
+    visu_type: bar
+    title: QC status per cluster
+    dict_kwargs:
+      x: cluster_label
+      color: qc_status
+      labels: {cluster_label: Cluster, qc_status: QC status}
+    description: >-
+      Each bar is a cluster and its segments count the cells that pass or that the filter
+      flagged. It answers whether flagged cells concentrate in some clusters.
+
+      How to read: a cluster made mostly of flagged cells is probably an artefact and not a
+      cell type. Open the table to see which rule flagged them.
+
+      Source: https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - id: qc_reason_picker
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: qc_reason
+    title: QC reason
+    description: >-
+      Keeps the cells flagged for the chosen reason, or those that pass. It answers which rule
+      removes which cells.
+
+      How to read: select one reason to see where those cells sit on the maps.
+  - id: cluster_picker
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: cluster_label
+    title: Cluster
+    description: >-
+      Keeps only the cells of the chosen clusters. It answers how the QC metrics look in one
+      population.
+
+      How to read: clear the selection to show every cluster again.
+  - id: qc_status_picker
+    component: interactive
+    interactive_type: SegmentedControl
+    column_name: qc_status
+    title: QC status
+    description: >-
+      Switches between the cells that pass the quality filter and the cells it flagged. It
+      answers where the flagged cells lie.
+
+      How to read: choose flagged to inspect them on the maps and in the table.
+  - id: n_umi_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: n_umi
+    title: UMI counts range
+    description: >-
+      Keeps the cells whose total UMI count falls in the range. It answers how the tab changes
+      when shallow or very deep cells are left out.
+
+      How to read: drag the lower handle to hide the shallow cells.
+  - id: n_genes_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: n_genes
+    title: Genes detected range
+    description: >-
+      Keeps the cells whose number of detected genes falls in the range. It answers how the
+      tab changes when low-complexity cells are left out.
+
+      How to read: drag the lower handle to hide cells with few genes.
+  - id: top20_share_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: pct_top20
+    title: Top 20 gene share range
+    description: >-
+      Keeps the cells whose top 20 genes hold a share of UMIs inside the range. It answers
+      which cells are dominated by a few genes.
+
+      How to read: drag the upper handle down to hide cells that few genes dominate.
+  - component: card
+    column: n_umi
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: UMI counts, with their spread
+    title: UMI counts per cell
+    description: >-
+      The hero number is the median UMI count of a cell, and the histogram shows the
+      distribution. It answers how deeply the cells are sequenced.
+
+      How to read: a median in the thousands is typical for droplet data. A long left tail or a
+      minimum near zero shows cells the filter should remove.
+  - component: card
+    column: n_genes
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: genes detected, with their spread
+    title: Genes detected per cell
+    description: >-
+      The hero number is the median count of genes detected in a cell, and the histogram
+      shows the distribution. It answers how complex the cells are.
+
+      How to read: low values point to poor cells or low-RNA cell types. Compare with the UMI
+      card, since the two rise together.
+  - component: card
+    column: pct_mito
+    aggregation: median
+    aggregations: [max]
+    secondary_layout: threshold
+    threshold_value: 8.0
+    threshold_direction: max
+    caption: median against the 8% mitochondrial limit
+    title: Mitochondrial fraction
+    description: >-
+      The hero number is the median percent of UMIs from mitochondrial genes, shown against
+      the fixed limit of 8 percent. It answers whether the typical cell is stressed.
+
+      How to read: a median under the limit passes. A high maximum is a cell the filter flags,
+      together with the median absolute deviation rule.
+
+      Lines and annotations: the 8 percent limit is the fixed cut-off a cell must also exceed
+      to be flagged, besides 3 median absolute deviations. The source states it is not
+      universal because mitochondrial content differs between cell types and tissues.
+
+      Source: https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - component: card
+    column: qc_flagged
+    aggregation: sum
+    aggregations: [average]
+    secondary_layout: composition
+    breakdown_col: qc_status
+    caption: cells passing and flagged
+    title: Cells flagged by QC
+    description: >-
+      The hero number is the count of cells the quality filter flags, and the bar splits the
+      cells into passing and flagged. It answers how much of the library the filter removes.
+
+      How to read: the average is the flagged fraction. A small fraction is typical, and a
+      large one means the library or the filter settings need a closer look.
+
+      Source: https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - component: card
+    column: pct_top20
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: box_plot
+    caption: top 20 gene share, with its spread
+    title: Top 20 gene share
+    description: >-
+      The hero number is the median percent of UMIs held by a cell's 20 most expressed genes,
+      and the box shows its spread. It answers how concentrated the expression is.
+
+      How to read: a high share means a few genes dominate the cell, which is typical of low
+      complexity or damaged cells. Cells above 5 median absolute deviations are flagged.
+
+      Source: https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - component: card
+    column: pct_ribo
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: box_plot
+    caption: ribosomal share, with its spread
+    title: Ribosomal fraction
+    description: >-
+      The hero number is the median percent of UMIs from ribosomal genes, and the box shows its
+      spread. It answers how much of the signal is ribosomal.
+
+      How to read: the level depends on the cell types in the sample. No cut-off is drawn
+      because the QC rules use no ribosomal limit.
+  - component: card
+    column: log10_n_umi
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: box_plot
+    caption: UMI counts (log10), with their spread
+    title: UMI counts, log scale
+    description: >-
+      The hero number is the median log10 of the UMI counts of a cell, and the box shows its
+      spread. It answers the depth of the cells on the scale the QC rule uses.
+
+      How to read: a narrow box means even depth. A long lower whisker holds the shallow cells.
+  - component: card
+    column: log10_n_genes
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: box_plot
+    caption: genes detected (log10), with their spread
+    title: Genes detected, log scale
+    description: >-
+      The hero number is the median log10 of the genes detected in a cell, and the box shows
+      its spread. It answers the complexity of the cells on the scale the QC rule uses.
+
+      How to read: a narrow box means even complexity. A long lower whisker holds the
+      low-complexity cells.
+  - component: card
+    column: cellbender_cell
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: cellbender_cell
+    caption: cells kept and dropped by CellBender
+    title: CellBender cell calls
+    description: >-
+      The hero number is the count of cells in view and the bar splits them by whether
+      CellBender also kept them. It answers how much the ambient-RNA correction agrees with the
+      cell calls.
+
+      How to read: a bar that is almost entirely kept means the two calls agree. A sizeable
+      dropped share means many called cells are mostly ambient RNA.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: barcode
+    title: Cell quality control
+    description: >-
+      Each row is a cell with its counts, mitochondrial, ribosomal and haemoglobin shares,
+      embedding coordinates, clusters and QC flags. It answers the exact values behind every
+      tile and lets a row selection filter the others.
+
+      How to read: sort by a metric to find the extreme cells, and read the reason column to
+      see which rule flagged a cell.

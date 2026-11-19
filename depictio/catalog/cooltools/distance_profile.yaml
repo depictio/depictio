@@ -13,15 +13,89 @@ renders_as:
   - id: ps_curve
     component: advanced_viz
     kind: profile
+    title: Contact probability against distance
     roles: {series: chrom, x: distance, y: contact_probability}
+    config:
+      log_x: true
+      log_y: true
+      x_title: Genomic distance (bp)
+      y_title: Contact probability
+    description: >-
+      Each line is a chromosome, plus the genome-wide pooled curve: the probability
+      that two loci a given distance apart are in contact, on log axes. It answers
+      how fast contacts decay with genomic distance.
+
+      How to read: contacts fall steadily with distance. Chromosomes whose curve
+      departs from the pooled one carry a different folding or a technical bias, and
+      a plateau or bump at long range can point to translocations or poor
+      balancing. Open the slope view for the local decay rate.
+
+      Note: this is the tool's expected contact table re-binned over log-spaced
+      distances, with no cut-off drawn.
   # The derivative of the same curve. Read on its own axis, because a slope
   # near -1 and a probability near 0.1 share no scale.
   - id: ps_slope
     component: advanced_viz
     kind: profile
+    title: Slope of the contact decay
     roles: {series: chrom, x: distance, y: log10_slope}
+    config:
+      log_x: true
+      x_title: Genomic distance (bp)
+      y_title: Log-log slope of the contact probability
+    description: >-
+      Each line is a chromosome, plus the genome-wide pooled curve: the local slope
+      of the contact probability against distance, on log axes. It answers at which
+      distance scales the decay changes.
+
+      How to read: a steady slope means a single regime of folding. A change of
+      slope marks a scale where the organisation changes, such as the footprint of
+      loop extrusion, and a chromosome off the others needs a closer look.
+
+      Note: the slope is a derivative of a noisy curve, so it is unreliable at the
+      largest distances where few pairs of bins are left. No cut-off is drawn.
   # The pooled curve only: a median over it and the per-chromosome curves
   # counts the genome twice.
-  - { component: card, column: log10_slope, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, filter_expr: "col('chrom') == 'all'" }
-  - { component: card, column: contact_probability, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: log10_slope
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('chrom') == 'all'"
+    title: Decay slope of the pooled curve
+    caption: median log-log slope of the pooled curve, with its spread
+    description: >-
+      The hero number is the median log-log slope of the genome-wide contact curve,
+      and the box shows how the slope varies across distances. It answers how steeply
+      contacts fall off overall.
+
+      How to read: a more negative slope means contacts are lost faster with
+      distance. Compare samples or resolutions, as the value shifts with both.
+  # Contact probability spans orders of magnitude over the curve, so a box plot
+  # would be squashed against zero: a stat strip is used instead.
+  - component: card
+    column: contact_probability
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: vertical
+    filter_expr: "col('chrom') == 'all'"
+    title: Short-range contact probability
+    caption: highest contact probability of the pooled curve, with its median and lowest
+    description: >-
+      The hero number is the highest contact probability of the genome-wide curve,
+      found at the shortest distance, and the strip shows its median and lowest
+      value. It answers how strong the contacts are at short range and how far they
+      fall.
+
+      How to read: the maximum and the minimum differ by orders of magnitude on
+      every Hi-C map. A change of the maximum between samples points to a different
+      sequencing depth or resolution rather than to biology.
+  - component: table
+    title: Contact probability per distance
+    description: >-
+      Each row is a distance bin of a chromosome with its contact probability, log
+      slope, observed contacts and number of possible bin pairs. It answers the
+      exact values behind the curves.
+
+      How to read: filter the chromosome column to one chromosome or to the pooled
+      curve and sort by distance.

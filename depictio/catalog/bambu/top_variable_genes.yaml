@@ -11,7 +11,64 @@ fixture: top_variable_genes.tsv
 renders_as:
   # `index` is not optional in practice: ComplexHeatmapConfig.index_column
   # falls back to the literal "sample_id", which this matrix does not have.
-  - { id: variable_gene_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_id} }
-  - { component: card, column: log_cpm_variance, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
-  - { component: table, page_size: 25 }
+  # C6 N/A: value columns are the run's samples
+  - id: variable_gene_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Most variable genes
+    roles: {index: gene_id, row_annotation_cols: [gene_biotype]}
+    config:
+      normalize: row_z
+    description: >-
+      Each cell is the log2(CPM + 1) expression of one of the most variable genes (rows) in
+      one sample (columns), scaled per gene, with the gene biotype as a row annotation. It
+      answers which genes drive the differences between samples.
+
+      How to read: columns of the same condition should share a pattern. A sample that
+      looks like the other group, or a block of genes that follows one condition, shows
+      what structures the data before any contrast is run.
+
+      Lines and annotations: the genes are the 100 with the highest variance of
+      log2(CPM + 1) across the run, a fixed display size and not a significance cut-off.
+      Colour is a per-gene z-score.
+  - id: variance_spread
+    component: card
+    column: log_cpm_variance
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: variance, with its spread
+    title: Variance of the top genes
+    description: >-
+      The hero number is the largest variance of log2(CPM + 1) among the displayed genes,
+      and the box shows the quartiles of all of them. It answers how strongly the top genes
+      vary.
+
+      How to read: a large maximum against a low box means a few genes carry most of the
+      variation. High variance often marks genes that separate conditions, but also genes
+      driven by one outlier library.
+  - id: variable_biotypes
+    component: card
+    column: gene_biotype
+    aggregation: nunique
+    aggregations: [mode]
+    secondary_layout: top_n
+    breakdown_col: gene_biotype
+    top_n_count: 3
+    caption: genes, by biotype
+    title: Biotypes of the variable genes
+    description: >-
+      The hero number is the count of distinct biotypes among the most variable genes, the
+      compact line gives the most frequent one, and the bars rank the biotypes by gene
+      count. It answers what kind of genes vary.
+
+      How to read: mostly protein-coding genes is the usual picture. A non-coding class
+      among them can be real regulation or a technical artefact.
+  - component: table
+    page_size: 25
+    title: Most variable genes table
+    description: >-
+      Each row is a gene with its biotype, the variance of its log2(CPM + 1) and its value
+      in every sample. It answers the exact values behind the heatmap.
+
+      How to read: sort by variance and compare a gene across the sample columns.

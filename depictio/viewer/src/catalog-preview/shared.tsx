@@ -6,7 +6,7 @@
 import React from 'react';
 import { ActionIcon, Anchor, Badge, Box, Button, CopyButton, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { componentTypeVisual } from 'depictio-react-core';
+import { componentTypeVisual, useChromeStyle } from 'depictio-react-core';
 import logoRaw from '../../public/logos/logo_black.svg?raw';
 import logoWhiteRaw from '../../public/logos/logo_white.svg?raw';
 
@@ -16,9 +16,23 @@ export const LOGO_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(logoRaw)}`
 export const LOGO_WHITE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(logoWhiteRaw)}`;
 export const logoFor = (theme?: string) => (theme === 'dark' ? LOGO_WHITE_SRC : LOGO_SRC);
 
-/** The catalog's section accent — one constant so the gallery + detail agree
- *  (Projects uses teal; each app/section gets its own flat Mantine color). */
+/** The catalog's section accent in Classic — one constant so the gallery +
+ *  detail agree (Projects uses teal; each app/section gets its own flat
+ *  Mantine color). Paper spends one accent, the instance's primary, on what is
+ *  selected or actionable: see `useCatalogPaper`. */
 export const CATALOG_ACCENT = 'violet';
+
+/** Whether the catalog draws in Paper, and the Mantine colour its accents take:
+ *  `undefined` is Mantine's "use the primary colour", as in the editor's
+ *  catalog picker (`useCatalogGlass`). */
+export function useCatalogPaper(): { paper: boolean; tone: string | undefined; accentVar: string } {
+  const paper = useChromeStyle().id === 'glass';
+  return {
+    paper,
+    tone: paper ? undefined : CATALOG_ACCENT,
+    accentVar: paper ? 'var(--gl-accent)' : `var(--mantine-color-${CATALOG_ACCENT}-6)`,
+  };
+}
 
 /** Component type → badge style. One registry for the whole app; see
  *  `componentTypeMeta` in depictio-react-core. `name` is kept as the key here
@@ -153,7 +167,16 @@ export interface OutputInfo {
   fixture?: string | null;
   nf_core_url?: string | null;
   biotools_url?: string | null;
+  /** Content hash of the payload in the site's `objects/` (published slots). */
+  dataRef?: string | null;
   edam?: string[];
+  /** The tool (catalog module) this output belongs to, and its revision. */
+  tool_id?: string | null;
+  tool_name?: string | null;
+  module_version?: string | null;
+  /** Since which module revision this output is as it is (optional). */
+  output_version?: string | null;
+  changelog?: { version: string; date?: string; changes: string[] }[];
   n_rows?: number;
   n_cols?: number;
   columns?: string[];
@@ -168,6 +191,8 @@ export interface FixturePreview {
 export interface OutputEntry {
   output: OutputInfo;
   fixturePreview?: FixturePreview | null;
+  /** Content hash of the payload in the site's `objects/` (published slots). */
+  dataRef?: string | null;
   renders: Record<string, unknown>[];
   ok: boolean;
   error?: string;
@@ -176,6 +201,9 @@ export interface OutputEntry {
 export interface ToolEntry {
   id: string;
   name: string;
+  /** The module's revision (`module.yaml` `version`). */
+  version?: string | null;
+  changelog?: { version: string; date?: string; changes: string[] }[];
   description?: string;
   homepage?: string | null;
   nf_core_url?: string | null;
@@ -186,11 +214,18 @@ export interface ToolEntry {
 
 export interface CatalogGlobal {
   theme?: 'light' | 'dark';
+  /** The release's version, from the exporter. */
+  version?: string;
   initialOutputId?: string | null;
   /** When set, the viewer skips all catalog chrome and renders only this render. */
   initialRenderId?: string | null;
   tools: ToolEntry[];
   data: unknown;
+  /** Set ONLY by the multi-file site entry (siteMain.tsx): `data` is empty and each
+   *  output's payload is fetched on demand from `<dataBase>outputs/<id>.json`.
+   *  Absent in the single-file bundle, whose embedded payload is complete. */
+  lazyOutputs?: boolean;
+  dataBase?: string;
 }
 
 /** A render's copyable `renders_as` YAML, joined across an output's renders. */

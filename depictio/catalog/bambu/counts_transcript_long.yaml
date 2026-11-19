@@ -7,11 +7,109 @@ description: >-
   biotype each isoform belongs to carried alongside.
 find: { path_glob: "**/bambu/counts_transcript.txt" }
 recipe: bambu/counts_transcript_long.py
+# The fixture is enriched synthetically from 1 real library of 12 transcripts (copies with seeded noise), so the preview shows several libraries and conditions.
 fixture: counts_transcript_long.tsv
 renders_as:
-  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: log_cpm, color: condition, title: Isoform expression distribution per library} }
-  - { component: card, column: log_cpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: count, aggregation: sum, secondary_layout: donut, breakdown_col: condition }
-  - { component: table, page_size: 25 }
+  - id: isoform_expression_box
+    component: figure
+    visu_type: box
+    dict_kwargs:
+      x: sample
+      y: log_cpm
+      color: condition
+      labels: {sample: Library, log_cpm: "Expression, log2(CPM + 1)", condition: Condition}
+    reference_lines:
+      - {axis: y, stat: median, column: log_cpm}
+    title: Isoform expression distribution per library
+    description: >-
+      Each box is the distribution of log2(CPM + 1) over the transcripts of one library,
+      coloured by condition. It answers whether the libraries are comparable after
+      normalising for depth.
+
+      How to read: boxes of similar height and position mean comparable libraries. A
+      library whose box sits well above or below its replicates has a composition or
+      quality difference to check before comparing conditions.
+
+      Lines and annotations: this catalog's recipe computes counts per million from the
+      Bambu transcript counts against the library total, then adds 1 before the log2
+      transform.
+      The dashed line is the median log2(CPM + 1) of this table, a reference computed
+      from the rows on show (it follows the filters), not a cut-off of Bambu.
+
+      Source: https://raw.githubusercontent.com/GoekeLab/bambu/master/README.md
+  - id: isoform_log_cpm_spread
+    component: card
+    column: log_cpm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median expression, with its spread
+    title: Typical isoform expression
+    description: >-
+      The hero number is the median log2(CPM + 1) over every transcript and library in
+      view, and the box shows the quartiles. It answers where isoform expression
+      typically sits.
+
+      How to read: most transcripts are not detected in a given library, so the median is
+      low and the upper quartile is the more informative number. Filter to one condition
+      to compare them.
+  - id: transcripts_by_biotype
+    component: card
+    column: transcript_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: gene_biotype
+    top_n_count: 3
+    caption: transcripts, by biotype
+    title: Transcripts quantified
+    description: >-
+      The hero number is the count of distinct transcripts, the compact line gives the
+      transcript and library rows, and the bars rank the biotypes of their genes. It
+      answers how much of the annotation is covered and by what kind of gene.
+
+      How to read: protein-coding genes usually lead. Novel transcripts that Bambu
+      discovered appear here as well.
+  - id: genes_per_library
+    component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    caption: genes, by library
+    title: Genes with isoforms
+    description: >-
+      The hero number is the count of distinct genes that have a quantified transcript, and
+      the bars rank the libraries by the rows they hold. It answers how many genes the
+      isoform table covers.
+
+      How to read: libraries with fewer rows had fewer transcripts above the minimum count.
+      Compare with the gene count of the gene-level table.
+  - id: transcript_reads_by_condition
+    component: card
+    column: count
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: condition
+    caption: reads, by condition
+    title: Reads assigned
+    description: >-
+      The hero number is the sum of Bambu transcript counts over the libraries in view and
+      the ring splits them by condition. It answers how the sequencing is shared between
+      conditions.
+
+      How to read: a lopsided ring means one condition has more reads, which counts per
+      million correct for. The compact line gives the median and maximum count of a
+      single transcript and library.
+  - component: table
+    page_size: 25
+    title: Transcript counts per library
+    description: >-
+      Each row is a transcript in one library with its gene, biotype, Bambu count, counts
+      per million and log2(CPM + 1). It answers the exact values behind the plots.
+
+      How to read: filter to one library or gene and sort by counts per million to compare
+      isoforms.

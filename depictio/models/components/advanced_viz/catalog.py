@@ -27,12 +27,12 @@ from __future__ import annotations
 from fnmatch import fnmatch
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-from depictio.models.components.lite import CardLiteComponent
+from depictio.models.components.lite import CardLiteComponent, ReferenceLine
 from depictio.models.components.types import (
     AdvancedVizKind,
     AggregationFunction,
@@ -42,6 +42,13 @@ from depictio.models.components.types import (
 )
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
+
+# Figure kwargs a render may not set: RULES.md §7 keeps colours in the
+# dashboard's ``category_colors`` (or a continuous scale), never in a per-figure
+# map, so a value keeps its colour on every tile that draws it.
+_FORBIDDEN_FIGURE_KWARGS: frozenset[str] = frozenset(
+    {"color_discrete_map", "color_discrete_sequence"}
+)
 
 # plotly-express kwargs whose VALUES are column names (grounded against data);
 # other dict_kwargs (title, points, log_x…) are passed through untouched.
@@ -263,6 +270,117 @@ class CatalogFind(BaseModel):
         return [self.path_glob, *self.path_glob_alt]
 
 
+def _config_columns(config: dict[str, Any]) -> set[str]:
+    """Columns a render's viz `config` names (`*_col` keys and column lists).
+
+    A display option such as `color_col` or `value_columns` still points at a
+    column, so it is grounded like a role.
+    """
+    cols: set[str] = set()
+    for key, value in config.items():
+        if key.endswith("_col") and isinstance(value, str) and value:
+            cols.add(value)
+        elif key in ("value_columns", "row_annotation_cols") and isinstance(value, list):
+            cols |= {v for v in value if isinstance(v, str) and v}
+    return cols
+
+
+@lru_cache(maxsize=1)
+def _viz_config_models() -> dict[str, type[BaseModel]]:
+    """``viz_kind -> config model``, read off the discriminated union.
+
+    Imported lazily: the config models are heavy and this module stays
+    import-cheap for the CLI.
+    """
+    from depictio.models.components.advanced_viz import configs
+
+    union = get_args(configs._VizConfigUnion)[0]
+    models: dict[str, type[BaseModel]] = {}
+    for model in get_args(union):
+        for kind in get_args(model.model_fields["viz_kind"].annotation):
+            models[kind] = model
+    return models
+
+
+def _check_viz_config(kind: str, roles: dict[str, Any], config: dict[str, Any]) -> None:
+    """Reject a render `config` key the kind's config model does not have.
+
+    A retired kind (`ma`, `qq`...) is checked against the model it is rewritten
+    into, the way every stored config is. Only the keys are checked here: the
+    values are validated with the bound roles when the component is built.
+    A key a role already derives is refused, so a binding has one home.
+    """
+    if not config:
+        return
+    from depictio.models.components.advanced_viz.configs import resolve_viz_kind
+
+    model = _viz_config_models().get(resolve_viz_kind(kind) or kind)
+    if model is None:
+        raise ValueError(f"renders_as {kind}: no config model, so 'config' cannot be set")
+    if "viz_kind" in config:
+        raise ValueError(f"renders_as {kind}: 'viz_kind' comes from 'kind', not 'config'")
+    unknown = set(config) - set(model.model_fields)
+    if unknown:
+        raise ValueError(
+            f"renders_as {kind}: unknown config key(s) {sorted(unknown)} for {model.__name__}"
+        )
+    from_roles = {role_config_key(kind, r) for r in roles} & set(config)
+    if from_roles:
+        raise ValueError(
+            f"renders_as {kind}: config key(s) {sorted(from_roles)} are set by 'roles' already"
+        )
+    # The values too: a 41-character axis label or a negative top-N passes the key
+    # check and only fails when the dashboard is imported. Validated alone, without
+    # the roles, so a field the roles fill is left at its default here.
+    from pydantic import ValidationError
+
+    from depictio.models.components.advanced_viz.configs import apply_kind_aliases
+
+    try:
+        model.model_validate(apply_kind_aliases({**config, "viz_kind": kind}))
+    except ValidationError as exc:
+        problems = [
+            f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+            for e in exc.errors()
+            if e["loc"] and e["loc"][0] in config
+        ]
+        if problems:
+            raise ValueError(f"renders_as {kind}: invalid config {problems}") from None
+
+
+# ---------------------------------------------------------------------------
+# Versions
+#
+# A module (`module.yaml` `version`) is the unit the locks hold: one revision of
+# each module is kept, and a template records the revisions it consumes. Inside
+# it, an output or a render may say *since which module revision* it is as it is
+# now (`version`, optional). Unset, it reads as "unchanged since an earlier
+# revision, or never said": the module's revision still covers it. A module may
+# also keep a `changelog`, newest first, whose top entry is its current version.
+# ---------------------------------------------------------------------------
+
+SEMVER_PATTERN = r"^\d+\.\d+\.\d+$"
+
+
+def semver_key(version: str) -> tuple[int, int, int]:
+    """``"1.10.0"`` -> ``(1, 10, 0)``: compares as numbers, not as text."""
+    major, minor, patch = (int(p) for p in version.split("."))
+    return major, minor, patch
+
+
+class ChangelogEntry(BaseModel):
+    """One revision of a module: its version and what changed in it."""
+
+    version: str = Field(pattern=SEMVER_PATTERN)
+    # ISO day (YYYY-MM-DD), optional: the catalog has no release clock of its own.
+    date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    # One line per change. Name the output or render it concerns, so a reader of
+    # the gallery can tell which changes touch what they use.
+    changes: list[str] = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class Render(BaseModel):
     """One render target for an output: a dashboard component + its binding.
 
@@ -286,11 +404,26 @@ class Render(BaseModel):
     # Optional tool-unique handle for `use: <tool>/<id>` (advanced_viz renders).
     id: str | None = None
     component: ComponentKind
+    # The module revision this render last changed in (see "Versions" above).
+    # Optional; never above the module's `version`.
+    version: str | None = Field(default=None, pattern=SEMVER_PATTERN)
     # Ordering when a dashboard is composed from the catalog: lower comes first
     # within its output; unset renders keep their declared order after the set ones.
     priority: int | None = Field(default=None, ge=0)
+    # Every component: the tile title, and the text of its info popover
+    # ("About this component"). The description follows RULES.md §14: a lead,
+    # then `How to read:`, `Lines and annotations:` (every mark drawn, with its
+    # value and source) and `Source:` paragraphs, separated by blank lines.
+    title: str | None = None
+    description: str | None = None
     # advanced_viz
     kind: AdvancedVizKind | None = None
+    # advanced_viz: the kind's display options and reference marks, merged over
+    # the role bindings (`top_n_labels`, `legend_pos`, `effect_label`,
+    # `score_threshold`, `reference_line`, `shaded_bands`, `color_mode`...).
+    # Keys are checked against the kind's config model; column bindings belong
+    # in `roles`, not here.
+    config: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("kind", mode="before")
     @classmethod
@@ -307,8 +440,14 @@ class Render(BaseModel):
     roles: dict[str, str | list[str]] = Field(default_factory=dict)
     # figure
     visu_type: ChartType | None = None  # UI mode: box/scatter/bar/histogram…
-    dict_kwargs: dict[str, str] = Field(default_factory=dict)  # plotly-express kwargs
+    # plotly-express kwargs. Column-valued keys (x, y, color...) are strings
+    # grounded against the data; `labels` maps column -> axis or legend title.
+    dict_kwargs: dict[str, Any] = Field(default_factory=dict)
     code: str | None = None  # code mode: inline Python that sets `fig`
+    # UI mode: guide lines, fixed (`value`) or at a statistic of a column over
+    # the rows on show (`stat` + `column`, named "median of this table"; RULES
+    # §17). Mirrors `FigureLiteComponent.reference_lines`.
+    reference_lines: list[ReferenceLine] = Field(default_factory=list)
     # card (single- or multi-metric)
     column: str | None = None
     aggregation: AggregationFunction | None = None  # hero metric
@@ -325,6 +464,9 @@ class Render(BaseModel):
     attrition_cols: list[str] = Field(default_factory=list)  # stages for =attrition
     trend_col: str | None = None  # ordered axis for secondary_layout=trend
     filter_expr: str | None = None  # optional polars pre-filter
+    # What the secondary strip shows ("median, with its spread"); without it the
+    # card prints the bare aggregation ("(Average)"). RULES.md §5.
+    caption: str | None = None
     # A card worth a place in a composed dashboard's Overview: the run's key
     # metrics, the way MultiQC's General Statistics picks a few columns per tool.
     headline: bool = False
@@ -357,7 +499,13 @@ class Render(BaseModel):
                 cols |= {c for c in value if c}
             elif value:
                 cols.add(value)
-        cols |= {v for k, v in self.dict_kwargs.items() if k in _FIGURE_COLUMN_KWARGS}
+        cols |= {
+            v
+            for k, v in self.dict_kwargs.items()
+            if k in _FIGURE_COLUMN_KWARGS and isinstance(v, str) and v
+        }
+        cols |= _config_columns(self.config)
+        cols |= {line.column for line in self.reference_lines if line.column}
         if self.column:
             cols.add(self.column)
         if self.breakdown_col:
@@ -411,19 +559,30 @@ class Render(BaseModel):
                     raise ValueError(
                         "renders_as sankey requires 'roles.steps' with at least 2 columns"
                     )
+            _check_viz_config(self.kind, self.roles, self.config)
         else:
             if self.kind is not None:
                 raise ValueError(f"'kind' is only valid for component=advanced_viz, not {c}")
             if self.roles:
                 raise ValueError(f"'roles' is only valid for component=advanced_viz, not {c}")
+            if self.config:
+                raise ValueError(f"'config' is only valid for component=advanced_viz, not {c}")
         # figure: visu_type (UI) or code (code mode)
         if c == "figure":
             if not (self.visu_type or self.code):
                 raise ValueError(
                     "renders_as figure requires 'visu_type' (UI) or 'code' (code mode)"
                 )
-        elif self.visu_type or self.dict_kwargs or self.code:
+        elif self.visu_type or self.dict_kwargs or self.code or self.reference_lines:
             raise ValueError(f"figure fields are only valid for component=figure, not {c}")
+        if self.reference_lines and not self.visu_type:
+            raise ValueError("'reference_lines' are drawn on UI-mode figures (visu_type) only")
+        forbidden = _FORBIDDEN_FIGURE_KWARGS & set(self.dict_kwargs)
+        if forbidden:
+            raise ValueError(
+                f"dict_kwargs {sorted(forbidden)}: a per-figure colour map is not allowed; "
+                "colour by a column and let the dashboard's category_colors pick the hues"
+            )
         # card: column + hero aggregation (+ optional secondary aggregations / filter)
         if c == "card":
             if not (self.column and self.aggregation):
@@ -463,6 +622,7 @@ class Render(BaseModel):
                 self.attrition_cols,
                 self.trend_col,
                 self.filter_expr,
+                self.caption,
                 self.headline,
             )
         ):
@@ -514,6 +674,10 @@ class CatalogOutput(BaseModel):
     origin_tool: str | None = None
     mode: str | None = None
     description: str = ""
+    # The module revision this output last changed in (see "Versions" above):
+    # its `find`, recipe, columns or renders. Optional; never above the module's
+    # `version`, and never below one of its own renders'.
+    version: str | None = Field(default=None, pattern=SEMVER_PATTERN)
     # Overrides the tool's `stage` for this output (see `Stage`).
     stage: Stage | None = None
 
@@ -613,7 +777,11 @@ class CatalogTool(BaseModel):
     # The module's own revision (semver), held to its content by
     # `depictio/catalog/catalog_versions.lock.json`. A template's lock entry records
     # the revision of each module it consumes, so bumping a module bumps them too.
-    version: str = Field(default="1.0.0", pattern=r"^\d+\.\d+\.\d+$")
+    version: str = Field(default="1.0.0", pattern=SEMVER_PATTERN)
+    # What changed in each revision, newest first (optional). When kept, its top
+    # entry is `version`: a bump without its line fails, so the history a reader
+    # sees in the gallery cannot fall behind the module.
+    changelog: list[ChangelogEntry] = Field(default_factory=list)
     description: str = ""
     homepage: str | None = None
     # Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched
@@ -628,6 +796,24 @@ class CatalogTool(BaseModel):
     stage: Stage | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _changelog_order(self) -> CatalogTool:
+        if not self.changelog:
+            return self
+        versions = [e.version for e in self.changelog]
+        if versions[0] != self.version:
+            raise ValueError(
+                f"tool {self.id!r}: changelog starts at {versions[0]}, but the module "
+                f"is at {self.version}; add a changelog entry for {self.version}"
+            )
+        keys = [semver_key(v) for v in versions]
+        if any(a <= b for a, b in zip(keys, keys[1:], strict=False)):
+            raise ValueError(
+                f"tool {self.id!r}: changelog versions must be unique and newest "
+                f"first, got {versions}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _identity_urls(self) -> CatalogTool:
@@ -649,6 +835,36 @@ class CatalogEntry(CatalogTool):
     def stage_of(self, output: CatalogOutput) -> str:
         """The output's stage: its own, else the tool's, else ``other``."""
         return output.stage or self.stage or "other"
+
+    @model_validator(mode="after")
+    def _versions_within_module(self) -> CatalogEntry:
+        # An output or render cannot have changed in a revision the module has
+        # not reached, and an output changes whenever one of its renders does.
+        module = semver_key(self.version)
+        problems: list[str] = []
+        for out in self.outputs:
+            if out.version and semver_key(out.version) > module:
+                problems.append(f"output {out.id!r} version {out.version}")
+            for i, r in enumerate(out.renders_as):
+                if not r.version:
+                    continue
+                label = f"render {r.id or i!r} of {out.id!r} version {r.version}"
+                if semver_key(r.version) > module:
+                    problems.append(label)
+                elif out.version and semver_key(r.version) > semver_key(out.version):
+                    raise ValueError(
+                        f"tool {self.id!r}: {label} is newer than its output's "
+                        f"{out.version}; a render change is a change of its output"
+                    )
+        if problems:
+            raise ValueError(
+                f"tool {self.id!r}: {', '.join(problems)} above the module's version {self.version}"
+            )
+        return self
+
+    def output_version(self, output: CatalogOutput) -> str:
+        """The revision an output is as of: its own, else the module's."""
+        return output.version or self.version
 
     @model_validator(mode="after")
     def _unique_output_ids(self) -> CatalogEntry:
@@ -860,11 +1076,15 @@ def read_fixture_schema(path: Path) -> dict[str, str]:
     return {name: _dtype_name(dtype) for name, dtype in schema.items()}
 
 
-def recipe_output_columns(recipe_ref: str) -> list[str]:
-    """Return the output column names a recipe produces (its OUTPUT_SCHEMA)."""
+def recipe_output_columns(recipe_ref: str, search_dir: Path | None = None) -> list[str]:
+    """Return the output column names a recipe produces (its OUTPUT_SCHEMA).
+
+    ``search_dir``: the tool folder being validated, tried first for a
+    module-owned recipe that is not in the catalog yet.
+    """
     from depictio.recipes import load_recipe
 
-    module = load_recipe(recipe_ref)
+    module = load_recipe(recipe_ref, search_dir=search_dir)
     return list(module.OUTPUT_SCHEMA.keys())
 
 

@@ -11,10 +11,100 @@ find:
 recipe: cellranger/hvg_dispersion.py
 fixture: hvg_dispersion.tsv
 renders_as:
-  - { id: hvg_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: mean_expression, y: normalized_dispersion, color: selection, label: gene} }
-  - { id: hvg_selection_filter, component: interactive, interactive_type: Select, column_name: selection }
-  - { id: hvg_dispersion_filter, component: interactive, interactive_type: RangeSlider, column_name: normalized_dispersion }
-  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: selection, top_n_count: 2 }
-  - { component: card, column: normalized_dispersion, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: detection_rate, aggregation: average, secondary_layout: histogram }
-  - { component: table }
+  # Cell Ranger keeps the top genes by normalised dispersion for the PCA, a rule of
+  # its own; the colour shows that selection and no line is drawn for it.
+  - id: hvg_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Gene dispersion against mean expression
+    roles: {x: mean_expression, y: normalized_dispersion, color: selection, label: gene}
+    config:
+      x_title: Mean expression (log1p CP10k)
+      y_title: Normalised dispersion
+      top_n_labels: 10
+    description: >-
+      Each point is a gene: its mean expression over the cells on the horizontal axis and its
+      normalised dispersion on the vertical axis, coloured by whether it was kept for the PCA.
+      It answers which genes vary more than expected for their level of expression.
+
+      How to read: the selected genes should sit high above the cloud, since they carry the
+      variation between cell types. Selected genes at very low expression may add noise, and
+      known markers missing from the selection are worth a look.
+
+      Lines and annotations: no line is drawn. The selection is the set Cell Ranger kept
+      for its PCA, and normalised dispersion scales each gene's dispersion by that of genes
+      with similar mean expression.
+
+      Source: https://scanpy.readthedocs.io/en/stable/api/generated/scanpy.pp.highly_variable_genes.html
+  - id: hvg_selection_filter
+    component: interactive
+    interactive_type: Select
+    column_name: selection
+    title: Selection status
+    description: >-
+      Keeps the genes selected for the PCA or the ones left out. It answers what the selection
+      kept and dropped.
+
+      How to read: choose selected to list the genes that shaped the embedding.
+  - id: hvg_dispersion_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: normalized_dispersion
+    title: Normalised dispersion range
+    description: >-
+      Keeps the genes whose normalised dispersion falls inside the range. It answers which
+      genes vary most.
+
+      How to read: raise the lower handle to keep only the most variable genes.
+  - component: card
+    column: gene
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: selection
+    top_n_count: 2
+    caption: genes, by selection status
+    title: Genes by selection
+    description: >-
+      The hero number is the count of distinct genes measured and the bars compare the selected
+      and the other genes. It answers how many genes shaped the embedding.
+
+      How to read: a small selected set against a large rest is the usual design. A very small
+      set means few genes carry the variation.
+  - component: card
+    column: normalized_dispersion
+    aggregation: median
+    aggregations: [box_plot_stats, max]
+    secondary_layout: box_plot
+    caption: normalised dispersion, with its spread
+    title: Normalised dispersion
+    description: >-
+      The hero number is the median normalised dispersion of the genes, and the box shows its
+      spread. It answers how variable the typical gene is.
+
+      How to read: dispersion is scaled so a typical gene sits near zero and variable genes lie
+      far above it. The maximum names the most variable gene.
+
+      Source: https://scanpy.readthedocs.io/en/stable/api/generated/scanpy.pp.highly_variable_genes.html
+  - component: card
+    column: detection_rate
+    aggregation: average
+    aggregations: [median, min]
+    secondary_layout: histogram
+    caption: share of cells detecting a gene
+    title: Detection rate of genes
+    description: >-
+      The hero number is the average share of cells in which a gene has at least one UMI, and
+      the histogram shows the distribution over genes. It answers how widely genes are
+      detected.
+
+      How to read: most genes are detected in few cells, which is normal for sparse
+      single-cell data. A selected gene with a very low rate drives variation from a few
+      cells.
+  - component: table
+    title: Gene dispersion table
+    description: >-
+      Each row is a gene with its normalised dispersion, mean expression, detection rate and
+      whether it was selected. It answers the exact values behind the plot.
+
+      How to read: sort by dispersion to list the most variable genes.

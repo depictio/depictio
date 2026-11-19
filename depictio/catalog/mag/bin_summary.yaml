@@ -17,27 +17,244 @@ find:
 recipe: mag/bin_summary.py
 fixture: bin_summary.tsv
 renders_as:
-  - { id: mimag_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: completeness, y: contamination, label: bin_id, color: mimag_tier, size: total_length} }
-  - { id: quality_vs_fragmentation, component: advanced_viz, kind: scatter_xy,
-      roles: {x: n50, y: quality_score, label: bin_id, color: phylum, size: total_length} }
-  - { id: binner_phylum_flow, component: advanced_viz, kind: sankey,
-      roles: {steps: [assembler, binner, phylum]} }
-  - { id: bin_lineage, component: advanced_viz, kind: sunburst,
-      roles: {ranks: [domain, phylum, class_name, order, family, genus], abundance: total_length} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: binner, y: quality_score, color: mimag_tier, title: Bin quality by binner and MIMAG tier} }
-  - { id: mimag_donut, component: card, column: bin_id, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: mimag_tier }
-  - { component: card, column: completeness, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: contamination, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: total_length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: bin_id, aggregation: nunique,
-      secondary_layout: top_n, breakdown_col: phylum, top_n_count: 5 }
-  - { component: card, column: quality_score, aggregation: max,
-      secondary_layout: top_n, breakdown_col: assembler, top_n_count: 4 }
-  - { component: card, column: sources_present, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: table }
+  - id: mimag_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Bin completeness against contamination
+    roles: {x: completeness, y: contamination, label: bin_id, color: mimag_tier, size: total_length}
+    config:
+      x_title: Completeness (%)
+      y_title: Contamination (%)
+      top_n_labels: 0
+      legend_pos: bottom
+      quadrants:
+        x: 50
+        y: 10
+        labels: [Contaminated, Contaminated, Low quality, Medium quality or better]
+    description: >-
+      Each point is a recovered bin: its completeness on the horizontal axis and its
+      contamination on the vertical axis, both estimated by CheckM2, sized by
+      assembly length and coloured by MIMAG tier. It answers which bins are good
+      enough to report as genomes.
+
+      How to read: the best bins sit at the bottom right, complete and clean. Bins
+      above the horizontal line are too contaminated for any tier, and bins left of
+      the vertical line are fragmentary. Open the bin table for the lineage and
+      assembly of a bin before trusting it.
+
+      Lines and annotations: the vertical line is 50 percent completeness and the
+      horizontal line 10 percent contamination, the limits of the medium-quality
+      MIMAG tier. The high-quality tier needs more than 90 percent completeness and
+      under 5 percent contamination, together with the 5S, 16S and 23S rRNA genes and
+      at least 18 tRNAs, so a bin can look high quality here and still be medium.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - id: quality_vs_fragmentation
+    component: advanced_viz
+    kind: scatter_xy
+    title: Bin quality against contiguity
+    roles: {x: n50, y: quality_score, label: bin_id, color: mimag_tier, size: total_length}
+    config:
+      log_x: true
+      x_title: N50 (bp)
+      y_title: Quality score (completeness minus 5 x contamination)
+      top_n_labels: 0
+      legend_pos: bottom
+    description: >-
+      Each point is a bin: the N50 of its contigs on the horizontal axis and its
+      quality score on the vertical axis, sized by assembly length and coloured by
+      MIMAG tier. It answers whether the best bins are also the least fragmented.
+
+      How to read: bins in the upper right are complete, clean and contiguous.
+      Bins with a high score but a low N50 are assembled in many pieces, which makes
+      them harder to trust and to annotate.
+
+      Lines and annotations: no line is drawn. The quality score is this table's own
+      summary, completeness minus five times contamination, and is not a published
+      standard.
+  - id: binner_phylum_flow
+    component: advanced_viz
+    kind: sankey
+    title: Assembler, binner and phylum flow
+    roles: {steps: [assembler, binner, phylum]}
+    description: >-
+      Each flow is a group of bins: the left column is the assembler, the middle the
+      binning tool and the right the GTDB-Tk phylum, with the width of a flow
+      showing how many bins follow that path. It answers which assembler and binner
+      combinations recover which lineages.
+
+      How to read: a binner with wide flows to many phyla recovers a diverse set of
+      genomes. A phylum reached by one assembler only is a lineage the others missed.
+      Bins GTDB-Tk could not classify have no phylum.
+  - id: bin_lineage
+    component: advanced_viz
+    kind: sunburst
+    title: Bin lineage hierarchy
+    roles: {ranks: [domain, phylum, class_name, order, family, genus], abundance: total_length}
+    config:
+      colour_by_rank: phylum
+    description: >-
+      Each arc is a taxon of the GTDB-Tk classification of the bins, sized by the
+      assembled length of its bins and coloured by phylum, from domain on the inner
+      ring to genus on the outer. It answers how much of the assembly belongs to
+      which lineages.
+
+      How to read: wide arcs are the lineages that hold most of the recovered
+      sequence. Classification stops at the deepest rank GTDB-Tk could assign, so
+      short branches mean novel or poorly characterised bins.
+  - component: figure
+    visu_type: strip
+    title: Bin quality by binner and MIMAG tier
+    dict_kwargs:
+      x: binner
+      y: quality_score
+      color: mimag_tier
+      stripmode: group
+      labels: {binner: Binner, quality_score: "Quality score (completeness minus 5 x contamination)", mimag_tier: MIMAG tier}
+    reference_lines:
+      - {axis: y, stat: median, column: quality_score}
+    description: >-
+      Each point is a bin: its quality score, grouped by the binner that recovered it
+      and coloured by MIMAG tier. It answers which binner delivers the best bins.
+
+      How to read: a binner with many high points of a good tier is the most reliable
+      for this data. A binner whose points sit low or fall in the contaminated tier
+      mixes genomes together.
+
+      Lines and annotations: the dashed line is the median quality score of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/mag. The score is this table's own summary, completeness minus five times
+      contamination, and is not a published standard.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - id: mimag_donut
+    component: card
+    column: bin_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: mimag_tier
+    caption: bins, by MIMAG tier
+    title: Bins recovered
+    description: >-
+      The hero number is the count of distinct bins and the ring splits them by MIMAG
+      tier. It answers how many of the recovered genomes reach each quality level.
+
+      How to read: a ring mostly in the high and medium tiers means a successful
+      binning. A large contaminated share points at binners mixing organisms.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: completeness
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Bin completeness
+    description: >-
+      The hero number is the median completeness of the bins, as estimated by
+      CheckM2, and the box shows the quartiles. It answers how much of a genome a
+      typical bin holds.
+
+      How to read: a median above 50 percent means most bins are at least medium
+      quality on this criterion. A long lower tail marks fragmentary bins.
+
+      Lines and annotations: the MIMAG standard asks for at least 50 percent
+      completeness for a medium-quality bin and more than 90 percent for a
+      high-quality one.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: contamination
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Bin contamination
+    description: >-
+      The hero number is the median contamination of the bins, as estimated by
+      CheckM2, and the box shows the quartiles. It answers how much foreign
+      sequence a typical bin carries.
+
+      How to read: low medians with a short tail mean clean bins. A long upper tail
+      marks bins that mix genomes.
+
+      Lines and annotations: the MIMAG standard allows under 10 percent contamination
+      for a medium-quality bin and under 5 percent for a high-quality one.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: total_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Bin size
+    description: >-
+      The hero number is the median assembled length of the bins in base pairs, and
+      the box shows the quartiles. It answers how large a typical recovered genome is.
+
+      How to read: very small bins are incomplete genomes, and very large ones may
+      combine several organisms. Read the length together with completeness and
+      contamination.
+  - component: card
+    column: bin_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: phylum
+    top_n_count: 5
+    filter_expr: "col('phylum') != ''"
+    caption: bins, by phylum
+    title: Bins by phylum
+    description: >-
+      The hero number is the count of bins with a GTDB-Tk phylum and the bars rank
+      the phyla by their number of bins. It answers which lineages dominate the
+      recovered genomes.
+
+      How to read: a ranking led by one phylum means a community dominated by it.
+      Bins without a phylum were not classified and are left out.
+  - component: card
+    column: quality_score
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: best score, by assembler
+    title: Best bin quality score
+    description: >-
+      The hero number is the highest quality score of any bin, completeness minus five
+      times contamination, and the bars rank the assemblers by their best bin. It
+      answers which assembler produced the best genome.
+
+      How to read: a tall bar for an assembler means it recovered at least one clean,
+      complete bin. The median and minimum beside it show how the typical bin
+      compares. The score is this table's own summary, not a published standard.
+  - component: card
+    column: sources_present
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: histogram
+    caption: tools that reported, per bin
+    title: Evidence per bin
+    description: >-
+      The hero number is the average count of the four tools (CheckM2, QUAST,
+      Prokka and GTDB-Tk) that reported on each bin, and the histogram shows how bins
+      spread over that count. It answers how complete the evidence behind each bin
+      is.
+
+      How to read: bins reported by fewer tools have blank columns in the table, so a
+      low average means the MIMAG tier or lineage may be missing for some bins.
+  - component: table
+    title: Bin summary
+    description: >-
+      One row is one recovered bin, with its completeness, contamination,
+      assembly statistics, annotation counts, MIMAG tier and GTDB-Tk lineage. It
+      answers whether an individual bin is good enough to use.
+
+      How to read: Sort by completeness, highest first, then check the
+      contamination and the MIMAG tier of the top rows. Look for bins with high
+      completeness and low contamination, and for rows with a missing tier or
+      lineage. It complements the quality and taxonomy tiles of the same output,
+      which summarise these bins.

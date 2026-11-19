@@ -12,14 +12,82 @@ find:
 recipe: viralmetagenome/mapping_overview.py
 fixture: mapping_overview.tsv
 renders_as:
-  - { id: constraint_breadth, component: card, column: cov_10x_pct, aggregation: median,
-      secondary_layout: threshold, threshold_value: 90, threshold_warn: 50, headline: true }
-  - { id: constraint_depth, component: card, column: mean_depth, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # No sourced breadth cut-off: the pipeline publishes none, so the card shows
+  # the spread of the 10x breadth rather than a pass mark.
+  - id: constraint_breadth
+    component: card
+    column: cov_10x_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    headline: true
+    title: Breadth at 10x depth
+    caption: genome covered at 10x (%), per genome
+    description: >-
+      The hero number is the median share of the constraint genome covered by at least
+      10 reads, and the histogram shows it for every sample and reference. It answers
+      how completely the reads cover each reference.
+
+      How to read: values near 100 mean a fully covered genome. A low tail marks
+      references the sample barely contains, and their consensus is mostly masked.
+
+      Lines and annotations: none are drawn. The pipeline masks positions covered by
+      fewer than 5 reads by default (min_consensus_depth) and publishes no breadth
+      cut-off.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/nextflow_schema.json
+  - id: constraint_depth
+    component: card
+    column: mean_depth
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Mean depth
+    caption: mean depth, with its spread
+    description: >-
+      The hero number is the median of the mean read depth over the constraint
+      genomes, and the box shows the quartiles. It answers how deeply the reads cover
+      the references.
+
+      How to read: higher depth supports a confident consensus. A low box means many
+      positions fall under the minimum depth and are masked.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/nextflow_schema.json
   # Depth against breadth: a deep but narrow mapping is a partial genome, a
   # broad but shallow one is a genome the consensus masks in places.
   - id: depth_vs_breadth
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: mean_depth, y: cov_10x_pct, label: genome_id, color: reference, size: mapped_reads }
-  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }
+    title: Depth against breadth
+    roles: {x: mean_depth, y: cov_10x_pct, label: genome_id, color: reference, size: mapped_reads}
+    config:
+      x_title: Mean depth
+      y_title: Genome covered at 10x (%)
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a sample mapped to one constraint reference: its mean depth on the
+      horizontal axis and the share of the genome covered at 10x or more on the
+      vertical axis, sized by mapped reads and coloured by reference. It answers
+      whether a deep mapping is also a complete one.
+
+      How to read: points at the top right are deep and complete. A deep but narrow
+      mapping is a partial genome, and a broad but shallow one is masked in places, so
+      look at the other references of the same sample.
+
+      Lines and annotations: the dashed line is the median share of the genome
+      covered at 10x of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of the pipeline.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: genome_id
+    title: Constraint mappings table
+    description: >-
+      Each row is a sample mapped to a constraint reference, with its consensus,
+      closest annotated reference, ambiguous bases, CheckV call, reads mapped and
+      duplicated, depth, breadth and variant counts. It answers how each mapping
+      performed and lets a row selection filter the other tiles.
+
+      How to read: sort by breadth or ambiguous bases, and compare the references of
+      one sample to see which one fits its reads.

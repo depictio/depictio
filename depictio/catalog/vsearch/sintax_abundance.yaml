@@ -17,14 +17,112 @@ renders_as:
   # Wide per-rank columns (Kingdom/Phylum), so the nested view is a sunburst;
   # `stacked_taxonomy` needs the single long rank column this table lacks, the
   # same reason `qiime2_rel_abundance` stops at a sunburst.
-  - { id: sintax_sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: Phylum, y: rel_abundance, color: Phylum, title: Relative abundance by phylum} }
+  # C1: arcs are coloured by phylum, the rank the reader compares.
+  - id: sintax_sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Kingdom and phylum composition
+    roles: {ranks: [Kingdom, Phylum], abundance: rel_abundance}
+    config:
+      colour_by_rank: Phylum
+    description: >-
+      Each arc is a taxon: the inner ring is the kingdom and the outer ring the phylum,
+      sized by relative abundance summed over the samples in view and coloured by
+      phylum. It answers which groups dominate the community.
+
+      How to read: a wide arc is a dominant phylum, and many thin arcs a diverse
+      community. Click an arc to zoom into it, and filter the samples to see how the
+      composition shifts. An Unclassified arc means the reference database could not
+      place those sequences.
+
+      Source: https://github.com/torognes/vsearch
+  - component: figure
+    visu_type: box
+    title: Relative abundance by phylum
+    dict_kwargs:
+      x: Phylum
+      y: rel_abundance
+      color: Phylum
+      labels: {Phylum: Phylum, rel_abundance: Relative abundance}
+    description: >-
+      Each box is a phylum: the spread of its relative abundance over the samples in
+      view. It answers which phyla carry most of the community and how much that varies.
+
+      How to read: a few high boxes and a long tail near zero is the usual shape of an
+      amplicon community. A wide box is a phylum whose share changes between samples;
+      filter by kingdom or sample to see which samples drive it.
   # How many samples were classified, how many phyla they resolve to, and how
   # unevenly the abundance sits across them.
-  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
-  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum, headline: true }
-  - { component: card, column: rel_abundance, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  # The ranks are the axes a reader narrows on before reading any of the above.
-  - { component: interactive, interactive_type: MultiSelect, column_name: Kingdom }
-  - { component: interactive, interactive_type: MultiSelect, column_name: Phylum }
-  - { component: table }
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: Phylum
+    top_n_count: 3
+    caption: samples, by phylum
+    title: Samples classified
+    description: >-
+      The hero number is the count of samples with a classification, with the number of
+      sample and phylum rows next to it, and the bars rank the phyla seen in the most
+      samples. It answers how many samples the composition rests on.
+
+      How to read: a phylum present in few samples is a sporadic taxon. The ranking
+      shows which phyla are shared across the samples.
+  - component: card
+    column: Phylum
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    filter_expr: "col('Phylum') != 'Unclassified'"
+    headline: true
+    caption: phyla, by sample
+    title: Phyla resolved
+    description: >-
+      The hero number is the count of distinct named phyla found, and the bars rank the
+      samples by how many phyla they hold. It answers how diverse the community is at
+      phylum level.
+
+      How to read: a sample with few phyla is dominated by one lineage. Sequences the
+      classifier could not place are left out of the count.
+  - component: card
+    column: rel_abundance
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: compact
+    caption: largest share, with the median and the upper quartile
+    title: Dominant phylum share
+    description: >-
+      The hero number is the largest relative abundance any phylum reaches in a sample,
+      with the median and the upper quartile of all phylum shares next to it. It
+      answers how dominated the community is by one lineage.
+
+      How to read: a maximum close to 1 means one phylum makes up nearly a whole
+      sample. A median far below it is the usual long tail of minor phyla.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: Kingdom
+    title: Kingdom
+    description: >-
+      Choose one or more kingdoms to restrict the tiles of this tab to them. It answers
+      how a single domain of life contributes to the composition.
+
+      How to read: pick a kingdom to see only its phyla in the sunburst and the boxes.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: Phylum
+    title: Phylum
+    description: >-
+      Choose one or more phyla to restrict the tiles of this tab to them. It answers
+      how a single phylum is distributed across the samples.
+
+      How to read: pick a phylum to compare its relative abundance between samples.
+  - component: table
+    title: Relative abundance per sample and phylum
+    description: >-
+      Each row is a phylum in one sample: its taxonomy, the kingdom and the relative
+      abundance. It answers exactly which taxa each sample holds and at what share.
+
+      How to read: sort by relative abundance to find the dominant phylum of a sample.

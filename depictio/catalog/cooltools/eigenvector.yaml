@@ -16,15 +16,86 @@ renders_as:
   - id: compartment_track
     component: advanced_viz
     kind: coverage_track
-    roles: {chromosome: chrom, position: start, value: E1}
+    title: A/B compartment track
+    roles: {chromosome: chrom, position: start, value: E1, category: compartment}
+    config:
+      color_by: category
+    description: >-
+      Each point is a bin of a chromosome with its first eigenvector value, coloured
+      by compartment. It answers which parts of the genome are in the active A
+      compartment and which in the inactive B compartment.
+
+      How to read: positive values are A and negative values are B, and the
+      zero-crossings are compartment boundaries. Long alternating stretches that
+      match the expected pattern mean a clean decomposition, and an inverted
+      chromosome arm is worth a check.
+
+      Lines and annotations: the compartment labels are this catalog's convention, A for positive E1
+      and B for negative. The recipe phases each chromosome so that E1 correlates positively with
+      bin coverage, the better-covered compartment being A, the same way at every resolution. The
+      cooltools documentation instead orients E1 to correlate positively with GC content, the usual
+      convention for Hi-C.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/eigdecomp.py
+      and https://cooltools.readthedocs.io/en/latest/notebooks/compartments_and_saddles.html
   # The same track on a chromosome-aware locus axis, so it lines up with the
   # insulation and domain tracks stacked under the contact map.
   - id: compartment_locus_track
     component: advanced_viz
     kind: genome_view
+    title: A/B compartments on the genome axis
     roles: {chr: chrom, pos: start, score: E1, end: end, sample: sample, category: compartment}
-  - { component: card, column: E1, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+    config:
+      score_title: First eigenvector (E1)
+    description: >-
+      Each mark is a bin with its E1 value, coloured by compartment on a
+      chromosome-aware axis. It answers the same question as the track with a view
+      that lines up with the insulation and domain tracks.
+
+      How to read: zoom into a boundary and compare it with the TAD boundaries of the
+      other tracks. Compartment boundaries often coincide with domain boundaries.
+
+      Lines and annotations: the compartment labels are this catalog's convention, A for positive E1
+      and B for negative.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/eigdecomp.py
+  # E1 is centred on zero, so a mean would cancel the two compartments: the hero is its range.
+  - component: card
+    column: E1
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Compartment signal
+    caption: range of E1, with its spread
+    description: >-
+      The hero number is the range of the first eigenvector over all bins, and the
+      box shows how its values spread. It answers how strong the compartment signal
+      is.
+
+      How to read: a box centred on zero with long whiskers on both sides is a
+      balanced A and B pattern. A box shifted to one side means an unbalanced
+      decomposition or a poorly phased chromosome.
   # Sign of E1 as a category: what share of the mappable genome is A and what
   # share is B, which a continuous E1 column cannot answer.
-  - { component: card, column: E1, aggregation: count, secondary_layout: donut, breakdown_col: compartment }
-  - { component: table }
+  - component: card
+    column: E1
+    aggregation: count
+    aggregations: [min, max]
+    secondary_layout: donut
+    breakdown_col: compartment
+    title: Share of A and B bins
+    caption: bins with an E1 value, split by compartment
+    description: >-
+      Each unit is a bin with an E1 value and the ring splits them into the A and B
+      compartments. It answers what share of the mappable genome is active.
+
+      How to read: a roughly balanced ring is typical. A large imbalance suggests a
+      sign problem in one chromosome, so check the track.
+  - component: table
+    title: Eigenvector values per bin
+    description: >-
+      Each row is a bin with its coordinates, balancing weight, first three
+      eigenvector values and compartment. It answers the exact value behind every
+      track.
+
+      How to read: filter by chromosome and sort by start to read a region.

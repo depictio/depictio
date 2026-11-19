@@ -11,10 +11,77 @@ find:
 recipe: orthofinder/species_stats.py
 fixture: species_stats.tsv
 renders_as:
-  - { id: assigned_share, component: card, column: genes_in_orthogroups_pct, aggregation: min,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: species_specific, component: card, column: species_specific_orthogroups, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: genome, top_n_count: 4 }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: genome, y: genes_in_orthogroups_pct, title: Genes placed in orthogroups} }
-  - { component: table }
+  - id: assigned_share
+    component: card
+    column: genes_in_orthogroups_pct
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: lowest species, with the spread
+    title: Genes placed in orthogroups
+    description: >-
+      The hero number is the lowest percentage of a species' genes that OrthoFinder
+      placed in an orthogroup, and the box shows how the species spread. It answers
+      whether every proteome is well represented in the orthogroups.
+
+      How to read: values close to 100 percent mean nearly every gene has a relative.
+      A species well below the others carries unassigned genes, and the OrthoFinder
+      tutorial names poor species sampling around it as the most likely cause.
+
+      Note: the tutorial likes to see at least 80 percent of all genes assigned, a
+      guide for the run as a whole rather than a pass mark per species, so no line is
+      drawn.
+
+      Source: https://raw.githubusercontent.com/davidemms/OrthoFinder/master/README.md
+      and https://davidemms.github.io/orthofinder_tutorials/exploring-orthofinders-results.html
+  # Species names are long ids, so the card shows the spread of the counts and not
+  # a ranking whose labels would be cut.
+  - id: species_specific
+    component: card
+    column: species_specific_orthogroups
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: grid
+    caption: total, with the median and largest species
+    title: Species-specific orthogroups
+    description: >-
+      The hero number is the total of orthogroups made entirely of genes from one
+      species, with the median and the largest count among species. It answers how much
+      of the gene content is unique to a single genome.
+
+      How to read: a species far above the median holds many families found nowhere
+      else, which is real novelty or contamination and fragmentation. Open the table to
+      see which species it is.
+
+      Source: https://raw.githubusercontent.com/davidemms/OrthoFinder/master/README.md
+  # C1 N/A: one bar per species, the x axis already names it and no other column splits it.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: genome
+      y: genes_in_orthogroups_pct
+      labels: {genome: Species, genes_in_orthogroups_pct: Genes in orthogroups (%)}
+    title: Genes placed in orthogroups per species
+    reference_lines:
+      - {axis: y, stat: median, column: genes_in_orthogroups_pct}
+    description: >-
+      Each bar is a species, with the percentage of its genes that OrthoFinder placed
+      in an orthogroup. It answers which proteomes are least covered by the orthogroups.
+
+      How to read: bars of similar height mean the species are equally well covered.
+      A short bar points to unassigned genes, which the OrthoFinder tutorial puts down
+      mostly to poor species sampling, so compare it with the unassigned share in the
+      table.
+
+      Lines and annotations: The dashed line is the median share of genes in orthogroups of this table, a reference computed from the rows on show (it follows the filters), not a cut-off of OrthoFinder.
+
+      Source: https://raw.githubusercontent.com/davidemms/OrthoFinder/master/README.md
+      and https://davidemms.github.io/orthofinder_tutorials/exploring-orthofinders-results.html
+  - component: table
+    title: Per-species statistics
+    description: >-
+      Each row is a species with the genes in its proteome, the share and number placed
+      in orthogroups, the unassigned genes, the orthogroups it takes part in and the ones
+      it holds alone. It answers the exact numbers behind each tile.
+
+      How to read: sort by unassigned share to find the proteomes to inspect first.

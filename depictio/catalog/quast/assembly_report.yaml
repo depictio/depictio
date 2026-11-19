@@ -14,18 +14,181 @@ find:
 recipe: quast/assembly_report.py
 fixture: assembly_report.tsv
 renders_as:
-  - { id: n50_vs_length, component: advanced_viz, kind: scatter_xy,
-      roles: {x: total_length, y: n50, label: assembly_id, color: assembler, size: n_contigs} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: total_length, color: assembler, title: Assembled length per assembly} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: assembler, y: n50, color: sample, title: Contig N50 by assembler} }
-  - { component: card, column: total_length, aggregation: sum,
-      secondary_layout: composition, breakdown_col: assembler }
-  - { component: card, column: n50, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: n_contigs, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 5 }
-  - { component: card, column: largest_contig, aggregation: max,
-      secondary_layout: top_n, breakdown_col: assembler, top_n_count: 4 }
-  - { component: card, column: gc_percent, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # C1: coloured by assembler, the comparison the tab exists for. QUAST defines no
+  # cut-off for N50 or assembled length, so no reference line is drawn.
+  - id: n50_vs_length
+    component: advanced_viz
+    kind: scatter_xy
+    title: Contiguity against assembled length
+    roles: {x: total_length, y: n50, label: assembly_id, color: assembler, size: n_contigs}
+    config:
+      x_title: Assembled length (bp)
+      y_title: Contig N50 (bp)
+      log_y: true
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is one assembly: its total assembled length on the horizontal
+      axis and its contig N50 on the vertical axis, coloured by assembler and
+      sized by the number of contigs. It answers which assembler gives the most
+      contiguous assembly for the length it recovers.
+
+      How to read: points toward the upper right assemble more of the community in
+      longer contigs. A large point low on the axis is a fragmented assembly, many
+      small contigs, which a binner will struggle with. Compare assemblers on the
+      same sample before choosing one.
+
+      Note: QUAST defines no pass mark for N50 or assembled length. The vertical
+      axis is logarithmic.
+
+      Lines and annotations: The dashed line is the median contig N50 of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of QUAST.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: figure
+    visu_type: bar
+    title: Assembled length per assembly
+    dict_kwargs:
+      x: assembly_id
+      y: total_length
+      color: assembler
+      labels: {assembly_id: Assembly, total_length: Assembled length (bp), assembler: Assembler}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: total_length
+    description: >-
+      Each bar is one assembly, with its total assembled length in base pairs,
+      coloured by assembler. It answers how much of the community each assembler
+      managed to assemble.
+
+      How to read: a short bar next to its siblings on the same sample means that
+      assembler lost sequence, often the low-coverage organisms. Read it beside
+      the N50 plot, since a long assembly in fragments is still hard to bin.
+
+      Lines and annotations: The dashed line is the median assembled length of
+      this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of QUAST.
+  - component: figure
+    visu_type: bar
+    title: Contig N50 by assembler
+    dict_kwargs:
+      x: assembler
+      y: n50
+      color: sample
+      barmode: group
+      labels: {assembler: Assembler, n50: Contig N50 (bp), sample: Sample}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: n50
+    description: >-
+      Each bar is the contig N50 of one assembly, grouped by assembler and
+      coloured by sample. It answers which assembler produces the longest contigs.
+
+      How to read: N50 is the contig length such that contigs of at least that
+      length cover half of the assembly, so a higher bar means a more contiguous
+      assembly. An assembler that wins on every sample is the safer choice for
+      binning.
+
+      Lines and annotations: The dashed line is the median contig N50 of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of QUAST.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: card
+    column: total_length
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: assembler
+    caption: assembled length, split by assembler
+    title: Assembled length
+    description: >-
+      The hero number is the summed length of every assembly in view, and the bar
+      splits it by assembler. It answers how much sequence each assembler
+      contributes.
+
+      How to read: a sum mixes samples, so use the median and the maximum beside it
+      for a per-assembly reading. An assembler with a thin segment recovered less of
+      the community.
+  - component: card
+    column: n50
+    aggregation: median
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: median N50, by assembler
+    title: Contig N50
+    description: >-
+      The hero number is the median contig N50 over the assemblies in view, and the
+      bars rank the assemblers by their median. It answers which assembler is the
+      most contiguous.
+
+      How to read: N50 is the contig length such that contigs of at least that length
+      cover half of the assembly, so higher is better. Contig lengths span orders of
+      magnitude, so the card ranks medians instead of drawing a box.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: card
+    column: n_contigs
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: contigs, by assembler
+    title: Contigs
+    description: >-
+      The hero number is the total count of contigs over the assemblies in view, and
+      the bars rank the assemblers by the contigs they produce. It answers which
+      assembler fragments the community most.
+
+      How to read: a much higher count for one assembler on the same samples means a
+      more fragmented assembly, usually with a lower N50. Contigs under 500 bp are
+      not counted by QUAST by default.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: card
+    column: largest_contig
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: longest contig, by assembler
+    title: Longest contig
+    description: >-
+      The hero number is the longest contig of any assembly in view, and the bars
+      rank the assemblers by their longest contig. It answers whether any assembler
+      reached genome-scale contigs.
+
+      How to read: a very long contig means part of the community assembled in one
+      piece. A low maximum next to a high total length points to a fragmented
+      assembly.
+  - component: card
+    column: gc_percent
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median GC, with its spread
+    title: GC content
+    description: >-
+      The hero number is the median GC percentage of the assemblies in view, and the
+      box shows the spread across assemblies. It answers whether assemblers agree on
+      the base composition of the community.
+
+      How to read: assemblies of the same sample should give a similar GC. A shift
+      points to one assembler recovering a different part of the community.
+  - component: table
+    title: Assembly statistics
+    description: >-
+      Each row is one assembly, with its contig counts, N50, N75, L50, L75, GC,
+      unknown bases, predicted rRNA genes and the length held by contigs over 1 kbp.
+      It answers the exact figures behind every tile.
+
+      How to read: sort by N50 or total length to rank assemblies, or filter by
+      assembler to compare them on one sample.

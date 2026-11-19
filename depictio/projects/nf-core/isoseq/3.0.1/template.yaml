@@ -37,7 +37,7 @@
 template:
   template_id: "nf-core/isoseq/3.0.1"
   description: "nf-core/isoseq template for PacBio Iso-Seq: CCS and primer QC, the full-length read funnel, insert and poly(A) lengths, and the TAMA transcriptome with read support, SQANTI-style structural categories against the reference and isoform structures per gene."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one isoseq run (01_PBCCS/ to 09_GSTAMA_MERGE/, ULTRA_INDEX/, multiqc/, pipeline_info/)"

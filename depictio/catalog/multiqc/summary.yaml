@@ -11,4 +11,14 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: summary }
+  - component: multiqc
+    section: summary
+    title: Pipeline summary
+    description: >-
+      Per-sample pipeline summary metrics, assembly and variant calling, as the
+      viralrecon summary tables report them. They answer which samples produced a
+      usable assembly and calls.
+
+      How to read: Samples with good coverage and few ambiguous bases are usable. A
+      sample that stands out on mapped reads or coverage should be checked before
+      its variants are trusted.

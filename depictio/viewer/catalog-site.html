@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Depictio — Catalog</title>
+    <!-- A slot URL without its final slash (`.../v1.22.0`) resolves `../assets/` and
+         `data/` one level too high, so the bundle never loads: send it to `.../v1.22.0/`
+         (query and hash kept) before anything else. Classic inline script on purpose:
+         the module below cannot run without the slash. `dev/catalog_site_check.mjs`
+         extracts and runs this exact script. Must not contain the asset path prefix
+         that the publisher rewrites. -->
+    <script>
+      (function () {
+        var p = location.pathname;
+        if (p.charAt(p.length - 1) === '/') return;
+        var last = p.substring(p.lastIndexOf('/') + 1);
+        // A file has a lettered extension; `v1.22.0` is a slot (its ".0" is not one).
+        if (last === 'index.html' || (/\.[a-z][a-z0-9]*$/i.test(last) && !/^v?\d/i.test(last))) return;
+        location.replace(p + '/' + location.search + location.hash);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/catalog-preview/siteMain.tsx"></script>
+  </body>
+</html>

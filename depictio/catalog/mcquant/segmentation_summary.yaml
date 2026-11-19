@@ -15,9 +15,75 @@ renders_as:
   - id: cells_per_image
     component: figure
     visu_type: bar
-    dict_kwargs: { x: sample, y: n_cells, color: segmenter, barmode: group }
-  - { id: cells_per_image_card, component: card, column: n_cells, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }
-  - { component: card, column: n_cells, aggregation: sum, secondary_layout: composition, breakdown_col: segmenter, headline: true }
-  - { component: figure, visu_type: bar, dict_kwargs: { x: sample, y: median_area, color: segmenter, barmode: group } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }
-  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }
+    title: Cells per image
+    dict_kwargs:
+      x: sample
+      y: n_cells
+      color: segmenter
+      barmode: group
+      labels:
+        sample: Image
+        n_cells: Cells
+        segmenter: Segmentation method
+    description: >-
+      Each bar is the number of cells one segmentation method found in one image. It answers how many cells each image holds and whether the methods agree on the count.
+
+      How to read: a method with far more cells than another on every image is splitting cells or masking nuclei. An image with very few cells under every method may be out of focus or mostly empty tissue.
+  - id: cells_per_image_card
+    component: card
+    column: n_cells
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: segmenter
+    top_n_count: 3
+    title: Typical cells per image
+    caption: median cells per image, by segmentation method
+    description: >-
+      The hero number is the median number of cells per image, and the bars rank the segmentation methods by their own median. It answers how dense the images are.
+
+      How to read: the minimum and maximum show how much the images differ. A method that always finds more cells than another is segmenting at a finer level.
+  - component: card
+    column: n_cells
+    aggregation: sum
+    aggregations: [median]
+    secondary_layout: composition
+    breakdown_col: segmenter
+    headline: true
+    title: Cells segmented
+    caption: cells, by segmentation method
+    description: >-
+      The hero number is the total number of cells found across the images in view, and the bar splits it by segmentation method. It answers how much data the run quantified.
+
+      How to read: the split shows how much each method contributes. Filter to one image to compare methods on the same tissue.
+  - id: area_per_image
+    component: figure
+    visu_type: bar
+    title: Median cell area per image
+    dict_kwargs:
+      x: sample
+      y: median_area
+      color: segmenter
+      barmode: group
+      labels:
+        sample: Image
+        median_area: Median cell area (pixels)
+        segmenter: Segmentation method
+    description: >-
+      Each bar is the median area of the cells one segmentation method found in one image. It answers how large the segmented objects are and whether the methods differ.
+
+      How to read: nuclear masks are smaller than whole-cell masks by design. A large difference between images under one method points to a change in magnification, tissue type or focus.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: segmenter
+    title: Segmentation method
+    description: >-
+      Keep one or more segmentation methods to compare them alone.
+  - component: table
+    title: Segmentation per image
+    description: >-
+      One row per image and segmentation method with the cell count and area, axis, eccentricity and solidity medians. Selecting rows filters the tab to them.
+
+      How to read: sort by cell count to find images that were segmented poorly.
+    row_selection_enabled: true
+    row_selection_column: summary_key

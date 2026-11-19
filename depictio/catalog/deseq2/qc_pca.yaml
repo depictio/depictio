@@ -13,17 +13,49 @@ find:
   path_glob_alt: # MultiQC custom-content flavour written by chipseq and atacseq
     - "**/*pca.vals_mqc.tsv"
 recipe: deseq2/qc_pca.py
+# The fixture is enriched synthetically from 8 real samples (copies with seeded noise), so the preview shows several PCA sets.
 fixture: qc_pca.tsv
 renders_as:
   - id: qc_pca_embedding
     component: advanced_viz
     kind: embedding
-    roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 }
-  - {
-      component: card,
-      column: dim_1_percent,
-      aggregation: max,
-      secondary_layout: gauge,
-      coverage_max: 100,
-    }
-  - { component: table }
+    title: Sample PCA from the pipeline QC
+    roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: pca_set}
+    config:
+      axis_prefix: PC
+    description: >-
+      Each point is a sample placed on the first two principal components that the
+      pipeline computed on its count matrix, coloured by the matrix it came from. It
+      answers whether the samples separate the way the experimental design predicts.
+
+      How to read: replicates of one condition should sit together and different
+      conditions apart. A sample far from its replicates, or a split that follows a
+      batch instead of the condition, points to an outlier or a batch effect to
+      resolve before reading any differential result.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+  - component: card
+    column: dim_1_percent
+    aggregation: max
+    aggregations: [min, median]
+    secondary_layout: gauge
+    caption: minimum and median, across contrasts
+    coverage_max: 100
+    title: Variance on the first component
+    description: >-
+      The hero number is the share of variance the first principal component
+      explains, shown against 100 percent. It answers how much of the variation one
+      axis carries.
+
+      How to read: a large share means one dominant source of variation, ideally the
+      condition. A small share means variation is spread over many axes and no single
+      factor dominates.
+  - component: table
+    title: PCA coordinates
+    description: >-
+      Each row is a sample with its coordinates on the first two components and the
+      share of variance each explains. It answers where a given sample sits and which
+      count matrix it belongs to.
+
+      How to read: sort by a component to find the outermost samples, then check them
+      in the PCA tile.

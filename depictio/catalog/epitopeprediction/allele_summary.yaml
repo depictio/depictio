@@ -15,9 +15,90 @@ renders_as:
   - id: allele_dot_plot
     component: advanced_viz
     kind: dot_plot
+    title: Binding by allele and sample
     roles: { cluster: sample, gene: allele, mean_expression: median_affinity_score, frac_expressing: binder_rate }
-  - { id: allele_binders, component: card, column: binders, aggregation: sum, secondary_layout: top_n, breakdown_col: hla_locus, top_n_count: 4 }
-  - { id: allele_binder_rate, component: card, column: binder_rate, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: bar, dict_kwargs: { x: allele, y: binders, color: sample } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: hla_locus }
-  - { component: table, row_selection_enabled: true, row_selection_column: allele_key }
+    description: >-
+      Each dot is an HLA allele in one sample: its size is the share of peptides that
+      at least one tool calls a binder and its colour is the median affinity score of
+      the peptides. It answers which alleles present the most candidate peptides.
+
+      How to read: a large, strongly coloured dot is an allele with many predicted
+      binders of good affinity, so its peptides are the first to follow up. Small pale
+      dots are alleles that bind few of the peptides. A column that stands apart from
+      the others in size points to a sample with a different peptide set or tool mix.
+
+      Lines and annotations: the binder call is the one the pipeline writes for each
+      tool, a percentile rank of 2 or less for MHCflurry, NetMHCpan and MixMHCpred, 5
+      or less for NetMHCIIpan, and an affinity score of at least 0.425 (500 nM) for
+      MHCnuggets. The affinity score is 1 minus log10 of the IC50 over log10 of 50000.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: allele_binders
+    component: card
+    column: binders
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: hla_locus
+    top_n_count: 4
+    caption: binders, by HLA locus
+    title: Predicted binders
+    description: >-
+      The hero number is the sum of binder peptides over every allele and sample in
+      view, and the bars rank the HLA loci by their share. It answers how many
+      candidate peptides the alleles present and through which locus.
+
+      How to read: a locus that carries most binders is the one the patient's
+      peptides fit best. The compact line gives the median and the largest binder count
+      of one allele, so a total spread over many alleles reads differently from one
+      dominant allele. Binders are the tools' own calls, see the dot plot for the rules.
+  - id: allele_binder_rate
+    component: card
+    column: binder_rate
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: binder share, with its spread
+    title: Binder share per allele
+    description: >-
+      The hero number is the median share of scored peptides that a tool calls a
+      binder, over the alleles in view, and the box shows the quartiles. It answers how
+      selective the alleles are.
+
+      How to read: a low median with a few high alleles is the usual pattern, since few
+      peptides bind any one allele. A box shifted high means a peptide set enriched for
+      binders, for example after a binder filter, or permissive tools. Filter to one
+      sample to compare alleles within it.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: allele
+      y: binders
+      color: sample
+      labels: { allele: Allele, binders: Binder peptides, sample: Sample }
+    title: Binders per allele
+    description: >-
+      Each bar is the number of binder peptides for an allele, split by sample. It
+      answers which alleles contribute the most candidates and whether samples agree.
+
+      How to read: tall bars mark alleles that bind many peptides. An allele that is
+      tall in one sample only reflects that sample's peptide set, not the allele alone.
+      Pick a locus in the filter to narrow the alleles.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: hla_locus
+    title: HLA locus
+    description: >-
+      Pick one or more HLA loci to restrict the dot plot, the cards and the table to
+      them. It answers how a single locus behaves.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: allele_key
+    title: Allele binding table
+    description: >-
+      Each row is an allele in one sample with its peptide count, binder count and
+      share, and the median and best IC50. It answers the exact numbers behind the plots
+      and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by binders or by best IC50 to find the alleles worth following
+      up.

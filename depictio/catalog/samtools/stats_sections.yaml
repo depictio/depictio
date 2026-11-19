@@ -21,14 +21,166 @@ find:
 recipe: samtools/stats_sections.py
 fixture: stats_sections.tsv
 renders_as:
-  - { id: read_length_profile, component: advanced_viz, kind: profile, roles: {series: series, x: bin, y: n_reads} }
-  - { id: coverage_distribution, component: advanced_viz, kind: profile, roles: {series: series, x: bin, y: n_bases} }
-  - { id: indel_spectrum, component: advanced_viz, kind: profile, roles: {series: series, x: bin, y: n_indels} }
-  - { component: card, column: reads_mapped_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: identity_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: average_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: maximum_length, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: supplementary_alignments, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: average_quality, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: reads_mapped, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: table, page_size: 25 }
+  - id: read_length_profile
+    component: advanced_viz
+    kind: profile
+    title: Read length distribution
+    roles: {series: series, x: bin, y: n_reads}
+    config: {x_title: Read length (bp), y_title: Reads}
+    description: >-
+      Each line is a sample: the number of reads at every read length in the alignment.
+      It answers how long the aligned reads are and whether the length is uniform.
+
+      How to read: short-read data draws one sharp peak at the sequenced length, and
+      trimmed reads draw a spread below it. A long flat tail is expected for long-read
+      data. Samples with a different shape were trimmed or sequenced differently.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - id: coverage_distribution
+    component: advanced_viz
+    kind: profile
+    title: Coverage depth distribution
+    roles: {series: series, x: bin, y: n_bases}
+    config: {x_title: Coverage depth, y_title: Bases}
+    description: >-
+      Each line is a sample: the number of bases covered at every depth. It answers
+      how evenly the reads cover the reference.
+
+      How to read: a narrow hump means even coverage and a long right tail means a few
+      regions are over-covered. A tall bar at depth zero or one means much of the
+      target is barely sequenced, so raise depth or check the library.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - id: indel_spectrum
+    component: advanced_viz
+    kind: profile
+    title: Indel length spectrum
+    roles: {series: series, x: bin, y: n_indels}
+    config: {x_title: Indel length (bp), y_title: Indels}
+    description: >-
+      Each line is the number of insertions or deletions of one length in a sample,
+      drawn separately for each direction. It answers whether insertions and deletions
+      are balanced.
+
+      How to read: counts fall quickly with length. Deletions far outnumbering
+      insertions, or the reverse, can point to a systematic error of the sequencing
+      platform, which long-read data often shows.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: card
+    column: reads_mapped_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Reads mapped
+    description: >-
+      The hero number is the median share of reads that are mapped, and the box shows
+      the spread across samples. It answers how well the reads align.
+
+      How to read: a high median is expected. A low value or a long box means some
+      samples align poorly, from contamination or the wrong reference.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: card
+    column: identity_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Alignment identity
+    description: >-
+      The hero number is the median share of aligned bases that match the reference
+      (one minus the mismatch error rate), and the box shows the spread. It answers how
+      closely the reads agree with the reference.
+
+      How to read: higher means closer agreement. Long-read data sits lower than short
+      reads, so compare samples from the same platform.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: card
+    column: average_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Average read length
+    description: >-
+      The hero number is the median of each sample's average read length, and the box
+      shows the spread. It answers how long the reads are.
+
+      How to read: samples of one run should agree. A sample far from its peers was
+      trimmed or sequenced differently.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: card
+    column: maximum_length
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: compact
+    caption: longest read, with the median of the maximums
+    title: Longest read
+    description: >-
+      The hero number is the longest read seen in any sample, and the second number is
+      the median of the per-sample maximums. It answers how far the read length tail
+      extends.
+
+      How to read: a single very long read can be a chimera or an artefact, so the
+      median of the maximums is the steadier value.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: card
+    column: supplementary_alignments
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: compact
+    caption: alignments, with the largest sample
+    title: Supplementary alignments
+    description: >-
+      The hero number is the total of supplementary alignments, which are the extra
+      pieces of reads that align in several places, and the second number is the
+      largest count in one sample. It answers how fragmented the alignments are.
+
+      How to read: a high count is common in long-read data and can mark structural
+      variants or chimeric reads. A sample far above the rest deserves a look.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: card
+    column: average_quality
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Average base quality
+    description: >-
+      The hero number is the median of each sample's average base quality, and the box
+      shows the spread. It answers how reliable the base calls are.
+
+      How to read: higher is better, and the scale depends on the sequencing platform.
+      A sample well below its peers may have a failed run.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: card
+    column: reads_mapped
+    aggregation: sum
+    aggregations: [median]
+    secondary_layout: compact
+    caption: reads, with the median per sample
+    title: Mapped reads
+    description: >-
+      The hero number is the total of mapped reads and the second number is the median
+      per sample. It answers how much aligned data the run holds.
+
+      How to read: a median far below the total divided by the sample count means a
+      few samples hold most of the data. Open the table for the counts.
+
+      Source: https://www.htslib.org/doc/samtools-stats.html
+  - component: table
+    page_size: 25
+    title: Alignment statistics
+    description: >-
+      Each row is a histogram bin or a summary line of a sample. It answers the exact
+      values behind the profiles and cards.
+
+      How to read: filter the section column to read one distribution, or to the summary
+      rows for per-sample totals.

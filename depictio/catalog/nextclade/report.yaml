@@ -6,10 +6,87 @@ find: { path_glob: "**/nextclade/*.csv" }
 recipe: nextclade/nextclade_results.py
 fixture: report.tsv
 renders_as:
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: clade, color: qc_overallStatus} } # clade calls
-  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # genome coverage
-  - { component: table }
+  # C1: the clade calls are coloured by the overall QC status of each sequence.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: clade
+      color: qc_overallStatus
+      labels: {clade: Clade, qc_overallStatus: QC status}
+    title: Clade calls by QC status
+    description: >-
+      Each bar counts the sequences assigned to a Nextclade clade, split by their
+      overall quality status. It answers which clades the run found and whether the
+      calls rest on good sequences.
+
+      How to read: a clade made of good sequences is a call to trust. Bars that are
+      mostly mediocre or bad mean the clade rests on incomplete or odd sequences, so
+      check the missing bases and the coverage before reporting them.
+
+      Lines and annotations: the colour is the overall QC status, good for a score
+      from 0 to 29, mediocre from 30 to 99 and bad from 100, the bands Nextclade
+      defines for its combined quality score.
+
+      Source: https://docs.nextstrain.org/projects/nextclade/en/stable/user/algorithm/06-quality-control.html
+  - component: card
+    column: coverage
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Genome coverage
+    caption: average, with quartiles
+    description: >-
+      The hero number is the average share of the reference genome covered by the
+      sequences, and the box shows their quartiles. It answers how complete the
+      consensus genomes are.
+
+      How to read: a box piled near one means complete genomes. A long tail towards
+      zero marks sequences with large missing stretches, which weaken both the clade
+      call and the mutation list. Open the table to see which ones.
+  - component: table
+    title: Clade assignment table
+    description: >-
+      Each row is a sequence with its clade, the Pango lineage Nextclade assigns,
+      the counts of substitutions, deletions, insertions, frame shifts and missing
+      or ambiguous bases, its coverage and its quality score and status. It answers
+      which sequences need attention and what each one carries.
+
+      How to read: sort by quality status to find the sequences to inspect, then
+      read the missing base count to see whether coverage explains the flag.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: clade, aggregation: nunique, secondary_layout: top_n, breakdown_col: clade, top_n_count: 3, headline: true }
-  - { component: card, column: totalMissing, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - component: card
+    column: clade
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: clade
+    top_n_count: 3
+    headline: true
+    title: Clades found
+    caption: sequences, by clade
+    description: >-
+      The hero number is the count of distinct clades, with the number of sequences
+      beside it, and the bars rank the clades by how many sequences carry them. It
+      answers how diverse the run is and which clades dominate.
+
+      How to read: one dominant clade is a single outbreak lineage in circulation,
+      several of similar size is a mixed collection. A clade seen once is worth
+      checking for a quality problem before it is reported.
+  - component: card
+    column: totalMissing
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Missing bases
+    caption: median, with the distribution
+    description: >-
+      The hero number is the median count of missing bases (N) per sequence, with
+      the lowest and highest value beside it, and the histogram shows how they are
+      spread. It answers how much of each genome the sequencing failed to call.
+
+      How to read: a pile at low values is a clean run. A long tail of sequences with
+      thousands of missing bases is expected for low viral loads or failed amplicons,
+      and these sequences get a worse quality status.
+
+      Source: https://docs.nextstrain.org/projects/nextclade/en/stable/user/output-files/04-results-tsv.html

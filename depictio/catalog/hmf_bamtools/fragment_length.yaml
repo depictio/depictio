@@ -10,5 +10,28 @@ find:
 recipe: hmf_bamtools/fragment_length.py
 fixture: fragment_length.tsv
 renders_as:
-  - { id: fragment_length_curve, component: advanced_viz, kind: profile, roles: {series: sample, x: fragment_length, y: fraction} }
-  - { component: table }
+  - id: fragment_length_curve
+    component: advanced_viz
+    kind: profile
+    title: Fragment length distribution
+    roles: {series: sample, x: fragment_length, y: fraction}
+    config:
+      x_title: Fragment length (bp)
+      y_title: Share of read pairs
+      legend_pos: bottom
+    description: >-
+      Each curve is a DNA sample: the share of read pairs at each insert size, grouped
+      into equal windows so libraries of different depth overlay. It answers whether the
+      libraries have the expected insert size.
+
+      How to read: one smooth peak is a normal library, and samples of the same prep
+      should overlay. A shifted or bimodal curve points at a library preparation problem.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/bam-tools/README.md
+  - component: table
+    title: Fragment length table
+    description: >-
+      Each row is a sample and a fragment length window with the read pairs in it and
+      their share. It answers the exact numbers behind the curve.
+
+      How to read: sort by share to find the modal fragment length of each sample.

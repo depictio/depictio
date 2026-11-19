@@ -12,7 +12,72 @@ find:
 recipe: bismark/mbias_all_contexts.py
 fixture: mbias_all_contexts.tsv
 renders_as:
-  - { id: mbias_context_profile, component: advanced_viz, kind: profile, roles: {series: series, x: position, y: pct_methylation} }
-  - { component: card, column: pct_methylation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: coverage, aggregation: sum, secondary_layout: top_n, breakdown_col: context, top_n_count: 3 }
-  - { component: table }
+  - id: mbias_context_profile
+    component: advanced_viz
+    kind: profile
+    roles: {series: series, x: position, y: pct_methylation}
+    config:
+      x_title: Position in read (bp)
+      y_title: Methylation (%)
+      legend_pos: bottom
+    title: M-bias in every cytosine context
+    description: >-
+      Each line is one read of one library in one cytosine context (CpG, CHG or
+      CHH): the percentage of methylated calls at each position along the read. It
+      answers whether any part of a read is biased, and whether conversion fails at
+      the read ends.
+
+      How to read: CpG sits high and CHG and CHH sit near zero in most mammalian
+      data. A line that bends at the read ends, such as the start of PBAT reads or the
+      first bases of read 2 after end repair, shows a methylation bias at those
+      positions, so ignore them during methylation extraction.
+
+      Source: https://felixkrueger.github.io/Bismark/usage/methylation-extraction/
+      and https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+  # Pooled over contexts the percentage mixes CpG (high) with CHG and CHH
+  # (near zero), so the box is read on CHH, the conversion read-out.
+  - component: card
+    column: pct_methylation
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "pl.col('context') == 'CHH'"
+    caption: CHH methylation along reads, with its spread
+    title: CHH methylation along reads
+    description: >-
+      The hero number is the mean methylation in the CHH context over all read
+      positions, and the box shows how much positions differ. It answers how
+      completely unmethylated cytosines were converted.
+
+      How to read: values near zero mean good conversion. A high mean or a wide box
+      points to non-conversion, often at the read start, so check the curve.
+
+      Note: this reading assumes non-CG methylation is near zero, as in mammals.
+      Other organisms can show real non-CG methylation.
+
+      Source: https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+  - component: card
+    column: coverage
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: context
+    top_n_count: 3
+    caption: Calls, by context
+    title: Methylation calls by context
+    description: >-
+      The hero number is the total of methylation calls counted in the M-bias
+      tables, and the bars split it by cytosine context. It answers how much data
+      sits behind each context.
+
+      How to read: CHH and CHG usually hold far more calls than CpG because those
+      contexts are more frequent in the genome.
+  - component: table
+    title: M-bias table, all contexts
+    description: >-
+      Each row is a read position of one read of one library in one context, with
+      its methylation percentage and the number of calls. It answers the exact value
+      and the depth at each position.
+
+      How to read: filter on a context and a read to follow one curve. A low call
+      count at a position gives a noisy percentage.

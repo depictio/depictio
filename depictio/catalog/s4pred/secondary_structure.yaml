@@ -13,15 +13,86 @@ find:
 recipe: s4pred/secondary_structure.py
 fixture: secondary_structure.tsv
 renders_as:
-  - { id: ss_sequence_track, component: advanced_viz, kind: sequence_track,
-      roles: {position: position, entity: entity, residue: residue, category: category, value: value} }
+  - id: ss_sequence_track
+    component: advanced_viz
+    kind: sequence_track
+    title: Predicted state along the sequence
+    roles: {position: position, entity: entity, residue: residue, category: category, value: value}
+    description: >-
+      Each cell is a residue of the protein, coloured by its predicted state (helix, strand or coil), with a
+      lane below for the probability of that state. It answers which stretches fold into which structure and
+      how sure the model is.
+
+      How to read: long helix or strand runs with high confidence are likely real elements. Short stretches
+      with low confidence are uncertain and may flip with a small change in the sequence. Compare the track
+      with domain and structure tiles of the same protein.
+
+      Note: S4PRED predicts from the single sequence, with no alignment.
+
+      Source: https://raw.githubusercontent.com/psipred/s4pred/main/README.md
   # The called state as a ribbon (helix, strand arrow, coil) shaded by the state probabilities.
-  - { id: ss_ribbon, component: advanced_viz, kind: secondary_structure,
-      roles: {position: position, entity: entity, residue: residue, state: ss_code,
-              p_helix: p_helix, p_strand: p_strand, p_coil: p_coil} }
-  - { id: ss_confidence, component: card, column: value, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: ss_residues, component: card, column: position, aggregation: count,
-      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: category, color: category} }
-  - { component: table }
+  - id: ss_ribbon
+    component: advanced_viz
+    kind: secondary_structure
+    title: Secondary structure ribbon
+    roles: {position: position, entity: entity, residue: residue, state: ss_code,
+            p_helix: p_helix, p_strand: p_strand, p_coil: p_coil}
+    description: >-
+      The ribbon draws the predicted structure of the protein as helices, strand arrows and coil, shaded by how
+      confident the prediction is, with the three state probabilities beneath it. It answers where the
+      structural elements are and where the call is ambiguous.
+
+      How to read: dark, clear helices and strands are confident calls. Pale stretches, or places where the
+      helix and strand probabilities are close, are ambiguous. The segment list gives the span of each element
+      for follow-up.
+
+      Source: https://raw.githubusercontent.com/psipred/s4pred/main/README.md
+  - id: ss_confidence
+    component: card
+    column: value
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Prediction confidence
+    caption: probability of the called state, with its spread
+    description: >-
+      The hero number is the median probability S4PRED gives to the state it called at each residue, and the
+      box shows its quartiles. It answers how confident the model is over the whole protein.
+
+      How to read: values close to one mean most residues are called with certainty. Lower values point to
+      disordered or ambiguous regions, where the predicted state should not be trusted.
+  - id: ss_residues
+    component: card
+    column: position
+    aggregation: count
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: category
+    top_n_count: 3
+    title: Residues by state
+    caption: residues, by predicted state
+    description: >-
+      The hero number is the count of residues predicted, with the longest protein length beside it, and the
+      bars rank the states by how many residues take them. It answers the helix, strand and coil composition.
+
+      How to read: a protein rich in helix or strand is mostly structured, while a coil-dominated one is
+      probably flexible or disordered. Filter to one protein to see its own composition.
+  - component: figure
+    visu_type: histogram
+    title: Confidence by predicted state
+    dict_kwargs: { x: value, color: category, barmode: overlay, labels: { value: Probability of the predicted state, category: Predicted state } }
+    description: >-
+      Each bar counts residues in a probability bin, split by predicted state. It answers which states the
+      model calls with confidence.
+
+      How to read: a state whose residues pile up near one is called reliably. A state spread toward lower
+      values, often coil or strand, is called with more doubt.
+  - component: table
+    title: Residue predictions
+    description: >-
+      Each row is a residue with its position, amino acid, predicted state, the probability of that state and
+      the three state probabilities. It answers what the model predicted at each position.
+
+      How to read: filter to one protein and sort by position to read the sequence, or sort by confidence to
+      find the uncertain residues.

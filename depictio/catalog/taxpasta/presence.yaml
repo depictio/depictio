@@ -12,16 +12,80 @@ fixture: presence.tsv
 renders_as:
   # upset_plot binds no canonical role: the set columns are the run's profilers,
   # so they are named in the tile's config rather than in a role.
-  - { id: profiler_upset, component: advanced_viz, kind: upset_plot }
-  - {
-      component: card,
-      column: n_profilers,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - { component: table }
+  # C6 N/A: set columns are the run's profilers, known only at ingest.
+  - id: profiler_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Profiler detection overlap
+    config:
+      color_intersections_by: degree
+    description: >-
+      Each bar is an intersection: the number of sample and taxon detections reported
+      by exactly that set of profilers, coloured by how many profilers share them. It
+      answers how much of the community the profilers agree on and how long each
+      one's private tail is.
+
+      How to read: tall bars with many joined dots are detections every profiler
+      makes, so they are the safest. Tall single-dot bars are taxa only one profiler
+      reports, which often means a database difference or a false positive. Open the
+      cross-profiler table to see which taxa sit in a private tail.
+
+      Lines and annotations: none are drawn. The side bars give the total detections
+      of each profiler.
+  - component: card
+    column: n_profilers
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Profilers per detection
+    description: >-
+      The hero number is the median count of profilers that report a taxon in a
+      sample, and the box shows the spread. It answers how widely a detection is
+      shared.
+
+      How to read: a median near the number of profilers means a consensus
+      community. A low median with a wide box means most detections are specific to
+      one or two profilers.
+  - component: table
+    title: Detection table
+    description: >-
+      Each row is a taxon detected in a sample, with the number of profilers that
+      report it and a 0 or 1 for each profiler. It answers which taxa a given
+      profiler misses or reports alone.
+
+      How to read: filter to a low profiler count to list the contested taxa, or sort
+      by rank to compare species with genus calls.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: rank, top_n_count: 4 }
-  - { component: card, column: n_profilers, aggregation: max, secondary_layout: gauge, coverage_max: 12 }
+  - component: card
+    column: taxon
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: rank
+    top_n_count: 4
+    caption: detections, by taxonomic rank
+    title: Detected taxa
+    description: >-
+      The hero number is the count of distinct taxa detected, the second number
+      counts every sample and taxon detection, and the bars rank the taxonomic ranks
+      by detections. It answers how many taxa the profilers report together.
+
+      How to read: a ranking led by species means the profilers resolve to species
+      level. A large genus bar means some profilers stop at genus.
+  - component: card
+    column: n_profilers
+    aggregation: max
+    aggregations: [mode]
+    secondary_layout: histogram
+    caption: profilers per detection
+    title: Widest agreement
+    description: >-
+      The hero number is the largest count of profilers that report one taxon in one
+      sample, with the most common count below it, and the histogram shows how many
+      detections each count holds. It answers whether any detection is made by every
+      profiler.
+
+      How to read: a histogram with a bar at the maximum means a core community all
+      profilers see, and a bar at one is the private tail.

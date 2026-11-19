@@ -7,307 +7,307 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "2.2.2",
-      "content_hash": "b37cdf9b63587e18e3395ee9ac6f555d35aa1a5076e80fedbcc035feaf7d4c42",
+      "version": "3.0.0",
+      "content_hash": "fbaa533d8eafda7df4963714530016ba0ce02758968fd1e51e07ac7895793db5",
       "catalog": {
-        "adapterremoval": "1.0.0",
-        "agat": "1.0.0",
-        "ampcombi": "1.1.0",
-        "anota2seq": "1.1.0",
-        "arriba": "1.0.0",
-        "ascat": "1.0.0",
-        "assemblyscan": "1.0.0",
-        "ataqv": "1.1.0",
-        "bambu": "1.0.0",
-        "bcftools": "1.0.0",
-        "bcl2fastq": "1.0.0",
-        "bclconvert": "1.0.0",
-        "bedtools": "1.0.0",
-        "bismark": "1.0.0",
-        "bowtie2": "1.0.0",
-        "busco": "2.0.0",
-        "cellbender": "1.0.0",
-        "cellranger": "1.1.0",
-        "checkm2": "1.1.0",
-        "checkv": "1.0.0",
-        "cmaple": "1.0.0",
-        "cnvkit": "1.0.0",
-        "combgc": "1.0.0",
-        "controlfreec": "1.0.0",
-        "cooler": "1.0.0",
-        "cooltools": "1.0.0",
-        "crisprseq": "1.0.0",
-        "ctatsplicing": "1.0.0",
-        "cuppa": "1.0.0",
-        "cutandrun": "1.0.0",
-        "damageprofiler": "1.0.0",
-        "dbcan": "1.0.0",
-        "deeptools": "1.0.0",
-        "deseq2": "1.0.0",
-        "dexseq": "1.1.0",
-        "edger": "1.0.0",
-        "enchantr": "1.0.0",
-        "endorspy": "1.0.0",
-        "epitopeprediction": "2.0.0",
-        "famsa": "1.0.0",
-        "fcsadaptor": "1.0.0",
-        "fcsgx": "1.0.0",
-        "funcscan": "1.1.0",
-        "fusioncatcher": "1.0.0",
-        "fusioninspector": "1.0.0",
-        "fusionreport": "1.0.0",
-        "genomescope": "1.0.0",
-        "gsea": "1.0.0",
-        "gtdbtk": "1.0.0",
-        "gtf": "1.0.0",
-        "hamronization": "1.0.0",
-        "happy": "1.0.0",
-        "hicexplorer": "1.0.0",
-        "hicpro": "1.0.0",
-        "hmf_bamtools": "1.0.0",
-        "hmmer": "1.0.0",
-        "homer": "1.0.0",
-        "interop": "1.0.0",
-        "interproscan": "1.0.0",
-        "isoseq": "1.0.0",
-        "ivar": "1.0.0",
-        "jellyfish": "1.0.0",
-        "kallisto": "1.0.0",
-        "last": "1.0.0",
-        "lilac": "1.0.0",
-        "linx": "1.0.0",
-        "macs2": "1.0.0",
-        "mag": "1.1.0",
-        "mcquant": "1.0.0",
-        "melon": "1.0.0",
-        "merqury": "1.0.0",
-        "metaphlan": "1.0.0",
-        "mhcquant": "1.0.0",
-        "mirdeep2": "1.0.0",
-        "mirtop": "1.0.0",
-        "mosdepth": "1.1.0",
-        "multiqc": "1.0.0",
-        "nanoplot": "1.0.0",
-        "neo": "1.0.0",
-        "nextclade": "1.0.0",
-        "nonpareil": "1.0.0",
-        "openms": "1.0.0",
-        "optitype": "1.0.0",
-        "orthofinder": "1.0.0",
-        "pangolin": "1.0.0",
-        "pbccs": "1.0.0",
-        "picard": "1.1.0",
-        "preseq": "1.0.0",
-        "prokka": "1.1.0",
-        "proteinannotator": "1.1.0",
-        "proteinfamilies": "1.0.0",
-        "proteinfold": "1.0.0",
-        "purple": "1.0.0",
-        "qcatch": "1.0.0",
-        "qiime2": "2.0.0",
-        "qsee": "1.0.0",
-        "qualimap": "1.0.0",
-        "quast": "1.0.0",
-        "repeatmasker": "1.0.0",
-        "ribocode": "1.0.0",
-        "ribotish": "1.0.0",
-        "ribowaltz": "1.0.0",
-        "rmats": "1.1.0",
-        "rseqc": "1.0.0",
-        "rtgtools": "1.0.0",
-        "s4pred": "1.0.0",
-        "salmon": "1.0.0",
-        "samtools": "1.1.0",
-        "seacr": "1.0.0",
-        "seqfu": "1.0.0",
-        "seqkit": "1.0.0",
-        "seqtk": "1.0.0",
-        "sidle": "1.0.0",
-        "sigs": "1.0.0",
-        "simpleaf": "1.0.0",
-        "snpeff": "1.0.1",
-        "sompy": "1.0.0",
-        "stableexpression": "1.0.0",
-        "star": "1.0.0",
-        "starfusion": "1.0.0",
-        "subread": "1.0.0",
-        "suppa": "1.1.0",
-        "svanalyzer": "1.0.0",
-        "sylph": "1.0.0",
-        "tama": "1.0.0",
-        "taxpasta": "1.0.0",
-        "tiara": "1.0.0",
-        "tidk": "1.0.0",
-        "truvari": "1.0.0",
-        "vcf": "1.0.0",
-        "vcftools": "1.0.0",
-        "viralmetagenome": "1.0.0",
-        "vsearch": "1.0.0",
-        "wittyer": "1.0.0"
+        "adapterremoval": "1.1.0",
+        "agat": "1.1.0",
+        "ampcombi": "1.2.0",
+        "anota2seq": "1.2.0",
+        "arriba": "1.1.0",
+        "ascat": "1.1.0",
+        "assemblyscan": "1.1.0",
+        "ataqv": "1.2.0",
+        "bambu": "1.1.0",
+        "bcftools": "1.1.0",
+        "bcl2fastq": "1.1.0",
+        "bclconvert": "1.1.0",
+        "bedtools": "1.1.0",
+        "bismark": "1.1.0",
+        "bowtie2": "1.1.0",
+        "busco": "2.1.0",
+        "cellbender": "1.1.0",
+        "cellranger": "1.2.0",
+        "checkm2": "1.2.0",
+        "checkv": "1.1.0",
+        "cmaple": "1.1.0",
+        "cnvkit": "1.1.0",
+        "combgc": "1.1.0",
+        "controlfreec": "1.1.0",
+        "cooler": "1.1.0",
+        "cooltools": "1.1.0",
+        "crisprseq": "1.1.0",
+        "ctatsplicing": "1.1.0",
+        "cuppa": "1.1.0",
+        "cutandrun": "1.1.0",
+        "damageprofiler": "1.1.0",
+        "dbcan": "1.1.0",
+        "deeptools": "1.1.0",
+        "deseq2": "1.1.0",
+        "dexseq": "1.2.0",
+        "edger": "1.1.0",
+        "enchantr": "1.1.0",
+        "endorspy": "1.1.0",
+        "epitopeprediction": "2.1.0",
+        "famsa": "1.1.0",
+        "fcsadaptor": "1.1.0",
+        "fcsgx": "1.1.0",
+        "funcscan": "1.2.0",
+        "fusioncatcher": "1.1.0",
+        "fusioninspector": "1.1.0",
+        "fusionreport": "1.1.0",
+        "genomescope": "1.1.0",
+        "gsea": "1.1.0",
+        "gtdbtk": "1.1.0",
+        "gtf": "1.1.0",
+        "hamronization": "1.1.0",
+        "happy": "1.1.0",
+        "hicexplorer": "1.1.0",
+        "hicpro": "1.1.0",
+        "hmf_bamtools": "1.1.0",
+        "hmmer": "1.2.0",
+        "homer": "1.1.0",
+        "interop": "1.1.0",
+        "interproscan": "1.1.0",
+        "isoseq": "1.1.0",
+        "ivar": "1.1.0",
+        "jellyfish": "1.1.0",
+        "kallisto": "1.1.0",
+        "last": "1.1.0",
+        "lilac": "1.1.0",
+        "linx": "1.1.0",
+        "macs2": "1.1.0",
+        "mag": "1.2.0",
+        "mcquant": "1.1.0",
+        "melon": "1.1.0",
+        "merqury": "1.1.0",
+        "metaphlan": "1.1.0",
+        "mhcquant": "1.1.0",
+        "mirdeep2": "1.1.0",
+        "mirtop": "1.1.0",
+        "mosdepth": "1.2.0",
+        "multiqc": "1.1.0",
+        "nanoplot": "1.1.0",
+        "neo": "1.1.0",
+        "nextclade": "1.1.0",
+        "nonpareil": "1.1.0",
+        "openms": "1.1.0",
+        "optitype": "1.1.0",
+        "orthofinder": "1.1.0",
+        "pangolin": "1.1.0",
+        "pbccs": "1.1.0",
+        "picard": "1.2.0",
+        "preseq": "1.1.0",
+        "prokka": "1.2.0",
+        "proteinannotator": "1.2.0",
+        "proteinfamilies": "1.1.0",
+        "proteinfold": "1.1.0",
+        "purple": "1.1.0",
+        "qcatch": "1.1.0",
+        "qiime2": "2.1.0",
+        "qsee": "1.1.0",
+        "qualimap": "1.1.0",
+        "quast": "1.1.0",
+        "repeatmasker": "1.1.0",
+        "ribocode": "1.1.0",
+        "ribotish": "1.1.0",
+        "ribowaltz": "1.1.0",
+        "rmats": "1.2.0",
+        "rseqc": "1.1.0",
+        "rtgtools": "1.1.0",
+        "s4pred": "1.1.0",
+        "salmon": "1.1.0",
+        "samtools": "1.2.0",
+        "seacr": "1.1.0",
+        "seqfu": "1.1.0",
+        "seqkit": "1.1.0",
+        "seqtk": "1.1.0",
+        "sidle": "1.1.0",
+        "sigs": "1.1.0",
+        "simpleaf": "1.1.0",
+        "snpeff": "1.1.0",
+        "sompy": "1.1.0",
+        "stableexpression": "1.1.0",
+        "star": "1.1.0",
+        "starfusion": "1.1.0",
+        "subread": "1.1.0",
+        "suppa": "1.2.0",
+        "svanalyzer": "1.1.0",
+        "sylph": "1.1.0",
+        "tama": "1.1.0",
+        "taxpasta": "1.1.0",
+        "tiara": "1.1.0",
+        "tidk": "1.1.0",
+        "truvari": "1.1.0",
+        "vcf": "1.1.0",
+        "vcftools": "1.1.0",
+        "viralmetagenome": "1.1.0",
+        "vsearch": "1.1.0",
+        "wittyer": "2.0.0"
       }
     },
     "nf-core/airrflow/5.1.0": {
-      "version": "1.1.0",
-      "content_hash": "49077330c73cf8d9361f2dd3094c976c8f964c148861259236464d8bc85aa529",
+      "version": "1.2.0",
+      "content_hash": "c5d04bc1f7ca0ea51a9c11969f52648e6711eee6a061ede9a51b727c7012fa3b",
       "catalog": {
-        "enchantr": "1.0.0",
-        "multiqc": "1.0.0"
+        "enchantr": "1.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/airrflow/5.1.1": {
-      "version": "1.1.0",
-      "content_hash": "94ccef426fe54a0b8b78a84581f0f94e2dff0257bcf472ab0c9dc58e69a7c513",
+      "version": "1.2.0",
+      "content_hash": "cc5017823a5689cfcabe7a6d493f8f5f74a912bc07b6bbb7b6964c4c790ba100",
       "catalog": {
-        "enchantr": "1.0.0",
-        "multiqc": "1.0.0"
+        "enchantr": "1.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/airrflow/5.1.2": {
-      "version": "1.2.0",
-      "content_hash": "24c9334efccfad00d78993634f381db8be69a5c521b1c0fe096c1d55dc582197",
+      "version": "1.3.0",
+      "content_hash": "9028fd6867222f6f4b7872d6188913e3a6dbe27b229bab28e9f3f1480bfaeb91",
       "catalog": {
-        "enchantr": "1.0.0",
-        "multiqc": "1.0.0"
+        "enchantr": "1.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/ampliseq/2.14.0": {
-      "version": "1.2.1",
-      "content_hash": "f94837463591784ef5d5af7ff73c96d79c2b3381386b2d579469f82b02d6ac86",
+      "version": "1.3.0",
+      "content_hash": "1ad8b51312f1054ac3ed2ec3502b41f40a3c3c9d651f2588ca2bea78c264ed7a",
       "catalog": {
-        "qiime2": "2.0.0"
+        "qiime2": "2.1.0"
       }
     },
     "nf-core/ampliseq/2.16.0": {
-      "version": "1.3.1",
-      "content_hash": "f9cf19188d9120fa8637ff33043fac2c9946566192850e4f26248ddb6effb284",
+      "version": "1.4.0",
+      "content_hash": "898c9eccdbeefdc11acfbc872d45db0c7f5556e774d8347fb350ef915dfb0045",
       "catalog": {
-        "multiqc": "1.0.0",
-        "qiime2": "2.0.0",
-        "sidle": "1.0.0",
-        "vsearch": "1.0.0"
+        "multiqc": "1.1.0",
+        "qiime2": "2.1.0",
+        "sidle": "1.1.0",
+        "vsearch": "1.1.0"
       }
     },
     "nf-core/ampliseq/2.18.0": {
-      "version": "1.4.1",
-      "content_hash": "f8ac8b6b67b807d06ad38095cabb0c0be9e2d566bd2f64d3d06a7d306267989b",
+      "version": "1.5.0",
+      "content_hash": "8cacdaa94c61cc6e24ee11d6600e41b3988db12d78921ea4f73cfd9017bf1922",
       "catalog": {
-        "multiqc": "1.0.0",
-        "qiime2": "2.0.0",
-        "sidle": "1.0.0",
-        "vsearch": "1.0.0"
+        "multiqc": "1.1.0",
+        "qiime2": "2.1.0",
+        "sidle": "1.1.0",
+        "vsearch": "1.1.0"
       }
     },
     "nf-core/ampliseq/3.1.0": {
-      "version": "3.0.0",
-      "content_hash": "5d9eab94e003f4bdf83fc59be18fa2f30f727cbcf3681279ba00c353bd0ea788",
+      "version": "3.1.0",
+      "content_hash": "fa40da8eef025e2909a46aedd9b6d79316671e13ae3d56d7bb37443ecf319436",
       "catalog": {
-        "multiqc": "1.0.0",
-        "qiime2": "2.0.0",
-        "sidle": "1.0.0",
-        "vsearch": "1.0.0"
+        "multiqc": "1.1.0",
+        "qiime2": "2.1.0",
+        "sidle": "1.1.0",
+        "vsearch": "1.1.0"
       }
     },
     "nf-core/atacseq/1.2.2": {
-      "version": "3.0.0",
-      "content_hash": "d96c3158a9016511ef449f7c7d29d08af3c84a6bd09a23c86490ee5dcd7bd05e",
+      "version": "3.1.0",
+      "content_hash": "93e69d04723f13452616438f2e33ce025a85d7280a79bda94b56c44abce22963",
       "catalog": {
-        "ataqv": "1.1.0",
-        "deeptools": "1.0.0",
-        "deseq2": "1.0.0",
-        "homer": "1.0.0",
-        "macs2": "1.0.0",
-        "multiqc": "1.0.0",
-        "preseq": "1.0.0"
+        "ataqv": "1.2.0",
+        "deeptools": "1.1.0",
+        "deseq2": "1.1.0",
+        "homer": "1.1.0",
+        "macs2": "1.1.0",
+        "multiqc": "1.1.0",
+        "preseq": "1.1.0"
       }
     },
     "nf-core/atacseq/2.1.2": {
-      "version": "4.0.0",
-      "content_hash": "843af8483a27e1d24fe5d48916908315b9d32c46630040636fe3a68ae1e49627",
+      "version": "5.0.0",
+      "content_hash": "322eb42dc2facb6b73d7e0cd34f60cbb5fa6500f312f9c5d83d659492ab6fadd",
       "catalog": {
-        "ataqv": "1.1.0",
-        "deeptools": "1.0.0",
-        "deseq2": "1.0.0",
-        "homer": "1.0.0",
-        "macs2": "1.0.0",
-        "multiqc": "1.0.0",
-        "picard": "1.1.0",
-        "preseq": "1.0.0"
+        "ataqv": "1.2.0",
+        "deeptools": "1.1.0",
+        "deseq2": "1.1.0",
+        "homer": "1.1.0",
+        "macs2": "1.1.0",
+        "multiqc": "1.1.0",
+        "picard": "1.2.0",
+        "preseq": "1.1.0"
       }
     },
     "nf-core/chipseq/1.2.0": {
-      "version": "2.1.0",
-      "content_hash": "dc922158884691a41553f56680df6f0e65bfb35da4be143482cd01285f0d3990",
+      "version": "2.2.0",
+      "content_hash": "049dd45a1324c2a9cf6d6677ec8b00c6da416cc247c584871e8e6518bf7c04fc",
       "catalog": {
-        "deeptools": "1.0.0",
-        "deseq2": "1.0.0",
-        "homer": "1.0.0",
-        "macs2": "1.0.0",
-        "multiqc": "1.0.0",
-        "preseq": "1.0.0"
+        "deeptools": "1.1.0",
+        "deseq2": "1.1.0",
+        "homer": "1.1.0",
+        "macs2": "1.1.0",
+        "multiqc": "1.1.0",
+        "preseq": "1.1.0"
       }
     },
     "nf-core/chipseq/2.1.0": {
-      "version": "4.2.0",
-      "content_hash": "119d9e0b7fc99ee5fd7d644fd6d8f59adad2a14325b20ee06551b16f78b20553",
+      "version": "5.0.0",
+      "content_hash": "fb9ca1b09bf01eda3db1546cb9526f3bcaa48ca95a60897f36e41128e00e79e4",
       "catalog": {
-        "deeptools": "1.0.0",
-        "deseq2": "1.0.0",
-        "homer": "1.0.0",
-        "macs2": "1.0.0",
-        "multiqc": "1.0.0",
-        "picard": "1.1.0",
-        "preseq": "1.0.0"
+        "deeptools": "1.1.0",
+        "deseq2": "1.1.0",
+        "homer": "1.1.0",
+        "macs2": "1.1.0",
+        "multiqc": "1.1.0",
+        "picard": "1.2.0",
+        "preseq": "1.1.0"
       }
     },
     "nf-core/crisprseq/2.3.0": {
-      "version": "2.3.0",
-      "content_hash": "ae151fb57b29d95417f7f14eed068039b26c2e445f24ab7a865ad128524aec04",
+      "version": "2.4.0",
+      "content_hash": "b2ed6b1680022f4262a6f15b05bfe32f0b896bbb8268c05287d4478368eeb562",
       "catalog": {
-        "crisprseq": "1.0.0"
+        "crisprseq": "1.1.0"
       }
     },
     "nf-core/cutandrun/3.1": {
-      "version": "2.1.0",
-      "content_hash": "4fabc4a5549032fa8a3b31b3294a61ab759a5e6132bbb7a109a55a11324feaf4",
+      "version": "3.0.0",
+      "content_hash": "326ad4bd3ea7e1f70e60eeaeec3596242efec09766b5e0ab55d2944f1ad310cc",
       "catalog": {
-        "bowtie2": "1.0.0",
-        "cutandrun": "1.0.0",
-        "deeptools": "1.0.0",
-        "macs2": "1.0.0",
-        "multiqc": "1.0.0",
-        "samtools": "1.1.0",
-        "seacr": "1.0.0"
+        "bowtie2": "1.1.0",
+        "cutandrun": "1.1.0",
+        "deeptools": "1.1.0",
+        "macs2": "1.1.0",
+        "multiqc": "1.1.0",
+        "samtools": "1.2.0",
+        "seacr": "1.1.0"
       }
     },
     "nf-core/cutandrun/3.2.2": {
-      "version": "2.1.0",
-      "content_hash": "04d6e8315349081727de9da7592dd656d0077104cd5260ab1da1b1257004a1a0",
+      "version": "3.0.0",
+      "content_hash": "e02f1ec71665226bbb383a452e7e867fa6550b46b577b50bc488b3f941e47f81",
       "catalog": {
-        "bowtie2": "1.0.0",
-        "cutandrun": "1.0.0",
-        "deeptools": "1.0.0",
-        "macs2": "1.0.0",
-        "multiqc": "1.0.0",
-        "samtools": "1.1.0",
-        "seacr": "1.0.0"
+        "bowtie2": "1.1.0",
+        "cutandrun": "1.1.0",
+        "deeptools": "1.1.0",
+        "macs2": "1.1.0",
+        "multiqc": "1.1.0",
+        "samtools": "1.2.0",
+        "seacr": "1.1.0"
       }
     },
     "nf-core/demultiplex/1.8.0": {
-      "version": "1.2.0",
-      "content_hash": "7bf1a9dcfc7a3625bc94d4088147db9a3c0d25096d83c53b0c3a73af2f94a417",
+      "version": "2.0.0",
+      "content_hash": "2e730d1276b82ead68a5e0af7150fb22c5da297cc05e535dd284622cb1810b27",
       "catalog": {
-        "bcl2fastq": "1.0.0",
-        "bclconvert": "1.0.0",
-        "interop": "1.0.0",
-        "multiqc": "1.0.0"
+        "bcl2fastq": "1.1.0",
+        "bclconvert": "1.1.0",
+        "interop": "1.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/differentialabundance/2.0.0": {
-      "version": "1.2.0",
-      "content_hash": "1c037fb24d83a207701e246e46a00c6d1ce2e7bbe6e13dc9f806d61009fc5a0f",
+      "version": "1.3.0",
+      "content_hash": "ae24d70b8bb5a866986613a987cfd6fbf5390c789af138bc2391904e87523f56",
       "catalog": {
-        "deseq2": "1.0.0",
-        "gsea": "1.0.0"
+        "deseq2": "1.1.0",
+        "gsea": "1.1.0"
       }
     },
     "nf-core/drop/1.0.0": {
@@ -315,250 +315,250 @@
       "content_hash": "5e684d5eea58107bf73ecf44c21563de512c342f4690bfff7a0fa17bc8d682d7"
     },
     "nf-core/eager/2.4.5": {
-      "version": "1.3.2",
-      "content_hash": "ef56b6f94388f17ff8266deee1896c25b41c60ed9abc208f254ddbbedf904070",
+      "version": "2.0.0",
+      "content_hash": "c8143d59725a06c32676d685a9a2baa89649d1716788890fdb88146c9b9ebd40",
       "catalog": {
-        "adapterremoval": "1.0.0",
-        "bcftools": "1.0.0",
-        "damageprofiler": "1.0.0",
-        "endorspy": "1.0.0",
-        "multiqc": "1.0.0",
-        "picard": "1.1.0",
-        "preseq": "1.0.0",
-        "qualimap": "1.0.0",
-        "samtools": "1.1.0"
+        "adapterremoval": "1.1.0",
+        "bcftools": "1.1.0",
+        "damageprofiler": "1.1.0",
+        "endorspy": "1.1.0",
+        "multiqc": "1.1.0",
+        "picard": "1.2.0",
+        "preseq": "1.1.0",
+        "qualimap": "1.1.0",
+        "samtools": "1.2.0"
       }
     },
     "nf-core/eager/2.5.3": {
-      "version": "1.5.0",
-      "content_hash": "4d967b28e94ea91917327986eca3391dcf8b614290c76f0ac9bfa059a1b6ba6b",
+      "version": "2.0.0",
+      "content_hash": "9768bac11b8b823efa0f1944786247a0c8922e0037d2bd8b53f782b0bf27aa15",
       "catalog": {
-        "adapterremoval": "1.0.0",
-        "bcftools": "1.0.0",
-        "damageprofiler": "1.0.0",
-        "endorspy": "1.0.0",
-        "multiqc": "1.0.0",
-        "picard": "1.1.0",
-        "preseq": "1.0.0",
-        "qualimap": "1.0.0",
-        "samtools": "1.1.0"
+        "adapterremoval": "1.1.0",
+        "bcftools": "1.1.0",
+        "damageprofiler": "1.1.0",
+        "endorspy": "1.1.0",
+        "multiqc": "1.1.0",
+        "picard": "1.2.0",
+        "preseq": "1.1.0",
+        "qualimap": "1.1.0",
+        "samtools": "1.2.0"
       }
     },
     "nf-core/epitopeprediction/3.2.0": {
-      "version": "2.2.0",
-      "content_hash": "8dc0c89ef6d8369e6c22c2357ad5ee91c589e6bade5afc5b1d360e68f54d8b0c",
+      "version": "2.3.0",
+      "content_hash": "0778c716203343748de35d5f71fd27d793dc50517481cbcfd54f05e2a414aee6",
       "catalog": {
-        "epitopeprediction": "2.0.0",
-        "multiqc": "1.0.0"
+        "epitopeprediction": "2.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/funcscan/4.0.0": {
-      "version": "2.1.0",
-      "content_hash": "1d47146ec06a24ba5278afed791ba0a0cfe46a2f1029c64a102d81771badd8c0",
+      "version": "2.2.0",
+      "content_hash": "82f23a7a21046051d51abc04630511a5358d6bc3cc9b9ae6eaef311b84981223",
       "catalog": {
-        "ampcombi": "1.1.0",
-        "combgc": "1.0.0",
-        "dbcan": "1.0.0",
-        "funcscan": "1.1.0",
-        "hamronization": "1.0.0"
+        "ampcombi": "1.2.0",
+        "combgc": "1.1.0",
+        "dbcan": "1.1.0",
+        "funcscan": "1.2.0",
+        "hamronization": "1.1.0"
       }
     },
     "nf-core/genomeassembler/2.0.0": {
-      "version": "1.3.0",
-      "content_hash": "8e73ad37ee54f6c700d280a8b8d3ee362875081f13a4adb1060f92d55d3b9d3b",
+      "version": "2.0.0",
+      "content_hash": "f2d1bafa4bb47f57805ac7682949a721d88c55eb4e62933d8ac3a7a69201ed94",
       "catalog": {
-        "busco": "2.0.0",
-        "genomescope": "1.0.0",
-        "jellyfish": "1.0.0",
-        "merqury": "1.0.0",
-        "quast": "1.0.0"
+        "busco": "2.1.0",
+        "genomescope": "1.1.0",
+        "jellyfish": "1.1.0",
+        "merqury": "1.1.0",
+        "quast": "1.1.0"
       }
     },
     "nf-core/genomeqc/1.0.1": {
-      "version": "2.0.1",
-      "content_hash": "a170f165db1a2d3447198d25cbbb96c29fb993e32af6cbcad7eba7559e3c94e0",
+      "version": "2.1.0",
+      "content_hash": "7d01c06e1bdfb052446772741b4c700eb43ac284af7819400c07aa5dd803cd5a",
       "catalog": {
-        "agat": "1.0.0",
-        "busco": "2.0.0",
-        "fcsadaptor": "1.0.0",
-        "fcsgx": "1.0.0",
-        "multiqc": "1.0.0",
-        "orthofinder": "1.0.0",
-        "quast": "1.0.0",
-        "repeatmasker": "1.0.0",
-        "tiara": "1.0.0",
-        "tidk": "1.0.0"
+        "agat": "1.1.0",
+        "busco": "2.1.0",
+        "fcsadaptor": "1.1.0",
+        "fcsgx": "1.1.0",
+        "multiqc": "1.1.0",
+        "orthofinder": "1.1.0",
+        "quast": "1.1.0",
+        "repeatmasker": "1.1.0",
+        "tiara": "1.1.0",
+        "tidk": "1.1.0"
       }
     },
     "nf-core/hic/2.0.0": {
-      "version": "1.0.0",
-      "content_hash": "4cadf14b9b126c4b553625c7608c4e775416731b012c98a679fb0b23c4711db2",
+      "version": "1.1.0",
+      "content_hash": "229045e8747edb32e6996376577647dfc7ec4101847f995f4493202435ba0f11",
       "catalog": {
-        "cooler": "1.0.0",
-        "cooltools": "1.0.0",
-        "hicexplorer": "1.0.0",
-        "hicpro": "1.0.0",
-        "multiqc": "1.0.0"
+        "cooler": "1.1.0",
+        "cooltools": "1.1.0",
+        "hicexplorer": "1.1.0",
+        "hicpro": "1.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/hic/2.1.0": {
-      "version": "1.0.0",
-      "content_hash": "7bfa5b6b4b01e88e837cc83ad08121e768ac1fbbfc49ecba22e173018b495c2b",
+      "version": "1.1.0",
+      "content_hash": "d70a81a3aa37b0f70fbe4060830fd74e63b80e7d8326363729d9e50bacc75b93",
       "catalog": {
-        "cooler": "1.0.0",
-        "cooltools": "1.0.0",
-        "hicexplorer": "1.0.0",
-        "hicpro": "1.0.0",
-        "multiqc": "1.0.0"
+        "cooler": "1.1.0",
+        "cooltools": "1.1.0",
+        "hicexplorer": "1.1.0",
+        "hicpro": "1.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/hlatyping/2.2.0": {
-      "version": "2.1.0",
-      "content_hash": "b4c298e45bdea3d5ea222368cafe0ca9a9ba77f6ac42f7ac6b2f33548c0dae60",
+      "version": "2.2.0",
+      "content_hash": "4e8b6f0d42c78047473e2af1c8f4cbbd3070890aab13c09cf22ce5da703bc39d",
       "catalog": {
-        "multiqc": "1.0.0",
-        "optitype": "1.0.0"
+        "multiqc": "1.1.0",
+        "optitype": "1.1.0"
       }
     },
     "nf-core/isoseq/3.0.1": {
-      "version": "1.0.0",
-      "content_hash": "9cf81f7647059b6c3616c0c730e93bb3be213303dee125042ad5f13f878bc0cb",
+      "version": "1.1.0",
+      "content_hash": "5e47ecc5c18d1f1eca9c4204707095139de14a6f1ddc10192ffeafe59ddd8c4a",
       "catalog": {
-        "isoseq": "1.0.0",
-        "multiqc": "1.0.0",
-        "pbccs": "1.0.0",
-        "tama": "1.0.0"
+        "isoseq": "1.1.0",
+        "multiqc": "1.1.0",
+        "pbccs": "1.1.0",
+        "tama": "1.1.0"
       }
     },
     "nf-core/mag/5.5.0": {
-      "version": "2.0.0",
-      "content_hash": "55cddfd40995bedf93ba20782a050c230b1847811ae264f4c65abbb8a7c76a3b",
+      "version": "2.1.0",
+      "content_hash": "259be5cd3dfcdc89059cc3ead0f9b5005f7f60d63181e94145315683b4353dc3",
       "catalog": {
-        "checkm2": "1.1.0",
-        "gtdbtk": "1.0.0",
-        "mag": "1.1.0",
-        "multiqc": "1.0.0",
-        "prokka": "1.1.0",
-        "quast": "1.0.0"
+        "checkm2": "1.2.0",
+        "gtdbtk": "1.1.0",
+        "mag": "1.2.0",
+        "multiqc": "1.1.0",
+        "prokka": "1.2.0",
+        "quast": "1.1.0"
       }
     },
     "nf-core/mcmicro/2.0.0": {
-      "version": "1.1.0",
-      "content_hash": "60d1a672fe902ace6f8d0010236c6dfbbf91588cf53d4338fae9a9878397865b",
+      "version": "1.2.0",
+      "content_hash": "3120bc9d7ddd12e64bfb68c9bc22e6f536f7fbf1d0a7a7ef674f471e249e78ce",
       "catalog": {
-        "mcquant": "1.0.0"
+        "mcquant": "1.1.0"
       }
     },
     "nf-core/methylseq/2.3.0": {
-      "version": "1.3.1",
-      "content_hash": "bc9e81cb38eccad6751708beac3a5318bd94d18eaa961051ec52754e25ea640b",
+      "version": "2.0.0",
+      "content_hash": "384dcf427c44ec2cbbaa6434c509605ee0e05e5afd5c0fbfe06e388be0c6c855",
       "catalog": {
-        "bismark": "1.0.0",
-        "multiqc": "1.0.0",
-        "qualimap": "1.0.0"
+        "bismark": "1.1.0",
+        "multiqc": "1.1.0",
+        "qualimap": "1.1.0"
       }
     },
     "nf-core/mhcquant/3.2.0": {
-      "version": "1.2.0",
-      "content_hash": "916b94df5a765d78a8452f24abd9d194e86555cfa367cc1dae39c7c9dec3e0e3",
+      "version": "1.3.0",
+      "content_hash": "d416edbde98eaf53b6971c6ea1320cdc401432ed46f39103c95bf4c66d335d51",
       "catalog": {
-        "mhcquant": "1.0.0",
-        "multiqc": "1.0.0",
-        "openms": "1.0.0"
+        "mhcquant": "1.1.0",
+        "multiqc": "1.1.0",
+        "openms": "1.1.0"
       }
     },
     "nf-core/mhcquant/3.3.0": {
-      "version": "1.2.0",
-      "content_hash": "b2292171934504169246762396a7e75d8b794931d3d5ca6290077e7e158faf3c",
+      "version": "1.3.0",
+      "content_hash": "151a9fc3b439b491794bd190205defd934253d3561a548af21d0ec173c188203",
       "catalog": {
-        "mhcquant": "1.0.0",
-        "multiqc": "1.0.0",
-        "openms": "1.0.0"
+        "mhcquant": "1.1.0",
+        "multiqc": "1.1.0",
+        "openms": "1.1.0"
       }
     },
     "nf-core/nanoseq/3.0.0": {
-      "version": "3.0.1",
-      "content_hash": "f791293abdd7bf4cb23102c566c8d45a89225c27b745318fba42860efdc8f4b2",
+      "version": "3.1.0",
+      "content_hash": "91f07bc7138fb8d440afdb7249544280badaff22ba665127873e7ace0528a1ac",
       "catalog": {
-        "bambu": "1.0.0",
-        "deseq2": "1.0.0",
-        "dexseq": "1.1.0",
-        "gtf": "1.0.0",
-        "multiqc": "1.0.0",
-        "nanoplot": "1.0.0",
-        "samtools": "1.1.0"
+        "bambu": "1.1.0",
+        "deseq2": "1.1.0",
+        "dexseq": "1.2.0",
+        "gtf": "1.1.0",
+        "multiqc": "1.1.0",
+        "nanoplot": "1.1.0",
+        "samtools": "1.2.0"
       }
     },
     "nf-core/nascent/2.3.0": {
-      "version": "2.0.1",
-      "content_hash": "a95bd85c091c429121153c9260dd81f15e524fb439f4e009d452ffded35a7b1e",
+      "version": "2.1.0",
+      "content_hash": "61691adb9ac6a4c5ccf4198176263030bce81f3ce2e3270829fa9bb963ccdd32",
       "catalog": {
-        "bedtools": "1.0.0",
-        "subread": "1.0.0"
+        "bedtools": "1.1.0",
+        "subread": "1.1.0"
       }
     },
     "nf-core/oncoanalyser/3.0.0": {
-      "version": "2.3.0",
-      "content_hash": "5dafa4d169e9f2e34934da0d1b3f1a415178533e0cd251f81c3fabfa1974c187",
+      "version": "2.4.0",
+      "content_hash": "53d06cc5e09bd84418f93c513bf37c6b2b4159af3247d7c2d101f81fdb2ff64d",
       "catalog": {
-        "chord": "1.0.0",
-        "cuppa": "1.0.0",
-        "hmf_bamtools": "1.0.0",
-        "lilac": "1.0.0",
-        "linx": "1.0.0",
-        "neo": "1.0.0",
-        "purple": "1.0.0",
-        "qsee": "1.0.0",
-        "sigs": "1.0.0",
-        "teal": "1.0.0"
+        "chord": "1.1.0",
+        "cuppa": "1.1.0",
+        "hmf_bamtools": "1.1.0",
+        "lilac": "1.1.0",
+        "linx": "1.1.0",
+        "neo": "1.1.0",
+        "purple": "1.1.0",
+        "qsee": "1.1.0",
+        "sigs": "1.1.0",
+        "teal": "1.1.0"
       }
     },
     "nf-core/pairgenomealign/3.0.4": {
-      "version": "1.2.0",
-      "content_hash": "905880d243f2270446c2a426f7414423eef85af297cb1c850f9552506a0ff84e",
+      "version": "1.3.0",
+      "content_hash": "8afc4c0611fec303a0532e6b0d8f915ba42104694794367941d11f69ecbc84a7",
       "catalog": {
-        "assemblyscan": "1.0.0",
-        "last": "1.0.0",
-        "seqtk": "1.0.0"
+        "assemblyscan": "1.1.0",
+        "last": "1.1.0",
+        "seqtk": "1.1.0"
       }
     },
     "nf-core/proteinannotator/1.1.0": {
-      "version": "2.1.0",
-      "content_hash": "9114fb7a7fffc1f2d10193aaa317b4deeefcb2ed3d747bf30cda9026f448c7bf",
+      "version": "2.2.0",
+      "content_hash": "1f496f1445c693d2359c1e472c499eab51431b2dace76854787280e3bb7071f2",
       "catalog": {
-        "hmmer": "1.0.0",
-        "interproscan": "1.0.0",
-        "proteinannotator": "1.1.0",
-        "s4pred": "1.0.0",
-        "seqfu": "1.0.0",
-        "seqkit": "1.0.0"
+        "hmmer": "1.2.0",
+        "interproscan": "1.1.0",
+        "proteinannotator": "1.2.0",
+        "s4pred": "1.1.0",
+        "seqfu": "1.1.0",
+        "seqkit": "1.1.0"
       }
     },
     "nf-core/proteinfamilies/2.5.0": {
-      "version": "1.1.2",
-      "content_hash": "affdc8d694ee6a23647150d60a8d4de4375bb20550f7300ecd763b1af5a9af9b",
+      "version": "2.0.0",
+      "content_hash": "6cb091d450fd324035bcfac9ec9b1bc5fe6b3c2e9aaa3b598fda430b0399ef45",
       "catalog": {
-        "famsa": "1.0.0",
-        "hmmer": "1.0.0",
-        "proteinfamilies": "1.0.0",
-        "seqfu": "1.0.0"
+        "famsa": "1.1.0",
+        "hmmer": "1.2.0",
+        "proteinfamilies": "1.1.0",
+        "seqfu": "1.1.0"
       }
     },
     "nf-core/proteinfamilies/2.6.0": {
-      "version": "1.1.2",
-      "content_hash": "6223deebbda0b6769155925e33c42f96c5174394c55527efd5c0a6a5989e752e",
+      "version": "2.0.0",
+      "content_hash": "d461ca306dcf699116d5dcb79128ed89e5ab7d4917b3a826ff10eeaf6ba3726f",
       "catalog": {
-        "famsa": "1.0.0",
-        "hmmer": "1.0.0",
-        "proteinfamilies": "1.0.0",
-        "seqfu": "1.0.0"
+        "famsa": "1.1.0",
+        "hmmer": "1.2.0",
+        "proteinfamilies": "1.1.0",
+        "seqfu": "1.1.0"
       }
     },
     "nf-core/proteinfold/2.1.0": {
-      "version": "1.1.2",
-      "content_hash": "1f2a38897dbf7730a95aac3dbdf2f45e70e775c8e69b3dace666c46b860cfcb5",
+      "version": "1.2.0",
+      "content_hash": "525bcdefa881b6bd4fcc2fc2262074ded5ec691867ed8fbc0d117af7eaa39414",
       "catalog": {
-        "proteinfold": "1.0.0"
+        "proteinfold": "1.1.0"
       }
     },
     "nf-core/quantms/1.1.1": {
@@ -570,263 +570,263 @@
       "content_hash": "d691439687a3dcb015ce9efaf8847c327b8e397493f5994beb5008bf7d9606f1"
     },
     "nf-core/raredisease/3.1.2": {
-      "version": "2.0.0",
-      "content_hash": "bce35e9b56e8271ac6e38362081f823796ad5a9b094192c55b04626b5e96efaf",
+      "version": "2.1.0",
+      "content_hash": "71b7d6ab18c6b2ad9346153fd4ea8cfe22cfe608347172c9f627b70afa33d6ac",
       "catalog": {
-        "multiqc": "1.0.0",
-        "vcf": "1.0.0"
+        "multiqc": "1.1.0",
+        "vcf": "1.1.0"
       }
     },
     "nf-core/riboseq/2.0.0": {
-      "version": "3.0.0",
-      "content_hash": "ba74bd92410b02db085f9f062db79126d56a117f5e5afe17ab51426184f9ce07",
+      "version": "3.1.0",
+      "content_hash": "bf47ed739cac47ad48eaa5429e5590f642182988ae72f762bb15e04cbde85875",
       "catalog": {
-        "anota2seq": "1.1.0",
-        "multiqc": "1.0.0",
-        "ribocode": "1.0.0",
-        "ribotish": "1.0.0",
-        "ribowaltz": "1.0.0",
-        "salmon": "1.0.0"
+        "anota2seq": "1.2.0",
+        "multiqc": "1.1.0",
+        "ribocode": "1.1.0",
+        "ribotish": "1.1.0",
+        "ribowaltz": "1.1.0",
+        "salmon": "1.1.0"
       }
     },
     "nf-core/rnafusion/4.1.3": {
-      "version": "2.3.0",
-      "content_hash": "32275496784a107c6172c5ff3c917d54ade74456ff64eed80a992aa311b961da",
+      "version": "2.4.0",
+      "content_hash": "b0af859130fdaff9ea96cfa2578f9f1ff80deecb4a405e61ee4bb71acfcce758",
       "catalog": {
-        "arriba": "1.0.0",
-        "ctatsplicing": "1.0.0",
-        "fusioncatcher": "1.0.0",
-        "fusioninspector": "1.0.0",
-        "fusionreport": "1.0.0",
-        "multiqc": "1.0.0",
-        "starfusion": "1.0.0"
+        "arriba": "1.1.0",
+        "ctatsplicing": "1.1.0",
+        "fusioncatcher": "1.1.0",
+        "fusioninspector": "1.1.0",
+        "fusionreport": "1.1.0",
+        "multiqc": "1.1.0",
+        "starfusion": "1.1.0"
       }
     },
     "nf-core/rnaseq/3.26.0": {
-      "version": "2.4.0",
-      "content_hash": "00bc7c97b3f6ec327a040f6bc9e1960fc07e46ff97e16a9adcfaa5b091cabb18",
+      "version": "2.5.0",
+      "content_hash": "f1e18863994d3ed41c52a48f123c70854084f5b97fabbd45a3491ba208f43988",
       "catalog": {
-        "deseq2": "1.0.0",
-        "multiqc": "1.0.0",
-        "rseqc": "1.0.0",
-        "salmon": "1.0.0"
+        "deseq2": "1.1.0",
+        "multiqc": "1.1.0",
+        "rseqc": "1.1.0",
+        "salmon": "1.1.0"
       }
     },
     "nf-core/rnaseq/3.28.0": {
-      "version": "2.4.0",
-      "content_hash": "88683df7ca86d757dd3030e5f34d265e2df870445d79ba7bd52485c22348c512",
+      "version": "2.5.0",
+      "content_hash": "117cbfff149566c5513f852bc8d5189ddc918ba89e9dd842a0b4a9d1721b10c3",
       "catalog": {
-        "deseq2": "1.0.0",
-        "multiqc": "1.0.0",
-        "rseqc": "1.0.0",
-        "salmon": "1.0.0"
+        "deseq2": "1.1.0",
+        "multiqc": "1.1.0",
+        "rseqc": "1.1.0",
+        "salmon": "1.1.0"
       }
     },
     "nf-core/rnasplice/1.0.4": {
-      "version": "3.0.1",
-      "content_hash": "20ae628bfa2974203608edcbbb3f9a293b49d2d296d43cc8830e0ecc22fe9577",
+      "version": "3.1.0",
+      "content_hash": "4b4de310b16794598036b55a38c4b53d1ba4953f0da1cffded7d849581fb927e",
       "catalog": {
-        "dexseq": "1.1.0",
-        "edger": "1.0.0",
-        "multiqc": "1.0.0",
-        "rmats": "1.1.0",
-        "salmon": "1.0.0",
-        "suppa": "1.1.0"
+        "dexseq": "1.2.0",
+        "edger": "1.1.0",
+        "multiqc": "1.1.0",
+        "rmats": "1.2.0",
+        "salmon": "1.1.0",
+        "suppa": "1.2.0"
       }
     },
     "nf-core/rnasplice/2.0.0": {
-      "version": "4.0.0",
-      "content_hash": "640527572c3e2de8a6d8949566da67db0010ac1617a3ff388d7115fc8c771159",
+      "version": "4.1.0",
+      "content_hash": "c2e4f129a0fb24c06034d245cb6f95bc44e57a984f8c5ccbe287f0fd7807b5c6",
       "catalog": {
-        "dexseq": "1.1.0",
-        "edger": "1.0.0",
-        "multiqc": "1.0.0",
-        "rmats": "1.1.0",
-        "salmon": "1.0.0",
-        "suppa": "1.1.0"
+        "dexseq": "1.2.0",
+        "edger": "1.1.0",
+        "multiqc": "1.1.0",
+        "rmats": "1.2.0",
+        "salmon": "1.1.0",
+        "suppa": "1.2.0"
       }
     },
     "nf-core/rnavar/1.3.0": {
-      "version": "1.1.2",
-      "content_hash": "ca40f232caf5be7630610df8a854a67630961791c1379839dea401a24d29b2bd",
+      "version": "2.0.0",
+      "content_hash": "1b975f0e3a6118d63082e0b18e798836a3e6fdccb61d9f6965a5da86d637887f",
       "catalog": {
-        "multiqc": "1.0.0",
-        "picard": "1.1.0",
-        "samtools": "1.1.0",
-        "snpeff": "1.0.1",
-        "star": "1.0.0",
-        "vcf": "1.0.0"
+        "multiqc": "1.1.0",
+        "picard": "1.2.0",
+        "samtools": "1.2.0",
+        "snpeff": "1.1.0",
+        "star": "1.1.0",
+        "vcf": "1.1.0"
       }
     },
     "nf-core/sarek/3.10.0": {
-      "version": "2.2.1",
-      "content_hash": "435e30cd334231e9f3d6be98645e22b83330f5a5c51fc4cd92505302bcef1941",
+      "version": "2.3.0",
+      "content_hash": "e1745b2a8ac660ec5d30e52f339214b0cd6671384580f80c2729b523d0667385",
       "catalog": {
-        "bcftools": "1.0.0",
-        "mosdepth": "1.1.0",
-        "multiqc": "1.0.0",
-        "snpeff": "1.0.1",
-        "vcf": "1.0.0",
-        "vcftools": "1.0.0"
+        "bcftools": "1.1.0",
+        "mosdepth": "1.2.0",
+        "multiqc": "1.1.0",
+        "snpeff": "1.1.0",
+        "vcf": "1.1.0",
+        "vcftools": "1.1.0"
       }
     },
     "nf-core/sarek/3.11.0": {
-      "version": "3.2.1",
-      "content_hash": "b6672b80a3518d2649bf36dd314877ced508d9cc24502ee6d80e8e6d7f9a3f82",
+      "version": "3.3.0",
+      "content_hash": "162255e7da81887661b701c114491bd766cd25a9e55f48719200605389807cf0",
       "catalog": {
-        "bcftools": "1.0.0",
-        "mosdepth": "1.1.0",
-        "multiqc": "1.0.0",
-        "snpeff": "1.0.1",
-        "vcf": "1.0.0",
-        "vcftools": "1.0.0"
+        "bcftools": "1.1.0",
+        "mosdepth": "1.2.0",
+        "multiqc": "1.1.0",
+        "snpeff": "1.1.0",
+        "vcf": "1.1.0",
+        "vcftools": "1.1.0"
       }
     },
     "nf-core/sarek/3.12.0": {
-      "version": "3.2.1",
-      "content_hash": "c2cbba090aebc1d708e473b6bf6966f02b17d6b3c519052d9c2c3499819b7158",
+      "version": "3.3.0",
+      "content_hash": "bdfaeaf4df51b0a31979f6370b8e46cfaeb6ad6ce0eb1878cbd181aea88a380b",
       "catalog": {
-        "bcftools": "1.0.0",
-        "mosdepth": "1.1.0",
-        "multiqc": "1.0.0",
-        "snpeff": "1.0.1",
-        "vcf": "1.0.0",
-        "vcftools": "1.0.0"
+        "bcftools": "1.1.0",
+        "mosdepth": "1.2.0",
+        "multiqc": "1.1.0",
+        "snpeff": "1.1.0",
+        "vcf": "1.1.0",
+        "vcftools": "1.1.0"
       }
     },
     "nf-core/scrnaseq/4.2.0": {
-      "version": "2.0.0",
-      "content_hash": "a8256a70e2d2a5c994e967e1b285387ffb5663e803324649d48ee6d5d163b06a",
+      "version": "3.0.0",
+      "content_hash": "343297adb08f938c6c8e541077356588d5c775c379780572de0784a39bf77262",
       "catalog": {
-        "cellbender": "1.0.0",
-        "cellranger": "1.1.0",
-        "kallisto": "1.0.0",
-        "multiqc": "1.0.0",
-        "qcatch": "1.0.0",
-        "simpleaf": "1.0.0"
+        "cellbender": "1.1.0",
+        "cellranger": "1.2.0",
+        "kallisto": "1.1.0",
+        "multiqc": "1.1.0",
+        "qcatch": "1.1.0",
+        "simpleaf": "1.1.0"
       }
     },
     "nf-core/smrnaseq/2.4.1": {
-      "version": "1.2.0",
-      "content_hash": "868f0de56b4b175784b277148da6c43a227a3a93f45f0c4f80c12d40ab840fc9",
+      "version": "2.0.0",
+      "content_hash": "a838fe13afe9f2a24d19525e549c5485fa199608c591efb685340175934c380e",
       "catalog": {
-        "mirdeep2": "1.0.0",
-        "mirtop": "1.0.0",
-        "multiqc": "1.0.0"
+        "mirdeep2": "1.1.0",
+        "mirtop": "1.1.0",
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/stableexpression/1.1.0": {
-      "version": "1.3.0",
-      "content_hash": "23770a0d7bd97fc8794eaf7d5a913ba5fb53a040d420d50c6b10fb5604cbe9f8",
+      "version": "1.4.0",
+      "content_hash": "b24dd19ab849a54bdbdafa5118b8c180bd27a48da17c29d1e1b49cff2697a23b",
       "catalog": {
-        "stableexpression": "1.0.0"
+        "stableexpression": "1.1.0"
       }
     },
     "nf-core/taxprofiler/2.0.1": {
-      "version": "1.1.1",
-      "content_hash": "fe2331c5bc527f37f6c3dcfdae7bac3920e44650a79e8a5d4a6d87f63d114b1c",
+      "version": "1.2.0",
+      "content_hash": "a662f75013c3e1aa3af79082073249253e657f430a1cb204a48f93a95170f4cb",
       "catalog": {
-        "melon": "1.0.0",
-        "multiqc": "1.0.0",
-        "nonpareil": "1.0.0",
-        "sylph": "1.0.0",
-        "taxpasta": "1.0.0"
+        "melon": "1.1.0",
+        "multiqc": "1.1.0",
+        "nonpareil": "1.1.0",
+        "sylph": "1.1.0",
+        "taxpasta": "1.1.0"
       }
     },
     "nf-core/variantbenchmarking/1.4.0": {
-      "version": "2.0.0",
-      "content_hash": "350219270d39c336d929ac2de9fce7a997bcf318aff572e57818f7d34b242551",
+      "version": "3.0.0",
+      "content_hash": "459ff2bf513d1edff7585f2c491d951db9a9ef013f986d4e284c6717cc5b389d",
       "catalog": {
-        "happy": "1.0.0",
-        "rtgtools": "1.0.0",
-        "sompy": "1.0.0",
-        "svanalyzer": "1.0.0",
-        "truvari": "1.0.0",
-        "wittyer": "1.0.0"
+        "happy": "1.1.0",
+        "rtgtools": "1.1.0",
+        "sompy": "1.1.0",
+        "svanalyzer": "1.1.0",
+        "truvari": "1.1.0",
+        "wittyer": "2.0.0"
       }
     },
     "nf-core/variantbenchmarking/1.4.0/categories/indel": {
-      "version": "1.0.1",
-      "content_hash": "369279460f73a604771856fb9077717c6bad8d91bccf668f91ed6c48e3d7c89a",
+      "version": "1.1.0",
+      "content_hash": "9cc541fd4049fe1a50b4d55895b2edf0a9e650c33ac57b4a93d8d28d57c7d3a1",
       "catalog": {
-        "multiqc": "1.0.0",
-        "rtgtools": "1.0.0",
-        "sompy": "1.0.0"
+        "multiqc": "1.1.0",
+        "rtgtools": "1.1.0",
+        "sompy": "1.1.0"
       }
     },
     "nf-core/variantbenchmarking/1.4.0/categories/small": {
-      "version": "1.0.0",
-      "content_hash": "c3b396afd289315b7db760cb90dffa571e3231cdfaec57ded8683885356334f7",
+      "version": "1.1.0",
+      "content_hash": "82412f9ed8dc05733c8ad2b6a4e9826074caa5ed575e005f1fb906202ec0fb8e",
       "catalog": {
-        "happy": "1.0.0",
-        "multiqc": "1.0.0",
-        "rtgtools": "1.0.0"
+        "happy": "1.1.0",
+        "multiqc": "1.1.0",
+        "rtgtools": "1.1.0"
       }
     },
     "nf-core/variantbenchmarking/1.4.0/categories/structural": {
-      "version": "1.0.0",
-      "content_hash": "91383b9a494ddb09c23313a1cf817cb6eaf93a7bfdd333c6e4ff7531920dd01c",
+      "version": "1.1.0",
+      "content_hash": "f04a2aca8732b2b3fadbf32a26a406439cc1688a9bfceb1bd968400dd081df29",
       "catalog": {
-        "multiqc": "1.0.0"
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/variantbenchmarking/1.6.1": {
-      "version": "2.0.0",
-      "content_hash": "46cb774c8ed4b2ce96e5dc22054be15df3fe51db06b2d40ffa98bcb720133917",
+      "version": "3.0.0",
+      "content_hash": "3d0a702f04594034a9f1b0931f7dcad46825f1c24cdd5f227c6845f052921091",
       "catalog": {
-        "happy": "1.0.0",
-        "rtgtools": "1.0.0",
-        "sompy": "1.0.0",
-        "svanalyzer": "1.0.0",
-        "truvari": "1.0.0",
-        "wittyer": "1.0.0"
+        "happy": "1.1.0",
+        "rtgtools": "1.1.0",
+        "sompy": "1.1.0",
+        "svanalyzer": "1.1.0",
+        "truvari": "1.1.0",
+        "wittyer": "2.0.0"
       }
     },
     "nf-core/variantbenchmarking/1.6.1/categories/indel": {
-      "version": "1.0.1",
-      "content_hash": "84b69c9a95c0f07578abde360dce8b96ef88c9e78e622ced5ad7407f8bc29e27",
+      "version": "1.1.0",
+      "content_hash": "ddcf0564b62bdfd7a7aca89b4aff9bf6d3873ba891a1fbe9f7ed53807227c4e5",
       "catalog": {
-        "multiqc": "1.0.0",
-        "rtgtools": "1.0.0",
-        "sompy": "1.0.0"
+        "multiqc": "1.1.0",
+        "rtgtools": "1.1.0",
+        "sompy": "1.1.0"
       }
     },
     "nf-core/variantbenchmarking/1.6.1/categories/small": {
-      "version": "1.0.0",
-      "content_hash": "55e6bf9009d75249a3f8a4db0d405dc448fbb513d323279083ac6b8dc57af516",
+      "version": "1.1.0",
+      "content_hash": "46325fa47eaf9be6cee0f86673fac2fd10033ab525bea6e1a83387b74e84ecd4",
       "catalog": {
-        "happy": "1.0.0",
-        "multiqc": "1.0.0",
-        "rtgtools": "1.0.0"
+        "happy": "1.1.0",
+        "multiqc": "1.1.0",
+        "rtgtools": "1.1.0"
       }
     },
     "nf-core/variantbenchmarking/1.6.1/categories/structural": {
-      "version": "1.0.0",
-      "content_hash": "76535fda82b26c0ffbdb0de86b08fa01b60c0320af461dcfef968f1871413a29",
+      "version": "1.1.0",
+      "content_hash": "5fa1d898df0f6bad06f02d12fda7a7834b5fdcca4b3581e2377f9f8300349742",
       "catalog": {
-        "multiqc": "1.0.0"
+        "multiqc": "1.1.0"
       }
     },
     "nf-core/viralmetagenome/1.2.0": {
-      "version": "1.3.0",
-      "content_hash": "c72d3e80ec10d14b99501da686173b45195bd9e9cf5ef425498639c9cae59d36",
+      "version": "1.4.0",
+      "content_hash": "3dd4e5c0d69997bf842bf375ac8e8ed2b98a6565134144284a26c2f6ce7b61ef",
       "catalog": {
-        "checkv": "1.0.0",
-        "ivar": "1.0.0",
-        "mosdepth": "1.1.0",
-        "multiqc": "1.0.0",
-        "viralmetagenome": "1.0.0"
+        "checkv": "1.1.0",
+        "ivar": "1.1.0",
+        "mosdepth": "1.2.0",
+        "multiqc": "1.1.0",
+        "viralmetagenome": "1.1.0"
       }
     },
     "nf-core/viralrecon/3.0.0": {
-      "version": "2.3.0",
-      "content_hash": "3ea14d188f338bb95b62e70354b513f950b283c3dfc3de8c5a450ff367060cf8",
+      "version": "2.4.0",
+      "content_hash": "3624244c9c689f121e1669766b5cb0c91c10dc56e0bec0c830db61fda14bc9e6",
       "catalog": {
-        "ivar": "1.0.0",
-        "mosdepth": "1.1.0",
-        "multiqc": "1.0.0",
-        "nextclade": "1.0.0",
-        "pangolin": "1.0.0"
+        "ivar": "1.1.0",
+        "mosdepth": "1.2.0",
+        "multiqc": "1.1.0",
+        "nextclade": "1.1.0",
+        "pangolin": "1.1.0"
       }
     }
   }

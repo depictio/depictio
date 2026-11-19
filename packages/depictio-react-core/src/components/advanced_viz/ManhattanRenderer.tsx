@@ -30,7 +30,13 @@ import {
 } from '../../highlight/genomicHover';
 import { useViewWindow } from '../../highlight/viewWindow';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
-import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import {
+  applyDataTheme,
+  applyLayoutTheme,
+  plotlyAxisOverrides,
+  plotlyThemeColors,
+  plotlyThemeFragment,
+} from './plotlyTheme';
 import {
   hoveredColor,
   hoverRingShape,
@@ -48,6 +54,13 @@ import {
 } from '../jbrowse/locusForAction';
 import { rainfallDistances } from './rainfallDistances';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import {
+  resolveScoreThreshold,
+  scoreThresholdRequests,
+  scoreThresholdTail,
+  type ReferenceStat,
+  type ReferenceStatValues,
+} from './referenceStats';
 import {
   VizControlGroup,
   VizMultiSelect,
@@ -88,6 +101,10 @@ interface ManhattanConfig {
   effect_col?: string | null;
   score_kind?: string;
   score_threshold?: number | null;
+  /** Place the threshold at this statistic of the score column over the rows
+   *  on show, computed by the server (`reference_stats.score_threshold`). An
+   *  explicit `score_threshold` wins. */
+  score_threshold_stat?: ReferenceStat | null;
   top_n_labels?: number | null;
   marker_size_above?: number;
   marker_size_below?: number;
@@ -146,11 +163,18 @@ const ManhattanRenderer: React.FC<Props> = ({
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as ManhattanConfig;
 
-  const [scoreThreshold, setScoreThreshold] = usePersistedVizControl<number | undefined>(
+  // The reader's (or author's) own threshold. When unset, a
+  // `score_threshold_stat` puts the line at that statistic of the score, which
+  // the server computes on the filtered, unsampled rows and names as such.
+  const [thresholdControl, setScoreThreshold] = usePersistedVizControl<number | undefined>(
     metadata,
     'score_threshold',
     undefined,
   );
+  const [referenceStats, setReferenceStats] = useState<ReferenceStatValues | null>(null);
+  const thresholdRef = resolveScoreThreshold(config, thresholdControl, referenceStats);
+  const scoreThreshold = thresholdRef.value ?? undefined;
+  const thresholdLabel = thresholdRef.stat ? thresholdRef.label : null;
   const [topNLabels, setTopNLabels] = usePersistedVizControl<number>(
     metadata,
     'top_n_labels',
@@ -325,17 +349,24 @@ const ManhattanRenderer: React.FC<Props> = ({
       // Never in rainfall mode: keeping the score's tail whole and thinning the
       // rest is exactly what a distance-to-the-previous-variant axis must not
       // be handed, since every dropped row stretches its neighbour's distance.
+      //
+      // A threshold named as a statistic travels as one: the server settles
+      // it on the unreduced rows, which is also where the line's own value
+      // (`referenceStats`) comes from, so the two cannot disagree.
       tail:
-        !rainfall && config.score_threshold != null && config.highlight !== 'none'
-          ? {
-              column: config.score_col,
-              direction: config.highlight === 'below' ? 'low' : 'high',
-              threshold: config.score_threshold,
-            }
+        !rainfall && config.highlight !== 'none'
+          ? scoreThresholdTail(
+              config,
+              config.score_threshold,
+              config.highlight === 'below' ? 'low' : 'high',
+            )
           : undefined,
+      referenceStats: rainfall ? undefined : scoreThresholdRequests(config, config.score_threshold),
     })
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setReferenceStats(res.reference_stats ?? null);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -355,6 +386,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     // The two modes ask the server for differently-reduced frames, so a switch
     // has to re-fetch even when the column list happens to be identical.
     rainfall,
+    config.score_threshold_stat,
   ]);
 
   // Variant clouds are the densest thing on a dashboard, so always compete for
@@ -719,6 +751,20 @@ const ManhattanRenderer: React.FC<Props> = ({
     //    ``candidates`` holds positions in the plotted arrays (``xs``), not raw
     //    row indices, so ``rowIdx[j]`` is the hop back to the source columns.
     const annotations: any[] = [];
+    // A threshold placed by a statistic says which one (RULES §17): it is a
+    // reading aid taken off this table, not the tool's own cut-off.
+    if (hasThreshold && thresholdLabel) {
+      annotations.push({
+        xref: 'paper',
+        x: 1,
+        y: scoreThreshold as number,
+        text: thresholdLabel,
+        showarrow: false,
+        xanchor: 'right',
+        yanchor: 'bottom',
+        font: { size: 10, color: plotlyThemeColors(isDark, theme).textColor },
+      });
+    }
     if (topNLabels > 0) {
       const candidates: number[] = [];
       for (let j = 0; j < rowIdx.length; j++) {
@@ -997,6 +1043,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     selectionColumn,
     selectionEnabled,
     scoreThreshold,
+    thresholdLabel,
     selectedChrs,
     followedRegion,
     topNLabels,
@@ -1076,7 +1123,12 @@ const ManhattanRenderer: React.FC<Props> = ({
             {rainfall ? null : (
               <VizNumberInput
                 label="Threshold"
-                value={scoreThreshold ?? ''}
+                value={thresholdControl ?? ''}
+                placeholder={
+                  thresholdLabel && scoreThreshold != null
+                    ? `${thresholdLabel}: ${scoreThreshold}`
+                    : undefined
+                }
                 onChange={(v) => setScoreThreshold(v === '' ? undefined : Number(v))}
                 decimalScale={3}
               />
@@ -1099,6 +1151,8 @@ const ManhattanRenderer: React.FC<Props> = ({
     ),
     [
       scoreThreshold,
+      thresholdControl,
+      thresholdLabel,
       hasThreshold,
       highlight,
       colorBy,

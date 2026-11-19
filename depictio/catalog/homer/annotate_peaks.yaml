@@ -11,13 +11,131 @@ recipe: homer/annotate_peaks.py
 fixture: annotate_peaks.tsv
 renders_as:
   # Where the peaks land relative to genes, then how far from the TSS.
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, color: annotation_class, title: Peak annotation per sample} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: distance_to_tss, color: annotation_class, title: Distance to nearest TSS} }
-  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: annotation_class, top_n_count: 3 }
-  - { component: card, column: annotation_class, aggregation: count, secondary_layout: donut, breakdown_col: annotation_class, headline: true }
-  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: composition, breakdown_col: annotation_class }
-  - { component: card, column: distance_to_tss, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      color: annotation_class
+      labels: {sample: Sample, annotation_class: Genomic feature, count: Peaks}
+    title: Peak annotation per sample
+    description: >-
+      Each bar is a sample and each segment counts its peaks by the genomic feature
+      HOMER assigned (promoter-TSS, exon, intron, intergenic and so on). It answers
+      where the peaks of each sample land relative to genes.
+
+      How to read: a transcription factor or an active histone mark is expected to
+      concentrate on promoters, while a repressive mark sits mostly in introns and
+      intergenic space. A sample whose split differs from its replicates is worth a
+      check of its quality.
+
+      Lines and annotations: HOMER gives each peak one class by priority, TSS first,
+      then TTS, exons, UTRs, introns and intergenic. The promoter-TSS window is from
+      1 kb upstream to 100 bp downstream of the start site, HOMER's default.
+
+      Source: http://homer.ucsd.edu/homer/ngs/annotation.html
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: distance_to_tss
+      color: annotation_class
+      labels: {distance_to_tss: Distance to nearest TSS (bp), annotation_class: Genomic feature}
+    title: Distance to nearest TSS
+    description: >-
+      Each bar counts peaks in a bin of their signed distance to the nearest
+      transcription start site, split by genomic feature. It answers how close the
+      peaks sit to promoters.
+
+      How to read: a tall bar around zero means promoter-bound peaks. A broad, flat
+      distribution with long tails means the signal is mostly distal. Negative values
+      are upstream of the start site and positive values downstream.
+  - component: card
+    column: chr
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: annotation_class
+    top_n_count: 3
+    caption: peaks, by feature class
+    title: Annotated peaks
+    description: >-
+      The hero number is the count of annotated peaks, and the bars rank the feature
+      classes that hold most of them. The secondary number is the count of chromosomes
+      the peaks fall on. It answers how many peaks there are and where they land.
+
+      How to read: a class that dominates the ranking tells what kind of region the
+      signal marks. Open the annotation bars to compare samples.
+  - component: card
+    column: annotation_class
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: annotation_class
+    headline: true
+    caption: peaks, by feature class
+    title: Peaks by feature class
+    description: >-
+      Each unit is one annotated peak and the ring splits them by the genomic feature
+      HOMER assigned. It answers what share of peaks sit in promoters, exons, introns
+      or intergenic regions.
+
+      How to read: compare the promoter share with what is expected for the mark or
+      factor. HOMER assigns one class per peak by priority, TSS first and intergenic
+      last.
+
+      Source: http://homer.ucsd.edu/homer/ngs/annotation.html
+  - component: card
+    column: gene_name
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: annotation_class
+    top_n_count: 3
+    caption: genes, by feature class
+    title: Genes with a peak
+    description: >-
+      The hero number is the count of distinct genes that are the nearest promoter of a
+      peak, and the bars rank the feature classes by how many genes they reach. It
+      answers how many genes the peaks can regulate.
+
+      How to read: HOMER assigns the nearest start site whatever the distance, so a
+      distal peak still names a gene. Filter to the promoter class for the confident
+      targets.
+  - component: card
+    column: peak_score
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Peak score
+    description: >-
+      The hero number is the median peak score, with a box for the quartiles. It
+      answers how strong the typical peak is.
+
+      How to read: the score comes from the peak caller, not from HOMER, so compare it
+      between samples called the same way. A sample with a much lower median has weaker
+      enrichment.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: peak_id
+    title: Annotated peaks table
+    description: >-
+      Each row is a peak with its position, score, feature class, distance to the
+      nearest start site and gene. It answers which peaks and genes to follow up and
+      lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by score, and filter by feature class to keep promoter peaks.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: peak_score, aggregation: average, secondary_layout: histogram }
+  - component: card
+    column: peak_score
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: histogram
+    caption: top score, with the typical peak
+    title: Peak score distribution
+    description: >-
+      The hero number is the highest peak score, and the histogram shows how scores are
+      spread over all peaks. It answers how many peaks are strong and how many are weak.
+
+      How to read: most callers give many weak peaks and a long tail of strong ones. A
+      distribution with no tail means little enrichment over background.

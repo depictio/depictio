@@ -9,5 +9,20 @@ recipe: deseq2/vst_top_variable.py
 fixture: vst_heatmap.tsv
 renders_as:
   # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls
-  # back to the literal "sample_id", which this matrix does not have.
-  - { id: top_variable_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_id} }
+  # back to the literal "sample_id", which this matrix does not have. Every numeric
+  # column is a sample named at ingest, so value_columns cannot be written here.
+  - id: top_variable_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Most variable features
+    roles: {index: gene_id}
+    description: >-
+      Each cell is the variance-stabilised expression of one of the most variable
+      genes (rows) in one sample (columns), with the sample sheet factors as column
+      annotations. It answers which genes drive the differences between samples.
+
+      How to read: columns of the same condition should share a pattern. A column that
+      looks like the other group, or a block of genes that follows a batch factor,
+      shows what structures the data before any contrast is run.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html

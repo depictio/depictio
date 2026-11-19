@@ -6,9 +6,79 @@ find: { filename: "*.pangolin.csv" }
 recipe: pangolin/pangolin_lineages.py
 fixture: report.tsv
 renders_as:
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: lineage, color: qc_status} } # lineage calls
-  - { component: table }
+  # C1: the lineage calls are coloured by the QC status of each sequence.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: lineage
+      color: qc_status
+      labels: {lineage: Pango lineage, qc_status: QC status}
+    title: Lineage calls by QC status
+    description: >-
+      Each bar counts the sequences assigned to a Pango lineage, split by whether they
+      passed Pangolin's sequence quality check. It answers which lineages the run
+      found and how many calls rest on usable sequences.
+
+      How to read: a lineage made of passing sequences is a call to trust. Failed
+      sequences get an unassigned lineage, so a large unassigned bar is a data quality
+      problem and not a new variant.
+
+      Lines and annotations: the colour is the QC status, which fails a sequence with
+      more than 30 percent N or shorter than 25000 bases, the defaults of Pangolin's
+      max-ambig and min-length options.
+
+      Source: https://raw.githubusercontent.com/cov-lineages/pangolin/master/pangolin/command.py
+  - component: table
+    title: Lineage report
+    description: >-
+      Each row is a sequence with its Pango lineage, the conflict and ambiguity
+      scores, the scorpio call and its support, the Pangolin version, a note and the
+      QC status. It answers which lineage each sequence got and how reliable the call
+      is.
+
+      How to read: a high ambiguity score means few sites were imputed, so the call is
+      well supported. Read the note for alternative placements when the conflict score
+      is above zero.
+
+      Source: https://cov-lineages.org/resources/pangolin/output.html
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: lineage, aggregation: nunique, secondary_layout: top_n, breakdown_col: lineage, top_n_count: 3, headline: true }
-  - { component: card, column: qc_status, aggregation: nunique, secondary_layout: donut, breakdown_col: qc_status }
+  - component: card
+    column: lineage
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: lineage
+    top_n_count: 3
+    headline: true
+    title: Lineages found
+    caption: sequences, by lineage
+    description: >-
+      The hero number is the count of distinct Pango lineages, with the number of
+      sequences beside it, and the bars rank the lineages by how many sequences carry
+      them. It answers how diverse the run is and which lineages dominate.
+
+      How to read: one dominant lineage is a single outbreak in circulation. Several
+      lineages of similar size suggest a mixed collection, and an unassigned bar means
+      sequences that failed the quality check.
+  - component: card
+    column: qc_status
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: qc_status
+    title: Sequences by QC status
+    caption: sequences, by QC status
+    description: >-
+      The hero number is the count of sequences, with the number of distinct statuses
+      beside it, and the ring splits them into those that passed and failed Pangolin's
+      quality check. It answers how many sequences can be trusted for lineage calling.
+
+      How to read: a ring that is mostly pass is a healthy run. A large failed share
+      means many sequences are too short or hold too many N bases, so check the
+      sequencing coverage.
+
+      Lines and annotations: a sequence fails with more than 30 percent N or fewer than
+      25000 bases, the defaults of Pangolin's max-ambig and min-length options.
+
+      Source: https://raw.githubusercontent.com/cov-lineages/pangolin/master/pangolin/command.py

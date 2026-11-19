@@ -8,19 +8,106 @@ description: >-
 find:
   path_glob: "**/assembly/assemblers/*/idxstats/*.idxstats"
 recipe: viralmetagenome/contigs.py
+# The fixture is enriched synthetically from 14 real rows (copies with seeded noise), so the preview shows several classifications.
 fixture: contigs.tsv
 renders_as:
-  - { id: contigs_by_class, component: card, column: contig, aggregation: count,
-      secondary_layout: composition, breakdown_col: classification, headline: true }
-  - { id: assembled_bp, component: card, column: length_bp, aggregation: sum,
-      secondary_layout: composition, breakdown_col: length_class }
-  - { id: reads_on_contigs, component: card, column: mapped_reads, aggregation: sum,
-      secondary_layout: donut, breakdown_col: cluster_role }
+  - id: contigs_by_class
+    component: card
+    column: length_bp
+    aggregation: count
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: classification
+    headline: true
+    title: De novo contigs
+    caption: contigs, classified or not
+    description: >-
+      The hero number is the count of de novo contigs, and the bar splits them by the
+      merged Kraken2 and Kaiju call. It answers how many contigs were assembled and
+      how many could be placed in a taxon.
+
+      How to read: a large classified share means the assembly resembles known
+      viruses. A large unclassified share points to novel sequence, chimeric contigs
+      or a classifier database without the virus.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  - id: assembled_bp
+    component: card
+    column: length_bp
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: length_class
+    title: Assembled length
+    caption: bases, by contig length band
+    description: >-
+      The hero number is the total number of assembled bases, and the bar splits it
+      by contig length band. It answers how much of the assembly sits in long, usable
+      contigs.
+
+      How to read: most bases in long bands mean a contiguous assembly. Bases in short
+      bands are fragments that the clustering may discard.
+
+      Lines and annotations: contigs shorter than 500 bases are dropped by default
+      (min_contig_size), so none appear in the shortest band.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/nextflow_schema.json
+  - id: reads_on_contigs
+    component: card
+    column: mapped_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: cluster_role
+    title: Reads on contigs
+    caption: reads, by cluster role
+    description: >-
+      The hero number is the total of reads that map back to the contigs, and the
+      ring splits them by the role of their contig in its cluster: centroid or
+      member. It answers where the sequencing effort went.
+
+      How to read: reads concentrated on centroids and members of refined clusters
+      are well used. Reads on contigs that never clustered were not carried into a
+      consensus.
   # Length against reads: a long contig few reads support is a chimera or a
   # contaminant, a short one with many is a fragment of a deep genome.
   - id: length_vs_reads
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: length_bp, y: mapped_reads, label: contig, color: classification, size: read_share_pct }
-  - { component: interactive, interactive_type: MultiSelect, column_name: classification }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+    title: Contig length against mapped reads
+    roles: {x: length_bp, y: mapped_reads, label: contig, color: classification, size: read_share_pct}
+    config:
+      x_title: Contig length (bp)
+      y_title: Reads mapped to the contig
+      log_x: true
+      log_y: true
+      top_n_labels: 5
+    description: >-
+      Each point is a de novo contig: its length on the horizontal axis and the reads
+      that map back to it on the vertical axis, sized by its share of the sample's
+      reads and coloured by its taxonomic call. It answers whether long contigs are
+      supported by the reads.
+
+      How to read: long contigs with many reads are well supported. A long contig
+      with few reads may be a chimera or a contaminant, and a short contig with many
+      reads is a fragment of a deeply covered genome. Both axes are logarithmic.
+
+      Lines and annotations: none are drawn, because the pipeline publishes no
+      length-to-reads cut-off.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: classification
+    title: Taxonomic call
+    description: >-
+      Keeps only contigs with the chosen call, classified or unclassified.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: De novo contigs table
+    description: >-
+      Each row is a de novo contig with its assembler, length, mapped reads, read
+      share, taxonomic call and cluster. It answers how each contig was built and
+      where it ended up, and lets a row selection filter the other tiles.
+
+      How to read: sort by mapped reads to see the best supported contigs, and by
+      length to see the longest.

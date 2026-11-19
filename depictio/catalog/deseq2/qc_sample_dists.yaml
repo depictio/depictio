@@ -13,8 +13,28 @@ find:
 recipe: deseq2/qc_sample_dists.py
 fixture: qc_sample_dists.tsv
 renders_as:
+  # Every numeric column of this square matrix is a sample, named at ingest, so
+  # value_columns cannot be written here and the default (all numeric) is right.
   - id: qc_distance_heatmap
     component: advanced_viz
     kind: complex_heatmap
-    roles: { index: sample }
-  - { component: table }
+    title: Sample distance heatmap
+    roles: {index: sample}
+    description: >-
+      Each cell is the Euclidean distance between two samples, computed on the
+      variance-stabilised expression the pipeline QC used, and the rows and columns
+      are clustered. It answers which samples resemble each other.
+
+      How to read: replicates should form dark blocks of small distance and
+      conditions should separate. A sample that clusters with the wrong group, or sits
+      far from everything, is an outlier to inspect.
+
+      Note: the diagonal is zero by construction.
+  - component: table
+    title: Sample distance table
+    description: >-
+      Each row is a sample with its distance to every other sample. It answers the
+      exact value behind a cell of the heatmap.
+
+      How to read: sort a column to find the samples nearest or furthest from one
+      sample.

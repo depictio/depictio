@@ -14,25 +14,150 @@ find:
 recipe: last/split_matrix.py
 fixture: split_matrix.tsv
 renders_as:
-  - { id: substitution_spectrum, component: advanced_viz, kind: complex_heatmap,
-      roles: {index: query,
-              value_columns: [A_to_C_pct, A_to_G_pct, A_to_T_pct, C_to_A_pct, C_to_G_pct, C_to_T_pct,
-                              G_to_A_pct, G_to_C_pct, G_to_T_pct, T_to_A_pct, T_to_C_pct, T_to_G_pct]} }
+  - id: substitution_spectrum
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Substitution spectrum by query
+    roles: {index: query,
+            value_columns: [A_to_C_pct, A_to_G_pct, A_to_T_pct, C_to_A_pct, C_to_G_pct, C_to_T_pct,
+                            G_to_A_pct, G_to_C_pct, G_to_T_pct, T_to_A_pct, T_to_C_pct, T_to_G_pct]}
+    description: >-
+      Each cell is the share of one directed substitution (a target base aligned to a
+      different query base) among all substitutions in the one-to-one alignment of a
+      query genome. It answers whether the substitution process looks alike across the
+      queries.
+
+      How to read: transitions (A to G, G to A, C to T, T to C) usually hold the
+      largest shares, and genomes of similar divergence cluster together. A query whose
+      row differs from the rest points to a different mutation process or a lower
+      quality assembly.
+
+      Source: https://raw.githubusercontent.com/nf-core/pairgenomealign/master/docs/output.md
   # The ratio falls as multiple hits saturate the transitions, so distant
-  # genomes sit low and right.
-  - { id: saturation_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: p_distance, y: ts_tv_ratio, label: query, size: blocks} }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: query, y: k80_distance, title: K80 distance to the target} }
-  - { id: k80_median, component: card, column: k80_distance, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: ts_tv_median, component: card, column: ts_tv_ratio, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # genomes sit low and right. Colour is the query's gap columns.
+  - id: saturation_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Transition to transversion ratio against distance
+    roles: {x: p_distance, y: ts_tv_ratio, label: query, size: blocks}
+    config:
+      color_col: query_gap_columns
+      x_title: Substitutions per aligned column (p-distance)
+      y_title: Transitions to transversions ratio
+    description: >-
+      Each point is a query genome: its p-distance to the target on the horizontal
+      axis and its ratio of transitions to transversions on the vertical axis. Size is
+      the number of alignment blocks and colour the number of gap columns on the query
+      side. It answers whether the distant genomes are saturated.
+
+      How to read: the ratio falls as multiple substitutions at one site hide the
+      transitions, so distant genomes sit low and to the right. A point off that trend
+      is a pair whose alignment or assembly deserves a look.
+
+      Lines and annotations: no reference line is drawn, because the expected ratio
+      depends on the species pair and the tool publishes no cut-off.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: query
+      y: k80_distance
+      color: k80_distance
+      labels: {query: Query genome, k80_distance: K80 distance}
+    title: K80 distance to the target
+    reference_lines:
+      - {axis: y, stat: median, column: k80_distance}
+    description: >-
+      Each bar is a query genome with its K80 distance to the target, the p-distance
+      corrected for multiple substitutions with separate rates for transitions and
+      transversions. It answers how diverged each query is.
+
+      How to read: closely related genomes have short bars and distant genomes long
+      ones. The correction matters for distant genomes only, so compare it with the
+      raw p-distance in the table.
+
+      Lines and annotations: the dashed line is the median K80 distance of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      LAST.
+  - id: k80_median
+    component: card
+    column: k80_distance
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: distance, with its spread
+    title: K80 distance
+    description: >-
+      The hero number is the median K80 distance of the queries to the target and the
+      box shows its quartiles. It answers how diverged the queries are on the whole.
+
+      How to read: a wide box means the run mixes close and distant genomes, and a
+      single distant genome pulls the upper whisker out.
+  - id: ts_tv_median
+    component: card
+    column: ts_tv_ratio
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: ratio, with its spread
+    title: Transition to transversion ratio
+    description: >-
+      The hero number is the median ratio of transitions to transversions over the
+      alignments, and the box shows its quartiles. It answers whether the substitution
+      process is similar across queries.
+
+      How to read: a tight box means the queries mutate alike. A ratio that falls
+      with distance is the sign of saturation.
   # Blocks run from thousands to hundreds of thousands, so the spread reads
   # better as a histogram than as one box.
-  - { id: blocks_median, component: card, column: blocks, aggregation: median,
-      secondary_layout: histogram }
-  - { id: query_gap_median, component: card, column: query_gap_columns, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: RangeSlider, column_name: p_distance }
-  - { component: table, row_selection_enabled: true, row_selection_column: query }
+  - id: blocks_median
+    component: card
+    column: blocks
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: blocks across genomes
+    title: Alignment blocks
+    description: >-
+      The hero number is the median number of alignment blocks per genome pair, and
+      the histogram shows the distribution. It answers how fragmented the alignments
+      are.
+
+      How to read: more blocks come with more divergence and more rearrangements, so a
+      pair far above the rest is either distant or fragmented.
+  - id: query_gap_median
+    component: card
+    column: query_gap_columns
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: gap columns, with their spread
+    title: Gap columns on the query
+    description: >-
+      The hero number is the median count of alignment columns where the target has a
+      base and the query a gap, and the box shows its quartiles. It answers how much
+      sequence the target holds that the query lacks.
+
+      How to read: more gap columns come with divergence and with a more fragmented
+      query assembly. Compare it with the target-side gaps in the table.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: p_distance
+    title: Distance range
+    description: >-
+      Select a range of p-distance to keep only the genome pairs inside it. It answers
+      which pairs fall in a given divergence band.
+
+      How to read: narrow the range to a band of related genomes, and every other tile
+      follows.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: query
+    title: Distances and substitutions table
+    description: >-
+      Each row is a genome pair with its alignment blocks, counts of identical and
+      substituted columns, transitions and transversions, gap columns, distances under
+      four models and the substitution spectrum. It answers the exact numbers behind
+      every tile and lets a row selection filter the dashboard.
+
+      How to read: sort by distance to rank the queries by divergence.

@@ -6,7 +6,38 @@ description: >-
   precision / F1).
 find: { path_glob: "**/summary/tables/sompy/sompy.regions.csv" }
 recipe: sompy/regions.py
+# The fixture is enriched synthetically from 5 real rows (copies with seeded noise), so the preview shows several callers.
 fixture: regions.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: af_bin, y: f1, color: caller} } # F1 across AF bins
-  - { component: table }
+  # C3 N/A: som.py defines no accuracy cut-off per allele-fraction bin.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: af_bin
+      y: f1
+      color: caller
+      barmode: group
+      labels: {af_bin: Allele fraction bin, f1: F1 score, caller: Caller}
+    title: F1 across allele fraction bins
+    description: >-
+      Each bar is the F1 score of one caller in one allele fraction bin. It answers whether a caller keeps
+      its accuracy for the low-fraction variants that are hardest to call.
+
+      How to read: a caller that holds its F1 down to the low bins detects subclonal variants, and one that
+      falls off there only finds the clonal ones. A missing bar is a bin with no truth variant or no call, where the ratio divides by zero, so
+      the recipe leaves it undefined rather than zero.
+
+      Lines and annotations: no cut-off is drawn. som.py bins true positives and false negatives by the
+      allele fraction of the truth set and false positives by the fraction observed in the query.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: table
+    title: Allele fraction strata table
+    description: >-
+      Each row is a caller and allele fraction bin with its recall, precision, F1 and the counts of true
+      positives, false positives and false negatives. It answers the exact numbers behind the bars.
+
+      How to read: read the counts beside each ratio, because a high F1 in a bin with a handful of variants
+      means little.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md

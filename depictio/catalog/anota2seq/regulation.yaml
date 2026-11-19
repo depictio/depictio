@@ -15,18 +15,143 @@ renders_as:
   - id: fold_change_plane
     component: advanced_viz
     kind: scatter_xy
+    title: Ribosome-bound against total mRNA change
     roles: { x: total_mrna_lfc, y: translated_mrna_lfc, label: gene_name, color: regulation_mode }
+    config:
+      x_title: Total mRNA log2 fold change
+      y_title: Ribosome-bound mRNA log2 fold change
+      reference_line: diagonal
+      reference_label: no change in translational efficiency
+      legend_pos: bottom
+      top_n_labels: 8
+    description: >-
+      Each point is a gene in one contrast: its change in total mRNA on the horizontal
+      axis and in ribosome-bound mRNA on the vertical axis, coloured by regulatory mode.
+      It answers whether a gene changes by transcript level, by translation or is
+      buffered.
+
+      How to read: genes riding the diagonal change with their mRNA level
+      (mRNA abundance). Genes above or below it change translation beyond their mRNA, and
+      buffered genes lie flat along the horizontal axis, where mRNA moves but
+      ribosome-bound mRNA does not. Open the volcano for the statistics of the
+      translation calls.
+
+      Lines and annotations: the diagonal is y = x, where ribosome-bound and total mRNA
+      change equally, so translational efficiency is unchanged. It is a geometric
+      reference. The modes follow the anota2seq default selection, an adjusted p-value
+      below 0.15 and, for translation and buffering, a change of at least log2(1.2).
+
+      Source: https://www.bioconductor.org/packages/release/bioc/manuals/anota2seq/man/anota2seq.pdf
+      and https://pubmed.ncbi.nlm.nih.gov/30926999/
   - id: translation_volcano
     component: advanced_viz
     kind: volcano
+    title: Translation effect volcano
     roles: { feature_id: gene_name, effect_size: translation_effect, significance: translation_padj, category: regulation_mode }
+    config:
+      significance_threshold: 0.15
+      effect_threshold: 0.263
+      top_n_labels: 10
+      effect_label: Translation effect (log2)
+      significance_label: -log10 adjusted p-value
+    description: >-
+      Each point is a gene in one contrast: its translation effect, the change in
+      ribosome-bound mRNA not explained by total mRNA, against its adjusted p-value.
+      Points are coloured by regulatory mode. It answers which genes change their
+      translational efficiency and how confidently.
+
+      How to read: genes in the upper corners are translationally up- or down-regulated
+      with confidence. Compare with the fold-change plane to separate them from genes
+      that follow their mRNA level.
+
+      Lines and annotations: the horizontal line is an adjusted p-value of 0.15, the
+      anota2seq default maxPAdj. The vertical lines mark an absolute effect of log2(1.2),
+      about 0.263, the default deltaPT for the translation analysis.
+
+      Source: https://www.bioconductor.org/packages/release/bioc/manuals/anota2seq/man/anota2seq.pdf
   - id: gene_record
     component: advanced_viz
     kind: record_card
+    title: Gene record
     roles: { id: gene_id, title: gene_name }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: regulation_mode }
-  - { component: card, column: translation_effect, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: total_mrna_lfc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: translated_mrna_lfc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: regulation_mode }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    description: >-
+      One gene at a time: its fold changes, effects, adjusted p-values and regulatory
+      mode across the four anota2seq analyses. Select a row in the table to open it.
+
+      How to read: compare the total and ribosome-bound changes with the translation and
+      buffering effects to see why the gene got its mode.
+  - component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: regulation_mode
+    headline: true
+    title: Genes by regulatory mode
+    caption: gene calls, by regulatory mode
+    description: >-
+      The hero number is the count of distinct genes, the second figure the count of
+      gene and contrast rows, and the ring splits the rows by regulatory mode. It
+      answers how much of the transcriptome is translationally regulated.
+
+      How to read: a ring mostly in not regulated means a weak response. Translation and
+      buffering slices are the ones that need ribosome-bound data to detect.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30926999/
+  - component: card
+    column: translation_effect
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Translation effect spread
+    caption: effect, quartiles over genes
+    description: >-
+      The hero number is the range of translation effects and the box shows their
+      quartiles. It answers how large the translational changes are.
+
+      How to read: a box tight around zero with a long range means few genes change.
+      The effect is a log2 change, so a median would cancel the two directions.
+  - component: card
+    column: total_mrna_lfc
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Total mRNA change spread
+    caption: log2 fold change, quartiles over genes
+    description: >-
+      The hero number is the range of total mRNA log2 fold changes and the box shows
+      their quartiles. It answers how much transcript levels move.
+
+      How to read: compare it with the ribosome-bound card; a wider ribosome-bound range
+      means translation amplifies the changes.
+  - component: card
+    column: translated_mrna_lfc
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Ribosome-bound change spread
+    caption: log2 fold change, quartiles over genes
+    description: >-
+      The hero number is the range of ribosome-bound mRNA log2 fold changes and the box
+      shows their quartiles. It answers how much translation moves.
+
+      How to read: compare it with the total mRNA card; a narrower range means
+      buffering holds ribosome-bound levels steady.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: regulation_mode
+    title: Regulatory mode
+    description: >-
+      Filters the tiles to genes in one or more regulatory modes: translation,
+      buffering, mRNA abundance or not regulated.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Regulation table
+    description: >-
+      Each row is a gene in one contrast with the four anota2seq analyses side by side
+      and one regulatory mode. It answers which genes to follow up and lets a row
+      selection filter the rest of the dashboard.
+
+      How to read: sort by translation adjusted p-value, or filter by mode. The mode is
+      assigned by priority: translation, then mRNA abundance, then buffering.

@@ -14,19 +14,171 @@ find:
 recipe: prokka/summary.py
 fixture: summary.tsv
 renders_as:
-  - { id: density_vs_size, component: advanced_viz, kind: scatter_xy,
-      roles: {x: bases, y: cds_per_mbp, label: bin_id, color: binner, size: cds} }
-  - { id: trna_vs_rrna, component: advanced_viz, kind: scatter_xy,
-      roles: {x: trna, y: rrna, label: bin_id, color: assembler, size: bases} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: cds_per_mbp, color: assembler, title: Gene density per assembler} }
-  - { component: card, column: cds, aggregation: sum,
-      secondary_layout: composition, breakdown_col: binner }
-  - { component: card, column: cds_per_mbp, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: trna, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: rrna, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: card, column: bin_id, aggregation: nunique,
-      secondary_layout: top_n, breakdown_col: assembler, top_n_count: 4 }
-  - { component: table }
+  - id: density_vs_size
+    component: advanced_viz
+    kind: scatter_xy
+    title: Coding density against bin size
+    roles: {x: bases, y: cds_per_mbp, label: bin_id, color: binner, size: cds}
+    config:
+      x_title: Bin size (bp)
+      y_title: Coding sequences per Mbp
+      log_x: true
+      legend_pos: bottom
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a bin: its size in base pairs and its number of coding sequences per
+      megabase, sized by total coding sequences and coloured by the binner that produced
+      it. It answers which bins annotate as plausible genomes.
+
+      How to read: bins of similar density cluster together, and outliers are worth a
+      look. Very low density in a large bin suggests missed genes or non-coding content;
+      compare binners by their colour groups.
+
+      Lines and annotations: the dashed line is the median coding density of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      Prokka. Prokka and MIMAG publish no density cut-off.
+
+      Source: https://raw.githubusercontent.com/tseemann/prokka/master/README.md
+  - id: trna_vs_rrna
+    component: advanced_viz
+    kind: scatter_xy
+    title: tRNAs against rRNAs per bin
+    roles: {x: trna, y: rrna, label: bin_id, color: assembler, size: bases}
+    config:
+      x_title: Transfer RNAs
+      y_title: Ribosomal RNAs
+      reference_line: vertical
+      reference_value: 18
+      reference_label: MIMAG, at least 18 tRNAs
+      legend_pos: bottom
+      top_n_labels: 5
+    description: >-
+      Each point is a bin: its count of transfer RNAs and of ribosomal RNAs, sized by
+      bin size and coloured by the assembler. It answers which bins carry the RNA genes
+      of a high-quality draft.
+
+      How to read: the MIMAG high-quality draft needs the 5S, 16S and 23S rRNA genes
+      and at least 18 tRNAs, so look right of the line and at three or more rRNAs.
+      Completeness alone cannot say this.
+
+      Lines and annotations: the vertical line is the MIMAG minimum of 18 tRNAs. The
+      rRNA requirement is one gene each of 5S, 16S and 23S, so a bin needs at least
+      three rRNA features; the plot cannot tell which rRNA genes they are.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: cds_per_mbp
+      color: assembler
+      barmode: overlay
+      opacity: 0.6
+      labels: {cds_per_mbp: Coding sequences per Mbp, assembler: Assembler}
+    title: Gene density per assembler
+    reference_lines:
+      - {axis: x, stat: median, column: cds_per_mbp}
+    description: >-
+      Each bar counts bins in a coding density bin, one overlaid histogram per
+      assembler. It answers whether an assembler yields bins with systematically fewer
+      annotated genes.
+
+      How to read: histograms centred on the same value mean comparable annotation. A
+      shifted one points to fragmented genes from that assembler.
+
+      Lines and annotations: the dashed line is the median coding density of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      Prokka.
+  - component: card
+    column: cds
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: binner
+    title: Coding sequences
+    caption: coding sequences, by binner
+    description: >-
+      The hero number is the total of coding sequences over the bins in view and the
+      bar splits it by binner. It answers which binner contributes most of the
+      annotated genes.
+
+      How to read: a large share is partly a matter of how many bins the binner
+      produced, so read it with the bin count card.
+  - component: card
+    column: cds_per_mbp
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Coding density
+    caption: density, quartiles over bins
+    description: >-
+      The hero number is the median count of coding sequences per megabase and the box
+      shows the spread. It answers how gene-dense the bins are.
+
+      How to read: a box far from the others, or a very low median, signals bins with
+      missed genes or large non-coding content. Prokka and MIMAG publish no density
+      cut-off.
+  - component: card
+    column: trna
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 18
+    threshold_direction: min
+    title: Transfer RNAs
+    caption: median against the MIMAG minimum of 18
+    description: >-
+      The hero number is the median count of tRNAs per bin, compared with the MIMAG
+      minimum of 18 for a high-quality draft. It answers whether bins carry enough tRNA
+      genes.
+
+      How to read: below 18 a bin cannot reach the high-quality tier. Open the scatter
+      to see which bins fall short.
+
+      Lines and annotations: the threshold is the MIMAG minimum of 18 tRNAs.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: rrna
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: histogram
+    title: Ribosomal RNAs
+    caption: rRNAs, distribution over bins
+    description: >-
+      The hero number is the largest count of rRNA features in a bin and the histogram
+      shows the distribution over bins. It answers how many bins have any rRNA at all.
+
+      How to read: a bin with no rRNA feature cannot reach the high-quality tier. That
+      tier needs the 5S, 16S and 23S genes, so a bin needs at least three rRNA
+      features.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: assembler
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    title: Annotated bins
+    caption: bins, by assembler
+    description: >-
+      The hero number is the count of annotated bins and the second figure the number
+      of assemblers; the bars rank assemblers by bins. It answers how the bins are
+      spread over assemblers.
+
+      How to read: an assembler with few bins may simply have produced few usable
+      ones, so compare with the density and RNA tiles.
+  - component: table
+    title: Bin annotation table
+    description: >-
+      Each row is a bin with its assembler, binner, contigs, bases, coding sequences,
+      tRNAs, rRNAs, tmRNAs and whether it meets the MIMAG RNA criteria. It answers
+      which bins pass the annotation half of the high-quality standard.
+
+      How to read: sort by tRNA or rRNA count, and check the MIMAG column. It is empty
+      when the GFF, which names the rRNA genes, was not provided.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/

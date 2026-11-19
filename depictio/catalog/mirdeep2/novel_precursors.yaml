@@ -12,10 +12,100 @@ find:
 recipe: mirdeep2/novel_precursors.py
 fixture: novel_precursors.tsv
 renders_as:
-  - { id: novel_support, component: advanced_viz, kind: scatter_xy,
-      roles: {x: samples_detected, y: max_score, label: precursor_id, color: star_support, size: total_reads} }
-  - { component: card, column: precursor_id, aggregation: nunique, secondary_layout: donut, breakdown_col: star_support }
-  - { component: card, column: samples_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: max_score, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: RangeSlider, column_name: samples_detected }
-  - { component: table, row_selection_enabled: true, row_selection_column: precursor_id }
+  # miRDeep2 documents a score cut-off only as the `-b` display filter (default 0)
+  # and surveys cut-offs from -10 to 10; it publishes no recommended value, so no
+  # threshold line is drawn (RULES section 17).
+  - id: novel_support
+    component: advanced_viz
+    kind: scatter_xy
+    title: Novel precursors by support
+    roles: {x: samples_detected, y: max_score, label: precursor_id, color: star_support, size: total_reads}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: Samples reporting the precursor
+      y_title: Best miRDeep2 score
+      legend_pos: bottom
+      top_n_labels: 6
+    description: >-
+      Each point is a novel miRNA precursor merged across samples: the number of
+      samples that report it and its best miRDeep2 score, sized by its total reads and
+      coloured by whether star-arm reads were seen. It answers which candidates are
+      best supported.
+
+      How to read: candidates in the upper right are detected in many samples with a
+      high score. A star-arm read pair is the signature of Dicer processing, so a
+      candidate with star support is stronger than one without. Open the table to read
+      the sequences of the labelled candidates.
+
+      Lines and annotations: the dashed line is the median best miRDeep2 score of this
+      table, a reference computed from the rows on show (it follows the filters), not a
+      cut-off of miRDeep2. The README sets a score cut-off of 0 only for which novel
+      candidates its overview table lists.
+
+      Source: https://raw.githubusercontent.com/rajewsky-lab/mirdeep2/master/README.md
+      and https://pubmed.ncbi.nlm.nih.gov/21911355/
+  - component: card
+    column: star_support
+    aggregation: count
+    aggregations: [mode]
+    secondary_layout: donut
+    breakdown_col: star_support
+    headline: true
+    title: Novel precursors
+    caption: precursors, by star-arm support
+    description: >-
+      The hero number is the count of novel precursors and the ring splits them by
+      whether star-arm reads support them. It answers how many candidates carry the
+      Dicer signature.
+
+      How to read: a large share without star support means many candidates rest on
+      mature-arm reads alone and need validation, for instance in more samples.
+  - component: card
+    column: samples_detected
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Samples per precursor
+    caption: samples, quartiles over precursors
+    description: >-
+      The hero number is the median count of samples that report a precursor and the
+      box shows the spread. It answers how reproducible the candidates are.
+
+      How to read: miRDeep2 flags candidates found in multiple independent samples as
+      high confidence, so a box near 1 means most calls are one-off.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/21911355/
+  - component: card
+    column: max_score
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Best score per precursor
+    caption: score, quartiles over precursors
+    description: >-
+      The hero number is the median of the best miRDeep2 score of each precursor and
+      the box shows the spread. It answers how confident the discovery is overall.
+
+      How to read: higher scores are more probable genuine miRNAs. Scores can be
+      negative, so compare the box with the score-cutoff survey tile rather than with
+      zero.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: samples_detected
+    title: Samples per precursor
+    description: >-
+      Restricts the tiles to precursors reported by a chosen range of samples. Raise
+      the lower bound to keep only reproducible candidates.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: precursor_id
+    title: Novel precursor table
+    description: >-
+      Each row is a novel precursor merged across samples, with its locus, best score,
+      reads per arm, randfold share and the mature, star and precursor sequences. It
+      answers which candidates to validate and lets a row selection filter the rest of
+      the dashboard.
+
+      How to read: sort by score or samples detected, and check the randfold share and
+      any Rfam hit, since a hit to a known non-miRNA family argues against a call.

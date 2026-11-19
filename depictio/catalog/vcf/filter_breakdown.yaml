@@ -14,8 +14,52 @@ find:
 recipe: vcf/filter_breakdown.py
 fixture: filter_breakdown.tsv
 renders_as:
-  - { id: filter_bars, component: figure, visu_type: bar,
-      dict_kwargs: {x: sample, y: calls_pct, color: filter_label} }
-  - { id: calls_by_filter, component: card, column: calls, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: filter_label, top_n_count: 4 }
-  - { component: table }
+  - id: filter_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: calls_pct
+      color: filter_label
+      labels: {sample: Sample, calls_pct: Share of calls (%), filter_label: FILTER value}
+    title: FILTER values per callset
+    description: >-
+      Each bar is a callset, split into segments by FILTER value and sized by the
+      share of its calls. It answers which filters removed the calls the caller
+      did not keep.
+
+      How to read: a large PASS segment means most calls were kept. A large segment of
+      one hard filter points to what limits the callset, for example low quality or
+      clustered SNPs, and the same filter dominating every callset points to the data
+      or the caller settings rather than to one sample.
+
+      Source: https://samtools.github.io/hts-specs/VCFv4.3.pdf
+  - id: calls_by_filter
+    component: card
+    column: calls
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: filter_label
+    top_n_count: 4
+    title: Calls by FILTER value
+    caption: the largest FILTER values, with the median and largest per callset
+    description: >-
+      The hero number is the total count of calls over the callsets in view, and the
+      bars rank the FILTER values that hold the most of them. It answers which filters
+      account for most of the calls.
+
+      How to read: PASS at the top is the usual picture. When a hard filter outranks
+      PASS, the caller's filters are removing more than they keep, so check the
+      filter definitions in the VCF header.
+
+      Source: https://samtools.github.io/hts-specs/VCFv4.3.pdf
+  - component: table
+    title: FILTER table
+    description: >-
+      Each row is a callset and a FILTER value, with the number of calls, their share
+      of the callset and how many are SNVs and indels. It answers how many calls each
+      filter removed in each callset.
+
+      How to read: sort by share of calls to see the dominant filters, and filter on
+      a FILTER value to compare it across callsets.

@@ -12,4 +12,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: quast }
+  - component: multiqc
+    section: quast
+    title: Assembly quality
+    description: >-
+      QUAST's assembly metrics per assembly: contig counts and lengths. They answer
+      how contiguous and complete an assembly is.
+
+      How to read: Fewer, longer contigs and a high N50 are better. Many short
+      contigs mean a fragmented assembly, and a total length far from the expected
+      genome size points to contamination or missing sequence.
+
+      Source: https://docs.seqera.io/multiqc/modules/quast

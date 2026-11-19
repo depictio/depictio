@@ -14,8 +14,50 @@ find:
 recipe: vcf/substitution_spectrum.py
 fixture: substitution_spectrum.tsv
 renders_as:
-  - { id: spectrum_bars, component: figure, visu_type: bar,
-      dict_kwargs: {x: substitution_class, y: fraction, color: sample, barmode: group} }
-  - { id: transition_share, component: card, column: count, aggregation: sum,
-      secondary_layout: composition, breakdown_col: mutation_class }
-  - { component: table }
+  - id: spectrum_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: substitution_class
+      y: fraction
+      color: sample
+      barmode: group
+      labels: {substitution_class: Substitution, fraction: Share of PASS SNVs, sample: Sample}
+    title: Substitution spectrum per callset
+    description: >-
+      Each bar is the share of a callset's PASS SNVs in one of the six pyrimidine
+      substitution classes. It answers whether the pattern of base changes looks like
+      genetic variation or carries a signature of its own.
+
+      How to read: the classes are folded so that, for example, a G to A change counts
+      with C to T. In an RNA callset, an excess of T to C comes from adenosine-to-inosine
+      editing, which is read as A to G, and a DNA callset of the same individual would
+      not show it. Compare callsets of the same data type, and open the Ts/Tv card for
+      the transition share.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/25859542/
+  - id: transition_share
+    component: card
+    column: count
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: mutation_class
+    title: Transitions and transversions
+    caption: split by mutation class, with the median and largest class count
+    description: >-
+      The hero number is the total count of PASS SNVs over the callsets in view, and the
+      bar splits them into transitions and transversions. It answers how the base changes
+      divide between the two kinds.
+
+      How to read: a callset with a very different split from the others points to a
+      sample, caller or data type difference. Open the spectrum for the class behind it.
+  - component: table
+    title: Substitution table
+    description: >-
+      Each row is a callset and a substitution class, with its SNV count, its
+      share of the callset and whether the class is a transition or a transversion.
+      It answers how many SNVs fall in each class.
+
+      How to read: filter on a class to compare it across callsets, or sort by share to
+      find the dominant class.

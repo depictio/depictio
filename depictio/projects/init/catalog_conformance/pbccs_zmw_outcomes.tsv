@@ -8,6 +8,90 @@ sample	library	rank	outcome	zmws	pct_of_input
 30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Coverage drops	81	0.014489487072157645
 30dpf_Muscle	30dpf_Muscle_0	CCS outcome	CCS below minimum RQ	57	0.01019630571744427
 30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Draft below --min-length	17	0.0030410034595886415
-30dpf_Muscle	30dpf_Muscle_0	CCS outcome	CCS did not converge	5	0.0008944127822319534
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	CCS did not converge	5	0.0008944127822319535
 30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Draft too different	3	0.0005366476693391721
-30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Empty coverage windows	2	0.00035776511289278135
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Empty coverage windows	2	0.0003577651128927814
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Passed	484962	75.82341297760767
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Lacking full passes	137511	21.499732642895335
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Below SNR threshold	11274	1.7626807005694238
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Draft generation error	3810	0.5956903910918488
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Insufficient draft cov	992	0.15509839054149976
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Heteroduplex insertions	840	0.13133331457143124
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Coverage drops	86	0.013446029825170343
+30dpf_Liver	30dpf_Liver_0	CCS outcome	CCS below minimum RQ	80	0.01250793472108869
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Draft below --min-length	28	0.004377777152381042
+30dpf_Liver	30dpf_Liver_0	CCS outcome	CCS did not converge	6	0.0009380951040816518
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Draft too different	3	0.0004690475520408259
+30dpf_Liver	30dpf_Liver_0	CCS outcome	Empty coverage windows	2	0.0003126983680272173
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Passed	597592	81.57974130575748
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Lacking full passes	118372	16.159448482986928
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Below SNR threshold	11576	1.580287362206068
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Draft generation error	2832	0.38660796559844374
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Insufficient draft cov	976	0.1332377734548309
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Heteroduplex insertions	956	0.13050749121190403
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Coverage drops	98	0.013378382990341626
+30dpf_Brain	30dpf_Brain_0	CCS outcome	CCS below minimum RQ	87	0.011876727756731853
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Draft below --min-length	23	0.003139824579365892
+30dpf_Brain	30dpf_Brain_0	CCS outcome	CCS did not converge	6	0.0008190846728780587
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Draft too different	4	0.0005460564485853725
+30dpf_Brain	30dpf_Brain_0	CCS outcome	Empty coverage windows	3	0.00040954233643902935
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Passed	297511	79.27158105652454
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Lacking full passes	69352	18.47878797567851
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Below SNR threshold	5830	1.5533990930067731
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Draft generation error	1417	0.3775585788663118
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Insufficient draft cov	562	0.14974447517492392
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Heteroduplex insertions	530	0.1412180993642521
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Coverage drops	54	0.014388259180508706
+30dpf_Heart	30dpf_Heart_0	CCS outcome	CCS below minimum RQ	33	0.008792825054755319
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Draft below --min-length	11	0.00293094168491844
+30dpf_Heart	30dpf_Heart_0	CCS outcome	CCS did not converge	3	0.0007993477322504836
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Draft too different	2	0.0005328984881669891
+30dpf_Heart	30dpf_Heart_0	CCS outcome	Empty coverage windows	1	0.00026644924408349456
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Passed	519178	76.18601798195348
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Lacking full passes	150791	22.12760524813599
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Below SNR threshold	6724	0.9867035677757054
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Draft generation error	3006	0.44111108339288674
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Insufficient draft cov	735	0.10785650242640445
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Heteroduplex insertions	861	0.1263461885566452
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Coverage drops	92	0.013500405745890079
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	CCS below minimum RQ	45	0.006603459332228843
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Draft below --min-length	18	0.0026413837328915376
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	CCS did not converge	5	0.0007337177035809827
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Draft too different	4	0.0005869741628647861
+60dpf_Muscle	60dpf_Muscle_0	CCS outcome	Empty coverage windows	2	0.00029348708143239305
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Passed	333634	76.47262416939618
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Lacking full passes	91949	21.07573364750538
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Below SNR threshold	6098	1.3977294346049203
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Draft generation error	2736	0.6271216354672124
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Insufficient draft cov	731	0.16755333169829398
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Heteroduplex insertions	976	0.223710057096491
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Coverage drops	76	0.01742004542964479
+60dpf_Liver	60dpf_Liver_0	CCS outcome	CCS below minimum RQ	55	0.012606611824085047
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Draft below --min-length	16	0.0036673779851883774
+60dpf_Liver	60dpf_Liver_0	CCS outcome	CCS did not converge	4	0.0009168444962970943
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Draft too different	2	0.00045842224814854717
+60dpf_Liver	60dpf_Liver_0	CCS outcome	Empty coverage windows	2	0.00045842224814854717
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Passed	487032	76.85432407354807
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Lacking full passes	131376	20.731314738018142
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Below SNR threshold	10697	1.6880014139004085
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Draft generation error	2667	0.4208562934348312
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Insufficient draft cov	868	0.1369716020627797
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Heteroduplex insertions	889	0.1402854311449437
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Coverage drops	93	0.014675528792440683
+60dpf_Brain	60dpf_Brain_0	CCS outcome	CCS below minimum RQ	55	0.008679076167572446
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Draft below --min-length	22	0.0034716304670289787
+60dpf_Brain	60dpf_Brain_0	CCS outcome	CCS did not converge	4	0.0006312055394598143
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Draft too different	3	0.00047340415459486075
+60dpf_Brain	60dpf_Brain_0	CCS outcome	Empty coverage windows	2	0.00031560276972990715
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Passed	515282	79.27330013369087
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Lacking full passes	121079	18.627337859438438
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Below SNR threshold	8543	1.314293538377279
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Draft generation error	3359	0.5167636656220626
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Insufficient draft cov	806	0.12399866462976554
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Heteroduplex insertions	740	0.11384492782385419
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Coverage drops	111	0.01707673917357813
+60dpf_Heart	60dpf_Heart_0	CCS outcome	CCS below minimum RQ	56	0.008615291835318697
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Draft below --min-length	20	0.0030768899411852484
+60dpf_Heart	60dpf_Heart_0	CCS outcome	CCS did not converge	6	0.0009230669823555747
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Draft too different	3	0.0004615334911777873
+60dpf_Heart	60dpf_Heart_0	CCS outcome	Empty coverage windows	2	0.0003076889941185249

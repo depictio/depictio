@@ -13,6 +13,47 @@ renders_as:
   - id: region_composition
     component: advanced_viz
     kind: stacked_taxonomy
+    title: P-sites per transcript region
     roles: { sample_id: sample, taxon: region, rank: scope, abundance: pct }
-  - { component: card, column: enrichment, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+    config:
+      rank_label: Scope
+      value_title: Share of P-sites (%)
+    description: >-
+      Each bar is a library: the share of its P-sites in the 5' UTR, CDS and 3' UTR. It
+      answers whether the footprints accumulate on coding sequence.
+
+      How to read: ribosome profiling data should define the CDS as the region with the
+      highest share of reads. A library whose shares follow the length of each region
+      behaves like fragmented RNA, not like translating ribosomes.
+
+      Lines and annotations: where the scope also holds the share expected from random
+      RNA fragmentation, it is the cumulative length of each region as a percentage, as
+      defined by riboWaltz.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: region_enrichment_card
+    component: card
+    column: enrichment
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('region') == 'CDS'"
+    caption: median, with its spread
+    title: CDS enrichment over length
+    description: >-
+      The hero number is the median ratio of the CDS share of P-sites to the share its
+      length alone would give, and the box shows the spread across libraries. It answers
+      how strongly footprints favour coding sequence.
+
+      How to read: a ratio of one means the footprints follow length, as fragmented RNA
+      would, and higher values mean the CDS is enriched. Libraries far below their peers
+      deserve a look.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - component: table
+    title: P-site region table
+    description: >-
+      Each row is a library and region with its P-site count, share, expected share and
+      enrichment. It answers the exact numbers behind the bars.
+
+      How to read: sort by enrichment to find the libraries that favour the CDS least.

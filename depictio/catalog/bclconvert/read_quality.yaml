@@ -9,8 +9,65 @@ find:
 recipe: bclconvert/read_quality.py
 fixture: read_quality.tsv
 renders_as:
-  - { id: lane_read_dots, component: advanced_viz, kind: dot_plot,
-      roles: {cluster: lane_label, gene: read_label, mean_expression: mean_quality, frac_expressing: frac_q30} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: lane_label, y: pct_q30, color: read_label, barmode: group, title: Bases at Q30 or above per lane and read} }
-  - { component: card, column: pct_q30, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: lane_read_dots
+    component: advanced_viz
+    kind: dot_plot
+    title: Base quality per lane and read
+    roles: {cluster: lane_label, gene: read_label, mean_expression: mean_quality, frac_expressing: frac_q30}
+    description: >-
+      Each dot is one read of one lane: the dot size is the fraction of its bases at
+      Q30 or above and the colour is its mean base quality. It answers which lane and
+      read have the weakest quality.
+
+      How to read: large dots in a bright colour mean high-quality bases. A small or
+      dim dot marks a read or lane to inspect, ideally compared with the same read
+      in the other lanes.
+
+      Note: BCL Convert publishes no Q30 cut-off, since the expected value depends
+      on the instrument and read length, so none is drawn.
+  - component: figure
+    visu_type: bar
+    title: Bases at Q30 or above per lane and read
+    dict_kwargs:
+      x: lane_label
+      y: pct_q30
+      color: read_label
+      barmode: group
+      labels: {lane_label: Lane, pct_q30: Bases at Q30 or above (%), read_label: Read}
+    reference_lines:
+      - {axis: y, stat: median, column: pct_q30}
+    description: >-
+      Each bar is one read of one lane: the percentage of its bases with a quality
+      score of 30 or higher, coloured by read. It answers how quality compares
+      between lanes and between reads.
+
+      How to read: bars should be close in height across lanes. A lower bar for one
+      lane points at a lane problem, and a lower bar for one read only points at that read.
+
+      Lines and annotations: the dashed line is the median share of bases at Q30 or above
+      of this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of BCL Convert.
+  - component: card
+    column: pct_q30
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: lowest read, with the spread
+    title: Lowest Q30 across reads
+    description: >-
+      The hero number is the lowest share of bases at Q30 or above of any read and
+      lane, and the box shows the spread. It answers whether every read reached good
+      quality.
+
+      How to read: a box that is tight and near the top means uniform quality. The
+      hero value is the weakest read, which is where to look first.
+  - component: table
+    title: Base quality metrics
+    description: >-
+      One row is one read of one lane, with its yield and the share of bases at
+      Q30 or above. It answers which read is the weakest.
+
+      How to read: Sort by the Q30 share, lowest first, to find the weakest
+      reads. Look for the second index read or read 2 trailing read 1, which is
+      common as cycles accumulate. It complements the lane summary, which gives
+      the quality of the lane as a whole.

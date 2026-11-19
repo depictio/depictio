@@ -3,10 +3,13 @@ process DEPICTIO_INGEST {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container "ghcr.io/depictio/depictio-cli:1.21.0"
-    // The image's ENTRYPOINT is the CLI itself, so `docker run <image> /bin/bash
-    // .command.run` would hand bash to the CLI as a subcommand. Singularity and
-    // Apptainer `exec` ignore the entrypoint already.
+    // The all-in-one image: the CLI, the server and MongoDB, Redis and SeaweedFS
+    // preinstalled (DEPICTIO_SERVICES_PREFIX), so the artifact's stack starts with
+    // no download, and the same image reopens the artifact.
+    container "ghcr.io/depictio/depictio-allinone:1.22.2"
+    // The image's ENTRYPOINT serves a home, and execs any other command; cleared
+    // anyway, so `docker run <image> /bin/bash .command.run` is plain bash.
+    // Singularity and Apptainer `exec` ignore the entrypoint already.
     containerOptions "${workflow.containerEngine in ['docker', 'podman'] ? '--entrypoint ""' : ''}"
 
     input:
@@ -42,7 +45,7 @@ process DEPICTIO_INGEST {
     // Options of `depictio local up`, e.g. '--port 8123' for the API port.
     def args2 = task.ext.args2 ?: ''
     prefix = task.ext.prefix ?: "${meta.id}"
-    // Single-quoted for the shell. Staged paths need none: Nextflow escapes them.
+    // Single-quoted for the shell, staged paths too: a file name may hold a space.
     def quote = { value -> "'" + value.toString().replace("'", "'\\''") + "'" }
     def inputs = files instanceof List ? files : [files]
     def rels = relpaths ? (relpaths instanceof List ? relpaths : [relpaths]) : []
@@ -57,18 +60,18 @@ process DEPICTIO_INGEST {
         // One directory is the data root itself; anything else is laid out flat.
         rels = inputs.size() == 1 ? ['.'] : inputs.collect { f -> f.name }
     }
-    def layout = [inputs, rels].transpose().collect { f, r -> "stage_into ${f} ${quote.call(r)}" }.join('\n    ')
+    def layout = [inputs, rels].transpose().collect { f, r -> "stage_into ${quote.call(f)} ${quote.call(r)}" }.join('\n    ')
 
     def project_args = ''
     if (project_config) {
-        project_args = "--project-config-path ${project_config}"
+        project_args = "--project-config-path ${quote.call(project_config)}"
     } else if (template) {
         project_args = "--template ${quote.call(template)}"
     }
     def dashboard_list = dashboards instanceof List ? dashboards : (dashboards ? [dashboards] : [])
-    def dashboard_args = dashboard_list.collect { d -> "--dashboard ${d}" }.join(' ')
+    def dashboard_args = dashboard_list.collect { d -> "--dashboard ${quote.call(d)}" }.join(' ')
     def artifact = !cli_config
-    def server_args = artifact ? '--server local' : "--server ${cli_config}"
+    def server_args = artifact ? '--server local' : "--server ${quote.call(cli_config)}"
     def artifact_dir = quote.call("${prefix}_depictio")
     // The stack's home is in the work directory, so it never touches
     // ~/.depictio/local, and its ports are picked free, so it runs beside any other
@@ -94,6 +97,13 @@ process DEPICTIO_INGEST {
     """
     def result_json = quote.call("${prefix}.depictio.json")
     """
+    # A container run as the host's uid (docker -u) can have HOME=/, which it
+    # cannot write: the CLI keeps its state there.
+    if [ "\${HOME:-/}" = / ] || [ ! -w "\$HOME" ]; then
+        export HOME="\$PWD/.home"
+        mkdir -p "\$HOME"
+    fi
+
     # Rebuild the published layout the template's scan patterns expect. The
     # scan does not descend into symlinked directories, so directories are
     # recreated for real with their files linked (-L also unfolds the symlinked
@@ -119,6 +129,12 @@ process DEPICTIO_INGEST {
     }
     mkdir -p data_root
     ${layout}
+    # An earlier run's artifact published into the same results directory
+    # (<outdir>/depictio/) is a whole stack, MongoDB files and admin keys
+    # included: never data to ingest.
+    find data_root -name .depictio-local-home -exec dirname {} \\; | while read -r stale; do
+        rm -rf "\$stale"
+    done
 
     ${start_stack}
     # Expanded in a project YAML's locations ({DEPICTIO_DATA_ROOT}).

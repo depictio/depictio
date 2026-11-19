@@ -290,3 +290,94 @@ def test_a_run_lists_the_recipe_collections_it_fed():
     run = {"workflow_id": WF, "run_tag": "run_b", "scan_results": [_scan("t", 3, 1)]}
     (row,) = build_project_runs(_project(), [run], outputs=outputs).runs
     assert row.dc_outputs == {"alpha": "run", "bray": "aggregate"}
+
+
+# ── two workflows sharing a run tag (#1401) ──────────────────────────────────
+
+WF2 = ObjectId()
+VARIANTS_DC = ObjectId()
+
+
+def _two_workflows():
+    project = _project_with_ids()
+    project["workflows"].append(
+        {
+            "_id": WF2,
+            "name": "nf-core/sarek",
+            "data_collections": [
+                {
+                    "_id": VARIANTS_DC,
+                    "data_collection_tag": "variants",
+                    "config": {"scan": {"mode": "recursive"}},
+                }
+            ],
+        }
+    )
+    return project
+
+
+def _shared_tag_runs():
+    counts = _file(COUNTS_DC, "counts.tsv")
+    vcf = _file(VARIANTS_DC, "calls.vcf")
+    rnaseq = {
+        "_id": ObjectId(),
+        "workflow_id": WF,
+        "run_tag": "run_01",
+        "scan_results": [_scan_ids("2026-01-02 10:00:00", new=[counts])],
+    }
+    sarek = {
+        "_id": ObjectId(),
+        "workflow_id": WF2,
+        "run_tag": "run_01",
+        "scan_results": [_scan_ids("2026-01-05 10:00:00", new=[vcf])],
+    }
+    return [rnaseq, sarek], counts, vcf
+
+
+def test_each_run_row_names_its_workflow_id():
+    runs, _, _ = _shared_tag_runs()
+    rows = build_project_runs(_two_workflows(), runs).runs
+    assert sorted((r.workflow, r.workflow_id) for r in rows) == [
+        ("nf-core/rnaseq", str(WF)),
+        ("nf-core/sarek", str(WF2)),
+    ]
+
+
+def test_two_workflows_sharing_a_run_tag_keep_their_scans_apart():
+    runs, counts, vcf = _shared_tag_runs()
+    project = _two_workflows()
+
+    sarek = build_run_files(project, runs, [vcf], "run_01", workflow_id=str(WF2))
+    assert [s.scan_time for s in sarek.scans] == ["2026-01-05 10:00:00"]
+    assert [(f.filename, f.dc_tag, f.added_in) for f in sarek.files] == [
+        ("calls.vcf", "variants", 0)
+    ]
+
+    rnaseq = build_run_files(project, runs, [counts], "run_01", workflow_id=str(WF))
+    assert [s.scan_time for s in rnaseq.scans] == ["2026-01-02 10:00:00"]
+
+    # Without a workflow, both runs' scans are read together, as before.
+    both = build_run_files(project, runs, [counts, vcf], "run_01")
+    assert len(both.scans) == 2
+
+
+def test_the_files_query_reads_only_the_named_workflows_run(monkeypatch):
+    import mongomock
+
+    from depictio.api.v1.endpoints.projects_endpoints import project_runs as module
+
+    db = mongomock.MongoClient().db
+    runs, counts, vcf = _shared_tag_runs()
+    db.runs.insert_many(runs)
+    counts["run_id"], vcf["run_id"] = runs[0]["_id"], runs[1]["_id"]
+    db.files.insert_many([counts, vcf])
+    monkeypatch.setattr(module, "runs_collection", db.runs)
+    monkeypatch.setattr("depictio.api.v1.db.files_collection", db.files)
+    monkeypatch.setattr(module, "_report_changes", lambda project, locations: {})
+
+    report = module.run_files(_two_workflows(), "run_01", workflow_id=str(WF2))
+    assert [f.filename for f in report.files] == ["calls.vcf"]
+    assert len(report.scans) == 1
+
+    both = module.run_files(_two_workflows(), "run_01")
+    assert sorted(f.filename for f in both.files) == ["calls.vcf", "counts.tsv"]

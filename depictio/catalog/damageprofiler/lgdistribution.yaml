@@ -11,10 +11,91 @@ find:
 recipe: damageprofiler/lgdistribution.py
 fixture: lgdistribution.tsv
 renders_as:
-  - { id: fragment_length_profile, component: advanced_viz, kind: profile,
-      roles: {series: series, x: length, y: fraction} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: length, y: occurrences, color: series, title: Fragment length distribution} }
-  - { component: card, column: occurrences, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: occurrences, aggregation: max, secondary_layout: donut, breakdown_col: strand }
-  - { component: table, page_size: 25 }
+  # DamageProfiler defines no length cut-off, so no reference line is drawn (C3).
+  - id: fragment_length_profile
+    component: advanced_viz
+    kind: profile
+    roles: {series: series, x: length, y: fraction}
+    config:
+      x_title: Fragment length (bp)
+      y_title: Fraction of mapped fragments
+      legend_pos: bottom
+    title: Fragment length distribution
+    description: >-
+      Each line is a library and strand: the fraction of its mapped fragments at each
+      length. It answers how long the surviving DNA fragments are.
+
+      How to read: ancient DNA is fragmented, so a curve piled at short lengths fits it.
+      A curve with a wide tail towards long fragments looks like a modern library, a
+      possible contamination even when the damage curve passes. The two strands of a
+      library should follow each other.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/17715061/ and https://pubmed.ncbi.nlm.nih.gov/22479540/
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: length
+      y: occurrences
+      color: series
+      labels: {length: Fragment length (bp), occurrences: Mapped fragments, series: Library and strand}
+    title: Fragment counts by length
+    description: >-
+      Each line is a library and strand: the number of mapped fragments at each length.
+      It answers how many fragments, not only what share, fall at each length.
+
+      How to read: a library with far more fragments dominates the plot, so use the
+      profile tile to compare shapes. A sharp drop at the shortest lengths reflects the
+      minimum length kept by the mapping step.
+
+      Source: https://damageprofiler.readthedocs.io/en/latest/contents/output.html
+  - component: card
+    column: occurrences
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: strand
+    top_n_count: 2
+    caption: fragments, by strand
+    title: Mapped fragments
+    description: >-
+      The hero number is the count of mapped fragments over every library in view, and
+      the bars split it by strand. It answers how many fragments the length distribution
+      holds and whether the strands are balanced.
+
+      How to read: the two strands should be of similar size. A strong imbalance points to
+      a mapping or library issue.
+  - component: card
+    column: occurrences
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: histogram
+    caption: distribution across length bins
+    title: Fragments at the most common length
+    description: >-
+      The hero number is the largest count of fragments at a single length, and the
+      histogram shows how counts are distributed over the length bins. It answers how
+      peaked the length distribution is.
+
+      How to read: a high maximum against a low median means the fragments cluster at a
+      narrow range of lengths, as in a sheared or degraded library.
+  - component: card
+    column: length
+    aggregation: max
+    aggregations: [min]
+    secondary_layout: vertical
+    caption: longest and shortest length
+    title: Fragment length range
+    description: >-
+      The hero number is the longest fragment length present in the table, with the
+      shortest beside it. It answers how wide the length window of the run is.
+
+      How to read: the window reflects the lengths the mapping kept, not the lengths in the
+      sample. Read the profile for the shape.
+  - component: table
+    page_size: 25
+    title: Fragment length table
+    description: >-
+      Each row is a length bin of one library and strand, with its fragment count and
+      its fraction of the library. It answers the exact numbers behind the length curves.
+
+      How to read: filter to one library and strand to read its distribution.

@@ -8,7 +8,57 @@ find: { path_glob: "**/all.vst.tsv" }
 recipe: deseq2/vst_pca.py
 fixture: vst_pca.tsv
 renders_as:
-  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: group} }
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
-  - { component: card, column: dim_1, aggregation: range, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: pca
+    component: advanced_viz
+    kind: embedding
+    title: Sample PCA
+    roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: group}
+    config:
+      axis_prefix: PC
+    description: >-
+      Each point is a sample placed on the first principal components of the
+      variance-stabilised expression of its most variable genes, coloured by group.
+      It answers whether the samples separate by the factor under study.
+
+      How to read: replicates of one group should sit together and groups apart. A
+      sample away from its group, or a split along a batch factor, is an outlier or a
+      confounder to deal with before differential testing. Switch the colour to a
+      batch column to check it.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+  - component: card
+    column: sample_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    caption: samples, by group
+    breakdown_col: group
+    top_n_count: 3
+    title: Samples per group
+    description: >-
+      The hero number is the count of samples, and the bars rank the groups by their
+      number of samples. It answers how balanced the design is.
+
+      How to read: very uneven groups make contrasts less reliable, and a group with
+      one sample cannot be tested.
+  - component: card
+    column: dim_1
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: quartiles of the sample scores
+    title: Spread on the first component
+    description: >-
+      The hero number is the range of sample scores on the first principal component,
+      and the box shows their quartiles. It answers how widely samples spread on the
+      leading axis.
+
+      How to read: a wide range with a clear gap suggests two clusters, usually the
+      groups. Check the PCA tile to see which samples sit at each end.
+  - component: table
+    title: PCA coordinates and sample sheet
+    description: >-
+      Each row is a sample with its principal component scores and the factors of the
+      sample sheet. It answers which factors line up with the components.
+
+      How to read: sort by a component and look for a factor that follows it.

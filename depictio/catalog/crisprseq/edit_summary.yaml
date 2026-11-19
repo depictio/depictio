@@ -2,42 +2,314 @@ id: crisprseq_edit_summary
 name: Editing outcome per library
 mode: gene-editing/summary
 description: >-
-  One row per library: read accounting from the CIGAR parser (raw, clustered
-  and classified reads, aligned share), reads per outcome class, the editing,
-  frameshift, in-frame and template-based rates as shares of the classified
-  reads, and the reads the indel filters dropped or placed outside the main
-  indel peak.
+  One row per library: read accounting from the CIGAR parser (raw, clustered and
+  classified reads, aligned share), reads per outcome class, the editing, frameshift,
+  in-frame and template-based rates as shares of the classified reads, and the reads
+  the indel filters dropped or placed outside the main indel peak.
 find: { path_glob: "**/*_edits.csv" }
 recipe: crisprseq/edit_summary.py
 fixture: edit_summary.tsv
 renders_as:
-  - { id: editing_rate, component: card, column: edited_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: frameshift_rate, component: card, column: frameshift_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: inframe_rate, component: card, column: inframe_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: template_rate, component: card, column: template_based_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: frameshift_of_indels, component: card, column: frameshift_of_indels_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: aligned_rate, component: card, column: aligned_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: raw_reads_per_library, component: card, column: raw_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: raw_reads_total, component: card, column: raw_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { id: read_attrition, component: card, column: raw_reads, aggregation: sum, secondary_layout: attrition, attrition_cols: [clustered_reads, classified_reads] }
-  - { id: filtered_indels, component: card, column: indels_failing_filter, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: editing_rate
+    component: card
+    column: edited_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with its spread
+    title: Editing rate
+    description: >-
+      The hero number is the median over libraries of the share of classified reads that
+      carry any edit, and the box shows the quartiles. It answers how efficiently the
+      guide edits.
+
+      How to read: a higher rate means more edited reads, and replicates of one guide
+      should agree. A very low rate means the cut did not take or the guide is inactive.
+      Compare with the frameshift share before calling a knockout.
+
+      Note: the rate is the share of classified reads, meaning wild type, template-based
+      and indel reads. The pipeline publishes no cut-off for it.
+  - id: frameshift_rate
+    component: card
+    column: frameshift_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Frameshift rate
+    description: >-
+      The hero number is the median over libraries of the share of classified reads with
+      an out-of-frame insertion or deletion, and the box shows the quartiles. It answers
+      how many reads would disrupt the coding frame.
+
+      How to read: this is the share of all reads, so it is capped by the editing rate. A
+      frameshift rate close to the editing rate means almost every edit is out of frame.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - id: inframe_rate
+    component: card
+    column: inframe_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: In-frame rate
+    description: >-
+      The hero number is the median over libraries of the share of classified reads with
+      an in-frame insertion or deletion, and the box shows the quartiles. It answers how
+      many edits keep the coding frame.
+
+      How to read: in-frame edits can leave a working protein, so a high value next to a
+      low frameshift rate is a weak knockout. Compare it with the frameshift rate.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - id: template_rate
+    component: card
+    column: template_based_pct
+    aggregation: average
+    aggregations: [max]
+    secondary_layout: histogram
+    caption: mean and highest rate, with the spread of libraries
+    title: Template-based repair rate
+    description: >-
+      The hero number is the mean over libraries of the share of classified reads repaired
+      from the supplied template, and the histogram shows how the libraries spread. It
+      answers whether homology-directed repair happened.
+
+      How to read: without a template the rate is zero in every library, which is
+      expected. With a template, a rate above zero is precise knock-in repair, and low
+      values mean most cuts are repaired by end joining.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - id: frameshift_of_indels
+    component: card
+    column: frameshift_of_indels_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with its spread
+    title: Frameshift share of indels
+    description: >-
+      The hero number is the median over libraries of the out-of-frame share of the indel
+      reads alone, and the box shows the quartiles. It answers how often an edit breaks
+      the reading frame, once editing happened.
+
+      How to read: values close to 100% mean nearly every indel shifts the frame, which is
+      what a knockout needs. Libraries with few indel reads are noisy, so check their
+      depth.
+
+      Note: a library with no indel reads has no value and is left out of the median.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - id: aligned_rate
+    component: card
+    column: aligned_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Aligned reads
+    description: >-
+      The hero number is the median over libraries of the share of reads that aligned to
+      the amplicon, and the box shows the quartiles. It answers whether the reads belong
+      to the targeted region.
+
+      How to read: a low share means the library holds off-target or contaminating reads
+      and carries less signal for the editing call. Open the table to find the libraries
+      that lag.
+
+      Note: no cut-off is drawn, because the pipeline publishes none.
+  - id: raw_reads_per_library
+    component: card
+    column: raw_reads
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Raw reads per library
+    description: >-
+      The hero number is the median number of raw reads per library, and the box shows the
+      quartiles. It answers how deep the sequencing is.
+
+      How to read: rates from libraries with few reads are noisy, so read them with care.
+      A box that is very uneven means some libraries are under-sequenced relative to the
+      rest.
+
+      Note: no minimum depth is drawn, because the pipeline publishes none.
+  - id: raw_reads_total
+    component: card
+    column: raw_reads
+    aggregation: sum
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: sum, with the smallest and largest library
+    title: Raw reads in total
+    description: >-
+      The hero number is the total of raw reads over all libraries in view, with the
+      smallest and the largest library beside it. It answers how much data the run holds.
+
+      How to read: a large gap between the smallest and the largest library means uneven
+      loading. Open the depth scatter to see which libraries are under-sequenced.
+  - id: read_attrition
+    component: card
+    column: raw_reads
+    aggregation: sum
+    aggregations: [median, min]
+    secondary_layout: attrition
+    attrition_cols: [clustered_reads, classified_reads]
+    caption: reads, from raw to clustered to classified
+    title: Read attrition
+    description: >-
+      The hero number is the total of raw reads, followed by the reads left after UMI
+      clustering and the reads the CIGAR parser could classify. It answers where reads are
+      lost on the way to an editing call.
+
+      How to read: a large drop at clustering means redundant or low quality reads, and a
+      drop at classification means reads that did not align or failed the filters. Open
+      the aligned reads and filtered indels cards to see which step lost them.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - id: filtered_indels
+    component: card
+    column: indels_failing_filter
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Indel reads failing the filters
+    description: >-
+      The hero number is the median over libraries of the indel reads that failed the
+      CIGAR parser's filters, and the box shows the quartiles. It answers how much of the
+      indel signal is discarded as noise.
+
+      How to read: a few discarded reads is normal. A large number means many indels sit
+      below the sequencing error rate or outside the main indel peak, so the editing rate
+      of that library deserves a second look.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
   # Editing against depth: low-depth libraries with extreme rates are the ones
   # to distrust.
+  # C1 N/A: the table has one row per library and no categorical column (no group or class) to colour by.
   - id: editing_vs_depth
     component: advanced_viz
     kind: scatter_xy
+    title: Editing rate against depth
     roles: { x: classified_reads, y: edited_pct, label: sample }
+    config:
+      x_title: Classified reads
+      y_title: Edited reads (%)
+      log_x: true
+      top_n_labels: 5
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a library: its classified reads against its editing rate. It answers whether an extreme rate comes from
+      a shallow library.
+
+      How to read: libraries at low depth with extreme rates are the ones to distrust, and
+      the rates of deep libraries are reliable. Points that stay apart from the cloud at
+      high depth are real outliers. Open the table for the labelled libraries.
+
+      Lines and annotations: the dashed line is the median edited share of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/crisprseq.
+
+      Note: the depth axis is logarithmic.
   # Depth against alignment: libraries whose reads do not align to the
   # amplicon carry too little signal to call an editing rate.
+  # C1 N/A: the table has one row per library and no categorical column (no group or class) to colour by.
   - id: depth_vs_alignment
     component: advanced_viz
     kind: scatter_xy
+    title: Alignment against depth
     roles: { x: raw_reads, y: aligned_pct, label: sample }
+    config:
+      x_title: Raw reads
+      y_title: Aligned reads (%)
+      log_x: true
+      top_n_labels: 5
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a library: its raw reads against the share that aligned to the
+      amplicon. It answers whether poorly aligned libraries
+      are also the shallow or the weakly edited ones.
+
+      How to read: libraries with a low aligned share carry too little signal to call an
+      editing rate, whatever their depth. A library that is both shallow and poorly
+      aligned should be resequenced. Open the table for the labelled libraries.
+
+      Lines and annotations: the dashed line is the median aligned share of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/crisprseq.
+
+      Note: the depth axis is logarithmic.
   # Of the edited reads, how many disrupt the reading frame: the knockout view.
+  # C1 N/A: the table has one row per library and no categorical column (no group or class) to colour by.
   - id: frameshift_vs_editing
     component: advanced_viz
     kind: scatter_xy
+    title: Frameshift share against editing rate
     roles: { x: edited_pct, y: frameshift_of_indels_pct, label: sample, size: classified_reads }
-  - { component: interactive, interactive_type: RangeSlider, column_name: edited_pct }
-  - { component: interactive, interactive_type: RangeSlider, column_name: classified_reads }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+    config:
+      x_title: Edited reads (%)
+      y_title: Out-of-frame share of indels (%)
+      top_n_labels: 5
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a library: its editing rate against the out-of-frame share of its
+      indels, sized by classified reads. It answers
+      whether the edits that happened are the kind that knock a gene out.
+
+      How to read: the upper right corner holds libraries that edit often and mostly out
+      of frame, the knockout view. A point high on the vertical axis but far left has few
+      edits, so its frameshift share rests on few reads. Large points are the better
+      supported.
+
+      Lines and annotations: the dashed line is the median out-of-frame share of indels of
+      this table, a reference computed from the rows on show (it follows the filters), not
+      a cut-off of nf-core/crisprseq.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: edited_pct
+    title: Editing rate range
+    description: >-
+      Keeps the libraries whose editing rate falls in the chosen range and filters every
+      tile of the tab with them.
+
+      How to read: raise the lower bound to study the libraries that edited well, or lower
+      the upper bound to inspect the failures.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: classified_reads
+    title: Depth range
+    description: >-
+      Keeps the libraries whose classified reads fall in the chosen range and filters
+      every tile of the tab with them.
+
+      How to read: raise the lower bound to drop shallow libraries, whose rates are the
+      least reliable.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Editing outcome table
+    description: >-
+      Each row is a library with its read accounting, its editing, frameshift, in-frame
+      and template-based rates, and the indel filter counts. It answers how each library
+      fared, in numbers.
+
+      How to read: sort by editing rate or by depth and compare the rates with the
+      accounting columns. Rates are shares of the classified reads. Selecting a row
+      filters the rest of the tab to that library.

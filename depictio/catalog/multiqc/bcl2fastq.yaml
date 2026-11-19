@@ -13,4 +13,17 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: bcl2fastq }
+  - component: multiqc
+    section: bcl2fastq
+    title: Demultiplexing statistics
+    description: >-
+      bcl2fastq's lane and sample summaries: how the reads of each lane were
+      assigned to libraries, and which barcodes stayed undetermined. It answers
+      whether the pool was loaded evenly and the indexes were read cleanly.
+
+      How to read: Samples should receive similar read counts, and the undetermined
+      share should be small. A large undetermined fraction or one dominant unknown
+      barcode suggests a sample sheet mistake or index errors, so check the barcodes
+      first.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/bcl2fastq/bcl2fastq.py

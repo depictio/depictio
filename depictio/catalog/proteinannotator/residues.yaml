@@ -18,11 +18,83 @@ find:
 recipe: proteinannotator/residues.py
 fixture: residues.tsv
 renders_as:
-  - { id: residue_sequence_track, component: advanced_viz, kind: sequence_track,
-      roles: {position: position, entity: entity, residue: residue, category: category, value: value} }
-  - { id: predicted_structure, component: advanced_viz, kind: molecule_3d,
-      roles: {position: position, entity: entity, category: domain, sequence: sequence} }
-  - { id: residue_count, component: card, column: position, aggregation: count,
-      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: domains_here, color: category} }
-  - { component: table, columns: [entity, sample, position, residue, category, value, domain, domain_database, domains_here] }
+  - id: residue_sequence_track
+    component: advanced_viz
+    kind: sequence_track
+    title: Sequence, structure and domains
+    roles: {position: position, entity: entity, residue: residue, category: category, value: value}
+    config:
+      value_label: S4PRED probability
+    description: >-
+      Each position is one residue of the shown protein, with the amino acid letter,
+      the secondary structure state S4PRED predicts as a coloured lane and its
+      probability as a line, plus a lane for the domains. It answers where the
+      helices, strands and domains lie along the sequence.
+
+      How to read: a high probability means a confident state, and a low one marks an
+      uncertain stretch. Domains that coincide with helix or strand runs point to a
+      folded region, and coil over a long unannotated stretch suggests a linker or a
+      disordered region. Select a residue to follow it on the structure.
+
+      Lines and annotations: none are drawn. The probability line is the S4PRED
+      probability of the predicted state at each residue.
+  # C1: the structure is coloured by domain through `category`.
+  - id: predicted_structure
+    component: advanced_viz
+    kind: molecule_3d
+    title: Predicted structure coloured by domain
+    roles: {position: position, entity: entity, category: domain, sequence: sequence}
+    description: >-
+      The protein is folded from its sequence and each residue is coloured by the
+      best domain that covers it. It answers where in three dimensions the domains
+      sit.
+
+      How to read: domains that form compact blocks are folded units. Residues without
+      a domain keep the neutral colour, so a large neutral region is a part no
+      database describes. The structure is a prediction, so treat it as a guide and
+      not as a measurement.
+
+      Note: the structure is resolved by an external service, ESMFold on ESM Atlas, and
+      stays off unless an administrator enables the resolver.
+  - id: residue_count
+    component: card
+    column: position
+    aggregation: count
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: category
+    top_n_count: 3
+    caption: residues, by predicted state
+    title: Residues
+    description: >-
+      The hero number is the count of residues in view, the second number is the
+      highest position and so the longest protein, and the bars rank the predicted
+      secondary structure states by residue count. It answers how much sequence is
+      covered and how it divides between helix, strand and coil.
+
+      How to read: coil is usually the largest class. A balance shifted to helix or
+      strand points to a structured protein.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: domains_here
+      color: category
+      labels: {domains_here: Overlapping domains at the residue, category: Predicted state}
+    title: Domain overlap per residue
+    description: >-
+      Each bar counts residues by the number of domains that overlap at them, split by
+      predicted structure state. It answers how crowded the annotation is.
+
+      How to read: most residues carry zero or one domain. A tail of residues under
+      many domains marks regions several databases describe, or overlapping
+      annotations of one family.
+  - component: table
+    columns: [entity, sample, position, residue, category, value, domain, domain_database, domains_here]
+    title: Residue table
+    description: >-
+      Each row is one residue of a protein with its amino acid, predicted structure
+      state and probability, best covering domain and the number of overlapping
+      domains. It answers the exact annotation of any residue.
+
+      How to read: filter to a protein, then sort by position to read it along the
+      sequence.

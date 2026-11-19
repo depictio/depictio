@@ -8,15 +8,79 @@ description: >-
   offset 0.
 find: { path_glob: "**/*_indels.csv" }
 recipe: crisprseq/cut_site_profile.py
+# The fixture is enriched synthetically from 11 real offsets (copies with seeded noise), so the preview shows several samples.
 fixture: cut_site_profile.tsv
 renders_as:
   - id: deletion_profile
     component: advanced_viz
     kind: profile
+    title: Deletion coverage around the cut site
     roles: { series: sample, x: offset, y: deletion_pct }
+    config:
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with a deletion (%)
+      legend_pos: bottom
+    description: >-
+      Each curve is a library: at every offset from the cut site, the share of its
+      classified reads whose deletion covers that position. It answers where the deletions
+      fall and how wide the damaged stretch is.
+
+      How to read: an efficient nuclease edit gives a hump centred on the cut site that
+      falls off within a few tens of bases. A hump displaced from the marker points to a
+      misplaced cut site or a second target, and a curve flat near zero means little
+      editing. Compare libraries of one guide, which should overlap.
+
+      Lines and annotations: the vertical marker at offset 0 is the cut site the pipeline
+      reports for the amplicon (the cut site file written by the CIGAR parser). It is a
+      landmark, not a cut-off. This catalog's recipe leaves out positions with no indel
+      and keeps a fixed window of 100 bases either side.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
   - id: insertion_profile
     component: advanced_viz
     kind: profile
+    title: Insertion starts around the cut site
     roles: { series: sample, x: offset, y: insertion_pct }
-  - { component: interactive, interactive_type: RangeSlider, column_name: offset }
-  - { component: table }
+    config:
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with an insertion (%)
+      legend_pos: bottom
+    description: >-
+      Each curve is a library: at every offset from the cut site, the share of its
+      classified reads with an insertion starting there. It answers whether insertions are
+      placed at the cut.
+
+      How to read: insertions that peak at the cut site are the expected product of a
+      blunt cut, usually one or a few bases. A spread-out or displaced curve is more
+      likely sequencing or alignment noise than editing. A curve near zero means
+      insertions are rare in this library.
+
+      Lines and annotations: the vertical marker at offset 0 is the cut site the pipeline
+      reports for the amplicon. It is a landmark, not a cut-off. This catalog's recipe
+      leaves out positions with no insertion.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: offset
+    title: Offset window
+    description: >-
+      Restricts the tiles to a range of offsets from the cut site.
+
+      How to read: narrow it to the few bases around the cut to read the core of the
+      repair, or widen it to see the amplicon ends.
+  - component: table
+    title: Indel position table
+    description: >-
+      Each row is a library and an offset from the cut site, with the share of classified
+      reads whose deletion covers it and the share with an insertion starting there. It
+      answers the exact values behind the curves.
+
+      How to read: sort by deletion share to find the most damaged positions, and filter
+      on a library to follow one sample.

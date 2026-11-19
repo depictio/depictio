@@ -34,13 +34,22 @@ export function metadataFromRender(
     component_type: render.component,
     wf_id: STUDIO_WF_ID,
     dc_id: STUDIO_DC_ID,
+    // The render's own title and About text, as the dashboard tile shows them.
+    ...(render.title ? { title: render.title } : {}),
+    ...(render.description ? { description: render.description } : {}),
   };
 
   if (render.component === 'figure') {
     return {
       ...base,
       visu_type: render.visu_type ?? 'scatter',
-      dict_kwargs: render.dict_kwargs ?? {},
+      dict_kwargs: {
+        ...(render.dict_kwargs ?? {}),
+        ...(render.labels ? { labels: render.labels } : {}),
+      },
+      ...(!render.code && render.reference_lines?.length
+        ? { reference_lines: render.reference_lines }
+        : {}),
       ...(render.code
         ? { mode: 'code', code_content: render.code, _previewFigure: render._previewFigure }
         : { mode: 'ui' }),
@@ -50,7 +59,7 @@ export function metadataFromRender(
   if (render.component === 'card') {
     return {
       ...base,
-      title: render.column,
+      title: render.title || render.column,
       column_name: render.column,
       aggregation: render.aggregation,
       icon_name: 'mdi:chart-line',
@@ -67,6 +76,7 @@ export function metadataFromRender(
       threshold_warn: render.threshold_warn ?? null,
       attrition_cols: render.attrition_cols ?? [],
       trend_col: render.trend_col ?? null,
+      caption: render.caption ?? null,
     };
   }
 
@@ -102,6 +112,9 @@ export function metadataFromRender(
   return {
     ...base,
     viz_kind: render.kind,
-    config: buildAdvancedVizConfigBlob(render.kind, render.roles ?? {}),
+    config: {
+      ...buildAdvancedVizConfigBlob(render.kind, render.roles ?? {}),
+      ...(render.config ?? {}),
+    },
   };
 }

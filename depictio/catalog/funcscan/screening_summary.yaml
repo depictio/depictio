@@ -4,7 +4,7 @@ mode: screening/summary
 description: >-
   One row per sample with the headline count of every nf-core/funcscan screen
   that produced a result: resistance-gene hits and distinct genes, antimicrobial
-  peptide candidates and how many reach the AMPcombi probability cut-off (0.6, the pipeline default), biosynthetic gene
+  peptide candidates and how many reach the AMPcombi prediction score cut-off (0.6, the pipeline default), biosynthetic gene
   cluster regions and product classes, CAZyme genes and families. The four
   screens share no table of their own, so this is the collection every sample
   filter and every cross-screen comparison hangs off.
@@ -22,15 +22,30 @@ fixture: screening_summary.tsv
 renders_as:
   # Resistome load against carbohydrate-degradation capacity: the two screens
   # that scale with assembly size, so a sample far off the cloud is either
-  # unusually resistant or unusually poorly assembled. Size is the BGC count
-  # and the lasso emits the sample the rest of the dashboard filters on. The
-  # colour channel is left to the tile: every string column here is the sample
-  # itself, so a colour role would only repeat the label, while a numeric
-  # `color_col` on the tile carries the third screen.
+  # unusually resistant or unusually poorly assembled. Size is the BGC count,
+  # colour is the AMP candidate count (a numeric colour column, since every
+  # string column here is the sample itself) and the lasso emits the sample the
+  # rest of the dashboard filters on.
   - id: screen_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: Resistance genes against CAZymes
     roles: {x: arg_hits, y: cazymes, label: sample, size: bgc_regions}
+    config:
+      color_col: amp_candidates
+      x_title: Resistance gene hits
+      y_title: CAZyme genes
+    description: >-
+      Each point is a sample: its resistance gene hits on the horizontal axis and its
+      CAZyme genes on the vertical axis, sized by biosynthetic gene cluster regions and
+      coloured by antimicrobial peptide candidates. It answers how the four screens
+      compare across samples.
+
+      How to read: both counts grow with assembly size, so a sample far from the cloud
+      is either unusually resistant or unusually poorly assembled. A lasso selection
+      filters the rest of the dashboard to those samples.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
   # The four screens differ by two orders of magnitude, so the bars need a log
   # axis; a sample missing a colour returned nothing for that screen.
   - id: screen_composition
@@ -83,12 +98,158 @@ renders_as:
           fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
       else:
           fig.update_layout(xaxis_title="Sample")
-  - { component: card, column: arg_hits, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
-  - { component: card, column: arg_genes, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
-  - { component: card, column: amp_candidates, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: amp_high_confidence, aggregation: sum, secondary_layout: composition, breakdown_col: sample, top_n_count: 4 }
-  - { component: card, column: bgc_regions, aggregation: sum, secondary_layout: donut, breakdown_col: sample, top_n_count: 4 }
-  - { component: card, column: bgc_classes, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
-  - { component: card, column: cazymes, aggregation: average, secondary_layout: gauge, coverage_max: 1500.0 }
-  - { component: card, column: cazyme_families, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+    title: Findings per screen and sample
+    description: >-
+      Each bar is the number of findings one screen (resistance genes, peptide
+      candidates, cluster regions or CAZymes) made in a sample, on a log axis, grouped
+      by screen. It answers how the four screens compare within and between samples.
+
+      How to read: the screens differ by orders of magnitude, so read the log axis
+      rather than the bar heights. A screen missing from a sample returned nothing
+      there, which can mean it was not enabled.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: arg_hits
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: hits per sample, with their spread
+    title: Resistance gene hits
+    description: >-
+      The hero number is the total of resistance gene hits over all samples and the
+      box shows their quartiles per sample. It answers how large the resistome is and
+      how evenly the samples share it.
+
+      How to read: a wide box means some samples carry far more resistance genes than
+      others. Hits are counted per tool, so one gene found by several tools counts
+      several times.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: arg_genes
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: distinct genes per sample
+    title: Distinct resistance genes
+    description: >-
+      The hero number is the median count of distinct resistance genes per sample and
+      the histogram shows the distribution. It answers how rich a typical resistome is.
+
+      How to read: compare it with the hits card, since many hits on few genes mean the
+      same genes are found by several tools or repeated in the assembly.
+  - component: card
+    column: amp_candidates
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: candidates per sample, with their spread
+    title: Peptide candidates
+    description: >-
+      The hero number is the median count of antimicrobial peptide candidates per
+      sample and the box shows its quartiles. It answers how many candidates a typical
+      sample yields.
+
+      How to read: candidates are predictions, not validated peptides, so a high
+      count calls for the confidence column in the table before follow-up.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: amp_high_confidence
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: high-confidence candidates per sample
+    title: High-confidence peptide candidates
+    description: >-
+      The hero number is the total of peptide candidates whose best prediction score
+      reaches the AMPcombi cut-off, and the histogram shows how many each sample has.
+      It answers how many candidates are strong enough to follow up.
+
+      How to read: a sample with many candidates and few above the cut-off carries
+      mostly weak predictions. Compare it with the candidates card.
+
+      Lines and annotations: the cut-off is a prediction score of 0.6, the default of
+      the nf-core/funcscan parameter amp_ampcombi_parsetables_cutoff, below which
+      AMPcombi sets a score to 0 in its summary. The pipeline does not call this high
+      confidence, so the name is the dashboard's.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/nextflow_schema.json
+  - component: card
+    column: bgc_regions
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: donut
+    breakdown_col: sample
+    top_n_count: 4
+    caption: regions, by sample
+    title: Biosynthetic gene cluster regions
+    description: >-
+      The hero number is the total of biosynthetic gene cluster regions found and the
+      ring splits them by sample. It answers which samples hold the secondary
+      metabolite potential.
+
+      How to read: regions are predicted from the assembly, so a poorly assembled
+      sample can show fewer. A ring held by one sample points to a metagenome with a
+      dominant producer.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: bgc_classes
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: histogram
+    caption: product classes per sample
+    title: Cluster product classes
+    description: >-
+      The hero number is the largest count of distinct biosynthetic product classes in
+      a sample and the histogram shows the distribution over samples. It answers how
+      diverse the cluster repertoire is.
+
+      How to read: a sample with many classes holds a broad secondary metabolite
+      repertoire. Compare it with the region count, since many regions of few classes
+      mean repeated clusters.
+  - component: card
+    column: cazymes
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: genes per sample, with their spread
+    title: CAZyme genes
+    description: >-
+      The hero number is the median count of carbohydrate-active enzyme genes per
+      sample and the box shows its quartiles. It answers how much carbohydrate
+      degradation capacity a typical sample has.
+
+      How to read: the count grows with assembly size, so compare samples of similar
+      assemblies. A sample far above the box is a candidate for a specialised
+      degrader.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: cazyme_families
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: families per sample
+    title: CAZyme families
+    description: >-
+      The hero number is the average count of distinct CAZyme families per sample and
+      the histogram shows the distribution. It answers how varied the enzyme
+      repertoire is.
+
+      How to read: many genes of few families mean repeated enzymes, and many families
+      mean a broad repertoire.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Screening hub table
+    description: >-
+      Each row is a sample with its headline counts for every screen: resistance gene
+      hits and distinct genes, peptide candidates and those at the cut-off, cluster
+      regions and classes, and CAZyme genes and families. It answers the exact numbers
+      behind every tile and lets a row selection filter the dashboard.
+
+      How to read: sort by a column to rank the samples, and select a row to filter
+      the other tabs.

@@ -10,21 +10,202 @@ find: { path_glob: "*.tsv" }
 recipe: mhcquant/sample_summary.py
 fixture: sample_summary.tsv
 renders_as:
-  - { id: yield_psms, component: card, column: psms, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: yield_peptides, component: card, column: peptides, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: yield_peptides_total, component: card, column: peptides, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { id: yield_proteins, component: card, column: proteins, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: modified_share, component: card, column: modified_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: ninemer_share, component: card, column: ninemer_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: class_i_share, component: card, column: class_i_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: class_ii_share, component: card, column: class_ii_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: median_length, component: card, column: median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: replicate_correlation, component: card, column: replicate_median_r, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: replicate_worst_pair, component: card, column: replicate_min_r, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: replicate_completeness, component: card, column: all_replicates_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: rt_error, component: card, column: median_abs_rt_error_min, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: yield_psms
+    component: card
+    column: psms
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median PSMs, with their spread
+    title: Peptide-spectrum matches
+    description: >-
+      The hero number is the median count of PSMs per sample, and the box shows the spread across samples. It answers how much spectral evidence each sample gives.
+
+      How to read: samples of the same design should give similar counts. A sample far below its peers had a low yield, so treat its comparisons with care.
+  - id: yield_peptides
+    component: card
+    column: peptides
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median peptides, with their spread
+    title: Distinct peptides
+    description: >-
+      The hero number is the median count of distinct peptide sequences per sample, and the box shows the spread across samples. It answers how deep each immunopeptidome is.
+
+      How to read: immunopeptidomes of a similar input amount give similar depth. An outlier sample is under or over sampled.
+  - id: yield_peptides_total
+    component: card
+    column: peptides
+    aggregation: sum
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: peptides per sample
+    title: Total peptides
+    description: >-
+      The hero number is the sum of distinct peptides over the samples in view, and the histogram shows how samples distribute over peptide counts. It answers how many peptides the dataset holds and how even the samples are.
+
+      How to read: a sum mixes samples, so read the minimum and the maximum beside it. A histogram with one far bar is a sample out of step with the rest.
+  - id: yield_proteins
+    component: card
+    column: proteins
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median proteins, with their spread
+    title: Source proteins
+    description: >-
+      The hero number is the median count of source proteins per sample, and the box shows the spread across samples. It answers how many proteins contribute peptides to each sample.
+
+      How to read: a sample with many peptides but few proteins is dominated by a few abundant sources. Compare with the peptide counts.
+  - id: modified_share
+    component: card
+    column: modified_fraction
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median share, with its spread
+    title: Modified peptide share
+    description: >-
+      The hero number is the median share of a sample's peptidoforms that carry a modification, and the box shows the spread across samples. It answers how much of the immunopeptidome is modified.
+
+      How to read: samples prepared the same way give similar shares. A sample with a much higher share may reflect a preparation artefact such as oxidation.
+  - id: ninemer_share
+    component: card
+    column: ninemer_fraction
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median share, with its spread
+    title: 9-mer share
+    description: >-
+      The hero number is the median share of a sample's peptides that are 9 residues long, and the box shows the spread across samples. It answers how strong the 9-mer signature is.
+
+      How to read: a class I immunopeptidome is dominated by 9-mers, so a low share points to a mix of classes or to contamination.
+  - id: class_i_share
+    component: card
+    column: class_i_fraction
+    aggregation: min
+    aggregations: [median]
+    secondary_layout: compact
+    caption: lowest sample, with the median
+    title: Peptides in the class I window
+    description: >-
+      The hero number is the lowest share of a sample's peptides that fall in the class I length window, 8 to 12 residues, and the median sits beside it. It answers whether any sample leaves the window.
+
+      How to read: mhcquant keeps peptides of 8 to 12 residues by default, so the share is 1 unless the run widened the range. A lower share means the run kept longer peptides.
+
+      Source: https://github.com/nf-core/mhcquant/blob/3.2.0/nextflow_schema.json
+  - id: class_ii_share
+    component: card
+    column: class_ii_fraction
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: compact
+    caption: highest sample, with the median
+    title: Peptides in the class II window
+    description: >-
+      The hero number is the highest share of a sample's peptides that fall in the class II length window, 13 to 25 residues, and the median sits beside it. It answers whether any sample holds long peptides.
+
+      How to read: with mhcquant's default length filter of 8 to 12 residues the share is 0, so a value above 0 means the run widened the range and the sample holds class II length peptides.
+
+      Source: https://github.com/nf-core/mhcquant/blob/3.2.0/nextflow_schema.json
+  - id: median_length
+    component: card
+    column: median_length
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: mean of sample medians, with the lowest and highest
+    title: Median peptide length
+    description: >-
+      The hero number is the mean over samples of each sample's median peptide length, with the lowest and highest sample beside it. It answers how long the peptides are overall.
+
+      How to read: samples of one class give about the same value. A sample with a clearly longer median holds longer peptides, so read it with the length profile.
+  - id: replicate_correlation
+    component: card
+    column: replicate_median_r
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median Pearson r, with its spread
+    title: Replicate correlation
+    description: >-
+      The hero number is the median over samples of the median Pearson correlation between replicate intensities, and the box shows the spread across samples. It answers how reproducible the quantification is.
+
+      How to read: values close to 1 mean replicates agree. A low value means noisy intensities, so open the replicate scatter before trusting the quantities.
+
+      Note: the correlation needs enough peptides quantified in both replicates, and samples without replicates have none.
+  - id: replicate_worst_pair
+    component: card
+    column: replicate_min_r
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: lowest r per sample, with its spread
+    title: Weakest replicate pair
+    description: >-
+      The hero number is the lowest Pearson correlation between replicate intensities over the samples in view, and the box shows the spread of each sample's weakest pair. It answers whether any replicate disagrees with the others.
+
+      How to read: a value much lower than the median correlation points to one bad replicate. Open its pair in the scatter.
+  - id: replicate_completeness
+    component: card
+    column: all_replicates_fraction
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median share, with its spread
+    title: Peptides in every replicate
+    description: >-
+      The hero number is the median share of a sample's peptides that were quantified in every replicate, and the box shows the spread across samples. It answers how completely replicates agree on what is present.
+
+      How to read: a high share means replicates detect the same peptides. A low share means many peptides are seen in one injection only.
+  - id: rt_error
+    component: card
+    column: median_abs_rt_error_min
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median error, with its spread
+    title: Retention-time error
+    description: >-
+      The hero number is the median over samples of each sample's median absolute retention-time error between observed and DeepLC-predicted time, and the box shows the spread. It answers how well the prediction fits each run.
+
+      How to read: a small error that is similar across samples means a consistent gradient. A sample with a larger error had a different gradient or column.
+  # C1 N/A: one point per sample and the only categorical column is the sample id itself,
+  # so a colour would only repeat the label.
   - id: yield_vs_ninemer
     component: advanced_viz
     kind: scatter_xy
+    title: Depth against 9-mer share
     roles: { x: peptides, y: ninemer_fraction, label: sample, size: psms }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+    config:
+      x_title: Distinct peptides
+      y_title: Share of 9-mers
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a sample: its distinct peptide count on the horizontal axis and
+      its share of 9-mers on the vertical axis, sized by PSMs. It answers whether
+      deeper samples keep the 9-mer signature.
+
+      How to read: samples of one class cluster together. A point far from the others
+      is a sample with a different depth or a different length mix, so open its
+      length profile.
+
+      Lines and annotations: the dashed line is the median share of 9-mers of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of mhcquant, which defines none.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Immunopeptidome summary
+    description: >-
+      Each row is a sample, with its PSMs, peptides, proteins, modified share, length
+      signature, median score, retention-time error and replicate statistics. It
+      answers the exact figures behind every card and lets a row selection filter the
+      dashboard.
+
+      How to read: sort by a column to find the outlier samples, then select one to
+      open it across the tiles.

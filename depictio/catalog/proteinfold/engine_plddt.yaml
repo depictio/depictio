@@ -12,7 +12,51 @@ find:
 recipe: proteinfold/engine_plddt.py
 fixture: engine_plddt.tsv
 renders_as:
-  - { id: plddt_by_engine, component: advanced_viz, kind: profile,
-      roles: {series: series, x: position, y: plddt} }
-  - { component: figure, visu_type: box, dict_kwargs: {x: series, y: plddt, color: series} }
-  - { component: table }
+  # pLDDT is bounded 0 to 100 and AlphaFold DB bands it at 90, 70 and 50.
+  # Profile marks are x positions only, so the bands are explained in the
+  # description rather than drawn.
+  - id: plddt_by_engine
+    component: advanced_viz
+    kind: profile
+    title: Residue confidence along the sequence
+    roles: {series: series, x: position, y: plddt}
+    config:
+      x_title: Residue position
+      y_title: pLDDT
+      legend_pos: bottom
+      residue_axis: true
+    description: >-
+      Each curve is the per-residue pLDDT of the top-ranked structure of one engine for one target, with chains of a complex drawn separately. It answers which regions of the sequence an engine places confidently.
+
+      How to read: stretches above 90 are very high confidence, 70 to 90 confident, 50 to 70 low and below 50 very low, which often marks intrinsically disordered regions. Dips between confident stretches usually separate domains or flexible linkers. When engines disagree on a region, treat its placement as unreliable.
+
+      Note: the bands are AlphaFold DB's reading guide and are not drawn on the plot. Curves longer than 200 residues are averaged over windows by this catalog's recipe, a display limit and not an engine setting.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/ and https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/plddt-understanding-local-confidence/
+  - id: plddt_box
+    component: figure
+    visu_type: box
+    title: Residue confidence per curve
+    dict_kwargs:
+      x: series
+      y: plddt
+      color: series
+      labels:
+        series: Target and engine
+        plddt: pLDDT
+    reference_lines:
+      - {axis: y, stat: median, column: plddt}
+    description: >-
+      Each box is the spread of per-residue pLDDT over one curve of the profile tile, so one box per target and engine. It answers which engine gives the most confident structure overall.
+
+      How to read: a box high up with a short range means a uniformly confident structure, and a long lower whisker means disordered or poorly placed regions. Compare boxes of the same target across engines, and open the profile to see where the low values sit.
+
+      Lines and annotations: the dashed line is the median residue pLDDT of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of proteinfold.
+  - component: table
+    title: Residue confidence per engine
+    description: >-
+      One row per residue and curve with its pLDDT.
+
+      How to read: sort by pLDDT to list the least confident residues of a target.

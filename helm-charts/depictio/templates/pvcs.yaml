@@ -82,3 +82,23 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.uploads.size }}
+{{- if ((.Values.backups | default dict).persistence | default dict).enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-depictio-backups-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+  annotations:
+    # Never deleted with the release: it holds the only copy of the backups.
+    helm.sh/resource-policy: keep
+spec:
+  storageClassName: {{ .Values.storageClass }}
+  accessModes:
+    - {{ .Values.backups.persistence.accessMode | default "ReadWriteMany" }}
+  resources:
+    requests:
+      storage: {{ .Values.backups.persistence.size | default "5Gi" }}
+{{- end }}

@@ -12,5 +12,32 @@ find:
 recipe: proteinannotator/database_coverage.py
 fixture: database_coverage.tsv
 renders_as:
-  - { id: coverage_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: entity} }
-  - { component: table }
+  - id: coverage_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Domain coverage per protein and database
+    roles: {index: entity}
+    config:
+      value_columns: [pfam, funfam, nmpfams, metagroot, interproscan]
+      row_annotation_cols: [sample]
+    description: >-
+      Each cell is the fraction of a protein's residues covered by the domains of one
+      database, from 0 (no hit) to 1 (every residue covered), with the sample as a row
+      strip. It answers which databases describe each protein and how completely.
+
+      How to read: clustered, proteins that group together are described by the same
+      databases. A protein bright in one column and blank in the others rests on a
+      single source, and a blank row has no annotation at all, so open the domain
+      architecture for it. A skipped database is a column of zeros.
+
+      Lines and annotations: the dendrograms come from hierarchical clustering of the
+      rows and columns. No cut-off is drawn, because no published rule defines a
+      sufficient coverage.
+  - component: table
+    title: Coverage table
+    description: >-
+      Each row is a protein with the fraction of its residues covered by each
+      searched database. It answers the exact value behind a heatmap cell.
+
+      How to read: sort a database column to find the best covered proteins, or sort
+      ascending to list the poorly described ones.

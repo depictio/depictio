@@ -33,7 +33,7 @@
 template:
   template_id: "nf-core/variantbenchmarking/1.4.0"
   description: "nf-core/variantbenchmarking template: benchmark variant callers (germline and somatic SNP/INDEL, SV, CNV) against truth sets, with precision, recall and F1 per callset and stratum."
-  version: "2.0.0"
+  version: "3.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing variantbenchmarking output (small/, indel/, and optionally sv/, cnv/)."

@@ -93,7 +93,50 @@ function payloadFor(rows: MetricRow[], key: string): unknown {
  * support it (a constant column has no histogram), and an all-zero chart would
  * read as a real answer.
  */
-const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
+/**
+ * The scalar `aggregations` rows a card lists under its strip.
+ *
+ * A card is multi-metric: whatever its layout draws (a ranking, a ring, a
+ * threshold bar, a box), the scalar `aggregations` it declares are listed in a
+ * compact line below, so a top-N card still says the median and the spread.
+ * Empty when there is nothing to add: a stat-list layout already is that list,
+ * a `minimal` (headline) card keeps its one strip, and a coverage / gauge card
+ * with no usable maximum falls back to the stat list inside its strip.
+ * Synthetic payload rows (``__breakdown__``, ``__histogram__``...) and the
+ * compound ``box_plot_stats`` are the strips' own data, not stats to list.
+ */
+export function extraStatRows(
+  rows: MetricRow[],
+  layout: SecondaryLayout,
+  minimal: boolean,
+  coverageValue?: number | null,
+  coverageMax?: number | null,
+): MetricRow[] {
+  const meterFallsBack =
+    (layout === 'coverage' || layout === 'gauge') &&
+    !(typeof coverageValue === 'number' && typeof coverageMax === 'number' && coverageMax > 0);
+  if (minimal || meterFallsBack || layout === 'vertical' || layout === 'compact' || layout === 'grid') {
+    return [];
+  }
+  return rows.filter((r) => !r.name.startsWith('__') && r.name !== 'box_plot_stats');
+}
+
+const SecondaryMetrics: React.FC<SecondaryMetricsProps> = (props) => {
+  const { rows, layout = 'vertical', minimal = false, format } = props;
+  const strip = <SecondaryStrip {...props} />;
+  const extra = extraStatRows(rows, layout, minimal, props.coverageValue, props.coverageMax);
+  if (!extra.length) return strip;
+  return (
+    <>
+      {strip}
+      <div style={{ marginTop: 6 }}>
+        <StatList rows={extra} variant="compact" format={format} />
+      </div>
+    </>
+  );
+};
+
+const SecondaryStrip: React.FC<SecondaryMetricsProps> = ({
   rows,
   layout = 'vertical',
   color,

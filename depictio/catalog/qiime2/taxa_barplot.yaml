@@ -7,4 +7,25 @@ find: { path_glob: "**/qiime2/barplot/level-*.csv" }
 recipe: qiime2/stacked_taxonomy_canonical.py
 fixture: taxa_barplot.tsv
 renders_as:
-  - { id: stacked_taxonomy_barplot, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance} }
+  # C1: coloured by taxon, the column that matters for a composition.
+  - id: stacked_taxonomy_barplot
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Taxa barplot
+    roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance}
+    config:
+      default_rank: Phylum
+      top_n: 12
+      value_title: Relative abundance
+      rank_label: Taxonomic rank
+    description: >-
+      Each bar is a sample, split into the taxa of the chosen rank by their relative
+      abundance, with the least abundant lumped into Other. It answers how the community
+      composition differs between samples.
+
+      How to read: bars with the same colour pattern are samples with similar communities,
+      and a bar dominated by one colour is a sample with a dominant taxon. Switch the rank
+      to move from phyla to genera, and sort the samples from the controls.
+
+      Note: unclassified reads form their own part, so a large one points to a database or
+      classification limit.

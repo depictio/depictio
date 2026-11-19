@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: gatk }
+  - component: multiqc
+    section: gatk
+    title: Base quality recalibration
+    description: >-
+      GATK4's base quality score recalibration plots: observed against reported base
+      quality after recalibration, per sample. They answer whether the sequencer's
+      reported qualities match reality.
+
+      How to read: Points should lie close to the diagonal after recalibration.
+      Large departures mean the reported qualities were miscalibrated, which can
+      bias variant calls.
+
+      Source: https://docs.seqera.io/multiqc/modules/gatk

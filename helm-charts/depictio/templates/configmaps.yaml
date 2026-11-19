@@ -58,6 +58,22 @@ data:
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 
+  # Backup schedule defaults (values: backups.schedule)
+  {{- $bk := .Values.backups | default dict }}
+  {{- $sched := $bk.schedule | default dict }}
+  {{- $bkPvc := ($bk.persistence | default dict).enabled }}
+  {{- if and $sched.enabled (not $bkPvc) }}
+  {{- fail "backups.schedule.enabled needs backups.persistence.enabled: without a volume every backup is lost on the next restart" }}
+  {{- end }}
+  DEPICTIO_BACKUP_AUTO_BACKUP_ENABLED: {{ $sched.enabled | default false | toString | quote }}
+  DEPICTIO_BACKUP_AUTO_BACKUP_INTERVAL_HOURS: {{ $sched.intervalHours | default 24 | toString | quote }}
+  {{- with $sched.timeOfDay }}
+  DEPICTIO_BACKUP_AUTO_BACKUP_TIME_OF_DAY: {{ . | quote }}
+  {{- end }}
+  DEPICTIO_BACKUP_BACKUP_FILE_RETENTION_DAYS: {{ (hasKey $sched "retentionDays" | ternary $sched.retentionDays 30) | toString | quote }}
+  DEPICTIO_BACKUP_BACKUP_RETENTION_WEEKLY_WEEKS: {{ $sched.weeklyWeeks | default 0 | toString | quote }}
+  DEPICTIO_BACKUP_BACKUP_RETENTION_MONTHLY_MONTHS: {{ $sched.monthlyMonths | default 0 | toString | quote }}
+
   # Legacy Google OAuth (deprecated, still honoured for one release). The backend
   # maps these onto the `google` OIDC provider; prefer `oidc.providers`. The client
   # secret is NOT here: it is carried by the Secret (see secrets.yaml).

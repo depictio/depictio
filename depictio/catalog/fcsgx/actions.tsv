@@ -1,4 +1,9 @@
 genome	seq_id	start	end	seq_len	action	division	division_group	contaminant_cov	top_taxon	flagged_bp
-Apis_mellifera					none					0
-Bombus_impatiens					none					0
+Vespa_crabro					none					0
 Polistes_canadensis	NW_014571578.1	1	2136	2136	EXCLUDE	prok:CFB group bacteria	prok	89.0	Bacteroides ihuae	2136
+Polistes_canadensis	NW_014571590.1	1	5310	5310	TRIM	prok:a-proteobacteria	prok	64.0	Wolbachia pipientis	5310
+Polistes_canadensis	NW_014571611.1	1	1874	1874	EXCLUDE	fung:ascomycetes	fung	91.0	Aspergillus fumigatus	1874
+Bombus_impatiens	NW_024107322.1	1	4421	4421	EXCLUDE	prok:g-proteobacteria	prok	87.0	Escherichia coli	4421
+Bombus_impatiens	NW_024107340.1	120	2610	2610	TRIM	prok:firmicutes	prok	58.0	Staphylococcus aureus	2491
+Apis_mellifera	NW_026440011.1	1	3295	3295	EXCLUDE	prok:CFB group bacteria	prok	93.0	Bacteroides ihuae	3295
+Apis_mellifera	NW_026440025.1	1	1520	1520	TRIM	prok:firmicutes	prok	61.0	Cutibacterium acnes	1520

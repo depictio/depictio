@@ -14,4 +14,16 @@ find:
 # plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: qualimap }
+  - component: multiqc
+    section: qualimap
+    title: Transcript coverage
+    description: >-
+      Qualimap's MultiQC plots: the genomic origin of the reads (exonic, intronic,
+      intergenic) and the 5' to 3' gene-body coverage profile, per sample. They
+      answer how the reads distribute across the transcriptome.
+
+      How to read: Most reads should be exonic and the gene-body profile should be
+      even. A strong 3' bias suggests RNA degradation, and many intergenic reads
+      suggest genomic DNA.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/qualimap/QM_RNASeq.py

@@ -13,11 +13,31 @@ renders_as:
   # Expression against junction purity, one dot per fusion, grouped by the
   # protein consequence: an in-frame fusion carried by mostly junction reads
   # sits top-right, a frameshift held up by spanning fragments bottom-left.
-  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: prot_fusion_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction} }
+  - id: evidence_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    title: Fusion evidence by protein consequence
+    roles: {cluster: prot_fusion_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction}
+    description: >-
+      Each dot is a fusion call placed in the column of its predicted protein
+      consequence. The colour is its expression as log10 of FFPM plus one and the size is the junction reads'
+      share of its supporting reads, both computed by this catalog's recipe. It
+      answers which fusions are both well expressed and backed by junction reads.
+
+      How to read: large, bright dots in the in-frame column are the best
+      candidates for a functional fusion. A small dot means most support comes from
+      spanning fragments, which are weaker evidence for the exact breakpoint. Open
+      the table tile to check the read counts behind a dot.
+
+      Note: FusionInspector publishes no pass or fail cut-off on these values, so none is drawn.
+
+      Source:
+      https://raw.githubusercontent.com/wiki/FusionInspector/FusionInspector/FusionInspector-Outputs-Described.md
   # The two fusion-allele ratios against each other. A fusion dominant on both
   # partners lands top-right; a ratio near the axis means the wild-type allele
   # of that partner still dominates.
   - component: figure
+    title: Fusion allele ratio of each partner
     code: |
       # FAR can be reported as 0, which a log axis cannot place, so shift both.
       eps = 0.01
@@ -39,8 +59,93 @@ renders_as:
           legend_title_text="Protein fusion type",
           margin={"t": 24, "l": 56, "r": 16, "b": 48},
       )
-  - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: prot_fusion_type, top_n_count: 3, headline: true }
-  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: splice_type }
-  - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
+    description: >-
+      Each point is a fusion call: the fusion allele ratio against its 5' partner
+      on the horizontal axis and against its 3' partner on the vertical axis. The
+      colour is the protein consequence and the size the number of supporting reads.
+      It answers how much each partner's own expression is taken up by the fusion.
+
+      How to read: a point in the top right is a fusion that is large compared with
+      both wild-type partners, which is the pattern of a driver. A point near an axis
+      means one partner is still expressed mostly in its normal form. Compare with the
+      read counts in the table before trusting a low-support point.
+
+      Lines and annotations: both axes are logarithmic, and a small constant of 0.01
+      is added to each ratio so that a ratio of zero can be placed. No cut-off is drawn
+      because FusionInspector publishes none for these ratios.
+  - component: card
+    column: log_ffpm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Fusion expression
+    description: >-
+      The hero number is the median expression of the fusion calls, as log10 of FFPM
+      plus one, and the box shows their quartiles. It answers how strongly the fusions
+      are expressed overall.
+
+      How to read: the scale is logarithmic because FFPM spans several orders of
+      magnitude. Calls at the low end are easy to confuse with noise, so confirm them
+      with the read support in the table.
+  - component: card
+    column: fusion
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: prot_fusion_type
+    top_n_count: 3
+    headline: true
+    caption: calls, by protein consequence
+    title: Distinct fusions
+    description: >-
+      The hero number is the count of distinct fusion gene pairs, and the bars rank
+      the protein consequences of the calls. It answers how many fusions were
+      validated and whether they keep the reading frame.
+
+      How to read: in-frame calls are the ones expected to give a chimeric protein.
+      Many frameshift calls usually point to junction artefacts, so check their read
+      support before following them up.
+  - component: card
+    column: supporting_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: splice_type
+    caption: reads, by splice type
+    title: Supporting reads
+    description: >-
+      The hero number is the total of junction reads and spanning fragments over all
+      calls, and the ring splits calls by the splice type FusionInspector assigned.
+      It answers how much evidence there is and where the junctions sit relative to
+      known splice sites.
+
+      How to read: a ring dominated by reference splice sites is the usual pattern of
+      a real fusion. A large share of non-reference splice calls deserves a look at the
+      individual junctions.
+  - component: card
+    column: junction_fraction
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: average, with its range
+    title: Junction purity
+    description: >-
+      The hero number is the average share of supporting reads that cross the
+      breakpoint, and the histogram shows how that share is spread over the calls.
+      It answers how direct the evidence is.
+
+      How to read: values near one mean the support is carried by junction reads. Values
+      near zero mean the call rests on spanning fragments only. FusionInspector gives
+      no cut-off, so read the shape against the rest of the run.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: Validated fusions table
+    description: >-
+      Each row is a fusion transcript pair with its read support, expression, allele
+      ratios and protein consequence. It answers which calls to follow up and lets a
+      row selection filter the rest of the dashboard.
+
+      How to read: sort by supporting reads or by expression, and filter by protein
+      consequence to keep the in-frame calls.

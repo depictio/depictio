@@ -130,14 +130,20 @@ def test_another_vite_run_leaves_it_up_to_date(repo):
     assert viewer_outdated(repo) is None
 
 
+# Answers `pnpm --version` as pnpm 10, so the build runs this pnpm.
+VERSION_10 = 'case "$1" in --version) echo 10.34.7; exit 0;; esac\n'
+
+
 @pytest.fixture
 def pnpm(tmp_path, monkeypatch):
-    """A pnpm on PATH that records each call; FAKE_PNPM_EXIT is its exit code."""
+    """A pnpm on PATH that records each call but --version; FAKE_PNPM_EXIT is its exit
+    code, FAKE_PNPM_VERSION its version (pnpm 10 by default)."""
     bin_dir = tmp_path / "bin"
     calls = tmp_path / "calls.txt"
     _write(
         bin_dir / "pnpm",
         "#!/bin/sh\n"
+        'case "$1" in --version) echo "${FAKE_PNPM_VERSION:-10.34.7}"; exit 0;; esac\n'
         'echo "pnpm $*"\n'
         f'echo "$* | $(pwd) | $VITE_NO_SOURCEMAP | $NODE_OPTIONS" >> "{calls}"\n'
         "exit ${FAKE_PNPM_EXIT:-0}\n",
@@ -186,7 +192,7 @@ def test_a_signal_during_the_build_stops_pnpm_and_what_it_runs(repo, tmp_path, m
     # pnpm runs a long step (vite, say), then `kill` arrives or the terminal closes.
     _write(
         bin_dir / "pnpm",
-        f"#!/bin/sh\nsleep 60 &\necho $! > '{child}'\nkill -{signum.name[3:]} $PPID\nwait\n",
+        f"#!/bin/sh\n{VERSION_10}sleep 60 &\necho $! > '{child}'\nkill -{signum.name[3:]} $PPID\nwait\n",
     ).chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
 
@@ -217,7 +223,8 @@ def _signal_inside_popen(monkeypatch, signum, ready):
 
     def popen(*args, **kwargs):
         proc = real(*args, **kwargs)
-        if not sent:
+        # Not on `pnpm --version`, read before the build guards its signals.
+        if not sent and "--version" not in args[0]:
             sent.append(signum)
             deadline = time.monotonic() + 10
             while not ready() and time.monotonic() < deadline:
@@ -231,7 +238,9 @@ def _signal_inside_popen(monkeypatch, signum, ready):
 @pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
 def test_a_signal_inside_popen_still_stops_what_pnpm_runs(repo, tmp_path, monkeypatch, signum):
     bin_dir, child = tmp_path / "bin", tmp_path / "child.pid"
-    _write(bin_dir / "pnpm", f"#!/bin/sh\nsleep 60 &\necho $! > '{child}'\nwait\n").chmod(0o755)
+    _write(
+        bin_dir / "pnpm", f"#!/bin/sh\n{VERSION_10}sleep 60 &\necho $! > '{child}'\nwait\n"
+    ).chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     _signal_inside_popen(monkeypatch, signum, ready=lambda: child.exists() and child.read_text())
 
@@ -250,3 +259,55 @@ def test_without_pnpm_the_build_says_what_to_install(repo, monkeypatch, tmp_path
 
     with pytest.raises(LocalStackError, match="pnpm is not installed.*corepack enable pnpm"):
         build_viewer(repo, tmp_path / "viewer-build.log")
+
+
+@pytest.fixture
+def corepack(tmp_path, monkeypatch):
+    """A corepack on PATH that records each call, beside the pnpm fixture's bin."""
+    calls = tmp_path / "corepack-calls.txt"
+    _write(
+        tmp_path / "bin" / "corepack",
+        f'#!/bin/sh\necho "$* | $(pwd)" >> "{calls}"\n',
+    ).chmod(0o755)
+    return calls
+
+
+def test_an_older_pnpm_builds_through_corepack_pnpm_10(repo, pnpm, corepack, tmp_path, monkeypatch):
+    # pnpm 9 hashes patches/ another way than the pnpm 10 that wrote the lockfile, and
+    # refuses the frozen install.
+    monkeypatch.setenv("FAKE_PNPM_VERSION", "9.15.9")
+    log = tmp_path / "viewer-build.log"
+
+    build_viewer(repo, log)
+
+    viewer = repo / "depictio" / "viewer"
+    assert corepack.read_text().splitlines() == [
+        f"pnpm@10 install --frozen-lockfile | {repo}",
+        f"pnpm@10 run build | {viewer}",
+    ]
+    assert not pnpm.exists()
+    # The log names the step as pnpm runs it, whichever way pnpm 10 is reached.
+    assert "$ pnpm install --frozen-lockfile" in log.read_text()
+
+
+def test_pnpm_10_on_path_is_used_even_with_corepack(repo, pnpm, corepack, tmp_path):
+    build_viewer(repo, tmp_path / "viewer-build.log")
+
+    assert len(pnpm.read_text().splitlines()) == 2
+    assert not corepack.exists()
+
+
+def test_an_older_pnpm_without_corepack_says_which_version_is_needed(
+    repo, pnpm, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("FAKE_PNPM_VERSION", "9.15.9")
+    real_which = local_stack.shutil.which
+    monkeypatch.setattr(
+        local_stack.shutil, "which", lambda name: None if name == "corepack" else real_which(name)
+    )
+
+    with pytest.raises(
+        LocalStackError, match=r"built with pnpm 10, and .* is pnpm 9\. Install pnpm 10"
+    ):
+        build_viewer(repo, tmp_path / "viewer-build.log")
+    assert not pnpm.exists()

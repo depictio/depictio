@@ -3,11 +3,37 @@ name: Annotation concordance
 mode: cazyme/concordance
 description: >-
   Gene by annotation-tool membership matrix: 1 when HMMER, dbCAN-sub or DIAMOND
-  reported a CAZy family for the gene. run_dbCAN recommends a family only where
-  at least two of the three agree, so the intersections read as call confidence.
+  reported a CAZy family for the gene. The more tools agree on a gene, the more
+  confident its call, so the intersections read as call confidence.
 find: { path_glob: "**/dbcan/cazyme_annotation/*/*_overview.tsv" }
 recipe: dbcan/tool_overlap.py
 fixture: tool_overlap.tsv
 renders_as:
-  - { id: cazyme_upset, component: advanced_viz, kind: upset_plot }
-  - { component: table }
+  - id: cazyme_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Agreement between the three tools
+    config:
+      set_columns: [hmmer, dbcan_sub, diamond]
+      color_intersections_by: degree
+    description: >-
+      Each bar is a combination of annotation tools, with the number of genes that
+      exactly those tools called a CAZyme, and the dots below say which tools are in
+      the combination. It answers how often the three run_dbCAN tools agree.
+
+      How to read: a tall bar on all three dots is a gene every tool confirms. Bars
+      on a single dot are genes only one tool called, the weakest calls. Bars are
+      coloured by the number of tools in the combination.
+
+      Lines and annotations: no line is drawn. The dbCAN2 paper combined its tools
+      and removed the CAZymes found by only one of them to improve accuracy, so the
+      bars with two or three dots are the calls the combination supports.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/29771380/
+  - component: table
+    title: Tool membership per gene
+    description: >-
+      Each row is a gene, with a 1 under each tool that reported a CAZy family for
+      it and a 0 otherwise. It answers which tools back a given gene.
+
+      How to read: filter on a tool column to list the genes it reports alone.
