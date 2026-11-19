@@ -326,13 +326,19 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 ### Offline outputs: one manifest, one runtime, two hosts
 - The serverless bundle (`/serverless/export-static`, `static.html`) and the rendered notebook report
   embed the same `BundleManifest` from producer A (`depictio/serverless/producer_a.py`) and the same
-  static runtime. Module swaps live once in `viewer/vite-plugins/static-runtime.ts` (both configs);
-  `check:static-shim` walks both entries (`static-runtime/main.tsx`, `static-runtime/report/main.tsx`)
-- Report host: `vite.report.config.ts` → `dist-static/report-runtime.{js,css}` (built by `build:static`,
-  CSS scoped to `.depictio-report-root` by `vite-plugins/scope-css.ts`). The generator's
-  `embed_runtime` wraps each tile in `data-depictio-tile="<tab>:<index>"` with its own output as
+  static runtime. Module swaps live once in `viewer/vite-plugins/static-runtime.ts`;
+  `check:static-shim` walks both entries (`static-runtime/main.tsx`, `static-runtime/combined/main.tsx`)
+- Report host: ONE runtime, `dist-static/combined-runtime.{js,css}` (built by `build:static`). A
+  report-only file and a combined report+dashboard file differ only in the report config's
+  `combined` section: without it `combined/main.tsx` boots the report host alone (no Dashboard
+  switch, no iframe). `depictio dashboard combine-report` adds that section offline. The worker
+  builds the manifest before the render and `combined.embed_runtime` places the runtime where
+  Quarto's plotly.js was; `report_runtime.runtime_parts` is the one composer (worker + `DepictioClient`),
+  `combined-runtime.mjs` its JS twin (byte parity: `test_runtime_compose_parity.py`). The
+  generator wraps each tile in `data-depictio-tile="<tab>:<index>"` with its own output as
   `.depictio-fallback`; `depictio/serverless/report.py` builds the block (owner-only, like a static
-  export; pinned/grouped states refused); `depictio/notebook/report_runtime.py` is the shared markup
+  export; pinned/grouped states refused); `POST /serverless/report-manifest/{id}` is a Celery job
+  (202, then `GET .../job/{job_id}`)
 - Which tile mounts: `static-core/src/reportMount.ts` (live always, frozen only at the default state)
 - `BundleManifest.initial_filters` is the report's exported state; a contract change means
   regenerating `serverless.schema.json` and `manifest-basic.json`
