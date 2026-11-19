@@ -32,6 +32,11 @@ from dataclasses import dataclass, field
 #: needs up to one whole block past the block it ends in.
 BGZF_MAX_BLOCK = 1 << 16
 
+#: Most bytes :func:`bgzf_decompress` inflates. A real tabix/CSI index or BAM
+#: header is a few MB decompressed; the ceiling only exists so a crafted file
+#: in a track collection cannot exhaust the worker's memory during an export.
+MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024
+
 
 class IndexFormatError(ValueError):
     """The bytes are not the index (or header) they were read as."""
@@ -154,22 +159,40 @@ class _Reader:
         return out
 
 
-def bgzf_decompress(data: bytes, limit: int | None = None) -> bytes:
+def bgzf_decompress(
+    data: bytes, limit: int | None = None, max_output: int | None = None
+) -> bytes:
     """Concatenated gzip members (BGZF) decompressed, up to ``limit`` bytes.
 
     A truncated last member (the caller read a prefix of the file) is decoded
     as far as it goes.
+
+    Never inflates more than ``max_output`` bytes (default
+    :data:`MAX_DECOMPRESSED_BYTES`): the input comes from a data collection, and
+    a few MB of crafted gzip can expand to gigabytes. With a ``limit`` at or
+    under the cap the output is cut there, as asked; past the cap it is an
+    :class:`IndexFormatError`, never a partial result read as a whole one.
     """
+    max_output = MAX_DECOMPRESSED_BYTES if max_output is None else max_output
+    cap = max_output if limit is None else min(limit, max_output)
     out = bytearray()
     buf = data
     while buf:
         d = zlib.decompressobj(31)
         try:
-            out += d.decompress(buf)
+            # One byte past the cap tells a stream that overflows it from one
+            # that ends exactly on it.
+            out += d.decompress(buf, cap - len(out) + 1)
         except zlib.error as exc:
             if out:
                 break
             raise IndexFormatError(f"not BGZF/gzip data: {exc}") from exc
+        if len(out) > cap:
+            if limit is not None and limit <= max_output:
+                return bytes(out[:limit])
+            raise IndexFormatError(
+                f"decompresses past {max_output // (1024 * 1024)} MB; refused as an index"
+            )
         if limit is not None and len(out) >= limit:
             break
         if not d.eof:
