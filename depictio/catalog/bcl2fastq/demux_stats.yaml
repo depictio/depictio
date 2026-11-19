@@ -7,16 +7,138 @@ description: >-
 find:
   path_glob: "**/Stats/Stats.json"
 recipe: bcl2fastq/demux_stats.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several lanes.
 fixture: demux_stats.tsv
 renders_as:
-  - { id: lane_composition, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: lane_label, taxon: sample, rank: level, abundance: pct_of_lane} }
-  - { id: lane_sunburst, component: advanced_viz, kind: sunburst,
-      roles: {abundance: reads, ranks: [lane_label, sample]} }
-  - { id: library_index_purity, component: advanced_viz, kind: scatter_xy,
-      roles: {x: reads, y: pct_perfect_index, label: sample, color: lane_label} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_of_lane, color: lane_label, title: Share of the lane per library} }
-  - { component: card, column: reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: pct_of_lane, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_q30, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: lane_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Share of each lane per library
+    roles: {sample_id: lane_label, taxon: sample, rank: level, abundance: pct_of_lane}
+    config:
+      top_n: 8
+      x_title: Lane
+      value_title: Share of the lane (%)
+      legend_pos: bottom
+    description: >-
+      Each bar is a lane, split into the libraries of the sample sheet and the Undetermined
+      reads, sized by their share of the lane. It answers how evenly the libraries share a
+      lane and how much went unassigned.
+
+      How to read: libraries pooled in equal amounts should take similar slices. A very large
+      or very small slice points to a pooling imbalance, and a large Undetermined slice points to
+      a sample sheet or index problem, so open the unknown barcodes tile next.
+
+      Note: the eight largest libraries are drawn and the rest are grouped as Other.
+  - id: lane_sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Lanes and libraries by reads
+    roles: {abundance: reads, ranks: [lane_label, sample]}
+    description: >-
+      Each ring segment is a lane in the inner ring and a library in the outer ring, sized by
+      its reads. It answers how the reads of the run split between lanes and, within a lane,
+      between libraries.
+
+      How to read: a lane with a much smaller arc than the others yielded fewer reads, and a
+      library with a thin arc received little of its lane. The Undetermined reads appear as a
+      segment of their own, so a large one points to a demultiplexing problem.
+  - id: library_index_purity
+    component: advanced_viz
+    kind: scatter_xy
+    title: Index purity against reads per library
+    roles: {x: reads, y: pct_perfect_index, label: sample, color: lane_label}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: Reads
+      y_title: Reads with a perfect index match (%)
+      top_n_labels: 5
+      legend_pos: bottom
+    description: >-
+      Each point is a library: its reads on the horizontal axis and the percentage of its reads
+      whose index matched perfectly on the vertical axis, coloured by lane. It answers whether
+      libraries with few reads are also the ones with doubtful index matches.
+
+      How to read: libraries high on the axis are well assigned. A library low on the axis relies
+      on reads with a mismatched index, which are more likely to come from a neighbouring
+      sample, so check the unknown barcodes and the sample sheet for it. A library with very few
+      reads is more exposed, since a few misassigned reads weigh more.
+
+      Note: no cut-off is drawn, because the expected share depends on the library preparation and
+      the instrument.
+
+      Lines and annotations: the dashed line is the median share of reads with a perfect
+      index match of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of bcl2fastq.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: pct_of_lane
+      color: lane_label
+      labels: {sample: Library, pct_of_lane: Share of the lane (%), lane_label: Lane}
+    title: Share of the lane per library
+    description: >-
+      Each bar is a library, sized by its share of the lane's reads and coloured by lane. It
+      answers which libraries are over or under represented in their lane.
+
+      How to read: libraries pooled equally should have bars of similar height. A short bar
+      marks a library that received few reads and may need resequencing, and a very tall one
+      may be over pooled.
+  - component: card
+    column: reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: Reads in the largest libraries
+    caption: the three libraries with the most reads, with the median and largest per row
+    description: >-
+      The hero number is the total of reads over the rows in view, and the bars rank the
+      libraries that hold the most. It answers how many reads the run produced and which
+      libraries took the largest share.
+
+      How to read: a library far above the others is over pooled. The total includes the
+      Undetermined reads, so compare it with the lane health tile.
+  - component: card
+    column: pct_of_lane
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Library share of the lane
+    caption: median, with its spread across libraries
+    description: >-
+      The hero number is the median share of a lane held by a library, and the box shows the
+      quartiles over libraries. It answers how even the pooling is.
+
+      How to read: a narrow box means even pooling, and a long whisker marks libraries
+      well above or below the typical share. The median depends on the number of libraries
+      in the lane.
+  - component: card
+    column: pct_q30
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Bases at Q30 or above
+    caption: median, with its spread across libraries
+    description: >-
+      The hero number is the median percentage of bases with a quality score of at least
+      Q30, over the libraries in view, and the box shows the quartiles. It answers how good
+      the base calls are.
+
+      How to read: a higher percentage is better, and a library well below the others points to
+      a problem with its cluster density, chemistry or index. No cut-off is drawn, because the
+      expected value depends on the instrument and read length. Open the read quality tile
+      to see which read is worse.
+  - component: table
+    title: Library demultiplexing table
+    description: >-
+      Each row is a library in a lane, or the Undetermined reads, with its index, its reads,
+      its share of the lane, its yield, its Q30 share, its mean quality and the percentage of
+      reads that matched the index perfectly or with one mismatch. It answers how each library
+      was demultiplexed.
+
+      How to read: sort by share of the lane or by index purity to find the libraries that need
+      attention, and filter on a lane.

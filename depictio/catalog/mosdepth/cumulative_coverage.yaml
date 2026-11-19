@@ -11,8 +11,58 @@ find:
 recipe: mosdepth/cumulative_coverage.py
 fixture: cumulative_coverage.tsv
 renders_as:
-  - { id: cumulative_curve, component: advanced_viz, kind: profile,
-      roles: {series: genome_id, x: depth, y: bases_pct} }
-  - { component: card, column: bases_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: cumulative_curve
+    component: advanced_viz
+    kind: profile
+    title: Cumulative coverage curve
+    roles: {series: genome_id, x: depth, y: bases_pct}
+    config:
+      reference_x: 10
+      reference_label: 10X, minimum depth for variant and consensus calls
+      x_title: Depth (X)
+      y_title: Bases covered at least this deep (%)
+      legend_pos: bottom
+    description: >-
+      Each line is a mapping: the share of the reference covered at least at each
+      depth, from mosdepth's global distribution. It answers how much of the genome
+      is deep enough to call variants and a consensus.
+
+      How to read: a curve that stays near 100 percent and falls late means even deep
+      coverage. A curve that drops early, or a lower plateau, means part of the genome
+      is thinly covered or not covered at all. Read the value where a curve crosses the
+      marked line to see the breadth at that depth.
+
+      Lines and annotations: the vertical marker is 10X, the default minimum depth at which
+      nf-core/viralrecon calls variants and consensus bases. iVar's own default is 10 reads for a
+      consensus base but 0 for a variant call. mosdepth itself sets no cut-off.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+      and https://raw.githubusercontent.com/nf-core/viralrecon/master/conf/modules_illumina.config
+      and https://raw.githubusercontent.com/brentp/mosdepth/master/README.md
+  - component: card
+    column: bases_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Bases covered across depths
+    description: >-
+      The hero number is the median, over every depth step of every mapping, of the
+      percentage of bases covered at least that deep, and the box shows the spread.
+      It answers how quickly coverage falls off with depth overall.
+
+      How to read: read it next to the curve, since it pools every depth step. A
+      high median with a tight box means most of the genome stays covered as the
+      depth rises.
+  - component: table
+    title: Cumulative coverage
+    description: >-
+      One row is one mapping at one depth, with the percentage of bases covered
+      at least that deep. It answers how much of the genome reaches a given
+      depth.
+
+      How to read: Filter on a depth of interest and sort by the percentage to
+      rank the mappings. Look for a mapping whose percentage falls early as the
+      depth rises. It complements the cumulative curve tile of the same output,
+      which draws these rows as lines.

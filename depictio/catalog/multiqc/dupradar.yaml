@@ -13,4 +13,16 @@ find:
 # plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: dupradar }
+  - component: multiqc
+    section: dupradar
+    title: Duplication vs expression
+    description: >-
+      dupRadar's curve of the duplication rate against gene expression, one line or
+      scatter per sample. It answers whether duplicates are natural, from highly
+      expressed genes, or an artefact of library preparation.
+
+      How to read: Duplication should rise only for the most expressed genes. A high
+      rate across the whole range signals low input or over-amplification, and these
+      reads should not be removed blindly in RNA-seq.
+
+      Source: https://bioconductor.org/packages/release/bioc/html/dupRadar.html

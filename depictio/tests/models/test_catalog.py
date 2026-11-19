@@ -17,6 +17,7 @@ from depictio.models.components.advanced_viz.catalog import (
     CatalogEntry,
     CatalogFind,
     CatalogOutput,
+    _config_columns,
     check_identity,
     load_catalog_entries,
     match_run_dir,
@@ -460,6 +461,8 @@ def test_all_recipe_output_roles_resolve_against_the_recipe():
                         role_cols.add(value)
                     elif isinstance(value, (list, tuple)):
                         role_cols.update(v for v in value if isinstance(v, str))
+                # Columns a viz option names (`color_col`, `value_columns`) too.
+                role_cols |= _config_columns(r.config)
                 missing = role_cols - cols
                 assert not missing, (
                     f"{out.id} render {r.kind}: roles {sorted(missing)} "
@@ -1302,3 +1305,204 @@ def test_every_headline_card_is_a_card():
     ]
     assert headline
     assert {component for _, component in headline} == {"card"}
+
+
+# ---------------------------------------------------------------------------
+# A render's own title, About text and viz options (catalog conformance audit)
+# ---------------------------------------------------------------------------
+
+
+def _av(**kw):
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    return Render(component="advanced_viz", **kw)
+
+
+def test_render_carries_title_and_description_on_any_component():
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    r = Render(component="table", title="Hits", description="One row per hit.")
+    assert (r.title, r.description) == ("Hits", "One row per hit.")
+
+
+def test_render_config_accepts_the_kinds_own_options():
+    r = _av(kind="volcano", roles={"feature_id": "g"}, config={"top_n_labels": 5})
+    assert r.config == {"top_n_labels": 5}
+
+
+def test_render_config_checks_a_retired_kind_against_its_survivor():
+    """`ma` is a volcano view: its options are VolcanoConfig's."""
+    _av(kind="ma", roles={"feature_id": "g"}, config={"fold_change_threshold": 1.0})
+
+
+def test_render_config_rejects_an_unknown_key():
+    with pytest.raises(ValueError, match="unknown config key"):
+        _av(kind="volcano", config={"top_n_label": 5})
+
+
+def test_render_config_refuses_a_key_a_role_already_sets():
+    with pytest.raises(ValueError, match="set by 'roles'"):
+        _av(kind="volcano", roles={"label": "gene"}, config={"label_col": "other"})
+
+
+def test_render_config_is_advanced_viz_only():
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    with pytest.raises(ValueError, match="only valid for component=advanced_viz"):
+        Render(component="table", config={"top_n_labels": 5})
+
+
+def test_render_config_columns_are_grounded():
+    r = _av(kind="scatter_xy", roles={"x": "a", "y": "b"}, config={"color_col": "grp"})
+    assert "grp" in r.bound_columns()
+
+
+def test_figure_labels_are_passed_through_not_grounded():
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    r = Render(
+        component="figure",
+        visu_type="bar",
+        dict_kwargs={"x": "lane", "y": "yield_gb", "labels": {"yield_gb": "Yield (Gb)"}},
+    )
+    assert r.bound_columns() == {"lane", "yield_gb"}
+
+
+def test_figure_colour_map_is_refused():
+    """RULES.md §7: colours come from category_colors, never a per-figure map."""
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    with pytest.raises(ValueError, match="colour map"):
+        Render(
+            component="figure",
+            visu_type="bar",
+            dict_kwargs={"x": "a", "color": "b", "color_discrete_map": {"x": "#fff"}},
+        )
+
+
+def test_preview_meta_and_config_carry_the_renders_own_fields():
+    from depictio.catalog.payload import _render_meta, _render_viz_config
+
+    r = _av(
+        kind="ma",
+        title="MA plot",
+        description="Each point is a gene.",
+        roles={"feature_id": "g"},
+        config={"top_n_labels": 3},
+    )
+    out = CatalogOutput(id="t_o", find={"filename": "x.tsv"}, columns={"g": "String"})
+    meta = _render_meta(r, out, 0)
+    assert meta["title"] == "MA plot" and meta["description"] == "Each point is a gene."
+    assert _render_viz_config(r) == {"viz_kind": "ma", "feature_id_col": "g", "top_n_labels": 3}
+
+
+def test_use_inherits_the_renders_title_description_and_options(monkeypatch):
+    from depictio.models.components.advanced_viz import catalog as catalog_mod
+    from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
+
+    entry = CatalogEntry.model_validate(
+        {
+            "id": "faketool",
+            "name": "Fake",
+            "description": "d",
+            "homepage": "https://example.org",
+            "biotools_url": None,
+            "outputs": [
+                {
+                    "id": "faketool_res",
+                    "find": {"filename": "x.tsv"},
+                    "columns": {"g": "String", "lfc": "Float64", "q": "Float64"},
+                    "renders_as": [
+                        {
+                            "id": "volcano",
+                            "component": "advanced_viz",
+                            "kind": "volcano",
+                            "title": "Differential genes",
+                            "description": "Each point is a gene.",
+                            "roles": {"feature_id": "g", "effect_size": "lfc", "significance": "q"},
+                            "config": {"top_n_labels": 4},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(catalog_mod, "load_catalog_entries", lambda: (entry,))
+    base = {"workflow_tag": "w", "data_collection_tag": "d", "use": "faketool/volcano"}
+    c = AdvancedVizLiteComponent(**base)
+    assert c.title == "Differential genes"
+    assert c.description == "Each point is a gene."
+    assert c.config.top_n_labels == 4
+    # The dashboard's own title and options win.
+    own = AdvancedVizLiteComponent(**base, title="Mine", config={"top_n_labels": 9})
+    assert own.title == "Mine" and own.config.top_n_labels == 9
+
+
+def test_compose_applies_the_renders_title_and_description(monkeypatch):
+    from depictio.cli.cli.utils import compose
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    monkeypatch.setattr(
+        compose, "_render_tile_fields", lambda *a, **k: {"title": "derived", "tag": "t"}
+    )
+    r = Render(component="table", title="Hits", description="One row per hit.")
+    tile = compose._render_tile(r, None, None, None, "w", None)
+    assert tile == {"title": "Hits", "tag": "t", "description": "One row per hit."}
+
+
+def test_every_bundled_card_is_multi_metric_with_a_caption():
+    """Every card lists aggregations beyond its hero number, and says what its strip shows.
+
+    The aggregations are drawn as a stats line under whatever strip the card's
+    layout draws (`extraStatRows` in SecondaryMetrics.tsx), so a card that lists
+    none, or only repeats its hero aggregation, is a bare number again. Without
+    a `caption` the viewer prints the bare aggregation ("(Average)"), RULES.md §5.
+    """
+    no_aggs: list[str] = []
+    repeated: list[str] = []
+    no_caption: list[str] = []
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            for i, render in enumerate(output.renders_as):
+                if render.component != "card":
+                    continue
+                where = f"{entry.id}/{output.id}#{i}"
+                if not render.aggregations:
+                    no_aggs.append(where)
+                elif render.aggregations == [render.aggregation]:
+                    repeated.append(where)
+                if not render.caption:
+                    no_caption.append(where)
+    assert no_aggs == [], f"cards with no aggregations: {no_aggs}"
+    assert repeated == [], f"cards whose aggregations only repeat the hero: {repeated}"
+    assert no_caption == [], f"cards with no caption: {no_caption}"
+
+
+def test_every_bundled_render_has_a_title_and_an_about_text():
+    """Every tile names itself and carries its info popover (RULES.md §14).
+
+    Charts and tables also carry a reading guide; a filter control's one-line
+    description is enough.
+    """
+    missing: list[str] = []
+    no_guide: list[str] = []
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            for i, render in enumerate(output.renders_as):
+                where = f"{entry.id}/{output.id}#{i}"
+                if not (render.title and render.description):
+                    missing.append(where)
+                elif render.component in ("figure", "advanced_viz", "table") and (
+                    "How to read" not in render.description
+                ):
+                    no_guide.append(where)
+    assert missing == [], f"renders with no title or description: {missing}"
+    assert no_guide == [], f"charts or tables with no 'How to read:' paragraph: {no_guide}"
+
+
+def test_render_config_values_are_checked_against_the_kind():
+    """A key the kind has, with a value it refuses, fails at validate, not at import."""
+    with pytest.raises(ValueError, match="invalid config"):
+        _av(kind="volcano", config={"effect_label": "x" * 41})
+    with pytest.raises(ValueError, match="invalid config"):
+        _av(kind="ma", config={"intensity_label": "x" * 41})

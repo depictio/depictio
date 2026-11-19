@@ -30,6 +30,7 @@ PLAN_KEYS = {
     "detected_runs",
     "runs",
     "shared_samples",
+    "samples_check_gaps",
     "resolved_variables",
     "data_collections",
     "dashboards",

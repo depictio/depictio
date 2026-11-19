@@ -12,13 +12,129 @@ find:
     - "**/*.metrics.txt"
     - "**/*.MarkDuplicates.metrics.txt"
 recipe: picard/markduplicates_metrics.py
+# The fixture is enriched synthetically from 2 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: markduplicates_metrics.tsv
 renders_as:
-  - { id: duplication_vs_depth, component: advanced_viz, kind: scatter_xy,
-      roles: {x: reads_after_dedup, y: percent_duplication, label: sample, color: sample, size: duplicate_reads} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: percent_duplication, color: sample, title: Duplication rate per library} }
-  - { component: card, column: percent_duplication, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: duplicate_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: reads_after_dedup, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
-  - { component: card, column: unpaired_reads_examined, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: table }
+  # C1: one colour per library, the only grouping column the table has.
+  - id: duplication_vs_depth
+    component: advanced_viz
+    kind: scatter_xy
+    title: Duplication rate against depth
+    roles: {x: reads_after_dedup, y: percent_duplication, label: sample, color: sample, size: duplicate_reads}
+    config:
+      x_title: Reads left after duplicate removal
+      y_title: Duplication rate (fraction of mapped reads)
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a library: the reads left after duplicate removal (horizontal)
+      against its duplication rate (vertical), sized by the number of duplicates. It
+      answers whether a library is deep because it is rich or only because it is
+      duplicated.
+
+      How to read: a point high and to the left is a library that is mostly duplicates
+      with little unique data left, so more sequencing buys little. A point low and to
+      the right is a complex library. The cited Picard metric definitions state no
+      cut-off for an acceptable duplication rate.
+
+      Lines and annotations: The dashed line is the median duplication rate of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of Picard.
+
+      Source: https://broadinstitute.github.io/picard/picard-metric-definitions.html
+  - component: figure
+    visu_type: bar
+    title: Duplication rate per library
+    dict_kwargs:
+      x: sample
+      y: percent_duplication
+      color: sample
+      title: Duplication rate per library
+      labels: {sample: Library, percent_duplication: Duplication rate (fraction of mapped reads)}
+    reference_lines: [{axis: y, stat: median, column: percent_duplication}]
+    description: >-
+      Each bar is a library: the fraction of its mapped sequence that MarkDuplicates
+      flagged as duplicate. It answers which libraries are the most duplicated.
+
+      How to read: a tall bar is a library with low molecular complexity, common with
+      low-input or ancient DNA. Compare it with the complexity curve to see whether
+      deeper sequencing would add new molecules.
+
+      Lines and annotations: The dashed line is the median duplication rate of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of Picard.
+
+      Source: https://broadinstitute.github.io/picard/picard-metric-definitions.html
+  - component: card
+    column: percent_duplication
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with the spread
+    title: Duplication rate
+    description: >-
+      The hero number is the mean duplication rate, a fraction between 0 and 1, with the
+      spread across libraries in the box. It answers how much of the data is redundant.
+
+      How to read: a wide box means libraries of very different complexity. A high
+      mean means resequencing will mostly return duplicates. The cited Picard metric
+      definitions state no cut-off for this rate.
+
+      Source: https://broadinstitute.github.io/picard/picard-metric-definitions.html
+  - component: card
+    column: duplicate_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: compact
+    caption: per library, the median and the largest
+    title: Duplicate reads
+    description: >-
+      The hero number is the total of reads flagged as duplicates (unpaired plus
+      both reads of each duplicate pair), with the median and the largest library next
+      to it. It answers how much sequencing was spent on duplicates.
+
+      How to read: a maximum far above the median is a library that wasted most of its
+      reads. Compare it with the duplication rate to separate a deep library from a
+      duplicated one.
+  - component: card
+    column: reads_after_dedup
+    aggregation: sum
+    aggregations: [median, min]
+    secondary_layout: compact
+    caption: per library, the median and the smallest
+    title: Reads after duplicate removal
+    description: >-
+      The hero number is the total of examined reads left once duplicates are removed,
+      with the median and the smallest library next to it. It answers how much unique
+      data the downstream analysis has.
+
+      How to read: the smallest library is the one that limits a joint analysis. Coverage
+      downstream rests on this number rather than the raw depth.
+  - component: card
+    column: unpaired_reads_examined
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: compact
+    caption: per library, the median and the largest
+    title: Single-end reads examined
+    description: >-
+      The hero number is the total of single-end reads MarkDuplicates examined, with the
+      median and the largest library next to it. It answers how much input the
+      duplication rate rests on.
+
+      How to read: collapsed or single-end libraries report their reads here, while
+      paired libraries report read pairs in the table.
+
+      Source: https://broadinstitute.github.io/picard/picard-metric-definitions.html
+  - component: table
+    title: Duplication metrics per library
+    description: >-
+      Each row is a library: the reads examined, the duplicates flagged, the reads left
+      after removal, the duplication rate and Picard's library size estimate. It answers
+      how redundant each library is.
+
+      How to read: the estimated library size is the number of unique molecules Picard
+      infers from the paired duplicates, and is empty when it cannot be estimated.
+
+      Source: https://broadinstitute.github.io/picard/picard-metric-definitions.html

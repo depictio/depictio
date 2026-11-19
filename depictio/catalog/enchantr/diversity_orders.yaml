@@ -14,6 +14,42 @@ renders_as:
   - id: diversity_order_ci_bars
     component: advanced_viz
     kind: metric_ci_bars
+    title: Hill diversity per sample
     roles: { label: sample_id, value: d, lower: d_lower, upper: d_upper }
-  - { id: diversity_order_picker, component: interactive, interactive_type: Select, column_name: order }
-  - { component: table }
+    config:
+      metric_name: Hill diversity
+    description: >-
+      Each bar is a sample: its Hill diversity at the chosen order, with a whisker for
+      the bootstrap confidence interval. It answers which samples differ in diversity
+      beyond the uncertainty of the estimate.
+
+      How to read: pick one order with the filter. Order 0 counts every clone, order 1
+      is the exponential of Shannon entropy and order 2 the inverse Simpson index, so
+      higher orders weigh common clones more. Samples with non-overlapping whiskers
+      differ, while overlapping ones do not rule a difference out, since alakazam
+      tests it with a bootstrap delta distribution.
+
+      Lines and annotations: the whiskers are the confidence interval alakazam derives
+      by bootstrapping, as shown in its diversity vignette.
+
+      Sources: https://alakazam.readthedocs.io/en/stable/vignettes/Diversity-Vignette/ and
+      https://alakazam.readthedocs.io/en/stable/topics/calcDiversity/
+  - id: diversity_order_picker
+    component: interactive
+    interactive_type: Select
+    column_name: order
+    title: Diversity order
+    description: >-
+      Chooses which Hill order the tiles read: richness (q = 0), Shannon (q = 1) or
+      inverse Simpson (q = 2).
+
+      How to read: start at richness, then move to q = 2 to see whether the ranking of
+      samples changes once dominant clones weigh more.
+  - component: table
+    title: Hill diversity table
+    description: >-
+      Each row is a sample at one named order, with its Hill diversity and the lower
+      and upper bounds of its confidence interval. It answers the exact values behind
+      the bars.
+
+      How to read: filter by order and sort by diversity to rank the samples.

@@ -3,548 +3,548 @@
   "schema": 1,
   "modules": {
     "adapterremoval": {
-      "version": "1.0.0",
-      "content_hash": "6123cb9d733cf5ba0db49ac75bd414585114ef7af8655b2de15270ee4fbe80af"
+      "version": "1.1.0",
+      "content_hash": "c8efebf45d117970846718c91fe5ec8d751477829661fbfd62ecf9e8646ce939"
     },
     "agat": {
-      "version": "1.0.0",
-      "content_hash": "ded2246534baa99872216b60bd5cf2802b443ba6d0133d7e18363dc6cb3e65dd"
+      "version": "1.1.0",
+      "content_hash": "b7b73b8582e002503adda4ae424e0f67cb1099dcd441b0e39e96bb6add4a0b5f"
     },
     "ampcombi": {
-      "version": "1.1.0",
-      "content_hash": "d2d37061ede0b9babf6c56c99bd2b7c9e3edbfe12487ba927a7e98d3efa593ec"
+      "version": "1.2.0",
+      "content_hash": "0b1cba354171e0ec6d3e2c5ce09c3ebbe7c51068ada6ee111a38bd3dc65eb905"
     },
     "anota2seq": {
-      "version": "1.1.0",
-      "content_hash": "8417235695576416ba19c323a202bb652a9bf5cba8ba825ce94548e52e0a4700"
+      "version": "1.2.0",
+      "content_hash": "dffb183492e60957edbe58522b397a900fd62ad50dac629d8231263b122748f2"
     },
     "arriba": {
-      "version": "1.0.0",
-      "content_hash": "88a37c3dfd2f47bc6ac1e9c7157a7159b53bfb11d4289a12b65e70fbd0bfc81c"
+      "version": "1.1.0",
+      "content_hash": "36cf30e27396d71169b9bd8ac9239c21701cd8a7a3d5d804e2925084fed09f8b"
     },
     "ascat": {
-      "version": "1.0.0",
-      "content_hash": "3fa92b23ca652d844e35b5f57327f187bb9c6b50a47de4d82d9946cbdbb86312"
+      "version": "1.1.0",
+      "content_hash": "a65d4d5f75f2c31ce876cfebdaebc09a520dfdf1f212f3cdef961ccea8c82e20"
     },
     "assemblyscan": {
-      "version": "1.0.0",
-      "content_hash": "3ddaa9c7f33fa1ed257af6596eb91fa7c3fbe9cb7ebfa0c963d8705cf5fccf14"
+      "version": "1.1.0",
+      "content_hash": "6099f34b28be39f65cb1de2b33318ec6108d6408a0168b8c9e8114334cdda4aa"
     },
     "ataqv": {
-      "version": "1.1.0",
-      "content_hash": "1399b654455d411fad4832000e817de1c11dcf8b458525ca4c947d296bfffd28"
+      "version": "1.2.0",
+      "content_hash": "de8b97894d8c832e75415c9997bfcf1b9ed5b8d4149f23c68de3f01a30712801"
     },
     "bambu": {
-      "version": "1.0.0",
-      "content_hash": "9f3f04e2c8a986ec9dc8d2c8c0484ad381cb25afef1cf1009153584770f785e7"
+      "version": "1.1.0",
+      "content_hash": "f511a37afd3de4b6b7b8875eac8ba0dbc997ec4a52b90c45f20b00617dc0a567"
     },
     "bcftools": {
-      "version": "1.0.0",
-      "content_hash": "dbfec0f47a9d99ea1ca1d5dc78a8c57fa3c26a58f6dee137c6664acc854a1424"
+      "version": "1.1.0",
+      "content_hash": "8816eaf45f3c71832707bcbed558b14f58917e3466455469e6082570b4b9f7ca"
     },
     "bcl2fastq": {
-      "version": "1.0.0",
-      "content_hash": "4a23762b5cf4cfd344d8bc941ee38eca62e9ecc0fb76dd49a4f5d2a856de6cbd"
+      "version": "1.1.0",
+      "content_hash": "0fdc970173d0498a464960277d69cb29bd21fa3486715d0e1d6084a3a271fc0b"
     },
     "bclconvert": {
-      "version": "1.0.0",
-      "content_hash": "888b604c3bc3d0850bc5cb11ba14554f2c3186fe0addf3dc8eb1e53b9d183ad7"
+      "version": "1.1.0",
+      "content_hash": "71d87449b49f5ab6ed78e8761d807709e7057ed3a7fa0a55a5b909da7b4f943b"
     },
     "bedtools": {
-      "version": "1.0.0",
-      "content_hash": "e087db86a18cffb499f01576916478298ee7642a7283d8c7a68b66f27d3110ce"
+      "version": "1.1.0",
+      "content_hash": "bd493d6e364f56111b44969cb3963905f38560664452174d0e95a7afab961360"
     },
     "bismark": {
-      "version": "1.0.0",
-      "content_hash": "dce562b54a2123e797188ed88c52978ca311c1b2b938fc10ee621fbe4cf542f4"
+      "version": "1.1.0",
+      "content_hash": "7c5fa3d475474d503dc57c550e55d9751d2ab966b129ad6cdb5c327adfc89c2b"
     },
     "bowtie2": {
-      "version": "1.0.0",
-      "content_hash": "3953a1faa10fb06a43bb5457a5aa947ddd72e8df2952805eb8274233879fe36d"
+      "version": "1.1.0",
+      "content_hash": "94062dd52c51d763fa50652a33cb312bbced061f192ab562f6f63f8c632841f3"
     },
     "busco": {
-      "version": "2.0.0",
-      "content_hash": "dee3a6e2e92ad4977eb7bc1b8c51c5c975928d396532a78d41ba3d9199d491ec"
+      "version": "2.1.0",
+      "content_hash": "29678880eed0eaadf284a889e102f40c98314654b332c0a1328470c29e66126e"
     },
     "cellbender": {
-      "version": "1.0.0",
-      "content_hash": "c3839339b6d39e89679db03ca3cf2f83785e030e9c0378728531e2d7ff40c337"
+      "version": "1.1.0",
+      "content_hash": "288a718a19c298817e39034842afbbbd722f65751bcfde98e9f4d5452b14863d"
     },
     "cellranger": {
-      "version": "1.1.0",
-      "content_hash": "9d97355f747a15957f9838b8440935f199443bdc785346b48b01e16cf77ffb26"
+      "version": "1.2.0",
+      "content_hash": "c40b595d4fb308766c4cddce657e9ea553ac39db9150108cedfd90c6d41ce1b4"
     },
     "checkm2": {
-      "version": "1.1.0",
-      "content_hash": "ea40c67d701a573b4e4ef10885c7df91a0ff32e64c0b1cf053d90c0955963c03"
+      "version": "1.2.0",
+      "content_hash": "84e29f03dffd6a7a980730576b37a4e7a78a0144088e1926e47e0e92035662b3"
     },
     "checkv": {
-      "version": "1.0.0",
-      "content_hash": "6d852caa25a90968157e99116d0cdf241aa73ba259530a0d570e12471ffe760b"
+      "version": "1.1.0",
+      "content_hash": "9d2a69398eed07b33b5b951b9cdb0679512757b397414b2425f74784f2d035d6"
     },
     "chord": {
-      "version": "1.0.0",
-      "content_hash": "2c1568f146336ddd12a8beea4ec77f80c5a2a319be91b04e88953f2d7599c1c4"
+      "version": "1.1.0",
+      "content_hash": "00e1b15a119d486e099a32a38c16e3a37b870ce9f82d3652e8c033c5b5737fdd"
     },
     "cmaple": {
-      "version": "1.0.0",
-      "content_hash": "09e1d203fdfa865c534dbc6f0ed579b02b7f36871b915b3a2cceadbea41d8c32"
+      "version": "1.1.0",
+      "content_hash": "5e6550987b55eddb2f9f55731eb82c1b2c5123093fb64cc2aea3fa73dea1e79c"
     },
     "cnvkit": {
-      "version": "1.0.0",
-      "content_hash": "0a4d4923ea8ab6a86979f0ef1ad1abf3e463edd614f9e89e49514a810690fd83"
+      "version": "1.1.0",
+      "content_hash": "caf8fd060435dda55030f4d5cc6fd341bc4929f42de255c9a63284394a0c5b32"
     },
     "combgc": {
-      "version": "1.0.0",
-      "content_hash": "04fe786783f61a0319e49fcd1c054993fb4dd849d17c0625985b6be7af3d68d0"
+      "version": "1.1.0",
+      "content_hash": "26dd3d10e586f5e9ffa61edaf596fe8110a364e209d8047f45eab2a52cb2cfb5"
     },
     "controlfreec": {
-      "version": "1.0.0",
-      "content_hash": "9c4b224a651221d4672f1d966dfad70a1058fd368766f5cbbd8d3c2ff23c2ca8"
+      "version": "1.1.0",
+      "content_hash": "b0fafa811d2f082c664616f65886bcebce84bddb9a327d55c91b86e0239c2f2a"
     },
     "cooler": {
-      "version": "1.0.0",
-      "content_hash": "1664c84a3526e36a5c034deff4376522541a8fb5674c92bd1e1fc6df9d71f4a4"
+      "version": "1.1.0",
+      "content_hash": "b98793a1f42cfc2f1e1147d222249e0ba1ab3aab12dbf632e3307d0a4f740032"
     },
     "cooltools": {
-      "version": "1.0.0",
-      "content_hash": "1b3f8b64ed9820238d58554b42e7d124bb8e960aef9cbca4adfb4e8e6c6b6bbe"
+      "version": "1.1.0",
+      "content_hash": "d7520101c87f4e015eadaf235e5f6959bf018fe9fcd04fc77d3f6d5681965eec"
     },
     "crisprseq": {
-      "version": "1.0.0",
-      "content_hash": "d4a8430f14f5d35960553c0168e637ce4b7a1bac53266cafaac7a03bd81b31af"
+      "version": "1.1.0",
+      "content_hash": "5eea80a845678749daa4dd7f224f26a37e7269c76df4bfb9a261bd2dac618db8"
     },
     "ctatsplicing": {
-      "version": "1.0.0",
-      "content_hash": "b84acbe87ae0c755112c527fec6e745c595387da55f10e8c99ac24dc97b6f940"
+      "version": "1.1.0",
+      "content_hash": "d5f699fab51715b876cda1aa08199df3dbbfc4e3615abb8151901092a145d980"
     },
     "cuppa": {
-      "version": "1.0.0",
-      "content_hash": "31b29167539005cf2dfdd25352199e5f521969b81cd21363bdac3d118c3acc24"
+      "version": "1.1.0",
+      "content_hash": "b63bc4ec2000829541f984f4049b9f7f369a6ec59684ad0e52e7d1d08e452a3f"
     },
     "cutandrun": {
-      "version": "1.0.0",
-      "content_hash": "c135788cb80e076e3de3d1f91108e0ab18e888ace5bf2b9ae765c40d8d5ea099"
+      "version": "1.1.0",
+      "content_hash": "ebff4ea11dd0af5e52ab7e4e9d793e0f231044c4b2077d2b140433e7abd0d344"
     },
     "damageprofiler": {
-      "version": "1.0.0",
-      "content_hash": "f3550d00bc2dda9149b4fbd1bd0d835cde366d64a076f8788ff133b50f7464a9"
+      "version": "1.1.0",
+      "content_hash": "e29d7435c0d133c0a230cb9b576d518ffd4d649889a068885fb5aaf68e25557d"
     },
     "dbcan": {
-      "version": "1.0.0",
-      "content_hash": "3c1737c3d5dc4b499e7d4ef5c97de00a368b0dc67d7942d5338871b6ffe6b409"
+      "version": "1.1.0",
+      "content_hash": "31781fc67a1b42a90c4b303735848181657e41f81b7e23d3e84fdc4df1adf5d6"
     },
     "deeptools": {
-      "version": "1.0.0",
-      "content_hash": "260544af62814d389d12c4ca2036ab8795edb5cacf346f0119abd9bdb61271e1"
+      "version": "1.1.0",
+      "content_hash": "08b365c4b0649de61bbcfea94416e3cdda32af3e4da2f80b2e460d1b08338b59"
     },
     "deseq2": {
-      "version": "1.0.0",
-      "content_hash": "f1ab25d1daa84d86f87335b61007ed98a4df41796239203ab45668de797c364d"
+      "version": "1.1.0",
+      "content_hash": "9a55949923f8f5391e6e962e16e35d30e644dbd818ca1535b7e5ea2e61897b4a"
     },
     "dexseq": {
-      "version": "1.1.0",
-      "content_hash": "605b3f837d2e90ac1da1718f9895a33f4c710835262d1ad345f59dab0dba9153"
+      "version": "1.2.0",
+      "content_hash": "3e2d740c577e541b0b9b4fc351517ad29db0e394dbe9053ed67fbb7990bd35df"
     },
     "edger": {
-      "version": "1.0.0",
-      "content_hash": "73ab8beff7f4ebb87898379fededba859247c1c7dbbbc50f519587eab53b7360"
+      "version": "1.1.0",
+      "content_hash": "12d173fa166dab397521636265cf58d7f3f4eb23a36b808d819b2d9a46b0aa48"
     },
     "enchantr": {
-      "version": "1.0.0",
-      "content_hash": "c854715c73b883f8f44fc684e910441da6687973b93d4128030a08a9db2e426e"
+      "version": "1.1.0",
+      "content_hash": "96067823b04dcd1a971d5cd88b509f9b23c3b83bba86cc5726fb331320105705"
     },
     "endorspy": {
-      "version": "1.0.0",
-      "content_hash": "7a09eefe5b02898e25cce465a9f741eed7ce1f9c03b3822a2ef20eefb811cce5"
+      "version": "1.1.0",
+      "content_hash": "d2f415f326f4ce9ecb8aa62d65fdc79337ef6e2abe2df90cc0b52e09388ed743"
     },
     "epitopeprediction": {
-      "version": "2.0.0",
-      "content_hash": "f9195330966b2add5fbcccf48a23672c7511052b1df09e6235062be72aea883a"
+      "version": "2.1.0",
+      "content_hash": "b7ab9f8ce7ad9199e8cb4fad36929e9da5b9f2da38d8ebc8737148bb289ecbef"
     },
     "famsa": {
-      "version": "1.0.0",
-      "content_hash": "b60d44d3bec673d564444a81ecc87355c7c158159ff45eee380f9f30da91a3bd"
+      "version": "1.1.0",
+      "content_hash": "7d13aef3ec71cef54a6c84c3b7ba33a5bab96c7e21bb1fbdec143f94802b5308"
     },
     "fcsadaptor": {
-      "version": "1.0.0",
-      "content_hash": "e2bd8d34b14f585eaf63af9c3bcca9fed7f15ec01505be3a4de20ee7c69436b4"
+      "version": "1.1.0",
+      "content_hash": "39c20f8847ba27291dc399ed375e870478b3d265966e0e69389abb1caa067dc4"
     },
     "fcsgx": {
-      "version": "1.0.0",
-      "content_hash": "782c6b6e163bfa878d8d0fefc5e1e5c131cbd98354616d9e4a8c961e01b6a5d9"
+      "version": "1.1.0",
+      "content_hash": "429d9ee424af111b37fa64c3695ffb8e6970135de88b06db79003436574be593"
     },
     "funcscan": {
-      "version": "1.1.0",
-      "content_hash": "7ab5a11e6e36ff3382485422be2901803dc411d913fdd388a5978848545bf762"
+      "version": "1.2.0",
+      "content_hash": "7adf6194ba0fabde7db22c111cb43b3eeed8f71eede32bfc380d458bce8fa92b"
     },
     "fusioncatcher": {
-      "version": "1.0.0",
-      "content_hash": "29a420fd2952d396ea6fb75263af40ef85feb57b1eee4a1d371537d0bb9ebbd3"
+      "version": "1.1.0",
+      "content_hash": "2b18a27099fc06b62d999fae98e89863d8506d01749450eec3b65477af369793"
     },
     "fusioninspector": {
-      "version": "1.0.0",
-      "content_hash": "7c9adc348b56893ae5024d2841e0b2b621bc3eebb7855d08af18e3b454faf623"
+      "version": "1.1.0",
+      "content_hash": "99b2ca595a2f12a9940be5dd42d6fefceef1d7e56f67493d8c672e010c7acb31"
     },
     "fusionreport": {
-      "version": "1.0.0",
-      "content_hash": "66efa890c1beefe16c3271ae9589f46424d0aac4abbc72397adaf06456540210"
+      "version": "1.1.0",
+      "content_hash": "9181faf9d50ca008e1667d8f8d2cbe47a3cc1e41c6af2b86bc20d6e8b4b0d814"
     },
     "genomescope": {
-      "version": "1.0.0",
-      "content_hash": "8e64eb61fa5345d6219211962f88283875adf243ac0de3ce9443c45816348f35"
+      "version": "1.1.0",
+      "content_hash": "717d3dd1251fb6630790e1e7573cfa0266f8f902bfeb366fc8e763fbb6d642b8"
     },
     "gsea": {
-      "version": "1.0.0",
-      "content_hash": "650db80f8c4096cf6cdd2c935aa246dbfbb28bb956ac29cc8e9873d9fade3b0a"
+      "version": "1.1.0",
+      "content_hash": "fcd3b9009e0970748f1717340cc10d9070dd47f49cff2ffe3278d796652e2e01"
     },
     "gtdbtk": {
-      "version": "1.0.0",
-      "content_hash": "b8b8fb5d8adfd305dd7660b7d2af6f7f57a724186470e421eeccd99310a8a174"
+      "version": "1.1.0",
+      "content_hash": "d2db96b2b0504ffc1b5dcb3ebd7f5e0f9dbda019f6c029c1d8ccac9515b8447f"
     },
     "gtf": {
-      "version": "1.0.0",
-      "content_hash": "c40b62c0af9e106cfadda5908b94f400ce964be35a5e1a5abd9aa47b40ffcea3"
+      "version": "1.1.0",
+      "content_hash": "f9896d4b8294fcc14a7f0d40c2cebea9f16e90e052c516a1e15792f2c907a25f"
     },
     "hamronization": {
-      "version": "1.0.0",
-      "content_hash": "7ea7cd9eb387b23a5293208541d1633444fa17345fec3e17ba7714eb50f094e0"
+      "version": "1.1.0",
+      "content_hash": "0f08684c84e9a8be5688e25f003dfe35099090f765cc8993bca9aac830487774"
     },
     "happy": {
-      "version": "1.0.0",
-      "content_hash": "bb0cb7b78c9c4a8ac3936196e8e60426125b7cf04a61ab3e186e7755ef5f7c81"
+      "version": "1.1.0",
+      "content_hash": "759c6f99dc117440d8b8d09abf02ba5b0b72005a2055f8cd4182c157446700d8"
     },
     "hicexplorer": {
-      "version": "1.0.0",
-      "content_hash": "559cdae3a0135388ef6845b7e374085ebac835efdd0a20890774c27b21c33730"
+      "version": "1.1.0",
+      "content_hash": "d567b98cfba2b9ca01b5aa823b38ea6a7e0663aa595f0362924b81235ac5a01f"
     },
     "hicpro": {
-      "version": "1.0.0",
-      "content_hash": "578d7ab133975d0010135584f4de01601978a28f52aa21488374ecc8260cb045"
+      "version": "1.1.0",
+      "content_hash": "8b7d2f0f94cbfecc863a4f2d40b15bb7a648bb0268d13a07e2be549d9c0fe606"
     },
     "hmf_bamtools": {
-      "version": "1.0.0",
-      "content_hash": "53fd9c0346199b30843dafa6f9a7cb5acda9861aff8c8ba6e4f0c2351b9a670e"
+      "version": "1.1.0",
+      "content_hash": "c29e1e63749f58d441aa38d4b5505d66c86eadd996361f4270695742788c81d1"
     },
     "hmmer": {
-      "version": "1.0.0",
-      "content_hash": "e50ea330adf794f1912708f77a3c278e4a2525d27fcc7a22c89806cb6b05a917"
+      "version": "1.2.0",
+      "content_hash": "583bc366f5af0ef1abd4a3698943efaa3e276b0fd71cada419ac0ff2bf404c15"
     },
     "homer": {
-      "version": "1.0.0",
-      "content_hash": "be96a278a99e42c09c0a3e69c83375d0cc08af12a8ca59e37c05bd35679626cd"
+      "version": "1.1.0",
+      "content_hash": "5104986036b2e5007a139159e1011b451d6dc7331b07b7fc5ab2eea0600ec98a"
     },
     "interop": {
-      "version": "1.0.0",
-      "content_hash": "15524e256677d3c83152a4b28acd8ecaf1668dcd9f8a4f79d0a956648481ab45"
+      "version": "1.1.0",
+      "content_hash": "28399a207ef92685bbcf29eaffc7c8cfdf3fb063bc688455d4f961fed8013812"
     },
     "interproscan": {
-      "version": "1.0.0",
-      "content_hash": "b88cc5f95f0ded29e8bb129eaeb9ce059ca37727d6fb23b91f0c62f0438ab3a5"
+      "version": "1.1.0",
+      "content_hash": "a8e970481b68d64d77e95fbb9f89bd4ae2fc4c05980e8c77589147e999717fb1"
     },
     "isoseq": {
-      "version": "1.0.0",
-      "content_hash": "a5e5a5dfee531e290f9dd4a167eb45fce14df7befd12a5b77f0b613c5cd2dfac"
+      "version": "1.1.0",
+      "content_hash": "5a21a6ec5dd0de98510a0aa9e609e183d9f584da0639eed08d2066a62272c85a"
     },
     "ivar": {
-      "version": "1.0.0",
-      "content_hash": "0de902fc3a06f181b2bbbc6a35e04df72f4ab4ad26f3e30ed4e09f867a725a7e"
+      "version": "1.1.0",
+      "content_hash": "c3a5353c8a50b5e1fd8388c2a6956ea2a05b7d8678c04e19c12fd4c167a9df25"
     },
     "jellyfish": {
-      "version": "1.0.0",
-      "content_hash": "489b76de83893d2b99427a496dcea5afa28df530406e8788b5ff2a8d84882e36"
+      "version": "1.1.0",
+      "content_hash": "fa340bf5dce0eb7ce94f9c47b4f7d11bae1240992959ec562f963af4a7260bea"
     },
     "kallisto": {
-      "version": "1.0.0",
-      "content_hash": "eee65e2439f0dfb4aaa5def04099c6d92ade41edfeabc8bcca9144824d5d4ca0"
+      "version": "1.1.0",
+      "content_hash": "5b73a813e5943b0793e81a5c2eee920e5f02d252394c0ad655c58f924bdb8f30"
     },
     "last": {
-      "version": "1.0.0",
-      "content_hash": "55abeb9e15cd65462bfd0b6bef43051c44edbe6d3f4677b7002b52d2e38ecb7c"
+      "version": "1.1.0",
+      "content_hash": "0f44b8af5ffeb3e874f44d1cd0e40532a2ed64cd9f76acc9a4d1bdcd504a0145"
     },
     "lilac": {
-      "version": "1.0.0",
-      "content_hash": "9cbd28c5e4efa3dbc530c4f70bccced8bc805ef893ab2f85880e9c9ce11edf92"
+      "version": "1.1.0",
+      "content_hash": "6cf79616a6b95102de1b5d70da96792bafbe0622e60c8ffcae15e027b2687963"
     },
     "linx": {
-      "version": "1.0.0",
-      "content_hash": "d9c0e31149bfefc3d7d97856868fe297d6fd7c2036f111be4a1d739ba94cc1c8"
+      "version": "1.1.0",
+      "content_hash": "5c633502864ab0b73a4c1ab4afae5df0c5c20ac428184e0a8517f4fed9e7c0e1"
     },
     "macs2": {
-      "version": "1.0.0",
-      "content_hash": "abf30a47cb86f175bed9fcc96184c08b0c95eff0485d1c92bacdc422ac4ff403"
+      "version": "1.1.0",
+      "content_hash": "b5ed1aad805e87398484c8f82a179e02df5e19495d2bb4846beb1620bf28b72f"
     },
     "mag": {
-      "version": "1.1.0",
-      "content_hash": "c39cf656d3a1d2edb306eba82e0d558090f49f041623d4a8f013cd6a5beecf83"
+      "version": "1.2.0",
+      "content_hash": "1b39582e391a41edf9f0a1e27ee545f711274a9cf4536eb8c947979f7b9715cd"
     },
     "mcquant": {
-      "version": "1.0.0",
-      "content_hash": "c9a231fa27b537c9e62963ed45a26cafdcf9aa74749cc12507bc12e91064bc11"
+      "version": "1.1.0",
+      "content_hash": "bc3914682a2a64185685610efe27fa2213b9a38bc5c72dc562f8d3f13a26e180"
     },
     "melon": {
-      "version": "1.0.0",
-      "content_hash": "190c4e50af918d490011aab4fc5211e08bb21055aec9703459446bd43fa12c2a"
+      "version": "1.1.0",
+      "content_hash": "49cc2e97fa12538ce5207ed40f2504308645b16be3918de10297c6e6efbac9da"
     },
     "merqury": {
-      "version": "1.0.0",
-      "content_hash": "ea0046d29f93c15a90014cd2af9e3ede36aa8047dd6e135ea8877c6fa325b220"
+      "version": "1.1.0",
+      "content_hash": "9d836c28a20385c6624c76ef1da5e92d834a78e5ca3e43852d8a63a029b01d19"
     },
     "metaphlan": {
-      "version": "1.0.0",
-      "content_hash": "44e767cdc13acd6d252a018e4af0efeeaf561eb101e87b304ef1b00949281aeb"
+      "version": "1.1.0",
+      "content_hash": "7148cdf1deace21123f532f88bb87103fe592e456d6c8755b6adaf30eabd1050"
     },
     "mhcquant": {
-      "version": "1.0.0",
-      "content_hash": "f8f7e3289c1f797635e6af46fcfe6f9f557b99dfdb6c92a152fd39d40db5d3f4"
+      "version": "1.1.0",
+      "content_hash": "8ff1950cbcf058c7d9117d09db105a483549921901e35ffe3333185b45d7b398"
     },
     "mirdeep2": {
-      "version": "1.0.0",
-      "content_hash": "41aa66be78a1027d2ecda52f86e9940132b019a601372e25564dfcc44f9103e9"
+      "version": "1.1.0",
+      "content_hash": "456b99e9bcc488069b0d4160c81276e2789b68966a6c72e46b48ecc0631dceac"
     },
     "mirtop": {
-      "version": "1.0.0",
-      "content_hash": "bce286943f35affc942a72c22eec187869ee93b8af43022262a4c4fd718b91f7"
+      "version": "1.1.0",
+      "content_hash": "00efefcc1fdce57d056bc1af09046a11a9c309d0db9645e105022af1a1d8f452"
     },
     "mosdepth": {
-      "version": "1.1.0",
-      "content_hash": "63d9805fb3fcc9cd29c39b5d2ffd8ffb56e66841456312503267988fd0d03c17"
+      "version": "1.2.0",
+      "content_hash": "faf15161d2df230599c0313e5005ef8ef9d15e3639acdd5dbb6dd15a3e098fb1"
     },
     "multiqc": {
-      "version": "1.0.0",
-      "content_hash": "0229fa421c930e3d72b0966618e64ee2059658086adcbccc829bc98957136b81"
+      "version": "1.1.0",
+      "content_hash": "680daf80f4195d3e65f3130ec0087a06279a6c0eb73ff4a27ad57efd32a4c0d4"
     },
     "nanoplot": {
-      "version": "1.0.0",
-      "content_hash": "6af79d413e87990d27984fed0a58d029865c25be1f43e86904326a477aadcf3b"
+      "version": "1.1.0",
+      "content_hash": "8c7f6e1247f6d79b144cfed41d871da1518c69ec2d342520c58c02642ef68a3c"
     },
     "neo": {
-      "version": "1.0.0",
-      "content_hash": "2a8b35804ab81dec203081c8e37222aeb7ecc22ef33a6eed26b2a79997957b02"
+      "version": "1.1.0",
+      "content_hash": "84bfdd6e122be494d3e7adfd124d1327449cd4fc820009f61b64c16d58962871"
     },
     "nextclade": {
-      "version": "1.0.0",
-      "content_hash": "bbadb93020acbe9497841070179bc9825035d2dd699d43342b138879a4f1961c"
+      "version": "1.1.0",
+      "content_hash": "560b130d63796a7e702b5e56bcb4fec093a1168815722c7e987dec329ac02d5d"
     },
     "nonpareil": {
-      "version": "1.0.0",
-      "content_hash": "99a0154ec1f3dc0a40ca915496e3b0422b782e5868ab2002b68e519c6e8e711f"
+      "version": "1.1.0",
+      "content_hash": "b570ef4a1513629b2a277c508967392a27712684541a9d820d575a9cbaa240e7"
     },
     "openms": {
-      "version": "1.0.0",
-      "content_hash": "ed269d5fae2a4c1b363b42408c04433fb8dd15bb890abf140b4616e600c8254f"
+      "version": "1.1.0",
+      "content_hash": "e8abd822cb5b7f5d941bbc32a1591dd8cbd9551928b0fd73285b63f0d31fcf86"
     },
     "optitype": {
-      "version": "1.0.0",
-      "content_hash": "d58992d347a9ff84f5d476d8408fce5cdb10a0fce7acf3d552f81e0559938492"
+      "version": "1.1.0",
+      "content_hash": "77bf802f2107e58ad6256fab48282a7a5f2e4c996f4fd94ab9708f1c9f039b8c"
     },
     "orthofinder": {
-      "version": "1.0.0",
-      "content_hash": "9433ce6a2de1752d4816b64a520bcacc06b879a3d6a4f45059f18a138be99e0a"
+      "version": "1.1.0",
+      "content_hash": "1e13ce9da006253d5862d076cf0a865233dfe320c0c8e2249a50cc03122ac83d"
     },
     "pangolin": {
-      "version": "1.0.0",
-      "content_hash": "32f8ba9ed8384bde51f46bd0e1d38644b8b2419331e9e35138842e8b6f1592f4"
+      "version": "1.1.0",
+      "content_hash": "71d8e4bf52bd93ff179104358e7aaa07a96420043a4c188d574caec03e246cdc"
     },
     "pbccs": {
-      "version": "1.0.0",
-      "content_hash": "40f247a0a2791beddbeb255e2c7a8d031a8695e7b427695c567bc1207429fb19"
+      "version": "1.1.0",
+      "content_hash": "5d7125df3c55a18996b29636cca51e489dcbe8409be52d0b7670746fa8c2e655"
     },
     "picard": {
-      "version": "1.1.0",
-      "content_hash": "0a610c65f6539a3aaa2b409a547c7d39405787a16121e2a35272f2ff5cb3ad3d"
+      "version": "1.2.0",
+      "content_hash": "066e6ab2a9532c620fd566c89216d2452a8d4197c75ba0e04a5f4995e73745db"
     },
     "preseq": {
-      "version": "1.0.0",
-      "content_hash": "a316cd6f70b7e05043c6eaddb37db5ba27c866c4da270cffdc42b917cfc9989c"
+      "version": "1.1.0",
+      "content_hash": "e974cf1d2eaabc40faa08d535df28bc22449c3922995e7ce066f129e4d6d9264"
     },
     "prokka": {
-      "version": "1.1.0",
-      "content_hash": "15b0f994d4c3f78a1d7d24905e47322261e186af7e83f7391f515a6dcd96ee82"
+      "version": "1.2.0",
+      "content_hash": "38e09832edebbfd5426e664ed31931faca7f0199037c47f705418154ed5f2f2c"
     },
     "proteinannotator": {
-      "version": "1.1.0",
-      "content_hash": "33a9a3ee971b46280307693052390f509608d65c67cdf012060ced8f26fa1a5d"
+      "version": "1.2.0",
+      "content_hash": "690a55a1e02b74515379fb28bbf7f486bd1a29b241ebcf4d1976409f07079bf9"
     },
     "proteinfamilies": {
-      "version": "1.0.0",
-      "content_hash": "35914f86407e4386742930d9fe906a52c9c356121242c3c0e0248cba9789e2fc"
+      "version": "1.1.0",
+      "content_hash": "9afcde0f6b3cc6426d9d34412a643b10da3a5fbbab2832b9492017df1ab25490"
     },
     "proteinfold": {
-      "version": "1.0.0",
-      "content_hash": "101139f159a8b8b56ab87d0bbcb178174d7de63aacad41fdbb02307f0d40678f"
+      "version": "1.1.0",
+      "content_hash": "af7aa596a37b770b6d37d655ffb9110cc01f34d235b34989ee4f9b3239915213"
     },
     "purple": {
-      "version": "1.0.0",
-      "content_hash": "a514ce8d1f305a997da52947d5e59066ce89ec59dace7a5a550c7e18814c90a5"
+      "version": "1.1.0",
+      "content_hash": "46ea1e50b6264f04c1302653aefa2acc903bfb52c54914e595c03a1f4baa5a19"
     },
     "qcatch": {
-      "version": "1.0.0",
-      "content_hash": "90426e04f9008833b891d6c08cb7d3f41808e4b77b906dfa69617d2547fc8f48"
+      "version": "1.1.0",
+      "content_hash": "95f517cc291617419b5513752252b501710d7094cb9474846c3048d3401bc141"
     },
     "qiime2": {
-      "version": "2.0.0",
-      "content_hash": "5194892c709a2a7bce3003ab7169df8aab6388ecfdf56296668835e7dd75178b"
+      "version": "2.1.0",
+      "content_hash": "5fc9f48261466dbe66fde28567c636481e93a0cce70fad3310139193a15ccbe9"
     },
     "qsee": {
-      "version": "1.0.0",
-      "content_hash": "02adb58f661f920eb6516f246b49dc34e041fe3621bdb983afd14776bd1099ad"
+      "version": "1.1.0",
+      "content_hash": "b4934880cd0756470dfc676f6eb168047c8811da1755e143edd517faef988e51"
     },
     "qualimap": {
-      "version": "1.0.0",
-      "content_hash": "3dfc57c023dccb331b730605a03835233422fd29380799a5d48e57290c265148"
+      "version": "1.1.0",
+      "content_hash": "f4be694058dc1c809eb99b7ce877cfd6fda2b607e0176267bf340de10d4e2887"
     },
     "quast": {
-      "version": "1.0.0",
-      "content_hash": "53faeb50b665e59cf5d05996403c35b06a08e465ee86cae91b19810df0b234be"
+      "version": "1.1.0",
+      "content_hash": "1acda714a12913185c8ba097ac43e7912d6d0208ff318c0755a8deb009b94c60"
     },
     "repeatmasker": {
-      "version": "1.0.0",
-      "content_hash": "fed1a51b1810a8af61667fd9299d55a3676d798266a83ae5d1417edfa2bcfdec"
+      "version": "1.1.0",
+      "content_hash": "0ea4706c3ee4895365f6d704cfce56f5b48a33e45232c335e59e27b0ae13a153"
     },
     "ribocode": {
-      "version": "1.0.0",
-      "content_hash": "0669623ec0058b720ec4d753ebe2853cb476a356eba49db27d2b68f89aec2710"
+      "version": "1.1.0",
+      "content_hash": "167f2f64bd291195505fc59bb3037aa9cbef54b65b9f58472c31f02f90a0b659"
     },
     "ribotish": {
-      "version": "1.0.0",
-      "content_hash": "a5792c1d4f5949e8726ba35ece013c71ace9437a76a1e9b37ed141ad71038f85"
+      "version": "1.1.0",
+      "content_hash": "72c4af2d4bd3f5e7090eaa745556e96902f56243d3a16aafffc03d2dd0dbb361"
     },
     "ribowaltz": {
-      "version": "1.0.0",
-      "content_hash": "92e238de974e9ec2ef18bab11cdc89f1a1f481bde9237ae72d7f9d6b0b04d1c2"
+      "version": "1.1.0",
+      "content_hash": "af2a75c194f85f818faf83116eda0dc10458522b5d812299f9c1fcbfc8aff102"
     },
     "rmats": {
-      "version": "1.1.0",
-      "content_hash": "975532b028c06a4002c4057fdc51932b08e89ce24383e2b94f5b761ad7669118"
+      "version": "1.2.0",
+      "content_hash": "534d7a6a6dd72c8795e08fdc00a12b14aff1c3443c2334c28ae51b7e59796f99"
     },
     "rseqc": {
-      "version": "1.0.0",
-      "content_hash": "46433190ce443d7711df7fdf22b72ae5afe5de5c48930ec659be2b1fc57dbce4"
+      "version": "1.1.0",
+      "content_hash": "21d5cff0a703fdc890e8c0814653118b3df0616037aa9657c64b6ac24858c427"
     },
     "rtgtools": {
-      "version": "1.0.0",
-      "content_hash": "a6c8615ad9348cda450207e92f527b0759797166f6ea7c10b7559e3c1338f4cf"
+      "version": "1.1.0",
+      "content_hash": "f761a0ab3dc23e1a3d0df4e8aeae64805b7eba5a2f47c1c5608b6a94aa4b916b"
     },
     "s4pred": {
-      "version": "1.0.0",
-      "content_hash": "64cdb8bb152169322d66acc2d30d4f2db0343e72aebecbcd23b8cf12123d1b4e"
+      "version": "1.1.0",
+      "content_hash": "6d00145833fa583712895ac9c1f98db148dc29d179bbad23315be9ded2d24bee"
     },
     "salmon": {
-      "version": "1.0.0",
-      "content_hash": "86210adc02a1fe12c65aa0f54f1130da9421251ef4021b0a305e317d095f04bf"
+      "version": "1.1.0",
+      "content_hash": "57699ccdedbc2e1dd924225400ee4a1aaca0f1350e480aac974b9fba6059bc16"
     },
     "samtools": {
-      "version": "1.1.0",
-      "content_hash": "4fc6990cb017fd2bdb36f69ee1a40f5b2acad05404051a916d9ef2a41f38b715"
+      "version": "1.2.0",
+      "content_hash": "61ce5729d17ecd569cafb283fa21439cd302d86cad81574c1cb86118a19de1e1"
     },
     "seacr": {
-      "version": "1.0.0",
-      "content_hash": "8748f6925a77791072580c52069903f8c70d1435a3526f507ff48b40731149cf"
+      "version": "1.1.0",
+      "content_hash": "0bcd5342a1437cd1788bff5cc234adbf12d6f4ab08059823588124114f115730"
     },
     "seqfu": {
-      "version": "1.0.0",
-      "content_hash": "9db1087ea0c8524470fa4d0b6cb8b8f25adb3a9aa98459905d6af4e57c4d71b3"
+      "version": "1.1.0",
+      "content_hash": "4ff1105ea499a364b84ea6c6e6377b7bd1658c05b21e73f4e0cc05cb1cbf33e4"
     },
     "seqkit": {
-      "version": "1.0.0",
-      "content_hash": "d2fe5b56fa395dcf312a7212b432cba26d7cd7e7c00eae6b1c5f6ef3a4fd777c"
+      "version": "1.1.0",
+      "content_hash": "768e87713e38e5d9d6f6edbd0f836d02129df673f9b10209be06a388176a4bf7"
     },
     "seqtk": {
-      "version": "1.0.0",
-      "content_hash": "c1ddd70c60306480d4570cd39f3658384936c945860398e0e2bd1c861e70fc40"
+      "version": "1.1.0",
+      "content_hash": "e2657ea19a122654685b61dd7e0bdbbdebde8c46e45be5ccc35556d6cc4ad0a9"
     },
     "sidle": {
-      "version": "1.0.0",
-      "content_hash": "d2d14b45ea59007acadaa239bbafb9a4a4588dafa0ddfe4165ed78ccbdf6410b"
+      "version": "1.1.0",
+      "content_hash": "f7d21707a19ae0102451c64d5cf58087d53af32891f9f590cc2ca7feeed178d8"
     },
     "sigs": {
-      "version": "1.0.0",
-      "content_hash": "1212d22f21b5c8b7b95cdd72c01febe359f12afdd0f08be0af5963a4a58171f7"
+      "version": "1.1.0",
+      "content_hash": "7f26dbc3460ff2cd9e8be00059c6ba61c1011b0da464afc7e142865b39c5c907"
     },
     "simpleaf": {
-      "version": "1.0.0",
-      "content_hash": "285e929542fac760ea1423aaf4817ebfae2c7ab7b7d3fe12508703c732d29d50"
+      "version": "1.1.0",
+      "content_hash": "8226e3800dd5a016de82ec9a45869ddf6d6bb091274a89655909ee808ddf5095"
     },
     "snpeff": {
-      "version": "1.0.1",
-      "content_hash": "1afe82c15493ec0b1d6f097bdf7ce47c3acd7506073dc8eb7e3322de0984ce04"
+      "version": "1.1.0",
+      "content_hash": "2b11e16a6ab23789db3eca613a893e445a19e454b0868b54ca8f25c1dea57a87"
     },
     "sompy": {
-      "version": "1.0.0",
-      "content_hash": "c2ffb2484b47be2ff7ac32cd9e97bc7e9899d55e5013f0a4fbf69c1da3086da1"
+      "version": "1.1.0",
+      "content_hash": "5bf971d9c04898bed1337c53d441fa0a04eb7c227b64e5cfd007e8665587bc29"
     },
     "stableexpression": {
-      "version": "1.0.0",
-      "content_hash": "b8ab5bfff830f8ae656492d453ae55c479ed093529f6a1f9bfa064e83e1632c7"
+      "version": "1.1.0",
+      "content_hash": "0d20d8f5f4d1d38059b2a1c7aa7101b2a94e26064e854c20b282c8872559bf6e"
     },
     "star": {
-      "version": "1.0.0",
-      "content_hash": "3d0e6cf81f0ca29a4cc16fb0243349928e4e232b50996adeae0c5a8218426498"
+      "version": "1.1.0",
+      "content_hash": "d8aa3a2de2c43aceb8a5d928c1ed0c417eacc8fc7d451a413e56b3ff7810357a"
     },
     "starfusion": {
-      "version": "1.0.0",
-      "content_hash": "3c0b88ae22cecee333fe9bf3bf6ddb89115f205e465eee9dd2aa88f746e73a51"
+      "version": "1.1.0",
+      "content_hash": "4e2fe1d8e80c9e7b86e98c42d5a50124370d70178dfb57dd59e4e994385abea8"
     },
     "subread": {
-      "version": "1.0.0",
-      "content_hash": "71ca2e62ba9df6660f803a37f36db3d1a21875992a400ae4ddefc8bcfd7a199f"
+      "version": "1.1.0",
+      "content_hash": "22e86a9bfdef923690893e1b17e1b2a9fcc826f537a054d4cb9caa5b9ca1a21a"
     },
     "suppa": {
-      "version": "1.1.0",
-      "content_hash": "74c3b24c21c7a734a0cf7ce8824ee3971b39eca85838c924437d4cde64e4eb03"
+      "version": "1.2.0",
+      "content_hash": "7bfd643a4abefd7edc93bfbe99c47ebf33c233e0dfafa74f344f62d220de8ecb"
     },
     "svanalyzer": {
-      "version": "1.0.0",
-      "content_hash": "a4b8ec13486ae9516faa60e45083e866bb944c029a1c08fbd1cc9bf1ef4ee2eb"
+      "version": "1.1.0",
+      "content_hash": "1b366e09441e35b5fc3ba161d2aea247a5e6a61b15511645ce89cbc54f938869"
     },
     "sylph": {
-      "version": "1.0.0",
-      "content_hash": "13b56c21cb84a82ccb68aa489c690baf29f67a43abc03fc8e9c1b601c32617fd"
+      "version": "1.1.0",
+      "content_hash": "3a85d5d99e8db9cec430ead6ee696b53e954dac419d910b8cf72957cf92372cb"
     },
     "tama": {
-      "version": "1.0.0",
-      "content_hash": "fb64815128622021572457794028c839a88217cab5c9493cb0c76fc41ab8ae45"
+      "version": "1.1.0",
+      "content_hash": "2925d6522e5830c40c3a4975568552b33268df3fd298c00fd8d54e2d8ccdd39f"
     },
     "taxpasta": {
-      "version": "1.0.0",
-      "content_hash": "012187d69e7821d5229f195e8ef98cdb44ed5e51b8ded80c2e263db0b508e4f5"
+      "version": "1.1.0",
+      "content_hash": "36b6e722d036ead3603cd33fd5830d577456918da31bbf2140d09e88b56746c7"
     },
     "teal": {
-      "version": "1.0.0",
-      "content_hash": "2491206380d24ef54a370cb2e5584a4052d4b9b3c951cb3082315890748a979f"
+      "version": "1.1.0",
+      "content_hash": "79851fa27f3124eacaf4d343827ae15676a986efee966e1f13107e57780547e7"
     },
     "tiara": {
-      "version": "1.0.0",
-      "content_hash": "a0342413c460848501e8cde153eabc16a31f81a0c8de6cb7ec973a205ac2a739"
+      "version": "1.1.0",
+      "content_hash": "c8273064df9b5b375efaca09d72f50c345ab58294e7fa0622e45e7b726c5b5a0"
     },
     "tidk": {
-      "version": "1.0.0",
-      "content_hash": "9c58010658e072ff8267a44ad4833fffda51a9beb073f16bf436a2489b765dfa"
+      "version": "1.1.0",
+      "content_hash": "308d5bd142bdf51dfcf1df20ebe32d7a00e0355469082b597d66b5958c8c9ede"
     },
     "truvari": {
-      "version": "1.0.0",
-      "content_hash": "b07a0a833db58e0edfe734c340dd56bc07d22456dd13ab03ad83bb030a13c4fb"
+      "version": "1.1.0",
+      "content_hash": "b9fe95cc2fa301534193621c9f2885bb643d0af6545a7c8b0d544e909f735f26"
     },
     "vcf": {
-      "version": "1.0.0",
-      "content_hash": "920a6c3105e4ba373857ae438efc3a3c7f7a43a0af7e3532d247663dca2d12e6"
+      "version": "1.1.0",
+      "content_hash": "0335d635a664c424f78c8ec97b144e8fc86483736ed7f61eb5aee3354d81cf9c"
     },
     "vcftools": {
-      "version": "1.0.0",
-      "content_hash": "a5b592b6ff821da08a0b9c059660fb98bd8f64323fcfe80db43f1fc59b83e2b1"
+      "version": "1.1.0",
+      "content_hash": "28d2432e6158447dd0ca09a870cc7bb9ac92e41ed37dbefe6a85c2421d5535bd"
     },
     "viralmetagenome": {
-      "version": "1.0.0",
-      "content_hash": "ceea477fa8273bf8cfe674fd96ad6c493e8ad5c5304ee3f3da9b482cb80b527e"
+      "version": "1.1.0",
+      "content_hash": "df4daf639d063fdc5ee3a5e33614e249658b8e657b3d4067dad166f3011d671f"
     },
     "vsearch": {
-      "version": "1.0.0",
-      "content_hash": "bd288e2ae9fbc7ac06c23eb8df7adcf22566b31b391b7b751e85d1e54e174f7a"
+      "version": "1.1.0",
+      "content_hash": "a31830422023e420117dd6fcc6b3d088ef94281dff9d91127c9b9363d57376b8"
     },
     "wittyer": {
-      "version": "1.0.0",
-      "content_hash": "40829f1b5785a267d0c26762a38eee2214870e60f7dfb659617a8aca7c61dae8"
+      "version": "2.0.0",
+      "content_hash": "97d84091a9f4e2ee76308ca13512165e1b5fc8f3b633fbc00163c0b5532be9c0"
     }
   }
 }

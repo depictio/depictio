@@ -1,14 +1,17 @@
 """HTTP surface for the serverless static-bundle exporter (producer A).
 
-Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
+Five thin endpoints around ``depictio.serverless.producer_a.export_static``:
 
 * ``GET  /export-static/{dashboard_id}/preflight`` — the ``--check`` tier table,
   per component and per tab of the dashboard's family, plus the bundle's
-  estimated size against the two ceilings (viewer permission, writes nothing).
-  It *does* read data: deciding a figure's tier means running the
+  estimated size against the two ceilings (writes nothing). For a caller who
+  may export it *does* read data: deciding a figure's tier means running the
   bind-and-refill builder over the frame the bundle would carry, so this is a
-  seconds-long call, not an instant one — and it is bounded by the same hard
-  size ceiling the build is, which it reports as a 413 rather than a 404.
+  seconds-long call, bounded by the same hard size ceiling the build is (413)
+  and by a per-process concurrency cap (429). Any other viewer gets the
+  data-free plan.
+* ``GET  /export-static/{dashboard_id}/can-export`` — whether the dispatch would
+  accept this caller (the UI's button state); the same rule, no data read.
 * ``POST /export-static/{dashboard_id}`` — owner-gated; enqueues the build as a
   Celery task and returns a ``job_id``. The bundle carries the whole tab family,
   entered on the requested tab.
@@ -32,13 +35,13 @@ from __future__ import annotations
 
 import functools
 import json
+import threading
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
 import anyio.to_thread
 import boto3
-from bson import ObjectId
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response, StreamingResponse
@@ -47,8 +50,7 @@ from depictio.api.celery_app import celery_app
 from depictio.api.v1.celery_tasks import export_static_bundle as export_static_bundle_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import dashboards_collection, static_exports_collection
-from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+from depictio.api.v1.db import static_exports_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.analysis_state import NotebookExportRequest
@@ -58,6 +60,7 @@ from depictio.serverless.producer_a import (
     BundleSize,
     BundleTooLargeError,
     ProducerAError,
+    export_denial,
     export_static,
 )
 
@@ -266,6 +269,40 @@ def _compact_timestamp(built_at: Any) -> str:
 #: wants the runtime's offer (the export modal) asks for ``auto`` explicitly.
 DEFAULT_PYTHON_RUNTIME: Literal["auto", "on", "off"] = "off"
 
+#: Data-reading preflights one API process runs at once. Each loads and prunes
+#: every collection the bundle would carry (up to the size ceiling) and runs the
+#: figure builder in an API thread, so they are counted; one past the limit is
+#: a 429 the modal can retry, not a queue that holds memory.
+PREFLIGHT_CONCURRENCY = 2
+_preflight_slots = threading.BoundedSemaphore(PREFLIGHT_CONCURRENCY)
+
+
+class _PreflightBusy(Exception):
+    """Every data-reading preflight slot of this process is taken."""
+
+
+def _run_preflight(dashboard_id: str, user: Any, python_runtime: str) -> tuple[Any, bool]:
+    """``(ExportResult, bound)``: the binding preflight for whoever may export,
+    the data-free plan for everyone else.
+
+    The binding preflight reads data (see :func:`preflight_export_static`), and
+    its only reader is the export modal, which only a project owner can open.
+    A viewer (anonymous in public mode) gets the instant plan instead: the same
+    rows, figures still ``provisional``, no size and no data read.
+    """
+    if export_denial(dashboard_id, user, "owner") is not None:
+        result = export_static(
+            dashboard_id, check=True, bind=False, user=user, python_runtime=python_runtime
+        )
+        return result, False
+    if not _preflight_slots.acquire(blocking=False):
+        raise _PreflightBusy()
+    try:
+        result = export_static(dashboard_id, check=True, user=user, python_runtime=python_runtime)
+    finally:
+        _preflight_slots.release()
+    return result, True
+
 
 @serverless_endpoint_router.get("/export-static/{dashboard_id}/preflight")
 async def preflight_export_static(
@@ -309,20 +346,24 @@ async def preflight_export_static(
     exactly as it is a refusal there — the ceiling bounds this path's memory
     too.
 
-    Needs *viewer* on the dashboard's project — every row it reads is a row the
-    normal render endpoints would already serve that viewer — and writes nothing.
-    ``export_static`` is synchronous and blocks on Mongo, S3 and plotly, so it
-    runs in a worker thread rather than on the event loop.
+    Only a caller who may export (``owner`` on the project, the dispatch's own
+    rule) gets that binding preflight, and at most ``PREFLIGHT_CONCURRENCY`` run
+    at once per API process (429 past that). Any other *viewer* — anonymous in
+    public mode — gets the data-free plan: the same rows, figures left
+    ``provisional``, no ``size_estimate``, and nothing read but the documents.
+    ``bound`` says which one answered. Writes nothing. ``export_static`` is
+    synchronous and blocks on Mongo, S3 and plotly, so it runs in a worker
+    thread rather than on the event loop.
     """
     try:
-        result = await anyio.to_thread.run_sync(
-            functools.partial(
-                export_static,
-                dashboard_id,
-                check=True,
-                user=current_user,
-                python_runtime=python_runtime,
-            )
+        result, bound = await anyio.to_thread.run_sync(
+            functools.partial(_run_preflight, dashboard_id, current_user, python_runtime)
+        )
+    except _PreflightBusy:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many export previews are running; try again in a few seconds.",
+            headers={"Retry-After": "5"},
         )
     except BundleTooLargeError as exc:
         # Not a 404: the dashboard exists and this caller may read it. Answering
@@ -385,6 +426,7 @@ async def preflight_export_static(
 
     return {
         "dashboard_id": dashboard_id,
+        "bound": bound,
         "tiers": tiers,
         "tabs": tabs,
         "links": links,
@@ -394,6 +436,20 @@ async def preflight_export_static(
         # and what it adds to the file, so the modal can offer it with its size.
         "python_runtime": result.python,
     }
+
+
+@serverless_endpoint_router.get("/export-static/{dashboard_id}/can-export")
+def can_export_static(
+    dashboard_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, bool]:
+    """Whether the dispatch below would accept this caller, for the UI's button.
+
+    The same :func:`producer_a.export_denial` the dispatch and the build ask, so
+    the button is enabled exactly when the export would be accepted (project
+    owner), whoever owns the dashboard document. Reads two documents, no data.
+    """
+    return {"can_export": export_denial(dashboard_id, current_user, "owner") is None}
 
 
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
@@ -407,17 +463,9 @@ def dispatch_export_static(
     Owner-gated (RFC §8 — a bundle is bulk data exfiltration). Denials return 404
     rather than 403 so the endpoint cannot be used to enumerate dashboards.
     """
-    try:
-        oid = ObjectId(str(dashboard_id))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
-
-    dashboard = dashboards_collection.find_one({"dashboard_id": oid})
-    if not dashboard:
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
-
-    project_id = dashboard.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "owner"):
+    denial = export_denial(dashboard_id, current_user, "owner")
+    if denial is not None:
+        logger.info(f"Static export refused for {dashboard_id}: {denial}")
         raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
 
     job_id = uuid4().hex
@@ -567,12 +615,7 @@ def post_report_manifest(
     reason = report.ineligibility(request.state)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
-    try:
-        dashboard = dashboards_collection.find_one({"dashboard_id": ObjectId(str(dashboard_id))})
-    except Exception:
-        dashboard = None
-    project_id = (dashboard or {}).get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "owner"):
+    if export_denial(dashboard_id, current_user, required="owner"):
         raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
 
     job_id = uuid4().hex

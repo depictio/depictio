@@ -70,7 +70,7 @@
 template:
   template_id: "nf-core/hic/2.1.0"
   description: "nf-core/hic template: HiC-Pro's valid-pair funnel as filterable numbers, the binned intra-chromosomal contact matrix with the compartment, insulation and TAD-domain tracks stacked under it, the contact-probability curve P(s) recomputed per chromosome, and the reprocessed MultiQC report."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing hic output (compartments/, contact_maps/, distance_decay/, fastqc/, hicpro/stats/, tads/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."

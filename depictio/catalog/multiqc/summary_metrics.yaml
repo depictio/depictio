@@ -9,13 +9,129 @@ find: { path_glob: "**/multiqc/summary_variants_metrics_mqc.csv" }
 recipe: multiqc/summary_metrics.py
 fixture: summary_metrics.tsv
 renders_as:
-  - { component: card, column: pct_genome_covered_10x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true } # ≥10× breadth
-  - { component: card, column: num_variants_total, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot } # variant load
-  - { component: table }
+  - component: card
+    column: pct_genome_covered_10x
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    headline: true # >=10x breadth
+    title: Genome covered at 10x
+    description: >-
+      The hero number is the median across samples of the percent of the genome
+      covered by at least 10 reads, and the box shows the spread. It answers whether
+      the samples were sequenced deeply enough for confident variant calls.
+
+      How to read: values near 100 percent mean the whole genome is callable. A
+      sample far below the box has gaps, so its missing positions cannot be called
+      and it deserves a look before its variants are trusted.
+
+      Note: no pass mark is drawn, because the pipeline defines no cut-off for this
+      metric.
+  - component: card
+    column: num_variants_total
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Variants per sample
+    description: >-
+      The hero number is the median count of variants called per sample (SNPs and
+      indels together), and the box shows the spread. It answers how divergent the
+      samples are from the reference.
+
+      How to read: samples of one lineage should carry similar counts. A sample far
+      above its peers may be a mixed infection or a different lineage, and one far
+      below may have poor coverage.
+  - component: table
+    title: Variant-calling summary
+    description: >-
+      One row is one sample: reads mapped, coverage, SNP, indel and total variant
+      counts, and lineage. It gives the exact values behind the cards and answers
+      which samples stand out.
+
+      How to read: sort by genome coverage ascending to find the weakest samples, then
+      by variant count to find unusual ones. Compare with the lineage composition tile
+      to see whether an outlier belongs to a minority lineage.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: lineage }
-  - { component: card, column: pct_reads_mapped, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: card, column: pct_genome_covered_10x, aggregation: average, secondary_layout: threshold, threshold_value: 80, threshold_direction: min, threshold_warn: 90 }
-  - { component: card, column: lineage, aggregation: nunique, secondary_layout: donut, breakdown_col: lineage }
-  - { component: card, column: pct_genome_covered_1x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - component: card
+    column: num_variants_total
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: lineage
+    top_n_count: 3
+    caption: variants, by lineage
+    title: Variants by lineage
+    description: >-
+      The hero number is the total count of variants called across all samples, and
+      the bars rank the lineages that account for most of them. It answers which
+      lineages carry the variant load.
+
+      How to read: a lineage leading the ranking either has many samples or many
+      variants per sample, so read it with the lineage composition tile.
+  - component: card
+    column: pct_reads_mapped
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    headline: true
+    title: Reads mapped
+    description: >-
+      The hero number is the median across samples of the percent of reads that
+      mapped to the reference, and the box shows the spread. It answers how much of
+      each library is usable for calling.
+
+      How to read: a high value means a clean library on the right reference. A
+      sample far below the box points to host or other contamination, or to a
+      reference that does not match.
+  # Not a pass mark: the 80 and 90 percent lines that used to sit here had no
+  # source (RULES 17), so the card shows the weakest sample and the spread instead.
+  - component: card
+    column: pct_genome_covered_10x
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: samples, by breadth at 10x
+    title: Weakest genome breadth at 10x
+    description: >-
+      The hero number is the lowest percent of the genome covered at 10x among the
+      samples, and the histogram counts samples by that breadth. It answers whether
+      any sample is thinly covered.
+
+      How to read: a tight pile near 100 percent means every sample is deeply
+      covered. A tail to the left holds the samples to rerun or exclude.
+
+      Note: no pass mark is drawn, because the pipeline defines no cut-off for this
+      metric.
+  - component: card
+    column: lineage
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: lineage
+    caption: samples, by lineage
+    title: Lineage composition
+    description: >-
+      The hero number is the count of samples, and the ring splits them by assigned
+      lineage. It answers which lineages the batch contains and how evenly.
+
+      How to read: one dominant lineage is typical of an outbreak. Many small slices
+      mean a diverse batch, and a sample with no lineage assigned usually had too
+      little coverage to classify.
+  - component: card
+    column: pct_genome_covered_1x
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Genome covered at 1x
+    description: >-
+      The hero number is the median across samples of the percent of the genome
+      covered by at least one read, and the box shows the spread. It answers whether
+      the samples reach the whole genome at all, however thinly.
+
+      How to read: a gap between this tile and the 10x tile means regions covered
+      too thinly for calling. A sample low on both has large missing stretches.

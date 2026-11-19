@@ -11,6 +11,7 @@
     "flag_bool": "Boolean",
     "event_date": "Datetime(time_unit='us', time_zone=None)",
     "sample_id": "String",
+    "depictio_run_id": "String",
     "__code__batch": "Int32",
     "__code__flag_bool": "Int32",
     "__ts__event_date": "Int64",
@@ -28,6 +29,7 @@
     "flag_bool": 117,
     "event_date": 130,
     "sample_id": 76,
+    "depictio_run_id": 286,
     "__code__batch": 111,
     "__code__flag_bool": 117,
     "__ts__event_date": 130,
@@ -856,6 +858,43 @@
         }
       ]
     },
+    "run_id_keeps_null_runs": {
+      "matched": 858,
+      "value_f64_sum": 11.484703999999986,
+      "filters": [
+        {
+          "value": [
+            "run-1"
+          ],
+          "column_name": "depictio_run_id",
+          "interactive_component_type": "MultiSelect"
+        }
+      ]
+    },
+    "run_id_select_scalar": {
+      "matched": 857,
+      "value_f64_sum": -13.455350999999993,
+      "filters": [
+        {
+          "value": "run-2",
+          "column_name": "depictio_run_id",
+          "interactive_component_type": "Select"
+        }
+      ]
+    },
+    "select_drops_null_elsewhere": {
+      "matched": 634,
+      "value_f64_sum": 73.925341,
+      "filters": [
+        {
+          "value": [
+            "alpha"
+          ],
+          "column_name": "category_str",
+          "interactive_component_type": "Select"
+        }
+      ]
+    },
     "empty_value_drops_its_filter_expr": {
       "matched": 2000,
       "value_f64_sum": 19.096772,
@@ -1314,7 +1353,7 @@
         "top": [
           {
             "name": "2",
-            "count": 0.2824116737967915,
+            "count": 0.2824116737967914,
             "percent": null
           },
           {
@@ -1352,7 +1391,7 @@
           },
           {
             "name": "5",
-            "count": 0.07979254857142855,
+            "count": 0.07979254857142858,
             "percent": null
           },
           {

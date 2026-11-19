@@ -11,16 +11,96 @@ find:
   path_glob_alt:
     - "**/prokka/**/*.gff"
 recipe: prokka/gene_track.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several feature classes.
 fixture: gene_track.tsv
 renders_as:
-  - { id: locus_map, component: advanced_viz, kind: gene_arrow_track,
-      roles: {contig: contig, feature_id: feature_id, start: start, end: end,
-              strand: strand, class: ftype, label: gene} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: length_bp, color: ftype, title: Feature length by class} }
-  - { component: card, column: feature_id, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: ftype }
-  - { component: card, column: length_bp, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: product, aggregation: nunique,
-      secondary_layout: top_n, breakdown_col: binner, top_n_count: 4 }
-  - { component: table }
+  - id: locus_map
+    component: advanced_viz
+    kind: gene_arrow_track
+    title: Gene arrows along a contig
+    roles: {contig: contig, feature_id: feature_id, start: start, end: end,
+            strand: strand, class: ftype, label: gene}
+    description: >-
+      Each arrow is a coding sequence, transfer RNA or ribosomal RNA placed on a contig
+      of one bin, pointing in the direction of the gene and coloured by feature class.
+      It answers how the genes of a bin are organised.
+
+      How to read: pick one bin and one contig. Runs of arrows on one strand are
+      operons, a switch of direction marks a strand change, and a cluster of ribosomal
+      RNA arrows is the rRNA operon that decides the MIMAG tier of the bin.
+
+      Note: Prokka renames contigs to internal identifiers, so the coordinates are valid
+      within a bin only.
+
+      Source: https://raw.githubusercontent.com/tseemann/prokka/master/README.md
+      and https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: length_bp
+      color: ftype
+      barmode: overlay
+      opacity: 0.7
+      labels: {length_bp: Feature length (bp), ftype: Feature class}
+    title: Feature length by class
+    description: >-
+      Each bar counts features in a length bin, one overlaid histogram per feature
+      class. It answers whether the lengths of coding sequences, tRNAs and rRNAs look
+      as expected.
+
+      How to read: tRNAs are short, rRNAs long and coding sequences in between, so
+      each class forms its own peak. A coding sequence peak shifted to short lengths
+      points to fragmented genes in a poor assembly.
+  - component: card
+    column: ftype
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: ftype
+    title: Annotated features
+    caption: features, by class
+    description: >-
+      The hero number is the count of annotated features and the ring splits them by
+      class (coding sequence, tRNA, rRNA); the second figure is the number of classes.
+      It answers what the annotation is made of.
+
+      How to read: coding sequences dominate, so look for the small RNA slices. A bin
+      with no rRNA slice cannot reach the MIMAG high-quality tier.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: length_bp
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Feature length
+    caption: length, quartiles over features
+    description: >-
+      The hero number is the median feature length in base pairs and the box shows the
+      spread. It answers how long the typical annotated feature is.
+
+      How to read: a very short median means fragmented genes. Filter to one class to
+      read it for coding sequences only.
+  - component: card
+    column: product
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: binner
+    top_n_count: 4
+    title: Distinct gene products
+    caption: distinct products, by binner
+    description: >-
+      The hero number is the count of distinct gene product names and the second figure
+      the count of features; the bars rank binners by distinct products. It answers how
+      functionally diverse the annotation is.
+
+      How to read: many features with few distinct products means mostly hypothetical
+      proteins, common in uncharacterised bins.
+  - component: table
+    title: Annotated feature table
+    description: >-
+      Each row is a feature with its bin, contig, class, coordinates, strand, length,
+      gene name and product. It answers which features lie where.
+
+      How to read: filter by class or product, for example to list every tRNA of a bin.

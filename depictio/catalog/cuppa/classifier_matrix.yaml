@@ -11,5 +11,25 @@ find:
 recipe: cuppa/classifier_matrix.py
 fixture: classifier_matrix.tsv
 renders_as:
-  - { id: classifier_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: row_label} }
-  - { component: table }
+  # C6 N/A: value columns are the classifiers present on the run (DNA and RNA ones are optional columns).
+  - id: classifier_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Cancer type by classifier
+    roles: {index: row_label, row_annotation_cols: [sample]}
+    description: >-
+      Each cell is the probability one CUPPA classifier gives to one cancer type for a tumor, with the tumor
+      as a row annotation. It answers whether the classifiers agree on a tissue of origin.
+
+      How to read: a row that is high across the DNA and RNA classifiers is a call several independent feature
+      families back. A row high in the combined column but low in the others rests on one family.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/cuppa/README.md
+  - component: table
+    title: Classifier probabilities
+    description: >-
+      Each row is a cancer type for a tumor, with one probability column per classifier. It answers the exact
+      score each classifier gave.
+
+      How to read: sort by the combined column to see CUPPA's ranking and compare it with the feature
+      classifiers.

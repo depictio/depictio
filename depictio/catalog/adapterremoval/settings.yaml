@@ -10,12 +10,147 @@ find:
 recipe: adapterremoval/settings.py
 fixture: settings.tsv
 renders_as:
-  - { id: collapse_vs_length, component: advanced_viz, kind: scatter_xy,
-      roles: {x: average_retained_length, y: collapse_rate, label: sample, color: sample, size: retained_reads} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: retained_reads, color: sample, title: Sequences retained per report} }
-  - { component: card, column: total_read_pairs, aggregation: sum, secondary_layout: attrition, attrition_cols: [well_aligned_read_pairs, collapsed_pairs] }
-  - { component: card, column: collapse_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: average_retained_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: discard_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: retained_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: table }
+  # Coloured by report: the table has one row per report and no group column, so
+  # the report id is the only pertinent split.
+  - id: collapse_vs_length
+    component: advanced_viz
+    kind: scatter_xy
+    title: Collapse rate against retained length
+    roles: {x: average_retained_length, y: collapse_rate, label: sample, color: sample, size: retained_reads}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: Average retained length (bp)
+      y_title: Share of pairs collapsed
+      legend_pos: bottom
+    description: >-
+      Each point is one AdapterRemoval report, usually a lane or a library: the mean
+      length of its retained sequences against the share of read pairs merged into a
+      single sequence, sized by the sequences retained. It answers whether the
+      insert sizes of a library are short enough for mates to overlap.
+
+      How to read: short fragments make the mates overlap, so a high collapse rate
+      goes with a short retained length. That is the expected shape of an ancient or
+      degraded DNA library. A low collapse rate with long retained sequences means
+      the inserts are longer than the reads and the mates cannot merge.
+
+      Lines and annotations: the dashed line is the median collapse rate of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      AdapterRemoval.
+
+      Source: https://adapterremoval.readthedocs.io/en/stable/manpage.html
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: retained_reads
+      color: sample
+      labels: {sample: Report, retained_reads: Sequences retained}
+    title: Sequences retained per report
+    reference_lines:
+      - {axis: y, stat: median, column: retained_reads}
+    description: >-
+      Each bar is one AdapterRemoval report: the number of sequences it wrote out,
+      which is the input of the mapper. It answers how much data each report
+      contributes after trimming and collapsing.
+
+      How to read: reports of one library type should be of similar size. A very short
+      bar is a report that lost most of its reads to discarding, so check its
+      discard rate before pooling it.
+
+      Lines and annotations: the dashed line is the median number of sequences retained
+      per report of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of AdapterRemoval.
+  - component: card
+    column: total_read_pairs
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: attrition
+    attrition_cols: [well_aligned_read_pairs, collapsed_pairs]
+    caption: pairs, from input to overlapping to collapsed
+    title: Read pairs processed
+    description: >-
+      The hero number is the total of read pairs given to AdapterRemoval across the
+      reports, and the strip steps down to the pairs whose mates overlapped and the
+      pairs merged into one sequence. It answers how much of the input survives each
+      step.
+
+      How to read: a short step from overlapping to collapsed means most overlapping
+      pairs were merged. A large drop from input to overlapping means long inserts,
+      which is normal for modern DNA and unusual for ancient DNA.
+
+      Source: https://adapterremoval.readthedocs.io/en/stable/manpage.html
+  - component: card
+    column: collapse_rate
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Collapse rate
+    description: >-
+      The hero number is the median across reports of the share of read pairs merged
+      into a single sequence, and the box shows the spread. It answers how often the
+      mates overlap enough to merge.
+
+      How to read: a high share is the expected shape of an ancient or degraded
+      library, with short fragments. A low share on such a library suggests modern
+      DNA or long inserts. A report far from the box deserves a look at its library
+      preparation.
+
+      Source: https://adapterremoval.readthedocs.io/en/stable/manpage.html
+  - component: card
+    column: average_retained_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Retained length
+    description: >-
+      The hero number is the median across reports of the mean length of a retained
+      sequence, in base pairs, and the box shows the spread. It answers how long the
+      sequences handed to the mapper are.
+
+      How to read: short sequences map ambiguously and long ones map better. A report
+      well below its peers may have been over-trimmed or be a degraded library.
+  - component: card
+    column: discard_rate
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Discard rate
+    description: >-
+      The hero number is the median across reports of the share of reads dropped on
+      quality or length, and the box shows the spread. It answers how much data
+      trimming throws away.
+
+      How to read: a low share means the library trims cleanly. A report far above its
+      peers has many reads too short or too poor to keep, which points to adapter
+      dimers or degraded input.
+
+      Source: https://adapterremoval.readthedocs.io/en/stable/manpage.html
+  - component: card
+    column: retained_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: reports, by sequences retained
+    title: Sequences retained
+    description: >-
+      The hero number is the total of sequences written out across the reports, and
+      the histogram counts the reports by how many each retained. It answers how much
+      data is left for mapping and how evenly the reports contribute.
+
+      How to read: a tight pile means evenly sized reports. A long tail of small
+      reports holds the lanes or libraries that lost most of their reads.
+  - component: table
+    title: Trimming and collapsing statistics
+    description: >-
+      One row is one AdapterRemoval report, with its read counts at each step,
+      retained length, collapse rate and discard rate. It gives the exact values
+      behind the tiles and answers which reports lose or merge the most reads.
+
+      How to read: sort by discard rate to find the reports that lose the most reads,
+      then by collapse rate to see how many pairs were merged. The counts balance, so
+      pairs in, mates merged and reads discarded add up to the sequences retained. It
+      complements the collapse rate and discard rate tiles.

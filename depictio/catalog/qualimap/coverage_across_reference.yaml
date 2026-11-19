@@ -11,12 +11,118 @@ find:
 recipe: qualimap/coverage_across_reference.py
 fixture: coverage_across_reference.tsv
 renders_as:
-  - { id: reference_coverage_track, component: advanced_viz, kind: coverage_track,
-      roles: {chromosome: chromosome, position: position, value: coverage, sample: sample} }
-  - { id: reference_genome_view, component: advanced_viz, kind: genome_view,
-      roles: {chr: chromosome, pos: position, score: coverage, sample: sample} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: global_position, y: coverage, color: sample, title: Depth along the concatenated reference} }
-  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: coverage, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: coverage_std, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, page_size: 25 }
+  # C1: both tracks bind the library (`sample`) to colour.
+  - id: reference_coverage_track
+    component: advanced_viz
+    kind: coverage_track
+    title: Read depth along the reference
+    roles: {chromosome: chromosome, position: position, value: coverage, sample: sample}
+    config:
+      color_by: sample
+    description: >-
+      Each point is a window of the reference, drawn at its position on its contig
+      with the read depth Qualimap measured there, one line per library. It answers
+      where along the genome the reads pile up or thin out.
+
+      How to read: a flat line means an even library. Spikes point to repeats,
+      amplified regions or organelle contigs, and long gaps point to regions
+      the reads do not reach. Compare libraries to separate a sample effect from a
+      reference effect.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - id: reference_genome_view
+    component: advanced_viz
+    kind: genome_view
+    title: Read depth on the genome axis
+    roles: {chr: chromosome, pos: position, score: coverage, sample: sample}
+    config:
+      score_title: Read depth (X)
+    description: >-
+      Each point is a window of the reference with its read depth, laid out on a
+      chromosome-aware axis that can be zoomed. It answers the same question as the
+      coverage track with a scrollable view of every contig.
+
+      How to read: zoom into a region where the depth departs from its neighbours
+      and compare libraries. Qualimap defines no depth cut-off, so no threshold line
+      is drawn.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: global_position
+      y: coverage
+      color: sample
+      labels: {global_position: Position on the concatenated reference (bp), coverage: Read depth (X), sample: Library}
+    title: Depth along the concatenated reference
+    description: >-
+      Each line is a library: the read depth in every window, with all contigs laid
+      end to end on one axis. It answers how the depth profiles of the libraries
+      compare along the whole reference.
+
+      How to read: parallel lines mean the libraries react to the reference in the
+      same way. A library whose line departs from the others at the same positions
+      points to a library-specific bias.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: coverage
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Window depth
+    caption: average window depth, with its spread
+    description: >-
+      The hero number is the average read depth over all windows and libraries, and
+      the box shows how the windows spread. It answers how even the depth is across
+      the reference.
+
+      How to read: a box that is narrow and close to the average means an even
+      library. A long upper whisker means a few windows soak up many reads.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: coverage
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: Deepest window
+    caption: deepest window, with the libraries that reach it ranked
+    description: >-
+      The hero number is the highest window depth found, and the bars rank the
+      libraries holding the deepest windows. It answers which library has the
+      strongest pile-up.
+
+      How to read: a maximum far above the median marks a collapsed region such as
+      a repeat or an organelle contig. Open the track to see where it sits.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: coverage_std
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Depth variability within windows
+    caption: average standard deviation of depth, with its spread
+    description: >-
+      The hero number is the average standard deviation of the depth inside a
+      window, and the box shows how it varies between windows. It answers how
+      uneven the depth is at a small scale.
+
+      How to read: windows with a large deviation compared with their depth hold
+      uneven or repetitive sequence. A library with a larger value overall is less
+      uniform.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: table
+    page_size: 25
+    title: Depth per window
+    description: >-
+      Each row is a window of the reference with its contig, position, mean depth
+      and the standard deviation of the depth inside it. It answers the exact depth
+      behind the tracks.
+
+      How to read: sort by depth to find the extreme windows, or filter by contig
+      to inspect one sequence.

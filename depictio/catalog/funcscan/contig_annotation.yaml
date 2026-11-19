@@ -24,12 +24,141 @@ renders_as:
   - id: contig_feature_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: Features against contig length
     roles:
       {x: contig_length, y: features, label: contig, color: top_screen, size: features_per_kb}
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: features_per_kb, color: top_screen, title: Feature density per contig} }
-  - { component: card, column: features, aggregation: sum, secondary_layout: top_n, breakdown_col: top_screen, top_n_count: 4 }
-  - { component: card, column: contig, aggregation: nunique, secondary_layout: donut, breakdown_col: top_screen, top_n_count: 4 }
-  - { component: card, column: contig_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: screens_on_contig, aggregation: average, secondary_layout: gauge, coverage_max: 4.0 }
-  - { component: card, column: features_per_kb, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: contig }
+    config:
+      x_title: Contig length (bp)
+      y_title: Features on the contig
+      log_x: true
+    description: >-
+      Each point is a contig: its length on the horizontal axis and the number of
+      features the four screens put on it on the vertical axis, sized by feature
+      density and coloured by the screen with the most features there. It answers
+      which contigs carry an unusual load of resistance genes, peptides, clusters or
+      CAZymes.
+
+      How to read: long contigs carry more of everything, so the interesting points
+      are the short contigs high on the plot, which are dense loci. A contig with
+      features from several screens is a candidate for a mobile or multi-function
+      element, so open the screening tabs for it.
+
+      Note: length is read from the contig name when the assembler wrote it there, so
+      contigs without it are not drawn.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: features_per_kb
+      color: top_screen
+      labels: {features_per_kb: Features per kb, top_screen: Top screen}
+    reference_lines:
+      - {axis: x, stat: p95, column: features_per_kb}
+    title: Feature density per contig
+    description: >-
+      Each bar counts contigs in a bin of feature density (features per kilobase),
+      split by the screen with the most features on the contig. It answers how dense
+      the annotated loci are and which screen drives the dense ones.
+
+      How to read: most contigs sit at low density, and a long right tail marks dense
+      loci such as resistance islands. A tail made of one screen shows which screen
+      produces the dense contigs.
+
+      Lines and annotations: The dashed line is the 95th percentile of the feature
+      density of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of funcscan.
+  - component: card
+    column: features
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: top_screen
+    top_n_count: 4
+    caption: features, by leading screen
+    title: Features by screen
+    description: >-
+      The hero number is the total of features the four screens put on the contigs and
+      the bars rank the screens by the features on the contigs they lead. It answers
+      which screen annotates the most loci.
+
+      How to read: the screens differ by orders of magnitude in what they report, so a
+      screen at the top reflects its design as much as the data.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: contig
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: top_screen
+    top_n_count: 4
+    caption: contigs, by leading screen
+    title: Contigs by leading screen
+    description: >-
+      The hero number is the count of contigs that carry at least one feature and the
+      ring splits them by the screen with the most features on each. It answers which
+      screen annotates most contigs.
+
+      How to read: a ring held by one screen means the others find little on these
+      contigs. Open the screening tabs to see which tools report the features.
+  - component: card
+    column: contig_length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: contig length across contigs
+    title: Contig length
+    description: >-
+      The hero number is the median length of the annotated contigs and the histogram
+      shows the distribution. It answers how contiguous the assembly is where the
+      features sit.
+
+      How to read: a metagenome assembly is mostly short contigs with a long tail of
+      long ones. Contigs without the length in their name are left out.
+  - component: card
+    column: screens_on_contig
+    aggregation: average
+    aggregations: [max]
+    secondary_layout: gauge
+    coverage_max: 4.0
+    caption: screens per contig, out of four
+    title: Screens per contig
+    description: >-
+      The hero number is the average number of screens (resistance genes, peptides,
+      clusters and CAZymes) that put a feature on the same contig, out of the four the
+      pipeline runs. It answers how often the screens find features on the same locus.
+
+      How to read: every contig in the table carries at least one screen, so an average near 1 means
+      almost every contig is annotated by one screen only.
+      Higher values point to loci with several functions, which are worth a look.
+
+      Lines and annotations: the dial maximum is four, the number of screens
+      nf-core/funcscan runs.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: features_per_kb
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: density across contigs
+    title: Feature density
+    description: >-
+      The hero number is the average number of features per kilobase on the annotated
+      contigs and the histogram shows the distribution. It answers how densely the
+      screens annotate a contig.
+
+      How to read: an average well above the median means a few very dense contigs
+      pull it up. Open the scatter to find them.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: contig
+    title: Annotated contigs table
+    description: >-
+      Each row is a contig that carries at least one feature, with its length and
+      coverage when the name holds them, the features from each screen, the screens
+      on the contig and the feature density. It answers the exact numbers behind
+      every tile and lets a row selection filter the dashboard.
+
+      How to read: sort by feature density to list the densest loci.

@@ -13,9 +13,81 @@ find:
 recipe: purple/protein_changes.py
 fixture: protein_changes.tsv
 renders_as:
-  - { id: protein_change_needles, component: advanced_viz, kind: lollipop, roles: {feature_id: entity, position: position, category: category, label: label, effect: value} }
-  - { id: protein_change_structure, component: advanced_viz, kind: molecule_3d, roles: {position: position, entity: entity, gene: entity, value: value, category: category, ref_aa: ref_aa, alt_aa: alt_aa, label: label} }
-  - { id: protein_change_count, component: card, column: label, aggregation: count, secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
-  - { id: protein_gene_filter, component: interactive, interactive_type: Select, column_name: entity }
-  - { id: protein_category_filter, component: interactive, interactive_type: MultiSelect, column_name: category }
-  - { id: protein_change_table, component: table, row_selection_enabled: true, row_selection_column: label }
+  - id: protein_change_needles
+    component: advanced_viz
+    kind: lollipop
+    title: Protein changes along the gene
+    roles: {feature_id: entity, position: position, category: category, label: label, effect: value}
+    config:
+      top_n_labels: 5
+    description: >-
+      Each needle is a somatic change at a residue of a gene, coloured by its coding effect
+      and sized by the purity-adjusted allele frequency. It answers where along the protein
+      the changes fall and how many cells carry them.
+
+      How to read: needles that stack at one residue are a hotspot, and needles clustered in a
+      region point to a functional domain. A tall needle is a change present in most tumor
+      cells, which makes it an early event.
+
+      Note: the allele frequency is adjusted for tumor purity by PURPLE, so it estimates the
+      share of tumor cells and not of all cells.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: protein_change_structure
+    component: advanced_viz
+    kind: molecule_3d
+    title: Changes on the 3D structure
+    roles: {position: position, entity: entity, gene: entity, value: value, category: category, ref_aa: ref_aa, alt_aa: alt_aa, label: label}
+    description: >-
+      Each marked residue is a somatic change mapped onto the 3D structure of its protein,
+      coloured by coding effect. It answers where in the folded protein the changes sit.
+
+      How to read: changes that fall next to each other in space, even when far apart in the
+      sequence, can act on the same site. Pick a residue on the lollipop to move to it here.
+  - id: protein_change_count
+    component: card
+    column: label
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: category
+    top_n_count: 3
+    title: Protein changes by effect
+    caption: changes, by coding effect
+    description: >-
+      The hero number is the count of protein changes in view, and the bars rank the coding
+      effects by how many they hold. The count beside it is the number of distinct changes.
+      It answers how many residues are altered and how.
+
+      How to read: missense changes usually lead, and a high share of nonsense or frameshift
+      changes points to loss of function. Synonymous changes do not alter the protein.
+  - id: protein_gene_filter
+    component: interactive
+    interactive_type: Select
+    column_name: entity
+    title: Gene
+    description: >-
+      Choose one gene. It answers which protein the lollipop and the structure show.
+
+      How to read: pick a gene to see its changes along the sequence and on the structure.
+  - id: protein_category_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: category
+    title: Coding effect
+    description: >-
+      Choose the coding effects to keep. It answers which kinds of change the other tiles show.
+
+      How to read: keep missense changes alone to leave out the synonymous ones.
+  - id: protein_change_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: label
+    title: Protein changes
+    description: >-
+      Each row is a somatic change with its gene, residue, amino acids, coding effect, allele
+      frequency and the flags for biallelic, hotspot and reported. It answers the exact
+      change behind each needle.
+
+      How to read: sort by allele frequency to find the most clonal changes. Select a row to
+      follow it on the other tiles.

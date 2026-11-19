@@ -11,5 +11,34 @@ find:
 recipe: hamronization/tool_overlap.py
 fixture: tool_overlap.tsv
 renders_as:
-  - { id: arg_upset, component: advanced_viz, kind: upset_plot }
-  - { component: table }
+  # The tool columns are 0/1 flags named by the tools that ran, so set_columns is
+  # left to auto-detect; colouring the intersections by degree shows how many
+  # tools agree.
+  - id: arg_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Contig overlap between tools
+    config:
+      color_intersections_by: degree
+      show_values: true
+    description: >-
+      Each bar counts the contigs found by one exact combination of screening tools,
+      and the dots below show which tools are in it. It answers which tools agree on
+      where resistance genes are, and which find hits no other tool does.
+
+      How to read: tall bars with many dots are contigs confirmed by several tools.
+      Tall bars with one dot are tool specific, which can be a database difference or
+      a false positive. Colour shows how many tools agree.
+
+      Note: agreement is scored on the contig because every tool has its own gene
+      vocabulary while the contig id is shared.
+
+      Source: https://github.com/pha4ge/hAMRonization/
+  - component: table
+    title: Contig by tool membership
+    description: >-
+      Each row is a contig with a 0 or 1 flag per screening tool. It answers which
+      tools found resistance genes on a given contig.
+
+      How to read: filter to one sample or to contigs found by a single tool to inspect
+      disagreements.

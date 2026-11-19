@@ -60,9 +60,9 @@ def addons_dir() -> Path:
     override = os.environ.get(ADDONS_DIR_ENV)
     if override:
         return Path(override)
-    from depictio.serverless.producer_b import _template_path
+    from depictio.serverless.dist import dist_static_dir
 
-    return _template_path().parent / "addons"
+    return dist_static_dir() / "addons"
 
 
 def registry() -> dict[str, Any]:

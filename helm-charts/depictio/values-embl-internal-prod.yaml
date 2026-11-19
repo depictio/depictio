@@ -317,3 +317,34 @@ global:
 #   -f ./helm-charts/depictio/values-embl-internal-prod.yaml \
 #   -f ./helm-charts/depictio/values-embl-secrets.yaml \
 #   -n datasci-depictio-internal-prod
+
+# MongoDB backups: daily at 03:00 UTC, smart retention (30 days daily,
+# 4 weekly, 12 monthly), so up to ~46 snapshots. Sized for real use, not
+# today's near-empty database: the showcases instance (51 projects) is ~100 MB,
+# so a few hundred MB per snapshot is expected.
+backups:
+  persistence:
+    enabled: true
+    size: 50Gi
+  schedule:
+    enabled: true
+    intervalHours: 24
+    timeOfDay: "03:00"
+    retentionDays: 30
+    weeklyWeeks: 4
+    monthlyMonths: 12
+  # Nightly 04:00 UTC copy of the backups and of the S3 data to the EMBL
+  # backup bucket. Keys: secrets.backupS3AccessKey/SecretKey in the
+  # gitignored values-embl-internal-backup-secrets.yaml.
+  offsite:
+    enabled: true
+    endpoint: https://buckets.embl.de
+    bucket: depictio-internal-backups
+    mongo:
+      retentionDays: 365
+    data:
+      enabled: true
+      # Explicit: the backend's DEPICTIO_S3_PUBLIC_URL renders as
+      # https://null.buckets.embl.de here.
+      sourceEndpoint: https://buckets.embl.de
+      archiveDays: 90

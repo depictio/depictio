@@ -14,10 +14,69 @@ find:
 recipe: famsa/alignment.py
 fixture: alignment.tsv
 renders_as:
-  - { id: family_msa, component: advanced_viz, kind: msa,
-      roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity} }
-  - { id: aligned_rows, component: card, column: seq_id, aggregation: count,
-      secondary_layout: top_n, breakdown_col: msa_id, top_n_count: 3 }
-  - { id: aligned_identity, component: card, column: identity, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: table }
+  - id: family_msa
+    component: advanced_viz
+    kind: msa
+    title: Family alignment
+    roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity}
+    description: >-
+      Each row is a sequence of a protein family, aligned to the family representative
+      on top, and each column is an alignment position coloured by residue type. It
+      answers how well the members of a family line up and where they differ.
+
+      How to read: columns of one colour are conserved positions, and a block of gaps
+      marks an insertion or a member that does not cover that region. Sequences with a
+      low identity to the representative are the divergent members, which may be
+      fragments or distant relatives. Brush columns to follow the residues on the
+      structure and the sequence track.
+
+      Lines and annotations: this module takes the first row of each alignment file as
+      the family representative and measures each row's identity against it. The
+      consensus row and the conservation bars are computed from the displayed rows,
+      which this module caps at 500 per family in file order, not a FAMSA setting.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/27670777/
+  - id: aligned_rows
+    component: card
+    column: seq_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: compact
+    caption: aligned rows, with the distinct sequences
+    title: Aligned sequences
+    description: >-
+      The hero number is the count of aligned rows across the families in view, and the
+      strip gives how many distinct sequences they are. It answers how large the
+      alignments are.
+
+      How to read: a distinct count below the row count means the same sequence sits in
+      more than one family. Rows are capped at 500 per family, so a very large family is
+      not shown in full.
+  - id: aligned_identity
+    component: card
+    column: identity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with its spread
+    title: Identity to the representative
+    description: >-
+      The hero number is the median identity between an aligned sequence and its family
+      representative, and the box shows the spread. It answers how tight the families are.
+
+      How to read: a high median means close relatives in a coherent family. A low
+      median with a long lower tail holds distant or fragmentary members, which are
+      worth checking before building a model from the family.
+
+      Note: identity is measured over the columns both sequences share, so a short
+      fragment can read as highly identical.
+  - component: table
+    title: Alignment table
+    description: >-
+      Each row is a sequence of a family alignment, with its family, its rank, the
+      aligned sequence, its identity to the representative and the share of the
+      representative it covers. It answers the exact members behind the alignment tile.
+
+      How to read: sort by identity or coverage to find the members that fit the
+      family least.

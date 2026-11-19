@@ -14,10 +14,58 @@ description: >-
 find:
   path_glob: "**/*.mosdepth.summary.txt"
 recipe: mosdepth/summary.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: summary.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: chrom, y: mean_depth, color: sample, barmode: group} }
+  - component: figure
+    visu_type: bar
+    title: Mean depth per contig
+    dict_kwargs:
+      x: chrom
+      y: mean_depth
+      color: sample
+      barmode: group
+      facet_row: scope
+      facet_col: stage
+      labels: {chrom: Contig, mean_depth: Mean depth (X), sample: Sample, scope: Scope, stage: Alignment stage}
+    description: >-
+      Each bar is a contig: its mean read depth, grouped by sample and split into the
+      whole contig (genome) and the targeted regions only (region) when mosdepth ran
+      with a target file, with one column of panels per alignment stage (md, recal). It
+      answers whether coverage is even between contigs.
+
+      How to read: bars of similar height mean even coverage. A contig far below the
+      others is under-covered, and the sex chromosomes are lower than the autosomes
+      in a single-copy sample. Compare the region facet with the genome facet to see
+      the enrichment of the targets.
+
+      Lines and annotations: the last bar is the run total, a pooled row, and no line
+      is drawn. mosdepth publishes no depth cut-off.
   # Mean depth per contig is read for its spread as much as its centre: the
   # Tukey strip shows the under-covered contigs the bar chart flattens.
-  - { component: card, column: mean_depth, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: mean_depth
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "(col('chrom') != 'total') & (col('scope') == 'genome')"
+    caption: median, with its spread
+    title: Contig mean depth
+    description: >-
+      The hero number is the median mean depth of a contig over the whole contig,
+      leaving out the run total and the on-target rows, and the box shows the
+      quartiles. It answers how evenly the contigs are covered.
+
+      How to read: a tight box means even coverage. A long lower tail holds
+      under-covered contigs, which are usually the sex chromosomes or small contigs.
+  - component: table
+    title: Coverage per contig
+    description: >-
+      One row is one contig of one sample, stage and scope, with its length,
+      bases and mean, lowest and highest depth. It answers what the depth of
+      each contig is.
+
+      How to read: Sort by the mean depth, lowest first, to find the under-
+      covered contigs, which are usually sex chromosomes or small contigs. Look
+      for contigs far from the depth of the rest of the sample. It complements
+      the per-sample depth tiles of the same output, which summarise these rows.

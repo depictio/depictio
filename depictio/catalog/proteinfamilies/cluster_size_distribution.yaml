@@ -14,9 +14,75 @@ find:
 recipe: proteinfamilies/cluster_size_distribution.py
 fixture: cluster_size_distribution.tsv
 renders_as:
-  - { id: cluster_size_profile, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: cluster_size, y: n_clusters} }
-  - { id: clusters_total, component: card, column: n_clusters, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: cluster_size, y: sequence_share, color: sample, barmode: group} }
-  - { component: table }
+  # The line at 25 is the pipeline's default `cluster_size_threshold`; a run can
+  # set another value, which this tile does not read.
+  - id: cluster_size_profile
+    component: advanced_viz
+    kind: profile
+    title: Initial cluster sizes
+    roles: {series: sample, x: cluster_size, y: n_clusters}
+    config:
+      log_y: true
+      reference_x: 25
+      reference_label: Default minimum cluster size (25)
+      x_title: Sequences in the cluster
+      y_title: Clusters
+    description: >-
+      Each line is a sample: the number of MMseqs2 clusters of every size before families
+      are built. It answers how the input sequences group and how many clusters are large
+      enough to seed a family.
+
+      How to read: most clusters are tiny, so the curve falls steeply and the count axis
+      is logarithmic. Only the tail to the right of the line can become families, so a
+      sample with almost nothing there will yield few families. Lower the threshold to
+      get more families.
+
+      Lines and annotations: the vertical line at 25 is the default minimum cluster size
+      of nf-core/proteinfamilies for seeding a family. The run may have set another
+      value, which this tile does not read.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfamilies/2.5.0/nextflow_schema.json
+  - id: clusters_total
+    component: card
+    column: n_clusters
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: compact
+    caption: clusters, with the largest size class
+    title: Initial clusters
+    description: >-
+      The hero number is the total of clusters over the samples in view, and the second
+      number is the count in the most populated size class. It answers how finely the
+      input fell apart.
+
+      How to read: the singletons dominate nearly every run, so the largest class is
+      usually the one of size one. Compare with the tail in the profile to see how many
+      clusters can seed a family.
+  - id: sequence_share_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: cluster_size
+      y: sequence_share
+      color: sample
+      barmode: group
+      labels: {cluster_size: Sequences in the cluster, sequence_share: Share of the sample's sequences, sample: Sample}
+    title: Share of sequences by cluster size
+    description: >-
+      Each bar is a cluster size: the share of a sample's input sequences that sit in
+      clusters of that size. It answers how much of the input is clustered into groups
+      large enough to be useful.
+
+      How to read: a tall bar at size one means most sequences are unclustered. Mass
+      further right means the sample holds many related sequences that can form
+      families.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfamilies/2.5.0/nextflow_schema.json
+  - component: table
+    title: Cluster size table
+    description: >-
+      Each row is a sample and cluster size with the number of clusters, the sequences
+      they hold and their share of the sample. It answers the exact numbers behind the
+      profile and the bars.
+
+      How to read: sort by cluster size to read the tail that can seed families.

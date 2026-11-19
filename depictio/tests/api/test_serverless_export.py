@@ -612,6 +612,54 @@ class _FakeCollection:
         return None
 
 
+def _register_collections(
+    monkeypatch: pytest.MonkeyPatch,
+    docs: list[dict[str, Any]],
+    *,
+    project: dict[str, Any] | None = None,
+    locations: dict[str, str] | None = None,
+) -> None:
+    """The project and ``deltatables`` documents a bundle is checked against.
+
+    Producer A ships only the collections of the dashboard's project, and reads
+    each one's Delta location from ``deltatables``, never from a component's
+    ``dc_config``. So every collection the ``docs``' components read is listed
+    in the project (under the workflow the component names, ``WF_OID`` when it
+    names none), at ``locations[dc]`` or else the document's own copy.
+    """
+    from depictio.api.v1 import db as db_mod
+
+    workflows: dict[str, dict[str, None]] = {}
+    where: dict[str, str] = {}
+    for doc in docs:
+        for comp in doc.get("stored_metadata") or []:
+            for wf_id, dc_id in producer_a.collection_refs(comp):
+                workflows.setdefault(wf_id or str(WF_OID), {})[dc_id] = None
+            loc = (comp.get("dc_config") or {}).get("delta_location")
+            if comp.get("dc_id") and loc:
+                where.setdefault(str(comp["dc_id"]), loc)
+    where.update(locations or {})
+    project_doc = {"_id": PROJECT_OID, "links": [], **(project or {})}
+    project_doc.setdefault(
+        "workflows",
+        [
+            {"_id": ObjectId(wf), "data_collections": [{"_id": ObjectId(dc)} for dc in dcs]}
+            for wf, dcs in workflows.items()
+        ],
+    )
+    monkeypatch.setattr(db_mod, "projects_collection", _FakeCollection([project_doc]))
+    monkeypatch.setattr(
+        db_mod,
+        "deltatables_collection",
+        _FakeCollection(
+            [
+                {"data_collection_id": ObjectId(dc), "delta_table_location": loc}
+                for dc, loc in where.items()
+            ]
+        ),
+    )
+
+
 class _FakeTabCollection:
     """``dashboards_collection`` as ``core_functions.get_child_tabs`` uses it:
     ``find(...).sort(field, direction)``.
@@ -674,9 +722,10 @@ def _frame_av() -> pl.DataFrame:
 
 
 def _dashboard_doc() -> dict[str, Any]:
-    dc_config = {"type": "table", "delta_location": "memory://dcA", "size_bytes": 123}
-    dc2_config = {"type": "table", "delta_location": "memory://dcB", "size_bytes": 45}
-    av_config = {"type": "table", "delta_location": "memory://dcAV", "size_bytes": 67}
+    # Decoy locations: what a document says is never where a bundle reads.
+    dc_config = {"type": "table", "delta_location": "memory://decoy-A", "size_bytes": 123}
+    dc2_config = {"type": "table", "delta_location": "memory://decoy-B", "size_bytes": 45}
+    av_config = {"type": "table", "delta_location": "memory://decoy-AV", "size_bytes": 67}
     return {
         "_id": ObjectId(),
         "dashboard_id": DASHBOARD_OID,
@@ -818,20 +867,18 @@ def offline_stack(monkeypatch: pytest.MonkeyPatch) -> dict[str, list]:
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
     # A lone dashboard is a one-tab family: the child lookup finds nothing.
     monkeypatch.setattr(core_mod, "dashboards_collection", _FakeTabCollection([]))
-    monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
-    # Phase 7 reads the dashboard's project for its cross-DC ``links`` — this
-    # one declares none, so ``manifest.links`` stays empty. (Links themselves
-    # are covered in tests/unit/serverless/test_links_producers.py.)
-    monkeypatch.setattr(
-        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
-    )
-
     frames = {str(DC_OID): _frame(), str(DC2_OID): _frame_2(), str(AV_DC_OID): _frame_av()}
+    # The real locations live in `deltatables`; the dashboard document's
+    # `dc_config.delta_location` copies are decoys the loader must not read.
     locations = {
         str(DC_OID): "memory://dcA",
         str(DC2_OID): "memory://dcB",
         str(AV_DC_OID): "memory://dcAV",
     }
+    # Phase 7 reads the dashboard's project for its cross-DC ``links`` — this
+    # one declares none, so ``manifest.links`` stays empty. (Links themselves
+    # are covered in tests/unit/serverless/test_links_producers.py.)
+    _register_collections(monkeypatch, [_dashboard_doc()], locations=locations)
 
     def fake_schema(workflow_id, data_collection_id, init_data):
         dc = str(data_collection_id)
@@ -883,6 +930,8 @@ def offline_stack(monkeypatch: pytest.MonkeyPatch) -> dict[str, list]:
     def fake_figure_preview(payload):
         assert payload["filter_metadata"] == []
         meta = payload["metadata"]
+        # The worker looks the location up itself; the document's copy is dropped.
+        assert "delta_location" not in meta["dc_config"]
         preview_calls.append(f"{meta['visu_type']}:{meta['mode']}")
         return {
             "figure": {"data": [], "layout": {}},
@@ -1233,6 +1282,176 @@ def test_preflight_data_refs_describe_the_bundle_without_serialising_it(
     assert ref.aggregation_hash == "agghash-1"  # the server token still holds
 
 
+def test_frozen_payloads_are_taken_at_the_tabs_interactive_defaults(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch
+):
+    """The bundle's App opens a tab with its declared filter defaults applied
+    (``withInteractiveDefaults``), so live tiles open narrowed to them. Frozen
+    tiles are taken at that same state, or they would show every row beside
+    them under a "default state" badge. Only a binding scaffold stays whole."""
+    from depictio.api.v1 import celery_tasks as celery_mod
+    from depictio.api.v1 import db as db_mod
+    from depictio.api.v1.endpoints.advanced_viz_endpoints import routes as av_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as routes_mod
+
+    doc = _dashboard_doc()
+    for comp in doc["stored_metadata"]:
+        if comp["index"] == "filter-1":
+            comp["default_state"] = {"default_value": [2021]}
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
+    seen: dict[str, list] = {"cards": [], "figures": [], "av": []}
+
+    def cards(dashboard_id, request, current_user, access_token):
+        seen["cards"].append(request["filters"])
+        return {"values": {"card-1": 1.0}}
+
+    real_preview = celery_mod.build_figure_preview
+
+    def preview(payload):
+        seen["figures"].append((payload["metadata"]["visu_type"], payload["filter_metadata"]))
+        return real_preview({**payload, "filter_metadata": []})
+
+    real_av = av_mod.fetch_advanced_viz_data
+
+    def av(response, payload, current_user, access_token):
+        seen["av"].append(payload["filter_metadata"])
+        return real_av(response, {**payload, "filter_metadata": []}, current_user, access_token)
+
+    monkeypatch.setattr(routes_mod, "bulk_compute_cards", cards)
+    monkeypatch.setattr(celery_mod, "build_figure_preview", preview)
+    monkeypatch.setattr(av_mod, "fetch_advanced_viz_data", av)
+
+    manifest = export_manifest(
+        str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True)
+    ).manifest
+    assert manifest is not None
+
+    (card_filters,) = seen["cards"]
+    assert [(f["index"], f["value"]) for f in card_filters] == [("filter-1", ["2021"])]
+    assert manifest.frozen["card-1"].payload["filter_applied"] is True
+    # The code figure: its scaffold whole, its frozen payload under the default;
+    # the heatmap (no binding) under the default.
+    year = [{"interactive_component_type": "MultiSelect", "column_name": "year"}]
+    narrowed = [
+        (kind, [{k: f.get(k) for k in ("interactive_component_type", "column_name")} for f in fm])
+        for kind, fm in seen["figures"]
+    ]
+    assert narrowed == [("scatter", []), ("scatter", year), ("heatmap", year)]
+    assert [[f["index"] for f in fm] for fm in seen["av"]] == [["filter-1"]]
+
+
+FOREIGN_DC_OID = ObjectId("746b0f3c1e4a2d7f8e5b9cff")  # another project's collection
+
+
+def test_collections_outside_the_project_are_never_bundled(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch
+):
+    """A dashboard document names its collections by id, and nothing checks
+    them on save. A bundle ships whole tables, so every collection a component
+    reads (its own, an advanced_viz companion, a text tile's values) must be one
+    of the project's: the rest are omitted before any loader or endpoint body
+    sees them, in the build and in the preflight."""
+    from depictio.api.v1 import db as db_mod
+    from depictio.api.v1 import deltatables_utils as dtu_mod
+
+    foreign_cfg = {"type": "table", "delta_location": "memory://dcA"}  # a lie
+    doc = _dashboard_doc()
+    doc["stored_metadata"] += [
+        {
+            "index": "card-foreign",
+            "component_type": "card",
+            "wf_id": WF_OID,
+            "dc_id": FOREIGN_DC_OID,
+            "dc_config": foreign_cfg,
+            "column_name": "bill",
+            "aggregation": "mean",
+        },
+        {
+            "index": "tbl-foreign",
+            "component_type": "table",
+            "wf_id": WF_OID,
+            "dc_id": FOREIGN_DC_OID,
+            "dc_config": foreign_cfg,
+        },
+        {
+            # Its own table is the project's; the MA companion is not.
+            "index": "av-foreign-companion",
+            "component_type": "advanced_viz",
+            "viz_kind": "volcano",
+            "wf_id": WF_OID,
+            "dc_id": AV_DC_OID,
+            "config": {
+                "viz_kind": "volcano",
+                "x_col": "lfc",
+                "y_col": "q_val",
+                "ma_dc_id": str(FOREIGN_DC_OID),
+            },
+        },
+        {
+            # A collection of the project, but under another workflow.
+            "index": "fig-wrong-workflow",
+            "component_type": "figure",
+            "visu_type": "scatter",
+            "dict_kwargs": {"x": "bill", "y": "flipper"},
+            "wf_id": ObjectId(),
+            "dc_id": DC_OID,
+        },
+    ]
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
+    loaded: list[str] = []
+    real_load = dtu_mod.load_deltatable_lite
+
+    def recording_load(workflow_id, data_collection_id, **kw):
+        loaded.append(str(data_collection_id))
+        return real_load(workflow_id, data_collection_id, **kw)
+
+    monkeypatch.setattr(dtu_mod, "load_deltatable_lite", recording_load)
+
+    for result in (
+        _preflight(),
+        export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True)),
+    ):
+        rows = {r.component_id: r for r in result.tier_rows}
+        for cid in ("card-foreign", "tbl-foreign", "av-foreign-companion", "fig-wrong-workflow"):
+            assert rows[cid].tier is ComponentTier.OMITTED, cid
+            assert rows[cid].detail and "not in this dashboard's project" in rows[cid].detail
+        assert rows["card-1"].tier is ComponentTier.LIVE
+        if result.manifest is not None:
+            assert str(FOREIGN_DC_OID) not in result.manifest.data_refs
+            assert "tbl-foreign" not in result.manifest.frozen
+    assert str(FOREIGN_DC_OID) not in loaded
+    # The frozen-table fallback never paged the foreign table, and the cards
+    # fallback asked only for the project's card.
+    assert offline_stack["tables"] == []
+    assert all(ids == ["card-1"] for ids in offline_stack["cards"])
+
+
+def test_an_unreadable_project_bundles_no_collection():
+    """No project document, nothing can be shown to belong to it."""
+    tab = FamilyTab(doc={"dashboard_id": DASHBOARD_OID, "project_id": PROJECT_OID})
+    comp = {"index": "c", "component_type": "card", "dc_id": DC_OID, "wf_id": WF_OID}
+    rows = {"c": classify_stored_metadata([comp])[0]}
+    omitted = producer_a.scope_to_project([(tab, comp, "c")], rows, {str(PROJECT_OID): None})
+    assert omitted == {"c"}
+    assert rows["c"].tier is ComponentTier.OMITTED
+
+
+def test_collection_refs_cover_companions_and_text_values():
+    comp = {
+        "component_type": "advanced_viz",
+        "wf_id": WF_OID,
+        "dc_id": AV_DC_OID,
+        "config": {"tree_dc_id": str(TREE_DC_OID), "hits_dc_id": "x" * 24, "hits_wf_id": "w"},
+    }
+    assert producer_a.collection_refs(comp) == [
+        (str(WF_OID), str(AV_DC_OID)),
+        ("", str(TREE_DC_OID)),
+        ("w", "x" * 24),
+    ]
+    project_dcs = {str(AV_DC_OID): str(WF_OID), str(TREE_DC_OID): str(WF_OID)}
+    assert producer_a.foreign_collections(comp, project_dcs) == ["x" * 24]
+
+
 def test_a_table_without_a_bundled_dc_is_downgraded_and_frozen(monkeypatch: pytest.MonkeyPatch):
     """The one case that overturns the planned live table: no Parquet to page
     through, so the build has to fall back to the server-rendered snapshot
@@ -1455,12 +1674,7 @@ def family_stack(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection(docs))
     # get_child_tabs binds the collection at import time on its own module.
     monkeypatch.setattr(core_mod, "dashboards_collection", _FakeTabCollection(docs))
-    monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
-    monkeypatch.setattr(
-        db_mod,
-        "projects_collection",
-        _FakeCollection([{"_id": PROJECT_OID, "name": "Fake project", "links": []}]),
-    )
+    _register_collections(monkeypatch, docs, project={"name": "Fake project"})
 
     frame = _fam_frame()
     monkeypatch.setattr(dtu_mod, "schema_deltatable_lite", lambda **kw: dict(frame.schema))
@@ -1892,10 +2106,7 @@ def size_stack(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     }
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
     monkeypatch.setattr(core_mod, "dashboards_collection", _FakeTabCollection([]))
-    monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
-    monkeypatch.setattr(
-        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
-    )
+    _register_collections(monkeypatch, [doc])
 
     frames = {str(oid): _sized_frame(i) for i, oid in enumerate(SIZE_DC_OIDS)}
     loaded: list[str] = []
@@ -2374,6 +2585,7 @@ def coloured_family(monkeypatch: pytest.MonkeyPatch, family_stack):
     docs = [main, child]
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection(docs))
     monkeypatch.setattr(core_mod, "dashboards_collection", _FakeFamilyCollection(docs))
+    _register_collections(monkeypatch, docs, project={"name": "Fake project"})
 
     payloads: list[dict[str, Any]] = []
 

@@ -56,6 +56,7 @@ from depictio.models.components.advanced_viz.catalog import (
     Render,
     load_catalog_entries,
 )
+from depictio.recipes import SOURCE_LINE_COLUMN
 
 DASHBOARD_FILE = "dashboards/composed.yaml"
 GENERAL_STATS_FILE = "general_stats.tsv"
@@ -416,6 +417,10 @@ def _lines_config(files: Sequence[str], column: str, with_path: bool) -> dict[st
     }
     if with_path:
         kwargs["include_file_paths"] = "source_path"
+        # Each line's place in its file: a Delta table does not promise to
+        # keep row order, the recipes read the lines back in this one.
+        kwargs["row_index_name"] = SOURCE_LINE_COLUMN
+        kwargs["row_index_offset"] = 1
     config: dict[str, Any] = {
         "type": "Table",
         "scan": _scan(files),
@@ -1687,6 +1692,7 @@ _CARD_FIELDS = (
     "attrition_cols",
     "trend_col",
     "filter_expr",
+    "caption",
 )
 _TABLE_FIELDS = (
     "columns",
@@ -1737,7 +1743,29 @@ def _render_tile(
     workflow: str,
     tagger: _Tagger,
 ) -> dict[str, Any] | str:
-    """One catalog render as a component dict, or the reason it was left out."""
+    """One catalog render as a component dict, or the reason it was left out.
+
+    A render's own `title` replaces the derived one, and its `description`
+    becomes the tile's info popover ("About this component").
+    """
+    tile = _render_tile_fields(render, output, entry, collection, workflow, tagger)
+    if isinstance(tile, dict):
+        if render.title:
+            tile["title"] = render.title
+        if render.description:
+            tile["description"] = render.description
+    return tile
+
+
+def _render_tile_fields(
+    render: Render,
+    output: CatalogOutput,
+    entry: CatalogEntry,
+    collection: Collection,
+    workflow: str,
+    tagger: _Tagger,
+) -> dict[str, Any] | str:
+    """The component dict a render derives, before its declared title and text."""
     from depictio.catalog.payload import advanced_viz_persist_config
     from depictio.models.components.advanced_viz.catalog import (
         role_config_key,
@@ -1775,6 +1803,10 @@ def _render_tile(
             fields |= {"mode": "code", "code_content": render.code}
         else:
             fields |= {"visu_type": render.visu_type, "dict_kwargs": dict(render.dict_kwargs)}
+            if render.reference_lines:
+                fields["reference_lines"] = [
+                    line.model_dump(exclude_none=True) for line in render.reference_lines
+                ]
         return _component(tagger, stem, "figure", **base, **fields)
     if kind == "interactive":
         assert render.column_name and render.interactive_type
@@ -1799,7 +1831,8 @@ def _render_tile(
     if kind == "advanced_viz":
         assert render.kind
         config = advanced_viz_persist_config(output, render) or {
-            role_config_key(render.kind, role): col for role, col in render.roles.items()
+            **{role_config_key(render.kind, role): col for role, col in render.roles.items()},
+            **render.config,
         }
         config = with_inferred_structure_source(render.kind, {**config, "viz_kind": render.kind})
         fields = {

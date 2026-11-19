@@ -33,6 +33,12 @@ A family's model is read once: the filtered HMM of ``hmm/filtered/`` wins over a
 raw model of the same name, and a file that is not a complete HMMER3 record is
 left out. ``sample`` is the directory the file sits in.
 
+Files are read one at a time (``iter_texts_by_file``), and of an alignment only
+the representative's residue numbers are kept, so a run of thousands of families
+is never held as text next to its table. Ingestion takes the table a batch of
+families at a time (``transform_batches``), so it is never held whole either
+(#1418).
+
 Output schema (``PROFILE_SCHEMA`` plus the sample):
     entity : Utf8          family id (the HMM name)
     position : Int64       residue of the representative at the state, null if none
@@ -50,6 +56,8 @@ Output schema (``PROFILE_SCHEMA`` plus the sample):
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
@@ -57,10 +65,10 @@ from depictio.recipes.lib import hmm as hmm_lib
 from depictio.recipes.lib.hmm import PROFILE_SCHEMA, profile_frame
 from depictio.recipes.lib.protein_families import (
     family_id,
+    iter_texts_by_file,
     representative_positions,
     representatives,
     sample_from_path,
-    texts_by_file,
 )
 
 RAW_DC_TAG = "hmmer_hmm_raw"
@@ -93,6 +101,12 @@ SOURCES: list[RecipeSource] = [
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {**PROFILE_SCHEMA, "sample": pl.Utf8}
+#: The text columns repeat on every letter row of every state (25M rows on a
+#: mid-size run): held as Categorical, half the table's memory. They are
+#: written and read back as String (``delta_versioning.as_stored``, #1418).
+_IN_MEMORY_SCHEMA = {
+    name: pl.Categorical if dtype == pl.Utf8 else dtype for name, dtype in OUTPUT_SCHEMA.items()
+}
 
 
 def _is_raw_model(path: str) -> bool:
@@ -100,19 +114,47 @@ def _is_raw_model(path: str) -> bool:
     return "/hmm/raw/" in "/" + path.replace("\\", "/")
 
 
-def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
-    """One row per match state and letter of every family HMM."""
-    stockholm = {
-        (sample_from_path(path), family_id(path)): text
-        for path, text in texts_by_file(sources.get("alignments")).items()
-    }
+def _positions_by_family(
+    alignments: pl.DataFrame | None, reps: dict[tuple[str, str], str]
+) -> dict[tuple[str, str], list[int | None] | None]:
+    """The representative's residue at each match column of every family alignment.
+
+    Read one alignment at a time, keeping only the numbers. ``None`` for an
+    alignment the representative is absent from, or that does not parse. The
+    model's length is checked against them later, when the model is read.
+    """
+    positions: dict[tuple[str, str], list[int | None] | None] = {}
+    for path, text in iter_texts_by_file(alignments):
+        key = (sample_from_path(path), family_id(path))
+        representative = reps.get(key)
+        if not (text and representative):
+            positions.pop(key, None)  # as a later file of the same family would
+            continue
+        try:
+            positions[key] = representative_positions(text, representative)
+        except ValueError:  # representative absent, rows of unequal width, ...
+            positions[key] = None
+    return positions
+
+
+#: Families per batch of ``transform_batches``: ~1.5M rows, ~150 MB on a mid-size run.
+BATCH_FAMILIES = 256
+
+
+def transform_batches(sources: dict[str, pl.DataFrame | None]) -> Iterator[pl.DataFrame]:
+    """The rows of ``transform``, ``BATCH_FAMILIES`` families at a time.
+
+    Ingestion writes each batch as it comes (#1418), so the table (25M rows on
+    a mid-size run) is never held whole.
+    """
     reps = representatives(sources.get("family_meta"))
-    models = texts_by_file(sources["hmms"])
+    aligned = _positions_by_family(sources.get("alignments"), reps)
     frames: list[pl.DataFrame] = []
     seen: set[str] = set()
-    for path in sorted(models, key=_is_raw_model):  # stable: scan order within each group
+    # Filtered models first, raw ones after; scan order within each group.
+    for path, text in iter_texts_by_file(sources["hmms"], order=_is_raw_model):
         try:
-            parsed = hmm_lib.parse_hmm(models[path])
+            parsed = hmm_lib.parse_hmm(text)
         except ValueError:
             continue
         sample = sample_from_path(path)
@@ -120,19 +162,23 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
             if model.name in seen:
                 continue
             seen.add(model.name)
-            positions = None
-            alignment = stockholm.get((sample, model.name))
-            representative = reps.get((sample, model.name))
-            if alignment and representative:
-                try:
-                    positions = representative_positions(alignment, representative, model.length)
-                except ValueError:  # representative absent, or states and RF columns disagree
-                    positions = None
+            positions = aligned.get((sample, model.name))
+            if positions is not None and len(positions) != model.length:
+                positions = None  # the states and the RF columns disagree
             frames.append(
-                profile_frame(model, entity=model.name, positions=positions).with_columns(
-                    pl.lit(sample, dtype=pl.Utf8).alias("sample")
-                )
+                profile_frame(model, entity=model.name, positions=positions)
+                .with_columns(pl.lit(sample, dtype=pl.Utf8).alias("sample"))
+                .select(list(OUTPUT_SCHEMA))
+                .cast(_IN_MEMORY_SCHEMA)  # type: ignore[arg-type]
             )
-    if not frames:
-        return pl.DataFrame(schema=OUTPUT_SCHEMA)
-    return pl.concat(frames).select(list(OUTPUT_SCHEMA)).cast(OUTPUT_SCHEMA)  # type: ignore[arg-type]
+            if len(frames) >= BATCH_FAMILIES:
+                yield pl.concat(frames)
+                frames = []
+    if frames:
+        yield pl.concat(frames)
+
+
+def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
+    """One row per match state and letter of every family HMM."""
+    batches = list(transform_batches(sources))
+    return pl.concat(batches) if batches else pl.DataFrame(schema=_IN_MEMORY_SCHEMA)

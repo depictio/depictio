@@ -801,7 +801,10 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Gene arrow track'}
-      subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      subtitle={
+        (metadata as { description?: string; subtitle?: string }).description ||
+        (metadata as { description?: string; subtitle?: string }).subtitle
+      }
       primaryControls={primaryControls}
       controls={controls}
       loading={loading}

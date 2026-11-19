@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: cutadapt }
+  - component: multiqc
+    section: cutadapt
+    title: Adapter trimming
+    description: >-
+      Cutadapt's MultiQC plots: how many reads were filtered and the lengths of the
+      trimmed sequences, per sample. They answer how much adapter was found and how
+      much was removed.
+
+      How to read: A moderate trimmed share is routine. A trimmed-length peak far
+      from the adapter's true length hints at the wrong adapter, and a very high
+      trimmed share suggests short inserts or adapter dimers.
+
+      Source: https://docs.seqera.io/multiqc/modules/cutadapt

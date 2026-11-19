@@ -13,11 +13,63 @@ find:
     - "**/qc/*/*.faa"
     - "**/qc/*/*.fa"
 recipe: seqkit/sequences.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several sequences.
 fixture: sequences.tsv
 renders_as:
-  - { id: sequence_count, component: card, column: entity, aggregation: count,
-      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }
-  - { id: sequence_length, component: card, column: length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: length, color: sample} }
-  - { component: table, columns: [entity, sample, description, length] }
+  - id: sequence_count
+    component: card
+    column: sample
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: compact
+    headline: true
+    title: Sequences kept
+    caption: sequences, and the samples they come from
+    description: >-
+      The hero number is the count of sequences in the filtered FASTA, with the number
+      of distinct samples beside it. It answers how many sequences the annotation steps
+      receive.
+
+      How to read: compare it with the count before filtering to see how many sequences
+      were removed. A count of zero means the filter removed everything.
+
+      Source: https://bioinf.shenwei.me/seqkit/
+  - id: sequence_length
+    component: card
+    column: length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Sequence length
+    caption: median, with the distribution
+    description: >-
+      The hero number is the median length of the kept sequences, in residues for a
+      protein FASTA and in bases otherwise, with the shortest and longest beside it. The
+      histogram shows how the lengths are spread. It answers whether the kept sequences
+      are of the expected size.
+
+      How to read: a narrow histogram means uniform sequences. A long tail of very short
+      sequences can be fragments, and a very long one an unfiltered chimera, so check
+      the table for the outliers.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: length
+      color: sample
+      labels: {length: Sequence length, sample: Sample}
+    title: Sequence length distribution
+    description: >-
+      Each bar counts the sequences in a length bin, coloured by sample. It answers how
+      the lengths are distributed and whether one sample differs from the others.
+
+      How to read: overlapping peaks mean similar samples. A sample that sits apart
+      holds sequences of a different size, so open the table to inspect them.
+  - component: table
+    columns: [entity, sample, description, length]
+    title: Sequences
+    description: >-
+      Each row is a sequence of the filtered FASTA with its id, sample, header
+      description and length. It answers which sequences passed the filter.
+
+      How to read: sort by length to find the shortest and longest sequences, or search
+      the description to find one by name.

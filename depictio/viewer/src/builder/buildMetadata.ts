@@ -6,7 +6,7 @@
  * `save_*_to_dashboard()` helper in depictio/dash/modules/* writes today,
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
-import type { StoredMetadata } from 'depictio-react-core';
+import type { FigureReferenceLine, StoredMetadata } from 'depictio-react-core';
 import {
   defaultInteractiveTitle,
   normalizeCardVariant,
@@ -39,6 +39,11 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
     // Persist catalog origin so the dashboard can show a "from catalog" badge.
     // Preserved through edits via the ...existing spread in per-type builders.
     ...(state.catalogSource ? { catalog_source: state.catalogSource } : {}),
+    // The tile's info popover ("About this component"). A catalog render seeds
+    // it; set on the base so every component type keeps it, not only cards.
+    ...(as<{ description?: string | null }>(state.config).description?.trim()
+      ? { description: as<{ description?: string }>(state.config).description!.trim() }
+      : {}),
   };
   // For edit mode, preserve any existing keys we don't explicitly set
   // (e.g. parent_index, panel, dc_config caches).
@@ -219,9 +224,15 @@ function buildFigure(
     selection_enabled?: boolean;
     selection_column?: string;
     max_points?: number | null;
+    reference_lines?: FigureReferenceLine[] | null;
   }>(state.config);
   const maxPoints = typeof c.max_points === 'number' ? c.max_points : null;
   const display = figureDisplay(state.config);
+  // Guide lines (a fixed cut-off, or a median of this table computed by the
+  // server builder): from the catalog render that seeded the config, else the
+  // ones the edited figure already had. A UI-mode field only.
+  const referenceLines =
+    c.reference_lines ?? (existing.reference_lines as FigureReferenceLine[] | undefined);
   if (state.figureMode === 'code') {
     return {
       ...existing,
@@ -232,6 +243,7 @@ function buildFigure(
       visu_type: state.visuType, // hint for renderers
       // dict_kwargs intentionally cleared in code mode
       dict_kwargs: {},
+      reference_lines: undefined,
       selection_enabled: Boolean(c.selection_enabled),
       selection_column: c.selection_column,
     };
@@ -243,6 +255,9 @@ function buildFigure(
     mode: 'ui',
     visu_type: state.visuType,
     dict_kwargs: state.dictKwargs,
+    ...(Array.isArray(referenceLines) && referenceLines.length
+      ? { reference_lines: referenceLines }
+      : {}),
     code_content: null,
     selection_enabled: Boolean(c.selection_enabled),
     selection_column: c.selection_column,
@@ -524,6 +539,7 @@ function buildAdvancedViz(
     config?: Record<string, unknown> | null;
     viz_overrides?: Record<string, unknown> | null;
     controls_placement?: StoredMetadata['controls_placement'];
+    title?: string;
   }>(state.config);
   // `preset_config` (catalog add) and `config` (edit-mode rehydration of a saved
   // component) both carry viz-control extras the role mapping can't express;
@@ -538,6 +554,9 @@ function buildAdvancedViz(
     ...existing,
     ...base,
     viz_kind: c.viz_kind,
+    // A catalog render names its tile; without it the renderer falls back to
+    // its own default ("Volcano plot" on an MA view, for one).
+    ...(c.title?.trim() ? { title: c.title.trim() } : {}),
     config: buildAdvancedVizConfigBlob(c.viz_kind, c.column_mapping || {}, preset),
     // Where the viz controls sit; unset (auto) is left out.
     ...('controls_placement' in c ? { controls_placement: c.controls_placement || null } : {}),

@@ -13,6 +13,46 @@ fixture: window_pca.tsv
 renders_as:
   # The design columns (the sample hub's factors) are run-dependent, so no role
   # binds one here: a dashboard colours by its own `{GROUP_COL}` via config.
-  - { id: pca_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3} }
-  - { component: figure, visu_type: scatter, dict_kwargs: {x: dim_1, y: dim_2, hover_name: sample_id, title: Libraries on the first two components of their binned methylome} }
-  - { component: table }
+  # C1 N/A: the design column is not in the recipe's OUTPUT_SCHEMA, so no role
+  # can bind it; the dashboard colours by its group.
+  - id: pca_embedding
+    component: advanced_viz
+    kind: embedding
+    roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3}
+    config:
+      axis_prefix: PC
+    title: Libraries on the binned methylome
+    description: >-
+      Each point is a library, placed by its methylation over the 10 kb windows on
+      the first principal components. It answers whether libraries separate by the
+      design of the experiment or by depth, batch or conversion.
+
+      How to read: replicates should sit close together and conditions apart. A
+      library that sits alone, or a split that follows a technical factor, is a
+      batch or quality effect to investigate before any comparison.
+
+      Note: the components are computed on the run's windows only, so axes have no
+      absolute meaning across runs.
+  # C1 N/A: same reason as the embedding above, the design columns are run-dependent.
+  - component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: dim_1
+      y: dim_2
+      hover_name: sample_id
+      labels: {dim_1: PC1, dim_2: PC2}
+    title: First two components
+    description: >-
+      Each point is a library on the first two principal components of its binned
+      methylome. It answers how libraries relate on the two axes of largest
+      variation.
+
+      How to read: neighbouring points are similar libraries. Hover a point to read
+      the library, and compare with the correlation heatmap for the same structure.
+  - component: table
+    title: PCA table
+    description: >-
+      Each row is a library with its coordinates on the first components and the
+      design columns. It answers the exact position of each point.
+
+      How to read: sort by a component to find the libraries at the extremes.

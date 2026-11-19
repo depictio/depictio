@@ -10,5 +10,38 @@ find: { path_glob: "**/qiime2/ancombc/differentials/*/lfc_slice.csv" }
 recipe: nf-core/ampliseq/ma_canonical.py
 fixture: ma.tsv
 renders_as:
-  - { id: ma_plot, component: advanced_viz, kind: ma, roles: {feature_id: feature_id, avg_log_intensity: avg_log_intensity, log2_fold_change: log2_fold_change} }
-  - { component: table }
+  # C6 N/A: `significance` and `label` are optional columns of the recipe, not in its
+  # OUTPUT_SCHEMA, so no role can bind them here; the dashboard binds them when present.
+  # C1 N/A: the MA view colours points by its significance call; with no
+  # `significance` column guaranteed by the recipe, every point draws in one colour.
+  - id: ma_plot
+    component: advanced_viz
+    kind: ma
+    title: Fold change against mean abundance
+    roles: {feature_id: feature_id, avg_log_intensity: avg_log_intensity, log2_fold_change: log2_fold_change}
+    config:
+      fold_change_threshold: 1.0
+      top_n_labels: 10
+      effect_label: Log fold change
+      intensity_label: Mean abundance (log10 of count plus 1)
+    description: >-
+      Each point is a taxon in one contrast: its mean abundance across samples on the
+      horizontal axis (log10 of the count plus one) and its ANCOM-BC log fold change on the
+      vertical axis. It answers whether the changes are real or only come from rare taxa.
+
+      How to read: a flat cloud centred on zero with the significant taxa spread over
+      abundance levels is healthy. A funnel that widens towards low abundance is the
+      normal noise of rare taxa. Open the table tile to inspect the labelled taxa.
+
+      Lines and annotations: the horizontal lines mark an absolute effect size of 1, the
+      nf-core/ampliseq default for its differential-abundance barplot.
+
+      Source: https://raw.githubusercontent.com/nf-core/ampliseq/master/nextflow_schema.json
+  - component: table
+    title: Fold change and abundance table
+    description: >-
+      Each row is a taxon in one contrast, with its mean abundance, log fold change and
+      q-value. It answers the exact values behind each point.
+
+      How to read: sort by q-value to list the strongest calls, then compare their
+      abundance in the plot.

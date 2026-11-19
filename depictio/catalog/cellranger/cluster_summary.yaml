@@ -7,14 +7,137 @@ description: >-
 find:
   path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
 recipe: cellranger/cluster_summary.py
+# The fixture is enriched synthetically from 14 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: cluster_summary.tsv
 renders_as:
-  - { id: cluster_sizes, component: figure, visu_type: bar, dict_kwargs: {x: cluster_label, y: n_cells, title: Cells per cluster} }
-  - { id: cluster_qc_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: cluster_label} }
-  - { id: cluster_composition, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_cells, color: cluster_label, barmode: stack, title: Cluster composition per sample} }
-  - { id: cluster_size_filter, component: interactive, interactive_type: RangeSlider, column_name: n_cells }
-  - { component: card, column: n_cells, aggregation: sum, secondary_layout: top_n, breakdown_col: cluster_label, top_n_count: 3 }
-  - { component: card, column: median_n_umi, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: pct_flagged, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: card, column: pct_cellbender_cell, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: table }
+  - id: cluster_sizes
+    component: figure
+    visu_type: bar
+    title: Cells per cluster
+    dict_kwargs:
+      x: cluster_label
+      y: n_cells
+      color: cluster_label
+      labels: {cluster_label: Cluster, n_cells: Cells}
+    description: >-
+      Each bar is a graph-based cluster and its height is the number of cells in it. It
+      answers how the cells divide between clusters.
+
+      How to read: a few large clusters with a tail of small ones is typical. A very small
+      cluster can be a rare population or a quality artefact, so check its QC tile.
+  # C6: the QC medians are numeric and named; sample is the only categorical column.
+  - id: cluster_qc_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Quality profile per cluster
+    roles:
+      index: cluster_label
+      value_columns: [median_n_umi, median_n_genes, median_pct_mito, pct_flagged, pct_cellbender_cell]
+      row_annotation_cols: [sample]
+    config:
+      normalize: col_z
+    description: >-
+      Each row is a cluster and each column a quality measure: median UMIs, median genes,
+      median mitochondrial share, share of flagged cells and share kept by CellBender. It
+      answers which clusters differ in quality from the rest.
+
+      How to read: colours are standardised per column, so a cluster that is dark in the UMI
+      and gene columns and in the flagged column is a poor one. A cluster that stands out only
+      on one measure usually reflects its cell type.
+
+      Lines and annotations: no cut-off is drawn. Each column is scaled to a z-score over the
+      clusters shown, so colours compare clusters and not absolute values.
+  - id: cluster_composition
+    component: figure
+    visu_type: bar
+    title: Cluster composition per sample
+    dict_kwargs:
+      x: sample
+      y: pct_cells
+      color: cluster_label
+      barmode: stack
+      labels: {sample: Sample, pct_cells: Cells (%), cluster_label: Cluster}
+    description: >-
+      Each bar is a sample and its segments are the share of its cells in each cluster. It
+      answers whether the samples contribute evenly to every cluster.
+
+      How to read: similar stacks mean the samples have the same composition. A cluster
+      present in only one sample may be a batch effect or real biology, so check the sample
+      metadata.
+  - id: cluster_size_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: n_cells
+    title: Cluster size range
+    description: >-
+      Keeps the clusters whose cell count falls inside the range. It answers how the tab looks
+      without very small or very large clusters.
+
+      How to read: raise the lower handle to hide the smallest clusters.
+  - component: card
+    column: n_cells
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: cluster_label
+    top_n_count: 3
+    caption: cells, in the largest clusters
+    title: Cells in clusters
+    description: >-
+      The hero number is the total of cells over all clusters and the bars rank the largest
+      clusters. It answers where most of the cells sit.
+
+      How to read: the median gives the size of a typical cluster, and a maximum far above it
+      shows a dominant one.
+  - component: card
+    column: median_n_umi
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: box_plot
+    caption: cluster UMI medians, with their spread
+    title: UMI counts per cluster
+    description: >-
+      The hero number is the median of the clusters' median UMI counts, and the box shows
+      their spread. It answers whether the clusters have similar depth.
+
+      How to read: a cluster far below the rest is shallower, either by cell type or by poor
+      quality. Compare it with the mitochondrial and flagged shares.
+  - component: card
+    column: pct_flagged
+    aggregation: average
+    aggregations: [max]
+    secondary_layout: gauge
+    coverage_max: 100.0
+    caption: cells flagged, of 100%
+    title: Flagged cells
+    description: >-
+      The hero number is the average percent of cells per cluster that the quality filter
+      flags, shown out of 100 percent. It answers how many cells the filter would remove.
+
+      How to read: the maximum is the worst cluster. A cluster with a high share is a candidate
+      artefact, and the rule is the median absolute deviation limit set per sample.
+
+      Source: https://www.sc-best-practices.org/preprocessing-visualization/quality-control/
+  - component: card
+    column: pct_cellbender_cell
+    aggregation: average
+    aggregations: [min]
+    secondary_layout: gauge
+    coverage_max: 100.0
+    caption: cells kept by CellBender, of 100%
+    title: Cells kept by CellBender
+    description: >-
+      The hero number is the average percent of a cluster's cells that CellBender also calls
+      cells, shown out of 100 percent. It answers how well the ambient-RNA correction agrees
+      with the called cells.
+
+      How to read: values near 100 mean agreement. The minimum names the cluster that loses
+      most cells, which may be mostly ambient RNA.
+  - component: table
+    title: Cluster summary
+    description: >-
+      Each row is a cluster with its cell count, share of the sample, median counts and genes,
+      median mitochondrial share, flagged share and share kept by CellBender. It answers the
+      exact values behind the tiles.
+
+      How to read: sort by a column to rank the clusters on that measure.

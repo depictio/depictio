@@ -281,6 +281,105 @@ def catalog_gallery(
         _serve_html(html, label, no_open, port)
 
 
+@app.command("export-site")
+def catalog_export_site(
+    out_dir: Annotated[
+        Path, typer.Option("--out-dir", "-o", help="Directory to write the site into")
+    ],
+    version: Annotated[
+        str | None,
+        typer.Option(
+            "--version", help="Version recorded in the site's index (default: this depictio's)"
+        ),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Fail when an output's previews cannot be built (for CI)"),
+    ] = False,
+) -> None:
+    """Export the catalog as a static site: the gallery, one output at a time.
+
+    Writes the prebuilt site bundle plus data/index.json (every tool, output and
+    render, without their data) and data/outputs/<output_id>.json (each output's
+    fixture and render data, fetched when it is opened). Same content as
+    `catalog gallery`, which puts all of it in one page; serve the directory
+    from any static host. The theme comes from the URL (?theme=dark).
+
+    Needs the prebuilt site bundle
+    (cd depictio/viewer && pnpm run build:catalog-site).
+    """
+    import shutil
+
+    from rich.markup import escape
+
+    from depictio.catalog.payload import (
+        SITE_BUNDLE_DIR,
+        CatalogPayloadError,
+        export_site_data,
+        inline_logos,
+    )
+    from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+    from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+    from depictio.version import get_version
+
+    if not (SITE_BUNDLE_DIR / "index.html").exists():
+        rich_print_checked_statement(
+            f"The catalog site bundle is not built: {escape(str(SITE_BUNDLE_DIR))} has no "
+            "index.html. Build it with `cd depictio/viewer && pnpm run build:catalog-site`.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    entries = load_catalog_entries()
+    if not entries:
+        typer.echo("No catalog entries found.")
+        raise typer.Exit(code=1)
+
+    # A previous export's per-output files and hashed chunks would linger next
+    # to the new ones.
+    data_dir = out_dir / "data"
+    for stale in (data_dir, out_dir / "assets"):
+        if stale.exists():
+            shutil.rmtree(stale)
+    shutil.copytree(SITE_BUNDLE_DIR, out_dir, dirs_exist_ok=True)
+    # The MultiQC logo paths point at the depictio server; a static host has none.
+    for chunk in (out_dir / "assets").glob("*.js"):
+        text = chunk.read_text()
+        inlined = inline_logos(text)
+        if inlined != text:
+            chunk.write_text(inlined)
+    try:
+        with _quiet_multiqc():
+            stats = export_site_data(entries, data_dir, version or get_version())
+    except CatalogPayloadError as exc:
+        typer.echo(f"  could not export the catalog site: {exc}")
+        raise typer.Exit(code=1)
+
+    failed = f", {stats['failed']} without a preview" if stats["failed"] else ""
+    render_errors = stats.get("render_errors", 0)
+    if render_errors:
+        failed += f", {render_errors} render(s) in error"
+    if strict and (stats["failed"] or render_errors):
+        if stats["failed"]:
+            typer.echo(
+                f"  {stats['failed']} output(s) could not be previewed; their entries in "
+                f"{data_dir / 'index.json'} carry the error"
+            )
+        if render_errors:
+            ids = stats.get("render_error_ids") or []
+            more = f" (first {len(ids)})" if render_errors > len(ids) else ""
+            typer.echo(
+                f"  {render_errors} render(s) failed inside outputs that are otherwise fine"
+                f"{more}: {', '.join(ids)}"
+            )
+        raise typer.Exit(code=1)
+    typer.echo(
+        f"  Wrote catalog site ({stats['tools']} tools, {stats['outputs']} outputs{failed}) "
+        f"to {out_dir}: index {stats['index_bytes'] / 1e6:.1f} MB, "
+        f"outputs {stats['outputs_bytes'] / 1e6:.1f} MB"
+    )
+
+
 @dev_app.command("columns")
 def catalog_columns(
     recipe: Annotated[str, typer.Argument(help="Recipe ref, e.g. qiime2/ancombc.py")],
@@ -407,9 +506,25 @@ def catalog_validate(
                     continue
                 # Author-declared dtypes are authoritative over CSV inference.
                 col_dtypes.update(out.columns)
+                # A fixture outranks the recipe for grounding, but the recipe must
+                # still load, and the fixture must be a sample of what it returns:
+                # otherwise a missing or broken recipe passes CI unnoticed.
+                if out.recipe:
+                    try:
+                        produced = recipe_output_columns(out.recipe, search_dir=out._source_dir)
+                    except Exception as exc:
+                        problems.append(f"{out.id}: recipe {out.recipe} → {exc}")
+                        continue
+                    absent = [c for c in produced if c not in available]
+                    if absent:
+                        problems.append(
+                            f"{out.id}: fixture {out.fixture} lacks {absent} from recipe "
+                            f"{out.recipe}'s OUTPUT_SCHEMA; the fixture must be a sample of "
+                            "the recipe's output"
+                        )
             elif out.recipe:
                 try:
-                    available = set(recipe_output_columns(out.recipe))
+                    available = set(recipe_output_columns(out.recipe, search_dir=out._source_dir))
                     source = f"recipe {out.recipe}"
                 except Exception as exc:
                     problems.append(f"{out.id}: recipe {out.recipe} → {exc}")

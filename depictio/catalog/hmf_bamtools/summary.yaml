@@ -12,9 +12,87 @@ find:
 recipe: hmf_bamtools/summary.py
 fixture: summary.tsv
 renders_as:
-  - { id: mean_coverage_spread, component: card, column: mean_coverage, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: total_reads_spread, component: card, column: total_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: worst_duplicate_frac, component: card, column: duplicate_frac, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: min_frac_ge_30x, component: card, column: frac_ge_30x, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: coverage_record, component: advanced_viz, kind: record_card, roles: {id: sample} }
-  - { id: bam_summary_table, component: table, row_selection_enabled: true, row_selection_column: sample }
+  - id: mean_coverage_spread
+    component: card
+    column: mean_coverage
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Mean coverage
+    caption: mean coverage, quartiles over samples
+    description: >-
+      The hero number is the median mean depth over the DNA samples and the box shows
+      the spread. It answers how deeply the samples are sequenced.
+
+      How to read: a tumour is normally sequenced deeper than its normal. A sample far
+      below the rest may be too shallow to call variants; BamTools documents no floor.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/bam-tools/README.md
+  - id: total_reads_spread
+    component: card
+    column: total_reads
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Total reads
+    caption: reads, quartiles over samples
+    description: >-
+      The hero number is the median count of reads per sample and the box shows the
+      spread. It answers how much sequencing each sample received.
+
+      How to read: read counts follow the depth, so an outlier here usually explains an
+      outlier in mean coverage.
+  - id: worst_duplicate_frac
+    component: card
+    column: duplicate_frac
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Highest duplicate fraction
+    caption: duplicate fraction, quartiles over samples
+    description: >-
+      The hero number is the largest fraction of duplicate reads among the samples and
+      the box shows the spread. It answers whether any library is dominated by
+      duplicates.
+
+      How to read: a high maximum next to low others marks one library with low
+      complexity. Duplicates add depth without adding information.
+  - id: min_frac_ge_30x
+    component: card
+    column: frac_ge_30x
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Lowest breadth at 30x
+    caption: fraction at 30x, quartiles over samples
+    description: >-
+      The hero number is the smallest fraction of bases covered at 30x or more among the
+      samples and the box shows the spread. It answers whether every sample reaches a
+      useful depth over most of the genome.
+
+      How to read: a low minimum marks the sample to check first. The 30x depth is one of
+      the depths BamTools reports, not a pass mark.
+  - id: coverage_record
+    component: advanced_viz
+    kind: record_card
+    title: Sample record
+    roles: {id: sample}
+    description: >-
+      One sample at a time: its reads, duplicates, coverage statistics and the fraction of
+      bases lost to each quality filter. Select a row in the table to open it.
+
+      How to read: compare the fractions lost to low mapping or base quality with the
+      other samples to spot a failing library.
+  - id: bam_summary_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Alignment summary table
+    description: >-
+      Each row is a DNA sample with its read counts, coverage statistics, quality-loss
+      fractions and the fraction of bases covered at each depth. It answers the exact
+      figures behind the cards and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by mean coverage or duplicate fraction to find the weakest sample.

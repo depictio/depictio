@@ -278,7 +278,13 @@ def _with_multiqc(env, project: dict, samples_by_run: dict[str, list[str]]) -> d
         )
         env.db["files"].insert_one({"file_location": path, "run_tag": run})
     env.rows.append(
-        SimpleNamespace(tag="multiqc_data", matched=1, status="ok", mode="recursive", samples=[])
+        SimpleNamespace(
+            tag="multiqc_data",
+            matched=1,
+            status="ok",
+            mode="recursive",
+            samples=[f"{env.new}/multiqc/multiqc_data/multiqc.parquet"],
+        )
     )
     return _store(env, project)
 
@@ -317,6 +323,30 @@ def test_a_run_sharing_samples_is_refused_and_nothing_is_written(env):
     assert "S1" in body["detail"]
     assert env.db["projects"].find_one({"_id": project["_id"]}) == before
     assert env.dispatch.call_count == 0
+
+
+def test_a_check_that_read_some_of_the_reports_says_how_many(env):
+    # The preview keeps the first 5 reports a collection matched (#1400): with
+    # 7 in the new run, no shared sample means none among those 5.
+    project = _with_multiqc(env, _project(env.old), {"run1": ["S1"]})
+    row = env.rows[-1]
+    row.matched = 7
+    row.samples = [f"{env.new}/multiqc/lane{i}/multiqc.parquet" for i in range(5)]
+    env.new_samples = {"S3"}
+    status, body = _call(project, env.new, dry_run=True)
+    assert status == 200
+    assert body["shared_samples"] == []
+    assert body["samples_check_gaps"] == [
+        {"data_collection_tag": "multiqc_data", "run": "run2", "checked": 5, "reports": 7}
+    ]
+
+
+def test_a_check_that_read_every_report_has_no_gap(env):
+    project = _with_multiqc(env, _project(env.old), {"run1": ["S1"]})
+    env.new_samples = {"S3"}
+    status, body = _call(project, env.new, dry_run=True)
+    assert status == 200
+    assert body["samples_check_gaps"] == []
 
 
 def test_a_run_with_its_own_samples_passes(env):

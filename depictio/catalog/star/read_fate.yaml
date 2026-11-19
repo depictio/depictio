@@ -11,8 +11,49 @@ find:
 recipe: star/read_fate.py
 fixture: read_fate.tsv
 renders_as:
-  - { id: read_fate_bars, component: figure, visu_type: bar,
-      dict_kwargs: {x: sample, y: reads_pct, color: fate} }
-  - { id: read_fate_composition, component: card, column: reads, aggregation: sum,
-      secondary_layout: composition, breakdown_col: fate }
-  - { component: table }
+  - id: read_fate_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: reads_pct
+      color: fate
+      labels: {sample: Sample, reads_pct: Reads (%), fate: Read fate}
+    title: Where the reads went
+    description: >-
+      Each bar is a sample and each segment is the share of its input reads that STAR
+      uniquely mapped, multi-mapped, mapped to too many loci or left unmapped, with the
+      reason. It answers how well each library aligned and why reads were lost.
+
+      How to read: a high uniquely mapped share is good. A large unmapped too short share
+      points to adapter or quality problems, and a large too many mismatches share to
+      contamination or a wrong reference. Compare with the summary table.
+
+      Lines and annotations: the segments are STAR's own categories from Log.final.out and
+      add up to the whole input. No cut-off is drawn because STAR publishes none.
+
+      Source: https://raw.githubusercontent.com/alexdobin/STAR/master/doc/STARmanual.pdf
+  - id: read_fate_composition
+    component: card
+    column: reads
+    aggregation: sum
+    aggregations: [min, max]
+    secondary_layout: composition
+    breakdown_col: fate
+    caption: reads, by fate
+    title: Reads by fate
+    description: >-
+      The hero number is the total of input reads, and the bar shows the share of each
+      fate over all samples. It answers where the reads of the run end up.
+
+      How to read: compare the uniquely mapped share with what is expected for the
+      organism and library type, and open the bars to see which sample drags it down.
+
+      Source: https://raw.githubusercontent.com/alexdobin/STAR/master/doc/STARmanual.pdf
+  - component: table
+    title: Read fate table
+    description: >-
+      Each row is a sample and a read fate with its read count and its percentage of the
+      input. It answers exactly how many reads fall in each fate.
+
+      How to read: filter on a fate and sort by percentage to find the outlier samples.

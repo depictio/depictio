@@ -13,5 +13,30 @@ fixture: correlation.tsv
 renders_as:
   # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls
   # back to the literal "sample_id", which this matrix does not have.
-  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
-  - { component: table }
+  # C6 N/A: value columns are the run's libraries, known only at ingest.
+  - id: correlation_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Library correlation
+    roles: {index: sample}
+    description: >-
+      Each cell is the Spearman correlation between two libraries over the features
+      detected in at least half of them, with libraries ordered by clustering. It
+      answers which libraries resemble each other and which stand apart.
+
+      How to read: blocks of high correlation are libraries of one condition or of
+      neighbouring time points. A library whose row is paler than all others is an
+      outlier, to check for a failed preparation or a swap before any comparison.
+
+      Note: featureCounts publishes no correlation cut-off and no pass mark is
+      drawn.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/24227677/
+  - component: table
+    title: Library correlation matrix
+    description: >-
+      Each row is a library and each column the Spearman correlation of its
+      log2 counts per million with another library. It answers the exact correlation
+      behind every cell of the heatmap.
+
+      How to read: read across a row to find the libraries it resembles least.

@@ -15,19 +15,166 @@ fixture: split_identity.tsv
 renders_as:
   # Identity falls with divergence, coverage with divergence and assembly gaps:
   # a point left of genomes of similar identity lost coverage to its assembly.
-  - { id: identity_vs_coverage, component: advanced_viz, kind: scatter_xy,
-      roles: {x: target_aligned_pct, y: percent_identity, label: query, size: aligned_bp} }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: query, y: target_aligned_pct, title: Share of the target covered by the one-to-one alignment} }
-  - { id: identity_median, component: card, column: percent_identity, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: target_coverage, component: card, column: target_aligned_pct, aggregation: median,
-      secondary_layout: histogram, headline: true }
-  - { id: genome_size, component: card, column: query_length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: aligned_length, component: card, column: aligned_bp, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: aligned_total, component: card, column: aligned_bp, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: query, top_n_count: 3 }
-  - { component: interactive, interactive_type: RangeSlider, column_name: percent_identity }
-  - { component: table, row_selection_enabled: true, row_selection_column: query }
+  # Colour is the query's sequence count, which is how fragmented its assembly is.
+  - id: identity_vs_coverage
+    component: advanced_viz
+    kind: scatter_xy
+    title: Identity against coverage of the target
+    roles: {x: target_aligned_pct, y: percent_identity, label: query, size: aligned_bp}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      color_col: query_sequences
+      x_title: Target covered by the one-to-one alignment (%)
+      y_title: Alignment identity (%)
+    description: >-
+      Each point is a query genome aligned to the target: the share of the target its
+      one-to-one alignment covers on the horizontal axis and the percent identity on
+      the vertical axis. Size is the aligned length and colour the number of sequences
+      in the query. It answers whether a genome is distant or only fragmented.
+
+      How to read: identity falls with divergence, so a distant genome sits low.
+      Coverage also falls with divergence and with assembly gaps, so a point to the
+      left of genomes of similar identity lost coverage to a fragmented assembly,
+      which the colour confirms. Open the distance and parameter tiles for the same
+      pairs.
+
+      Note: there is no standard way to compute nucleotide identity, so the value here
+      is the one nf-core/pairgenomealign reports (gaps counted as mismatches).
+
+      Lines and annotations: the dashed line is the median alignment identity of this
+      table, a reference computed from the rows on show (it follows the filters), not a
+      cut-off of LAST.
+
+      Source: https://raw.githubusercontent.com/nf-core/pairgenomealign/master/docs/output.md
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: query
+      y: target_aligned_pct
+      color: percent_identity
+      labels: {query: Query genome, target_aligned_pct: Target covered (%), percent_identity: Identity (%)}
+    title: Share of the target covered
+    reference_lines:
+      - {axis: y, stat: median, column: target_aligned_pct}
+    description: >-
+      Each bar is a query genome with the share of the target genome its one-to-one
+      alignment covers, coloured by percent identity. It answers which genomes align
+      to most of the target.
+
+      How to read: a short bar with a high identity colour is a close genome with a
+      fragmented assembly or a real loss of sequence. A short bar with a low identity
+      colour is simply a distant genome.
+
+      Note: the one-to-one alignment keeps one copy of locally duplicated regions, so
+      they count as missing in the other genome.
+
+      Lines and annotations: the dashed line is the median share of the target covered of
+      this table, a reference computed from the rows on show (it follows the filters), not
+      a cut-off of LAST.
+
+      Source: https://raw.githubusercontent.com/nf-core/pairgenomealign/master/docs/output.md
+  - id: identity_median
+    component: card
+    column: percent_identity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: identity, with its spread
+    title: Alignment identity
+    description: >-
+      The hero number is the median nucleotide percent identity of the one-to-one
+      alignments and the box shows its quartiles. It answers how close the aligned
+      genomes are to the target.
+
+      How to read: closely related genomes sit near 100 percent, and the identity
+      falls as genomes diverge. A wide box means the run mixes close and distant
+      genomes.
+
+      Source: https://raw.githubusercontent.com/nf-core/pairgenomealign/master/docs/output.md
+  - id: target_coverage
+    component: card
+    column: target_aligned_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    headline: true
+    caption: coverage across genomes
+    title: Target covered
+    description: >-
+      The hero number is the median share of the target genome covered by the
+      one-to-one alignment, and the histogram shows the distribution. It answers how
+      much of the target the queries reach.
+
+      How to read: coverage below 100 percent is expected, since a one-to-one alignment
+      leaves out duplicated and unalignable regions. A low tail marks genomes that are
+      divergent or fragmented.
+  - id: genome_size
+    component: card
+    column: query_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: genome length, with its spread
+    title: Query genome length
+    description: >-
+      The hero number is the median total length of the query genomes, and the box
+      shows its quartiles. It answers whether the queries are of a similar size to the
+      target.
+
+      How to read: a query much longer or shorter than the rest has a different
+      assembly completeness or a real size difference, which also lowers coverage.
+  - id: aligned_length
+    component: card
+    column: aligned_bp
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: aligned length, with its spread
+    title: Aligned length
+    description: >-
+      The hero number is the median number of aligned base pairs in the one-to-one
+      alignments, and the box shows its quartiles. It answers how much sequence each
+      alignment holds.
+
+      How to read: compare it with the genome length card. A short aligned length for
+      a genome of normal size means a divergent or fragmented query.
+  - id: aligned_total
+    component: card
+    column: aligned_bp
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: concentration
+    breakdown_col: query
+    top_n_count: 3
+    caption: share held by the top genomes
+    title: Aligned bases in total
+    description: >-
+      The hero number is the total aligned base pairs over all pairs, and the strip
+      shows the share held by the three genomes with the longest alignments. It
+      answers whether the alignment is spread evenly over the queries.
+
+      How to read: a share close to the number of genomes shown over the total means
+      the queries align alike. A higher share points to a few genomes dominating.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: percent_identity
+    title: Identity range
+    description: >-
+      Select a range of percent identity to keep only the genome pairs inside it. It
+      answers which pairs fall in a given divergence band.
+
+      How to read: narrow the range to a band of closely related genomes, and every
+      other tile follows.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: query
+    title: Alignment summary table
+    description: >-
+      Each row is a genome pair with the aligned length, identity with and without
+      gaps, sequence counts and lengths of both genomes, and the share of each genome
+      covered. It answers the exact numbers behind every tile and lets a row selection
+      filter the dashboard.
+
+      How to read: sort by identity to rank the pairs by divergence.

@@ -9,12 +9,97 @@ description: >-
 find:
   path_glob: "**/sidle/**/reconstruction_summary/metadata.tsv"
 recipe: sidle/reconstruction_qc.py
+# The fixture is enriched synthetically from 17 real rows (copies with seeded noise), so the preview shows several k-mer spreads.
 fixture: reconstruction_qc.tsv
 renders_as:
   # Support against coverage: the two axes that qualify a reconstructed feature.
-  - { id: reconstruction_support, component: advanced_viz, kind: scatter_xy, roles: {x: num_regions, y: total_kmers_mapped, size: mean_kmer_per_region, label: feature_id} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: num_regions, title: Features by regions mapped} }
-  - { component: card, column: num_regions, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: total_kmers_mapped, aggregation: median, secondary_layout: histogram }
-  - { component: card, column: mean_kmer_per_region, aggregation: average, secondary_layout: histogram }
-  - { component: table }
+  - id: reconstruction_support
+    component: advanced_viz
+    kind: scatter_xy
+    title: Region coverage against kmer support
+    roles: {x: num_regions, y: total_kmers_mapped, size: mean_kmer_per_region, label: feature_id}
+    config:
+      color_col: stdv_kmer_per_region
+      x_title: Regions mapped
+      y_title: Kmers mapped
+      top_n_labels: 5
+    description: >-
+      Each point is a reconstructed feature: the number of amplified regions that mapped
+      to it on the horizontal axis and the kmer support summed over them on the vertical
+      axis. The size is the mean support per region and the colour its spread across
+      regions. It answers how well each feature is backed by the sequenced regions.
+
+      How to read: a point to the right is carried by several regions and is a stronger
+      claim than one carried by a single region. A high point with an uneven colour has
+      most of its support in one region. Follow up the labelled points in the table.
+
+      Note: q2-sidle publishes no minimum number of regions or kmers, so no cut-off is
+      drawn.
+
+      Source: https://q2-sidle.readthedocs.io/en/latest/reconstruction.html
+  - component: figure
+    visu_type: histogram
+    # C1 N/A: every column of this table is numeric or an identifier, so no
+    # category exists to split the bars by.
+    dict_kwargs:
+      x: num_regions
+      labels: {num_regions: Regions mapped, count: Features}
+    title: Features by regions mapped
+    description: >-
+      Each bar counts the reconstructed features that were mapped by a given number of
+      amplified regions. It answers how many features rest on one region and how many
+      on all of them.
+
+      How to read: a distribution piled on the highest value means the regions agree and
+      the reconstruction is well supported. A tall bar at one region means many features
+      are single-region claims.
+  - component: card
+    column: num_regions
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: average, with its spread
+    title: Regions per feature
+    description: >-
+      The hero number is the average count of amplified regions that mapped to a feature,
+      and the box shows the quartiles. It answers how much cross-region support the
+      features have.
+
+      How to read: the closer it is to the number of regions sequenced, the more complete
+      the reconstruction. A low value means most features come from a single region.
+  - component: card
+    column: total_kmers_mapped
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: median, with its range
+    title: Kmer support
+    description: >-
+      The hero number is the median total kmer support per feature, and the histogram
+      shows its distribution. It answers how much sequence evidence stands behind a
+      typical feature.
+
+      How to read: a long right tail is normal. Features at the lowest values are the
+      weakest reconstructions, so look at them in the table first.
+  - component: card
+    column: mean_kmer_per_region
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: average, with its range
+    title: Kmers per region
+    description: >-
+      The hero number is the average kmer support per mapped region, and the histogram
+      shows its distribution over features. It answers how deep the support is on each
+      region and not only in total.
+
+      How to read: a value near one means each region adds little evidence by itself.
+      Higher values mean regions that pin the feature down.
+  - component: table
+    title: Reconstruction confidence table
+    description: >-
+      Each row is a reconstructed feature with the number of regions mapped, the kmer
+      support and the per-region ASVs behind it. It answers which features are well
+      supported.
+
+      How to read: sort by regions mapped, then by kmer support.

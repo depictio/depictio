@@ -13,9 +13,66 @@ renders_as:
   - id: orf_record
     component: advanced_viz
     kind: record_card
+    title: ORF record
     roles: { id: orf_id, title: gene_name }
-  - { component: card, column: orf_id, aggregation: nunique, secondary_layout: donut, breakdown_col: orf_class }
-  - { component: card, column: aa_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: histogram, dict_kwargs: { x: aa_length, color: orf_class } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: orf_class }
-  - { component: table, row_selection_enabled: true, row_selection_column: orf_id }
+    description: >-
+      The card shows every field of one Ribo-TISH ORF: its gene, transcript, location, initiation type, start
+      codon, length and frame-test q-value. It answers what is known about the ORF picked in the table.
+
+      How to read: select a row in the table to fill the card. A low frame-test q-value means the in-frame
+      reads are significantly more numerous than the out-of-frame ones.
+
+      Source: https://raw.githubusercontent.com/zhpn1024/ribotish/master/README.rst
+  - component: card
+    column: orf_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: orf_class
+    title: ORFs predicted
+    caption: ORFs, by class
+    description: >-
+      The hero number is the count of distinct ORFs Ribo-TISH predicted, and the ring splits them by class
+      (annotated coding sequence, N-terminal variant, upstream, downstream, internal or novel ORF). It
+      answers how much translation beyond annotated starts the data supports.
+
+      How to read: annotated coding sequences are the baseline. A large share of novel or upstream ORFs is the
+      interesting part but needs follow-up, for example with a second caller.
+  - component: card
+    column: aa_length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: ORF length
+    caption: lengths, in amino acids
+    description: >-
+      The hero number is the median ORF length in amino acids and the histogram shows the distribution. It
+      answers whether the calls are full proteins or short ORFs.
+
+      How to read: a histogram with a large short peak points to many small ORFs such as upstream ones.
+      Filter by ORF class to separate them from annotated coding sequences.
+  - component: figure
+    visu_type: histogram
+    title: ORF length by class
+    dict_kwargs: { x: aa_length, color: orf_class, labels: { aa_length: ORF length (amino acids), orf_class: ORF class } }
+    description: >-
+      Each bar counts ORFs in a length bin, split by ORF class. It answers how the classes differ in length.
+
+      How to read: annotated coding sequences spread over long lengths while small ORFs pile up on the left.
+      A class with an unusual length profile, for example long novel ORFs, deserves a closer look in the table.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: orf_class
+    title: ORF class
+    description: >-
+      Restricts every tile to the chosen ORF classes, such as upstream or novel ORFs. It answers whether a
+      pattern belongs to annotated genes or to the new calls.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: orf_id
+    title: Ribo-TISH ORFs
+    description: >-
+      Each row is an ORF in one library, collapsed from its start codons, with its gene, transcript, location,
+      class, start codon, length and frame-test q-value. It answers which ORFs to follow up.
+
+      How to read: sort by the q-value or the length and select a row to fill the ORF record.

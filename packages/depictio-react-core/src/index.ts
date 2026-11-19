@@ -641,6 +641,7 @@ export {
   dispatchStaticExport,
   pollStaticExport,
   downloadStaticExport,
+  canExportStatic,
   // Project management
   fetchProject,
   fetchIngestionReport,
@@ -857,6 +858,7 @@ export type {
   VizSuggestionMatch,
   VizSuggestionsResponse,
   CatalogRender,
+  FigureReferenceLine,
   CatalogOutputMatch,
   CatalogModule,
   CatalogComposeResponse,
@@ -1267,6 +1269,7 @@ export type {
   FromRunRequest,
   FromRunReport,
   SharedRunSamples,
+  SamplesCheckGap,
   FromRunDCPreview,
   FromRunRecipePreview,
   FromRunRecipeSource,

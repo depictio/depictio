@@ -1,2 +1,7 @@
 sample	library	fl_reads	flnc_reads	flnc_polya_reads	chimeric_reads	pct_flnc	pct_polya
 30dpf_Muscle	30dpf_Muscle_0	405646	402664	7272	2982	99.26	1.81
+30dpf_Brain	30dpf_Brain_0	314977	312201	9358	2776	99.12	3.0
+30dpf_Liver	30dpf_Liver_0	497008	493361	13178	3647	99.27	2.67
+60dpf_Muscle	60dpf_Muscle_0	341336	336544	5086	4792	98.6	1.51
+60dpf_Brain	60dpf_Brain_0	442978	439844	11953	3134	99.29	2.72
+60dpf_Liver	60dpf_Liver_0	238942	237579	5837	1363	99.43	2.46

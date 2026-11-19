@@ -11,11 +11,13 @@ passwords, keys, ports and environment. What it adds is what `local up` cannot d
 yet (see README, "Changes to depictio"):
 
   * foreground supervision as PID 1's child, with ordered shutdown;
-  * the native services read from a prefix baked into the image
-    (DEPICTIO_SERVICES_PREFIX, default /opt/depictio-services), not <home>/env;
   * the API bound to DEPICTIO_BIND_HOST (0.0.0.0 under Docker, 127.0.0.1 under
     Apptainer, which shares the host network);
   * dropping root to the owner of /data, so files stay the user's.
+
+The services baked into the image are local_stack's own business: it reads them
+from DEPICTIO_SERVICES_PREFIX (/opt/depictio-services), so a plain
+`depictio local up` in the image (the Nextflow module's task) uses them too.
 
 Usage:  entrypoint.py [serve]          start and supervise the stack (default)
         entrypoint.py health           exit 0 when the API answers /health
@@ -32,7 +34,12 @@ import threading
 from pathlib import Path
 
 HOME_DIR = Path(os.environ.get("DEPICTIO_LOCAL_HOME") or "/data")
-SERVICES_PREFIX = Path(os.environ.get("DEPICTIO_SERVICES_PREFIX") or "/opt/depictio-services")
+# local_stack reads the services from here (the Dockerfile sets it; this default
+# keeps a stripped environment working too).
+os.environ["DEPICTIO_SERVICES_PREFIX"] = (
+    os.environ.get("DEPICTIO_SERVICES_PREFIX") or "/opt/depictio-services"
+)
+SERVICES_PREFIX = Path(os.environ["DEPICTIO_SERVICES_PREFIX"])
 IN_APPTAINER = any(
     os.environ.get(v) for v in ("APPTAINER_CONTAINER", "SINGULARITY_CONTAINER", "APPTAINER_NAME")
 )
@@ -135,14 +142,12 @@ def api_port_wanted() -> int | None:
 
 
 def patch_local_stack(ls, host: str) -> None:
-    """Two seams `depictio local up` does not expose yet (README: Changes to depictio).
-
-    * Paths.env -> the baked prefix, so nothing is downloaded into the user's data
-      (a home from the pipeline may hold an env/ for another platform, or none).
-    * the API's `--host 127.0.0.1` -> ``host``. Asserted, so a depictio release
-      that changes the command fails loudly instead of silently binding loopback.
+    """The one seam `depictio local up` does not expose yet (README: Changes to
+    depictio): the API's `--host 127.0.0.1` -> ``host``. Asserted, so a depictio
+    release that changes the command fails loudly instead of silently binding
+    loopback. (The services prefix and SeaweedFS's per-user sockets are
+    local_stack's own, from DEPICTIO_SERVICES_PREFIX.)
     """
-    ls.Paths.env = property(lambda self: SERVICES_PREFIX)
     original_spawn = ls.spawn
 
     def spawn(paths, name, cmd, env=None):
@@ -154,29 +159,9 @@ def patch_local_stack(ls, host: str) -> None:
             if cmd[i + 1] != "127.0.0.1":
                 raise ls.LocalStackError(f"unexpected API host {cmd[i + 1]!r} in local_stack")
             cmd = [*cmd[: i + 1], host, *cmd[i + 2 :]]
-        if name == "s3":
-            cmd = [*cmd, *seaweedfs_socket_flags(cmd)]
         return original_spawn(paths, name, cmd, env=env)
 
     ls.spawn = spawn
-
-
-def seaweedfs_socket_flags(cmd: list[str]) -> list[str]:
-    """Per-user names for the unix sockets weed puts in /tmp (it ignores TMPDIR).
-
-    Under Apptainer without --contain, /tmp is the node's, shared by its users. A
-    /tmp/seaweedfs-s3-9000.sock left by another user's SeaweedFS makes ours die at
-    startup ("Failed to remove ... operation not permitted"; reproduced). Only the
-    S3 and filer sockets can be named. weed saves these flags in s3/mini.options,
-    so the names stay valid for a later `depictio local up` on the host.
-    """
-    port = next((a.split("=", 1)[1] for a in cmd if a.startswith("-s3.port=")), "9000")
-    filer = next((a.split("=", 1)[1] for a in cmd if a.startswith("-filer.port=")), "8888")
-    uid = os.getuid()
-    return [
-        f"-s3.localSocket=/tmp/seaweedfs-u{uid}-s3-{port}.sock",
-        f"-filer.localSocket=/tmp/seaweedfs-u{uid}-filer-{filer}.sock",
-    ]
 
 
 def warn_on_mongo_series(home: Path) -> None:

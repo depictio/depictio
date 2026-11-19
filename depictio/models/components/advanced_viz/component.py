@@ -223,14 +223,26 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
             with_inferred_structure_source,
         )
 
+        # The render's declared options (labels, thresholds, reference lines)
+        # travel with its roles. Never the preview's fixture-derived defaults:
+        # a quantile of the fixture is not a cut-off for someone else's run.
         inherited = {
-            role_config_key(render.kind, role): col for role, col in (render.roles or {}).items()
+            **{
+                role_config_key(render.kind, role): col
+                for role, col in (render.roles or {}).items()
+            },
+            **(render.config or {}),
         }
         user_cfg = data.get("config") or {}
         merged = with_inferred_structure_source(
             render.kind, {**inherited, **user_cfg, "viz_kind": render.kind}
         )
-        return {**data, "viz_kind": render.kind, "config": merged}
+        expanded = {**data, "viz_kind": render.kind, "config": merged}
+        # The catalog's title and About text, unless the dashboard sets its own.
+        for key in ("title", "description"):
+            if not expanded.get(key) and getattr(render, key, None):
+                expanded[key] = getattr(render, key)
+        return expanded
 
     @model_validator(mode="before")
     @classmethod

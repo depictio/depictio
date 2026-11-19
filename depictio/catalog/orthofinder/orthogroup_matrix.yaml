@@ -12,10 +12,76 @@ recipe: orthofinder/orthogroup_matrix.py
 fixture: orthogroup_matrix.tsv
 renders_as:
   # The renderer enumerates the binary species columns itself.
-  - { id: orthogroup_upset, component: advanced_viz, kind: upset_plot }
-  - { id: orthogroups_total, component: card, column: orthogroup, aggregation: count,
-      secondary_layout: composition, breakdown_col: copy_class }
-  - { component: card, column: n_genomes, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: copy_class }
-  - { component: table }
+  - id: orthogroup_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Orthogroups shared between species
+    config:
+      color_intersections_by: degree
+      show_values: true
+    description: >-
+      Each bar is a set of species and counts the orthogroups that contain genes from
+      exactly those species, with the dots below naming the set. It answers which
+      orthogroups every species shares, which a clade shares and which belong to a
+      single species.
+
+      How to read: the bar with every species joined is the core set that all genomes
+      carry. Tall bars for a subset of species point to a clade-specific gene family,
+      and a species with a large single bar holds many genes found nowhere else, which
+      is also what a fragmented or contaminated proteome looks like.
+
+      Lines and annotations: bars are coloured by the number of species in the set,
+      the degree of the intersection.
+
+      Source: https://raw.githubusercontent.com/davidemms/OrthoFinder/master/README.md
+  - id: orthogroups_total
+    component: card
+    column: total_genes
+    aggregation: count
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: copy_class
+    caption: orthogroups, by copy class
+    title: Orthogroups
+    description: >-
+      The hero number is the count of orthogroups, the bar splits them by copy class,
+      and the strip gives the median and largest number of genes in an orthogroup. It
+      answers how many gene families the species form and how many are single copy.
+
+      How to read: a large single-copy share means few duplications, which suits a
+      species tree. A large multi-copy share points to expanded families.
+
+      Source: https://raw.githubusercontent.com/davidemms/OrthoFinder/master/README.md
+  - component: card
+    column: n_genomes
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: average, with its spread
+    title: Species per orthogroup
+    description: >-
+      The hero number is the average count of species that hold genes of an
+      orthogroup, and the box shows the spread. It answers how widely shared the gene
+      families are.
+
+      How to read: an average close to the number of species means most families are
+      shared by all of them. A low average with a long tail points to many
+      species-specific families.
+
+      Source: https://raw.githubusercontent.com/davidemms/OrthoFinder/master/README.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: copy_class
+    title: Copy class
+    description: >-
+      Filters the tiles to orthogroups of one or more copy classes, such as single copy
+      or multi copy.
+  - component: table
+    title: Orthogroup table
+    description: >-
+      Each row is an orthogroup, with a 0 or 1 column per species, the number of
+      species it reaches, its total genes, its copy class and how widely it is shared.
+      It answers which families make up each bar of the intersection plot.
+
+      How to read: sort by total genes to find the largest families, or filter by
+      sharing to list the core ones.

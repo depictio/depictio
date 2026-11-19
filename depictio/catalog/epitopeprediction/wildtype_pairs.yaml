@@ -14,8 +14,81 @@ renders_as:
   - id: wildtype_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: Mutant against wild-type IC50
     roles: { x: wt_ic50_nm, y: ic50_nm, label: sequence, color: pair_call }
-  - { id: pair_outcomes, component: card, column: pair_key, aggregation: count, secondary_layout: composition, breakdown_col: pair_call }
-  - { id: agretopicity_median, component: card, column: log10_agretopicity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: pair_call }
-  - { component: table, row_selection_enabled: true, row_selection_column: pair_key }
+    config:
+      x_title: Wild-type IC50 (nM)
+      y_title: Mutant IC50 (nM)
+      log_x: true
+      log_y: true
+      reference_line: diagonal
+      reference_label: Mutant equals wild type
+      top_n_labels: 5
+    description: >-
+      Each point is a missense mutant peptide against an allele and a tool: the IC50 of
+      its wild type on the horizontal axis and its own IC50 on the vertical axis,
+      coloured by the outcome. It answers which mutations create or strengthen binding.
+
+      How to read: points below the diagonal bind more strongly than their wild type. The
+      classic neoepitope candidate is a mutant binder whose wild type does not bind.
+      Points on the diagonal are unchanged by the mutation.
+
+      Lines and annotations: the diagonal is where the mutant and wild-type IC50 are
+      equal, an identity line and not a cut-off. Binder calls are each tool's own rule, a
+      percentile rank of 2 or less for most tools and an IC50 of 500 nM or less for
+      MHCnuggets.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: pair_outcomes
+    component: card
+    column: sequence
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: pair_call
+    caption: pairs, by outcome
+    title: Mutant and wild-type pairs
+    description: >-
+      The hero number is the count of mutant and wild-type pairs, the compact line gives
+      the distinct mutant peptides, and the bar splits them by outcome. It answers how
+      many mutations change binding.
+
+      How to read: the share where the mutant binds and the wild type does not is the
+      candidate list. A large share where neither binds is common, since most peptides
+      do not bind.
+  - id: agretopicity_median
+    component: card
+    column: log10_agretopicity
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: log10 agretopicity, quartiles
+    title: Change in affinity
+    description: >-
+      The hero number is the range of log10 agretopicity, which is the log10 of the
+      mutant IC50 over the wild-type IC50, and the box shows the quartiles. It answers how
+      strongly mutations change binding.
+
+      How to read: a value below zero means the mutant binds more strongly than its wild
+      type and a value above zero less strongly. A box centred on zero means most
+      mutations leave binding unchanged, and the hero is a range and not a median because
+      a median over both directions cancels out.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: pair_call
+    title: Outcome
+    description: >-
+      Pick an outcome, for example a mutant binder whose wild type does not bind, to
+      restrict the scatter, the cards and the table to it. It answers what the candidates
+      look like.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: pair_key
+    title: Mutant and wild-type table
+    description: >-
+      Each row is a mutant peptide with its wild type, allele and tool, both IC50, both
+      binder calls, the agretopicity and the outcome. It answers the exact values behind
+      the scatter and lets a row selection filter the rest of the dashboard.
+
+      How to read: filter to the outcome where only the mutant binds and sort by mutant
+      IC50 to rank the candidates.

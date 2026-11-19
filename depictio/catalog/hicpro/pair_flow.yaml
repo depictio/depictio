@@ -16,19 +16,67 @@ renders_as:
   - id: pair_flow_sankey
     component: advanced_viz
     kind: sankey
+    title: Fate of the read pairs
     roles:
       steps: [mapping, filtering, contacts]
+    config:
+      value_label: Read pairs
+    description: >-
+      Each band is a group of read pairs flowing from how they mapped, through the restriction-fragment
+      filter, to the contact class they end in. It answers where the sequenced pairs are lost on the way to
+      valid contacts.
+
+      How to read: a thick band into Lost at an early step is the main source of loss. A large dangling end
+      or religation band points to a problem in the digestion or ligation, and a thin valid pairs band means
+      most of the sequencing did not yield contacts. Compare samples through the table tile.
+
+      Lines and annotations: dangling ends are unligated fragments with both reads on the same restriction
+      fragment, religation is the ligation of juxtaposed fragments, and only valid pairs between two
+      different fragments become contacts. No cut-off is drawn.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
   # Composition of what survives: the cis/trans split plus the duplicates
   # de-duplication removed. `filter_expr` keeps the lost paths out of the ring.
   - component: card
     column: pairs
     aggregation: sum
+    aggregations: [min, max]
     secondary_layout: donut
     breakdown_col: contacts
     filter_expr: "col('filtering') == 'Valid pairs'"
+    caption: valid pairs, by contact class
+    title: Valid pairs by contact class
+    description: >-
+      The hero number is the total of valid read pairs, and the ring splits them by contact class (cis,
+      trans or removed duplicates). The strip gives the smallest and largest single flow. It answers what
+      the surviving pairs are made of.
+
+      How to read: cis contacts join loci on the same chromosome and trans contacts join different
+      chromosomes. A large duplicate share points to a low-complexity library, and a trans share far above
+      the other samples to a noisier one.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
   - component: card
     column: pairs
     aggregation: sum
+    aggregations: [min, max]
     secondary_layout: donut
     breakdown_col: mapping
-  - { component: table }
+    caption: read pairs, by mapping outcome
+    title: Read pairs by mapping outcome
+    description: >-
+      The hero number is the total of read pairs, and the ring splits them by how they mapped: uniquely
+      mapped, singleton, low quality or unmapped. The strip gives the smallest and largest single flow. It
+      answers how much of the sequencing maps to the genome.
+
+      How to read: a large uniquely mapped share is healthy. Large unmapped or low quality shares point to
+      contamination, poor read quality or the wrong reference.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: table
+    title: Read-pair fates table
+    description: >-
+      Each row is a sample and a path of mapping outcome, filter outcome and contact class with the number of
+      read pairs that took it. It answers the exact counts behind the flow.
+
+      How to read: filter on a sample and sort by pairs to list its largest fates.

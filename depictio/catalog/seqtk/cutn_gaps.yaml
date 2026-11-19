@@ -11,11 +11,79 @@ find:
 recipe: seqtk/cutn_gaps.py
 fixture: cutn_gaps.tsv
 renders_as:
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: genome, y: gap_bp, title: Bases in assembly gaps per genome} }
-  - { id: gap_runs, component: card, column: gaps, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: gap_bases, component: card, column: gap_bp, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: genome, top_n_count: 3, headline: true }
-  - { component: interactive, interactive_type: RangeSlider, column_name: gaps }
-  - { component: table, row_selection_enabled: true, row_selection_column: genome }
+  # C1 N/A: one bar per assembly, the x axis already names it and no other column splits it.
+  # The bases in gaps span orders of magnitude between assemblies, so the axis is logarithmic.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: genome
+      y: gap_bp
+      log_y: true
+      labels: {genome: Assembly, gap_bp: Bases in gaps}
+    title: Bases in assembly gaps per genome
+    reference_lines: [{axis: y, stat: median, column: gap_bp}]
+    description: >-
+      Each bar is an assembly, with the total bases that sit in runs of N, on a log
+      scale. It answers which assemblies carry the most unresolved sequence.
+
+      How to read: a tall bar is a gap-rich assembly, which covers less of a target
+      without being more divergent. Compare it with the number of gaps in the table to
+      tell a few long gaps from many short ones.
+
+      Lines and annotations: The dashed line is the median number of bases in gaps
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of Seqtk.
+
+      Source: https://raw.githubusercontent.com/lh3/seqtk/master/seqtk.c
+  # The number of gaps spans orders of magnitude, so the card shows the extremes.
+  - id: gap_runs
+    component: card
+    column: gaps
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: grid
+    caption: median, with the fewest and the most
+    title: Gaps per assembly
+    description: >-
+      The hero number is the median count of runs of N per assembly, with the smallest
+      and largest count. It answers how gapped the assemblies are.
+
+      How to read: a count near zero means a gap-free assembly. Thousands of gaps mean a
+      scaffolded draft, whose gaps cannot align to a target.
+
+      Source: https://raw.githubusercontent.com/lh3/seqtk/master/seqtk.c
+  # Genomes are long ids, so the card gives the spread of the totals, not a ranking.
+  - id: gap_bases
+    component: card
+    column: gap_bp
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: grid
+    headline: true
+    caption: total, with the median and largest assembly
+    title: Bases in gaps
+    description: >-
+      The hero number is the total of bases inside runs of N over the assemblies in view,
+      with the median and the largest per assembly. It answers how much sequence is
+      unresolved.
+
+      How to read: a large maximum against a small median points to one assembly that
+      is far more gapped than the rest. Open the gap table to find it.
+
+      Source: https://raw.githubusercontent.com/lh3/seqtk/master/seqtk.c
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: gaps
+    title: Gap count range
+    description: >-
+      Filters the tiles to assemblies whose number of gaps falls inside the chosen range.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: genome
+    title: Assembly gaps table
+    description: >-
+      Each row is an assembly with its number of gaps, their total and median length,
+      the longest gap and how many sequences carry one. It answers the exact numbers
+      behind every tile and lets a row selection filter the dashboard.
+
+      How to read: sort by total gap bases to rank the assemblies by unresolved sequence.

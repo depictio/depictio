@@ -15,7 +15,82 @@ find:
 recipe: cnvkit/cnv_profile.py
 fixture: cnv_profile.tsv
 renders_as:
-  - { id: cnvkit_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
-  - { id: cnvkit_log2_spread, component: card, column: log2, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: cnvkit_bin_depth, component: card, column: depth, aggregation: median, secondary_layout: histogram }
-  - { component: table, columns: [sample, chrom, start, end, log2, copy_number, segment, label] }
+  - id: cnvkit_profile
+    component: advanced_viz
+    kind: cnv_profile
+    title: Copy-number profile
+    roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label}
+    config:
+      gain_threshold: 0.2
+      loss_threshold: -0.25
+      y_range: 3.0
+    description: >-
+      Each dot is a genomic bin: its log2 copy ratio against the reference along the chromosomes, with the
+      called segments drawn over the bins and coloured by their integer copy number, and the B-allele
+      frequency of each segment underneath when it is known. It answers which regions of the genome are
+      gained or lost in a sample.
+
+      How to read: a log2 ratio near zero is a neutral, two-copy region. Segments above the gain line are
+      gains and segments below the loss line are losses, and a deep drop is a possible homozygous deletion.
+      Bins scattered widely around a segment mean a noisy sample, so check the bin depth card before
+      trusting small segments.
+
+      Lines and annotations: the gain line at a log2 ratio of 0.2 and the loss line at -0.25 are the inner
+      cut-offs of the default thresholds of cnvkit call, chosen to detect a single-copy change in a diploid
+      tumour at a purity as low as 30%. They assume a diploid genome and are rescaled by purity when it is
+      given.
+
+      Sources: https://cnvkit.readthedocs.io/en/stable/pipeline.html and https://pubmed.ncbi.nlm.nih.gov/27100738/
+  - id: cnvkit_log2_spread
+    component: card
+    column: log2
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('segment') == 'bin'"
+    caption: bin log2 ratio, with its spread
+    title: Copy-ratio spread
+    description: >-
+      The hero number is the range of the bin-level log2 copy ratios, and the box shows their quartiles. It
+      answers how far the bins stray from a neutral ratio.
+
+      How to read: a box tight around zero with a few extreme bins means a mostly neutral genome with a few
+      alterations. A wide box means a noisy sample or many copy-number changes. The range is shown instead of
+      a median, because gains and losses cancel to about zero.
+
+      Lines and annotations: bins are the rows of the copy ratio file, one per genomic bin, with segments
+      left out.
+
+      Source: https://cnvkit.readthedocs.io/en/stable/fileformats.html
+  - id: cnvkit_bin_depth
+    component: card
+    column: depth
+    aggregation: median
+    aggregations: [q1, q3]
+    secondary_layout: histogram
+    filter_expr: "col('segment') == 'bin'"
+    caption: bin depth, with its distribution
+    title: Bin depth
+    description: >-
+      The hero number is the median read depth of the bins, with the quartiles beside it and the histogram of
+      the depths below. It answers whether the sample is covered deeply enough for reliable calls.
+
+      How to read: a narrow histogram of depths means even coverage. CNVkit documentation notes that larger
+      alterations are called reliably down to about 10x on-target coverage, with more spurious segments
+      below that. A long tail of low-depth bins is noisy.
+
+      Lines and annotations: the 10x figure in the documentation concerns on-target coverage, and no line is
+      drawn for it here.
+
+      Source: https://cnvkit.readthedocs.io/en/stable/pipeline.html
+  - component: table
+    columns: [sample, chrom, start, end, log2, copy_number, segment, label]
+    title: Bins and segments table
+    description: >-
+      Each row is a bin or a called segment with its position, log2 copy ratio, integer copy number and the
+      gene label CNVkit gives it. It answers the exact values behind the profile.
+
+      How to read: filter the segment column to segments to list the calls, then sort by log2 to find the strongest gains and losses.
+
+      Source: https://cnvkit.readthedocs.io/en/stable/fileformats.html and
+      https://cnvkit.readthedocs.io/en/stable/pipeline.html

@@ -7,13 +7,123 @@ description: >-
 find:
   path_glob: "**/Stats/Stats.json"
 recipe: bcl2fastq/lane_summary.py
+# The fixture is enriched synthetically from 1 real row (copies with seeded noise), so the preview shows several lanes and flowcells.
 fixture: lane_summary.tsv
 renders_as:
-  - { id: lane_health, component: advanced_viz, kind: scatter_xy,
-      roles: {x: pct_undetermined, y: pct_q30, label: lane_label, size: yield_gb} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: lane_label, y: yield_gb, title: Yield per lane} }
-  - { component: card, column: yield_gb, aggregation: sum, secondary_layout: top_n, breakdown_col: lane_label, top_n_count: 4 }
-  - { component: card, column: clusters_pf, aggregation: sum, secondary_layout: top_n, breakdown_col: lane_label, top_n_count: 4 }
-  - { component: card, column: pct_q30, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_undetermined, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: lane_health
+    component: advanced_viz
+    kind: scatter_xy
+    title: Lane quality against Undetermined share
+    roles: {x: pct_undetermined, y: pct_q30, label: lane_label, size: yield_gb, color: flowcell}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: Undetermined reads (%)
+      y_title: Bases at Q30 or above (%)
+      top_n_labels: 8
+      legend_pos: bottom
+    description: >-
+      Each point is a lane: the share of its reads that were Undetermined on the horizontal
+      axis and the share of its bases at Q30 or above on the vertical axis, sized by yield and
+      coloured by flowcell. It answers which lanes are healthy.
+
+      How to read: a healthy lane sits in the upper left, with high quality and few unassigned
+      reads. A lane to the right has many reads that no index matched, and a lane low on the
+      axis has poor base quality, so open the unknown barcodes and read quality tiles for the
+      lane. With few lanes, read the table instead.
+
+      Note: no cut-off is drawn, because the expected values depend on the instrument and the
+      library type.
+
+      Lines and annotations: the dashed line is the median share of bases at Q30 or above
+      of this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of bcl2fastq.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: lane_label
+      y: yield_gb
+      color: flowcell
+      barmode: group
+      labels: {lane_label: Lane, yield_gb: Yield (Gb), flowcell: Flowcell}
+    title: Yield per lane
+    reference_lines:
+      - {axis: y, stat: median, column: yield_gb}
+    description: >-
+      Each bar is a lane, sized by its yield in gigabases and coloured by flowcell. It answers
+      whether the lanes produced similar amounts of data.
+
+      How to read: lanes of one flowcell are expected to yield similar amounts, so a short bar
+      points to a lane with a cluster, loading or instrument problem. Compare it with the
+      clusters passing filter.
+
+      Lines and annotations: the dashed line is the median yield per lane of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      bcl2fastq.
+  - component: card
+    column: yield_gb
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 4
+    title: Total yield
+    caption: the lanes with the highest yield, with the median and largest per lane
+    description: >-
+      The hero number is the total yield in gigabases over the lanes in view, and the bars rank
+      the lanes. It answers how much data the run produced and how it divides between lanes.
+
+      How to read: bars of similar length mean balanced lanes, and one much shorter bar points to
+      a failing lane.
+  - component: card
+    column: clusters_pf
+    aggregation: sum
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 4
+    title: Clusters passing filter
+    caption: the lanes with the most clusters, with the smallest and largest per lane
+    description: >-
+      The hero number is the total of clusters that passed the instrument's purity filter
+      over the lanes in view, and the bars rank the lanes. It answers how many clusters yielded
+      usable reads.
+
+      How to read: a lane with far fewer clusters than the others is under loaded or had a
+      clustering problem. Compare it with the share of clusters passing filter in the table.
+  - component: card
+    column: pct_q30
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Lowest Q30 share
+    caption: the worst lane, with the spread over lanes
+    description: >-
+      The hero number is the lowest percentage of bases at Q30 or above among the lanes in
+      view, and the box shows the quartiles over lanes. It answers how good the worst lane is.
+
+      How to read: a minimum far below the box marks a lane to investigate. No cut-off is drawn,
+      because the expected value depends on the instrument and read length.
+  - component: card
+    column: pct_undetermined
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Highest Undetermined share
+    caption: the worst lane, with the spread over lanes
+    description: >-
+      The hero number is the highest share of reads left Undetermined among the lanes in view,
+      and the box shows the quartiles over lanes. It answers how much data the worst lane lost to
+      unassigned indexes.
+
+      How to read: a maximum far above the box marks a lane to open in the unknown barcodes tile,
+      where a sample sheet error or an index hop shows up. No cut-off is drawn, because
+      the expected value depends on the library and the run.
+  - component: table
+    title: Lane table
+    description: >-
+      Each row is a lane, with its clusters and those passing filter, its yield, its Q30 share,
+      its mean quality, the number of libraries, the Undetermined share and how evenly libraries
+      split the lane. It answers the run health lane by lane.
+
+      How to read: sort by Undetermined share or by Q30 to find the lanes to check.

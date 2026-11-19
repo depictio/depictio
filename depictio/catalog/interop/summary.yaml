@@ -11,12 +11,128 @@ find:
 recipe: interop/summary.py
 fixture: summary.tsv
 renders_as:
-  - { id: lane_read_error, component: advanced_viz, kind: dot_plot,
-      roles: {cluster: lane_label, gene: read_label, mean_expression: error_rate, frac_expressing: frac_q30} }
-  - { id: phasing_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: phasing, y: prephasing, label: lane_label, color: read_label} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: lane_label, y: error_rate, color: read_label, barmode: group, title: PhiX error rate per lane and read} }
-  - { component: card, column: error_rate, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_cluster_pf, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: yield_gb, aggregation: sum, secondary_layout: top_n, breakdown_col: lane_label, top_n_count: 4 }
-  - { component: table }
+  # C1: the dot colour is the continuous PhiX error rate.
+  - id: lane_read_error
+    component: advanced_viz
+    kind: dot_plot
+    title: Error rate and Q30 per lane and read
+    roles: {cluster: lane_label, gene: read_label, mean_expression: error_rate, frac_expressing: frac_q30}
+    description: >-
+      Each dot is a read of a lane: its colour is the PhiX error rate and its size the
+      share of bases at Q30 or above. It answers which lane and read combinations
+      sequenced well.
+
+      How to read: a large, pale dot is a read with high quality and a low error rate. A
+      small, dark dot is a weak read to compare with the other lanes.
+      Index reads have no PhiX error rate, so their colour is empty.
+
+      Source: https://support-docs.illumina.com/SW/SAV/Content/SW/SAV/Metrics.htm
+  - id: phasing_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Phasing against prephasing
+    roles: {x: phasing, y: prephasing, label: lane_label, color: read_label}
+    config:
+      x_title: Phasing (% per cycle)
+      y_title: Prephasing (% per cycle)
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a lane of one read: the phasing rate (horizontal) against the
+      prephasing rate (vertical), coloured by the read. It answers whether the
+      chemistry keeps molecules in step along the read.
+
+      How to read: points near the origin are reads where clusters stay in step. A
+      point that sits far from the others is a lane whose chemistry or flow cell
+      deviates, and it is the one to compare with its Q30 and error rate. Index reads
+      report a phasing and prephasing of 0 in the InterOp summary, so read them as not
+      measured rather than perfect.
+
+      Note: the rates are the values Real-Time Analysis uses, estimated from the first
+      25 cycles of each read.
+
+      Lines and annotations: The dashed line is the median prephasing of this table,
+      a reference computed from the rows on show (it follows the filters), not a
+      cut-off of Illumina Interop.
+
+      Source: https://support-docs.illumina.com/SW/SAV/Content/SW/SAV/Metrics.htm
+  - component: figure
+    visu_type: bar
+    title: PhiX error rate per lane and read
+    dict_kwargs:
+      x: lane_label
+      y: error_rate
+      color: read_label
+      barmode: group
+      title: PhiX error rate per lane and read
+      labels: {lane_label: Lane, error_rate: PhiX error rate (%), read_label: Read}
+    reference_lines: [{axis: y, stat: median, column: error_rate}]
+    description: >-
+      Each bar is a read of a lane: its error rate measured on the PhiX control. It
+      answers which lanes and reads have the most sequencing errors.
+
+      How to read: compare lanes within the same read. A lane clearly above its
+      neighbours for the same read is the one to inspect for a flow cell or fluidics
+      problem. Lanes without a PhiX spike-in have no bar.
+
+      Lines and annotations: The dashed line is the median PhiX error rate of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of Illumina Interop.
+
+      Source: https://support-docs.illumina.com/SW/SAV/Content/SW/SAV/Metrics.htm
+  - component: card
+    column: error_rate
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: worst lane and read, with the spread
+    title: Highest error rate
+    description: >-
+      The hero number is the highest PhiX error rate of any lane and read, with the
+      spread across them in the box. It answers how bad the worst part of the run is.
+
+      How to read: a maximum far above the box is one lane or read that needs a look.
+      Compare it with its Q30 share before deciding whether to rerun.
+  - component: card
+    column: pct_cluster_pf
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: lowest lane, with the spread
+    title: Lowest clusters passing filter
+    description: >-
+      The hero number is the lowest percentage of clusters passing filter of any lane,
+      with the spread across lanes and reads in the box. It answers whether every lane
+      kept a usable share of its clusters.
+
+      How to read: a low minimum is a lane that was over-clustered or had poor signal,
+      so it gives fewer reads. Check its density next.
+
+      Source: https://support-docs.illumina.com/SW/SAV/Content/SW/SAV/Metrics.htm
+  - component: card
+    column: yield_gb
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 4
+    caption: yield, by lane
+    title: Total yield
+    description: >-
+      The hero number is the total yield in gigabases over all lanes and reads, with the
+      median and the largest per row next to it, and the bars rank the lanes. It
+      answers how much data the run produced and which lanes carry it.
+
+      How to read: lanes of similar size mean even loading. A short bar is a lane that
+      lost clusters or was not loaded.
+
+      Source: https://support-docs.illumina.com/SW/SAV/Content/SW/SAV/Metrics.htm
+  - component: table
+    title: Run summary per lane and read
+    description: >-
+      Each row is a read of a lane: the tiles, density, clusters passing filter, phasing
+      and prephasing, Q30 share, yield and PhiX error rate. It answers the same
+      questions as the Sequencing Analysis Viewer summary tab.
+
+      How to read: sort by error rate or Q30 to find the weakest lane and read.

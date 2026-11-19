@@ -16,10 +16,133 @@ renders_as:
   # library whose curve is odd, so a point off the trend is the one to look at.
   # MultiQC draws the fingerprint curve itself but never this table, so the
   # per-sample numbers are only readable here.
-  - { id: fingerprint_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: auc, y: synthetic_js_distance, label: sample} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: auc_ratio, title: Coverage concentration relative to a uniform library} }
-  - { component: card, column: auc_ratio, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: card, column: auc_ratio, aggregation: max, secondary_layout: threshold, threshold_value: 0.85, threshold_direction: max, threshold_warn: 0.95 }
-  - { component: card, column: synthetic_js_distance, aggregation: average, aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: card, column: x_intercept, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # C1: the sample is the only categorical column, so each library gets a colour.
+  - id: fingerprint_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Enrichment against divergence from uniform
+    roles: {x: auc, y: synthetic_js_distance, label: sample, color: sample}
+    config:
+      x_title: Area under the fingerprint curve
+      y_title: Jensen-Shannon distance to a uniform library
+      reference_line: vertical
+      reference_value: 0.5
+      reference_label: Maximum area (uniform library)
+    description: >-
+      Each point is a library: the area under its cumulative-coverage curve on the
+      horizontal axis and its synthetic Jensen-Shannon distance, the distance to a perfect input of the same depth,
+      on the vertical axis, with one colour per library. It answers which libraries are enriched and how strongly.
+
+      How to read: enriched targets sit far left, with a large distance. Inputs and
+      failed enrichments sit near the maximum area with a distance close to zero. A
+      point off the trend is a library whose curve is odd, so open the fingerprint in
+      the MultiQC tab.
+
+      Lines and annotations: the vertical line at 0.5 is the maximum value the area can take, as
+      stated by the deepTools documentation. It is the area under the diagonal, which the
+      documentation equates with a perfect input of infinite coverage.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html
+  - id: auc_ratio_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: auc_ratio
+      color: auc_ratio
+      labels: {sample: Sample, auc_ratio: Area relative to a uniform library}
+    title: Coverage concentration relative to a uniform library
+    description: >-
+      Each bar is a library: the area under its fingerprint curve divided by the area
+      expected for a perfectly uniform library of the same depth, coloured by the same
+      ratio. It answers how concentrated each library's coverage is once depth is
+      accounted for.
+
+      How to read: lower means more focal enrichment. Inputs and failed enrichments sit
+      near one and strong enrichments sit well below it. Compare targets with their
+      inputs rather than reading one bar alone.
+
+      Lines and annotations: a ratio of one means no enrichment, by this catalog's
+      definition of the ratio. deepTools publishes no pass or fail cut-off for it.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html
+  - id: auc_ratio_card
+    component: card
+    column: auc_ratio
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: average, with its spread
+    title: Fingerprint area ratio
+    description: >-
+      The hero number is the average ratio of each library's fingerprint area to that of
+      a uniform library, and the box shows the spread. It answers how enriched the
+      libraries are overall.
+
+      How to read: lower means more focal enrichment and one means none. A mix of
+      targets and inputs gives a wide box, so filter to one kind of library.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html
+  - id: auc_ratio_extremes
+    component: card
+    column: auc_ratio
+    aggregation: min
+    aggregations: [max]
+    secondary_layout: compact
+    caption: most enriched, with the least enriched
+    title: Strongest and weakest enrichment
+    description: >-
+      The hero number is the lowest area ratio, the most enriched library, and the
+      second number is the highest, the least enriched. It answers how far apart the
+      libraries are.
+
+      How to read: a lowest ratio close to one means no library is enriched. deepTools
+      publishes no cut-off, so judge each target against its own input.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html
+  - id: js_distance_card
+    component: card
+    column: synthetic_js_distance
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: histogram
+    caption: average, with the spread across libraries
+    title: Distance to a uniform library
+    description: >-
+      The hero number is the average synthetic Jensen-Shannon distance, between each library and a
+      perfect input of the same depth, and the bars show how libraries spread.
+      It answers how far the coverage departs from uniform.
+
+      How to read: the distance runs from 0 to 1 and higher means a bigger difference from a perfect input of the same depth, so enriched targets
+      score high and inputs low.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html
+  - id: x_intercept_card
+    component: card
+    column: x_intercept
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: average, with its spread
+    title: Unsequenced fraction
+    description: >-
+      The hero number is the average x-intercept of the fingerprint curve, the point
+      where the curve stops being zero, and the box shows the spread. It answers roughly
+      how much of the genome received no reads.
+
+      How to read: values near zero are ideal. High values come from low depth or from
+      very strong enrichment that soaks up all the reads, so read it with the area ratio.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html
+  - component: table
+    title: Fingerprint metrics
+    description: >-
+      Each row is a library with its fingerprint quality metrics and their synthetic
+      counterparts for a uniform library of the same depth. It answers the exact numbers
+      behind the tiles of this tab.
+
+      How to read: compare each metric with its synthetic value, since the expectation
+      for a perfect input depends on sequencing depth.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html

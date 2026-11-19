@@ -9,7 +9,59 @@ find: { path_glob: "**/bambu/counts_gene.txt" }
 recipe: bambu/sample_correlation.py
 fixture: sample_correlation.tsv
 renders_as:
-  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample_id} }
-  - { component: card, column: mean_correlation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: condition }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples
+  - id: correlation_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Sample correlation
+    roles: {index: sample_id, row_annotation_cols: [condition]}
+    description: >-
+      Each cell is the Spearman correlation between two samples over their log2(CPM + 1)
+      gene expression, with the condition as a row annotation and rows and columns
+      clustered. It answers which samples resemble each other.
+
+      How to read: replicates should form blocks of high correlation and conditions
+      should separate. A sample that correlates better with the other condition, or with
+      none, is a swapped label or a replicate that did not replicate.
+
+      Lines and annotations: the diagonal is 1 by construction. Genes below a minimum
+      total count are left out, and no correlation cut-off is applied.
+  - id: mean_correlation_spread
+    component: card
+    column: mean_correlation
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean correlation, with its spread
+    title: Mean correlation per sample
+    description: >-
+      The hero number is the average of each sample's mean correlation with the others,
+      and the box shows the quartiles. It answers how similar the libraries are overall.
+
+      How to read: a high average with a tight box means a consistent run. A sample whose
+      value sits far below the box is the outlier to inspect first. Rank correlation is
+      high between any two samples of the same tissue, so compare samples within a run and
+      not against an absolute value.
+  - id: correlation_samples_by_condition
+    component: card
+    column: condition
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: condition
+    caption: samples, by condition
+    title: Conditions and samples
+    description: >-
+      The hero number is the count of conditions, the compact line gives the number of
+      samples, and the ring splits the samples by condition. It answers how the run is
+      balanced.
+
+      How to read: unequal slices mean an unbalanced design, which weakens comparisons of
+      the smaller group.
+  - component: table
+    title: Sample correlation table
+    description: >-
+      Each row is a sample with its condition, its mean correlation and its correlation
+      with every other sample. It answers the exact values behind the heatmap.
+
+      How to read: sort by mean correlation to find the least typical sample.

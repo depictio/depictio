@@ -210,6 +210,7 @@ def patched_env():
         patch(f"{routes_mod}.dashboards_collection", db.dashboards),
         patch(f"{routes_mod}.projects_collection", db.projects),
         patch(f"{routes_mod}.check_project_permission", lambda *a, **k: True),
+        patch("depictio.serverless.producer_a.export_denial", lambda *a, **k: None),
         patch(f"{routes_mod}._resolve_link_filters_cached", lambda **kw: list(kw["filters"])),
         patch("depictio.api.v1.deltatables_utils.load_deltatable_lite", _fake_load),
         patch.object(nbx, "_dtypes_for", lambda *a, **k: None),

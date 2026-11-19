@@ -746,14 +746,10 @@ def _owner_refusal(
         return reason
     if not current_user or not getattr(current_user, "id", None):
         return "embedding the dashboard's data needs a signed-in owner"
-    try:
-        doc = routes.dashboards_collection.find_one(
-            {"dashboard_id": ObjectId(str(dashboard_id))}, {"project_id": 1}
-        )
-    except Exception:  # noqa: BLE001 - an unreadable id is no owner
-        doc = None
-    project_id = (doc or {}).get("project_id")
-    if not project_id or not routes.check_project_permission(project_id, current_user, "owner"):
+    # The one export rule, the very check a static export's dispatch makes.
+    from depictio.serverless.producer_a import export_denial
+
+    if export_denial(str(dashboard_id), current_user, required="owner"):
         return "embedding the dashboard's data is limited to its owners, as a static export is"
     return None
 

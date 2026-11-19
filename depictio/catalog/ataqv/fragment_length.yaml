@@ -16,11 +16,100 @@ renders_as:
   # `profile` kind draws the ladder with its windows as shaded bands, which is the
   # reading; the plain line stays for
   # dashboards that only want the curve.
-  - { id: fragment_ladder, component: advanced_viz, kind: profile, roles: {series: sample, x: fragment_length, y: fraction_of_all_reads} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction_of_all_reads, color: sample, title: Fragment length distribution} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_count, color: fragment_class, title: Reads per fragment class} }
-  - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: fragment_class, top_n_count: 4 }
+  - id: fragment_ladder
+    component: advanced_viz
+    kind: profile
+    title: Fragment length ladder
+    roles: {series: sample, x: fragment_length, y: fraction_of_all_reads}
+    config:
+      x_title: Fragment length (bp)
+      y_title: Share of all reads
+      log_y: true
+      shaded_bands:
+        - [50, 100, Short fragments (50-100 bp)]
+        - [150, 200, Mononucleosomal (150-200 bp)]
+    description: >-
+      Each line is a library: the share of reads at each fragment length. It answers
+      whether the library shows the open-chromatin peak and the nucleosome ladder
+      expected of ATAC-seq.
+
+      How to read: a good library has a peak of short fragments followed by a
+      decaying ladder with a bump near one nucleosome. A flat curve with no ladder
+      points to over-tagmentation or damaged chromatin. Compare libraries and open
+      the quality table for the ratio between the two windows.
+
+      Lines and annotations: the shaded bands are the two windows ataqv counts, 50 to
+      100 bp for short fragments and 150 to 200 bp for mononucleosomal ones, taken
+      from the ataqv source code. The ENCODE ATAC-seq standards also require a
+      nucleosome-free region and a mononucleosome peak.
+
+      Source: https://raw.githubusercontent.com/ParkerLab/ataqv/master/src/cpp/Metrics.cpp
+      and https://www.encodeproject.org/atac-seq/
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: fragment_length
+      y: fraction_of_all_reads
+      color: sample
+      labels: {fragment_length: Fragment length (bp), fraction_of_all_reads: Share of all reads, sample: Library}
+    title: Fragment length distribution
+    description: >-
+      Each line is a library: the share of reads at each fragment length. It
+      answers the same question as the ladder as a plain curve.
+
+      How to read: look for a first peak below 100 bp and a second, lower one near
+      200 bp. A library without them lost the pattern of accessible chromatin.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: read_count
+      color: fragment_class
+      labels: {sample: Library, read_count: Reads, fragment_class: Fragment class}
+    title: Reads per fragment class
+    description: >-
+      Each bar is a library, split by the fragment class ataqv counts: short
+      (50 to 100 bp), mononucleosomal (150 to 200 bp) or outside those windows. It
+      answers how the reads of each library divide between open and nucleosomal
+      fragments.
+
+      How to read: a larger short class than mononucleosomal one is the signature
+      of open chromatin. Libraries that differ in their split should not be compared
+      directly.
+
+      Lines and annotations: the class windows are ataqv's own, from its source code.
+
+      Source: https://raw.githubusercontent.com/ParkerLab/ataqv/master/src/cpp/Metrics.cpp
+  - component: card
+    column: read_count
+    aggregation: sum
+    aggregations: [max, median]
+    secondary_layout: top_n
+    breakdown_col: fragment_class
+    top_n_count: 4
+    title: Reads per fragment class
+    caption: total reads, with the classes ranked
+    description: >-
+      The hero number is the total of reads in the table, and the bars rank the
+      fragment classes that hold most of them. It answers which kind of fragment
+      dominates the run.
+
+      How to read: the short and mononucleosomal classes should hold a large part of
+      the reads. A large class outside the windows is a sign of fragments ataqv does
+      not count in its ratio.
+
+      Lines and annotations: the class windows are 50 to 100 bp and 150 to 200 bp, from
+      the ataqv source code.
+
+      Source: https://raw.githubusercontent.com/ParkerLab/ataqv/master/src/cpp/Metrics.cpp
   # No count or median card over this table: it has one row per (library,
   # length), so either measures the x axis of the ladder, not the fragments.
   # The per-library median fragment length is `ataqv/metrics.median_fragment_length`.
-  - { component: table }
+  - component: table
+    title: Fragment length histogram
+    description: >-
+      Each row is a fragment length in a library with its read count, share of all
+      reads and class. It answers the exact values behind the ladder.
+
+      How to read: filter to one library and look at the lengths with the largest
+      shares.

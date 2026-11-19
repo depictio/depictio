@@ -12,4 +12,14 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: strand }
+  - component: multiqc
+    section: strand
+    title: Strand cross-correlation
+    description: >-
+      The cross-correlation between plus and minus strand read densities across
+      strand shifts, one curve per sample. It answers how sharply the library is
+      enriched at the fragment length.
+
+      How to read: A clear peak at the fragment length means real enrichment. A peak
+      at the read length alone is a phantom peak, so compare with the NSC and RSC
+      coefficients.

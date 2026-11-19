@@ -53,6 +53,7 @@ from depictio.api.v1.db import (
 from depictio.api.v1.endpoints.projects_endpoints.from_run import (
     _SHARED_SAMPLES_SHOWN,
     DetectedTemplate,
+    SamplesCheckGap,
     SharedRunSamples,
     _build_data_root,
     _detect_run,
@@ -61,6 +62,7 @@ from depictio.api.v1.endpoints.projects_endpoints.from_run import (
     _scan_modes,
     _shared_samples_detail,
     describe_detection,
+    samples_check_gap,
 )
 from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _dispatch_refresh_tasks
@@ -114,6 +116,9 @@ class AttachRunReport(BaseModel):
     # report already in the project names too. A real call refuses them
     # (``runs_share_samples``): one MultiQC collection would merge them.
     shared_samples: list[SharedRunSamples] = Field(default_factory=list)
+    # The collections whose reports in the new run that check did not all
+    # read: an empty ``shared_samples`` then covers only the reports read.
+    samples_check_gaps: list[SamplesCheckGap] = Field(default_factory=list)
     # Ingestion to poll via GET /projects/refresh_manifest/{run_id}; None on a dry run.
     run_id: str | None = None
     dry_run: bool = True
@@ -295,12 +300,17 @@ def _samples_in_project(dc_id: str) -> dict[str, str]:
 
 
 def samples_shared_with_project(
-    multiqc_dcs: dict[str, str], new_run: str, root: Any, rows: dict[str, Any]
+    multiqc_dcs: dict[str, str],
+    new_run: str,
+    root: Any,
+    rows: dict[str, Any],
+    gaps: list[SamplesCheckGap] | None = None,
 ) -> list[SharedRunSamples]:
     """Per MultiQC collection, the samples of the new run a report in the project names.
 
     ``rows`` are the new folder's preview rows by tag. A report of the new run
-    that cannot be read is not checked (``_report_sample_names`` says None).
+    that cannot be read is not checked (``_report_sample_names`` says None). A
+    collection whose reports were not all read is added to ``gaps``.
     """
     shared: list[SharedRunSamples] = []
     for tag, dc_id in sorted(multiqc_dcs.items()):
@@ -308,6 +318,9 @@ def samples_shared_with_project(
         if row is None or not row.matched:
             continue
         names = _report_sample_names(root, row)
+        gap = samples_check_gap(tag, new_run, row, names)
+        if gap is not None and gaps is not None:
+            gaps.append(gap)
         if not names:
             continue
         owner = _samples_in_project(dc_id)
@@ -484,7 +497,9 @@ def _attach_run_sync(
             if len(report.new_runs) == 1
             else os.path.basename(os.path.normpath(new_location))
         )
-        report.shared_samples = samples_shared_with_project(multiqc_dcs, new_name, root, rows)
+        report.shared_samples = samples_shared_with_project(
+            multiqc_dcs, new_name, root, rows, report.samples_check_gaps
+        )
 
     if payload.dry_run:
         return report

@@ -880,3 +880,18 @@ def test_a_frozen_figure_with_text_arrays_serialises() -> None:
         {"visu_type": "histogram", "dict_kwargs": {"x": "biome", "color": "biome"}}, frame
     )
     assert "urban" in json.dumps(payload)
+
+
+def test_inject_escapes_script_breakouts_and_keeps_the_values() -> None:
+    """``</`` and ``<!--`` in a data value cannot end (or wedge open) the
+    manifest's script element, and JSON.parse still reads the value back."""
+    import json
+
+    from depictio.serverless.inject import inject
+
+    value = "a</script><!--<script>b"
+    html = inject('<script type="application/json">__T__</script>', "__T__", {"v": value})
+    body = html[html.index(">") + 1 : html.rindex("</script>")]
+    assert "</" not in body
+    assert "<!--" not in body
+    assert json.loads(body) == {"v": value}

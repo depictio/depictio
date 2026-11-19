@@ -11,6 +11,29 @@ find:
 recipe: orthofinder/orthologue_matrix.py
 fixture: orthologue_matrix.tsv
 renders_as:
-  - { id: one_to_one_heatmap, component: advanced_viz, kind: complex_heatmap,
-      roles: {index: genome} }
-  - { component: table }
+  # C6 N/A: value columns are the run's species, known only at ingest.
+  - id: one_to_one_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: One-to-one orthologues between species
+    roles: {index: genome}
+    description: >-
+      Each cell is a pair of species and gives the number of one-to-one orthologues
+      OrthoFinder found between them, with rows and columns ordered by similarity. It
+      answers which genomes share the most single-copy gene pairs.
+
+      How to read: close, well annotated genomes form bright blocks. A species whose
+      whole row is dimmer than the others has lost or split gene models, or sits far
+      from the rest in the tree, so check its assigned share on the species tile.
+
+      Note: the diagonal is empty, since a species has no orthologues with itself.
+
+      Source: https://raw.githubusercontent.com/davidemms/OrthoFinder/master/README.md
+  - component: table
+    title: One-to-one orthologue counts
+    description: >-
+      Each row is a species and each column another species, with the count of
+      one-to-one orthologues between the two. It answers the exact numbers behind the
+      heatmap.
+
+      How to read: read across a row to compare one species with every other.

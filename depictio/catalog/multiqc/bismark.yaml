@@ -12,4 +12,18 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: bismark }
+  - component: multiqc
+    section: bismark
+    title: Bisulfite alignment QC
+    description: >-
+      Bismark's own MultiQC plots: alignment outcome, deduplication, strand
+      specificity, M-bias and the methylation-extraction table per sample. They
+      answer whether bisulfite reads aligned well and whether methylation calls are
+      unbiased.
+
+      How to read: A high unique-alignment rate and balanced strands are good. An
+      M-bias curve that departs from flat at the read ends signals bias, which is
+      usually fixed by clipping those positions before calling. High duplication
+      reduces usable coverage.
+
+      Source: https://docs.seqera.io/multiqc/modules/bismark

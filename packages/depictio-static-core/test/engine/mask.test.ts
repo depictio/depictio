@@ -64,6 +64,12 @@ describe('mask: in (codebook path — codebooks written by the Python builder)',
     check(r, 'in_codebook_miss');
   });
 
+  it('keepNull (the run-id rule) adds exactly the null rows on the codebook path', async () => {
+    const plain = await runMask([{ kind: 'in', column: 'batch', values: ['2', '4'] }]);
+    const kept = await runMask([{ kind: 'in', column: 'batch', values: ['2', '4'], keepNull: true }]);
+    expect(kept.matched).toBe(plain.matched + expected.null_counts.batch);
+  });
+
   it('all values missing from the codebook -> zero rows', async () => {
     const r = await runMask([{ kind: 'in', column: 'batch', values: [99] }]);
     check(r, 'in_codebook_all_miss');

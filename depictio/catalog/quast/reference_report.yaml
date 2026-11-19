@@ -14,15 +14,123 @@ find:
     - "**/quast/*/transposed_report.tsv"
     - "**/QUAST/transposed_report.tsv"
 recipe: quast/reference_report.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several assemblies.
 fixture: reference_report.tsv
 renders_as:
-  - { id: fraction_vs_misassemblies, component: advanced_viz, kind: scatter_xy,
-      roles: {x: genome_fraction, y: misassemblies, label: assembly_id, color: report_id, size: nga50} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: report_id, y: nga50, title: NGA50 per assembly} }
-  - { component: card, column: genome_fraction, aggregation: max,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: misassemblies, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: report_id, top_n_count: 4 }
-  - { component: card, column: mismatches_per_100kbp, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # C1: coloured by assembly report. The scatter holds one point per assembly against a
+  # reference, so its size depends on the run. QUAST defines no pass mark for genome
+  # fraction or misassemblies, so no reference line is drawn.
+  - id: fraction_vs_misassemblies
+    component: advanced_viz
+    kind: scatter_xy
+    title: Reference covered against misassemblies
+    roles: {x: genome_fraction, y: misassemblies, label: assembly_id, color: report_id, size: nga50}
+    config:
+      x_title: Genome fraction (% of the reference covered)
+      y_title: Misassemblies
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is one assembly aligned to the reference: the share of the
+      reference it covers on the horizontal axis and the number of misassemblies
+      on the vertical axis, sized by NGA50. It answers which assemblies cover the
+      reference without breaking it.
+
+      How to read: points toward the lower right cover most of the reference with
+      few joins the reference does not support. A high point has a long N50 bought
+      with misassemblies, so read it beside NGA50.
+
+      Note: QUAST defines no pass mark for genome fraction or misassemblies.
+
+      Lines and annotations: The dashed line is the median number of misassemblies
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of QUAST.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: figure
+    visu_type: bar
+    title: NGA50 per assembly
+    dict_kwargs:
+      x: report_id
+      y: nga50
+      color: genome_fraction
+      labels: {report_id: Assembly, nga50: NGA50 (bp), genome_fraction: Genome fraction (%)}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: nga50
+    description: >-
+      Each bar is one assembly: its NGA50, the contiguity left once the assembly
+      is cut at every misassembly and unaligned region, shaded by the genome
+      fraction it covers. It answers how contiguous each assembly is against the
+      reference.
+
+      How to read: NGA50 is the length of a block such that blocks of at least
+      that length cover half of the reference. A bar much shorter than the
+      assembly's N50 means contiguity bought with joins the reference does not
+      support.
+
+      Lines and annotations: The dashed line is the median NGA50 of this table, a
+      reference computed from the rows on show (it follows the filters), not a
+      cut-off of QUAST.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: card
+    column: genome_fraction
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median coverage, with its spread
+    title: Reference covered
+    description: >-
+      The hero number is the median percentage of the reference covered by an
+      assembly, and the box shows the spread across assemblies. It answers how
+      complete the assemblies are against the reference.
+
+      How to read: a value near 100 means the reference is almost fully assembled. A
+      low value means missing regions, or a reference that differs from the sample.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: card
+    column: misassemblies
+    aggregation: sum
+    aggregations: [box_plot_stats, max]
+    secondary_layout: box_plot
+    caption: misassemblies per assembly, with their spread
+    title: Misassemblies
+    description: >-
+      The hero number is the total count of misassemblies over the assemblies in
+      view, and the box shows how they spread per assembly. It answers how often the
+      assemblies disagree with the reference.
+
+      How to read: fewer is better, and a few assemblies carrying most of them point
+      to an assembler or a setting to revisit. Compare with N50 and NGA50 before
+      trusting a long assembly.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: card
+    column: mismatches_per_100kbp
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median rate, with its spread
+    title: Mismatches per 100 kbp
+    description: >-
+      The hero number is the median count of mismatches per 100 kbp of aligned
+      sequence, and the box shows the spread across assemblies. It answers how
+      accurate the assembled bases are.
+
+      How to read: lower is better. A high rate points to a polishing or
+      error-correction problem, or to a reference that differs from the sample.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: table
+    title: Assembly against the reference
+    description: >-
+      Each row is one assembly aligned to the reference, with its genome fraction,
+      duplication ratio, misassemblies, mismatch and indel rates, NG50 and NGA50. It
+      answers the exact figures behind every tile.
+
+      How to read: sort by NGA50 to rank assemblies, then check their misassemblies
+      and duplication ratio.

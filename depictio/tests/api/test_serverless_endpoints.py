@@ -124,6 +124,9 @@ class _FakeS3:
         self.payload = payload
         self.get_calls: list[tuple[str, str]] = []
         self.put_calls: list[dict[str, Any]] = []
+        # The retention prune: list the export prefix, delete what is too old.
+        self.objects: list[dict[str, Any]] = []
+        self.delete_calls: list[dict[str, Any]] = []
 
     def get_object(self, Bucket: str, Key: str):
         self.get_calls.append((Bucket, Key))
@@ -131,6 +134,20 @@ class _FakeS3:
 
     def put_object(self, **kwargs):
         self.put_calls.append(kwargs)
+        return {}
+
+    def get_paginator(self, name: str):
+        assert name == "list_objects_v2"
+        fake = self
+
+        class _Paginator:
+            def paginate(self, Bucket: str, Prefix: str):
+                yield {"Contents": [o for o in fake.objects if o["Key"].startswith(Prefix)]}
+
+        return _Paginator()
+
+    def delete_objects(self, Bucket: str, Delete: dict[str, Any]):
+        self.delete_calls.append(Delete)
         return {}
 
 
@@ -187,10 +204,25 @@ def jobs(monkeypatch: pytest.MonkeyPatch) -> _FakeJobs:
 
 @pytest.fixture
 def dashboards(monkeypatch: pytest.MonkeyPatch):
+    """The dashboard as ``producer_a.export_denial`` reads it (``db`` at call time).
+
+    Its document lists the stranger as an owner: the export rule is the
+    *project* owner, whoever the dashboard document names.
+    """
+    from depictio.api.v1 import db as db_mod
+
     monkeypatch.setattr(
-        routes_mod,
+        db_mod,
         "dashboards_collection",
-        _FakeCollection([{"dashboard_id": DASHBOARD_OID, "project_id": PROJECT_OID}]),
+        _FakeCollection(
+            [
+                {
+                    "dashboard_id": DASHBOARD_OID,
+                    "project_id": PROJECT_OID,
+                    "permissions": {"owners": [{"_id": OTHER_OID}]},
+                }
+            ]
+        ),
     )
 
 
@@ -268,16 +300,30 @@ def _fake_export_result() -> ExportResult:
     )
 
 
+def _may_export(monkeypatch: pytest.MonkeyPatch, allowed: bool = True) -> None:
+    """Answer the preflight's export rule without a project fixture."""
+    monkeypatch.setattr(
+        routes_mod, "export_denial", lambda *a, **k: None if allowed else "permission denied"
+    )
+
+
 def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, Any] = {}
 
     def fake_export_static(
-        dashboard_id, out_path=None, mode=None, check=False, user=None, python_runtime="off"
+        dashboard_id,
+        out_path=None,
+        mode=None,
+        check=False,
+        user=None,
+        python_runtime="off",
+        bind=True,
     ):
         captured.update(dashboard_id=dashboard_id, check=check, user=user)
         return _fake_export_result()
 
     monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
@@ -287,6 +333,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
     assert captured["user"] is owner
     assert resp.json() == {
         "dashboard_id": str(DASHBOARD_OID),
+        "bound": True,
         "tiers": [
             {
                 "component_id": "c1",
@@ -362,6 +409,7 @@ def test_preflight_without_a_sized_report_says_so_explicitly(
     result = _fake_export_result()
     result.size = None
     monkeypatch.setattr(routes_mod, "export_static", lambda *a, **kw: result)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
@@ -382,12 +430,19 @@ def test_preflight_defaults_to_the_python_runtime_a_build_defaults_to(
     seen: list[str] = []
 
     def fake_export_static(
-        dashboard_id, out_path=None, mode=None, check=False, user=None, python_runtime="?"
+        dashboard_id,
+        out_path=None,
+        mode=None,
+        check=False,
+        user=None,
+        python_runtime="?",
+        bind=True,
     ):
         seen.append(python_runtime)
         return _fake_export_result()
 
     monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 200
@@ -404,11 +459,56 @@ def test_preflight_defaults_to_the_python_runtime_a_build_defaults_to(
     assert build_default == "off"
 
 
+def test_a_viewer_who_cannot_export_gets_the_data_free_plan(
+    client, stranger, monkeypatch: pytest.MonkeyPatch
+):
+    """The binding preflight loads every collection a bundle would carry; its
+    only reader is the export modal, which only someone who may export opens.
+    Anyone else (anonymous in public mode) gets the plan: no data read."""
+    seen: list[bool] = []
+
+    def fake_export_static(dashboard_id, check=False, user=None, python_runtime="off", bind=True):
+        seen.append(bind)
+        return _fake_export_result()
+
+    monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    _may_export(monkeypatch, allowed=False)
+    _as_user(client, stranger)
+
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
+    assert resp.status_code == 200
+    assert resp.json()["bound"] is False
+    assert seen == [False]
+
+
+def test_data_reading_preflights_are_capped_per_process(
+    client, owner, monkeypatch: pytest.MonkeyPatch
+):
+    """Past PREFLIGHT_CONCURRENCY running at once, the next one is a 429 the
+    modal can retry rather than one more set of frames in API memory."""
+    import threading
+
+    monkeypatch.setattr(routes_mod, "_preflight_slots", threading.BoundedSemaphore(1))
+    monkeypatch.setattr(routes_mod, "export_static", lambda *a, **kw: _fake_export_result())
+    _may_export(monkeypatch, allowed=True)
+    _as_user(client, owner)
+
+    routes_mod._preflight_slots.acquire()  # one already running
+    try:
+        resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
+        assert resp.status_code == 429
+        assert resp.headers["Retry-After"] == "5"
+    finally:
+        routes_mod._preflight_slots.release()
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 200
+
+
 def test_preflight_producer_error_is_404(client, stranger, monkeypatch: pytest.MonkeyPatch):
     def boom(*args, **kwargs):
         raise ProducerAError("permission denied: exporting needs 'viewer'")
 
     monkeypatch.setattr(routes_mod, "export_static", boom)
+    _may_export(monkeypatch, allowed=False)
     _as_user(client, stranger)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
@@ -428,6 +528,7 @@ def test_preflight_over_the_size_ceiling_is_413_with_the_reason(
         raise BundleTooLargeError("static bundle too large: 140.0 MB after 2 of 3 …")
 
     monkeypatch.setattr(routes_mod, "export_static", too_big)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
@@ -492,6 +593,31 @@ def test_dispatch_non_owner_is_404_without_dispatch(
     assert resp.json()["detail"] == "Dashboard not found or access denied"
     assert task.calls == []
     assert jobs.docs == {}
+
+
+def test_can_export_is_the_dispatch_rule(
+    client, owner, stranger, dashboards, monkeypatch: pytest.MonkeyPatch
+):
+    """The UI's button asks the same rule the dispatch applies: the project
+    owner can export; a dashboard-document owner who is not one cannot, and an
+    unknown id is just "no"."""
+    _patch_project(monkeypatch, [OWNER_OID])
+
+    _as_user(client, owner)
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export")
+    assert resp.status_code == 200
+    assert resp.json() == {"can_export": True}
+    assert client.get(f"/serverless/export-static/{ObjectId()}/can-export").json() == {
+        "can_export": False
+    }
+    assert client.get("/serverless/export-static/not-an-id/can-export").json() == {
+        "can_export": False
+    }
+
+    _as_user(client, stranger)  # owns the dashboard document, not the project
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export").json() == {
+        "can_export": False
+    }
 
 
 def test_dispatch_unknown_dashboard_is_404(
@@ -766,7 +892,8 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
     assert result["size_bytes"] == len("<html>hi</html>")
     assert result["tab_count"] == 2
     assert result["s3_key"].startswith(f"serverless-exports/{DASHBOARD_OID}/")
-    assert result["s3_key"].endswith(".html")
+    # The job id keeps two exports in the same second from sharing a key.
+    assert result["s3_key"].endswith("Z-job-1.html")
     datetime.fromisoformat(result["built_at"])
 
     (put,) = fake_s3.put_calls
@@ -774,6 +901,65 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
     assert put["Bucket"] == settings.minio.bucket
     assert put["ContentType"] == "text/html; charset=utf-8"
     assert put["Body"] == b"<html>hi</html>"
+
+
+def test_export_task_prunes_expired_bundles_first(monkeypatch: pytest.MonkeyPatch):
+    """Retention: bundles older than static_export_retention_days are deleted by
+    the next export; younger ones and other prefixes are left alone."""
+    from datetime import timedelta, timezone
+
+    from depictio.api.v1 import s3 as s3_mod
+    from depictio.api.v1.celery_tasks import export_static_bundle
+    from depictio.api.v1.configs.config import settings
+    from depictio.serverless import producer_a as producer_a_mod
+
+    def fake_export_static(dashboard_id, out_path=None, **kwargs):
+        Path(out_path).write_text("<html>hi</html>", encoding="utf-8")
+        return _fake_export_result()
+
+    now = datetime.now(timezone.utc)
+    fake_s3 = _FakeS3()
+    fake_s3.objects = [
+        {"Key": "serverless-exports/d/old.html", "LastModified": now - timedelta(days=8)},
+        {"Key": "serverless-exports/d/new.html", "LastModified": now - timedelta(days=1)},
+        {"Key": "notebook_reports/x.html", "LastModified": now - timedelta(days=80)},
+    ]
+    monkeypatch.setattr(producer_a_mod, "export_static", fake_export_static)
+    monkeypatch.setattr(s3_mod, "s3_client", fake_s3)
+    monkeypatch.setattr(settings.performance, "static_export_retention_days", 7)
+
+    export_static_bundle(
+        {
+            "job_id": "job-2",
+            "dashboard_id": str(DASHBOARD_OID),
+            "user": {"id": str(OWNER_OID), "email": "o@example.com"},
+        }
+    )
+    (deleted,) = fake_s3.delete_calls
+    assert deleted["Objects"] == [{"Key": "serverless-exports/d/old.html"}]
+
+    # 0 keeps everything.
+    fake_s3.delete_calls = []
+    monkeypatch.setattr(settings.performance, "static_export_retention_days", 0)
+    export_static_bundle(
+        {"job_id": "job-3", "dashboard_id": str(DASHBOARD_OID), "user": {"id": str(OWNER_OID)}}
+    )
+    assert fake_s3.delete_calls == []
+
+
+def test_static_exports_ttl_index_follows_the_retention():
+    import mongomock
+
+    from depictio.api.v1.core_indexes import STATIC_EXPORTS_TTL_INDEX, ensure_static_exports_ttl
+
+    coll = mongomock.MongoClient().db.static_exports
+    ensure_static_exports_ttl(coll, retention_days=7)
+    info = coll.index_information()[STATIC_EXPORTS_TTL_INDEX]
+    assert info["key"] == [("created_at", 1)]
+    assert info["expireAfterSeconds"] == 7 * 86_400
+
+    ensure_static_exports_ttl(coll, retention_days=0)
+    assert STATIC_EXPORTS_TTL_INDEX not in coll.index_information()
 
 
 def test_export_task_propagates_missing_template(monkeypatch: pytest.MonkeyPatch):
@@ -811,14 +997,19 @@ def test_export_task_propagates_missing_template(monkeypatch: pytest.MonkeyPatch
 
 
 def test_template_path_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    from depictio.serverless import producer_b
+    from depictio.serverless import addons, dist
 
-    assert producer_b._template_path() == producer_b.TEMPLATE_PATH
+    assert dist.template_path() == dist.TEMPLATE_PATH
+    assert dist.dist_static_dir() == dist.TEMPLATE_PATH.parent
 
     custom = tmp_path / "static.html"
     custom.write_text("__BUNDLE_MANIFEST__", encoding="utf-8")
-    monkeypatch.setenv(producer_b.TEMPLATE_PATH_ENV, str(custom))
-    assert producer_b._template_path() == custom
+    monkeypatch.setenv(dist.TEMPLATE_PATH_ENV, str(custom))
+    assert dist.template_path() == custom
+    # Everything beside the template moves with it.
+    assert dist.dist_static_dir() == tmp_path
+    monkeypatch.delenv(addons.ADDONS_DIR_ENV, raising=False)
+    assert addons.addons_dir() == tmp_path / "addons"
 
-    monkeypatch.delenv(producer_b.TEMPLATE_PATH_ENV)
-    assert producer_b._template_path() == producer_b.TEMPLATE_PATH
+    monkeypatch.delenv(dist.TEMPLATE_PATH_ENV)
+    assert dist.template_path() == dist.TEMPLATE_PATH

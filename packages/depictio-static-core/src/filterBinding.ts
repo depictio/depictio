@@ -13,7 +13,8 @@
  *     from the top level first, then `metadata`.
  *   Select/MultiSelect/SegmentedControl — `in`; a `genome_selection` source
  *     widens the chromosome names to their chr/no-chr spellings
- *     (`chrom_name_variants`).
+ *     (`chrom_name_variants`). On `depictio_run_id` the rows with a null run
+ *     are kept too (`| is_null()`).
  *   TextInput — `text_filter_pattern`: trimmed, ≤ 512 chars, CASE-INSENSITIVE
  *     regex by default, `match_mode: contains` = literal text, `case_sensitive`
  *     opt-in; a pattern the regex engine rejects means "no filter". Non-string
@@ -32,6 +33,8 @@ import type { BoundFilter, SliderOp } from './engine/filters';
 
 import { GENOME_SELECTION_SOURCE, LINK_NO_MATCH } from './links';
 export const RESIDUE_SELECTION_SOURCE = 'residue_selection';
+/** `deltatables_utils.RUN_ID_COLUMN`: a categorical filter on it keeps null rows. */
+export const RUN_ID_COLUMN = 'depictio_run_id';
 
 /** The loose shape of a viewer `InteractiveFilter` the binder reads. */
 export interface FilterLike {
@@ -195,7 +198,11 @@ export function bindFilters(filters: readonly FilterLike[], opts: BindOptions = 
         if ((f.source || f.metadata?.source) === GENOME_SELECTION_SOURCE && type !== 'SegmentedControl') {
           v = chromNameVariants(v);
         }
-        out.push({ kind: 'in', column, values: Array.isArray(v) ? v : [v] });
+        const values = Array.isArray(v) ? v : [v];
+        // A row with no run aggregates several runs' samples (a recipe
+        // recomputed over every run): the server keeps it under any run.
+        if (column === RUN_ID_COLUMN) out.push({ kind: 'in', column, values, keepNull: true });
+        else out.push({ kind: 'in', column, values });
         break;
       }
       case 'TextInput': {

@@ -207,6 +207,13 @@ def gate(monkeypatch: pytest.MonkeyPatch, built_runtime):
         "check_project_permission",
         lambda project_id, user, level: level == "owner" and str(user.id) in owners,
     )
+    # The one export rule (producer_a.export_denial) is what the gate asks.
+    monkeypatch.setattr(
+        "depictio.serverless.producer_a.export_denial",
+        lambda dashboard_id, user, required="owner": (
+            None if getattr(user, "id", None) and str(user.id) in owners else "denied"
+        ),
+    )
     return owners
 
 
@@ -279,13 +286,8 @@ def test_the_manifest_route_queues_a_job_for_an_owner(monkeypatch):
     owner = ExportUser(id=ObjectId(), email="o@x")
     monkeypatch.setattr(
         routes,
-        "dashboards_collection",
-        _FakeCollection([{"dashboard_id": DASHBOARD_OID, "project_id": PROJECT_OID}]),
-    )
-    monkeypatch.setattr(
-        routes,
-        "check_project_permission",
-        lambda project_id, user, level: level == "owner" and user is owner,
+        "export_denial",
+        lambda dashboard_id, user, required="owner": None if user is owner else "denied",
     )
     monkeypatch.setattr(
         "depictio.api.celery_app.build_report_manifest_job.apply_async",

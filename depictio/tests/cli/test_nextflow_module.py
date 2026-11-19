@@ -20,7 +20,9 @@ import yaml
 from depictio.cli.depictio_cli import app
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-INGEST = REPO_ROOT / "depictio" / "cli" / "configs" / "nextflow" / "modules" / "depictio" / "ingest"
+NEXTFLOW = REPO_ROOT / "depictio" / "cli" / "configs" / "nextflow"
+INGEST = NEXTFLOW / "modules" / "depictio" / "ingest"
+PUBLISH = NEXTFLOW / "subworkflows" / "depictio" / "publish"
 
 
 def _package_version() -> str:
@@ -113,6 +115,17 @@ class TestInterface:
         """The scan skips symlinked directories, so linking one whole loses its files."""
         assert 'cp -rsfL "$src/." "$dst/"' in _main().replace("\\$", "$")
 
+    def test_an_earlier_artifact_in_the_results_is_not_ingested(self):
+        """<outdir>/depictio/ holds the last run's stack (MongoDB files, admin keys)."""
+        assert "find data_root -name .depictio-local-home" in _main()
+
+    def test_every_staged_path_is_quoted(self):
+        """A results directory named `results 2024` must still stage."""
+        script = _main().split("script:", 1)[1].split("stub:", 1)[0]
+        assert "stage_into ${quote.call(f)} ${quote.call(r)}" in script
+        for flag in ("--project-config-path", "--dashboard", "--server"):
+            assert re.search(rf"{flag} \$\{{quote\.call\(", script), flag
+
     def test_the_cli_is_called_as_depictio(self):
         main = _main()
         assert re.search(r"^\s*depictio \\\\$", main, re.MULTILINE)
@@ -121,8 +134,22 @@ class TestInterface:
 
 class TestPinsFollowThePackageVersion:
     def test_container_tag(self):
-        tags = re.findall(r'container "ghcr\.io/depictio/depictio-cli:([^"]+)"', _main())
+        """The all-in-one image: the CLI image has no server and no services, so the
+        artifact's `depictio local up` could not start in it."""
+        tags = re.findall(r'container "ghcr\.io/depictio/depictio-allinone:([^"]+)"', _main())
         assert tags == [_package_version()]
+        assert "depictio-cli:" not in _main()
+
+    def test_the_container_image_bakes_its_services_prefix(self):
+        """`local up` in the task reads the services the image preinstalled: nothing
+        is downloaded, and nothing is for the user to set."""
+        dockerfile = (REPO_ROOT / "docker-images" / "allinone" / "Dockerfile").read_text()
+        assert "DEPICTIO_SERVICES_PREFIX=/opt/depictio-services" in dockerfile
+        assert "install_services.py local_stack.py /opt/depictio-services" in dockerfile
+
+    def test_a_container_uid_without_a_writable_home_gets_one(self):
+        """`docker -u $(id -u)` leaves HOME=/ for a uid the image does not know."""
+        assert 'export HOME="\\$PWD/.home"' in _main()
 
     def test_conda_pin(self):
         env = (INGEST / "environment.yml").read_text()
@@ -139,8 +166,57 @@ class TestPinsFollowThePackageVersion:
             assert (INGEST / name).read_text().count(search) == 1, name
 
     def test_the_image_entrypoint_is_cleared_for_docker_and_podman(self):
-        """The CLI image's ENTRYPOINT would otherwise receive bash as a subcommand."""
+        """The image's ENTRYPOINT (tini + the all-in-one entrypoint) is not needed to
+        run the task's bash; cleared so nothing stands between Nextflow and bash."""
         assert (
             "containerOptions \"${workflow.containerEngine in ['docker', 'podman'] "
             "? '--entrypoint \"\"' : ''}\""
         ) in _main()
+
+
+class TestPublishSubworkflow:
+    """depictio/publish: the module for any pipeline, settings from params.depictio_*."""
+
+    def test_it_ships_the_nf_core_subworkflow_files(self):
+        for name in ("main.nf", "meta.yml", "nextflow.config", "tests/main.nf.test"):
+            assert (PUBLISH / name).is_file(), name
+
+    def test_it_includes_the_module_it_ships_with(self):
+        main = (PUBLISH / "main.nf").read_text()
+        include = re.search(r"include \{ DEPICTIO_INGEST \} from '([^']+)'", main).group(1)
+        assert (PUBLISH / include).with_suffix(".nf").resolve() == (INGEST / "main.nf").resolve()
+
+    def test_it_reads_no_params(self):
+        """nf-core asks a subworkflow to take every setting as an input."""
+        code = [line.split("//", 1)[0] for line in (PUBLISH / "main.nf").read_text().splitlines()]
+        assert not [line for line in code if "params." in line]
+
+    def test_it_runs_when_the_channel_it_waits_on_is_empty(self):
+        """collect() emits nothing for an empty channel (--skip_multiqc); toList() emits []."""
+        main = (PUBLISH / "main.nf").read_text()
+        assert ".toList()" in main
+        assert ".collect()" not in main.split("main:", 1)[1].split("DEPICTIO_INGEST(", 1)[0]
+
+    def test_depictio_vars_reads_a_command_line_string_too(self):
+        """`--depictio_vars 'A=b,C=d'` arrives as a String, not a Map."""
+        config = (PUBLISH / "nextflow.config").read_text()
+        assert "params.depictio_vars instanceof Map" in config
+        assert ".tokenize(',')" in config
+
+    def test_its_selector_matches_with_or_without_an_enclosing_workflow(self):
+        selector = re.search(
+            r"withName: '([^']+)'", (PUBLISH / "nextflow.config").read_text()
+        ).group(1)
+        for name in (
+            "DEPICTIO_PUBLISH:DEPICTIO_INGEST",
+            "NFCORE_RNASEQ:DEPICTIO_PUBLISH:DEPICTIO_INGEST",
+        ):
+            assert re.fullmatch(selector, name), name
+
+    def test_meta_yml_documents_its_takes_and_emits(self):
+        meta = yaml.safe_load((PUBLISH / "meta.yml").read_text())
+        main = (PUBLISH / "main.nf").read_text()
+        take = main.split("take:", 1)[1].split("main:", 1)[0]
+        emit = main.split("emit:", 1)[1]
+        assert [next(iter(i)) for i in meta["input"]] == re.findall(r"^\s+(\w+)\s+//", take, re.M)
+        assert [next(iter(o)) for o in meta["output"]] == re.findall(r"^\s+(\w+)\s+=", emit, re.M)

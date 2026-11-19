@@ -2350,8 +2350,8 @@ const App: React.FC = () => {
           closeSettings();
           openExportStatic();
         }}
-        isOwner={isOwner}
         getAnalysisState={getAnalysisState}
+        previewing={Boolean(previewVersionId)}
         filters={
           remembering
             ? {

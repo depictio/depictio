@@ -3,7 +3,7 @@ name: Library complexity curve
 mode: complexity-curve
 description: >-
   How many distinct molecules each library would yield at a given sequencing
-  depth, with the 95% interval preseq puts around that extrapolation. A curve
+  depth, with the confidence interval preseq puts around that extrapolation. A curve
   still climbing at the depth already sequenced means resequencing buys new
   material; one that has flattened means the library is exhausted.
 find:
@@ -15,10 +15,113 @@ renders_as:
   # has an entry of its own: MultiQC's preseq panel plots expected_distinct
   # alone and drops the two CI columns, so the width of the extrapolation is
   # only readable here.
-  - { id: complexity_ribbon, component: advanced_viz, kind: profile, roles: {series: sample, x: total_reads, y: expected_distinct, lower: lower_ci, upper: upper_ci} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: total_reads, y: expected_distinct, color: sample, title: Expected distinct molecules by sequencing depth} }
-  - { component: card, column: expected_distinct, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: expected_distinct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: ci_width, aggregation: average, aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: card, column: expected_distinct, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
-  - { component: table }
+  # C3 N/A: preseq publishes no cut-off; the data-defined reference is the
+  # identity (every read distinct), described in the text.
+  - id: complexity_ribbon
+    component: advanced_viz
+    kind: profile
+    title: Expected distinct molecules by depth
+    roles: {series: sample, x: total_reads, y: expected_distinct, lower: lower_ci, upper: upper_ci}
+    config:
+      x_title: Total reads sequenced
+      y_title: Expected distinct molecules
+      legend_pos: bottom
+    description: >-
+      Each curve is a library: the number of distinct molecules preseq expects to see
+      at a given sequencing depth, with the confidence interval as a band. It answers
+      whether sequencing deeper would still add new molecules.
+
+      How to read: a curve still rising steeply means the library is far from
+      exhausted and resequencing pays off. A curve that has flattened is exhausted, so
+      more reads return duplicates. A wide band means the extrapolation is uncertain,
+      so be careful recommending deeper sequencing from it.
+
+      Note: preseq extrapolates from the reads already sequenced, and the further it
+      goes past that depth the less reliable it is. It publishes no cut-off for a
+      sufficient library.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/23435259/
+      and https://raw.githubusercontent.com/smithlabcode/preseq/master/README.md
+  - component: figure
+    visu_type: line
+    title: Expected distinct molecules by depth
+    dict_kwargs:
+      x: total_reads
+      y: expected_distinct
+      color: sample
+      title: Expected distinct molecules by sequencing depth
+      labels: {total_reads: Total reads sequenced, expected_distinct: Expected distinct molecules, sample: Library}
+    description: >-
+      Each line is a library: the expected distinct molecules at each sequencing depth,
+      without the interval. It answers how the libraries compare in complexity.
+
+      How to read: a line that stays closer to the diagonal at low depth has few
+      duplicates so far. Lines that part early belong to libraries of very different
+      complexity.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/23435259/
+  - component: card
+    column: expected_distinct
+    aggregation: max
+    aggregations: [q3, median]
+    secondary_layout: compact
+    caption: deepest prediction, with the upper quartile and the median
+    title: Deepest expected yield
+    description: >-
+      The hero number is the largest expected distinct molecule count of any library at
+      the deepest depth extrapolated, with the upper quartile and the median over all
+      points next to it. It answers how rich the best library could become.
+
+      How to read: the value depends on how far preseq extrapolated, so compare
+      libraries only at the same depth.
+  - component: card
+    column: lower_ci
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: compact
+    caption: conservative yield, with the median
+    title: Conservative expected yield
+    description: >-
+      The hero number is the largest lower bound of the confidence interval, the yield
+      preseq is confident the library reaches, with the median next to it. It answers
+      what yield can be promised with caution.
+
+      How to read: the gap between this and the deepest expected yield is the
+      uncertainty of the extrapolation.
+  - component: card
+    column: ci_width
+    aggregation: max
+    aggregations: [median, average]
+    secondary_layout: compact
+    caption: widest interval, with the median and the mean
+    title: Interval width
+    description: >-
+      The hero number is the widest confidence interval of any library, in molecules,
+      with the median and the mean next to it. It answers how uncertain the
+      extrapolation is.
+
+      How to read: the width grows with depth, so a very wide interval means the
+      extrapolation went far past the sequenced depth. Treat those predictions as
+      indicative only.
+  - component: card
+    column: total_reads
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: compact
+    caption: deepest depth, with the median
+    title: Extrapolated depth
+    description: >-
+      The hero number is the largest sequencing depth preseq extrapolated to, with the
+      median depth of the grid next to it. It answers how far the predictions go.
+
+      How to read: all the curve past the depth you really sequenced is a prediction.
+      Read the interval width there before relying on it.
+  - component: table
+    title: Complexity curve points
+    description: >-
+      Each row is a depth of one library: the expected distinct molecules, the
+      confidence interval and its width. It answers the expected yield at an exact
+      depth.
+
+      How to read: find the depth you plan to sequence to and read the interval, not
+      only the expected value.

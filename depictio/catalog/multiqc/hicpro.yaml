@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: hicpro }
+  - component: multiqc
+    section: hicpro
+    title: HiC-Pro mapping and filtering
+    description: >-
+      HiC-Pro's MultiQC plots: read mapping, pairing, valid-pair filtering and
+      contact statistics per sample. They answer how many read pairs end up as
+      usable chromatin contacts.
+
+      How to read: A high share of valid interaction pairs is good. Many dangling
+      ends or self-circles point to inefficient ligation or digestion, which lowers
+      usable depth.
+
+      Source: https://docs.seqera.io/multiqc/modules/hicpro

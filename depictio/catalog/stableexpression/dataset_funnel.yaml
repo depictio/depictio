@@ -12,9 +12,65 @@ find:
 recipe: stableexpression/dataset_funnel.py
 fixture: dataset_funnel.tsv
 renders_as:
-  - { id: sample_funnel, component: figure, visu_type: histogram,
-      dict_kwargs: { x: step, y: samples, color: platform, histfunc: sum } }
-  - { id: samples_lost, component: figure, visu_type: histogram,
-      dict_kwargs: { x: step, y: samples_lost, color: outcome, histfunc: sum } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: step }
-  - { component: table }
+  - id: sample_funnel
+    component: figure
+    visu_type: histogram
+    title: Samples at each filtering step
+    dict_kwargs:
+      x: step
+      y: samples
+      color: platform
+      histfunc: sum
+      labels: {step: Step, samples: Samples, platform: Platform}
+    description: >-
+      Each bar adds up the samples of every downloaded dataset at one step of the
+      pipeline, split by the platform that measured them. It answers how many
+      samples survive from download to the merged matrix.
+
+      How to read: bars should shrink only a little from one step to the next. A
+      large drop after the gene ID mapping means many datasets could not be
+      mapped, and a drop after a filter means many samples were mostly zeros or
+      mostly missing. Filter by step to see which datasets lose most.
+
+      Lines and annotations: none are drawn. The pipeline rejects a sample whose
+      share of zeros or missing values is above 0.9 by default (max_zero_ratio and
+      max_null_ratio), and the run may have changed them.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/nextflow_schema.json
+  - id: samples_lost
+    component: figure
+    visu_type: histogram
+    title: Samples lost at each step
+    dict_kwargs:
+      x: step
+      y: samples_lost
+      color: outcome
+      histfunc: sum
+      labels: {step: Step, samples_lost: Samples lost, outcome: Dataset outcome}
+    description: >-
+      Each bar adds up the samples lost at one step, split by the final outcome of
+      their dataset. It answers where in the pipeline samples are removed and which
+      kind of dataset loses them.
+
+      How to read: losses coloured as a dataset that was never merged are expected,
+      since such a dataset loses everything at the step that stopped it. Losses in
+      merged datasets are partial filtering and are the ones to check against the
+      zero and missing-value filters.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: step
+    title: Pipeline step
+    description: >-
+      Keeps only the rows of the chosen steps, so the figures and the table show
+      one stage of the funnel at a time.
+  - component: table
+    title: Samples per dataset and step
+    description: >-
+      Each row is one dataset at one pipeline step, with its platform, final
+      outcome, the samples it holds and the samples lost there. It answers which
+      datasets lose samples and at which step.
+
+      How to read: sort by samples lost to find the datasets that shrink most, then
+      check their outcome and platform before trusting them.

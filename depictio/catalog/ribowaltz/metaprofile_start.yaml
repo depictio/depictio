@@ -7,10 +7,35 @@ description: >-
   and shows a 3-nt saw-tooth along the CDS.
 find: { path_glob: "**/*.ribowaltz.metaprofile_psite.tsv" }
 recipe: ribowaltz/metaprofile_start.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: metaprofile_start.tsv
 renders_as:
   - id: start_profile
     component: advanced_viz
     kind: profile
+    title: P-site signal around the start codon
     roles: { series: sample, x: position, y: signal }
-  - { component: table }
+    config:
+      reference_x: 0
+      reference_label: First nucleotide of the start codon
+      x_title: Distance from the start codon (nt)
+      y_title: Share of the window's P-site signal (%)
+    description: >-
+      Each line is a library: its P-site signal at every nucleotide around the annotated
+      start codon, summed over all transcripts. It answers whether footprints are phased
+      along the coding sequence.
+
+      How to read: Position 0 is the first nucleotide of the start codon. A peak there and a three-nucleotide saw-tooth along the CDS show a phased library. A flat or noisy line with no pattern means the offsets are wrong
+      or the library has no periodicity.
+
+      Lines and annotations: the vertical line at 0 marks the first nucleotide of the
+      start codon, the origin of the distance axis, defined by the annotation riboWaltz uses.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - component: table
+    title: P-site signal around the start codon
+    description: >-
+      Each row is a library and a position relative to the start codon, with the share of
+      the window's P-site signal. It answers the exact signal behind the lines.
+
+      How to read: filter to one library and sort by position to follow its profile.

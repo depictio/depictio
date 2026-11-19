@@ -13,5 +13,32 @@ renders_as:
   # CDS id. Charge class is the default colour because the plane is a
   # physicochemical one; the sample and the per-tool probabilities ride along in
   # the output, and the renderer's colour menu reaches them.
-  - { id: amp_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2, color: charge_class} }
-  - { component: table }
+  - id: amp_embedding
+    component: advanced_viz
+    kind: embedding
+    title: Property space of the AMP candidates
+    roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2, color: charge_class}
+    config:
+      axis_prefix: PC
+    description: >-
+      Each point is an antimicrobial-peptide candidate placed by a principal component
+      analysis of its physicochemical descriptors: molecular weight, isoelectric point,
+      hydrophobicity and the helix, turn and sheet fractions, standardised first. The
+      colour is the charge class. It answers which candidates resemble each other and how
+      the charge classes separate.
+
+      How to read: candidates close together share properties, and a group of one colour
+      is a family with a common charge profile. Use the colour menu to colour by sample or
+      by tool probability and see whether groups are sample specific.
+
+      Lines and annotations: the charge class is a bin of the isoelectric point made by
+      this catalog, basic at 8 or above and acidic at 6 or below, and not a call made by
+      AMPcombi.
+  - component: table
+    title: Embedding coordinates table
+    description: >-
+      Each row is an AMP candidate with its two principal components, charge class, length
+      and the probabilities of the prediction tools. It answers where a given candidate sits
+      in property space.
+
+      How to read: sort by a component to find the candidates at the edge of the cloud.

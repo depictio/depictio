@@ -11,6 +11,33 @@ find:
 recipe: cuppa/predictions.py
 fixture: predictions.tsv
 renders_as:
-  - { id: cancer_type_bar, component: figure, visu_type: bar, dict_kwargs: {x: cancer_type, y: probability, color: classifier} }
-  - { id: classifier_filter, component: interactive, interactive_type: MultiSelect, column_name: classifier }
-  - { id: prediction_table, component: table }
+  - id: cancer_type_bar
+    component: figure
+    visu_type: bar
+    title: Probability of each cancer type
+    dict_kwargs: { x: cancer_type, y: probability, color: classifier, barmode: group, labels: { cancer_type: Cancer type, probability: Probability, classifier: Classifier } }
+    description: >-
+      Each bar is the probability one CUPPA classifier gives to a cancer type for a tumor, grouped by
+      classifier. It answers which cancer type each feature family points to and how strongly.
+
+      How to read: a cancer type with tall bars across the classifiers is a consistent call, and the combined
+      classifier's top type is CUPPA's prediction. Disagreement between DNA and RNA classifiers means the
+      call needs a second opinion. Use the classifier filter to read one at a time.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/cuppa/README.md
+  - id: classifier_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: classifier
+    title: Classifier
+    description: >-
+      Restricts every tile to the chosen classifiers, such as the combined, DNA or RNA ones. It answers what
+      one feature family alone predicts.
+  - id: prediction_table
+    component: table
+    title: Tissue of origin probabilities
+    description: >-
+      Each row is a cancer type scored by one classifier for a tumor, with its probability, its rank within
+      that classifier and a flag on the top call. It answers the ranking behind each prediction.
+
+      How to read: filter to the combined classifier and sort by rank to read CUPPA's final prediction.

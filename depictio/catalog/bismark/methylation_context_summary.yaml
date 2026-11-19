@@ -11,8 +11,84 @@ find:
 recipe: bismark/methylation_context_summary.py
 fixture: methylation_context_summary.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_methylated, color: context, title: "% methylated cytosines by context"} }
-  - { component: card, column: pct_methylated, aggregation: average, secondary_layout: donut, breakdown_col: context }
-  - { component: card, column: pct_methylated, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: methylated_c, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: pct_methylated
+      color: context
+      barmode: group
+      labels: {sample: Library, pct_methylated: Methylated cytosines (%), context: Context}
+    title: Methylation by cytosine context
+    description: >-
+      Each bar is the percentage of methylated cytosines of one library in one
+      context (CpG, CHG or CHH). It answers whether CpG methylation is high and
+      non-CpG methylation low, as bisulfite conversion should leave it.
+
+      How to read: CpG methylation is high in most mammalian cells while CHG and CHH
+      sit close to zero. A raised CHG or CHH bar means non-conversion, or real
+      non-CG methylation in organisms that have it.
+
+      Source: https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+  # Pooled over contexts the percentage mixes CpG with CHG and CHH, so each card
+  # reads one context.
+  - component: card
+    column: pct_methylated
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "pl.col('context') == 'CpG'"
+    caption: CpG methylation, with its spread
+    title: Average CpG methylation
+    description: >-
+      The hero number is the mean percentage of methylated cytosines in the CpG
+      context, and the box shows the spread across libraries. It answers how
+      methylated the libraries are overall.
+
+      How to read: a tight box means comparable libraries. A library far from the
+      others differs in biology, cell composition or conversion, so compare it with
+      the PCA before drawing a conclusion.
+  - component: card
+    column: pct_methylated
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: compact
+    filter_expr: "pl.col('context') == 'CHH'"
+    caption: Highest library, with the median and the lowest
+    title: Highest CHH methylation
+    description: >-
+      The hero number is the largest CHH methylation percentage of any library,
+      shown with the median and the lowest. It answers how incomplete bisulfite
+      conversion could be at worst.
+
+      How to read: a value of 0.3 percent means conversion was at least 99.7
+      percent efficient, so values near zero are good. A library well above its
+      peers is the one to check first.
+
+      Note: this reading assumes non-CG methylation is near zero, as in mammals.
+      Bismark publishes no cut-off for it.
+
+      Source: https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+  - component: card
+    column: methylated_c
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: context
+    top_n_count: 3
+    caption: Methylated calls, by context
+    title: Methylated calls by context
+    description: >-
+      The hero number is the total of methylated cytosine calls, and the bars split
+      it by context. It answers where the methylated calls come from.
+
+      How to read: CpG should carry most of the methylated calls in a mammalian
+      library. A large CHH or CHG share would raise a conversion question.
+  - component: table
+    title: Methylation by context table
+    description: >-
+      Each row is a library in one context, with the methylated and unmethylated
+      cytosine counts and the methylation percentage. It answers the exact counts
+      behind the bar chart.
+
+      How to read: filter on a context to compare libraries.
