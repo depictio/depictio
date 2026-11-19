@@ -315,6 +315,16 @@ def test_the_site_index_lists_every_output_without_its_data(tmp_path) -> None:
     assert stats["outputs"] == len(entry.outputs)
 
 
+def test_the_site_index_carries_the_module_version(tmp_path) -> None:
+    import json
+
+    entry = _flagship_entry()
+    export_site_data([entry], tmp_path, "9.9.9")
+
+    [tool] = json.loads((tmp_path / "index.json").read_text())["tools"]
+    assert tool["version"] == entry.version
+
+
 def test_each_site_output_file_holds_what_the_gallery_embeds(tmp_path) -> None:
     """Same fixture and data as the one-page gallery: only the download moves."""
     import json

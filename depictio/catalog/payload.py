@@ -1182,6 +1182,7 @@ def _tool_dict(tool: Any, outputs: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "id": tool.id,
         "name": tool.name,
+        "version": tool.version,
         "description": tool.description or "",
         "homepage": tool.homepage,
         "nf_core_url": tool.nf_core_url,
