@@ -76,13 +76,8 @@ def readable_name(value: Any) -> str:
 
 
 def _hex_color(color: str | None, fallback: str) -> str:
-    """A Mantine palette name (shade 6) or a CSS hex, as a hex."""
-    if not color:
-        return fallback
-    if color.startswith("#"):
-        return color
-    shades = _theme.MANTINE_SHADES.get(color.split(".")[0].strip().lower())
-    return shades[0] if shades else fallback
+    """A Mantine palette name (shade 6) or a CSS colour (``theme.palette_hex``)."""
+    return _theme.palette_hex(color, fallback)
 
 
 #: "No argument given", where ``None`` is a value (a card with no value).
@@ -305,14 +300,6 @@ def table_markdown(df: pl.DataFrame, limit: int = STATIC_TABLE_ROWS) -> str:
 # and reading the rest off the React renderer, or snapshotting it.
 SERVER_PLOTLY_KINDS = frozenset({"complex_heatmap", "upset_plot", "sankey"})
 
-_HEX8_RE = re.compile(r"^#([0-9a-fA-F]{2}){4}$")
-
-
-def _hex8_to_rgba(color: str) -> str:
-    r, g, b, a = (int(color[i : i + 2], 16) for i in (1, 3, 5, 7))
-    return f"rgba({r}, {g}, {b}, {a / 255:.3f})"
-
-
 _HEX6_RE = re.compile(r"^[0-9a-fA-F]{6}$")
 _RGB_PREFIX_RE = re.compile(r"^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)")
 
@@ -339,21 +326,8 @@ def _hex_with_alpha(color: str | None, alpha: float) -> str:
 
 
 def _normalize_colors(obj: Any) -> Any:
-    """Rewrite 8-digit hex colours (``#RRGGBBAA``) to ``rgba(...)``.
-
-    A figure extracted from the React renderer (``component_figure``) is
-    Plotly.js's own JSON, and Plotly.js accepts 8-digit hex for an alpha
-    channel; the Python ``plotly`` package's validator does not and raises
-    constructing the figure. Same data, just a spelling Python doesn't
-    accept — translate it rather than losing the figure.
-    """
-    if isinstance(obj, dict):
-        return {k: _normalize_colors(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_normalize_colors(v) for v in obj]
-    if isinstance(obj, str) and _HEX8_RE.match(obj):
-        return _hex8_to_rgba(obj)
-    return obj
+    """``theme.normalize_colors``: a renderer's 8-digit hex as Python plotly's rgba."""
+    return _theme.normalize_colors(obj)
 
 
 def _figure_from_dict(fig_dict: dict[str, Any]):

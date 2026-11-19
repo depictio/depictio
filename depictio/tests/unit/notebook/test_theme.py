@@ -128,3 +128,20 @@ def test_classic_leaves_plotly_alone():
     assert bundle["application/vnd.plotly.v1+json"]["layout"]["plot_bgcolor"] == "#e5ecf6"
     with pytest.raises(ValueError):
         theme.use_theme("neon")
+
+
+def test_palette_hex_is_the_one_resolver_for_accents():
+    from depictio.notebook.theme import MANTINE_SHADES, normalize_colors, palette_hex
+
+    assert palette_hex("teal", "#000") == MANTINE_SHADES["teal"][0]
+    assert palette_hex("Teal.6", "#000") == MANTINE_SHADES["teal"][0]
+    assert palette_hex("lime", "#000", shade=7) == "#74b816"
+    assert palette_hex("#abc", "#000") == "#abc"
+    assert palette_hex("rgba(1, 2, 3, 0.5)", "#000") == "rgba(1, 2, 3, 0.5)"
+    assert palette_hex(None, "#000") == palette_hex("not-a-colour", "#000") == "#000"
+    # Nothing that could leave the attribute or the style value it lands in.
+    assert palette_hex('red"><script>', "#000") == "#000"
+    assert palette_hex("rgb(1,2,3);background:url(x)", "#000") == "#000"
+    assert normalize_colors({"a": ["#11223380", "#112233"]}) == {
+        "a": ["rgba(17, 34, 51, 0.502)", "#112233"]
+    }

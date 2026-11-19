@@ -28,7 +28,7 @@ from depictio.notebook.qmd_safe import comment as _qmd_comment
 from depictio.notebook.qmd_safe import defuse, defuse_code, one_line
 from depictio.notebook.qmd_safe import esc as _esc
 from depictio.notebook.qmd_safe import typst_str as _typst_str
-from depictio.notebook.theme import resolve_primary
+from depictio.notebook.theme import palette_hex, resolve_primary
 
 from .aggregations import agg_expr_source
 from .cells import Cell, md_cell, render_qmd
@@ -79,29 +79,6 @@ from .resources import script, style
 # What a highlight can show (``highlightTile.ts``: ``HIGHLIGHTABLE_TYPES``).
 _HIGHLIGHTABLE = frozenset({"figure", "advanced_viz"})
 
-# Shade 6 of ``@mantine/core``'s own ``DEFAULT_COLORS`` — the shade every
-# icon/accent use in the live app resolves a bare palette name to. The server
-# has no Mantine theme to ask, so a section's or tab's ``color`` (``"teal"``,
-# picked from the same palette the editor's colour picker offers) is resolved
-# against this fixed copy instead of hand-waving a different blue everywhere.
-_MANTINE_SHADE_6 = {
-    "dark": "#2e2e2e",
-    "gray": "#868e96",
-    "red": "#fa5252",
-    "pink": "#e64980",
-    "grape": "#be4bdb",
-    "violet": "#7950f2",
-    "indigo": "#4c6ef5",
-    "blue": "#228be6",
-    "cyan": "#15aabf",
-    "teal": "#12b886",
-    "green": "#40c057",
-    "lime": "#82c91e",
-    "yellow": "#fab005",
-    "orange": "#fd7e14",
-}
-# A literal colour, whole: it lands in attributes and style values unescaped.
-_CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|(rgba?|hsla?)\([0-9.,%\s/]+\))$")
 # SectionAccordion's TAB_LINK: a markdown link whose target is another tab.
 # A target may hold one level of parentheses: `tab:Environment (CTD)`.
 _TARGET = r"((?:[^()\n]|\([^()\n]*\))+)"
@@ -155,18 +132,6 @@ _MAX_INLINE_VALUES = 2
 _MAX_LABEL_CHARS = 28
 _RANGE_TYPES = frozenset({"RangeSlider", "DateRangePicker", "DatePicker", "Timeline"})
 
-# ``FunnelView.tsx``'s marker palette, in order, as Mantine resolves it.
-_FUNNEL_PALETTE = (
-    "#12b886",  # teal 6
-    "#228be6",  # blue 6
-    "#7950f2",  # violet 6
-    "#fd7e14",  # orange 6
-    "#e64980",  # pink 6
-    "#15aabf",  # cyan 6
-    "#be4bdb",  # grape 6
-    "#74b816",  # lime 7
-)
-
 # The chrome the three formats cannot get from Depictio's own stylesheets: the
 # section rail, and the fold the live dashboard gets from Mantine's accordion.
 # Inline rather than a linked asset, like every other asset in these exports —
@@ -190,19 +155,6 @@ PAPER_CHROME = style("paper_chrome.css")
 def _css_value(value: str) -> str:
     """A brand font stack as a CSS value: nothing that could close the rule."""
     return re.sub(r"[;{}<>]", "", value).strip()
-
-
-def _resolve_accent_hex(color: str | None, fallback: str) -> str:
-    """A Mantine palette name or a literal CSS colour, to a hex the export's
-    static HTML can use directly. Mirrors the live chrome's own fallback:
-    unset/unrecognised stays neutral rather than picking a colour on the
-    author's behalf.
-    """
-    if not color:
-        return fallback
-    if _CSS_COLOR_RE.match(color.strip()):
-        return color.strip()
-    return _MANTINE_SHADE_6.get(color.split(".")[0].strip().lower(), fallback)
 
 
 @dataclass
@@ -773,10 +725,10 @@ class NotebookBuilder:
                 continue
             if unit.kind == "tab":
                 brand = self.plan.tab_brands.get(unit.dashboard_id or "") or self.plan.brand or {}
-                accent = _resolve_accent_hex(unit.color, brand.get("primary") or "")
+                accent = palette_hex(unit.color, brand.get("primary") or "")
                 anchor = self.tab_anchors.get(unit.dashboard_id or unit.text)
             else:
-                accent = _resolve_accent_hex(unit.color, "")
+                accent = palette_hex(unit.color, "")
                 anchor = next(seq, None)
             if not anchor:
                 continue
@@ -876,7 +828,7 @@ class NotebookBuilder:
         return f"{self.plan.api_url.rstrip('/')}/dashboard/{self.plan.dashboard_id}"
 
     def _accent(self) -> str:
-        return _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+        return palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
 
     def _appbar(self) -> str:
         """The header bar: the dashboard's mark and "Powered by" Depictio.
@@ -886,7 +838,7 @@ class NotebookBuilder:
         tab breadcrumb either: the first part's own heading follows."""
         plan = self.plan
         main = plan.tabs[0] if plan.tabs else {}
-        accent = _resolve_accent_hex(str(main.get("icon_color") or "") or None, self._accent())
+        accent = palette_hex(str(main.get("icon_color") or "") or None, self._accent())
         h1 = plan.title
         bar_name = None if self.hero is not None or h1.strip() == plan.title.strip() else h1
         return appbar_html(
@@ -1018,6 +970,7 @@ class NotebookBuilder:
             "from depictio.notebook import (\n"
             "    DepictioClient,\n"
             "    fill_text,\n"
+            "    funnel_figure,\n"
             "    funnel_rest,\n"
             "    funnel_stage,\n"
             "    StaticCard,\n"
@@ -1157,7 +1110,7 @@ def card_row(cards):
         # rules read. A separate block rather than a placeholder inside
         # NOTEBOOK_CHROME: that constant is full of CSS and JS braces, and
         # nothing there is worth making it a format string over.
-        accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+        accent = palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
         root = f"--dpx-primary: {accent};"
         chrome = NOTEBOOK_CHROME
         if self.paper:
@@ -1482,7 +1435,7 @@ def card_row(cards):
         """
         rows = []
         for stage in stages:
-            accent = _resolve_accent_hex(stage.color, "#228be6")
+            accent = palette_hex(stage.color, "#228be6")
             icon = self._icon_html(stage.icon, accent)
             value = self._filter_value_text(stage)
             rows.append(
@@ -1556,85 +1509,15 @@ def card_row(cards):
             + "\n_series = [\n"
             + "\n".join(frames)
             + "\n]"
-            + f"\n_palette = {pprint.pformat(list(_FUNNEL_PALETTE), width=88)}"
-            + """
-fig_funnel = go.Figure(
-    go.Funnel(
-        name=_series[0][0],
-        orientation="h",
-        y=_stages,
-        x=_series[0][1],
-        textinfo="value+percent initial",
-        textposition="inside",
-        hovertemplate="%{y}<br>%{x} rows<extra>%{fullData.name}</extra>",
-        marker={"color": _palette[0]},
-        connector={"line": {"color": "rgba(0,0,0,0.08)", "width": 1}},
-    )
-)
-# One collection at a time: the tables span three orders of magnitude, and on
-# one shared axis the small ones collapse into slivers with no room for their
-# numbers. The dropdown is Plotly's own, so it works in the exported HTML with
-# nothing to run — the report's own script replaces it with an HTML select,
-# which Plotly cannot place here: a menu takes paper coordinates, and this
-# figure's left third is the gutter its stage labels need. It swaps the one
-# trace's data rather than toggling the visibility of seven, because a funnel
-# with hidden traces drops its stage labels off the axis entirely.
-fig_funnel.update_layout(
-    updatemenus=[
-        {
-            "name": "Data collection",
-            "buttons": [
-                {
-                    "label": _name,
-                    "method": "restyle",
-                    "args": [
-                        {
-                            "x": [_rows],
-                            "name": [_name],
-                            "marker.color": [_palette[_i % len(_palette)]],
-                        }
-                    ],
-                }
-                for _i, (_name, _rows) in enumerate(_series)
-            ],
-            "direction": "down",
-            "showactive": True,
-            "x": 0,
-            "xanchor": "left",
-            "y": 1.18,
-            "yanchor": "top",
-            # The app's `Select`: white on a gray-4 border, gray-7 text, the
-            # system stack at Mantine's `sm`.
-            "bgcolor": "#ffffff",
-            "bordercolor": "#ced4da",
-            "borderwidth": 1,
-            "pad": {"l": 10, "r": 10, "t": 7, "b": 7},
-            "font": {
-                "family": '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                "size": 13,
-                "color": "#495057",
-            },
-        }
-    ],
-    template="plotly_white",
-    showlegend=False,
-    # No room reserved above for the menu: Plotly grows the top margin itself
-    # while it is showing, and gives it back once the select has taken over.
-    margin={"l": 260, "r": 24, "t": 28, "b": 24},
-    yaxis={"autorange": "reversed"},
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font={"color": "#495057"},
-    height=max(290, 130 + len(_stages) * 46),
-)
-fig_funnel"""
+            + "\nfig_funnel = funnel_figure(_stages, _series)"
+            + "\nfig_funnel"
         )
         return Cell(body)
 
     def _funnel_cells(self) -> list[Cell]:
         cells: list[Cell] = []
         stages = self.plan.stages
-        accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+        accent = palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
 
         def part(title: str, icon: str, level: int, kind: str, **opts: Any) -> str:
             return self._heading(
@@ -2135,7 +2018,7 @@ fig_funnel"""
         if ctype == "text":
             surface = str(meta.get("surface") or "")
             if surface == "card":
-                accent = _resolve_accent_hex(str(meta.get("accent") or "") or None, "")
+                accent = palette_hex(str(meta.get("accent") or "") or None, "")
                 if not in_row:
                     out.append(md_cell(SURFACE_OPEN))
                 out.append(md_cell(cell_open("dpx-surface-card", accent or None)))
@@ -2264,7 +2147,7 @@ fig_funnel"""
 
     def _results_header_html(self) -> str:
         """The one heading every tab hangs off: the dashboard itself."""
-        accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "")
+        accent = palette_hex((self.plan.brand or {}).get("primary"), "")
         return "\n\n".join(
             [
                 self._heading(
@@ -2307,7 +2190,7 @@ fig_funnel"""
         for m in controls:
             stage = by_index.get(str(m.get("index") or ""))
             value = self._filter_value_text(stage) if stage else "All"
-            color = _resolve_accent_hex(
+            color = palette_hex(
                 str(m.get("custom_color") or m.get("icon_color") or m.get("color") or "") or None,
                 "",
             )
@@ -2328,7 +2211,7 @@ fig_funnel"""
         # icon and title in the section's colour, over a body the reader can
         # fold, behind that colour's rail. Unset stays neutral rather than
         # picking a hue on the author's behalf, exactly as the app does.
-        accent = _resolve_accent_hex(unit.color, "")
+        accent = palette_hex(unit.color, "")
         parts = [
             self._heading(
                 level=SECTION_LEVEL,
@@ -2378,7 +2261,7 @@ fig_funnel"""
         # resolved identity too, not just the document's.
         brand = self.plan.tab_brands.get(unit.dashboard_id or "") if unit.dashboard_id else None
         fallback = (brand or self.plan.brand or {}).get("primary") or ""
-        accent = _resolve_accent_hex(unit.color, fallback)
+        accent = palette_hex(unit.color, fallback)
         anchor = self.tab_anchors.get(unit.dashboard_id or unit.text)
         parts = [
             self._heading(
@@ -2553,7 +2436,7 @@ fig_funnel"""
         text = "\n\n".join(parts) or "*(empty text tile)*"
         if self.plan.pdf:
             # The PDF draws the stepper and the fact lists itself.
-            accent = _resolve_accent_hex(str(meta.get("accent") or "") or None, self._accent())
+            accent = palette_hex(str(meta.get("accent") or "") or None, self._accent())
             text = pdf_structures(
                 text,
                 lambda icon: self.plan.icons.get(icon),

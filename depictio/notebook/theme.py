@@ -93,6 +93,56 @@ def _alpha(color: str, a: float) -> str:
     return f"rgba({r}, {g}, {b}, {a})"
 
 
+# A literal colour, whole: hex, or rgb()/hsl() with nothing but numbers inside.
+# What a caller may put straight into an attribute or a style value.
+_CSS_COLOR = re.compile(r"^(#[0-9a-fA-F]{3,8}|(rgba?|hsla?)\([0-9.,%\s/]+\))$")
+
+
+def palette_hex(color: str | None, fallback: str, *, shade: int = 6) -> str:
+    """A colour as the page can use it: a literal CSS colour as written, a
+    Mantine palette name (``teal``, ``teal.6``) at ``shade`` (6, or 7 for the
+    accent's ink), else ``fallback``.
+
+    The one resolver for every accent the export draws (a tab's, a section's,
+    a filter's, a card's): unset or unrecognised stays the caller's neutral
+    rather than a colour picked on the author's behalf.
+    """
+    if not color:
+        return fallback
+    text = color.strip()
+    if _CSS_COLOR.match(text):
+        return text
+    shades = MANTINE_SHADES.get(text.split(".")[0].strip().lower())
+    if not shades:
+        return fallback
+    return shades[1] if shade == 7 else shades[0]
+
+
+_HEX8 = re.compile(r"^#([0-9a-fA-F]{2}){4}$")
+
+
+def _hex8_to_rgba(color: str) -> str:
+    r, g, b, a = (int(color[i : i + 2], 16) for i in (1, 3, 5, 7))
+    return f"rgba({r}, {g}, {b}, {a / 255:.3f})"
+
+
+def normalize_colors(obj: Any) -> Any:
+    """Every 8-digit hex colour (``#RRGGBBAA``) in ``obj`` as ``rgba(...)``.
+
+    A figure read off the React renderer is Plotly.js's own JSON, and Plotly.js
+    takes 8-digit hex for an alpha channel; the Python ``plotly`` package's
+    validator does not, and raises building the figure. Same colour, another
+    spelling: both the extraction (server) and the notebook client translate it.
+    """
+    if isinstance(obj, dict):
+        return {k: normalize_colors(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [normalize_colors(v) for v in obj]
+    if isinstance(obj, str) and _HEX8.match(obj):
+        return _hex8_to_rgba(obj)
+    return obj
+
+
 def resolve_primary(primary: str | None) -> tuple[str, str]:
     """A brand's ``primary`` as ``(shade 6, shade 7)`` hex.
 

@@ -105,3 +105,28 @@ def test_a_link_resolution_is_applied_only_for_the_filter_it_was_resolved_for():
             FRAME, changed, 1, dc_id=DC, links=links, resolved_for=resolved_for
         )
     assert out.height == 4
+
+
+def test_the_funnel_figure_is_the_dashboard_s_funnel_view():
+    """One collection drawn, the others a dropdown away, in FunnelView's palette."""
+    from depictio.notebook.funnel import FUNNEL_PALETTE, funnel_figure
+
+    assert FUNNEL_PALETTE == (
+        "#12b886",
+        "#228be6",
+        "#7950f2",
+        "#fd7e14",
+        "#e64980",
+        "#15aabf",
+        "#be4bdb",
+        "#74b816",
+    )
+    stages = ["0. Unfiltered", "1. Species = Adelie"]
+    fig = funnel_figure(stages, [("penguins", [342, 151]), ("sites", [12, 4])])
+    (trace,) = fig.data
+    assert list(trace.y) == stages and list(trace.x) == [342, 151]
+    assert trace.marker.color == FUNNEL_PALETTE[0]
+    buttons = fig.layout.updatemenus[0].buttons
+    assert [b.label for b in buttons] == ["penguins", "sites"]
+    assert buttons[1].args[0]["marker.color"] == [FUNNEL_PALETTE[1]]
+    assert fig.layout.height == 290
