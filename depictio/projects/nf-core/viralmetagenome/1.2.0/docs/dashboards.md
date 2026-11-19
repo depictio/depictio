@@ -29,10 +29,19 @@ Picard and mosdepth. The family rules the template follows are in
 | `vmg_contig_iterations` | `overview-tables/*contigs_overview-with-iterations.tsv` | de novo consensus and refinement step |
 | `vmg_mapping_overview` | `overview-tables/*mapping_overview.tsv` | constraint mapping |
 | `checkv_quality` | `consensus/quality_control/checkv/<sample>/<genome>/quality_summary.tsv` | consensus sequence |
-| `genomes` | recipe over the two overviews, `checkv_quality` and `samples` | consensus genome |
+| `genomes` | recipe over the two overviews, `checkv_quality`, `vmg_clusters` and `samples` | consensus genome (one per segment) |
+| `genome_matrix` | recipe over `genomes` | virus segment, one column per sample |
+| `route_comparison` | recipe over `genomes` | sample and virus segment |
 | `ivar_variants` | `variants/ivar/<sample>/*.tsv` (raw iVar tables) | variant call |
+| `variants` | `ivar_variants`, else `variants/<caller>/<sample>/*.filtered.vcf.gz` | variant call |
+| `intrahost_diversity` | `ivar_variants`, else `variants/bcftools/<sample>/*.norm.vcf.gz` | genome position |
 | `coverage_bins` | `variants/mapping-info/metrics/mosdepth/<sample>/*.per-base.bed.gz` | mapping and depth bin |
+| `coverage_profile` | recipe over `coverage_bins` and `genomes` | mapping and depth bin |
+| `genome_ends` | the same per-base files, first and last 200 bp | mapping, end and 10 bp bin |
 | `coverage_cumulative` | `variants/mapping-info/metrics/mosdepth/<sample>/*.mosdepth.global.dist.txt` | mapping and depth |
+| `genome_loci` | recipe over `coverage_bins` (`MAPPING_REFERENCES_FASTA` only) | genome and region |
+| `tracks` | the BAMs, per-base depth and plain VCFs of each genome (`MAPPING_REFERENCES_FASTA` only) | track file |
+| `umi_stats` | `preprocessing/umi/umitools/log/*.log`, `variants/mapping-info/deduplicate/log/<sample>/*.log` | sample or mapping |
 
 Every file name carries the run's `--global_prefix` (`<prefix>_<date>_<version>_<run name>-`):
 the globs match on the suffix and the recipes strip the prefix, so the template reads any run
@@ -46,6 +55,20 @@ rate and the annotation identity as percentages, and take the longest assembly a
 CheckV's completeness is not in them; the genome hub reads it from `checkv_quality`, for the
 consensus each genome ended with.
 
+Segments. A segmented virus (Lassa S and L, CCHFV S, M and L, influenza A's eight) is one genome
+per segment. `virus` is the annotation's acronym; `segment` is the annotation's segment, else the
+constraint sheet's, and `virus_segment` names the genome, so two segments of one virus are never
+counted as one. Completeness is read segment by segment off the genome's BLAST hit:
+`ref_cover_pct = (|send - sstart| + 1) / slen` and `len_minus_ref = qlen - slen`, from the
+overview's `(blast)` columns. `completeness_call` reads Complete (95 % or more), Partial (50 % or
+more), Fragment, No BLAST hit, or Shorter than reference: a genome that aligns along 90 % of itself
+or more but is under 60 % of its hit's length. BLAST cannot tell whether that hit is longer than the
+segment (an influenza segment 8 of ~890 nt against a 2349 nt reference reads 38 %) or the genome
+stops short of both ends, so the call asks for a look rather than calling it truncated. CheckV
+estimates completeness against whole genomes, so one segment reads as the share of the genome it
+carries; it stays in the record as a second opinion. The cover is read off the best HSP only, a
+lower bound for a genome whose alignment BLAST splits.
+
 ## Variables
 
 | Variable | Default | Effect |
@@ -53,6 +76,7 @@ consensus each genome ended with.
 | `METADATA_FILE` | unset | optional metadata table, the one given to `--metadata`: sample id first (or a `sample` column), one column per factor |
 | `METADATA_ID_COL` | first column | metadata id column |
 | `GROUP_COL`, `GROUP_COL_DISPLAY` | first factor column | group filter, Samples card breakdown and colours |
+| `MAPPING_REFERENCES_FASTA` | unset | indexed FASTA (`.fai`, and `.gzi` when bgzipped) of every reference the run mapped reads to, under DATA_ROOT; enables the Genome browser section of the Variants tab |
 
 The pipeline merges its `--metadata` table into the samples overview but does not publish it, so
 the template takes it as an optional table. The reference dataset ships `input/metadata.tsv`, the
@@ -92,36 +116,44 @@ sample sheet sit in the left panel and at the bottom of every other tab.
    taxonomic call, assembled bases by length band, reads on contigs by cluster role and clusters
    refined or filtered out. Every contig by length and the reads that map back to it (log axes, coloured by its call and sized by its read share, with a 1 kb line and the largest contigs named), and the read depth share of the clusters per sample. Contig and cluster
    tables are collapsed. The tab exists only on the de novo route.
-4. **Consensus.** *How close to a reference and how complete is each genome?* Four cards:
-   genomes by route, ambiguous bases (5 % N passes, 20 % warns), identity to the closest
-   reference and the CheckV tier. Every genome by its ambiguous bases and identity, coloured by route, with the trust zone cut at 5 % N and 95 % identity, the genomes furthest from a reference named and the record of the picked one; the ambiguous bases of each de novo consensus along
+4. **Consensus.** *How close to a reference and how complete is each genome?* Route, Virus and
+   Segment (virus and segment) filters. The sample x segment matrix, coloured by reference cover,
+   sits under the scatter. Four cards: genomes by route, ambiguous bases (5 % N passes, 20 % warns),
+   BLAST reference cover (95 % passes, 50 % warns) and genomes by completeness call. Every genome by its ambiguous bases and reference cover, coloured by its completeness call, cut at 5 % N and 95 % cover, the genomes with the lowest cover named, and the record of the picked one (genome, cluster type and segment; completeness with the reference length and qlen - slen; BLAST, annotation and Mash references with their identity; CheckV with its caveat for segmented viruses); the ambiguous bases of each de novo consensus along
    its refinement (scaffold, mapping iterations, variant-calling round), a code figure with markers on every step, a 5 % N line and a log axis floored at 0.1 %, since the share of N can be exactly 0. A line that ends before the others is labelled "no later step recorded": the pipeline's table holds no later iteration for that genome. A late rise in the share of N is expected, because the variant-calling round masks
-   the positions too shallow to call. The genome and CheckV tables are collapsed.
+   the positions too shallow to call. A Constraint route section plots the Mash identity of each
+   picked reference against its breadth at 10X, beside a table that lines up the best de novo and
+   constraint genome of every sample and segment. The genome and CheckV tables are collapsed.
 5. **Mapping.** *How deep and how evenly do the reads cover each genome?* Four cards: reads
    mapped, mean depth, breadth at 10X (90 % passes, 50 % warns) and duplicate pairs. The depth
-   along each genome in bins (a code figure on a log axis with a 10X line and the stretches under it shaded), then depth against breadth per genome (cut at 10X and 90 %, the thinnest genomes named) beside the cumulative
-   coverage curves. The mapping table is collapsed.
+   along each genome in bins, one panel per virus segment (a code figure on a log axis with a 10X line and the stretches under it shaded), the depth over the first and last 200 bp of each genome in 10 bp bins, read from each tip inwards, then depth against breadth per genome (cut at 10X and 90 %, the thinnest genomes named) beside the cumulative
+   coverage curves. The genome ends, a UMI table (`--with_umi` runs) and the mapping table are collapsed.
 
 **Variants**
 
-6. **Variants.** *Which variants does each genome carry, and how fixed are they?* Four cards:
+6. **Variants.** *Which variants does each genome carry, and how fixed are they?* Read from
+   `variants`, the iVar table or, with `--variant_caller bcftools`, the filtered bcftools VCFs, so
+   the tab stays with either caller. Variant type, Route and Segment filters. Four cards:
    passing calls by allele frequency band (fixed at 0.9 or more, major from 0.5, minor below),
    minor calls kept or filtered, call depth and the genomes carrying a passing call. Every call on
    a genome view, one lane per genome (up to 12, opening on every reference at once), and allele
-   frequency against depth (cut at 10 reads and half frequency, with smaller points because the calls overlap). The call table is collapsed.
+   frequency against depth (cut at 10 reads and half frequency, with smaller points because the calls overlap). Intra-host diversity (collapsed): the Shannon entropy of the alleles at every position with an alternative allele, one lane per genome, from every call before the frequency filter, with a card of the mixed positions (second allele at 5 % or more). The call table and iVar's own table (p-value, codon change; pruned with a bcftools run) are collapsed.
+   A collapsed Genome browser section (`MAPPING_REFERENCES_FASTA` only) opens the picked genome on
+   its reference and steps between its 5' and 3' ends (200 bp): mosdepth's per-base depth, iVar's
+   plain-text VCF and the deduplicated BAM (soft clips shown). Without the variable it is removed.
 
 ## Notes
 
-- Genome browser. The pipeline publishes its filtered VCFs (`*.filtered.vcf.gz`) next to the
-  tabix index of the sorted VCF it filtered (`*.sort.vcf.gz.tbi`), so no published VCF has its
-  own index and an `indexed_file` collection cannot range-read them. Its references are viral
-  genomes no bundled assembly covers, so the genome view derives its axis from the rows; with
-  several references in one run the axis lists each of them, and a lane shows its calls on its
-  own reference. The view does not open on a given reference: the axis order is the natural
-  order of the reference names and the lane order that of the genome ids, neither of which a
-  recipe can set, so no default region names the reference carrying the most calls. Brush a
-  reference to zoom on it. The base.yaml carries a `TODO(jbrowse)` for the JBrowse2 swap;
-  coupling the view to a JBrowse tile, as nf-core/viralrecon 3.0.0 does, is a follow-up.
+- Genome browser. Every genome is its own reference (a constraint reference, a pool pick, or the
+  sample's own de novo consensus), and a `genomic_tracks` collection takes one assembly. The
+  browser therefore reads one indexed multi-FASTA of every mapping reference of the run,
+  `MAPPING_REFERENCES_FASTA`; the pipeline does not publish it, so the tab is opt-in (a
+  conditional removes `tracks` and `genome_loci` without it). The pipeline publishes its filtered
+  VCFs (`*.filtered.vcf.gz`) next to the tabix index of the sorted VCF (`*.sort.vcf.gz.tbi`), so
+  no bgzipped VCF has its own index; the browser reads iVar's plain-text `*.vcf` whole instead,
+  and a bcftools run has no variant track. BAMs are not in the megatest subset, so the read track
+  is checked on fixtures only. The Variants tab keeps its table-backed genome view, which needs
+  none of this: its axis comes from the rows, a lane per genome on its own reference.
 - The depth along each genome is a line figure over the position, not a coverage track: the genomes
   of a run sit on different references, and lines overlay them from their first base. It is a code
   figure because the profile kind has no horizontal reference line, and the 10X line is what the

@@ -94,6 +94,8 @@ REGISTRY: dict[str, RecipeScope] = {
     # nf-core/viralrecon
     "nf-core/viralrecon/upset_canonical": _agg(),
     "nf-core/viralrecon/variant_feature_matrix_canonical": _agg("sample_id"),
+    # nf-core/viralmetagenome: one column per sample
+    "nf-core/viralmetagenome/genome_matrix": _agg(),
     # nf-core/taxprofiler
     "taxpasta/embedding": _agg("sample_id"),
     "taxpasta/matrix": _agg(),

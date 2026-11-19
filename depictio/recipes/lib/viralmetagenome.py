@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from pathlib import PurePosixPath
 
 import polars as pl
 
@@ -165,6 +166,10 @@ GENOME_NUMERIC: dict[str, tuple[tuple[str, ...], type[pl.DataType]]] = {
     "blast_identity_pct": (("(blast) pident",), pl.Float64),
     "blast_aligned_bp": (("(blast) length",), pl.Int64),
     "blast_bitscore": (("(blast) bitscore",), pl.Float64),
+    "blast_qlen": (("(blast) qlen",), pl.Int64),
+    "blast_slen": (("(blast) slen",), pl.Int64),
+    "blast_sstart": (("(blast) sstart",), pl.Int64),
+    "blast_send": (("(blast) send",), pl.Int64),
     "checkv_contamination": (("(checkv) contamination",), pl.Float64),
     "checkv_genes": (("(checkv) gene_count",), pl.Int64),
     "checkv_viral_genes": (("(checkv) viral_genes",), pl.Int64),
@@ -228,10 +233,68 @@ GENOME_SCHEMA: dict[str, type[pl.DataType]] = {
     "route": pl.Utf8,
     "step": pl.Utf8,
     "virus": pl.Utf8,
+    "segment": pl.Utf8,
+    "virus_segment": pl.Utf8,
     **{c: dtype for c, (_, dtype) in GENOME_NUMERIC.items()},
     **dict.fromkeys(GENOME_TEXT, pl.Utf8),
     "blast_query_cover_pct": pl.Float64,
+    "ref_cover_pct": pl.Float64,
+    "len_minus_ref": pl.Int64,
+    "ref_length_pct": pl.Float64,
+    "completeness_call": pl.Utf8,
 }
+
+#: The reference cover a genome needs to read Complete, and the floor of Partial.
+#: Reading aids, not published pass marks: a consensus of the full segment
+#: aligns over its whole reference, give or take the primer-trimmed ends.
+REF_COVER_COMPLETE = 95.0
+REF_COVER_PARTIAL = 50.0
+#: A genome that aligns along nearly all of its own length (query cover) but
+#: reaches less than this share of the reference's length is shorter than its
+#: hit, end to end. BLAST cannot say why: the reference may be longer than the
+#: segment (an influenza segment 8 of ~890 nt against a 2349 nt hit), or the
+#: genome may stop short of both ends. Its low reference cover is flagged for a
+#: look at the hit rather than read as a partial genome.
+REF_MISMATCH_QUERY_COVER = 90.0
+REF_MISMATCH_LENGTH_PCT = 60.0
+
+COMPLETENESS_COMPLETE = "Complete"
+COMPLETENESS_PARTIAL = "Partial"
+COMPLETENESS_FRAGMENT = "Fragment"
+COMPLETENESS_MISMATCH = "Shorter than reference"
+COMPLETENESS_NO_HIT = "No BLAST hit"
+
+
+def completeness_call() -> pl.Expr:
+    """What the BLAST reference cover says of a genome, in one word.
+
+    Reads ``ref_cover_pct``, ``ref_length_pct`` and ``blast_query_cover_pct``.
+    A segmented genome is judged segment by segment against its own BLAST hit,
+    which is why this leads over CheckV, whose completeness of a segmented
+    virus is the share of the whole genome one segment carries.
+    """
+    cover = pl.col("ref_cover_pct")
+    return (
+        pl.when(cover.is_null())
+        .then(pl.lit(COMPLETENESS_NO_HIT))
+        .when(
+            (pl.col("blast_query_cover_pct") >= REF_MISMATCH_QUERY_COVER)
+            & (pl.col("ref_length_pct") < REF_MISMATCH_LENGTH_PCT)
+        )
+        .then(pl.lit(COMPLETENESS_MISMATCH))
+        .when(cover >= REF_COVER_COMPLETE)
+        .then(pl.lit(COMPLETENESS_COMPLETE))
+        .when(cover >= REF_COVER_PARTIAL)
+        .then(pl.lit(COMPLETENESS_PARTIAL))
+        .otherwise(pl.lit(COMPLETENESS_FRAGMENT))
+    )
+
+
+def _segment_label(raw: pl.Expr) -> pl.Expr:
+    """A segment name as a reader writes it: ``segment 4`` and ``Segment_4`` read ``4``."""
+    value = raw.str.strip_chars().str.replace(r"(?i)^segment[\s_-]*", "")
+    return pl.when(value.is_in(_UNNAMED) | value.is_null()).then(None).otherwise(value)
+
 
 # Placeholder strings a missing annotation is written with.
 _UNNAMED = ["", "NA", "N/A", "None", "nan", "null", "-"]
@@ -279,6 +342,21 @@ def tidy_genome_overview(df: pl.DataFrame, default_route: str) -> pl.DataFrame:
         .then((pl.col("blast_aligned_bp") * 100.0 / pl.col("consensus_length")).round(2))
         .otherwise(None)
         .alias("blast_query_cover_pct"),
+        pl.when(pl.col("blast_slen") > 0)
+        .then(
+            (
+                ((pl.col("blast_send") - pl.col("blast_sstart")).abs() + 1)
+                * 100.0
+                / pl.col("blast_slen")
+            ).round(2)
+        )
+        .otherwise(None)
+        .alias("ref_cover_pct"),
+        (pl.col("blast_qlen") - pl.col("blast_slen")).alias("len_minus_ref"),
+        pl.when(pl.col("blast_slen") > 0)
+        .then((pl.col("blast_qlen") * 100.0 / pl.col("blast_slen")).round(2))
+        .otherwise(None)
+        .alias("ref_length_pct"),
     )
     virus = pl.coalesce(
         [
@@ -286,11 +364,22 @@ def tidy_genome_overview(df: pl.DataFrame, default_route: str) -> pl.DataFrame:
             for c in ("annotation_acronym", "annotation_name", "constraint_species")
         ]
     )
+    segment = pl.coalesce(
+        [_segment_label(pl.col(c)) for c in ("annotation_segment", "constraint_segment")]
+    )
     out = out.with_columns(
         virus.fill_null("Unclassified").alias("virus"),
+        segment.alias("segment"),
+        completeness_call().alias("completeness_call"),
         pl.struct("sample", "reference")
         .map_elements(lambda r: genome_id(r["sample"], r["reference"]), return_dtype=pl.Utf8)
         .alias("genome_id"),
+    )
+    out = out.with_columns(
+        pl.when(pl.col("segment").is_null())
+        .then(pl.col("virus"))
+        .otherwise(pl.concat_str([pl.col("virus"), pl.col("segment")], separator=" "))
+        .alias("virus_segment")
     )
     return out.select([pl.col(c).cast(t) for c, t in GENOME_SCHEMA.items()])
 
@@ -362,3 +451,159 @@ def design_columns(metadata: pl.DataFrame | None, reserved: set[str]) -> pl.Data
         .filter(pl.col("sample").is_not_null())
         .unique(subset="sample", keep="first")
     )
+
+
+# ---------------------------------------------------------------------------
+# VCF records (variants/<caller>/<sample>/*.vcf.gz)
+# ---------------------------------------------------------------------------
+
+VCF_RAW_COL = "raw_line"
+VCF_PATH_COL = "source_path"
+#: Read a VCF one line per row: the record separator never occurs in a VCF, so
+#: every line, header included, lands whole in ``raw_line``.
+VCF_RAW_READ_KWARGS = {
+    "separator": "\x1e",
+    "has_header": False,
+    "quote_char": None,
+    "new_columns": [VCF_RAW_COL],
+    "infer_schema_length": 0,
+}
+# `<id>_<step>.filtered.vcf.gz`, `.norm.vcf.gz`, `.org.vcf.gz`, `.sort.vcf.gz`, `.vcf.gz`.
+_VCF_SUFFIX = re.compile(r"(?:\.(?:filtered|norm|org|sort))?\.vcf(?:\.gz)?$")
+
+
+def path_ids(path: str) -> list[str | None]:
+    """``[caller, sample, reference, route, genome_id]`` read off a VCF's place."""
+    p = PurePosixPath(path)
+    # The run prefix goes first: a prefix holding the sample name would
+    # otherwise be read as the start of the sample's own part.
+    stem = strip_global_prefix(_VCF_SUFFIX.sub("", p.name))
+    parts = p.parts
+    caller = parts[-3] if len(parts) >= 3 else None
+    sample = sample_from_path(f"{p.parent}/{stem}", (caller or "", "variants"))
+    if sample == stem:
+        sample = strip_global_prefix(stem)
+        return [caller, sample, None, None, sample]
+    reference, route, _step = split_mapping_name(stem, sample)
+    return [caller, sample, reference, route, genome_id(sample, reference)]
+
+
+def _format_value(key: str) -> pl.Expr:
+    """FORMAT field ``key`` of the first sample column, located by its FORMAT position."""
+    keys = pl.col("format").str.split(":")
+    values = pl.col("sample_field").str.split(":")
+    index = keys.list.eval(pl.element() == key).list.arg_max()
+    return (
+        pl.when(keys.list.contains(key))
+        .then(values.list.get(index, null_on_oob=True))
+        .otherwise(None)
+    )
+
+
+def _frequency_class(af: pl.Expr) -> pl.Expr:
+    """Fixed (0.9 or more), Major (0.5 to 0.9) or Minor, iVar's table bands."""
+    return (
+        pl.when(af >= 0.9)
+        .then(pl.lit("Fixed"))
+        .when(af >= 0.5)
+        .then(pl.lit("Major"))
+        .when(af.is_not_null())
+        .then(pl.lit("Minor"))
+        .otherwise(None)
+    )
+
+
+def vcf_calls(raw: pl.DataFrame) -> pl.DataFrame:
+    """One row per VCF record of a raw ``raw_line`` / ``source_path`` frame."""
+    ids = (
+        raw.select(VCF_PATH_COL)
+        .unique()
+        .with_columns(
+            pl.col(VCF_PATH_COL).map_elements(path_ids, return_dtype=pl.List(pl.Utf8)).alias("_ids")
+        )
+        .select(
+            VCF_PATH_COL,
+            *[
+                pl.col("_ids").list.get(i).alias(name)
+                for i, name in enumerate(["caller", "sample", "reference", "route", "genome_id"])
+            ],
+        )
+    )
+    fields = pl.col(VCF_RAW_COL).str.split("\t")
+    df = (
+        raw.filter(
+            pl.col(VCF_RAW_COL).is_not_null()
+            & pl.col(VCF_RAW_COL).str.contains(r"^[^#\t][^\t]*\t\d+\t")
+        )
+        .with_columns(
+            fields.list.get(0, null_on_oob=True).alias("chrom"),
+            fields.list.get(1, null_on_oob=True).cast(pl.Int64, strict=False).alias("pos"),
+            fields.list.get(3, null_on_oob=True).alias("ref"),
+            fields.list.get(4, null_on_oob=True)
+            .str.split(",")
+            .list.get(0, null_on_oob=True)
+            .alias("alt"),
+            fields.list.get(6, null_on_oob=True).alias("filter_status"),
+            fields.list.get(7, null_on_oob=True).alias("info"),
+            fields.list.get(8, null_on_oob=True).alias("format"),
+            fields.list.get(9, null_on_oob=True).alias("sample_field"),
+        )
+        .join(ids, on=VCF_PATH_COL, how="left")
+        # `call --keep-alts` writes the unobserved-allele placeholder `<*>`.
+        .filter(pl.col("alt").is_not_null() & ~pl.col("alt").str.contains(r"^<.*>$|^\*$"))
+    )
+    ad = _format_value("AD").str.split(",")
+    ad_ref = ad.list.get(0, null_on_oob=True).cast(pl.Float64, strict=False)
+    ad_alt = ad.list.get(1, null_on_oob=True).cast(pl.Float64, strict=False)
+    df = df.with_columns(
+        pl.coalesce(
+            _format_value("DP").cast(pl.Int64, strict=False),
+            pl.col("info").str.extract(r"(?:^|;)DP=(\d+)", 1).cast(pl.Int64, strict=False),
+        ).alias("total_dp"),
+        pl.coalesce(
+            ad_alt.cast(pl.Int64, strict=False),
+            _format_value("ALT_DP").cast(pl.Int64, strict=False),
+        ).alias("alt_dp"),
+        pl.when((ad_ref + ad_alt) > 0)
+        .then(ad_alt / (ad_ref + ad_alt))
+        .otherwise(None)
+        .alias("_ad_af"),
+        _format_value("ALT_FREQ").cast(pl.Float64, strict=False).alias("_alt_freq"),
+    ).with_columns(
+        # The alternative depth over the depth first: after `norm --multiallelics
+        # -any` a record's AD holds the reference and its own allele only, so
+        # AD[1] / (AD[0] + AD[1]) leaves the other alleles' reads out. The
+        # pipeline filters on the same AD[1] / DP.
+        pl.coalesce(
+            pl.col("_alt_freq"),
+            pl.when(pl.col("total_dp") > 0).then(pl.col("alt_dp") / pl.col("total_dp")),
+            pl.col("_ad_af"),
+        )
+        .round(4)
+        .alias("af"),
+    )
+    ref_len = pl.col("ref").str.len_chars()
+    alt_len = pl.col("alt").str.len_chars()
+    return df.with_columns(
+        pl.when((ref_len == 1) & (alt_len == 1))
+        .then(pl.lit("SNV"))
+        .when(alt_len > ref_len)
+        .then(pl.lit("Insertion"))
+        .when(alt_len < ref_len)
+        .then(pl.lit("Deletion"))
+        .otherwise(pl.lit("MNV"))
+        .alias("variant_type"),
+        (
+            pl.col("chrom")
+            + ":"
+            + pl.col("pos").cast(pl.Utf8)
+            + pl.col("ref").str.slice(0, 20)
+            + ">"
+            + pl.col("alt").str.slice(0, 20)
+        ).alias("variant_key"),
+        _frequency_class(pl.col("af")).alias("frequency_class"),
+        pl.when(pl.col("filter_status").is_in(["PASS", ".", ""]))
+        .then(pl.lit("PASS"))
+        .otherwise(pl.lit("Filtered"))
+        .alias("filter"),
+    ).filter(pl.col("pos").is_not_null())

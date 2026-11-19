@@ -20,15 +20,22 @@ consensus of the last refinement step of a de novo one. The design columns of
 the sample hub (``samples``) follow ``sample``, so ``{GROUP_COL}`` resolves here
 too.
 
+``cluster_type`` says what a genome was built on: ``Reference-anchored`` or
+``Contig-only`` for a de novo genome (the centroid of its cluster, from
+``vmg_clusters``: a reference-pool sequence or one of the sample's own contigs),
+``Constraint reference`` for a constraint mapping. A contig-only genome has no
+reference behind its ends, which is where its consensus is least certain.
+
 Sources:
     denovo      ``vmg_contigs_overview``, optional
     constraint  ``vmg_mapping_overview``, optional
     checkv      ``checkv_quality``, optional
+    clusters    ``vmg_clusters``, optional
     samples     ``samples``, the sample hub, optional
 
 Output schema: ``GENOME_SCHEMA`` of ``depictio.recipes.lib.viralmetagenome``, then
-``checkv_completeness`` and ``completeness_method``, with the design columns
-after ``sample``.
+``checkv_completeness``, ``completeness_method`` and ``cluster_type``, with the
+design columns after ``sample``.
 """
 
 from __future__ import annotations
@@ -40,6 +47,8 @@ from depictio.recipes.lib.viralmetagenome import (
     GENOME_SCHEMA,
     NO_GROUP_COL,
     NO_GROUP_VALUE,
+    ROUTE_CONSTRAINT,
+    ROUTE_DENOVO,
     split_mapping_name,
 )
 
@@ -59,6 +68,12 @@ SOURCES: list[RecipeSource] = [
         optional=True,
         input_schema={"sample": pl.Utf8, "contig_id": pl.Utf8, "completeness": pl.Float64},
     ),
+    RecipeSource(
+        ref="clusters",
+        dc_ref="vmg_clusters",
+        optional=True,
+        input_schema={"sample": pl.Utf8, "cluster": pl.Utf8, "cluster_type": pl.Utf8},
+    ),
     RecipeSource(ref="samples", dc_ref="samples", optional=True, input_schema={"sample": pl.Utf8}),
 ]
 
@@ -67,7 +82,9 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     **GENOME_SCHEMA,
     "checkv_completeness": pl.Float64,
     "completeness_method": pl.Utf8,
+    "cluster_type": pl.Utf8,
 }
+CLUSTER_TYPE_CONSTRAINT = "Constraint reference"
 
 #: Measures of the sample hub, which are not design columns.
 _SAMPLE_MEASURES = {
@@ -166,6 +183,26 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     checkv = sources.get("checkv")
     if _present(checkv):
         genomes = genomes.join(_completeness(checkv, genomes), on="genome_id", how="left")
+    clusters = sources.get("clusters")
+    if _present(clusters):
+        genomes = genomes.join(
+            clusters.select(
+                pl.col("sample").cast(pl.Utf8),
+                pl.col("cluster").cast(pl.Utf8).alias("reference"),
+                pl.col("cluster_type").cast(pl.Utf8),
+                pl.lit(ROUTE_DENOVO).alias("route"),
+            ).unique(subset=["sample", "reference"]),
+            on=["sample", "reference", "route"],
+            how="left",
+        )
+    else:
+        genomes = genomes.with_columns(pl.lit(None, dtype=pl.Utf8).alias("cluster_type"))
+    genomes = genomes.with_columns(
+        pl.when(pl.col("route") == ROUTE_CONSTRAINT)
+        .then(pl.lit(CLUSTER_TYPE_CONSTRAINT))
+        .otherwise(pl.col("cluster_type"))
+        .alias("cluster_type")
+    )
     for col in ("checkv_completeness", "completeness_method"):
         if col not in genomes.columns:
             genomes = genomes.with_columns(pl.lit(None, dtype=OUTPUT_SCHEMA[col]).alias(col))
