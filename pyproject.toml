@@ -195,12 +195,9 @@ exclude = [
   # `depictio build-static` (producer B) injects its manifest into it, so a
   # pip-installed CLI can build a bundle without a checkout.
   "viewer/dist-static/static.html",
-  # The report runtime (same build): what a rendered notebook report inlines
-  # to draw its tiles with the dashboard's renderers (serverless/report.py).
-  "viewer/dist-static/report-runtime.js",
-  "viewer/dist-static/report-runtime.css",
-  # The combined runtime (same build): the report AND the dashboard in one file
-  # (serverless/combined.py, `depictio dashboard combine-report`).
+  # The runtime a rendered notebook report embeds (same build): its tiles drawn
+  # by the dashboard's renderers, and the whole dashboard in the combined file
+  # (serverless/combined.py).
   "viewer/dist-static/combined-runtime.js",
   "viewer/dist-static/combined-runtime.css",
   # Its conditional add-ons (3Dmol.js, 0.54 MB raw / 0.16 MB deflated), appended

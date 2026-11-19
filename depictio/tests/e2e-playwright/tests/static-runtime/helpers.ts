@@ -166,20 +166,21 @@ export async function blockNetwork(page: Page): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
-// The report host: the same runtime mounted into a report's tiles
+// A report with the runtime embedded: the report alone, or the report AND the
+// dashboard in one HTML (the combined file)
 // ---------------------------------------------------------------------------
 
 const DIST_STATIC = join(REPO_ROOT, "depictio/viewer/dist-static");
-export const REPORT_RUNTIME_JS = join(DIST_STATIC, "report-runtime.js");
+export const RUNTIME_JS = join(DIST_STATIC, "combined-runtime.js");
 /** The report skeleton: the DOM Quarto renders from the notebook generator's
  *  placeholders, for the penguins demo manifest. Regenerate with
  *  `depictio/serverless/examples/generate_report_fixture.py`. */
 export const PENGUINS_REPORT = join(REPO_ROOT, "depictio/viewer/demo/reports/penguins.html");
 
-export function skipUnlessReportRuntimeBuilt(): void {
+export function skipUnlessRuntimeBuilt(): void {
   test.skip(
-    !existsSync(REPORT_RUNTIME_JS),
-    "report runtime not built — run `pnpm run build:static` in depictio/viewer first",
+    !existsSync(RUNTIME_JS),
+    "static runtime not built — run `pnpm run build:static` in depictio/viewer first",
   );
 }
 
@@ -188,71 +189,54 @@ const jsonScript = (id: string, payload: unknown) =>
     .replace(/<\//g, "<\\/")
     .replace(/<!--/g, "<\\u0021--")}</script>`;
 
+const scriptText = (text: string) =>
+  text.replace(/<\/script/g, "<\\/script").replace(/<!--/g, "<\\!--");
+
 /** The penguins report with the runtime and the manifest inlined once at its
- *  end — the producer's block (depictio/notebook/report_runtime.py) — opened
- *  on `initialFilters`. Returns a file:// URL. */
-export function reportUrl(initialFilters: unknown[] = []): string {
+ *  end — the producer's composition (depictio/serverless/combined.py) for a
+ *  report with no Plotly copy of its own — opened on `initialFilters`.
+ *  `defaultView` makes it the combined file (the switch on, opening on that
+ *  view); without it, the report alone. Returns a file:// URL. */
+function runtimeReportUrl(
+  initialFilters: unknown[],
+  defaultView: "report" | "dashboard" | null,
+  edit?: (manifest: Record<string, any>) => void,
+): string {
   const manifest = JSON.parse(readFileSync(PENGUINS_MANIFEST, "utf-8"));
   manifest.initial_filters = initialFilters;
-  const js = readFileSync(REPORT_RUNTIME_JS, "utf-8")
-    .replace(/<\/script/g, "<\\/script")
-    .replace(/<!--/g, "<\\!--");
-  const css = readFileSync(join(DIST_STATIC, "report-runtime.css"), "utf-8");
+  edit?.(manifest);
+  const config: Record<string, unknown> = { brand: { primary: "#228be6" } };
+  if (defaultView) config.combined = { default_view: defaultView };
   const block =
-    `<style data-depictio-report-runtime="css">${css}</style>` +
-    jsonScript("depictio-report-config", { brand: { primary: "#228be6" } }) +
+    jsonScript("depictio-report-config", config) +
     jsonScript("depictio-report-manifest", manifest) +
-    `<script data-depictio-report-runtime="js">${js}</script>`;
+    `<script type="text/plain" data-depictio-runtime="css">${scriptText(
+      readFileSync(join(DIST_STATIC, "combined-runtime.css"), "utf-8"),
+    )}</script>` +
+    `<script data-depictio-runtime="js">${scriptText(readFileSync(RUNTIME_JS, "utf-8"))}</script>`;
   const html = readFileSync(PENGUINS_REPORT, "utf-8").replace(
     "<!--DEPICTIO_REPORT_RUNTIME-->",
     () => block,
   );
-  const dir = fixtureDir("depictio-report-");
-  const out = join(dir, "report-fixture.html");
+  const dir = fixtureDir(defaultView ? "depictio-combined-" : "depictio-report-");
+  const out = join(dir, defaultView ? "combined-fixture.html" : "report-fixture.html");
   writeFileSync(out, html);
   return `file://${out}`;
 }
 
-// ---------------------------------------------------------------------------
-// The combined file: the report AND the dashboard, one HTML
-// ---------------------------------------------------------------------------
-
-export const COMBINED_RUNTIME_JS = join(DIST_STATIC, "combined-runtime.js");
-
-export function skipUnlessCombinedRuntimeBuilt(): void {
-  test.skip(
-    !existsSync(COMBINED_RUNTIME_JS),
-    "combined runtime not built — run `pnpm run build:static` in depictio/viewer first",
-  );
+/** The report alone (no "Report | Dashboard" switch); `edit` changes the
+ *  manifest first. */
+export function reportUrl(
+  initialFilters: unknown[] = [],
+  edit?: (manifest: Record<string, any>) => void,
+): string {
+  return runtimeReportUrl(initialFilters, null, edit);
 }
 
-/** The penguins report as a combined file (the producer's composition,
- *  depictio/serverless/combined.py, for a report with no Plotly copy of its
- *  own), opened on `initialFilters`. Returns a file:// URL. */
+/** The combined file, opening on `defaultView` when its link names none. */
 export function combinedUrl(
   initialFilters: unknown[] = [],
   defaultView: "report" | "dashboard" = "report",
 ): string {
-  const manifest = JSON.parse(readFileSync(PENGUINS_MANIFEST, "utf-8"));
-  manifest.initial_filters = initialFilters;
-  const inert = (text: string) =>
-    text.replace(/<\/script/g, "<\\/script").replace(/<!--/g, "<\\!--");
-  const js = readFileSync(COMBINED_RUNTIME_JS, "utf-8");
-  const css = readFileSync(join(DIST_STATIC, "combined-runtime.css"), "utf-8");
-  const block =
-    jsonScript("depictio-report-config", {
-      brand: { primary: "#228be6" },
-      combined: { default_view: defaultView },
-    }) +
-    jsonScript("depictio-report-manifest", manifest) +
-    `<script type="text/plain" data-depictio-runtime="css">${inert(css)}</script>` +
-    `<script data-depictio-runtime="js">${inert(js)}</script>`;
-  const html = readFileSync(PENGUINS_REPORT, "utf-8").replace(
-    "<!--DEPICTIO_REPORT_RUNTIME-->",
-    () => block,
-  );
-  const dir = fixtureDir("depictio-combined-");
-  const out = join(dir, "combined-fixture.html");
-  writeFileSync(out, html);
-  return `file://${out}`;
+  return runtimeReportUrl(initialFilters, defaultView);
 }

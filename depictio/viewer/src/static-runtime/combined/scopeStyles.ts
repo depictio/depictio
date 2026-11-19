@@ -1,15 +1,15 @@
 /**
  * The App's stylesheet, scoped in the page onto the runtime's roots.
  *
- * A combined file carries ONE copy of the runtime's stylesheet, unscoped, as
- * inert text: the dashboard view (its own document, an iframe) takes it as
- * written, exactly as the bundle does. The report view cannot: the page is
- * Quarto's, and Mantine's global rules (`:root` tokens, `body`, element
- * resets) would restyle it. So here, in the report, the browser parses the
- * text into a constructed stylesheet, every selector is moved onto the
- * runtime's roots by the same rule the report runtime's build applies
- * (`scopeSelector`, `vite-plugins/scope-css.ts`), and the sheet is adopted.
- * Shipping a second, pre-scoped copy would cost the file ~0.6 MB.
+ * A report that embeds the runtime carries ONE copy of its stylesheet,
+ * unscoped, as inert text: the dashboard view of a combined file (its own
+ * document, an iframe) takes it as written, exactly as the bundle does. The
+ * report view cannot: the page is Quarto's, and Mantine's global rules
+ * (`:root` tokens, `body`, element resets) would restyle it. So here, in the
+ * report, the browser parses the text into a constructed stylesheet, every
+ * selector is moved onto the runtime's roots (`scopeSelector`), and the
+ * scoped rules are written into the page. Shipping a second, pre-scoped copy
+ * would cost the file ~0.6 MB.
  */
 import { scopeSelectorList } from 'depictio-static-core';
 
@@ -68,10 +68,9 @@ export function scopedSheet(
  * Not an adopted sheet: adopted sheets cascade after every sheet of the
  * document, so the stylesheet's own `:root` tokens (moved onto the root) would
  * override the ones Mantine writes for the report's brand, which arrive later
- * in a `<style>` of the runtime's React tree. In document order those win, as
- * they did when the report runtime's stylesheet was inlined at the page's end.
+ * in a `<style>` of the runtime's React tree. In document order those win.
  */
-export function adoptScopedStyles(
+export function injectScopedStyles(
   doc: Document,
   css: string,
   root: string,

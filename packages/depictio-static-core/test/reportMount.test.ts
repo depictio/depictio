@@ -6,10 +6,13 @@ import { parseManifest, type BundleManifest } from '../src/manifest';
 import {
   compactPanelSections,
   componentFor,
+  familyTabs,
+  formatTileRef,
   groupMountVerdict,
   parseTileRefs,
   reportCategorySource,
   restoreReportBasemaps,
+  tabDoc,
   tileMountVerdict,
 } from '../src/reportMount';
 
@@ -31,6 +34,30 @@ describe('parseTileRefs', () => {
 
   it('splits on the first colon only (an index may carry one)', () => {
     expect(parseTileRefs('tab:a:b')).toEqual([{ tabId: 'tab', index: 'a:b' }]);
+  });
+
+  it('reads back what formatTileRef writes', () => {
+    const refs = [
+      { tabId: TAB, index: 'comp-card-1' },
+      { tabId: 'tab', index: 'a:b' },
+    ];
+    expect(parseTileRefs(refs.map(formatTileRef).join(' '))).toEqual(refs);
+  });
+});
+
+describe('familyTabs / tabDoc', () => {
+  it('a single-tab bundle is its one dashboard', () => {
+    const m = fixture();
+    m.tabs = [];
+    expect(familyTabs(m).map((t) => t.id)).toEqual([m.dashboard.id]);
+    expect(tabDoc(m, m.dashboard.id)).toBe(m.dashboard.doc);
+    expect(tabDoc(m, 'elsewhere')).toBeNull();
+  });
+
+  it('a family is its tabs, each with its own document', () => {
+    const m = parseManifest(JSON.parse(readFileSync(TABS_FIXTURE, 'utf-8')));
+    expect(familyTabs(m)).toBe(m.tabs);
+    for (const tab of m.tabs) expect(tabDoc(m, tab.id)).toBe(tab.doc);
   });
 });
 

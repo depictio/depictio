@@ -33,6 +33,9 @@ export const REPORT_TILE_ATTR = 'data-depictio-tile';
 export const REPORT_FILTERS_ATTR = 'data-depictio-filters';
 /** `<script type="application/json">` holding the manifest in a report. */
 export const REPORT_MANIFEST_ID = 'depictio-report-manifest';
+/** `<script type="application/json">` holding the manifest in a bundle (and in
+ *  the dashboard view of a combined file). */
+export const BUNDLE_MANIFEST_ID = 'bundle-manifest';
 /** `<script type="application/json">` holding the report's look (brand). */
 export const REPORT_CONFIG_ID = 'depictio-report-config';
 /** Set on a placeholder once the runtime drew it; its fallback is then hidden. */
@@ -41,6 +44,11 @@ export const REPORT_MOUNTED_ATTR = 'data-depictio-mounted';
 export interface TileRef {
   tabId: string;
   index: string;
+}
+
+/** A ref as the placeholder writes it, and as hosts key tiles by. */
+export function formatTileRef(ref: TileRef): string {
+  return `${ref.tabId}:${ref.index}`;
 }
 
 /** `"<tab>:<index> <tab>:<index>"` → refs; malformed entries are dropped. */
@@ -62,12 +70,19 @@ interface DocComponent {
   component_type?: unknown;
 }
 
-function tabDoc(manifest: BundleManifest, tabId: string): Record<string, unknown> | null {
+/** The bundle's tabs: the family, or the one dashboard of a single-tab bundle. */
+export function familyTabs(
+  manifest: BundleManifest,
+): { id: string; title: string; doc: Record<string, unknown> }[] {
   const tabs = manifest.tabs ?? [];
-  if (tabs.length === 0) {
-    return manifest.dashboard.id === tabId ? manifest.dashboard.doc : null;
-  }
-  return tabs.find((t) => t.id === tabId)?.doc ?? null;
+  if (tabs.length > 0) return tabs;
+  const { id, title, doc } = manifest.dashboard;
+  return [{ id, title, doc }];
+}
+
+/** A tab's own document; null when the tab is not in the bundle. */
+export function tabDoc(manifest: BundleManifest, tabId: string): Record<string, unknown> | null {
+  return familyTabs(manifest).find((t) => t.id === tabId)?.doc ?? null;
 }
 
 /** The component a ref names, from its own tab's document. */
@@ -153,10 +168,7 @@ const MAP_SUBPLOTS = ['map', 'mapbox'] as const;
 export function restoreReportBasemaps(manifest: BundleManifest): number {
   let restored = 0;
   const styleOf = new Map<string, string>();
-  const docs = (manifest.tabs ?? []).length
-    ? (manifest.tabs ?? []).map((t) => t.doc)
-    : [manifest.dashboard.doc];
-  for (const doc of docs) {
+  for (const { doc } of familyTabs(manifest)) {
     for (const m of (doc?.stored_metadata as Record<string, unknown>[] | undefined) ?? []) {
       const style = m.map_style;
       if (

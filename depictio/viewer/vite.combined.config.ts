@@ -1,19 +1,20 @@
 /**
- * The combined runtime: ONE script for both views of a combined report +
- * dashboard file (`src/static-runtime/combined/main.tsx`).
+ * The static runtime a rendered report embeds, in both of a report's outputs
+ * (`src/static-runtime/combined/main.tsx`): the report alone, and the combined
+ * report + dashboard file.
  *
  * The whole viewer App (the bundle's runtime) plus the report host, built as
  * one classic script (IIFE, every dynamic import inlined) and one UNSCOPED
  * stylesheet, `dist-static/combined-runtime.{js,css}`. The producer
  * (`depictio/serverless/combined.py`) inlines the script once, where the
  * report's own Plotly copy was, and the stylesheet once, as inert text: the
- * dashboard view (an iframe written from that same text) takes it as written,
- * the report view scopes it onto the runtime's roots in the page
- * (`combined/scopeStyles.ts`).
+ * report view scopes it onto the runtime's roots in the page
+ * (`combined/scopeStyles.ts`), and the dashboard view of a combined file (an
+ * iframe written from that same text) takes it as written.
  *
- * Same shims (`vite-plugins/static-runtime.ts`) as the bundle and the report
- * runtime: one runtime, now hosted twice by one file. Built after them into
- * the same `dist-static/` (`emptyOutDir: false`), by `pnpm run build:static`.
+ * Same shims (`vite-plugins/static-runtime.ts`) as the bundle. Built after it
+ * into the same `dist-static/` (`emptyOutDir: false`), by `pnpm run
+ * build:static`.
  */
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';

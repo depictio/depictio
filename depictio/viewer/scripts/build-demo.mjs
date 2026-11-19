@@ -18,8 +18,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { applyAddons } from './addons.mjs';
-import { REPORT_TOKEN, composeReportRuntime, readReportRuntime } from './report-runtime.mjs';
-import { composeCombined, readCombinedRuntime } from './combined-runtime.mjs';
+import { REPORT_TOKEN, composeRuntime, readCombinedRuntime } from './combined-runtime.mjs';
 
 const VIEWER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEMPLATE = join(VIEWER_DIR, 'dist-static', 'static.html');
@@ -69,23 +68,27 @@ writeFileSync(
   applyAddons(template, ['jbrowse']),
 );
 
-// The report host (the Quarto export's tiles drawn by this runtime): the
-// penguins report skeleton (demo/reports/penguins.html, written by
-// depictio/serverless/examples/generate_report_fixture.py) opened on an
-// exported state — species = Adelie — with the runtime and the manifest
-// inlined once at its end. Plus the floor every report pays for the runtime,
-// which CI checks against its own byte budget.
-const report = readReportRuntime(join(VIEWER_DIR, 'dist-static'));
-if (report) {
+// The runtime a report embeds (vite.combined.config.ts), in a report's two
+// outputs: the penguins report skeleton (demo/reports/penguins.html, written
+// by depictio/serverless/examples/generate_report_fixture.py) with the runtime
+// and the manifest inlined once at its end. The report alone opens on an
+// exported state (species = Adelie); the combined file adds the dashboard
+// behind a "Report | Dashboard" switch. Plus the floor every report pays for
+// the runtime, which CI checks against its own byte budget.
+const runtime = readCombinedRuntime(join(VIEWER_DIR, 'dist-static'));
+if (runtime) {
   writeFileSync(
-    join(VIEWER_DIR, 'dist-static', 'report-runtime-floor.html'),
-    composeReportRuntime({ ...report, manifest: null }),
+    join(VIEWER_DIR, 'dist-static', 'combined-runtime-floor.html'),
+    composeRuntime({ ...runtime, manifest: null, output: 'combined' }),
   );
-  const penguins = JSON.parse(
-    readFileSync(join(VIEWER_DIR, 'demo', 'manifests', 'penguins.json'), 'utf-8'),
-  );
-  const species = penguins.dashboard.doc.stored_metadata.find((c) => c.index === 'filter-species');
-  penguins.initial_filters = [
+  const skeleton = readFileSync(join(VIEWER_DIR, 'demo', 'reports', 'penguins.html'), 'utf-8');
+  const penguins = () =>
+    JSON.parse(readFileSync(join(VIEWER_DIR, 'demo', 'manifests', 'penguins.json'), 'utf-8'));
+  const config = { brand: { primary: '#228be6' } };
+
+  const exported = penguins();
+  const species = exported.dashboard.doc.stored_metadata.find((c) => c.index === 'filter-species');
+  exported.initial_filters = [
     {
       index: 'filter-species',
       value: ['Adelie'],
@@ -94,51 +97,39 @@ if (report) {
       metadata: { dc_id: species.dc_id, column_name: 'species', interactive_component_type: 'MultiSelect' },
     },
   ];
-  const skeleton = readFileSync(join(VIEWER_DIR, 'demo', 'reports', 'penguins.html'), 'utf-8');
-  const html = skeleton.replace(REPORT_TOKEN, () => composeReportRuntime({ ...report, manifest: penguins }));
-  writeFileSync(join(SITE_DIR, 'report-penguins.html'), html);
-  entries.push({
-    id: 'report-penguins',
-    file: 'report-penguins.html',
-    bytes: html.length,
-    title: 'Report host — the Quarto export\'s tiles drawn by this runtime',
-    description:
-      'A report page (the DOM Quarto renders from the notebook export) with the same manifest inlined once and the report runtime mounting each tile in place: the cards, the scatter, the tables and the advanced views are the dashboard\'s own renderers, the filter panel sits in the Filters part and recomputes every tile in the page. It opens on the exported state (species = Adelie); each tile\'s own export output stays as its fallback, and a tile the manifest does not hold keeps it.',
-  });
-  console.log(`report-penguins.html: ${(html.length / 1e6).toFixed(2)} MB — report host`);
+  const pages = [
+    {
+      id: 'report-penguins',
+      html: skeleton.replace(REPORT_TOKEN, () =>
+        composeRuntime({ ...runtime, manifest: exported, config, output: 'report' }),
+      ),
+      title: 'Report host — the Quarto export\'s tiles drawn by this runtime',
+      description:
+        'A report page (the DOM Quarto renders from the notebook export) with the same manifest inlined once and the runtime mounting each tile in place: the cards, the scatter, the tables and the advanced views are the dashboard\'s own renderers, the filter panel sits in the Filters part and recomputes every tile in the page. It opens on the exported state (species = Adelie); each tile\'s own export output stays as its fallback, and a tile the manifest does not hold keeps it.',
+    },
+    {
+      id: 'combined-penguins',
+      html: skeleton.replace(REPORT_TOKEN, () =>
+        composeRuntime({ ...runtime, manifest: penguins(), config, output: 'combined' }),
+      ),
+      title: 'Report + dashboard — one file, a "Report | Dashboard" switch',
+      description:
+        'The combined export: the same report, and the whole interactive dashboard one click away (a same-origin view built on demand from the script and manifest already in the page — nothing stored twice). One filter state across both views, "Open in dashboard" on each report tile, "Show in report" on each dashboard tile, deep links (#dashboard, #dashboard/<tab>, #report/<anchor>).',
+    },
+  ];
+  for (const page of pages) {
+    writeFileSync(join(SITE_DIR, `${page.id}.html`), page.html);
+    entries.push({
+      id: page.id,
+      file: `${page.id}.html`,
+      bytes: page.html.length,
+      title: page.title,
+      description: page.description,
+    });
+    console.log(`${page.id}.html: ${(page.html.length / 1e6).toFixed(2)} MB — ${page.title}`);
+  }
 } else {
-  console.warn('report runtime not built (vite.report.config.ts): the report demo is skipped');
-}
-
-// The combined file (the report AND the dashboard, one HTML, a "Report |
-// Dashboard" switch): the same penguins report skeleton, with the combined
-// runtime — the whole App plus the report host — inlined once. Plus its floor,
-// which CI checks against its own byte budget.
-const combinedRuntime = readCombinedRuntime(join(VIEWER_DIR, 'dist-static'));
-if (combinedRuntime) {
-  writeFileSync(
-    join(VIEWER_DIR, 'dist-static', 'combined-runtime-floor.html'),
-    composeCombined({ ...combinedRuntime, manifest: null }),
-  );
-  const penguins = JSON.parse(
-    readFileSync(join(VIEWER_DIR, 'demo', 'manifests', 'penguins.json'), 'utf-8'),
-  );
-  const skeleton = readFileSync(join(VIEWER_DIR, 'demo', 'reports', 'penguins.html'), 'utf-8');
-  const html = skeleton.replace(REPORT_TOKEN, () =>
-    composeCombined({ ...combinedRuntime, manifest: penguins, config: { brand: { primary: '#228be6' } } }),
-  );
-  writeFileSync(join(SITE_DIR, 'combined-penguins.html'), html);
-  entries.push({
-    id: 'combined-penguins',
-    file: 'combined-penguins.html',
-    bytes: html.length,
-    title: 'Report + dashboard — one file, a "Report | Dashboard" switch',
-    description:
-      'The combined export: the report page with its tiles drawn live, and the whole interactive dashboard one click away (a same-origin view built on demand from the script and manifest already in the page — nothing stored twice). One filter state across both views, "Open in dashboard" on each report tile, "Show in report" on each dashboard tile, deep links (#dashboard, #dashboard/<tab>, #report/<anchor>).',
-  });
-  console.log(`combined-penguins.html: ${(html.length / 1e6).toFixed(2)} MB — report + dashboard`);
-} else {
-  console.warn('combined runtime not built (vite.combined.config.ts): the combined demo is skipped');
+  console.warn('static runtime not built (vite.combined.config.ts): the report demos are skipped');
 }
 
 const sha = process.env.GITHUB_SHA?.slice(0, 8) ?? 'local';

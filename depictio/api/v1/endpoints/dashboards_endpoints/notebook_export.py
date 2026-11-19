@@ -733,14 +733,14 @@ def build_export_plan(
 # state the runtime cannot reproduce in the page is not embedded at all.
 
 
-def _runtime_refusal(
+def _owner_refusal(
     dashboard_id: PyObjectId, state: AnalysisState, current_user: User
 ) -> str | None:
-    """Why this report cannot embed the runtime, or ``None`` when it can."""
+    """Why this caller (or this state) cannot have the dashboard's manifest
+    embedded, or ``None``: a state the runtime reproduces, and an owner, as a
+    static export needs."""
     from depictio.serverless import report
 
-    if not report.runtime_available():
-        return "the report runtime is not built on this deployment"
     reason = report.ineligibility(state)
     if reason:
         return reason
@@ -756,6 +756,17 @@ def _runtime_refusal(
     if not project_id or not routes.check_project_permission(project_id, current_user, "owner"):
         return "embedding the dashboard's data is limited to its owners, as a static export is"
     return None
+
+
+def _runtime_refusal(
+    dashboard_id: PyObjectId, state: AnalysisState, current_user: User
+) -> str | None:
+    """Why this report cannot embed the runtime, or ``None`` when it can."""
+    from depictio.serverless import combined
+
+    if not combined.runtime_available():
+        return "the static runtime is not built on this deployment"
+    return _owner_refusal(dashboard_id, state, current_user)
 
 
 def _embed_runtime(
@@ -780,16 +791,11 @@ def _combined_refusal(
 ) -> str | None:
     """Why this caller cannot have the combined report + dashboard file.
 
-    It is a rendered report with the dashboard's manifest embedded, so it needs
-    both: a deployment that renders reports, and the runtime's rules (a state it
-    can reproduce, an owner, as a static export).
+    It is a rendered report with the runtime embedded and its switch on, so it
+    needs both: a deployment that renders reports, and the runtime's rules.
     """
-    from depictio.serverless import combined
-
     if not settings.notebook_export.render_enabled:
         return "this server does not render reports (Quarto is not enabled)"
-    if not combined.combined_runtime_available():
-        return "the combined runtime is not built on this deployment"
     return _runtime_refusal(dashboard_id, state, current_user)
 
 
@@ -867,11 +873,6 @@ def notebook_export(
 # export renders rather than computes costs a browser pass, so a dashboard's
 # report is minutes of work. The client starts it, polls the status, then
 # downloads.
-
-
-def combined_filename(stem: str) -> str:
-    """The combined file's name: the report's, marked as holding the dashboard."""
-    return f"{stem}-report-dashboard.html"
 
 
 def _require_render_enabled() -> None:
@@ -958,6 +959,8 @@ async def notebook_export_render(
     from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
     from depictio.api.v1.services.notebook_export import store
     from depictio.models.models.users import TokenData
+    from depictio.serverless.combined import combined_filename
+    from depictio.serverless.report import user_payload
 
     combined = request.output == "combined"
     if combined:
@@ -1010,17 +1013,13 @@ async def notebook_export_render(
             "api_url": settings.fastapi.internal_url,
             "token_id": str(token.id),
             # The worker builds the manifest in-process (producer A, as the
-            # static export does) and hands the document the composed block.
+            # static export does) and embeds it with the runtime after the
+            # render.
             "runtime": (
                 {
                     "dashboard_id": str(dashboard_id),
                     "state": request.state.model_dump(mode="json"),
-                    "user": {
-                        "id": user_id,
-                        "email": getattr(current_user, "email", "") or "",
-                        "is_admin": bool(getattr(current_user, "is_admin", False)),
-                        "is_anonymous": bool(getattr(current_user, "is_anonymous", False)),
-                    },
+                    "user": user_payload(current_user),
                     # The look the document's own cell would pass (its brand
                     # primary and type), so both render paths match.
                     "config": builder.runtime_config(),
@@ -1028,8 +1027,8 @@ async def notebook_export_render(
                 if embed_runtime
                 else None
             ),
-            # The combined file: the same render, then the report's runtime
-            # block swapped for the App runtime the dashboard view shares.
+            # The combined file: the same embedding, its switch to the
+            # dashboard on.
             "combined": {"default_view": request.default_view} if combined else None,
             "filename": filename,
             "pdf": bool(request.pdf),

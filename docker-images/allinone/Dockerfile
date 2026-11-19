@@ -117,11 +117,8 @@ COPY --from=viewer-builder /build/depictio/viewer/dist-embed/embed.html \
 # The serverless bundle template every static export injects its manifest into.
 COPY --from=viewer-builder /build/depictio/viewer/dist-static/static.html \
     /app/depictio/viewer/dist-static/static.html
-# The report runtime a rendered notebook report inlines (same build:static).
-COPY --from=viewer-builder /build/depictio/viewer/dist-static/report-runtime.js \
-    /build/depictio/viewer/dist-static/report-runtime.css \
-    /app/depictio/viewer/dist-static/
-# The combined report + dashboard runtime (same build:static).
+# The runtime a rendered report embeds, alone or with the dashboard (same
+# build:static).
 COPY --from=viewer-builder /build/depictio/viewer/dist-static/combined-runtime.js \
     /build/depictio/viewer/dist-static/combined-runtime.css \
     /app/depictio/viewer/dist-static/

@@ -127,30 +127,22 @@ jobs:
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-static/static-structure.html 4613734 static-runtime+3dmol
 
-      # The report runtime (vite.report.config.ts): what a rendered notebook
-      # report inlines ONCE to draw its tiles with the dashboard's renderers —
-      # its script + scoped stylesheet, composed with no manifest
-      # (dist-static/report-runtime-floor.html, written by build-demo.mjs).
-      # Measured 3.01 MB gzip (9.72 MB raw); budget = that + ~0.5 MB.
-      - name: Byte budget — report runtime (notebook report host)
+      # The runtime every rendered report embeds (vite.combined.config.ts), in
+      # both outputs (the report alone, and the report + dashboard file): the
+      # whole App runtime plus the report host, its stylesheet once as inert
+      # text — the floor every such report pays, on top of its report and
+      # manifest. It replaces Quarto's own plotly.js in the page. Measured
+      # 3.84 MB gzip (12.23 MB raw), the base runtime + 0.01 MB; budget = the
+      # base budget + 0.2 MB, as the add-on floors get.
+      - name: Byte budget — report runtime (report alone, or report + dashboard)
         working-directory: depictio/viewer
-        run: node scripts/check-bundle-budget.mjs dist-static/report-runtime-floor.html 3670016 report-runtime
+        run: node scripts/check-bundle-budget.mjs dist-static/combined-runtime-floor.html 4613734 combined-runtime
+
       # The genome-browser floor: the base runtime plus the conditional JBrowse
       # add-on (dist-static/static-genome.html, written by build-demo.mjs). The
       # add-on is JBrowse 2 + MUI + mobx, 3.04 MB raw / 0.92 MB gzip; the base
       # runtime keeps the depictio half of the renderer (+0.06 MB gzip). Measured
       # 4.73 MB; budget = the base budget + the add-on + 0.3 MB.
-      # The combined report + dashboard file (vite.combined.config.ts): the
-      # whole App runtime plus the report host, its stylesheet once as inert
-      # text — the floor every combined file pays, on top of its report and
-      # manifest. It replaces both the report runtime and Quarto's own
-      # plotly.js in the page. Measured 3.84 MB gzip (12.23 MB raw), the base
-      # runtime + 0.01 MB; budget = the base budget + 0.2 MB, as the add-on
-      # floors get.
-      - name: Byte budget — combined runtime (report + dashboard file)
-        working-directory: depictio/viewer
-        run: node scripts/check-bundle-budget.mjs dist-static/combined-runtime-floor.html 4613734 combined-runtime
-
       - name: Byte budget — static runtime + genome browser (JBrowse add-on)
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-static/static-genome.html 5662310 static-runtime+jbrowse
@@ -214,8 +206,6 @@ jobs:
           path: |
             depictio/viewer/dist-static/site/
             depictio/viewer/dist-static/static.html
-            depictio/viewer/dist-static/report-runtime.js
-            depictio/viewer/dist-static/report-runtime.css
             depictio/viewer/dist-static/combined-runtime.js
             depictio/viewer/dist-static/combined-runtime.css
             depictio/viewer/dist-static/addons/

@@ -22,12 +22,12 @@ from depictio.notebook.report_runtime import (
     FALLBACK_CLASS,
     FILTERS_ATTR,
     MANIFEST_ID,
-    RUNTIME_FILE_ENV,
-    RUNTIME_MARK,
+    RUNTIME_ATTR,
+    RUNTIME_DEFERRED_ENV,
     TILE_ATTR,
-    compose_report_runtime,
     json_script,
     raw_html_block,
+    runtime_parts,
     tile_close,
     tile_open,
 )
@@ -126,26 +126,35 @@ def test_the_runtime_takes_the_report_look(penguins_tabs):
 # ---------------------------------------------------------------------------
 
 
+def _block(**kw) -> str:
+    data, code = runtime_parts(**kw)
+    return data + code
+
+
 def test_compose_puts_everything_once_and_in_order():
-    html = compose_report_runtime(
+    html = _block(
         js="run()",
         css=".a{}",
         manifest={"x": "</script><!--"},
         config={"brand": None},
         addons='<script data-depictio-addon="3dmol">m()</script>',
     )
-    for needle in (f'id="{MANIFEST_ID}"', f'id="{CONFIG_ID}"', f'{RUNTIME_MARK}="js"'):
+    for needle in (f'id="{MANIFEST_ID}"', f'id="{CONFIG_ID}"', f'{RUNTIME_ATTR}="js"'):
         assert html.count(needle) == 1
-    assert html.index(MANIFEST_ID) < html.index("3dmol") < html.index(f'{RUNTIME_MARK}="js"')
+    assert html.index(MANIFEST_ID) < html.index("3dmol") < html.index(f'{RUNTIME_ATTR}="js"')
+    # The stylesheet is inert text: never applied to the page as written.
+    assert f'<script type="text/plain" {RUNTIME_ATTR}="css">.a{{}}</script>' in html
     # The manifest cannot close its element, or open a comment state.
     manifest_el = html[html.index(MANIFEST_ID) : html.index("</script>", html.index(MANIFEST_ID))]
     assert "</script" not in manifest_el[1:] and "<!--" not in manifest_el
 
 
 def test_scripts_are_neutralised_inside_inline_elements():
-    html = compose_report_runtime(js='a="</script>";b="<!--"', css="", manifest={})
-    body = html[html.index(f'{RUNTIME_MARK}="js">') :]
+    html = _block(js='a="</script>";b="<!--"', css="x{content:'</script>'}", manifest={})
+    body = html[html.index(f'{RUNTIME_ATTR}="js">') :]
     assert body.count("</script>") == 1  # the element's own end tag only
+    css = html[html.index(f'{RUNTIME_ATTR}="css">') :]
+    assert css.index("</script>") > css.index("content")  # its own end tag, after the text
     assert json_script("i", {"v": float("nan")}).endswith('{"v":null}</script>')
 
 
@@ -173,13 +182,21 @@ def _client(handler) -> DepictioClient:
 
 
 def test_the_client_composes_the_block_from_the_api(monkeypatch):
-    monkeypatch.delenv(RUNTIME_FILE_ENV, raising=False)
+    monkeypatch.delenv(RUNTIME_DEFERRED_ENV, raising=False)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     seen: list[str] = []
+    polls = iter([{"status": "running"}])
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(f"{request.method} {request.url.path}?{request.url.query.decode()}")
         if request.url.path.endswith("/serverless/report-manifest/d1"):
-            return httpx.Response(200, json={"manifest_version": 1, "addons": [{"name": "3dmol"}]})
+            return httpx.Response(202, json={"job_id": "j1", "status": "queued"})
+        if request.url.path.endswith("/serverless/report-manifest/job/j1"):
+            ready = {
+                "status": "ready",
+                "manifest": {"manifest_version": 1, "addons": [{"name": "3dmol"}]},
+            }
+            return httpx.Response(200, json=next(polls, ready))
         if request.url.path.endswith("/serverless/report-runtime"):
             return httpx.Response(
                 200,
@@ -190,29 +207,42 @@ def test_the_client_composes_the_block_from_the_api(monkeypatch):
     block = _client(handler).report_runtime("d1", {"filters": []})
     assert block.strip().startswith("```{=html}")
     assert block.count(MANIFEST_ID) == 1 and "<script>m()</script>" in block
+    # The report alone: its config has no `combined` section.
+    assert '<script type="application/json" id="depictio-report-config">{}</script>' in block
     assert seen == [
         "POST /depictio/api/v1/serverless/report-manifest/d1?",
+        "GET /depictio/api/v1/serverless/report-manifest/job/j1?",
+        "GET /depictio/api/v1/serverless/report-manifest/job/j1?",
         "GET /depictio/api/v1/serverless/report-runtime?addons=3dmol",
     ]
 
 
 @pytest.mark.parametrize("status", [403, 404, 409, 503])
 def test_the_client_prints_nothing_when_the_api_says_no(monkeypatch, status):
-    monkeypatch.delenv(RUNTIME_FILE_ENV, raising=False)
+    monkeypatch.delenv(RUNTIME_DEFERRED_ENV, raising=False)
     client = _client(lambda request: httpx.Response(status, json={"detail": "no"}))
     assert client.report_runtime("d1", {"filters": []}) == ""
 
 
-def test_the_worker_block_wins_over_the_api(monkeypatch, tmp_path):
-    path = tmp_path / "block.html"
-    path.write_text("<b>runtime</b>")
-    monkeypatch.setenv(RUNTIME_FILE_ENV, str(path))
+def test_a_failed_manifest_job_prints_nothing(monkeypatch):
+    monkeypatch.delenv(RUNTIME_DEFERRED_ENV, raising=False)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(202, json={"job_id": "j1", "status": "queued"})
+        return httpx.Response(413, json={"detail": "over the ceiling"})
+
+    assert _client(handler).report_runtime("d1", {"filters": []}) == ""
+
+
+def test_a_worker_render_never_asks_the_api(monkeypatch):
+    """The worker embeds the runtime itself, after the render."""
+    monkeypatch.setenv(RUNTIME_DEFERRED_ENV, "1")
 
     def handler(request):  # pragma: no cover - must not be reached
         raise AssertionError("the API must not be asked")
 
-    assert "<b>runtime</b>" in _client(handler).report_runtime("d1")
-    path.write_text("")
     assert _client(handler).report_runtime("d1") == ""
 
 
@@ -248,14 +278,12 @@ def test_a_child_tab_with_its_own_filters_gets_its_panel(penguins_tabs):
     assert src.count(FILTERS_ATTR) == 1
 
 
-def test_a_static_render_embeds_no_runtime(monkeypatch, tmp_path):
+def test_a_static_render_embeds_no_runtime(monkeypatch):
     """The PDF render runs no script: the runtime block is not printed at all."""
-    from depictio.notebook.report_runtime import RUNTIME_FILE_ENV
-
-    block = tmp_path / "block.html"
-    block.write_text("<script>1</script>")
-    monkeypatch.setenv(RUNTIME_FILE_ENV, str(block))
-    client = DepictioClient(base_url="http://127.0.0.1:9", token="t")
-    assert client.report_runtime("d") != ""
+    monkeypatch.delenv(RUNTIME_DEFERRED_ENV, raising=False)
     monkeypatch.setenv("DEPICTIO_STATIC_FIGURES", "1")
-    assert client.report_runtime("d") == ""
+
+    def handler(request):  # pragma: no cover - must not be reached
+        raise AssertionError("the API must not be asked")
+
+    assert _client(handler).report_runtime("d") == ""

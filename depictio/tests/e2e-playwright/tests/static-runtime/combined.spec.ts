@@ -16,7 +16,7 @@ import {
   PENGUINS_MANIFEST,
   blockNetwork,
   combinedUrl,
-  skipUnlessCombinedRuntimeBuilt,
+  skipUnlessRuntimeBuilt,
 } from "./helpers";
 
 const manifest = JSON.parse(readFileSync(PENGUINS_MANIFEST, "utf-8"));
@@ -57,7 +57,7 @@ const backToReport = (frame: Frame) => frame.locator("[data-testid='glass-report
 const dashboardCard = (frame: Frame) => frame.locator('[data-component-index="card-body-mass"]');
 
 test.describe("combined file — report + dashboard", () => {
-  test.beforeEach(() => skipUnlessCombinedRuntimeBuilt());
+  test.beforeEach(() => skipUnlessRuntimeBuilt());
 
   test("one switch, two views, one filter state", async ({ page }) => {
     const attempts = await blockNetwork(page);

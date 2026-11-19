@@ -6,8 +6,8 @@
  * module swaps that keep it offline (api.ts -> tabApiShim.ts -> apiShim.ts,
  * useCurrentUserShim.ts, realtimeShim.ts, serverStatusShim.ts,
  * chromeVariantShim.ts, jbrowseStub.tsx, and `3dmol` -> threeDmolAddon.ts) live
- * in `vite-plugins/static-runtime.ts`, shared with the report runtime
- * (`vite.report.config.ts`): one runtime, two hosts.
+ * in `vite-plugins/static-runtime.ts`, shared with the runtime a report embeds
+ * (`vite.combined.config.ts`): one runtime, two hosts.
  *
  * Producers inject the manifest into dist-static/static.html by replacing the
  * __BUNDLE_MANIFEST__ token (same convention as catalog-preview).

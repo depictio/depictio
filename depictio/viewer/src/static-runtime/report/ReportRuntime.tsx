@@ -40,7 +40,9 @@ import {
   REPORT_MOUNTED_ATTR,
   compactPanelSections,
   componentFor,
+  formatTileRef,
   reportCategorySource,
+  tabDoc,
   type BundleManifest,
   type FilterChannel,
   type ReportSectionSpec,
@@ -195,9 +197,7 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
     channel?.set(filters, CHANNEL_SOURCE);
   }, [channel, filters]);
   useEffect(
-    () =>
-      channel?.subscribe(CHANNEL_SOURCE, (next) => setFilters(next as InteractiveFilter[])) ??
-      undefined,
+    () => channel?.subscribe(CHANNEL_SOURCE, (next) => setFilters(next as InteractiveFilter[])),
     [channel],
   );
 
@@ -243,11 +243,7 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
     >();
     for (const panel of panels) {
       if (out.has(panel.tabId)) continue;
-      const doc = (
-        panel.tabId === entryId
-          ? manifest.dashboard.doc
-          : ((manifest.tabs ?? []).find((t) => t.id === panel.tabId)?.doc ?? null)
-      ) as {
+      const doc = tabDoc(manifest, panel.tabId) as {
         stored_metadata?: StoredMetadata[];
         filter_sections?: ReportSectionSpec[];
         grid_sections?: ReportSectionSpec[];
@@ -370,7 +366,7 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
               tile.mount,
               // By position: a highlight draws the same component a second
               // time, and two portals keyed alike would drop one.
-              `${i}:${tile.refs.map((r) => `${r.tabId}:${r.index}`).join(' ')}`,
+              `${i}:${tile.refs.map(formatTileRef).join(' ')}`,
             ),
       )}
       {panels

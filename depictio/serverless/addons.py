@@ -37,11 +37,15 @@ Pyodide blocks are inert data until a tile boots the runtime.
 from __future__ import annotations
 
 import json
+import logging
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 from depictio.models.models.serverless import RuntimeAddon
+
+logger = logging.getLogger(__name__)
 
 ADDONS_DIR_ENV = "DEPICTIO_SERVERLESS_ADDONS_DIR"
 REGISTRY_NAME = "addons.json"
@@ -122,8 +126,9 @@ def pyodide_html(packages: list[str]) -> str:
         "lock": assets.lock,
         "modules": bundle_python_sources(),
     }
-    blob = json.dumps(meta, separators=(",", ":")).replace("</", "<\\/")
-    blocks = [f'<script type="application/json" id="{PYODIDE_META_ID}">{blob}</script>']
+    from depictio.notebook.report_runtime import json_script
+
+    blocks = [json_script(PYODIDE_META_ID, meta)]
     for f in assets.files:
         blocks.append(
             f'<script type="application/octet-stream" data-pya="{f.name}" '
@@ -133,11 +138,37 @@ def pyodide_html(packages: list[str]) -> str:
 
 
 def addons_html(names: list[str], packages: list[str] | None = None) -> str:
-    """The add-ons' elements, in order: what both hosts of the runtime embed
-    (the bundle before its ``</body>``, a report beside its runtime)."""
+    """The add-ons' elements, in order, as the bundle embeds them before its
+    ``</body>``."""
     return "".join(
         pyodide_html(list(packages or [])) if n == "pyodide" else addon_script(n) for n in names
     )
+
+
+def addon_markup(entries: Iterable[Any], *, skip_missing: bool = False) -> dict[str, str]:
+    """Each add-on ``entries`` names (``BundleManifest.addons``: models or their
+    JSON dicts), as its embedding markup, in order: what a report embeds beside
+    the runtime. Pyodide's data blocks are built from the entry's packages.
+
+    ``skip_missing`` leaves out an add-on that is not built (logged) instead of
+    raising :class:`AddonError`.
+    """
+    out: dict[str, str] = {}
+    for entry in entries:
+        data = entry if isinstance(entry, dict) else entry.model_dump()
+        name = str(data.get("name") or "")
+        if not name or name in out:
+            continue
+        try:
+            if name == "pyodide":
+                out[name] = pyodide_html(list(data.get("packages") or []))
+            else:
+                out[name] = addon_script(name)
+        except AddonError as exc:
+            if not skip_missing:
+                raise
+            logger.warning("runtime add-on %r unavailable: %s", name, exc)
+    return out
 
 
 def apply_addons(template: str, names: list[str], packages: list[str] | None = None) -> str:

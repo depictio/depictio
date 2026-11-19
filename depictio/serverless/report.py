@@ -7,10 +7,13 @@ differ only in the host page:
 
 * the bundle (``producer_a.export_static``) injects the manifest into
   ``static.html``, which mounts the viewer App over the whole page;
-* the report (this module) inlines the manifest, once, beside the report
-  runtime (``dist-static/report-runtime.{js,css}``, ``vite.report.config.ts``),
-  which mounts each tile into the placeholder the notebook generator wrote for
-  it, and the dashboard's controls into the report's "Filters" part.
+* the report (this module, then ``combined.py``) carries the manifest, once,
+  beside the static runtime (``dist-static/combined-runtime.{js,css}``,
+  ``vite.combined.config.ts``), which mounts each tile into the placeholder the
+  notebook generator wrote for it, and the dashboard's controls into the
+  report's "Filters" part. The same runtime also holds the whole dashboard,
+  shown behind a "Report | Dashboard" switch when the file is the combined
+  output.
 
 The manifest is producer A's own (``export_manifest``), so a report is exactly
 as live as the bundle of the same dashboard would be and is refused on the same
@@ -27,25 +30,18 @@ no group store). Those reports keep every tile's own output, as before.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from depictio.models.models.analysis_state import AnalysisState
 from depictio.models.models.serverless import BundleManifest
-from depictio.notebook.report_runtime import compose_report_runtime
 
 logger = logging.getLogger(__name__)
 
 RUNTIME_DIR_ENV = "DEPICTIO_REPORT_RUNTIME_DIR"
-RUNTIME_JS = "report-runtime.js"
-RUNTIME_CSS = "report-runtime.css"
-
-
-class ReportRuntimeUnavailable(RuntimeError):
-    """The report runtime is not built next to the static template."""
 
 
 class ReportRuntimeRefused(RuntimeError):
@@ -60,37 +56,6 @@ def runtime_dir() -> Path:
     from depictio.serverless.producer_b import _template_path
 
     return _template_path().parent
-
-
-def runtime_available() -> bool:
-    folder = runtime_dir()
-    return (folder / RUNTIME_JS).is_file() and (folder / RUNTIME_CSS).is_file()
-
-
-@dataclass(frozen=True)
-class RuntimeAssets:
-    js: str
-    css: str
-
-    @property
-    def bytes(self) -> int:
-        return len(self.js.encode()) + len(self.css.encode())
-
-
-def runtime_assets() -> RuntimeAssets:
-    """The built runtime's script and stylesheet."""
-    folder = runtime_dir()
-    try:
-        return RuntimeAssets(
-            js=(folder / RUNTIME_JS).read_text(encoding="utf-8"),
-            css=(folder / RUNTIME_CSS).read_text(encoding="utf-8"),
-        )
-    except OSError as exc:
-        raise ReportRuntimeUnavailable(
-            f"report runtime not built: {folder / RUNTIME_JS} is missing — run "
-            "`cd depictio/viewer && pnpm run build:static`, or point "
-            f"{RUNTIME_DIR_ENV} at a folder holding {RUNTIME_JS} and {RUNTIME_CSS}"
-        ) from exc
 
 
 def ineligibility(state: AnalysisState) -> str | None:
@@ -143,40 +108,32 @@ def build_report_manifest(
     return result.manifest.model_copy(update={"initial_filters": initial_filters(state)})
 
 
-def addon_markup(manifest: BundleManifest) -> str:
-    from depictio.serverless.addons import addons_html
+def manifest_json(manifest: BundleManifest) -> str:
+    """The manifest as JSON text, serialised once (no intermediate dict).
 
-    pyodide = next((a for a in manifest.addons if a.name == "pyodide"), None)
-    return addons_html(
-        [a.name for a in manifest.addons], list(pyodide.packages) if pyodide else None
-    )
-
-
-def report_runtime_html(manifest: BundleManifest, *, config: dict[str, Any] | None = None) -> str:
-    """The block a report inlines once: runtime CSS, config, manifest, add-ons, script.
-
-    ``config`` is the report's look (``NotebookBuilder.runtime_config``).
+    Falls back to a dump through ``json`` for a payload pydantic cannot write
+    (a numpy scalar in an ``Any`` field), with non-finite floats as ``null``
+    either way, as ``JSON.parse`` needs.
     """
-    assets = runtime_assets()
-    return compose_report_runtime(
-        js=assets.js,
-        css=assets.css,
-        manifest=manifest.model_dump(mode="json"),
-        config=config,
-        addons=addon_markup(manifest),
-    )
+    try:
+        return manifest.model_dump_json()
+    except (ValueError, TypeError) as exc:
+        logger.debug("manifest JSON: falling back to json.dumps (%s)", exc)
+        from depictio.notebook.report_runtime import _json_safe
+
+        return json.dumps(
+            _json_safe(manifest.model_dump(mode="json")), default=str, separators=(",", ":")
+        )
 
 
-def build_report_runtime(
-    dashboard_id: str,
-    user: Any,
-    state: AnalysisState,
-    *,
-    config: dict[str, Any] | None = None,
-    python_runtime: str = "off",
-) -> str:
-    """Everything a report needs to mount its tiles, as one HTML block."""
-    if not runtime_available():
-        raise ReportRuntimeUnavailable(f"report runtime not built in {runtime_dir()}")
-    manifest = build_report_manifest(dashboard_id, user, state, python_runtime=python_runtime)
-    return report_runtime_html(manifest, config=config)
+def user_payload(user: Any) -> dict[str, Any]:
+    """The requester, as a worker task's JSON argument (``ExportUser`` fields)."""
+    from depictio.serverless.producer_a import resolve_user
+
+    export_user = resolve_user(user)
+    return {
+        "id": str(export_user.id),
+        "email": export_user.email,
+        "is_admin": export_user.is_admin,
+        "is_anonymous": export_user.is_anonymous,
+    }

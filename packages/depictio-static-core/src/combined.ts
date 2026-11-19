@@ -13,8 +13,7 @@
  *     and the choice of the view a file opens on (`landingView`);
  *   - scoping a stylesheet onto the runtime's roots (`scopeSelector`,
  *     `splitSelectorList`), which the report host applies in the page to the
- *     one unscoped stylesheet the file carries, and the report runtime's build
- *     applies at build time (`vite-plugins/scope-css.ts`).
+ *     one unscoped stylesheet the file carries.
  */
 
 // ── Shared filter state ─────────────────────────────────────────────────────
@@ -104,17 +103,18 @@ export interface DashboardController {
   onTabChange(cb: (id: string) => void): () => void;
 }
 
-/**
- * The combined host this window can reach: its own, or its parent's when it is
- * the dashboard iframe of a combined file. Null everywhere else (a plain
- * bundle, the server app), and when the parent is another origin.
- */
 /** The part of a browser window this module reads. The package builds without
  *  the DOM lib (it is DOM-free by design), so `Window` itself is not in scope. */
 export interface WindowLike {
   parent?: WindowLike | null;
 }
 
+/**
+ * The combined host this window can reach: its own, or its parent's when it is
+ * the dashboard iframe of a combined file. Null everywhere else (a plain
+ * bundle, the server app, a report-only file), and when the parent is another
+ * origin.
+ */
 export function findCombinedHost(win: WindowLike | null | undefined): CombinedHostApi | null {
   const candidates: Array<WindowLike | null | undefined> = [win];
   try {

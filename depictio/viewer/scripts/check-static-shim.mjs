@@ -3,11 +3,11 @@
  * Shim-coverage gate for the serverless static bundle.
  *
  * Walks the module graph the two static entries actually pull in — the bundle
- * (`src/static-runtime/main.tsx`) and the report runtime
- * (`src/static-runtime/report/main.tsx`) — following named imports to the file
- * each name comes from, barrels included, and applying the same module swaps
- * as `vite-plugins/static-runtime.ts` (shared by `vite.static.config.ts` and
- * `vite.report.config.ts`) — and collects every `depictio-react-core` api.ts
+ * (`src/static-runtime/main.tsx`) and the runtime a report embeds
+ * (`src/static-runtime/combined/main.tsx`) — following named imports to the
+ * file each name comes from, barrels included, and applying the same module
+ * swaps as `vite-plugins/static-runtime.ts` (shared by `vite.static.config.ts`
+ * and `vite.combined.config.ts`) — and collects every `depictio-react-core` api.ts
  * export the graph imports. Each one that reaches the network (its body, or a
  * local function it calls, uses `fetch` / `authFetch` / a WebSocket /
  * EventSource) must be either
@@ -37,7 +37,7 @@ const ROOT = path.resolve(VIEWER, '../..');
 const CORE = path.join(ROOT, 'packages/depictio-react-core/src');
 const RUNTIME = path.join(VIEWER, 'src/static-runtime');
 const API = path.join(CORE, 'api.ts');
-const ENTRIES = [path.join(RUNTIME, 'main.tsx'), path.join(RUNTIME, 'report', 'main.tsx')];
+const ENTRIES = [path.join(RUNTIME, 'main.tsx'), path.join(RUNTIME, 'combined', 'main.tsx')];
 const SHIM_FILES = [path.join(RUNTIME, 'tabApiShim.ts'), path.join(RUNTIME, 'apiShim.ts')];
 
 // The swaps of vite-plugins/static-runtime.ts (api.ts is handled by name, below).

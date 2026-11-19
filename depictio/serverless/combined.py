@@ -1,85 +1,93 @@
-"""The combined export: one HTML file, the rendered report AND the dashboard.
+"""The static runtime in a rendered report: the report alone, or the report AND
+the dashboard in one HTML file.
 
-Depictio's two offline outputs, in one file a reader opens and switches
-between ("Report | Dashboard"):
+One runtime, ``dist-static/combined-runtime.{js,css}``
+(``viewer/vite.combined.config.ts``): the whole viewer App plus the report
+host that mounts the report's tiles. Every report that embeds the runtime
+carries it, in one of two outputs that differ only by the report's config:
 
-* the page is the rendered Quarto report — its contents list, prose, code
-  and print layout untouched;
-* the dashboard is the full viewer App, written into a same-origin iframe the
-  first time it is asked for, from the script, stylesheet and manifest the
-  page already holds — nothing is stored twice.
+* ``report`` — the report alone: its tiles drawn by the dashboard's renderers,
+  its filter panel recomputing them in the page;
+* ``combined`` — the same, plus the whole interactive dashboard behind a
+  "Report | Dashboard" switch. The dashboard is the viewer App, written into a
+  same-origin iframe the first time it is asked for, from the script,
+  stylesheet and manifest the page already holds: nothing is stored twice.
 
-One runtime serves both: ``dist-static/combined-runtime.{js,css}``
-(``viewer/vite.combined.config.ts``), the whole App plus the report host that
-mounts the report's tiles. It replaces the report runtime a report embeds
-(``report.py``), and Quarto's own plotly.js too: the report's static figures
-call ``window.Plotly`` while the page parses, so the runtime goes where that
-copy was and exposes its own Plotly. A report that carries its own 3Dmol.js
-(py3Dmol's structures) lends it to the dashboard rather than shipping the
-add-on a second time.
+So a report-only file becomes the combined one by flipping its config
+(:func:`set_output`, ``depictio dashboard combine-report``), offline.
 
-:func:`compose_combined` is pure text in, text out: it works on a report the
-worker just rendered (with an empty runtime slot) and on any report rendered
-with the report runtime embedded, whose block it replaces.
+The runtime also stands in for Quarto's own plotly.js: the report's static
+figures call ``window.Plotly`` while the page parses, so the runtime's script
+goes where that copy was and exposes its own Plotly. A report that carries its
+own 3Dmol.js (py3Dmol's structures) lends it to the dashboard rather than
+shipping the add-on a second time.
+
+:func:`compose_report` is pure text in, text out; :func:`embed_runtime` is the
+same with the built runtime and add-ons.
 """
 
 from __future__ import annotations
 
-import html as _html
 import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Literal
 
-from depictio.notebook.components import public_reason
 from depictio.notebook.report_runtime import (
+    COMBINED_KEY,
     CONFIG_ID,
     MANIFEST_ID,
-    RUNTIME_MARK,
+    RUNTIME_ATTR,
     json_script,
+    runtime_parts,
 )
+from depictio.serverless.report import runtime_dir
 
-COMBINED_JS = "combined-runtime.js"
-COMBINED_CSS = "combined-runtime.css"
-# Marks the combined runtime's parts in the page (`viewer/.../combined/host.ts`).
-COMBINED_MARK = "data-depictio-runtime"
+RUNTIME_JS = "combined-runtime.js"
+RUNTIME_CSS = "combined-runtime.css"
 
+Output = Literal["report", "combined"]
 DefaultView = Literal["report", "dashboard"]
+OUTPUTS: tuple[str, ...] = ("report", "combined")
+DEFAULT_VIEWS: tuple[str, ...] = ("report", "dashboard")
 
 
-class CombinedRuntimeUnavailable(RuntimeError):
-    """The combined runtime is not built next to the static template."""
+class RuntimeUnavailable(RuntimeError):
+    """The static runtime is not built next to the static template."""
 
 
-def runtime_dir() -> Path:
-    from depictio.serverless.report import runtime_dir as _dir
+def combined_filename(stem: str) -> str:
+    """The combined file's name: the report's, marked as holding the dashboard."""
+    return f"{stem}-report-dashboard.html"
 
-    return _dir()
 
-
-def combined_runtime_available() -> bool:
-    folder = runtime_dir()
-    return (folder / COMBINED_JS).is_file() and (folder / COMBINED_CSS).is_file()
+# ── The built runtime ────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
-class CombinedAssets:
+class RuntimeAssets:
     js: str
     css: str
 
 
-def combined_assets() -> CombinedAssets:
+def runtime_available() -> bool:
+    folder = runtime_dir()
+    return (folder / RUNTIME_JS).is_file() and (folder / RUNTIME_CSS).is_file()
+
+
+def runtime_assets() -> RuntimeAssets:
+    """The built runtime's script and stylesheet."""
     folder = runtime_dir()
     try:
-        return CombinedAssets(
-            js=(folder / COMBINED_JS).read_text(encoding="utf-8"),
-            css=(folder / COMBINED_CSS).read_text(encoding="utf-8"),
+        return RuntimeAssets(
+            js=(folder / RUNTIME_JS).read_text(encoding="utf-8"),
+            css=(folder / RUNTIME_CSS).read_text(encoding="utf-8"),
         )
     except OSError as exc:
-        raise CombinedRuntimeUnavailable(
-            f"combined runtime not built: {folder / COMBINED_JS} is missing — run "
-            "`cd depictio/viewer && pnpm run build:static`"
+        raise RuntimeUnavailable(
+            f"static runtime not built: {folder / RUNTIME_JS} is missing — run "
+            "`cd depictio/viewer && pnpm run build:static`, or point "
+            f"DEPICTIO_REPORT_RUNTIME_DIR at a folder holding {RUNTIME_JS} and {RUNTIME_CSS}"
         ) from exc
 
 
@@ -136,22 +144,6 @@ def _json_block(html: str, element_id: str) -> tuple[int, int, Any] | None:
     return m.start(), close + len("</script>"), payload
 
 
-def report_runtime_span(html: str) -> tuple[int, int] | None:
-    """The report runtime's block (``compose_report_runtime``), if embedded.
-
-    The block is contiguous: its stylesheet, config, manifest, add-ons, then
-    its script, whose text cannot hold a literal ``</script>``.
-    """
-    start = html.find(f"<style {RUNTIME_MARK}=")
-    js = html.find(f"<script {RUNTIME_MARK}=", start if start >= 0 else 0)
-    if start < 0 or js < 0:
-        return None
-    end = html.find("</script>", js)
-    if end < 0:
-        return None
-    return start, end + len("</script>")
-
-
 def embedded_manifest(html: str) -> dict[str, Any] | None:
     block = _json_block(html, MANIFEST_ID)
     return block[2] if block else None
@@ -162,57 +154,52 @@ def embedded_config(html: str) -> dict[str, Any]:
     return block[2] if block and isinstance(block[2], dict) else {}
 
 
-# ── Scrubbing what a fallback says ───────────────────────────────────────────
-
-_REASON_BLOCKS = (
-    # `_placeholder_html`: the reason line under "<title> could not be shown here."
-    re.compile(r'(<div style="margin-top:4px;color:#868e96">)(.*?)(</div>)', re.DOTALL),
-    # The genome browser's "No snapshot of the view (<reason>). <link>"
-    re.compile(r"(No snapshot of the view \()(.*?)(\)\. )", re.DOTALL),
-)
-
-
-def scrub_fallback_reasons(html: str) -> str:
-    """The reasons a report's fallbacks give, without the renderer's paths.
-
-    New reports write them through ``public_reason`` already; a report
-    rendered before that may carry a worker's filesystem paths (a Playwright
-    launch error) and is cleaned here before it travels again.
-    """
-
-    def clean(m: re.Match[str]) -> str:
-        text = _html.unescape(m.group(2))
-        return m.group(1) + _html.escape(public_reason(text), quote=False) + m.group(3)
-
-    for pattern in _REASON_BLOCKS:
-        html = pattern.sub(clean, html)
-    return html
+def runtime_embedded(html: str) -> bool:
+    """Whether ``html`` already carries the runtime's script and a manifest."""
+    return f'<script {RUNTIME_ATTR}="js">' in html and embedded_manifest(html) is not None
 
 
 # ── Composing the file ───────────────────────────────────────────────────────
 
 
-def _inline_script(js: str) -> str:
-    return js.replace("</script", "<\\/script").replace("<!--", "<\\!--")
+def output_config(
+    config: dict[str, Any] | None, output: Output, default_view: DefaultView = "report"
+) -> dict[str, Any]:
+    """``config`` (the report's look) with the section ``output`` asks for."""
+    if output not in OUTPUTS:
+        raise ValueError(f"output must be 'report' or 'combined', not {output!r}")
+    if default_view not in DEFAULT_VIEWS:
+        raise ValueError(f"default_view must be 'report' or 'dashboard', not {default_view!r}")
+    merged = {k: v for k, v in (config or {}).items() if k != COMBINED_KEY}
+    if output == "combined":
+        merged[COMBINED_KEY] = {"default_view": default_view}
+    return merged
 
 
-def _inert_text(css: str) -> str:
-    # Inert: a `<script type="text/plain">` is never run nor applied. In CSS,
-    # `\/` reads as `/`, so the escape changes nothing the parser sees.
-    return css.replace("</script", "<\\/script").replace("<!--", "<\\!--")
+def set_output(html: str, output: Output, default_view: DefaultView = "report") -> str:
+    """A report that embeds the runtime, switched to ``output``: its config
+    rewritten, everything else (runtime, manifest, add-ons) kept as it is."""
+    block = _json_block(html, CONFIG_ID)
+    if block is None or not runtime_embedded(html):
+        raise ValueError("this report does not embed the dashboard's runtime")
+    start, end, previous = block
+    config = output_config(previous if isinstance(previous, dict) else {}, output, default_view)
+    return html[:start] + json_script(CONFIG_ID, config) + html[end:]
 
 
 def _tag_addon(html: str, span: tuple[int, int], name: str) -> str:
-    start, _ = span
-    return (
-        html[: start + len("<script")]
-        + f' data-depictio-addon="{name}"'
-        + html[start + len("<script") :]
-    )
+    at = span[0] + len("<script")
+    return html[:at] + f' data-depictio-addon="{name}"' + html[at:]
+
+
+def _body_end(html: str) -> int:
+    """Where ``</body>`` is, without a lower-cased copy of a 20 MB page."""
+    at = html.rfind("</body>")
+    return at if at >= 0 else html.rfind("</BODY>")
 
 
 @dataclass(frozen=True)
-class CombinedResult:
+class ComposedReport:
     html: str
     #: Bytes Quarto's own plotly.js took, now served by the runtime (0 when the
     #: report had none).
@@ -221,7 +208,7 @@ class CombinedResult:
     addons_shared: tuple[str, ...]
 
 
-def compose_combined(
+def compose_report(
     report_html: str,
     manifest: dict[str, Any] | str,
     *,
@@ -229,25 +216,19 @@ def compose_combined(
     css: str,
     addons: dict[str, str] | None = None,
     config: dict[str, Any] | None = None,
+    output: Output = "report",
     default_view: DefaultView = "report",
-) -> CombinedResult:
-    """The combined file, from a rendered report and producer A's manifest.
+) -> ComposedReport:
+    """A rendered report with the runtime embedded, for ``output``.
 
-    ``addons`` maps an add-on's name to its markup (``addons.addon_script``);
-    ``config`` is the report's look (``NotebookBuilder.runtime_config``), to
-    which the combined section (``default_view``) is added. A report runtime
-    already embedded in ``report_html`` is replaced, its config kept under
-    ``config``'s keys.
+    ``report_html`` holds no runtime yet (the worker renders the document with
+    its last cell printing nothing). ``manifest`` is producer A's (a dict, or
+    its JSON text); ``addons`` maps an add-on's name to its markup
+    (``addons.addon_markup``); ``config`` is the report's look
+    (``NotebookBuilder.runtime_config``).
     """
-    if default_view not in ("report", "dashboard"):
-        raise ValueError(f"default_view must be 'report' or 'dashboard', not {default_view!r}")
+    config = output_config(config, output, default_view)
     html = report_html
-    previous = embedded_config(html)
-    span = report_runtime_span(html)
-    if span:
-        html = html[: span[0]] + html[span[1] :]
-    html = scrub_fallback_reasons(html)
-
     addons = dict(addons or {})
     shared: list[str] = []
     if "3dmol" in addons:
@@ -257,113 +238,62 @@ def compose_combined(
             del addons["3dmol"]
             shared.append("3dmol")
 
+    data, code = runtime_parts(
+        js=js, css=css, manifest=manifest, config=config, addons="".join(addons.values())
+    )
     plotly = plotly_script_span(html)
     dropped = 0
-    runtime = (
-        "".join(addons.values()) + f'<script {COMBINED_MARK}="js">{_inline_script(js)}</script>'
-    )
     if plotly:
         dropped = plotly[1] - plotly[0]
-        html = html[: plotly[0]] + runtime + html[plotly[1] :]
-        runtime = ""
-
-    merged = {**previous, **(config or {})}
-    merged["combined"] = {"default_view": default_view}
-    tail = "".join(
-        [
-            json_script(CONFIG_ID, merged),
-            json_script(MANIFEST_ID, manifest),
-            f'<script type="text/plain" {COMBINED_MARK}="css">{_inert_text(css)}</script>',
-            runtime,
-        ]
-    )
-    at = html.lower().rfind("</body>")
+        html = html[: plotly[0]] + code + html[plotly[1] :]
+        code = ""
+    tail = data + code
+    at = _body_end(html)
     html = html + tail if at < 0 else html[:at] + tail + html[at:]
-    return CombinedResult(html=html, plotly_dropped=dropped, addons_shared=tuple(shared))
+    return ComposedReport(html=html, plotly_dropped=dropped, addons_shared=tuple(shared))
 
 
-def addon_markup_for(manifest: dict[str, Any]) -> dict[str, str]:
-    """Each add-on the manifest names, as its embedding markup (pyodide's
-    data blocks included)."""
-    from depictio.serverless.addons import addons_html
-
-    out: dict[str, str] = {}
-    for entry in manifest.get("addons") or []:
-        name = str(entry.get("name") or "")
-        if not name:
-            continue
-        packages = list(entry.get("packages") or []) if name == "pyodide" else None
-        out[name] = addons_html([name], packages)
-    return out
-
-
-def combine_report(
+def embed_runtime(
     report_html: str,
-    manifest: dict[str, Any],
+    manifest: dict[str, Any] | str,
+    addon_entries: list[Any],
     *,
     config: dict[str, Any] | None = None,
+    output: Output = "report",
     default_view: DefaultView = "report",
-) -> CombinedResult:
-    """:func:`compose_combined` with the built runtime and add-ons."""
-    assets = combined_assets()
-    return compose_combined(
+) -> ComposedReport:
+    """:func:`compose_report` with the built runtime and the manifest's add-ons
+    (``addon_entries``: ``BundleManifest.addons``)."""
+    from depictio.serverless.addons import addon_markup
+
+    assets = runtime_assets()
+    return compose_report(
         report_html,
         manifest,
         js=assets.js,
         css=assets.css,
-        addons=addon_markup_for(manifest),
+        addons=addon_markup(addon_entries),
         config=config,
+        output=output,
         default_view=default_view,
     )
-
-
-def build_combined(
-    report_html: str,
-    dashboard_id: str,
-    user: Any,
-    state: Any,
-    *,
-    config: dict[str, Any] | None = None,
-    default_view: DefaultView = "report",
-    python_runtime: str = "off",
-) -> CombinedResult:
-    """The combined file for a report rendered from ``dashboard_id``'s export.
-
-    The manifest is producer A's, opening on ``state`` (``report.
-    build_report_manifest``): refused on the same grounds as a static export.
-    """
-    from depictio.serverless.report import build_report_manifest
-
-    if not combined_runtime_available():
-        raise CombinedRuntimeUnavailable(f"combined runtime not built in {runtime_dir()}")
-    manifest = build_report_manifest(dashboard_id, user, state, python_runtime=python_runtime)
-    return combine_report(
-        report_html,
-        manifest.model_dump(mode="json"),
-        config=config,
-        default_view=default_view,
-    )
-
-
-def runtime_floor_html(js: str, css: str) -> str:
-    """The bytes every combined file pays for its runtime (CI's budget floor)."""
-    page = "<!doctype html><html><head><meta charset='utf-8'></head><body></body></html>"
-    return compose_combined(page, "null", js=js, css=css).html
 
 
 __all__ = [
-    "COMBINED_CSS",
-    "COMBINED_JS",
-    "CombinedResult",
-    "CombinedRuntimeUnavailable",
-    "build_combined",
-    "combine_report",
-    "combined_runtime_available",
-    "compose_combined",
+    "RUNTIME_CSS",
+    "RUNTIME_JS",
+    "ComposedReport",
+    "RuntimeUnavailable",
+    "combined_filename",
+    "compose_report",
+    "embed_runtime",
     "embedded_config",
     "embedded_manifest",
+    "output_config",
     "plotly_script_span",
-    "report_runtime_span",
-    "scrub_fallback_reasons",
+    "runtime_assets",
+    "runtime_available",
+    "runtime_embedded",
+    "set_output",
     "threedmol_script_span",
 ]

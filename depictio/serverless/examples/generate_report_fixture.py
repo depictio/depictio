@@ -1,4 +1,4 @@
-"""Regenerate the report skeleton the report-runtime demo and e2e spec mount into.
+"""Regenerate the report skeleton the report demos and e2e specs mount the runtime into.
 
 A rendered report is a Quarto page whose tiles the notebook generator wrapped
 in placeholders (``depictio/notebook/report_runtime.py``); Quarto turns each

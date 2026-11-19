@@ -20,12 +20,14 @@
  * own scripts (Quarto's, the export's fold script) own the rest of the page.
  */
 import {
+  BUNDLE_MANIFEST_ID,
   COMBINED_HOST_GLOBAL,
-  REPORT_CONFIG_ID,
   REPORT_MANIFEST_ID,
   REPORT_TILE_ATTR,
   componentFor,
+  familyTabs,
   formatCombinedHash,
+  formatTileRef,
   landingView,
   parseCombinedHash,
   parseTileRefs,
@@ -39,15 +41,13 @@ import {
   type RouteTab,
 } from 'depictio-static-core';
 
+import { reportScheme, type CombinedConfig, type Scheme } from '../report/page';
+import { storageGet, storageSet } from '../storage';
+
 /** Marks the runtime's script, stylesheet text and add-ons in a combined file. */
 export const RUNTIME_ATTR = 'data-depictio-runtime';
 /** Attribute of a report tab heading naming its dashboard tab. */
 export const REPORT_TAB_ATTR = 'data-depictio-tab';
-
-export interface CombinedConfig {
-  /** The view a file opens on when its link names none (chosen at export). */
-  default_view?: CombinedView;
-}
 
 interface HostOptions {
   manifest: BundleManifest;
@@ -55,44 +55,26 @@ interface HostOptions {
   config: CombinedConfig;
 }
 
-function readJson<T>(id: string): T | null {
-  try {
-    const raw = document.getElementById(id)?.textContent;
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-/** The combined section of the report's config (`depictio-report-config`). */
-export function readCombinedConfig(): CombinedConfig {
-  const config = readJson<{ combined?: CombinedConfig }>(REPORT_CONFIG_ID);
-  return config?.combined ?? {};
-}
-
 function runtimeText(kind: 'js' | 'css'): string {
   return document.querySelector(`script[${RUNTIME_ATTR}="${kind}"]`)?.textContent ?? '';
 }
 
-function storageGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
+/** A tile or a section the reader was sent to: one ring, then gone. The
+ *  report page and the dashboard's document each get a copy. */
+const FLASH_CSS = `
+.dpx-flash{animation:dpx-flash 1.6s ease-out 1}
+@keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px var(--dpx-flash-ring)}100%{box-shadow:0 0 0 3px transparent}}
+`;
 
-function storageSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* storage blocked: the view is simply not remembered */
-  }
-}
-
+/**
+ * Styles the host writes into the report page. Colours are the page's own
+ * tokens: Paper's `--gl-*` (the export's chrome), else Quarto's Bootstrap
+ * variables (the classic theme), so they follow the report's dark mode.
+ */
 const HOST_CSS = `
+:root{--dpx-flash-ring:color-mix(in srgb,var(--gl-accent,var(--bs-primary)) 55%,transparent)}
 .dpx-dashboard-frame{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483000;
-  background:#fff;visibility:hidden}
+  background:var(--gl-paper,var(--bs-body-bg));visibility:hidden}
 html.dpx-view-dashboard{overflow:hidden}
 html.dpx-view-dashboard .dpx-dashboard-frame{visibility:visible}
 .dpx-open-dashboard{display:inline-flex;align-items:center;gap:6px;margin-inline-end:8px}
@@ -101,29 +83,26 @@ html.dpx-view-dashboard .dpx-dashboard-frame{visibility:visible}
 .dpx-tile-links .dpx-tile-open{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:5px;
   cursor:pointer;height:26px;padding:0 10px;border-radius:999px;
   font:600 12px/1 var(--dpx-font,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif);
-  color:var(--gl-muted,#868e96);border:1px solid var(--gl-hair,rgba(33,37,41,.11));
-  background:var(--gl-paper,#fff);transition:color .12s ease,background-color .12s ease}
+  color:var(--gl-muted,var(--bs-secondary-color));border:1px solid var(--gl-hair,var(--bs-border-color));
+  background:var(--gl-paper,var(--bs-body-bg));transition:color .12s ease,background-color .12s ease}
 .dpx-tile-links .dpx-tile-open svg{width:13px;height:13px;flex:none}
-.dpx-tile-links .dpx-tile-open:hover{color:var(--gl-accent-fg,#1c7ed6);background:var(--gl-accent-soft,rgba(28,126,214,.08))}
-.dpx-tile-links .dpx-tile-open:focus-visible{outline:2px solid var(--gl-accent,#228be6);outline-offset:2px}
-.dpx-flash{animation:dpx-flash 1.6s ease-out 1}
-@keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px rgba(34,139,230,.55)}100%{box-shadow:0 0 0 3px rgba(34,139,230,0)}}
+.dpx-tile-links .dpx-tile-open:hover{color:var(--gl-accent-fg,var(--bs-link-color));
+  background:var(--gl-accent-soft,var(--bs-tertiary-bg))}
+.dpx-tile-links .dpx-tile-open:focus-visible{outline:2px solid var(--gl-accent,var(--bs-primary));outline-offset:2px}
 @media print{.dpx-open-dashboard,.dpx-dashboard-frame,.dpx-tile-links{display:none!important}
   html.dpx-view-dashboard{overflow:visible}}
-`;
+${FLASH_CSS}`;
 
-/** Styles the host writes into the dashboard's document. */
+/** Styles the host writes into the dashboard's document: Mantine's tokens,
+ *  which follow the dashboard's own colour scheme. */
 const FRAME_CSS = `
 html,body{margin:0}
+:root{--dpx-flash-ring:color-mix(in srgb,var(--mantine-primary-color-filled) 60%,transparent)}
 .dpx-show-in-report{position:fixed;z-index:2147483000;display:none;cursor:pointer;
-  font:500 12px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:6px 10px;
-  border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.95);color:#1c7ed6;
-  box-shadow:0 2px 8px rgba(0,0,0,.15)}
-[data-mantine-color-scheme="dark"] .dpx-show-in-report{background:rgba(37,38,43,.95);
-  color:#74c0fc;border-color:rgba(255,255,255,.14)}
-.dpx-flash{animation:dpx-flash 1.6s ease-out 1}
-@keyframes dpx-flash{0%,30%{box-shadow:0 0 0 3px rgba(34,139,230,.6)}100%{box-shadow:0 0 0 3px rgba(34,139,230,0)}}
-`;
+  font:500 12px/1 var(--mantine-font-family);padding:6px 10px;border-radius:999px;
+  border:1px solid var(--mantine-color-default-border);background:var(--mantine-color-body);
+  color:var(--mantine-primary-color-light-color);box-shadow:var(--mantine-shadow-sm)}
+${FLASH_CSS}`;
 
 function escapeStyle(css: string): string {
   return css.replace(/<\/style/gi, '<\\/style');
@@ -140,7 +119,7 @@ function tileHosts(): Map<string, HTMLElement> {
     const anchor = refs[0] ? `tile-${refs[0].index}` : '';
     if (anchor && !host.id && !document.getElementById(anchor)) host.id = anchor;
     for (const ref of refs) {
-      const key = `${ref.tabId}:${ref.index}`;
+      const key = formatTileRef(ref);
       if (!out.has(key)) out.set(key, host);
     }
   }
@@ -238,9 +217,7 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
   style.textContent = HOST_CSS;
   document.head.appendChild(style);
 
-  const tabs: RouteTab[] = (manifest.tabs ?? []).length
-    ? (manifest.tabs ?? []).map((t) => ({ id: t.id, title: t.title }))
-    : [{ id: manifest.dashboard.id, title: manifest.dashboard.title }];
+  const tabs: RouteTab[] = familyTabs(manifest).map(({ id, title }) => ({ id, title }));
   const memoryKey = viewMemoryKey(manifest.dashboard.id, manifest.built_at);
   const hosts = tileHosts();
 
@@ -272,9 +249,7 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
   else if (title) title.insertAdjacentElement('afterend', openButton);
   else document.body.prepend(openButton);
 
-  const reportScheme = (): 'light' | 'dark' =>
-    document.body.classList.contains('quarto-dark') ? 'dark' : 'light';
-  const frameScheme = (): 'light' | 'dark' =>
+  const frameScheme = (): Scheme =>
     frame?.contentDocument?.documentElement.getAttribute('data-mantine-color-scheme') === 'dark'
       ? 'dark'
       : 'light';
@@ -350,7 +325,7 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
     // markup, so 12 MB of script text is never re-parsed as HTML.
     const manifestEl = doc.createElement('script');
     manifestEl.type = 'application/json';
-    manifestEl.id = 'bundle-manifest';
+    manifestEl.id = BUNDLE_MANIFEST_ID;
     manifestEl.textContent = document.getElementById(REPORT_MANIFEST_ID)?.textContent ?? 'null';
     doc.body.appendChild(manifestEl);
     for (const node of Array.from(
@@ -472,10 +447,7 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
       if (!frame) frame = buildFrame();
       else if (route?.tab) withController((c) => c.switchTab(route.tab!));
       const tab = route?.tab ?? controller?.currentTab() ?? pendingTab ?? undefined;
-      setHash(
-        { view: 'dashboard', tab: tab ?? undefined, component: route?.component },
-        push,
-      );
+      setHash({ view: 'dashboard', tab, component: route?.component }, push);
       if (pendingTile) {
         const index = pendingTile;
         pendingTile = null;
@@ -530,13 +502,15 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
   const api: CombinedHostApi = {
     filters: channel,
     reportHas(tabId, index) {
-      if (index) return hosts.has(`${tabId}:${index}`);
+      if (index) return hosts.has(formatTileRef({ tabId, index }));
       if (document.querySelector(`[${REPORT_TAB_ATTR}="${CSS.escape(tabId)}"]`)) return true;
       for (const key of hosts.keys()) if (key.startsWith(`${tabId}:`)) return true;
       return false;
     },
     showInReport(tabId, index) {
-      const target = index ? (hosts.get(`${tabId}:${index}`) ?? null) : tabTarget(tabId, hosts);
+      const target = index
+        ? (hosts.get(formatTileRef({ tabId, index })) ?? null)
+        : tabTarget(tabId, hosts);
       if (!target) return false;
       show('report', undefined, true);
       unfoldTo(target);
@@ -565,7 +539,6 @@ export function installCombinedHost({ manifest, channel, config }: HostOptions):
   if (first === 'dashboard') show('dashboard', route ?? { view: 'dashboard' });
   else if (route?.anchor) show('report', route);
   else syncChrome();
-
 
   const onLocation = () => {
     const next = parseCombinedHash(location.hash, tabs);

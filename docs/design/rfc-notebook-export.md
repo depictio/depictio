@@ -414,23 +414,29 @@ the panel in the page, with no server.
 
 * **Server-rendered report: on by default.** The endpoint clears it (owner on the project — a
   manifest is the data, as a static export is; a state the page can reproduce; the runtime
-  built), the worker builds the manifest in-process with producer A and composes the block
-  (`serverless/report.py`), and hands it to the document's last cell through
-  `DEPICTIO_REPORT_RUNTIME_FILE`. Any failure leaves the block empty: the report renders
-  exactly as before.
+  built), and the worker builds the manifest in-process with producer A before the render
+  (the build counts in the task's time limits). The document's last cell prints nothing
+  (`DEPICTIO_REPORT_RUNTIME_DEFERRED`); once Quarto is done, the worker embeds the static
+  runtime (`serverless/combined.py`) in place of Quarto's plotly.js, with the manifest. A
+  failed manifest leaves the report exactly as before (the combined output fails instead).
 * **Downloaded `.qmd`: off by default.** Asked for, the last cell is
   `print(client.report_runtime(<entry tab>, depictio_state, config=…))`: the reader's client
-  fetches `POST /serverless/report-manifest/{id}` (owner-gated, 404 on denial, 409 for a
-  state it cannot reproduce, 413 over the size ceiling) and `GET /serverless/report-runtime`,
-  and composes the same block (`depictio/notebook/report_runtime.py`, pure stdlib, shared by
-  both paths). Without API access it prints nothing and the fallbacks stand.
+  starts `POST /serverless/report-manifest/{id}` (owner-gated, 404 on denial, 409 for a
+  state it cannot reproduce), a worker job like a static export's build, polls
+  `GET /serverless/report-manifest/job/{job_id}` (413 over the size ceiling), fetches
+  `GET /serverless/report-runtime`, and prints the same parts
+  (`depictio/notebook/report_runtime.py::runtime_parts`, pure stdlib, shared by both
+  paths). Without API access it prints nothing and the fallbacks stand.
 
-The block is one raw-HTML block, inlined once: the runtime's scoped stylesheet, the report's
-look (`NotebookBuilder.runtime_config`: the document's primary and Inter-first type), the
-manifest, any add-on the manifest names (3Dmol.js), the runtime's script. Measured on the
-seeded families (penguins, iris; Quarto 1.9.37): 9.0 MB → 19.4 MB raw, 2.5 MB → 5.6 MB gzip,
-the difference being the runtime's 9.76 MB raw / 3.01 MB gzip floor plus a 0.13–0.15 MB
-manifest. What stays fallback-only, and why: RFC serverless §14.
+One runtime serves both outputs of a report: the report alone, and the combined report +
+dashboard file, which differ only by the config's `combined` section
+(`depictio dashboard combine-report` flips it, offline). What the report embeds: the
+report's look (`NotebookBuilder.runtime_config`: the document's primary and Inter-first
+type), the manifest, the runtime's stylesheet as inert text (scoped in the page), any
+add-on the manifest names (3Dmol.js, JBrowse), the runtime's script. Measured on the
+seeded penguins family (Quarto 1.9.37): 18.2 MB raw, 5.5 MB gzip, smaller than with the
+former report runtime (20.3 MB, 6.0 MB), since Quarto's plotly.js is dropped. What stays
+fallback-only, and why: RFC serverless §14.
 
 ## 4. Alternatives considered
 

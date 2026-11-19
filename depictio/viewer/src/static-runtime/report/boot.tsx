@@ -1,10 +1,9 @@
 /**
  * The report host of the static runtime, hosted by a Quarto report.
  *
- * Booted by the report runtime's entry (`main.tsx`, whose stylesheet is scoped
- * at build time) and by the combined runtime (`combined/main.tsx`, which scopes
- * the App's stylesheet in the page and shares one filter state with the
- * dashboard view).
+ * Booted by the static runtime's report entry (`combined/main.tsx`), in both
+ * outputs of a report: the report alone, and the combined file, where it
+ * shares one filter state with the dashboard view.
  *
  * The serverless bundle and the report share one manifest contract
  * (`depictio/models/models/serverless.py`, built by producer A) and one
@@ -16,11 +15,11 @@
  * controls into the report's "Filters" part (`<div data-depictio-filters>`).
  *
  * The page is someone else's: Quarto's Bootstrap, its fonts, its layout. So
- * nothing here styles the page. The runtime's CSS is scoped to its own roots
- * at build time (`vite-plugins/scope-css.ts`); Mantine's variables are written
- * for those roots only (`cssVariablesSelector`), and its portals land in a root
- * of their own at the end of <body>. Inter is already in the report (the
- * Quarto theme embeds it); this build carries no font of its own.
+ * nothing here styles the page. The runtime's CSS is scoped onto its own roots
+ * in the page (`combined/scopeStyles.ts`); Mantine's variables are written for
+ * those roots only (`cssVariablesSelector`), and its portals land in a root of
+ * their own at the end of <body>. Inter is already in the report (the Quarto
+ * theme embeds it); the runtime adds no font face of its own to the page.
  *
  * Zero network, as the bundle: every api.ts call is shimmed.
  */
@@ -34,12 +33,10 @@ import {
   StaticBadgeProvider,
   buildDepictioTheme,
   setChromeStyle,
-  type BrandTheme,
   type StaticTierMap,
 } from 'depictio-react-core';
 import type { BundleManifest } from 'depictio-static-core';
 import {
-  REPORT_CONFIG_ID,
   REPORT_FILTERS_ATTR,
   REPORT_MANIFEST_ID,
   REPORT_TILE_ATTR,
@@ -53,33 +50,11 @@ import { installInlineMultiqcLogos } from '../../chrome/multiqcLogo';
 import { installOfflineGenomeAssets } from '../genomeAssets';
 import { loadBundleFromDocument, setActiveTab } from '../bundle';
 import ReportRuntime, { type ReportPanel, type ReportTile } from './ReportRuntime';
+import { readReportConfig, reportScheme, type Scheme } from './page';
 import type { FilterChannel } from 'depictio-static-core';
 
 /** The class every root of the runtime carries: what its CSS is scoped to. */
 const ROOT_CLASS = 'depictio-report-root';
-
-interface ReportConfig {
-  /** The report's brand: its primary colour and font, so a tile's accent is
-   *  the document's. */
-  brand?: BrandTheme | null;
-}
-
-function readConfig(): ReportConfig {
-  try {
-    const raw = document.getElementById(REPORT_CONFIG_ID)?.textContent;
-    return raw ? (JSON.parse(raw) as ReportConfig) : {};
-  } catch {
-    return {};
-  }
-}
-
-type Scheme = 'light' | 'dark';
-
-/** The report's own scheme: Quarto marks its dark page `body.quarto-dark`
- *  (the reader's preference, or its toggle). */
-function reportScheme(): Scheme {
-  return document.body?.classList.contains('quarto-dark') ? 'dark' : 'light';
-}
 
 const roots: HTMLElement[] = [];
 
@@ -182,7 +157,7 @@ export function bootReport(options: BootReportOptions = {}): BootedReport | null
   const portalRoot = runtimeRoot('depictio-report-portal');
   document.body.append(reactRoot, portalRoot);
 
-  const config = readConfig();
+  const config = readReportConfig();
   const theme = mergeThemeOverrides(
     buildDepictioTheme({ brand: config.brand ?? null }),
     createTheme({

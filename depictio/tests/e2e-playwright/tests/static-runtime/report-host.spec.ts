@@ -3,8 +3,9 @@
  * report, from `file://`, with no network.
  *
  * One manifest (producer B's penguins demo, the same contract producer A
- * writes for a report), inlined once beside the report runtime, at the end of
- * a page laid out as Quarto renders the notebook generator's placeholders. The
+ * writes for a report), inlined once beside the static runtime in its
+ * report-only output (no "Report | Dashboard" switch), at the end of a page
+ * laid out as Quarto renders the notebook generator's placeholders. The
  * report opens on an exported state (species = Adelie); the filter panel in
  * its "Filters" part recomputes every tile in the page. Reference numbers are
  * the Polars ones of filter-parity-cards.spec.ts:
@@ -16,7 +17,7 @@ import {
   PENGUINS_MANIFEST,
   blockNetwork,
   reportUrl,
-  skipUnlessReportRuntimeBuilt,
+  skipUnlessRuntimeBuilt,
 } from "./helpers";
 import { readFileSync } from "node:fs";
 
@@ -51,7 +52,7 @@ async function scatterPoints(page: Page): Promise<number> {
 }
 
 test.describe("report host — the runtime mounted into a report", () => {
-  test.beforeEach(() => skipUnlessReportRuntimeBuilt());
+  test.beforeEach(() => skipUnlessRuntimeBuilt());
 
   test("tiles mount in place, open on the exported state and follow the panel", async ({
     page,
@@ -112,18 +113,62 @@ test.describe("report host — the runtime mounted into a report", () => {
     expect(host.font).toContain("Georgia");
     expect(host.margin).toBe("0px");
     expect(host.probe).toBe("16px");
-    // With no exported filter, the dashboard's default state: every row.
+    // With no exported filter, no filter: every row.
     await expect(tile(page, "card-body-mass").getByText("4,201.7544")).toBeVisible({
       timeout: 30_000,
     });
     expect(attempts).toEqual([]);
   });
 
+  test("the report alone offers no dashboard", async ({ page }) => {
+    const attempts = await blockNetwork(page);
+    await page.goto(reportUrl(ADELIE));
+    await expect(page.locator("[data-depictio-tile][data-depictio-mounted]").first()).toBeAttached({
+      timeout: 30_000,
+    });
+    await expect(page.locator(".dpx-open-dashboard")).toHaveCount(0);
+    await expect(page.locator(".dpx-tile-open")).toHaveCount(0);
+    await expect(page.locator("iframe")).toHaveCount(0);
+    expect(await page.evaluate(() => "__DEPICTIO_COMBINED__" in window)).toBe(false);
+    // The panel speaks of this page only.
+    await expect(page.locator("[data-testid='depictio-report-filters']")).toContainText(
+      "recomputes in this page",
+    );
+    expect(attempts).toEqual([]);
+  });
+
+  test("the exported state wins over a filter's default", async ({ page }) => {
+    // The species filter defaults to Adelie on the dashboard, and the reader
+    // cleared it before exporting: the report opens with no filter, as the
+    // document says, not on the default.
+    const attempts = await blockNetwork(page);
+    await page.goto(
+      reportUrl([], (m) => {
+        const filter = m.dashboard.doc.stored_metadata.find(
+          (c: { index: string }) => c.index === "filter-species",
+        );
+        filter.default_state = { default_value: ["Adelie"] };
+        filter.default_value = ["Adelie"];
+        for (const tab of m.tabs ?? []) {
+          const same = tab.doc.stored_metadata?.find(
+            (c: { index: string }) => c.index === "filter-species",
+          );
+          if (same) Object.assign(same, { default_state: filter.default_state, default_value: ["Adelie"] });
+        }
+      }),
+    );
+    await expect(tile(page, "card-body-mass").getByText("4,201.7544")).toBeVisible({
+      timeout: 30_000,
+    });
+    await tile(page, "scatter-mass-flipper").scrollIntoViewIfNeeded();
+    await expect.poll(() => scatterPoints(page), { timeout: 30_000 }).toBe(342);
+    expect(attempts).toEqual([]);
+  });
 });
 
 test.describe("report host — scripts blocked", () => {
   test.use({ javaScriptEnabled: false });
-  test.beforeEach(() => skipUnlessReportRuntimeBuilt());
+  test.beforeEach(() => skipUnlessRuntimeBuilt());
 
   test("without the runtime, the report is its fallbacks", async ({ page }) => {
     const attempts = await blockNetwork(page);

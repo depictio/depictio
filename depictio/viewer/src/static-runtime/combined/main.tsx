@@ -1,18 +1,20 @@
 /**
- * Entry of the combined runtime: ONE script for both views of a combined
- * report + dashboard file (`vite.combined.config.ts`).
+ * Entry of the static runtime a rendered report embeds: ONE script for both
+ * outputs of a report (`vite.combined.config.ts`), the report alone and the
+ * combined report + dashboard file.
  *
- * It runs twice, in two documents of the same file:
+ * In the report (the page, a rendered Quarto document holding
+ * `#depictio-report-manifest`) it scopes its own stylesheet onto the
+ * runtime's roots and mounts the report's tiles and filter panels (the report
+ * host, `report/boot.tsx`). The report's config says which output the file
+ * is: with a `combined` section it also installs the "Report | Dashboard"
+ * switch, the cross-links and the deep links (`host.ts`); without one (the
+ * report-only output) it stops there: no switch, no dashboard, no frame.
  *
- *   - in the report (the page, a rendered Quarto document holding
- *     `#depictio-report-manifest`): it scopes its own stylesheet onto the
- *     runtime's roots, mounts the report's tiles and filter panel (the report
- *     host, `report/boot.tsx`) and installs the switch, the cross-links and the
- *     deep links (`host.ts`);
- *   - in the dashboard (the iframe `host.ts` writes on demand, holding
- *     `#bundle-manifest` and `#root`): it mounts the whole viewer App (the
- *     bundle host, `appHost.tsx`), opened on the tab asked for and sharing the
- *     report's filter state.
+ * In the dashboard (the iframe `host.ts` writes on demand, holding
+ * `#bundle-manifest` and `#root`) it mounts the whole viewer App (the bundle
+ * host, `appHost.tsx`), opened on the tab asked for and sharing the report's
+ * filter state.
  *
  * It also stands in for the report's own copy of Plotly: the export's static
  * figures call `window.Plotly.newPlot` while the page parses, so the producer
@@ -22,19 +24,14 @@ import '../../icons';
 
 import Plotly from 'plotly.js';
 
-import '@mantine/core/styles.css';
-import '@mantine/notifications/styles.css';
-import '@mantine/carousel/styles.css';
-import '@mantine/dates/styles.css';
-import '@mantine/tiptap/styles.css';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
-import '../../styles/app.css';
-// The report host's own: the Paper keys and strips, and the placeholders.
+import '../appStyles';
+// The report host's own, after the App's: the Paper keys and strips, and the
+// placeholders.
 import '../../chrome/variants/glass/layout.css';
 import '../report/report.css';
 
 import {
+  BUNDLE_MANIFEST_ID,
   REPORT_MANIFEST_ID,
   createFilterChannel,
   findCombinedHost,
@@ -42,8 +39,9 @@ import {
 
 import { bootApp } from '../appHost';
 import { bootReport } from '../report/boot';
-import { RUNTIME_ATTR, installCombinedHost, readCombinedConfig } from './host';
-import { adoptScopedStyles } from './scopeStyles';
+import { readReportConfig } from '../report/page';
+import { RUNTIME_ATTR, installCombinedHost } from './host';
+import { injectScopedStyles } from './scopeStyles';
 import { withReachableBasemap } from '../mapBasemap';
 
 declare global {
@@ -89,18 +87,24 @@ function bootReportView(): void {
   if (css) {
     try {
       // Virgil is the app's hand-drawn page-title face; no tile draws in it.
-      adoptScopedStyles(document, css, REPORT_ROOT, { dropFontFaces: ['Virgil'] });
+      injectScopedStyles(document, css, REPORT_ROOT, { dropFontFaces: ['Virgil'] });
     } catch (err) {
       console.warn('[depictio] the runtime stylesheet could not be applied', err);
     }
   }
+  const combined = readReportConfig().combined;
+  if (!combined) {
+    // The report alone: its tiles and its filter panel, nothing else.
+    bootReport();
+    return;
+  }
   const channel = createFilterChannel();
   const booted = bootReport({ channel });
   if (!booted) return;
-  installCombinedHost({ manifest: booted.manifest, channel, config: readCombinedConfig() });
+  installCombinedHost({ manifest: booted.manifest, channel, config: combined });
 }
 
-if (document.getElementById('bundle-manifest') && document.getElementById('root')) {
+if (document.getElementById(BUNDLE_MANIFEST_ID) && document.getElementById('root')) {
   bootDashboardView();
 } else if (document.readyState === 'loading') {
   document.addEventListener(

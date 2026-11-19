@@ -421,15 +421,24 @@ class DepictioClient:
         The same manifest a static export bundles (producer A, the dashboard's
         whole tab family), with ``initial_filters`` set to the state's filters,
         so the runtime opens on the view the document narrates. Owner-gated,
-        like the static export: it carries the data.
+        like the static export: it carries the data. Built by a worker, as
+        long as the export's own build, so this waits for it.
         """
         state = state or self.state(dashboard_id)
         if hasattr(state, "model_dump"):
             state = state.model_dump(mode="json", exclude_none=True)
-        return self.post(f"/serverless/report-manifest/{dashboard_id}", {"state": state})
+        job = self.poll(
+            f"/serverless/report-manifest/{dashboard_id}",
+            {"state": state},
+            "/serverless/report-manifest/job/{job_id}",
+            interval=2.0,
+            max_wait=900.0,
+            retries=0,
+        )
+        return job["manifest"]
 
     def runtime(self, addons: list[str] | None = None) -> dict[str, Any]:
-        """The report runtime: ``{"js", "css", "addons": {name: markup}}``."""
+        """The static runtime: ``{"js", "css", "addons": {name: markup}}``."""
         params = {"addons": ",".join(addons)} if addons else {}
         return self.get("/serverless/report-runtime", **params)
 
@@ -440,44 +449,38 @@ class DepictioClient:
         *,
         config: dict[str, Any] | None = None,
     ) -> str:
-        """The block a report inlines once at its end, as a raw-HTML block.
+        """The runtime and the manifest a report embeds, as a raw-HTML block.
 
         With it, the report's tiles are drawn by the dashboard's own renderers
         and follow an in-page filter panel; without it (this returns ``""``
         when the API is out of reach, the caller is not an owner, or the
         state cannot be reproduced in the page) every tile keeps the output
-        this document computed for it. A worker rendering the report composes
-        the block itself and names it in ``DEPICTIO_REPORT_RUNTIME_FILE``.
+        this document computed for it. A worker rendering the report embeds the
+        runtime itself afterwards (``DEPICTIO_REPORT_RUNTIME_DEFERRED``).
         """
         from .components import static_figures
-        from .report_runtime import RUNTIME_FILE_ENV, compose_report_runtime, raw_html_block
+        from .report_runtime import RUNTIME_DEFERRED_ENV, raw_html_block, runtime_parts
 
-        if static_figures():
+        if static_figures() or os.environ.get(RUNTIME_DEFERRED_ENV):
             # A page with no browser (the PDF) runs no script: the block would
-            # only be megabytes of raw HTML for the typst writer to drop.
+            # only be megabytes of raw HTML for the typst writer to drop. And a
+            # worker's render gets the runtime from the worker, once.
             return ""
-        prebuilt = os.environ.get(RUNTIME_FILE_ENV)
-        if prebuilt:
-            try:
-                return raw_html_block(Path(prebuilt).read_text(encoding="utf-8"))
-            except OSError:
-                return ""
         try:
             manifest = self.manifest(dashboard_id, state)
             names = [str(a.get("name")) for a in manifest.get("addons") or [] if a.get("name")]
             runtime = self.runtime(names)
         except Exception:  # noqa: BLE001 - the fallbacks stand in
             return ""
-        addons = "".join((runtime.get("addons") or {}).get(n, "") for n in names)
-        return raw_html_block(
-            compose_report_runtime(
-                js=str(runtime.get("js") or ""),
-                css=str(runtime.get("css") or ""),
-                manifest=manifest,
-                config=config,
-                addons=addons,
-            )
+        markup = runtime.get("addons") or {}
+        data, code = runtime_parts(
+            js=str(runtime.get("js") or ""),
+            css=str(runtime.get("css") or ""),
+            manifest=manifest,
+            config=config,
+            addons="".join(markup.get(n, "") for n in names),
         )
+        return raw_html_block(data + code)
 
     def close(self) -> None:
         self._http.close()

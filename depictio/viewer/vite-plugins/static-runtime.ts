@@ -1,10 +1,10 @@
 /**
  * The module swaps and resolution shared by the two hosts of the static
  * runtime: the serverless bundle (`vite.static.config.ts`, the whole viewer App
- * in one HTML file) and the report runtime (`vite.report.config.ts`, the same
- * renderers mounted into a Quarto report). One list, so the two can never
- * disagree on which module reaches a server: a shim added for one host is a
- * shim for both.
+ * in one HTML file) and the runtime a report embeds (`vite.combined.config.ts`,
+ * the same renderers mounted into a Quarto report, plus the App for the
+ * combined file's dashboard view). One list, so the two can never disagree on
+ * which module reaches a server: a shim added for one host is a shim for both.
  *
  * Swapped by the module-shim plugin (RFC errata #5/#6):
  *

@@ -156,8 +156,8 @@ def _render(
         env["DEPICTIO_API_TOKEN"] = api_token
     # The notebook is a client of this deployment, whichever side of it runs.
     env["DEPICTIO_CONTEXT"] = "client"
-    # E.g. DEPICTIO_REPORT_RUNTIME_FILE: the report runtime's block, composed
-    # by the worker for the document's last cell to print.
+    # E.g. DEPICTIO_REPORT_RUNTIME_DEFERRED: the worker embeds the runtime
+    # after the render, so the document's last cell prints nothing.
     env.update(extra_env or {})
 
     with tempfile.TemporaryDirectory(prefix="depictio-report-") as tmp:

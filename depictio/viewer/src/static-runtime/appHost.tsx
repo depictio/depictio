@@ -26,14 +26,7 @@ import ReactDOM from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { DatesProvider } from '@mantine/dates';
-import '@mantine/core/styles.css';
-import '@mantine/notifications/styles.css';
-import '@mantine/carousel/styles.css';
-import '@mantine/dates/styles.css';
-import '@mantine/tiptap/styles.css';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
-import '../styles/app.css';
+import './appStyles';
 
 import { StaticBadgeProvider, type StaticTierMap } from 'depictio-react-core';
 
@@ -47,6 +40,7 @@ import {
   setActiveTab,
 } from './bundle';
 import { installBundleNavigation } from './tabNav';
+import { storageGet, storageSet } from './storage';
 import { installInlineMultiqcLogos } from '../chrome/multiqcLogo';
 import { installOfflineGenomeAssets } from './genomeAssets';
 import { BundleProjectPageContext, type BundleProjectPage } from '../chrome/bundlePage';
@@ -77,13 +71,8 @@ export interface BootAppOptions {
  */
 function seedSidebarOpen(): void {
   if (bundledTabs().length === 0) return;
-  try {
-    if (localStorage.getItem('sidebar-collapsed') == null) {
-      localStorage.setItem('sidebar-collapsed', 'false');
-    }
-  } catch {
-    /* storage unavailable (file:// with cookies blocked) — rail stays default */
-  }
+  // Storage unavailable (file:// with cookies blocked): the rail stays default.
+  if (storageGet('sidebar-collapsed') == null) storageSet('sidebar-collapsed', 'false');
 }
 
 /** Tab switches requested from outside React (the host page). */
@@ -171,12 +160,8 @@ const StaticRuntime: React.FC<{
  * stored scheme, else light).
  */
 function initialColorScheme(): 'light' | 'dark' {
-  try {
-    const stored = localStorage.getItem('mantine-color-scheme-value');
-    if (stored === 'light' || stored === 'dark') return stored;
-  } catch {
-    /* storage blocked: fall through to the system's preference */
-  }
+  const stored = storageGet('mantine-color-scheme-value');
+  if (stored === 'light' || stored === 'dark') return stored;
   return typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-color-scheme: dark)').matches
     ? 'dark'

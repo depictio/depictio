@@ -1,12 +1,14 @@
-"""The combined export: the rendered report AND the dashboard, in one HTML file.
+"""The static runtime in a rendered report: the report alone, or the report AND
+the dashboard in one HTML file.
 
-``depictio/serverless/combined.py`` turns a rendered report into the combined
-file: Quarto's plotly.js out (the runtime's Plotly draws the report's figures),
-the report runtime's block out, the App runtime in once — where plotly.js was —
-with the manifest, its add-ons (or the report's own 3Dmol, lent to the
-dashboard) and its stylesheet as inert text. These tests hold the composition
-to that on a page shaped like a Quarto report, then the endpoint's gate and the
-worker's path to it.
+``depictio/serverless/combined.py`` embeds the one runtime in a rendered
+report: Quarto's plotly.js out (the runtime's Plotly draws the report's
+figures), the runtime in once — where plotly.js was — with the manifest, its
+add-ons (or the report's own 3Dmol, lent to the dashboard) and its stylesheet
+as inert text. The two outputs differ only by the config's ``combined``
+section, so a report-only file becomes the combined one by flipping it. These
+tests hold the composition to that on a page shaped like a Quarto report, then
+the endpoint's gate, the worker's path to it and the CLI.
 """
 
 from __future__ import annotations
@@ -24,11 +26,7 @@ from fastapi import HTTPException
 
 from depictio.models.models.analysis_state import AnalysisState, NotebookExportRequest
 from depictio.notebook.components import public_reason
-from depictio.notebook.report_runtime import (
-    CONFIG_ID,
-    MANIFEST_ID,
-    compose_report_runtime,
-)
+from depictio.notebook.report_runtime import CONFIG_ID, MANIFEST_ID
 from depictio.serverless import combined
 
 PLOTLY = "/**\n* plotly.js v3.7.0\n* Copyright 2012-2026, Plotly, Inc.\n*/\nwindow.Plotly = {};"
@@ -37,17 +35,12 @@ THREEDMOL = (
     'var root,factory;root=this;root["3Dmol"]={};'
 )
 FIGURE = '<script>window.PLOTLYENV={};Plotly.newPlot("f1",[],{});</script>'
-LEAK = (
-    "Depictio API returned 500: BrowserType.launch: Executable doesn&#39;t exist at "
-    "/opt/pw-browsers/chromium_headless_shell-1234/chrome-headless-shell\n"
-    "╔══════╗\n║ Looks like Playwright was just installed ║"
-)
 JS = "window.__combined=1;var s='</script>';/*<!-- -->*/"
 CSS = ":root{--x:1}body{margin:0}.depictio-tile{display:block}"
 MANIFEST = {"dashboard": {"id": "d1", "title": "T", "doc": {}}, "built_at": "now", "addons": []}
 
 
-def _report(*, plotly: bool = True, threedmol: bool = False, runtime: bool = False) -> str:
+def _report(*, plotly: bool = True, threedmol: bool = False) -> str:
     parts = [
         "<!DOCTYPE html><html><head><title>R</title></head><body class='quarto-light'>",
         "<h1>Report</h1>",
@@ -63,25 +56,14 @@ def _report(*, plotly: bool = True, threedmol: bool = False, runtime: bool = Fal
         )
     parts.append(
         '<div class="depictio-tile" data-depictio-tile="d1:c1"><div class="depictio-fallback">'
-        '<div class="dpx-unavailable"><b>X</b> could not be shown here.'
-        f'<div style="margin-top:4px;color:#868e96">{LEAK}</div></div></div></div>'
+        "<b>X</b></div></div>"
     )
-    if runtime:
-        parts.append(
-            compose_report_runtime(
-                js="window.__oldRuntime=1;",
-                css=".depictio-report-root{}",
-                manifest={"old": True},
-                config={"brand": {"primary": "#159090"}},
-                addons='<script data-depictio-addon="3dmol">old</script>',
-            )
-        )
     parts.append("</body></html>")
     return "".join(parts)
 
 
-def _compose(html: str, **kw: Any) -> combined.CombinedResult:
-    return combined.compose_combined(html, MANIFEST, js=JS, css=CSS, **kw)
+def _compose(html: str, **kw: Any) -> combined.ComposedReport:
+    return combined.compose_report(html, MANIFEST, js=JS, css=CSS, **kw)
 
 
 def _runtime_script_bodies(html: str) -> list[str]:
@@ -123,18 +105,22 @@ def test_one_manifest_one_config_one_stylesheet_and_nothing_closes_early():
     assert "window.__combined=1" in body
 
 
-def test_a_report_runtime_already_embedded_is_replaced_and_its_look_kept():
-    html = _compose(
-        _report(runtime=True), config={"brand": {"font_family": "Inter"}}, default_view="dashboard"
-    ).html
-    assert "__oldRuntime" not in html
-    assert "data-depictio-report-runtime" not in html
-    assert '"old"' not in html
-    assert 'data-depictio-addon="3dmol">old' not in html
-    config = combined.embedded_config(html)
-    assert config["brand"] == {"font_family": "Inter"}  # the caller's look wins key by key
-    assert config["combined"] == {"default_view": "dashboard"}
-    assert combined.embedded_manifest(html) == MANIFEST
+def test_the_two_outputs_differ_by_the_combined_section_only():
+    look = {"brand": {"primary": "#159090"}}
+    alone = _compose(_report(), config=look).html
+    both = _compose(_report(), config=look, output="combined", default_view="dashboard").html
+    assert combined.embedded_config(alone) == look
+    assert combined.embedded_config(both) == {**look, "combined": {"default_view": "dashboard"}}
+    config_re = rf'<script type="application/json" id="{CONFIG_ID}">.*?</script>'
+    assert re.sub(config_re, "", alone) == re.sub(config_re, "", both)
+    # And a report-only file becomes the combined one by flipping that section.
+    assert combined.set_output(alone, "combined", "dashboard") == both
+    assert combined.set_output(both, "report") == alone
+
+
+def test_flipping_needs_an_embedded_runtime():
+    with pytest.raises(ValueError, match="does not embed"):
+        combined.set_output(_report(), "combined")
 
 
 def test_the_reports_own_3dmol_is_lent_to_the_dashboard():
@@ -159,24 +145,25 @@ def test_an_addon_the_report_lacks_goes_in_before_the_runtime():
     )
 
 
-def test_fallback_reasons_lose_the_workers_paths():
-    html = _compose(_report()).html
-    assert "/opt/pw-browsers" not in html
-    assert "Looks like Playwright" not in html
-    assert "Executable doesn&#x27;t exist at &lt;path&gt;" in html or (
-        "Executable doesn't exist at &lt;path&gt;" in html
-    )
-
-
-def test_the_default_view_is_checked():
+def test_the_default_view_and_the_output_are_checked():
     with pytest.raises(ValueError):
-        _compose(_report(), default_view="both")  # type: ignore[arg-type]
+        _compose(_report(), output="combined", default_view="both")  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        _compose(_report(), output="both")  # type: ignore[arg-type]
 
 
 def test_the_runtime_floor_is_the_runtime_and_nothing_else():
-    floor = combined.runtime_floor_html("a" * 1000, "b" * 100)
+    """What every report that embeds the runtime pays for it (CI's budget floor,
+    written by build-demo.mjs), on top of its report and manifest."""
+    page = "<!doctype html><html><head><meta charset='utf-8'></head><body></body></html>"
+    floor = combined.compose_report(page, "null", js="a" * 1000, css="b" * 100).html
     assert floor.count("a" * 1000) == 1 and floor.count("b" * 100) == 1
     assert len(floor) < 1000 + 100 + 1000
+
+
+def test_the_body_end_is_found_in_either_case():
+    html = _compose(_report(plotly=False).replace("</body>", "</BODY>")).html
+    assert html.index('data-depictio-runtime="js"') < html.index("</BODY>")
 
 
 # ---------------------------------------------------------------------------
@@ -215,8 +202,8 @@ def test_public_reason_is_bounded():
 def built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     from depictio.serverless import report
 
-    (tmp_path / combined.COMBINED_JS).write_text(JS)
-    (tmp_path / combined.COMBINED_CSS).write_text(CSS)
+    (tmp_path / combined.RUNTIME_JS).write_text(JS)
+    (tmp_path / combined.RUNTIME_CSS).write_text(CSS)
     monkeypatch.setenv(report.RUNTIME_DIR_ENV, str(tmp_path))
     addons = tmp_path / "addons"
     addons.mkdir()
@@ -228,20 +215,32 @@ def built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def test_combine_report_reads_the_built_runtime_and_addons(built):
-    manifest = {**MANIFEST, "addons": [{"name": "jbrowse", "version": "4", "bytes": 14}]}
-    out = combined.combine_report(_report(), manifest)
+def test_embed_runtime_reads_the_built_runtime_and_addons(built):
+    entries = [{"name": "jbrowse", "version": "4", "bytes": 14}]
+    out = combined.embed_runtime(_report(), {**MANIFEST, "addons": entries}, entries)
     assert "window.__combined=1" in out.html
-    assert '<script data-depictio-addon="jbrowse">window.__jb=1;</script>' in out.html
+    assert 'data-depictio-addon="jbrowse">window.__jb=1;</script>' in out.html
 
 
 def test_a_missing_runtime_is_a_named_error(tmp_path, monkeypatch):
     from depictio.serverless import report
 
     monkeypatch.setenv(report.RUNTIME_DIR_ENV, str(tmp_path))
-    assert not combined.combined_runtime_available()
-    with pytest.raises(combined.CombinedRuntimeUnavailable, match="build:static"):
-        combined.combined_assets()
+    assert not combined.runtime_available()
+    with pytest.raises(combined.RuntimeUnavailable, match="build:static"):
+        combined.runtime_assets()
+
+
+def test_addon_markup_is_one_builder_for_every_path(built):
+    from depictio.serverless.addons import AddonError, addon_markup
+
+    markup = addon_markup([{"name": "jbrowse"}, {"name": "jbrowse"}])
+    assert list(markup) == ["jbrowse"] and "window.__jb=1;" in markup["jbrowse"]
+    with pytest.raises(AddonError):
+        addon_markup([{"name": "3dmol"}])
+    assert addon_markup([{"name": "3dmol"}, {"name": "jbrowse"}], skip_missing=True).keys() == {
+        "jbrowse"
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -261,15 +260,15 @@ def test_combined_needs_rendering_a_built_runtime_and_the_runtime_rules(built):
         assert "does not render" in (ep._combined_refusal("d1", _state(), user) or "")  # type: ignore[arg-type]
     with (
         patch.object(ep.settings.notebook_export, "render_enabled", True),
-        patch.object(ep, "_runtime_refusal", lambda *a: "limited to its owners"),
+        patch.object(ep, "_owner_refusal", lambda *a: "limited to its owners"),
     ):
         assert ep._combined_refusal("d1", _state(), user) == "limited to its owners"  # type: ignore[arg-type]
     with (
         patch.object(ep.settings.notebook_export, "render_enabled", True),
-        patch.object(ep, "_runtime_refusal", lambda *a: None),
+        patch.object(ep, "_owner_refusal", lambda *a: None),
     ):
         assert ep._combined_refusal("d1", _state(), user) is None  # type: ignore[arg-type]
-        (built / combined.COMBINED_JS).unlink()
+        (built / combined.RUNTIME_JS).unlink()
         assert "not built" in (ep._combined_refusal("d1", _state(), user) or "")  # type: ignore[arg-type]
 
 
@@ -339,9 +338,8 @@ def _run_task(monkeypatch: pytest.MonkeyPatch, **kw: Any) -> tuple[dict, dict, d
     seen: dict[str, Any] = {}
 
     def fake_render(qmd: bytes, **opts: Any) -> bytes:
-        env_file = opts["extra_env"].get("DEPICTIO_REPORT_RUNTIME_FILE")
-        seen["runtime_block"] = Path(env_file).read_text() if env_file else None
-        return _report(runtime=False).encode()
+        seen["deferred"] = opts["extra_env"].get("DEPICTIO_REPORT_RUNTIME_DEFERRED")
+        return _report().encode()
 
     monkeypatch.setattr("pymongo.AsyncMongoClient", _Mongo)
     monkeypatch.setattr("beanie.init_beanie", _noop)
@@ -371,17 +369,30 @@ RUNTIME = {
 }
 
 
-def test_the_worker_combines_after_rendering_with_an_empty_block(monkeypatch, built):
+class _Manifest:
+    """What the worker reads of producer A's manifest."""
+
+    addons: list[Any] = []
+
+    def model_dump_json(self) -> str:
+        return json.dumps(MANIFEST)
+
+
+def _manifest(*a: Any) -> Any:
+    return _Manifest()
+
+
+def test_the_worker_embeds_the_combined_file_after_rendering(monkeypatch, built):
     from depictio.api import celery_app as worker
 
-    monkeypatch.setattr(worker, "_combined_manifest", lambda runtime: dict(MANIFEST))
+    monkeypatch.setattr(worker, "_report_manifest", _manifest)
     result, stored, seen = _run_task(
         monkeypatch,
         runtime=RUNTIME,
         combined={"default_view": "dashboard"},
         filename="report-report-dashboard.html",
     )
-    assert seen["runtime_block"] == ""  # the document printed no runtime of its own
+    assert seen["deferred"] == "1"  # the document printed no runtime of its own
     assert result["filename"] == "report-report-dashboard.html"
     html = stored[result["key"]].decode()
     assert result["key"].endswith("/report-report-dashboard.html")
@@ -391,6 +402,18 @@ def test_the_worker_combines_after_rendering_with_an_empty_block(monkeypatch, bu
     assert config["brand"] == {"primary": "#123456"}
 
 
+def test_a_report_job_embeds_the_same_runtime_without_the_switch(monkeypatch, built):
+    from depictio.api import celery_app as worker
+
+    monkeypatch.setattr(worker, "_report_manifest", _manifest)
+    result, stored, seen = _run_task(monkeypatch, runtime=RUNTIME)
+    assert seen["deferred"] == "1"
+    assert result["filename"] == "report.html"
+    html = stored[result["key"]].decode()
+    assert "window.__combined=1" in html and "plotly.js v3" not in html
+    assert combined.embedded_config(html) == {"brand": {"primary": "#123456"}}
+
+
 def test_a_combined_job_whose_manifest_fails_fails(monkeypatch, built):
     from depictio.api import celery_app as worker
     from depictio.serverless.producer_a import ProducerAError
@@ -398,24 +421,53 @@ def test_a_combined_job_whose_manifest_fails_fails(monkeypatch, built):
     def boom(runtime: dict) -> dict:
         raise ProducerAError("permission denied")
 
-    monkeypatch.setattr(worker, "_combined_manifest", boom)
+    monkeypatch.setattr(worker, "_report_manifest", boom)
     with pytest.raises(ProducerAError):
         _run_task(monkeypatch, runtime=RUNTIME, combined={"default_view": "report"})
 
 
-def test_a_plain_report_job_is_unchanged(monkeypatch, built):
+def test_a_report_job_whose_manifest_fails_keeps_its_fallbacks(monkeypatch, built):
+    from depictio.api import celery_app as worker
+    from depictio.serverless.producer_a import ProducerAError
+
+    def boom(runtime: dict) -> dict:
+        raise ProducerAError("permission denied")
+
+    monkeypatch.setattr(worker, "_report_manifest", boom)
+    result, stored, seen = _run_task(monkeypatch, runtime=RUNTIME)
+    # Still deferred: the document must not ask the API for what failed here.
+    assert seen["deferred"] == "1"
+    html = stored[result["key"]].decode()
+    assert "window.__combined" not in html and "plotly.js v3" in html
+
+
+def test_a_time_limit_during_the_manifest_is_the_tasks(monkeypatch, built):
+    from celery.exceptions import SoftTimeLimitExceeded
+
     from depictio.api import celery_app as worker
 
-    monkeypatch.setattr(worker, "_report_runtime_file", lambda job_id, runtime: _empty(job_id))
-    result, stored, _ = _run_task(monkeypatch, runtime=RUNTIME)
+    def slow(runtime: dict) -> dict:
+        raise SoftTimeLimitExceeded()
+
+    monkeypatch.setattr(worker, "_report_manifest", slow)
+    with pytest.raises(SoftTimeLimitExceeded):
+        _run_task(monkeypatch, runtime=RUNTIME)
+
+
+def test_the_task_limits_count_the_manifest_build():
+    from depictio.api import celery_app as worker
+
+    render = worker.settings.notebook_export.render_timeout_s
+    task = worker.render_notebook_report
+    assert task.soft_time_limit >= worker.MANIFEST_BUILD_S + 2 * render
+    assert task.time_limit > task.soft_time_limit
+
+
+def test_a_plain_report_job_is_unchanged(monkeypatch, built):
+    result, stored, seen = _run_task(monkeypatch)
+    assert seen["deferred"] is None
     assert result["filename"] == "report.html"
     assert "window.__combined" not in stored[result["key"]].decode()
-
-
-def _empty(job_id: str) -> str:
-    from depictio.api import celery_app as worker
-
-    return worker._empty_runtime_file(job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -423,22 +475,28 @@ def _empty(job_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_the_cli_combines_a_rendered_report_offline(built, tmp_path):
+def test_the_cli_turns_a_report_only_file_into_the_combined_one(tmp_path):
+    """Offline and from the file alone: no built runtime is needed."""
     from typer.testing import CliRunner
 
     from depictio.cli.cli.commands.dashboard import app
 
+    alone = _compose(_report(), config={"brand": {"primary": "#159090"}}).html
     src = tmp_path / "penguins.html"
-    src.write_text(_report(runtime=True).replace('{"old":true}', json.dumps(MANIFEST)))
+    src.write_text(alone)
     res = CliRunner().invoke(app, ["combine-report", str(src), "--default-view", "dashboard"])
     assert res.exit_code == 0, res.output
     out = tmp_path / "penguins-report-dashboard.html"
     html = out.read_text()
-    assert "window.__combined=1" in html and "__oldRuntime" not in html
-    assert combined.embedded_config(html)["combined"] == {"default_view": "dashboard"}
+    assert html.count("window.__combined=1") == 1
+    assert combined.embedded_config(html) == {
+        "brand": {"primary": "#159090"},
+        "combined": {"default_view": "dashboard"},
+    }
+    assert combined.embedded_manifest(html) == MANIFEST
 
 
-def test_the_cli_refuses_a_report_without_a_manifest(built, tmp_path):
+def test_the_cli_refuses_a_report_without_the_runtime(tmp_path):
     from typer.testing import CliRunner
 
     from depictio.cli.cli.commands.dashboard import app
@@ -448,3 +506,5 @@ def test_the_cli_refuses_a_report_without_a_manifest(built, tmp_path):
     res = CliRunner().invoke(app, ["combine-report", str(src)])
     assert res.exit_code == 1
     assert "does not embed" in res.output
+    bad = CliRunner().invoke(app, ["combine-report", str(src), "--default-view", "both"])
+    assert bad.exit_code == 2

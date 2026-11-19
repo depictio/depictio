@@ -10,15 +10,16 @@ module is the report's half of that contract, as text:
   *fallback*): ``<div data-depictio-tile="<tab_id>:<index>">`` holding a
   ``.depictio-fallback`` div, and ``<div data-depictio-filters>`` where the
   dashboard's controls are drawn;
-* :func:`compose_report_runtime`, the one block inlined at the end of the
-  document: the runtime's stylesheet, the report's look, the manifest, any
-  add-on the manifest names, then the runtime's script.
+* :func:`runtime_parts`, the one composer of what a report embeds: the
+  report's look (with the ``combined`` section when the file also holds the
+  dashboard), the manifest, the runtime's stylesheet as inert text, the
+  add-ons, then the runtime's script. ``serverless/combined.py`` places those
+  parts in a rendered report; a reader's own render prints them from the
+  document's last cell (:meth:`DepictioClient.report_runtime`).
 
-Pure standard library, so it ships with the notebook client: the server
-composes the block for a report it renders, and a reader's own render composes
-it from :meth:`DepictioClient.report_runtime`. Neither path touches the
-fallbacks; without the block (or with scripts blocked) the report reads
-exactly as it did before the runtime existed.
+Pure standard library, so it ships with the notebook client. Without the
+runtime (or with scripts blocked) the report reads exactly as it did before
+the runtime existed: every fallback stays.
 """
 
 from __future__ import annotations
@@ -35,11 +36,15 @@ FALLBACK_CLASS = "depictio-fallback"
 TILE_CLASS = "depictio-tile"
 MANIFEST_ID = "depictio-report-manifest"
 CONFIG_ID = "depictio-report-config"
-# Marks the block, so a document (and a test) can tell it was embedded once.
-RUNTIME_MARK = "data-depictio-report-runtime"
-# Set by the worker that renders a report: the block, composed in-process, for
-# the document's last cell to print instead of asking the API for it.
-RUNTIME_FILE_ENV = "DEPICTIO_REPORT_RUNTIME_FILE"
+# Marks the runtime's script, its stylesheet text and the elements its host
+# adds (`viewer/src/static-runtime/combined/host.ts`).
+RUNTIME_ATTR = "data-depictio-runtime"
+# The config section that turns the "Report | Dashboard" switch on. Without it
+# the runtime draws the report's tiles only (the report-only output).
+COMBINED_KEY = "combined"
+# Set by the worker that renders a report: it embeds the runtime itself once
+# the render is done, so the document's last cell prints nothing.
+RUNTIME_DEFERRED_ENV = "DEPICTIO_REPORT_RUNTIME_DEFERRED"
 
 
 def tile_ref(tab_id: str, index: str) -> str:
@@ -86,36 +91,44 @@ def json_script(element_id: str, payload: Any) -> str:
     return f'<script type="application/json" id="{element_id}">{blob}</script>'
 
 
-def _inline_script(js: str) -> str:
-    # Inside script data, `</script` ends the element and `<!--` can switch the
-    # tokenizer into its escaped states. Both are only ever inside string or
-    # regex literals in a minified bundle, where `<\/` and `<\!` read the same.
-    return js.replace("</script", "<\\/script").replace("<!--", "<\\!--")
+def script_text(text: str) -> str:
+    """``text`` safe inside a ``<script>`` element (run, or inert ``text/plain``).
+
+    Inside script data, ``</script`` ends the element and ``<!--`` can switch
+    the tokenizer into its escaped states. In a minified bundle both only ever
+    sit in string or regex literals, where ``<\\/`` and ``<\\!`` read the
+    same; in CSS a ``\\/`` reads as ``/``.
+    """
+    return text.replace("</script", "<\\/script").replace("<!--", "<\\!--")
 
 
-def compose_report_runtime(
+def runtime_parts(
     *,
     js: str,
     css: str,
-    manifest: dict[str, Any] | str,
+    manifest: Any,
     config: dict[str, Any] | None = None,
     addons: str = "",
-) -> str:
-    """The block a report inlines once, at its end.
+) -> tuple[str, str]:
+    """What a report embeds, as ``(data, code)``.
 
-    ``addons`` is the add-ons' markup (``serverless.addons.addons_html``), placed
-    before the runtime's script so their globals exist when it runs.
+    ``data``: the report's look (``config``, with its ``combined`` section when
+    the file also holds the dashboard), the manifest, and the runtime's
+    stylesheet as inert text (the report view scopes it onto the runtime's
+    roots, the dashboard view takes it as written). ``code``: the add-ons'
+    markup (``serverless.addons.addon_markup``), then the runtime's script, so
+    their globals exist when it runs. The two go together at the page's end,
+    or apart when the script takes the place of the report's own plotly.js.
     """
-    style = css.replace("</style", "<\\/style")
-    return "".join(
+    data = "".join(
         [
-            f'<style {RUNTIME_MARK}="css">{style}</style>',
             json_script(CONFIG_ID, config or {}),
             json_script(MANIFEST_ID, manifest),
-            addons,
-            f'<script {RUNTIME_MARK}="js">{_inline_script(js)}</script>',
+            f'<script type="text/plain" {RUNTIME_ATTR}="css">{script_text(css)}</script>',
         ]
     )
+    code = addons + f'<script {RUNTIME_ATTR}="js">{script_text(js)}</script>'
+    return data, code
 
 
 _BACKTICKS = re.compile(r"`{3,}")
