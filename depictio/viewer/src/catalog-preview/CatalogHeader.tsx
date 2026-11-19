@@ -14,10 +14,11 @@ import React from 'react';
 import { Tooltip } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
-import { BookOpen, ChevronRight, SquarePen } from 'lucide-react';
+import { BookOpen, ChevronRight, Moon, SquarePen, Sun } from 'lucide-react';
 
 import DepictioRose from '../components/rose/DepictioRose';
 import { LOGO_SRC } from './shared';
+import { currentCatalogTheme, setCatalogTheme } from './siteTheme';
 
 /** depictio's hairline stroke for chrome glyphs (glass/icons.tsx). */
 const STROKE = 1.6;
@@ -49,6 +50,53 @@ function TopKey({
       >
         {children}
       </a>
+    </Tooltip>
+  );
+}
+
+/** The rose, still at rest and opening into petals on hover, as in the app's bar. */
+function BrandRose({ size, label }: { size: number; label: string }) {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <span
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ display: 'inline-flex' }}
+    >
+      <DepictioRose mode={hovered ? 'petals' : 'logo'} size={size} label={label} />
+    </span>
+  );
+}
+
+/** Light/dark switch. Only on the catalog site opened on its own: the
+ *  single-file gallery has its theme baked in, and inside the docs' iframe the
+ *  docs own the theme and pass it as `?theme=`. */
+function ThemeKey() {
+  const g = (window as { __CATALOG_PREVIEW__?: { lazyOutputs?: boolean } }).__CATALOG_PREVIEW__;
+  let framed = false;
+  try {
+    framed = window.self !== window.top;
+  } catch {
+    framed = true;
+  }
+  if (!g?.lazyOutputs || framed) return null;
+  const dark = currentCatalogTheme() === 'dark';
+  const label = dark ? 'Switch to light theme' : 'Switch to dark theme';
+  return (
+    <Tooltip label={label} withArrow openDelay={250}>
+      <button
+        type="button"
+        className="hy-key hy-key--top"
+        aria-label={label}
+        data-testid="catalog-theme-toggle"
+        onClick={() => setCatalogTheme(dark ? 'light' : 'dark')}
+      >
+        {dark ? (
+          <Sun size={21} strokeWidth={STROKE} aria-hidden />
+        ) : (
+          <Moon size={21} strokeWidth={STROKE} aria-hidden />
+        )}
+      </button>
     </Tooltip>
   );
 }
@@ -85,12 +133,12 @@ export default function CatalogHeader({
             onClick={home}
             aria-label="Back to the catalog"
           >
-            <DepictioRose mode="logo" size={markSize} label="" />
+            <BrandRose size={markSize} label="" />
           </a>
         </Tooltip>
       ) : (
         <span className="hy-top-brand hy-top-brand--mark">
-          <DepictioRose mode="logo" size={markSize} label="depictio" />
+          <BrandRose size={markSize} label="depictio" />
         </span>
       )}
       <span className="hy-top-rule" aria-hidden />
@@ -125,6 +173,7 @@ export default function CatalogHeader({
         </span>
       )}
       <div className="hy-top-keys">
+        <ThemeKey />
         <TopKey label="Add a tool in Tool Studio" href={TOOL_STUDIO_URL}>
           <SquarePen size={21} strokeWidth={STROKE} aria-hidden />
         </TopKey>
