@@ -679,14 +679,16 @@ def _arrow_stream(frames: Iterable[pl.DataFrame], schema: pl.Schema, tally: _Tal
     they finish: rows keep their order inside a batch, never across batches.
     A frame of many chunks (a scan of thousands of files) handed over chunk by
     chunk came back shuffled, file lines included (#1418). So a frame's rows
-    keep their order, and the frames themselves may not. Categorical and Enum
-    columns are written as String (``as_stored``), so the table holds plain
-    strings and no polars metadata. ``tally`` counts what went through.
+    keep their order, and the frames themselves may not. Each frame goes
+    through polars' own export, one batch that shares the text of its string
+    views. Categorical and Enum columns are written as String (``as_stored``),
+    so the table holds plain strings and no polars metadata. ``tally`` counts
+    what went through.
     """
     import pyarrow as pa
 
     columns = list(schema)
-    arrow_schema = as_stored(pl.DataFrame(schema=schema)).to_arrow().schema
+    arrow_schema = pa.RecordBatchReader.from_stream(as_stored(pl.DataFrame(schema=schema))).schema
 
     def batches():
         try:
@@ -695,10 +697,7 @@ def _arrow_stream(frames: Iterable[pl.DataFrame], schema: pl.Schema, tally: _Tal
                     part = part.select(columns).cast(dict(schema))  # type: ignore[arg-type]
                 if tally is not None:
                     tally.add(part)
-                if part.height == 0:
-                    continue
-                table = as_stored(part).rechunk().to_arrow().cast(arrow_schema)
-                yield from table.combine_chunks().to_batches(max_chunksize=table.num_rows)
+                yield from pa.RecordBatchReader.from_stream(as_stored(part))
         except BaseException as exc:
             if tally is not None:
                 tally.source_error = exc
@@ -757,6 +756,29 @@ def content_digest(df: pl.DataFrame) -> str | None:
     return digest.hexdigest()
 
 
+def _start_write(
+    schema: pl.Schema,
+    write_mode: WriteMode,
+    replace_run_tags: list[str] | None,
+    scoped: bool,
+) -> _Tally:
+    """Refuse a write that cannot be made, before any row is read; else the
+    tally that counts it. See ``write_delta_frames_versioned`` for the modes."""
+    predicated = write_mode == "replace-runs" and bool(replace_run_tags)
+    if scoped and not predicated:
+        # Invariant, deliberately an exception rather than a fall-back: with a
+        # subset frame, "overwrite the whole table" is data loss.
+        raise ValueError(
+            "a scoped write must be predicate-scoped to its runs; "
+            "refusing to overwrite the whole table with a subset of its runs"
+        )
+    if replace_run_tags and write_mode != "replace-runs":
+        raise ValueError("replace_run_tags needs replace-runs")
+    _refuse_unwritable_types(schema)
+    # A scoped write holds only some runs: its digest would not be the table's.
+    return _Tally(digest=None if scoped else _Digest(schema))
+
+
 def write_delta_table_versioned(
     aggregated_df: pl.DataFrame,
     destination_file: str,
@@ -770,16 +792,15 @@ def write_delta_table_versioned(
 ) -> DeltaWriteResult:
     """Write the aggregated frame as one table, in its row order.
 
-    The frame goes to deltalake whole, through polars' own Arrow export, as
-    ``DataFrame.write_delta`` does: one batch, so the table keeps the frame's
-    row order (deltalake reorders the batches of a stream, see
-    ``_arrow_stream``). A one-line-per-row scan is only readable in that
-    order (#1418). The export copies the frame's string views, not their
-    text. See ``write_delta_frames_versioned`` for the modes and ``scoped``.
+    The frame goes to deltalake whole, as one batch of polars' own export
+    (``DataFrame.write_delta`` did the same), so the table keeps its row
+    order: see ``_arrow_stream``. A one-line-per-row scan is only readable in
+    that order (#1418). The export copies the frame's string views, not their
+    text, but a Categorical or Enum column becomes a String column for the
+    whole frame. See ``write_delta_frames_versioned`` for the modes and
+    ``scoped``.
     """
-    _refuse_unwritable_types(aggregated_df.schema)
-    # A scoped write holds only some runs: its digest would not be the table's.
-    tally = _Tally(digest=None if scoped else _Digest(aggregated_df.schema))
+    tally = _start_write(aggregated_df.schema, write_mode, replace_run_tags, scoped)
     for part in aggregated_df.iter_slices(WRITE_SLICE_ROWS):
         tally.add(part)
     return _write_versioned(
@@ -813,10 +834,8 @@ def write_delta_frames_versioned(
     only the frame being written is held. The rows, their runs and the digest
     are counted as they go, and it is one commit. A frame source that raises
     stops the write before anything is committed: the table stays at its last
-    version. Each frame keeps its row order in the table, but the frames may
-    land in any order (``_arrow_stream``): a frame must not need its
-    neighbours to be read. A whole frame goes through
-    ``write_delta_table_versioned``, which keeps every row in place.
+    version. Each frame keeps its row order, the frames may land in any order
+    (``_arrow_stream``).
 
     ``overwrite`` reproduces the historical behaviour exactly. ``replace-runs``
     scopes the overwrite to the runs present in ``aggregated_df`` so untouched
@@ -846,9 +865,7 @@ def write_delta_frames_versioned(
       unreadable on 0.24. ``merge`` keeps the column, and turns a genuine type
       conflict into a loud failure instead of a corrupt table.
     """
-    _refuse_unwritable_types(schema)
-    # A scoped write holds only some runs: its digest would not be the table's.
-    tally = _Tally(digest=None if scoped else _Digest(schema))
+    tally = _start_write(schema, write_mode, replace_run_tags, scoped)
     return _write_versioned(
         _arrow_stream(frames, schema, tally),
         tally,
@@ -878,16 +895,6 @@ def _write_versioned(
     with the options ``write_mode`` and ``scoped`` call for, ``tally`` saying
     what it held."""
     predicated = write_mode == "replace-runs" and bool(replace_run_tags)
-    if scoped and not predicated:
-        # Invariant, deliberately an exception rather than a fall-back: with a
-        # subset frame, "overwrite the whole table" is data loss.
-        raise ValueError(
-            "a scoped write must be predicate-scoped to its runs; "
-            "refusing to overwrite the whole table with a subset of its runs"
-        )
-    if replace_run_tags and write_mode != "replace-runs":
-        raise ValueError("replace_run_tags needs replace-runs")
-
     # Replacing the schema is only correct when the frame *is* the table; a
     # subset has to merge into the schema it finds. See
     # ``write_delta_frames_versioned``.

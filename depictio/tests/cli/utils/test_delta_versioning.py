@@ -685,10 +685,7 @@ class TestWholeFrameWrite:
             }
         )
 
-    def test_it_writes_the_table_write_delta_wrote(self, tmp_path, storage, monkeypatch):
-        from depictio.cli.cli.utils import delta_versioning
-
-        monkeypatch.setattr(delta_versioning, "WRITE_SLICE_ROWS", 700)
+    def test_it_writes_the_table_write_delta_wrote(self, tmp_path, storage):
         df = self._mixed()
         reference = str(tmp_path / "reference")
         df.write_delta(reference, mode="overwrite")
@@ -750,10 +747,7 @@ class TestWholeFrameWrite:
         write_delta_table_versioned(scan, destination, storage)
         assert dict(iter_texts_by_file(pl.read_delta(destination))) == files
 
-    def test_it_writes_a_partitioned_and_a_scoped_table(self, tmp_path, storage, monkeypatch):
-        from depictio.cli.cli.utils import delta_versioning
-
-        monkeypatch.setattr(delta_versioning, "WRITE_SLICE_ROWS", 700)
+    def test_it_writes_a_partitioned_and_a_scoped_table(self, tmp_path, storage):
         df = self._mixed()
         destination = str(tmp_path / "table")
         write_delta_table_versioned(df, destination, storage, partition=True)
@@ -833,10 +827,7 @@ class TestFramesWrite:
         ]
         write_delta_frames_versioned(iter(parts), parts[0].schema, destination, storage)
         back = pl.read_delta(destination)
-        runs = back.with_columns(start=(pl.col("f") != pl.col("f").shift()).fill_null(True)).filter(
-            "start"
-        )
-        assert sorted(runs["f"].to_list()) == list(range(12))
+        assert back["f"].rle_id().n_unique() == 12
         for k, part in enumerate(parts):
             assert back.filter(pl.col("f") == k).equals(part)
 

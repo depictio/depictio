@@ -693,8 +693,8 @@ def streams_batches(module: Any) -> bool:
     it comes (``execute_recipe_batches``); every other caller (preview, an
     aggregate over runs, the tests) keeps calling ``transform``. A batch must
     not carry ``depictio_run_id``: ingestion tags the rows with their run.
-    A batch keeps its row order in the table, but the batches may land in any
-    order: no batch may need another to be read (one family, one sample, ...).
+    A batch keeps its row order in the table, the batches may land in any order
+    (``delta_versioning._arrow_stream``): no batch may need another to be read.
     """
     return callable(getattr(module, "transform_batches", None))
 
