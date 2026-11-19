@@ -1,3 +1,9 @@
 sample	library	unpaired_reads_examined	read_pairs_examined	unmapped_reads	unpaired_read_duplicates	read_pair_duplicates	read_pair_optical_duplicates	duplicate_reads	reads_after_dedup	percent_duplication	estimated_library_size
 COD076E1bL1	Unknown Library	16801402	0	0	4682948	0	0	4682948	12118454	0.278724	
 COD092E1bL1i69	Unknown Library	16298931	0	0	2616401	0	0	2616401	13682530	0.160526	
+COD076E1bL2	Unknown Library	18568523	0	0	3005290	0	0	3005290	15563233	0.161849	
+COD081E1bL1	Unknown Library	17847643	0	0	2995171	0	0	2995171	14852472	0.167819	
+COD092E1bL2i69	Unknown Library	16470124	0	0	3252576	0	0	3252576	13217548	0.197483	
+COD105E1bL1	Unknown Library	0	8548382	75855	0	1102009	101464	2204018	14892746	0.128914	38794496
+COD105E1bL2	Unknown Library	13772113	0	0	5763836	0	0	5763836	8008277	0.418515	
+COD118E1bL1	Unknown Library	0	8150812	55744	0	808613	83352	1617226	14684398	0.0992064	47304312

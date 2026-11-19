@@ -12,5 +12,23 @@ renders_as:
   - id: composition_bars
     component: advanced_viz
     kind: stacked_taxonomy
+    title: Peptide composition per sample
     roles: { sample_id: sample, taxon: category, rank: rank, abundance: peptides }
-  - { component: table }
+    config:
+      value_title: Share of the sample's peptidoforms
+      rank_label: Split by
+    description: >-
+      Each bar is one sample, stacked by the share of its distinct peptidoforms in
+      each category of the chosen split: peptide length, precursor charge or
+      modification state. It answers how the immunopeptidome is composed.
+
+      How to read: switch the split to compare samples. Similar bars mean similar
+      immunopeptidomes. A sample with an odd length or charge mix, or a high modified
+      share, may reflect a different preparation.
+  - component: table
+    title: Peptide composition
+    description: >-
+      Each row is one sample, one split and one category, with the count of distinct
+      peptidoforms. It answers the exact counts behind the bars.
+
+      How to read: filter by split to read one composition at a time.

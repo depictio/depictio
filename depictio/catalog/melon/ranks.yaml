@@ -12,37 +12,80 @@ fixture: ranks.tsv
 renders_as:
   # wide per-rank columns -> sunburst fits; stacked_taxonomy would need the long
   # rank column, and a per-sample axis this pooled table does not carry.
-  - {
-      id: sunburst,
-      component: advanced_viz,
-      kind: sunburst,
-      roles:
-        {
-          ranks: [superkingdom, phylum, class, order, family, genus, species],
-          abundance: abundance,
-        },
-    }
-  - {
-      headline: true,
-      component: card,
-      column: species,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: phylum,
-      top_n_count: 4,
-    }
-  - {
-      component: card,
-      column: copy_number,
-      aggregation: sum,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: identity_mean,
-      aggregation: average,
-      secondary_layout: gauge,
-      coverage_max: 1,
-    }
-  - { component: table }
+  - id: sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Community composition by lineage
+    roles:
+      ranks: [superkingdom, phylum, class, order, family, genus, species]
+      abundance: abundance
+    config:
+      colour_by_rank: phylum
+    description: >-
+      Each arc is a taxon: the rings run from superkingdom at the centre out to species, sized by its share of
+      the estimated genome copies and coloured by phylum. It answers which lineages make up the community.
+
+      How to read: wide arcs are the dominant lineages, and an arc that fans out into many species is a diverse
+      group. Taxa Melon could not name at a rank are labelled unclassified. Click an arc to zoom in on it.
+
+      Note: abundance is a share of estimated genome copies from marker genes, not of reads, and the rows are
+      pooled across samples.
+
+      Source: https://raw.githubusercontent.com/xinehc/melon/master/README.md
+  - component: card
+    column: species
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: phylum
+    top_n_count: 4
+    filter_expr: "col('species') != 'unclassified'"
+    headline: true
+    title: Species detected
+    caption: species, by phylum
+    description: >-
+      The hero number is the count of distinct named species Melon identified, and the bars rank the phyla
+      that hold most of them. It answers how rich the community is and where the diversity sits.
+
+      How to read: a phylum with many species is a diverse group. Unclassified lineages are left out, so the
+      count is a lower bound.
+  - component: card
+    column: copy_number
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: phylum
+    top_n_count: 4
+    title: Genome copies
+    caption: genome copies, by phylum
+    description: >-
+      The hero number is the total of estimated genome copies, and the bars rank the phyla by their copies. It
+      answers how large the profiled community is and which phyla dominate it.
+
+      How to read: copies are estimated from marker genes, so they count genomes rather than reads and are
+      less biased by genome size. Compare with the species card: a phylum with few species but many copies is
+      dominated by a few organisms.
+
+      Source: https://raw.githubusercontent.com/xinehc/melon/master/README.md
+  - component: card
+    column: identity_mean
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Identity to the reference
+    caption: mean identity per lineage
+    description: >-
+      The hero number is the mean identity of the marker-gene reads to their reference genome cluster, and the
+      histogram shows its distribution over lineages. It answers how close the community is to known genomes.
+
+      How to read: values near one mean close relatives are in the database. Low values flag novel or distant
+      lineages whose assignment is less certain. Melon publishes no pass mark for it.
+
+      Source: https://raw.githubusercontent.com/xinehc/melon/master/README.md
+  - component: table
+    title: Lineages and genome copies
+    description: >-
+      Each row is a full lineage from superkingdom to species with its estimated genome copies, relative
+      abundance, mean identity and the number of lineages pooled into it. It answers what Melon found.
+
+      How to read: sort by abundance to see the dominant species and check their identity.

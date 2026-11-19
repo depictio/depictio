@@ -15,4 +15,10 @@ columns:
   sample: String
   fasta: String
 renders_as:
-  - { component: table }
+  - component: table
+    title: Input samplesheet
+    description: >-
+      Each row is a sample and the assembly it was screened from. It answers which
+      inputs the run used.
+
+      How to read: check that every expected sample is listed with its assembly path.

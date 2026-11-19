@@ -14,6 +14,56 @@ find:
 recipe: ascat/cnv_segments.py
 fixture: cnv_segments.tsv
 renders_as:
-  - { id: ascat_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
-  - { id: ascat_cn_spread, component: card, column: copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, columns: [sample, chrom, start, end, copy_number, baf, label] }
+  # C1 N/A: the profile shades segments by gain, loss and neutral from their log2
+  # itself, and the table has no pertinent categorical column beyond the sample.
+  - id: ascat_profile
+    component: advanced_viz
+    kind: cnv_profile
+    title: Allele-specific copy-number profile
+    roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label}
+    config:
+      gain_threshold: 0.322
+      loss_threshold: -0.415
+    description: >-
+      Each line is a called copy-number segment: its total copy number as a log2 ratio
+      against two copies on the upper panel, and its expected B-allele frequency on the
+      lower one. It answers where the tumour genome gains, loses or keeps its copy
+      number, and where one allele is lost.
+
+      How to read: segments above the upper dotted line are gains and those below the
+      lower one are losses. A BAF far from 0.5 at an unchanged copy number is
+      copy-neutral loss of heterozygosity, which the total copy number alone never
+      shows. Zoom on a chromosome to read the allele-specific counts in the label.
+
+      Lines and annotations: the dotted lines at log2 0.322 and -0.415 are log2(2.5/2) and
+      log2(1.5/2), the total copy numbers of 2.5 and 1.5 where a rounded call leaves two. They are
+      an arithmetic reference defined by this catalog, not an ASCAT cut-off. The dotted line at BAF 0.5 is the balanced state.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/20837533/
+  - id: ascat_cn_spread
+    component: card
+    column: copy_number
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Copy number spread
+    description: >-
+      The hero number is the median total copy number over the called segments, and the
+      box shows their quartiles. It answers whether the tumour genome sits near the
+      diploid baseline or is shifted.
+
+      How to read: a median of two with a short box means a mostly balanced genome. A
+      higher median or a long box points to widespread gains or a whole-genome
+      duplication. Segments differ in length, so open the profile to see how much of the
+      genome each level covers.
+  - component: table
+    columns: [sample, chrom, start, end, copy_number, baf, label]
+    title: Copy-number segments
+    description: >-
+      Each row is a called segment with its position, total copy number, expected
+      B-allele frequency and allele-specific label. It answers the exact boundaries and
+      allele counts behind the profile.
+
+      How to read: sort by copy number to list gains and losses, or look for rows with a
+      BAF away from 0.5 and a copy number of two, which are copy-neutral LOH.

@@ -19,15 +19,174 @@ renders_as:
   - component: card
     column: total_pairs
     aggregation: sum
+    aggregations: [median, max]
     secondary_layout: attrition
     attrition_cols: [reported_pairs, valid_pairs, valid_pairs_rmdup, cis_pairs, cis_long_range]
-  - { component: card, column: valid_pair_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: cis_ratio, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: long_range_ratio, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: duplicate_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: low_qual_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: valid_pairs_rmdup, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: cis_long_range, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: trans_ratio, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: valid_pair_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+    caption: pairs left at each stage
+    title: Valid-pair funnel
+    description: >-
+      The hero number is the read pairs sequenced, and the stages below it show how many remain after
+      pairing, the restriction-fragment filter, de-duplication, the cis split and the long-range cut. The
+      strip gives the median and the largest sample. It answers how much of the sequencing ends as useful
+      long-range contacts.
+
+      How to read: each stage should keep a sizeable share of the one before. A sharp drop at the
+      restriction-fragment filter points to the digestion or ligation, and one at de-duplication to a
+      low-complexity library.
+
+      Lines and annotations: long-range contacts are cis pairs more than 20 kb apart and short-range ones are 20 kb apart
+      or less, as HiC-Pro counts them.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md and
+      https://raw.githubusercontent.com/nservant/HiC-Pro/master/scripts/merge_valid_interactions.sh
+  - component: card
+    column: valid_pair_rate
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: mean valid pair rate, with its lowest and highest
+    title: Valid pair rate
+    description: >-
+      The hero number is the mean share of processed read pairs that are valid pairs, with the lowest and
+      highest sample beside it. It answers how efficient the library is at yielding contacts.
+
+      How to read: a low rate for one sample against the others marks a failed library. Look at the funnel
+      and the read-pair flow to see which step loses the pairs. HiC-Pro defines no cut-off, so judge a
+      sample against its peers.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: card
+    column: cis_ratio
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: mean cis share, with its lowest and highest
+    title: Cis contact share
+    description: >-
+      The hero number is the mean share of de-duplicated valid pairs that join loci on the same chromosome,
+      with the lowest and highest sample beside it. It answers how much of the signal is intra-chromosomal.
+
+      How to read: the cis share and the trans share add up to one. A sample whose cis share is far below
+      its peers is noisier, so compare samples because HiC-Pro defines no cut-off.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: card
+    column: long_range_ratio
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: mean long-range share of cis pairs, with its lowest and highest
+    title: Long-range share of cis contacts
+    description: >-
+      The hero number is the mean share of cis contacts that are more than 20 kb apart, with the lowest and
+      highest sample beside it. It answers how much of the signal reports distant interactions.
+
+      How to read: long-range cis contacts are the ones a Hi-C run is built to capture, so a low share
+      means the library is dominated by short-range contacts. Compare samples, since HiC-Pro defines no
+      cut-off.
+
+      Lines and annotations: HiC-Pro splits cis contacts into short range (20 kb or less) and long range (over 20 kb).
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md and
+      https://raw.githubusercontent.com/nservant/HiC-Pro/master/scripts/merge_valid_interactions.sh
+  - component: card
+    column: duplicate_rate
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: duplicate rate, with its spread
+    title: Duplicate rate
+    description: >-
+      The hero number is the mean share of valid pairs removed as duplicates, and the box shows the spread
+      over samples. It answers how redundant the library is.
+
+      How to read: a high rate means the same ligation products were sequenced many times, so the library
+      has low complexity and sequencing deeper adds little. Compare samples to find the outliers.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: card
+    column: low_qual_rate
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: low quality rate, with its spread
+    title: Low quality rate
+    description: >-
+      The hero number is the mean share of processed read pairs discarded for low mapping quality, and the
+      box shows the spread over samples. It answers how many pairs map ambiguously.
+
+      How to read: a high rate points to repeats, poor read quality or a mismatched reference. Compare
+      samples to find the outliers. The minimum mapping quality is a HiC-Pro setting.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: card
+    column: valid_pairs_rmdup
+    aggregation: sum
+    aggregations: [median, min, max]
+    secondary_layout: compact
+    caption: de-duplicated valid pairs, with their range over samples
+    title: De-duplicated valid pairs
+    description: >-
+      The hero number is the total of valid pairs left after de-duplication, with the median, lowest and
+      highest sample beside it. It answers how many usable contacts the run holds.
+
+      How to read: contact maps at fine resolution need many contacts, so a sample with far fewer pairs than
+      its peers limits the resolution you can use.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: card
+    column: cis_long_range
+    aggregation: sum
+    aggregations: [median, min, max]
+    secondary_layout: compact
+    caption: long-range cis pairs, with their range over samples
+    title: Long-range cis pairs
+    description: >-
+      The hero number is the total of cis pairs more than 20 kb apart, with the median, lowest and highest
+      sample beside it. It answers how many distant contacts the run holds.
+
+      How to read: these are the contacts that carry domain and loop information. A sample far below its
+      peers is a weak one for such analyses.
+
+      Lines and annotations: long range means more than 20 kb between the two ends, as HiC-Pro defines it.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: card
+    column: trans_ratio
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: trans share, with its spread
+    title: Trans contact share
+    description: >-
+      The hero number is the mean share of de-duplicated valid pairs that join different chromosomes, and
+      the box shows the spread over samples. It answers how much of the signal is inter-chromosomal.
+
+      How to read: it is the complement of the cis share. A sample whose trans share is far above its peers
+      is noisier. HiC-Pro defines no cut-off, so judge a sample against its peers.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: card
+    column: mapping_rate_r1
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mapping rate, with its spread
+    title: Mapping rate of the first mate
+    description: >-
+      The hero number is the mean share of first-mate reads that mapped to the genome, and the box shows the
+      spread over samples. It answers how well the reads align before pairing.
+
+      How to read: a low rate points to contamination, poor quality or the wrong reference. HiC-Pro maps
+      reads in two steps and trims reads spanning the ligation junction, so a part of the mapped reads comes
+      from the second step.
+
+      Source: https://raw.githubusercontent.com/nservant/HiC-Pro/master/doc/MANUAL.md
+  - component: table
+    title: Valid-pair funnel table
+    description: >-
+      Each row is a sample with its counts at every stage of the funnel and the rates derived from them. It
+      answers the exact numbers behind each card.
+
+      How to read: sort by valid pair rate to find the weakest libraries, then read the other columns to see
+      which step lost the pairs.

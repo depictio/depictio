@@ -2,10 +2,10 @@ id: seacr_frags_profile
 name: Fragment pile-up around the peaks
 mode: peaks/frags_profile
 description: >-
-  The sequenced fragments piled up in 100 bp bins on a 6 kb window centred on
-  the summit of each sample's 500 strongest non-overlapping SEACR regions, per
-  million fragments of the sample: a metagene matrix around the calls and a
-  fragment coverage track under a locus navigator, from the same rows.
+  The sequenced fragments piled up in 100 bp bins on a 6 kb window centred on the
+  summit of each sample's 500 strongest non-overlapping SEACR regions, per million
+  fragments of the sample: a metagene matrix around the calls and a fragment coverage
+  track under a locus navigator, from the same rows.
 # Reads the fragment BEDs through a raw scan collection (the sample is in the
 # file name) and the tidy SEACR calls through dc_ref; see the recipe docstring.
 # Fragment BEDs are published by the pipeline but are large (tens of MB per
@@ -17,11 +17,99 @@ fixture: frags_profile.tsv
 renders_as:
   # Regions down, offsets across, one panel per sample, the mean profile on top:
   # the deepTools plotHeatmap reading, built from fragments instead of a bigWig.
-  - { id: frags_pileup_matrix, component: advanced_viz, kind: signal_matrix, roles: {region_id: peak_id, position: offset_bp, value: cpm, group: sample} }
+  # C1 N/A: the matrix is coloured by a continuous signal scale, one panel per sample.
+  - id: frags_pileup_matrix
+    component: advanced_viz
+    kind: signal_matrix
+    title: Fragment pile-up around peak summits
+    roles: {region_id: peak_id, position: offset_bp, value: cpm, group: sample}
+    config:
+      reference_label: Peak summit
+    description: >-
+      Each row is one of the strongest SEACR regions of a sample, each column a 100 bp bin
+      around its summit, and the colour is the fragment coverage per million fragments of
+      the sample. It answers whether the calls stand on a clean, centred pile-up.
+
+      How to read: a bright vertical band at the centre means the signal is centred on the
+      summit. A target with sharp peaks, such as a promoter mark, gives a narrow band, and
+      a broad mark a wide one. Rows that are bright everywhere are broad domains.
+
+      Lines and annotations: the marker at offset 0 is the summit of the region, the
+      midpoint of its maximum signal interval as reported by SEACR. The window, 3 kb each
+      side of it, is a fixed choice of this catalog's recipe, and rows are ordered by total
+      signal.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
   # The same bins at their genomic coordinates: a coverage track that follows
   # the region of a locus navigator.
-  - { id: frags_pileup_track, component: advanced_viz, kind: coverage_track, roles: {chromosome: chr, position: bin_start, value: cpm, end: bin_end, sample: sample} }
-  - { component: card, column: cpm, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: fragments, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: cpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: frags_pileup_track
+    component: advanced_viz
+    kind: coverage_track
+    title: Fragment coverage track
+    roles: {chromosome: chr, position: bin_start, value: cpm, end: bin_end, sample: sample, category: target}
+    config:
+      color_by: category
+    description: >-
+      Each bar is a 100 bp bin at its genomic position, with its fragment coverage per
+      million fragments, coloured by target. It answers where along a locus the fragments
+      pile up in each sample.
+
+      How to read: peaks that are present in the replicates of one target and absent in
+      the other target are specific to it. Only bins around the strongest calls are drawn,
+      so empty stretches mean no strong call, not no signal.
+
+      Note: the window around each call is the pipeline's own choice, and no signal
+      threshold is drawn.
+  - component: card
+    column: cpm
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    caption: highest bin, by target
+    title: Highest fragment coverage
+    description: >-
+      The hero number is the highest coverage per million fragments in any bin and the
+      bars rank the targets by their highest bin. It answers which target has the sharpest
+      pile-up.
+
+      How to read: sharp marks give high, narrow maxima and broad marks give low ones, so
+      compare within a target.
+  - component: card
+    column: fragments
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    caption: fragments, by target
+    title: Fragments in the windows
+    description: >-
+      The hero number is the total of fragments in the windows around the strongest calls
+      and the bars rank the targets by it. It answers how much of the library sits in the
+      strongest regions.
+
+      How to read: a target with few fragments in its windows has weaker calls. This is a
+      count inside the windows, not a fraction of reads in peaks.
+  - component: card
+    column: cpm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Coverage per bin
+    description: >-
+      The hero number is the median coverage per million fragments over the bins of the
+      windows, and the box shows the quartiles. It answers how high the typical bin is.
+
+      How to read: a low median with a high maximum is a sharp peak on a quiet background,
+      and a high median is a broad domain.
+  - component: table
+    title: Fragment pile-up table
+    description: >-
+      Each row is a sample, a peak and a 100 bp bin around its summit, with the fragments
+      and the coverage per million in it. It answers the exact numbers behind the matrix
+      and the track.
+
+      How to read: filter on a peak and sort by offset to read its profile.

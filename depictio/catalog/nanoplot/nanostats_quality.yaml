@@ -13,9 +13,109 @@ find:
 recipe: nanoplot/nanostats_quality.py
 fixture: nanostats_quality.tsv
 renders_as:
-  - { id: quality_ladder, component: advanced_viz, kind: profile, roles: {series: sample, x: q_cutoff, y: pct_reads} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: q_cutoff, y: megabases, color: sample, barmode: group, title: Yield above each quality cutoff} }
-  - { component: card, column: pct_reads, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: megabases, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: n_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: table }
+  # NanoStat reports a fixed ladder of cutoffs (Q5, Q7, Q10, Q12, Q15) and sets no
+  # pass mark on it, so nothing is drawn as a threshold (C3 N/A). The ladder is
+  # cumulative: the cards below read the Q10 rung, never a sum or mean over rungs.
+  - id: quality_ladder
+    component: advanced_viz
+    kind: profile
+    roles: {series: sample, x: q_cutoff, y: pct_reads}
+    config:
+      x_title: Quality cutoff (Phred Q)
+      y_title: Reads above the cutoff (%)
+      legend_pos: bottom
+    title: Reads kept at each quality cutoff
+    description: >-
+      Each line is a library: the percentage of its reads whose mean quality is above
+      each cutoff of the NanoStat ladder. It answers how fast a library loses reads as
+      the quality floor rises.
+
+      How to read: a line that stays high and drops late is a library tight around a
+      good quality. A line that falls early is poor, and a steep drop between two
+      rungs means a bimodal library that a single mean quality hides. Pick the
+      cutoff for filtering from the rung where the curve starts to fall.
+
+      Lines and annotations: no pass mark is drawn, because NanoStat defines none. The
+      rungs are the fixed cutoffs of the NanoStat report.
+
+      Source: https://github.com/wdecoster/nanostat
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: q_cutoff
+      y: megabases
+      color: sample
+      barmode: group
+      labels: {q_cutoff: Quality cutoff (Phred Q), megabases: Yield above the cutoff (Mb), sample: Library}
+    title: Yield above each quality cutoff
+    description: >-
+      Each bar is a library at one cutoff: the megabases carried by reads above that
+      quality. It answers how much usable sequence remains after filtering at each
+      rung.
+
+      How to read: compare bars within a cutoff to rank libraries by usable yield. A
+      library with a large yield at Q5 but a small one at Q10 is mostly low-quality
+      sequence.
+
+      Source: https://github.com/wdecoster/nanostat
+  - component: card
+    column: pct_reads
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('q_cutoff') == 10"
+    caption: mean, with its spread
+    headline: true
+    title: Reads above Q10
+    description: >-
+      The hero number is the mean percentage of reads above quality Q10 over the
+      libraries, and the box shows the spread between them. It answers what share of
+      reads survive a common basecall quality floor.
+
+      How to read: a high value with a tight box means consistent libraries. Q10 is one
+      rung of the ladder NanoStat reports and not a pass mark, so open the ladder
+      line chart to see other rungs.
+
+      Source: https://github.com/wdecoster/nanostat
+  - component: card
+    column: megabases
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    filter_expr: "col('q_cutoff') == 10"
+    caption: the libraries with most yield above Q10
+    title: Yield above Q10 (Mb)
+    description: >-
+      The hero number is the megabases carried by reads above Q10 over every library
+      in view, and the bars rank the libraries by it. It answers how much sequence
+      is left after filtering at that quality.
+
+      How to read: the ladder is cumulative, so a single rung is read, not a sum across
+      rungs. A library that leads on total yield but not here has lower accuracy.
+  - component: card
+    column: n_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    filter_expr: "col('q_cutoff') == 10"
+    caption: the libraries with most reads above Q10
+    title: Reads above Q10
+    description: >-
+      The hero number is the count of reads above Q10 over every library in view, and
+      the bars rank the libraries by it. It answers how many reads pass that quality
+      floor.
+
+      How to read: compare it with the total read count of the summary tab. A large
+      loss means many low-quality reads.
+  - component: table
+    title: Quality ladder table
+    description: >-
+      Each row is a library at one quality cutoff: reads, percentage of reads and
+      megabases above it. It answers the exact numbers behind the ladder tiles.
+
+      How to read: filter on one cutoff to compare libraries, or on one library to see
+      its whole ladder.

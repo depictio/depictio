@@ -9,11 +9,78 @@ description: >-
 find:
   path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
 recipe: cellranger/cell_expression_long.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several marker genes.
 fixture: cell_expression_long.tsv
 renders_as:
-  - { id: marker_by_cluster, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: expression, color: cluster_label, title: Marker expression per cluster} }
-  - { id: marker_by_gene, component: figure, visu_type: box, dict_kwargs: {x: gene, y: expression, color: gene, title: Marker expression per gene} }
-  - { id: marker_gene_picker, component: interactive, interactive_type: Select, column_name: gene }
-  - { id: marker_expression_filter, component: interactive, interactive_type: RangeSlider, column_name: expression }
-  - { component: card, column: expression, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: table }
+  - id: marker_by_cluster
+    component: figure
+    visu_type: box
+    title: Marker expression per cluster
+    dict_kwargs:
+      x: cluster_label
+      y: expression
+      color: cluster_label
+      labels: {cluster_label: Cluster, expression: Expression (log1p CP10k)}
+    description: >-
+      Each box is a cluster and shows the expression of the selected marker genes over its
+      cells. It answers which clusters express a marker.
+
+      How to read: a high box in one cluster and low boxes elsewhere marks a cluster-specific
+      gene. Boxes pinned at zero mean the gene is rarely detected there, which is common for
+      lowly expressed genes.
+  - id: marker_by_gene
+    component: figure
+    visu_type: box
+    title: Marker expression per gene
+    dict_kwargs:
+      x: gene
+      y: expression
+      color: gene
+      labels: {gene: Gene, expression: Expression (log1p CP10k)}
+    description: >-
+      Each box is a marker gene and shows its expression over the cells in view. It answers
+      which markers are expressed strongly and how widely.
+
+      How to read: a wide box with a high median is a robust marker. A box squeezed at zero
+      with a few high points is detected in only a small fraction of cells.
+  - id: marker_gene_picker
+    component: interactive
+    interactive_type: Select
+    column_name: gene
+    title: Marker gene
+    description: >-
+      Shows one marker gene on every tile of the tab. It answers how a single gene behaves.
+
+      How to read: clear the selection to show all markers again.
+  - id: marker_expression_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: expression
+    title: Expression range
+    description: >-
+      Keeps the cells whose expression falls inside the range. It answers which cells express
+      a gene above a level.
+
+      How to read: raise the lower handle above zero to keep only the cells where the gene is
+      detected.
+  - component: card
+    column: expression
+    aggregation: median
+    aggregations: [box_plot_stats, max]
+    secondary_layout: box_plot
+    caption: expression, with its spread
+    title: Marker expression
+    description: >-
+      The hero number is the median expression of the marker genes over the cells in view,
+      and the box shows its spread. It answers how strongly the markers are expressed.
+
+      How to read: a median at zero is normal for sparse single-cell data, so read the upper
+      whisker and the maximum for signal.
+  - component: table
+    title: Marker expression per cell
+    description: >-
+      Each row is one gene in one cell with its cluster, QC status and expression. It answers
+      the exact values behind the box plots.
+
+      How to read: filter on a gene and sort by expression to find the cells that express it
+      most.

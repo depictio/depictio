@@ -76,6 +76,8 @@ export function boundColumns(render: RenderSpec): string[] {
       const v = render.dict_kwargs?.[k];
       if (v) cols.add(v);
     }
+    // A guide line at a statistic of a column binds that column too.
+    render.reference_lines?.forEach((ref) => ref.column && cols.add(ref.column));
   } else if (render.component === 'card') {
     // Mirrors Render.bound_columns() in the catalog model — trend/attrition
     // layouts bind extra columns and must be grounded like the rest.

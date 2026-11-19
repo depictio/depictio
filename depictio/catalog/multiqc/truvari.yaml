@@ -14,4 +14,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: truvari }
+  - component: multiqc
+    section: truvari
+    title: Structural-variant benchmark (Truvari)
+    description: >-
+      Truvari's accuracy summary per callset: precision against recall and the
+      true-positive, false-positive and false-negative classes. It answers how
+      accurate a structural-variant caller is against a truth set.
+
+      How to read: Values close to one are better. A low recall means missed events
+      and a low precision means false calls, and the breakdown by size shows where
+      it fails.
+
+      Source: https://docs.seqera.io/multiqc/modules/truvari

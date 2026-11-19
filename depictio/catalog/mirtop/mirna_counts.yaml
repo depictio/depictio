@@ -11,9 +11,78 @@ find:
 recipe: mirtop/mirna_counts.py
 fixture: mirna_counts.tsv
 renders_as:
-  - { component: figure, visu_type: box, dict_kwargs: {x: mirna, y: log2_cpm, points: all} }
-  - { component: card, column: reads, aggregation: sum, secondary_layout: top_n, breakdown_col: mirna, top_n_count: 5 }
-  - { component: card, column: mirna, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: interactive, interactive_type: MultiSelect, column_name: mirna }
-  - { component: interactive, interactive_type: RangeSlider, column_name: log2_cpm }
-  - { component: table }
+  # C1 N/A: the box is one per miRNA and the x axis already names it, no
+  # pertinent column is left to colour by (design columns are not in the schema).
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: mirna
+      y: log2_cpm
+      points: all
+      labels: {mirna: miRNA, log2_cpm: Expression (log2 CPM)}
+    title: miRNA expression distribution
+    reference_lines: [{axis: y, stat: median, column: log2_cpm}]
+    description: >-
+      Each box is a miRNA, summarising its expression across samples as log2 of counts
+      per million miRNA-assigned reads, with every sample drawn as a point. It answers
+      how abundant each miRNA is and how much it varies between samples.
+
+      How to read: boxes higher up are more abundant miRNAs. A wide box or a point far
+      from the rest marks a miRNA or a sample that varies, so check that sample in the
+      PCA. The scale is relative, so it follows the sample's total of miRNA reads.
+
+      Lines and annotations: The dashed line is the median expression (log2 CPM) of
+      this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of mirtop.
+  - component: card
+    column: reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: mirna
+    top_n_count: 5
+    title: Reads in the top miRNAs
+    caption: the five miRNAs with the most reads, with the median and largest per sample
+    description: >-
+      The hero number is the total of miRNA reads over the samples in view, and the bars rank
+      the miRNAs that hold the most of them. It answers whether a few miRNAs dominate the
+      library.
+
+      How to read: miRNA libraries are often dominated by a handful of abundant miRNAs.
+      When one miRNA holds most of the reads, the others are measured with fewer reads, so
+      treat the low abundance ones with caution.
+  - component: card
+    column: mirna
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: miRNAs detected
+    caption: samples with the most miRNA rows, and the total of rows
+    description: >-
+      The hero number is the count of distinct miRNAs seen in the samples in view, and the
+      bars rank the samples that have the most. It answers how many miRNAs the data
+      detects.
+
+      How to read: a sample with far fewer miRNAs than the rest points to a shallow or
+      low-quality library. Open the PCA to see whether it also separates there.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: mirna
+    title: miRNA filter
+    description: Pick one or more miRNAs to keep. It filters the tiles of the dashboard that read this table.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: log2_cpm
+    title: Expression range filter
+    description: Set a range of log2 counts per million to keep. It filters the tiles of the dashboard that read this table.
+  - component: table
+    title: miRNA counts table
+    description: >-
+      Each row is a miRNA in a sample, with its reads summed over its isomiRs, counts per
+      million, their log2, the number of distinct isomiRs and the share of reads matching
+      the reference sequence. It answers how much of each miRNA each sample holds.
+
+      How to read: sort by reads or by the reference share, and filter on a miRNA or a
+      sample to follow it.

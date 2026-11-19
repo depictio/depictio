@@ -10,8 +10,28 @@ find: { path_glob: "**/repertoire_comparison/V_family/V_gene_distribution_by_seq
 recipe: enchantr/v_gene_matrix.py
 fixture: v_gene_matrix.tsv
 renders_as:
+  # C6 N/A: value columns are the V genes the run observed, known only at ingest.
   - id: v_gene_heatmap
     component: advanced_viz
     kind: complex_heatmap
-    roles: { index: row_id }
-  - { component: table }
+    title: V gene usage by sample
+    roles: { index: row_id, row_annotation_cols: [subject_id, locus] }
+    description: >-
+      Each cell is a sample and a V gene: the fraction of its sequences that use that
+      gene. Rows and columns are clustered. It answers which samples share a V gene
+      repertoire.
+
+      How to read: samples that cluster together use V genes in similar proportions, as
+      expected for the same subject or locus. A sample that clusters away from its
+      subject may carry a skewed or contaminated repertoire. Dark columns are V genes
+      used by most samples.
+
+      Lines and annotations: the strips beside the rows name the subject and the locus
+      of each sample.
+  - component: table
+    title: V gene usage table
+    description: >-
+      Each row is a sample and locus, with the fraction of its sequences using each V
+      gene. It answers the exact usage behind the heatmap.
+
+      How to read: sort a gene column to find the samples that use it most.

@@ -12,6 +12,42 @@ renders_as:
   - id: size_profile
     component: advanced_viz
     kind: profile
+    title: Indel size distribution
     roles: { series: sample, x: size, y: pct_reads }
-  - { component: interactive, interactive_type: RangeSlider, column_name: size }
-  - { component: table }
+    config:
+      reference_x: 0
+      reference_label: No length change
+      x_title: Indel size (bp, deletions negative)
+      y_title: Classified reads (%)
+      legend_pos: bottom
+    description: >-
+      Each curve is a library: the share of its classified reads carrying an indel of each
+      signed size, with deletions negative and insertions positive. It answers which
+      repair outcomes a guide produces.
+
+      How to read: a few dominant sizes, such as a one base insertion or short deletions,
+      are a reproducible repair signature, and replicates of one guide should overlap. A
+      flat curve spread over many sizes means unspecific damage. Sizes that are multiples
+      of three keep the reading frame, so check the frameshift share before calling a
+      knockout.
+
+      Lines and annotations: the vertical marker at 0 only separates deletions from
+      insertions and is not a cut-off. Sizes beyond 100 bases are not drawn.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: size
+    title: Indel size window
+    description: >-
+      Restricts the tiles to a range of signed indel sizes.
+
+      How to read: narrow it around zero to read the small indels that dominate most
+      edits.
+  - component: table
+    title: Indel size table
+    description: >-
+      Each row is a library and an indel size, with its read count and its share of the
+      classified reads and of the indel reads. It answers the exact values behind the
+      curves.
+
+      How to read: sort by share to list the dominant sizes of a library, and compare the
+      two shares to see how much of the library is edited.

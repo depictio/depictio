@@ -14,9 +14,106 @@ renders_as:
   # The `profile` kind rather than a line figure: it puts the TSS marker at 0,
   # the log axes and the legend placement in the tile's own Settings, which is
   # what the code-mode `at-sig-fig-tss` was written by hand to get.
-  - { id: tss_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: position, y: coverage} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: coverage, color: sample, title: Coverage around transcription start sites} }
-  - { component: card, column: coverage, aggregation: max, secondary_layout: threshold, threshold_value: 5.0, threshold_direction: min, threshold_warn: 3.0 }
-  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: position, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: table }
+  - id: tss_profile
+    component: advanced_viz
+    kind: profile
+    title: Coverage around transcription start sites
+    roles: {series: sample, x: position, y: coverage}
+    config:
+      reference_x: 0
+      reference_label: TSS
+      x_title: Distance from the TSS (bp)
+      y_title: Normalised coverage
+    description: >-
+      Each line is a library: its aggregate read coverage in a window centred on
+      every transcription start site, scaled so the flanks of the window average 1.
+      It answers whether the reads concentrate at start sites.
+
+      How to read: a good library has a sharp spike at the TSS standing well above
+      the flanks. A low or broad shoulder means weak or diffuse enrichment, so check
+      the fragment ladder and the share of reads in peaks.
+
+      Lines and annotations: the vertical marker is the TSS at position 0. The height
+      of the curve at it is the TSS enrichment score, as ataqv scales the profile by
+      the mean of the 100 bp at each end of the window.
+
+      Source: https://raw.githubusercontent.com/ParkerLab/ataqv/master/src/cpp/Metrics.cpp
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: position
+      y: coverage
+      color: sample
+      labels: {position: Distance from the TSS (bp), coverage: Normalised coverage, sample: Library}
+    title: Coverage around transcription start sites
+    description: >-
+      Each line is a library: the aggregate read coverage around start sites. It
+      answers the same question as the profile as a plain curve.
+
+      How to read: look for a spike at zero over a flat baseline of about one. A
+      broad bump without a spike means diffuse signal.
+  # The value of the curve at position 0 is the TSS enrichment score (ataqv
+  # Metrics.cpp, calculate_tss_metrics). ENCODE's GRCh38 RefSeq cut-offs apply.
+  - component: card
+    column: coverage
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 7.0
+    threshold_direction: min
+    threshold_warn: 5.0
+    filter_expr: "col('position') == 0"
+    title: Enrichment at the TSS
+    caption: average coverage at the TSS, with the lowest and highest library
+    description: >-
+      The hero number is the average normalised coverage exactly at the start site,
+      which is the TSS enrichment score. It answers how strong the signal is at the
+      centre of the profile.
+
+      How to read: higher is better. A library below the lower line has weak
+      enrichment.
+
+      Lines and annotations: the cut-offs are the ENCODE values for the GRCh38 RefSeq
+      TSS annotation, 7 and above is ideal, 5 to 7 acceptable and under 5
+      concerning. Other annotations use other values.
+
+      Source: https://www.encodeproject.org/atac-seq/
+      and https://raw.githubusercontent.com/ParkerLab/ataqv/master/src/cpp/Metrics.cpp
+  - component: card
+    column: coverage
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('position') == 0"
+    title: Spread of TSS enrichment
+    caption: median enrichment at the TSS, with its spread
+    description: >-
+      The hero number is the median coverage at the start site over libraries, and
+      the box shows how they spread. It answers whether the libraries enrich alike.
+
+      How to read: a library far below the box has weaker signal than its peers.
+      Open the profile to see whether it lacks a spike or has a high background.
+  - component: card
+    column: coverage
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: Highest point of the profile
+    caption: highest coverage in the window, with the libraries ranked
+    description: >-
+      The hero number is the highest coverage anywhere in the window, and the bars
+      rank the libraries reaching the highest point. It answers which libraries
+      have the sharpest peak.
+
+      How to read: the highest point is normally at or next to the TSS. If a library
+      peaks elsewhere, the profile is noisy and its enrichment score is not
+      reliable.
+  - component: table
+    title: Coverage profile values
+    description: >-
+      Each row is a position in the window around start sites with the normalised
+      coverage of a library. It answers the exact values behind the profile.
+
+      How to read: filter to position 0 to read the enrichment of every library.

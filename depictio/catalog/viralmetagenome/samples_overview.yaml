@@ -12,20 +12,140 @@ find:
 recipe: viralmetagenome/samples_overview.py
 fixture: samples_overview.tsv
 renders_as:
-  - { id: read_attrition, component: card, column: raw_read_pairs, aggregation: sum,
-      secondary_layout: attrition, attrition_cols: [trimmed_read_pairs, host_filtered_read_pairs], headline: true }
-  - { id: retained_share, component: card, column: retained_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: host_share, component: card, column: host_pct, aggregation: median,
-      secondary_layout: threshold, threshold_value: 50, threshold_direction: max }
-  - { id: assembly_n50, component: card, column: assembly_n50, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: read_attrition
+    component: card
+    column: raw_read_pairs
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: attrition
+    attrition_cols: [trimmed_read_pairs, host_filtered_read_pairs]
+    headline: true
+    title: Read pairs through preprocessing
+    caption: read pairs, at each step
+    description: >-
+      The hero number is the total of raw read pairs, and the bars show how many
+      remain after trimming and after host removal. It answers how much sequencing
+      reaches the assembly.
+
+      How to read: a small loss at each step is normal. A large loss at trimming
+      means poor read quality or adapters, and a large loss at host removal means a
+      host-rich sample.
+  - id: retained_share
+    component: card
+    column: retained_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Reads retained
+    caption: reads retained (%), with their spread
+    description: >-
+      The hero number is the median share of raw read pairs left after
+      preprocessing, and the box shows the quartiles over samples. It answers how
+      much of each library survives.
+
+      How to read: values near 100 are libraries with little loss. A long lower
+      whisker marks samples that lost many reads and may be too shallow to assemble.
+  # No sourced host-share cut-off: the pipeline publishes none, so the card shows
+  # the spread across samples.
+  - id: host_share
+    component: card
+    column: host_pct
+    aggregation: median
+    aggregations: [max]
+    secondary_layout: histogram
+    title: Host reads
+    caption: host share (%), per sample
+    description: >-
+      The hero number is the median share of reads removed as host, and the histogram
+      shows it for every sample. It answers how host-rich the samples are.
+
+      How to read: a high share means most sequencing went to the host, leaving less
+      for the virus, and the highest samples are the ones to check first.
+
+      Lines and annotations: none are drawn. Host removal uses a Kraken2 database and
+      the pipeline publishes no cut-off for the host share.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  - id: assembly_n50
+    component: card
+    column: assembly_n50
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Assembly N50
+    caption: N50 (bp), with its spread
+    description: >-
+      The hero number is the median N50 of the de novo assemblies, and the box shows
+      the quartiles over samples. It answers how contiguous the assemblies are.
+
+      How to read: for a virus with one genome segment, an N50 close to the genome
+      length means a near-complete assembly. A low N50 means fragmented contigs that
+      the clustering has to merge.
   # Reads left against the host share: a sample low on both lost its reads to
   # the host database, one low on reads alone was sequenced shallow.
+  # C1 N/A: the recipe has no categorical column per sample (every column is a
+  # numeric read count or percentage), so the points stay one colour and carry
+  # the read depth in their size.
   - id: retained_vs_host
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: host_pct, y: retained_pct, label: sample, size: raw_read_pairs }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: host_filtered_read_pairs, title: Read pairs after host removal} }
-  - { component: interactive, interactive_type: RangeSlider, column_name: host_pct }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+    title: Reads retained against host share
+    roles: {x: host_pct, y: retained_pct, label: sample, size: raw_read_pairs}
+    config:
+      x_title: Host reads (%)
+      y_title: Read pairs retained (%)
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a sample: its share of host reads on the horizontal axis and the
+      share of raw read pairs retained on the vertical axis, sized by raw read pairs.
+      It answers why a sample lost reads.
+
+      How to read: a sample low on both axes lost its reads to the host database. A
+      sample low on retained reads with little host lost them at trimming, so check
+      its quality and adapter content. Large points that stay high are well sequenced.
+
+      Lines and annotations: the dashed line is the median share of read pairs
+      retained of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of the pipeline.
+  - id: host_filtered_bars
+    component: figure
+    visu_type: bar
+    title: Read pairs after host removal
+    dict_kwargs:
+      x: sample
+      y: host_filtered_read_pairs
+      color: host_pct
+      labels: {sample: Sample, host_filtered_read_pairs: Read pairs after host removal, host_pct: Host reads (%)}
+    reference_lines:
+      - {axis: y, stat: median, column: host_filtered_read_pairs}
+    description: >-
+      Each bar is a sample: the read pairs left after host removal, coloured by the
+      share of reads removed as host. It answers how much usable sequencing each
+      sample has.
+
+      How to read: short bars are samples with little left to assemble, and the colour
+      says whether the host removal or a shallow library is the cause.
+
+      Lines and annotations: the dashed line is the median number of read pairs
+      after host removal of this table, a reference computed from the rows on show
+      (it follows the filters), not a cut-off of the pipeline.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: host_pct
+    title: Host reads (%)
+    description: >-
+      Keeps only samples whose host share falls in the chosen range.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Samples overview table
+    description: >-
+      Each row is a sample with its read pairs before and after trimming and host
+      removal, its quality and duplication, the assembly length and N50, the clusters
+      kept and removed and the de novo consensus count. It answers how every sample
+      fared from reads to assembly and lets a row selection filter the other tiles.
+
+      How to read: sort by retained share or host share to find the samples that lost
+      the most reads, then read their assembly metrics.

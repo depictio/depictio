@@ -11,9 +11,64 @@ find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
 recipe: qiime2/embedding_pcoa.py
 fixture: embedding_pcoa.tsv
 renders_as:
-  - { id: embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }
-  - { component: table }
+  # C1 N/A: the grouping column is run-dependent (the dashboard's {GROUP_COL}) and
+  # is not in the recipe's OUTPUT_SCHEMA, so no role can bind it here; the
+  # dashboard colours by its group through the config.
+  - id: embedding
+    component: advanced_viz
+    kind: embedding
+    title: Samples on the first two axes
+    roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2}
+    config:
+      axis_prefix: PCo
+    description: >-
+      Each point is a sample, placed by a principal coordinates analysis of the
+      Bray-Curtis dissimilarities between samples. It answers whether samples of the same
+      habitat or condition have similar communities.
+
+      How to read: points that sit close have similar communities and points far apart
+      differ. Groups that separate along the first axis carry the main source of variation.
+      A sample far from its group is worth checking for a technical problem.
+
+      Note: the axes are ordination coordinates, so their sign and scale have no absolute
+      meaning.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/
+  - component: table
+    title: Ordination coordinates
+    description: >-
+      Each row is a sample with its coordinates on the first axes. It answers the exact
+      position of each point.
+
+      How to read: sort by an axis to find the samples at its two extremes.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: dim_1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: dim_2, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # A median of a centred ordination axis is about zero, so the cards show the
+  # range of the samples on each axis instead.
+  - component: card
+    column: dim_1
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Spread on the first axis
+    caption: range, with the quartiles
+    description: >-
+      The hero number is the range of the samples along the first ordination axis, and
+      the box shows their quartiles. It answers how far apart the samples are on the main
+      axis of variation.
+
+      How to read: a wide range with a box split into two clusters points to groups with
+      distinct communities. The axis is centred, so its median says nothing.
+  - component: card
+    column: dim_2
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Spread on the second axis
+    caption: range, with the quartiles
+    description: >-
+      The hero number is the range of the samples along the second ordination axis, and
+      the box shows their quartiles. It answers how much variation the second axis adds.
+
+      How to read: a range much narrower than the first axis means one gradient explains
+      most of the difference between samples.

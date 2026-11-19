@@ -15,10 +15,82 @@ renders_as:
   # step, so it can only ever plot the single `rel_abundance` column. The
   # clustered heatmap is offered by `qiime2_clustered_heatmap`, which binds the
   # canonical taxon × sample matrix the same reshape produces.
-  - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
+  - id: sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Kingdom and phylum composition
+    roles: {ranks: [Kingdom, Phylum], abundance: rel_abundance}
+    config:
+      colour_by_rank: Phylum
+    description: >-
+      Each arc is a taxon: the inner ring is the kingdom and the outer ring the phylum,
+      sized by relative abundance summed over the samples in view and coloured by phylum.
+      It answers which lineages make up the communities.
+
+      How to read: a wide arc is a dominant lineage, and a ring made of many thin arcs is a
+      diverse one. Click an arc to zoom in on it, and filter by habitat to compare groups.
+
+      Note: unclassified reads form their own arc, so a large one points to a database or
+      classification limit rather than a real group.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: rel_abundance, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: taxonomy, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3, headline: true }
-  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Kingdom }
-  - { component: table }
+  # The relative abundances span orders of magnitude (a box plot would draw a flat
+  # line), so the card shows the dominant value with its typical and upper-quartile ones.
+  - component: card
+    column: rel_abundance
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: compact
+    title: Dominant relative abundance
+    caption: largest, median and upper quartile
+    description: >-
+      The hero number is the largest relative abundance of any taxon in any sample in view,
+      with the median and the upper quartile beside it. It answers how dominant the leading
+      taxon is.
+
+      How to read: a large maximum against a small median is the usual shape of a community
+      with a few dominant taxa and a long tail. Filter by sample or habitat to see how the
+      dominance changes.
+  - component: card
+    column: taxonomy
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: Kingdom
+    top_n_count: 2
+    headline: true
+    title: Taxa by kingdom
+    caption: detections, by kingdom
+    description: >-
+      The hero number is the count of distinct taxa detected, and the bars rank the kingdoms
+      by how many detections they hold. The count beside it is the number of sample and taxon
+      detections. It answers how many lineages the run recovered and where they come from.
+
+      How to read: a run dominated by one kingdom is usual for a 16S survey. A high count of
+      detections against a low count of taxa means the same taxa are found in many samples.
+  - component: card
+    column: rel_abundance
+    aggregation: average
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: Phylum
+    top_n_count: 3
+    filter_expr: "pl.col('Phylum') != 'Unclassified'"
+    title: Abundance of the leading phyla
+    caption: mean abundance when detected, by phylum
+    description: >-
+      The hero number is the mean relative abundance of a detected taxon, and the bars rank
+      the phyla by their mean. The largest value is listed beside it. It answers which phyla
+      are abundant when they are present.
+
+      How to read: phyla at the top make up most of the reads where they occur. Only
+      detections above zero are counted, so a phylum found in a single sample can still rank
+      high. Unclassified taxa are left out.
+  - component: table
+    title: Relative abundance table
+    description: >-
+      Each row is a taxon in one sample, with its relative abundance, its kingdom and phylum
+      and the sample metadata. It answers the exact abundance behind each arc and card.
+
+      How to read: sort by abundance to find the dominant taxa of a sample, or filter on a
+      phylum to follow it across samples.

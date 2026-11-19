@@ -10,10 +10,95 @@ description: >-
 find:
   path_glob: "**/purple/*.purple.cnv.gene.tsv"
 recipe: purple/gene_copy_number.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several copy-number events.
 fixture: gene_copy_number.tsv
 renders_as:
-  - { id: gene_event_count, component: card, column: gene, aggregation: count, secondary_layout: top_n, breakdown_col: cn_event, top_n_count: 3, filter_expr: "pl.col('cn_event') != 'NEUTRAL'" }
-  - { id: gene_cn_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: min_copy_number, y: max_copy_number, label: gene, color: cn_event} }
-  - { id: gene_cn_record, component: advanced_viz, kind: record_card, roles: {id: gene} }
-  - { id: gene_cn_event_filter, component: interactive, interactive_type: MultiSelect, column_name: cn_event }
-  - { id: gene_cn_table, component: table, row_selection_enabled: true, row_selection_column: gene }
+  - id: gene_event_count
+    component: card
+    column: gene
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: cn_event
+    top_n_count: 3
+    filter_expr: "pl.col('cn_event') != 'NEUTRAL'"
+    title: Genes with a copy-number event
+    caption: events, by call
+    description: >-
+      The hero number is the count of gene calls that are not neutral, and the bars rank the
+      calls (amplification, deletion, loss of heterozygosity and their partial forms) by how
+      many genes they hold. The count beside it is the number of distinct genes. It answers
+      how much of the gene set is altered and in which way.
+
+      How to read: loss of heterozygosity is frequent in many tumors and is not a driver by
+      itself, whereas homozygous deletions and amplifications are the strong events. Open the
+      scatter to see how far each gene departs.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  # C1: coloured by the copy-number call.
+  - id: gene_cn_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Minimum against maximum copy number
+    roles: {x: min_copy_number, y: max_copy_number, label: gene, color: cn_event}
+    config:
+      reference_line: diagonal
+      reference_label: Minimum equals maximum
+      x_title: Minimum copy number over the gene
+      y_title: Maximum copy number over the gene
+      top_n_labels: 10
+      legend_pos: bottom
+    description: >-
+      Each point is a gene: the lowest and the highest copy number found over its exons,
+      coloured by the call derived from them. It answers which genes are altered and whether
+      the change covers the whole gene or only a part.
+
+      How to read: genes on the diagonal have one copy number over their whole length. Genes
+      above it change copy number inside the gene, so only part of it is deleted or
+      amplified. Genes far from the main cloud with a deletion or amplification call are the
+      candidates to follow up.
+
+      Lines and annotations: the diagonal is the line where the minimum equals the maximum,
+      so the gene has a single copy number.
+
+      Note: PURPLE calls an amplification above three times the sample ploidy and a deletion
+      below 0.5 copies, so the call depends on the fitted ploidy and not on a fixed copy number.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: gene_cn_record
+    component: advanced_viz
+    kind: record_card
+    title: Gene record
+    roles: {id: gene}
+    config:
+      labels: {min_copy_number: Minimum copy number, max_copy_number: Maximum copy number, min_minor_allele_copy_number: Minimum minor allele copy number, relative_min_copy_number: Copy number relative to ploidy, somatic_regions: Copy-number regions, cn_event: Call, chromosome_band: Chromosome band, reported_status: Reported status, driver_type: Driver type}
+    description: >-
+      The card shows every field of one gene. It answers the details behind a row you pick
+      in the table or the scatter.
+
+      How to read: a minimum minor allele copy number near zero is loss of heterozygosity, and
+      the copy number relative to ploidy tells whether the gene is high or low for this tumor.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: gene_cn_event_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: cn_event
+    title: Copy-number call
+    description: >-
+      Choose the copy-number calls to keep. It answers which genes the other tiles show.
+
+      How to read: select amplifications and deletions to leave out the neutral genes and the
+      loss of heterozygosity.
+  - id: gene_cn_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: gene
+    title: Gene copy numbers
+    description: >-
+      Each row is a gene with its location, its minimum and maximum copy number, its minimum
+      minor allele copy number and its call. It answers the exact copy number behind each
+      point of the scatter.
+
+      How to read: sort by minimum copy number to list the deleted genes first. Select a row to
+      open its record.

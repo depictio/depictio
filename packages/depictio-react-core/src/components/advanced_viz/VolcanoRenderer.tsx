@@ -86,6 +86,8 @@ interface VolcanoConfig {
   /** Volcano axis titles in words; unset, the column names. */
   effect_label?: string | null;
   significance_label?: string | null;
+  /** MA view x-axis title in words (its y axis takes `effect_label`). */
+  intensity_label?: string | null;
   /** MA and QQ view bindings. See deViews.ts for why they live on this config. */
   avg_log_intensity_col?: string | null;
   log2_fold_change_col?: string | null;
@@ -570,8 +572,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         labels,
         hovers,
         hitSymbol: markerPlanOf(rows, config, activeMarkerBy).symbolFor,
-        xTitle: config.avg_log_intensity_col ?? '',
-        yTitle: maYCol,
+        xTitle: config.intensity_label || (config.avg_log_intensity_col ?? ''),
+        yTitle: config.effect_label || maYCol,
         sigTitle: config.significance_col,
         isNegLog10: Boolean(config.significance_is_neg_log10),
         sigThreshold,
@@ -952,7 +954,10 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
 
   return (
     <AdvancedVizFrame
-      title={metadata.title || 'Volcano plot'}
+      title={
+        metadata.title ||
+        (activeView === 'ma' ? 'MA plot' : activeView === 'qq' ? 'QQ plot' : 'Volcano plot')
+      }
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

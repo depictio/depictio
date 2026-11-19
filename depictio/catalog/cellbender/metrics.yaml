@@ -10,7 +10,77 @@ find:
 recipe: cellbender/metrics.py
 fixture: metrics.tsv
 renders_as:
-  - { component: card, column: fraction_counts_removed, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: found_cells, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: ratio_of_found_cells_to_expected_cells, aggregation: average, secondary_layout: threshold, threshold_value: 1.0 }
-  - { component: table }
+  # CellBender's docs give no cut-off for the removed fraction, so the card shows
+  # the measure and its spread and draws no pass mark. A fraction between 0 and
+  # 1 is also not a gauge (RULES section 5).
+  - component: card
+    column: fraction_counts_removed
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: median, with the lowest and highest sample
+    title: Share of counts removed as ambient
+    description: >-
+      The hero number is the median fraction of all counts that CellBender called
+      ambient RNA and removed, over the samples in view. It answers how much of the
+      signal was background.
+
+      How to read: a small fraction means a clean sample and little change to the
+      matrix. A large one means heavy ambient contamination, so compare samples
+      and look at the CellBender report of the outlier before using its matrix.
+
+      Note: CellBender documents no cut-off for this fraction, so no pass mark is
+      drawn. It depends on the target false-positive rate the run used.
+
+      Source: https://cellbender.readthedocs.io/en/latest/usage/index.html
+  - component: card
+    column: found_cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Cells found per sample
+    description: >-
+      The hero number is the median count of barcodes CellBender kept as cells, and
+      the box shows the spread across samples. It answers how many cells each
+      sample yielded after background removal.
+
+      How to read: samples of the same design should give similar counts. A sample
+      far below or above its peers was either filtered hard or called many empty
+      droplets, so check it against its UMI curve.
+
+      Source: https://cellbender.readthedocs.io/en/latest/usage/index.html
+  # The ratio of found to expected cells is 1 when CellBender agrees with the prior
+  # it started from. CellBender defines no pass range for it, so the layout is a
+  # spread, not a threshold.
+  - component: card
+    column: ratio_of_found_cells_to_expected_cells
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: median, with the lowest and highest sample
+    title: Found against expected cells
+    description: >-
+      The hero number is the median ratio of cells CellBender found to cells it
+      expected, over the samples in view. It answers whether the called cell count
+      matches the prior the run started from.
+
+      How to read: a ratio near 1 means the call agrees with the expectation, and
+      CellBender asks only for an expected-cells value within a factor of 2. A ratio far
+      outside that means the setting did not match the data or the cell call went wrong,
+      so compare it with the UMI curve as the CellBender troubleshooting guide advises.
+
+      Note: CellBender defines no acceptable range for this ratio, so no pass mark
+      is drawn.
+
+      Sources: https://cellbender.readthedocs.io/en/latest/reference/index.html and
+      https://cellbender.readthedocs.io/en/latest/troubleshooting/index.html
+  - component: table
+    title: Ambient-RNA removal per sample
+    description: >-
+      Each row is a sample, with the counts before and after removal, the fraction
+      removed, the expected and found cell counts and the target false-positive
+      rate. It answers the exact numbers behind the cards.
+
+      How to read: sort by the fraction removed to find the most contaminated
+      samples, then check the found-to-expected ratio of the same row.

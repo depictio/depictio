@@ -8,10 +8,86 @@ description: >-
 find:
   path_glob: "**/*.filter_summary.report.json"
 recipe: isoseq/refine_summary.py
+# The fixture is enriched synthetically from 1 real library (copies with seeded noise), so the preview shows several libraries.
 fixture: refine_summary.tsv
 renders_as:
-  - { component: card, column: flnc_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: library, top_n_count: 3, headline: true }
-  - { component: card, column: pct_flnc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_polya, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: library, y: flnc_reads, color: sample} }
-  - { component: table }
+  - component: card
+    column: flnc_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: compact
+    headline: true
+    caption: per library, the median and the largest
+    title: Full-length non-chimeric reads
+    description: >-
+      The hero number is the total of full-length non-chimeric (FLNC) reads, the
+      reads that carry both primers and a poly(A) tail without being a concatemer,
+      with the median and the largest library next to it. It answers how much usable
+      transcript data the run produced.
+
+      How to read: a large gap between the median and the maximum means uneven
+      libraries. Open the bar chart to see which ones are small.
+
+      Source: https://isoseq.how/getting-started.html
+  - component: card
+    column: pct_flnc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: Non-chimeric share
+    description: >-
+      The hero number is the median share of full-length reads that survive chimera
+      removal, with the spread across libraries in the box. It answers how clean the
+      libraries are.
+
+      How to read: a high share with a tight box means little concatemer
+      contamination. A library far below the others had many artificial
+      concatemers, so check its preparation. isoseq refine publishes no cut-off for
+      this share.
+  - component: card
+    column: pct_polya
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: Poly(A) share
+    description: >-
+      The hero number is the median share of FLNC reads that still carry a poly(A)
+      tail, with the spread across libraries in the box. It answers how many reads
+      kept the tail the refine step looks for.
+
+      How to read: the share depends on the library preparation, so compare
+      libraries made the same way. A library far from its peers had a different
+      poly(A) capture. isoseq refine publishes no cut-off for this share.
+  - component: figure
+    visu_type: bar
+    title: Full-length non-chimeric reads per library
+    dict_kwargs:
+      x: library
+      y: flnc_reads
+      color: sample
+      labels: {library: Library, flnc_reads: FLNC reads, sample: Sample}
+    reference_lines:
+      - {axis: y, stat: median, column: flnc_reads}
+    description: >-
+      Each bar is a library: its count of full-length non-chimeric reads, coloured by
+      the sample it belongs to. It answers which libraries contribute most to a
+      sample.
+
+      How to read: a sample made of several libraries of very different size depends
+      on its largest one. A very short bar is a library worth checking for a failed
+      run.
+
+      Lines and annotations: the dashed line is the median FLNC read count of this table,
+      a reference computed from the rows on show (it follows the filters), not a cut-off
+      of Iso-Seq.
+  - component: table
+    title: Refine summary per library
+    description: >-
+      Each row is a library: its full-length, non-chimeric and poly(A) read counts and
+      the two shares. It answers which libraries lost the most reads to chimera
+      removal.
+
+      How to read: sort by the non-chimeric share to find libraries with many
+      concatemers.

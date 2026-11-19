@@ -10,9 +10,87 @@ find:
 recipe: qualimap/genome_fraction_coverage.py
 fixture: genome_fraction_coverage.tsv
 renders_as:
-  - { id: genome_fraction_profile, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: min_coverage, y: genome_fraction_pct} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: min_coverage, y: genome_fraction_pct, color: sample, title: Share of the reference covered at least X deep} }
-  - { component: card, column: genome_fraction_pct, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: genome_fraction_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, page_size: 25 }
+  - id: genome_fraction_profile
+    component: advanced_viz
+    kind: profile
+    title: Genome fraction covered at least X deep
+    roles: {series: sample, x: min_coverage, y: genome_fraction_pct}
+    config:
+      x_title: Minimum read depth (X)
+      y_title: Reference covered (%)
+    description: >-
+      Each line is a library: the percentage of the reference covered by at least
+      the read depth on the horizontal axis. It answers how much of the genome is
+      usable at each depth, which a mean depth cannot tell.
+
+      How to read: a curve that stays high as the depth rises is a library with its
+      reads spread over the genome. A curve that collapses at the first depths
+      means the reads are piled on a small part of it, so the mean depth overstates
+      what is usable.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: min_coverage
+      y: genome_fraction_pct
+      color: sample
+      labels: {min_coverage: Minimum read depth (X), genome_fraction_pct: Reference covered (%), sample: Library}
+    title: Share of the reference covered at least X deep
+    description: >-
+      Each line is a library: the percentage of the reference covered at least X
+      deep. It answers the same question as the profile as a plain line.
+
+      How to read: compare where the curves reach the depth you need for your
+      analysis, and read the gap between libraries as a difference in evenness.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: genome_fraction_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    filter_expr: "col('min_coverage') == 1"
+    title: Reference covered at 1X
+    caption: median percent covered by one read or more, with the best libraries ranked
+    description: >-
+      The hero number is the median percentage of the reference covered by at least
+      one read, and the bars rank the libraries that cover most of it. It answers
+      how complete a library is at the lowest depth.
+
+      How to read: a low value means large parts of the genome are unseen. A
+      library that is high here and drops quickly at higher depth is complete but
+      shallow.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: min_coverage
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    filter_expr: "col('genome_fraction_pct') > 0"
+    title: Deepest depth still reached
+    caption: highest depth with any coverage, with the libraries ranked
+    description: >-
+      The hero number is the highest depth at which some of the reference is still
+      covered, and the bars rank the libraries that go deepest. It answers how far
+      each library's curve extends.
+
+      How to read: a short reach means a shallow library. The table is capped at
+      the depths Qualimap reports, so a value at that cap means at least that deep.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: table
+    page_size: 25
+    title: Genome fraction per depth
+    description: >-
+      Each row is a library at one minimum depth with the percentage of the
+      reference covered at least that deep. It answers the exact values behind the
+      curves.
+
+      How to read: filter to a library and read down to the depth your analysis
+      needs.

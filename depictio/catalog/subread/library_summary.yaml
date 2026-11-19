@@ -9,11 +9,105 @@ description: >-
 find:
   path_glob: "**/*.featureCounts.txt"
 recipe: subread/library_summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: library_summary.tsv
 renders_as:
-  - { component: card, column: assigned_reads, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: genes_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: card, column: top100_share_pct, aggregation: max, secondary_layout: gauge, coverage_max: 100 }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: assigned_reads, title: Reads counted over features per library} }
-  - { component: figure, visu_type: scatter, dict_kwargs: {x: assigned_reads, y: genes_detected, hover_name: sample, title: Depth against features detected} }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+  - component: card
+    column: assigned_reads
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: per library, with its spread
+    title: Reads counted over features
+    description: >-
+      The hero number is the reads assigned to features over every library, and the
+      box shows the spread between libraries. It answers how much usable signal the
+      run holds and how even depth is.
+
+      How to read: a wide box means uneven depth, so compare libraries in counts per
+      million. A library far below the box has too little signal to trust.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/24227677/
+  - component: card
+    column: genes_detected
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: features detected per library, distribution
+    title: Features detected
+    description: >-
+      The hero number is the median count of features reaching ten reads in a
+      library, and the histogram shows how libraries distribute. It answers how
+      complex the libraries are.
+
+      How to read: a library detecting far fewer features than the rest is low in
+      complexity, because of shallow depth or a few dominating transcripts.
+  - component: card
+    column: top100_share_pct
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: gauge
+    coverage_max: 100
+    caption: highest library share, of 100
+    title: Share held by the top 100 features
+    description: >-
+      The hero number is the highest percent of a library's reads taken by its 100
+      most counted features, shown against 100 percent. It answers how narrow the
+      most concentrated library is.
+
+      How to read: a narrow library holds most of its reads in a few loci, such as
+      rRNA, and its other features are poorly measured. featureCounts defines no
+      cut-off for this share, so none is drawn.
+  - component: figure
+    visu_type: bar
+    title: Reads counted over features per library
+    dict_kwargs:
+      x: sample
+      y: assigned_reads
+      color: sample
+      labels: {sample: Library, assigned_reads: Reads counted over features}
+    reference_lines: [{axis: y, stat: median, column: assigned_reads}]
+    description: >-
+      Each bar is a library, with the reads assigned to features. It answers how
+      deep each library is.
+
+      How to read: bars of similar height mean balanced libraries. A short bar is a
+      shallow library that will give noisy counts.
+
+      Lines and annotations: The dashed line is the median number of reads counted
+      over features of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of Subread.
+  - component: figure
+    visu_type: scatter
+    title: Depth against features detected
+    dict_kwargs:
+      x: assigned_reads
+      y: genes_detected
+      color: top100_share_pct
+      hover_name: sample
+      labels: {assigned_reads: Reads counted over features, genes_detected: Features detected, top100_share_pct: Share of top 100 features (%), sample: Library}
+    reference_lines: [{axis: y, stat: median, column: genes_detected}]
+    description: >-
+      Each point is a library, with its counted reads on the horizontal axis and
+      the features detected on the vertical axis, coloured by the share of reads
+      held by its 100 top features. It answers whether more depth buys more
+      features.
+
+      How to read: libraries usually climb together, and a library below the trend
+      detects fewer features than its depth suggests. A high share of the top 100 on the colour
+      scale explains it, as a few loci take the reads.
+
+      Lines and annotations: The dashed line is the median number of features
+      detected of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of Subread.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Library depth and complexity
+    description: >-
+      Each row is a library, with the reads counted over features, the features
+      detected and their share, the share of the top 100 features and the median
+      log2 counts per million. It answers the exact numbers behind every other tile
+      and lets a row selection filter the dashboard.
+
+      How to read: sort by the top 100 share to find the narrowest libraries.

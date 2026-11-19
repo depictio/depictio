@@ -13,6 +13,7 @@ renders_as:
   - id: isoform_structures
     component: advanced_viz
     kind: transcript_structure
+    title: Isoform structures against the reference
     roles:
       transcript_id: transcript_id
       gene_id: gene_id
@@ -25,4 +26,27 @@ renders_as:
       gene_name: gene_name
       transcript_class: transcript_class
       expression: expression
-  - { component: table }
+    config:
+      colour_by: transcript_class
+    description: >-
+      Each lane is a transcript of one gene: boxes are its exons, and the reference transcripts of the gene
+      sit beside the TAMA isoforms of the chosen sample. It answers how an isoform's exon structure differs
+      from the annotation.
+
+      How to read: lanes coloured as full splice matches repeat a reference structure, and novel categories
+      show skipped, extra or shifted exons against the reference lanes. Pick the gene and the sample from the
+      controls, and compare a novel isoform's read support with the reference before trusting it.
+
+      Lines and annotations: the lane colour is the structural category, following SQANTI3 (FSM full splice
+      match, ISM incomplete, NIC new combination of known splice sites, NNC at least one unannotated splice
+      site). Reference lanes are coloured as the reference class.
+
+      Source: https://raw.githubusercontent.com/wiki/ConesaLab/SQANTI3/SQANTI3-isoform-classification:-categories-and-subcategories.md
+  - component: table
+    title: Exon blocks table
+    description: >-
+      Each row is an exon or CDS block of a transcript with its coordinates, strand, structural class and
+      read support. It answers the exact coordinates behind the lanes.
+
+      How to read: filter on a gene and compare the blocks of an isoform with the reference rows of the same
+      gene.

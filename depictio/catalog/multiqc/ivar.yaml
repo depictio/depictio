@@ -13,4 +13,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: ivar }
+  - component: multiqc
+    section: ivar
+    title: Primer trimming
+    description: >-
+      iVar's amplicon primer-trimming and variant metrics per sample. They answer
+      how many reads had primers removed and how the called variants look.
+
+      How to read: Most mapped reads should be trimmed in an amplicon protocol. A
+      low trimmed share means the primer scheme does not match the reads, which can
+      leave primer sequence in variant calls.
+
+      Source: https://docs.seqera.io/multiqc/modules/ivar

@@ -12,15 +12,207 @@ find:
 recipe: nanoplot/nanostats.py
 fixture: nanostats.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_length_n50, color: sample, title: Read length N50 per library} }
-  - { component: card, column: n_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: total_gigabases, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: read_length_n50, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mean_read_quality, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mean_read_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: median_read_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: stdev_read_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: longest_read_length, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: median_read_quality, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: length_vs_quality, component: advanced_viz, kind: scatter_xy, roles: {x: mean_read_length, y: mean_read_quality, label: sample, size: total_gigabases} }
-  - { component: table }
+  # NanoStat publishes no pass mark for any of these summaries, so none of the
+  # tiles below draws a threshold (C3 N/A). Colour is the library, the only
+  # categorical column the report carries.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: read_length_n50
+      color: sample
+      labels: {sample: Library, read_length_n50: Read length N50 (bases)}
+    reference_lines:
+      - {axis: y, stat: median, column: read_length_n50}
+    title: Read length N50 per library
+    description: >-
+      Each bar is a library: the N50 of its read lengths, the length such that half
+      of the sequenced bases sit in reads at least that long. It answers which
+      libraries gave the longest reads for the sequenced yield.
+
+      How to read: a taller bar means longer reads, which resolve repeats and
+      structural variants better. Compare libraries prepared the same way, since a
+      fragmentation or size selection step moves the N50 as much as the run does.
+      Open the length against quality view to see whether a long library is also accurate.
+
+      Lines and annotations: The dashed line is the median read length N50 of this
+      table, a reference computed from the rows on show (it follows the filters), not a
+      cut-off of NanoStat.
+
+      Source: https://github.com/wdecoster/nanostat and
+      https://raw.githubusercontent.com/wdecoster/nanomath/master/nanomath/nanomath.py
+  - component: card
+    column: n_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    caption: the libraries with most reads
+    title: Total reads
+    description: >-
+      The hero number is the count of reads over every library in view, and the bars
+      rank the libraries that contribute most. It answers how much sequence the run
+      produced and where it came from.
+
+      How to read: a library far below its peers is under-loaded or failed early.
+      Reads are not bases, so read this next to the yield card.
+  - component: card
+    column: total_gigabases
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    caption: the libraries with most yield
+    headline: true
+    title: Total yield (Gb)
+    description: >-
+      The hero number is the sequenced yield in gigabases over every library in
+      view, and the bars rank the libraries by yield. It answers whether the run
+      produced enough data for the planned analysis.
+
+      How to read: compare each library with the yield you planned for. NanoStat
+      sets no minimum yield, so judge it against the experiment, not a fixed number.
+
+      Source: https://github.com/wdecoster/nanostat
+  - component: card
+    column: read_length_n50
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    headline: true
+    title: Read length N50
+    description: >-
+      The hero number is the median N50 across libraries, and the box shows how the
+      libraries spread around it. It answers how long the reads are in a typical
+      library and how consistent the libraries are.
+
+      How to read: a tight box means the libraries were prepared alike. A wide box
+      or a far outlier points to a library with a different size distribution, so
+      open the table to find it.
+  - component: card
+    column: mean_read_quality
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with its spread
+    title: Mean read quality
+    description: >-
+      The hero number is the mean of the libraries' mean read quality, a Phred score
+      averaged over each read's bases, and the box shows the spread between
+      libraries. It answers how accurate the basecalls are overall.
+
+      How to read: higher is better and the value depends on the pore chemistry and
+      the basecaller model, so compare libraries of one run. A library well below
+      its peers deserves a look at the quality ladder tab before analysis.
+  - component: card
+    column: mean_read_length
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with its spread
+    title: Mean read length
+    description: >-
+      The hero number is the mean of the libraries' mean read length in bases, and the
+      box shows the spread between libraries. It answers how long a read is on
+      average.
+
+      How to read: the mean is pulled up by a few very long reads, so it sits above
+      the median in a typical Nanopore library. A large gap between the two cards
+      means a long tail.
+  - component: card
+    column: median_read_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Median read length
+    description: >-
+      The hero number is the median of the libraries' median read length in bases,
+      and the box shows the spread between libraries. It answers how long the middle
+      read is, which a few very long reads do not move.
+
+      How to read: compare it with the mean and the N50. A median far below the N50
+      means most reads are short while the bases sit in a few long ones.
+  - component: card
+    column: stdev_read_length
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with its spread
+    title: Read length spread
+    description: >-
+      The hero number is the mean standard deviation of read length, in bases, over
+      the libraries, and the box shows how it varies between them. It answers how
+      uneven the read lengths are.
+
+      How to read: a large value relative to the mean length means a broad
+      distribution, typical of unsheared or transposase library preparations. A
+      tight value points to a size-selected library.
+  - component: card
+    column: longest_read_length
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    caption: the libraries with the longest read
+    title: Longest read
+    description: >-
+      The hero number is the longest read in any library in view, in bases, and the
+      bars rank the libraries by their own longest read. It answers how far the
+      length tail reaches.
+
+      How to read: one extreme read says little on its own, since a single chimeric
+      or concatenated read can dominate it. Read it with the N50.
+  - component: card
+    column: median_read_quality
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Median read quality
+    description: >-
+      The hero number is the median of the libraries' median read quality, a Phred
+      score, and the box shows the spread between libraries. It answers what quality
+      the typical read has.
+
+      How to read: the median sits above the mean when a tail of poor reads drags the
+      mean down. A library whose median is low as well has poor basecalls overall.
+  - id: length_vs_quality
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: mean_read_length, y: mean_read_quality, label: sample, size: total_gigabases, color: sample}
+    config:
+      x_title: Mean read length (bases)
+      y_title: Mean read quality (Phred)
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    title: Read length against quality
+    description: >-
+      Each point is a library: its mean read length on the horizontal axis, its mean
+      read quality on the vertical axis, with the marker sized by sequenced yield. It
+      answers whether the longest libraries are also the most accurate.
+
+      How to read: libraries in the upper right give long and accurate reads. A library
+      that is long but low in quality, or accurate but short, shows the trade-off of
+      its preparation; with few libraries the points are best read next to the table.
+      No pass mark is drawn because NanoStat defines none.
+
+      Lines and annotations: The dashed line is the median mean read quality of this
+      table, a reference computed from the rows on show (it follows the filters), not a
+      cut-off of NanoStat.
+
+      Source: https://github.com/wdecoster/nanostat
+  - component: table
+    title: Long-read summary table
+    description: >-
+      Each row is a library with its NanoStat summary: read count, yield, read length
+      mean, median, N50 and standard deviation, read quality and the longest read. It
+      answers which library to inspect or exclude.
+
+      How to read: sort by N50, quality or yield to find the weakest library, and compare
+      the mean with the median to spot a long tail.

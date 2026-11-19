@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: deeptools }
+  - component: multiqc
+    section: deeptools
+    title: Signal enrichment
+    description: >-
+      deepTools plotFingerprint curve: the cumulative share of signal against the
+      share of the genome covered, one curve per sample. It answers whether a ChIP
+      sample is enriched over its input.
+
+      How to read: An input or a failed ChIP follows the diagonal. An enriched
+      sample bows toward the lower right because a few regions hold most of the
+      signal, and the further it bows the stronger the enrichment.
+
+      Source: https://docs.seqera.io/multiqc/modules/deeptools

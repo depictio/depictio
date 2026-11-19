@@ -11,9 +11,78 @@ find:
 recipe: mirdeep2/predictions.py
 fixture: predictions.tsv
 renders_as:
-  - { id: prediction_scores, component: advanced_viz, kind: scatter_xy,
-      roles: {x: total_reads, y: score, label: prediction_id, color: category} }
-  - { component: card, column: prediction_id, aggregation: count, secondary_layout: donut, breakdown_col: category }
-  - { component: card, column: score, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: category }
-  - { component: table, row_selection_enabled: true, row_selection_column: prediction_id }
+  # No score cut-off is drawn: miRDeep2 documents none (RULES section 17).
+  - id: prediction_scores
+    component: advanced_viz
+    kind: scatter_xy
+    title: Prediction score against read support
+    roles: {x: total_reads, y: score, label: prediction_id, color: category}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: Total reads on the precursor
+      y_title: miRDeep2 score
+      log_x: true
+      legend_pos: bottom
+      top_n_labels: 6
+    description: >-
+      Each point is a precursor in one sample: its total reads on a log axis and its
+      miRDeep2 score, coloured by novel or known (already in miRBase). It answers how
+      novel candidates compare with the known miRNAs the run re-detected.
+
+      How to read: known miRNAs show what a confident call looks like for this
+      dataset. Novel candidates scoring like them are credible; low-scoring ones on
+      few reads are likely noise. Open the table to read the sequences.
+
+      Lines and annotations: the dashed line is the median miRDeep2 score of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      miRDeep2. The README sets a score cut-off of 0 only for which novel candidates its
+      overview table lists, and surveys cut-offs from -10 to 10.
+
+      Source: https://raw.githubusercontent.com/rajewsky-lab/mirdeep2/master/README.md
+  - component: card
+    column: category
+    aggregation: count
+    aggregations: [mode]
+    secondary_layout: donut
+    breakdown_col: category
+    headline: true
+    title: Scored precursors
+    caption: precursors, novel and known
+    description: >-
+      The hero number is the count of precursors miRDeep2 scored and the ring splits
+      them into novel candidates and known miRBase precursors. It answers how much of
+      the output is discovery.
+
+      How to read: a known share that is very low means the library missed most
+      expected miRNAs, which argues for checking the library quality first.
+  - component: card
+    column: score
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Score of predictions
+    caption: score, quartiles over predictions
+    description: >-
+      The hero number is the median miRDeep2 score and the box shows the spread. It
+      answers how strongly the predictions are supported overall.
+
+      How to read: filter to novel or known with the category selector and compare the
+      two boxes. A novel box far below the known one means weak candidates.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: category
+    title: Prediction category
+    description: >-
+      Filters the tiles to novel candidates, known miRBase precursors or both.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: prediction_id
+    title: Prediction table
+    description: >-
+      Each row is a precursor in one sample with its score, true-positive estimate,
+      read counts per arm, randfold result and locus. It answers which predictions to
+      follow up and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by score and check the true-positive estimate and its
+      standard deviation together, as a wide deviation means an uncertain estimate.

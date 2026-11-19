@@ -13,11 +13,99 @@ find: { path_glob: "**/qiime2/alpha-rarefaction/*.csv" }
 recipe: qiime2/alpha_rarefaction_summary.py
 fixture: alpha_rarefaction_summary.tsv
 renders_as:
-  # The curve itself, with the iteration spread drawn as a band around it —
-  # the reading the raw table can only suggest.
-  - { id: rarefaction_band, component: advanced_viz, kind: profile, roles: {series: sample, x: depth, y: faith_pd} }
-  - { id: rarefaction_curve, component: advanced_viz, kind: rarefaction, roles: {sample_id: sample, depth: depth, metric: faith_pd} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: depth, y: faith_pd, color: sample, title: Rarefaction curves} }
-  - { component: card, column: faith_pd, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: depth, aggregation: max, secondary_layout: histogram }
-  - { component: table }
+  # The median curve per sample. The summary stores the interquartile width, not
+  # its two edges, so the profile tile cannot draw the spread as a band.
+  # Colour is one per sample (profile series); the metadata columns that would
+  # group them are run-dependent and not in the recipe's OUTPUT_SCHEMA.
+  - id: rarefaction_band
+    component: advanced_viz
+    kind: profile
+    title: Median rarefaction curves
+    roles: {series: sample, x: depth, y: faith_pd}
+    config:
+      x_title: Sequencing depth (reads per sample)
+      y_title: Faith's phylogenetic diversity
+      legend_pos: bottom
+    description: >-
+      Each line is a sample: the median, over the iterations, of its Faith's
+      phylogenetic diversity at each subsampling depth. It answers whether the
+      diversity of each sample has stopped growing with depth.
+
+      How to read: a line that levels out means more reads would not reveal new
+      diversity, and a line still rising at the deepest depth means the sample was
+      not sequenced deeply enough. Pick the sampling depth for diversity analyses
+      where most lines have levelled out.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/
+  # C1 N/A: same reason as above, one colour per sample and no grouping column.
+  - id: rarefaction_curve
+    component: advanced_viz
+    kind: rarefaction
+    title: Rarefaction by sample
+    roles: {sample_id: sample, depth: depth, metric: faith_pd}
+    description: >-
+      Each line is a sample: its median Faith's phylogenetic diversity at each
+      subsampling depth, with the controls of the rarefaction view. It answers which
+      samples are the richest and whether their curves have levelled out.
+
+      How to read: curves that flatten show that the diversity was captured, and the
+      ordering of the curves shows which samples are richer at equal depth. A curve
+      that stays steep is a sample worth resequencing or dropping from depth-sensitive
+      comparisons.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: depth
+      y: faith_pd
+      color: sample
+      labels: {depth: Sequencing depth (reads per sample), faith_pd: Faith's phylogenetic diversity, sample: Sample}
+    title: Rarefaction curves
+    description: >-
+      Each line is a sample: its median Faith's phylogenetic diversity at each
+      subsampling depth. It answers how fast the diversity of each sample grows with
+      sequencing depth.
+
+      How to read: hover a line to read the sample, and look for curves that level out.
+      A curve still rising at the right edge was not sequenced deeply enough to see its
+      full diversity.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/
+  - component: card
+    column: faith_pd
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Faith's diversity along the curves
+    caption: median, with its spread
+    description: >-
+      The hero number is the median Faith's phylogenetic diversity over every sample
+      and depth step in view, and the box shows their quartiles. It answers the
+      typical diversity reached across the rarefaction series.
+
+      How to read: it mixes shallow and deep steps, so use it as a coarse summary and
+      read the curves for the plateau. Filter to one sample to see its own range.
+  - component: card
+    column: depth
+    aggregation: max
+    aggregations: [min, median]
+    secondary_layout: compact
+    title: Subsampling depths
+    caption: deepest, shallowest and median depth
+    description: >-
+      The hero number is the deepest subsampling depth of the series, with the
+      shallowest and the median step beside it. It answers how far the rarefaction
+      explored.
+
+      How to read: compare the deepest depth with the library sizes of the run, since
+      a sampling depth above a library size would drop that sample.
+  - component: table
+    title: Rarefaction summary table
+    description: >-
+      Each row is a sample at one subsampling depth, with its median diversity, the
+      interquartile width over the iterations and the number of iterations. It answers
+      the exact value behind each point of the curves.
+
+      How to read: a wide interquartile width at a depth means the subsamples disagree,
+      which usually happens at the shallowest steps.

@@ -9,4 +9,15 @@ description: >-
 find: { path_glob: "**/salmon.merged.gene_counts.tsv" }
 fixture: merged_gene_counts.tsv
 renders_as:
-  - { component: table }
+  # A table only: the matrix is the input a differential tool is handed, with one
+  # column per sample known at ingest, so there is nothing to bind to a plot.
+  - component: table
+    title: Merged gene counts
+    description: >-
+      Each row is a gene with its estimated read count in every sample, as summarised
+      by tximport from the Salmon quantifications. It answers what the raw counts
+      handed to a differential expression tool look like.
+
+      How to read: counts are estimates and may be non-integer. Compare them across
+      samples only after normalisation, which is what the differential expression
+      step does; use the TPM views for comparisons.

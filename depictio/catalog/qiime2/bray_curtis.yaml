@@ -9,5 +9,37 @@ find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
 recipe: nf-core/ampliseq/bray_curtis_canonical.py
 fixture: bray_curtis.tsv
 renders_as:
-  - { id: distance_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples, known only at ingest. A matrix
+  # of distances needs no row annotation: the recipe carries no metadata column.
+  # C1 N/A: a heatmap colours by its value scale, which the kind draws itself.
+  - id: distance_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Sample distances
+    roles: {index: sample}
+    config:
+      cluster_rows: true
+      cluster_cols: true
+      normalize: none
+    description: >-
+      Each cell is the Bray-Curtis dissimilarity between two samples, computed from their
+      relative abundances. It answers which samples have similar communities and which
+      groups they form.
+
+      How to read: dark blocks along the diagonal are groups of similar samples and the
+      dendrograms show how they cluster. Samples that sit far from every other sample have
+      an unusual community, so check them against the ordination and the habitat metadata.
+
+      Note: Bray-Curtis runs from 0 for identical communities to 1 for communities that
+      share nothing.
+
+      Sources: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/ and
+      https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.braycurtis.html
+  - component: table
+    title: Distance matrix
+    description: >-
+      Each row is a sample and each column the Bray-Curtis dissimilarity to another sample.
+      It answers the exact distance between any two samples.
+
+      How to read: read across a row to find the nearest and the most distant samples of
+      the one in view.

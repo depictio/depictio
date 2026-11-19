@@ -10,7 +10,43 @@ find:
 recipe: mirtop/sample_pca.py
 fixture: sample_pca.tsv
 renders_as:
-  - { id: mirna_pca, component: advanced_viz, kind: embedding,
-      roles: {sample_id: sample, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3} }
-  - { component: card, column: mirnas_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # C1: the design column (condition) is not in the recipe's output schema, so
+  # the points are coloured by the library size, which separates depth from design.
+  - id: mirna_pca
+    component: advanced_viz
+    kind: embedding
+    title: Sample PCA of miRNA expression
+    roles: {sample_id: sample, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3, color: mirna_reads}
+    config:
+      axis_prefix: PC
+      legend_pos: right
+    description: >-
+      Each point is a sample, placed by the principal components of log2 counts per million
+      (plus one) over the most variable expressed miRNAs, and coloured by its number of
+      miRNA reads. It answers whether samples group by biology or by sequencing depth.
+
+      How to read: samples of the same condition should sit together. When the
+      colour gradient runs along a component, depth drives the separation and not the design,
+      so normalise or drop shallow libraries. A sample far from its group is a candidate
+      outlier.
+  - component: card
+    column: mirnas_detected
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: miRNAs detected per sample
+    caption: median, with its spread across samples
+    description: >-
+      The hero number is the median count of miRNAs detected per sample, and the box
+      shows the quartiles. It answers how complex the libraries are.
+
+      How to read: a sample with far fewer miRNAs than the rest points to a shallow or
+      degraded library. Compare it with its miRNA reads in the PCA colours.
+  - component: table
+    title: Sample PCA table
+    description: >-
+      Each row is a sample with its principal components, its number of miRNA reads and its
+      number of detected miRNAs. It answers which samples are outliers on a component.
+
+      How to read: sort by a component to find the extremes, and compare reads with detected
+      miRNAs to tell depth from design.

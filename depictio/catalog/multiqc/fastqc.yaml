@@ -12,4 +12,22 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: fastqc }
+  - component: multiqc
+    section: fastqc
+    title: Raw-read QC
+    description: >-
+      FastQC's own plots aggregated by MultiQC: per-base quality, GC content,
+      duplication and adapter content, one line per sample. They answer whether the
+      raw reads are fit for downstream analysis.
+
+      How to read: Quality should stay in the green band along the read and adapter
+      content should be near zero. A shifted or multi-peaked GC curve suggests
+      contamination, so check the sample before trusting its results.
+
+      Lines and annotations: The per-base and per-sequence quality plots are banded
+      green above a Phred score of 28, orange from 20 to 28 and red below 20. The
+      adapter content plot is banded orange from 5 to 20 percent and red above 20
+      percent. The bands are set in the MultiQC FastQC module.
+
+      Source:
+      https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/fastqc/fastqc.py

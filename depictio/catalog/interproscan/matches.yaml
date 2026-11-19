@@ -12,11 +12,78 @@ find:
   path_glob_alt:
     - "**/interproscan/*.tsv"
 recipe: interproscan/matches.py
+# The fixture is enriched synthetically from 1 real rows (copies with seeded noise), so the preview shows several member databases and proteins.
 fixture: matches.tsv
 renders_as:
-  - { id: signature_matches, component: card, column: entity, aggregation: count,
-      secondary_layout: top_n, breakdown_col: source, top_n_count: 4, headline: true }
-  - { id: interpro_entries, component: card, column: interpro_accession, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: source }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: source, color: source} }
-  - { component: table }
+  - id: signature_matches
+    component: card
+    column: entity
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: source
+    top_n_count: 4
+    headline: true
+    title: Signature matches
+    caption: matches, by member database
+    description: >-
+      The hero number is the count of signature matches, with the number of distinct
+      proteins that have one beside it, and the bars rank the member databases that
+      report them. It answers how much of the protein set is annotated and by which
+      database.
+
+      How to read: proteins without a match write no row, so compare the protein count
+      with the input size to see the unannotated share. A database that dominates may
+      simply be the one with the broadest signatures.
+
+      Source: https://interproscan-docs.readthedocs.io/en/v5/OutputFormats.html
+  - id: interpro_entries
+    component: card
+    column: interpro_accession
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: source
+    filter_expr: "(col('interpro_accession') != '')"
+    title: InterPro entries
+    caption: integrated matches, by member database
+    description: >-
+      The hero number is the count of distinct InterPro entries the matches are
+      integrated into, with the number of integrated matches beside it, and the ring
+      splits those matches by member database. It answers how many distinct
+      functions the proteins carry.
+
+      How to read: only integrated matches count here, so a signature that InterPro
+      has not integrated is left out. A ring led by one database shows where the
+      curated entries come from.
+
+      Source: https://interproscan-docs.readthedocs.io/en/v5/OutputFormats.html
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: source
+      color: source
+      labels: {source: Member database}
+    title: Matches per member database
+    description: >-
+      Each bar counts the signature matches reported by one member database, such as
+      Pfam, PANTHER or CDD. It answers which databases contribute annotation for these
+      proteins.
+
+      How to read: a tall bar is a database with many hits, and a missing one found
+      nothing or was not run. Open the table to see the signatures and spans behind a
+      bar.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/24451626/
+  - component: table
+    title: Signature matches table
+    description: >-
+      Each row is a signature match with its protein, member database, signature and
+      description, matched span, E-value or score, and the InterPro entry, GO terms and
+      pathways it is integrated into. It answers which domains each protein carries
+      and where.
+
+      How to read: sort by E-value to see the most confident matches first, and filter
+      by database or by InterPro entry to follow one function across proteins.
+
+      Source: https://interproscan-docs.readthedocs.io/en/v5/OutputFormats.html

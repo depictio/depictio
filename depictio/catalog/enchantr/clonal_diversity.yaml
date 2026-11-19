@@ -3,22 +3,64 @@ name: Clonal diversity profile
 mode: repertoire-analysis/diversity
 description: >-
   alakazam Hill diversity profile per sample: the bootstrapped diversity d at
-  every order q from richness to inverse Simpson, with its confidence band and
-  the matching evenness.
+  every order q from richness to inverse Simpson, with its confidence band
+  and the matching evenness.
 find: { path_glob: "**/repertoire_analysis_report/tables/clonal_diversity.tsv" }
 recipe: enchantr/clonal_diversity.py
 fixture: clonal_diversity.tsv
 renders_as:
   # A diversity profile is a curve per sample over an ordered x: the same shape
-  # a rarefaction curve has, so the rarefaction renderer draws it directly.
+  # a rarefaction curve has, so the rarefaction renderer draws it directly. The
+  # x axis is the diversity order q, not a subsampling depth.
   - id: diversity_profile
     component: advanced_viz
     kind: rarefaction
-    roles: { sample_id: sample_id, depth: q, metric: d }
+    title: Diversity profile by order
+    roles: { sample_id: sample_id, depth: q, metric: d, group: subject_id }
+    description: >-
+      Each curve is a sample: its Hill diversity at every order q, coloured by
+      subject. It answers how diverse each repertoire is and how that changes as
+      common clones weigh more.
+
+      How to read: the horizontal axis is the diversity order q, not a sequencing
+      depth. At q = 0 every clone counts equally (richness), at q = 1 it is the
+      exponential of Shannon entropy and at q = 2 the inverse Simpson index. A curve
+      that falls steeply is dominated by a few clones, a flat one is even, and
+      curves that run apart at high q differ in their dominant clones.
+
+      Sources: https://alakazam.readthedocs.io/en/stable/vignettes/Diversity-Vignette/ and
+      https://alakazam.readthedocs.io/en/stable/topics/calcDiversity/
   # Narrowed to one q, the same rows are one Hill number per sample with its
   # bootstrap confidence interval.
   - id: diversity_ci_bars
     component: advanced_viz
     kind: metric_ci_bars
+    title: Diversity with confidence interval
     roles: { label: sample_id, value: d, lower: d_lower, upper: d_upper }
-  - { component: table }
+    config:
+      metric_name: Hill diversity
+    description: >-
+      Each bar is a sample: its Hill diversity with a whisker for the bootstrap
+      confidence interval. It answers which samples differ in diversity beyond the
+      uncertainty of the estimate.
+
+      How to read: filter to one diversity order first (0 richness, 1 Shannon, 2
+      inverse Simpson), otherwise every order is drawn at once. Samples whose
+      whiskers do not overlap differ, but overlapping whiskers do not rule a
+      difference out: alakazam tests one with a bootstrap delta distribution, not by
+      overlap.
+
+      Lines and annotations: the whiskers are the confidence interval alakazam
+      derives by bootstrapping, as shown in its diversity vignette.
+
+      Sources: https://alakazam.readthedocs.io/en/stable/vignettes/Diversity-Vignette/ and
+      https://alakazam.readthedocs.io/en/stable/topics/calcDiversity/
+  - component: table
+    title: Diversity table
+    description: >-
+      Each row is a sample at one diversity order, with its Hill diversity, bootstrap
+      standard deviation, confidence bounds and evenness. It answers the exact values
+      behind the curves.
+
+      How to read: filter to one order to compare samples, and read the evenness
+      column to separate a rich but dominated repertoire from a flat one.

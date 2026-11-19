@@ -12,4 +12,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: ribotish }
+  - component: multiqc
+    section: ribotish
+    title: Ribo-seq footprint quality
+    description: >-
+      Ribo-TISH's quality plots: reading-frame proportions and the read-length
+      distribution of the footprints. They answer whether a Ribo-seq library shows
+      ribosome periodicity.
+
+      How to read: Genuine footprints concentrate in one reading frame and in a
+      narrow length range. Even frame proportions mean little ribosome signal.
+
+      Source: https://docs.seqera.io/multiqc/modules/ribotish

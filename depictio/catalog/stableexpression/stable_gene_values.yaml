@@ -15,7 +15,63 @@ renders_as:
   - id: stability_violins
     component: advanced_viz
     kind: ranked_distribution
-    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section, value: value }
-  - { id: value_box, component: figure, visu_type: box, dict_kwargs: { x: gene_name, y: value, color: section } }
-  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: dataset, top_n_count: 3 }
-  - { component: interactive, interactive_type: MultiSelect, column_name: dataset }
+    title: Most stable genes across samples
+    roles: {feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section, value: value}
+    config:
+      distribution: violin
+      score_label: Stability score (lower is more stable)
+      value_label: Normalised expression
+    description: >-
+      Each row is one of the top candidate genes of an expression section, coloured by
+      section: the distribution of its normalised expression over the samples in view,
+      beside its stability score. It answers how steady a gene's expression is across
+      datasets, and recomputes when you filter samples.
+
+      How to read: a narrow distribution with a low score marks a reliable reference
+      gene. A wide or multi-peaked shape means expression differs between datasets or
+      platforms, so filter by dataset to see which.
+
+      Lines and annotations: none are drawn. The score ranks the genes within their
+      section and has no published cut-off.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - id: value_box
+    component: figure
+    visu_type: box
+    title: Expression of the top genes
+    dict_kwargs:
+      x: gene_name
+      y: value
+      color: section
+      labels: {gene_name: Gene, value: Normalised expression, section: Expression section}
+    description: >-
+      Each box is a top candidate gene and summarises its normalised expression over
+      the samples in view, coloured by section. It answers how the best candidates
+      compare in level and spread.
+
+      How to read: boxes at the same height with a short spread are interchangeable
+      references. A box that moves when you filter by dataset depends on the dataset
+      and is a weaker reference.
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: dataset
+    top_n_count: 3
+    title: Samples in view
+    caption: samples, the largest datasets
+    description: >-
+      The hero number is the count of distinct samples behind the gene values, and the
+      bars rank the datasets that contribute most. It answers how large the evidence
+      is and whether one dataset dominates.
+
+      How to read: if one dataset holds most samples, the stability of the top genes
+      mostly reflects that dataset. Filter by dataset to test this.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: dataset
+    title: Dataset
+    description: >-
+      Keeps only the samples of the chosen datasets, so each gene's distribution is
+      recomputed from them.

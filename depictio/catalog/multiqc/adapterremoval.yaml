@@ -12,4 +12,17 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: adapterremoval }
+  - component: multiqc
+    section: adapterremoval
+    title: Adapter trimming and read collapsing
+    description: >-
+      AdapterRemoval's own MultiQC plot: for each sample, how many reads were kept,
+      discarded or collapsed into a single merged read. It answers how much of the
+      library was lost to trimming and how much of it merged.
+
+      How to read: A high retained share means clean libraries. A large discarded
+      share points to adapter dimers or very short inserts, so check the library
+      preparation. A high collapsed share is expected for short inserts and is not a
+      defect.
+
+      Source: https://docs.seqera.io/multiqc/modules/adapterremoval

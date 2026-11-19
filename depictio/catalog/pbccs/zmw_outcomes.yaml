@@ -8,9 +8,46 @@ description: >-
 find:
   path_glob: "**/*.report.json"
 recipe: pbccs/zmw_outcomes.py
+# The fixture is enriched synthetically from 12 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: zmw_outcomes.tsv
 renders_as:
-  - { id: ccs_outcome_bars, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: library, taxon: outcome, rank: rank, abundance: pct_of_input} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: library, y: pct_of_input, color: outcome} }
-  - { component: table }
+  - id: ccs_outcome_bars
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: ZMW outcome per library
+    roles: {sample_id: library, taxon: outcome, rank: rank, abundance: pct_of_input}
+    config:
+      default_rank: CCS outcome
+      normalise_to_one: true
+    description: >-
+      Each bar is a library and each segment the outcome of its ZMWs: passed, or the
+      filter that removed them, as a share of the ZMWs read. It answers where the ZMWs
+      of each library went.
+
+      How to read: a large Passed segment is a productive library. A large too-few-passes
+      segment means short movies or long inserts, while a growing SNR or draft-failure
+      segment points to the chemistry or the polymerase. Switch to counts to see the
+      absolute numbers.
+
+      Source: https://ccs.how/faq/fail-reads.html
+  - component: figure
+    visu_type: bar
+    title: ZMW outcome share per library
+    dict_kwargs:
+      x: library
+      y: pct_of_input
+      color: outcome
+      labels: {library: Library, pct_of_input: Share of input ZMWs (%), outcome: Outcome}
+    description: >-
+      Each segment is an outcome of a library: its share of the ZMWs that went into
+      CCS. It answers how the libraries compare on each filter.
+
+      How to read: compare the same colour across libraries to see which one loses more
+      ZMWs to a filter. The segments of a library add up to 100%.
+  - component: table
+    title: CCS outcomes per library
+    description: >-
+      Each row is an outcome of one library: the number of ZMWs and their share of the
+      ZMWs read. It answers exactly how many ZMWs each filter removed.
+
+      How to read: sort by the share to see the dominant reason ZMWs fail.

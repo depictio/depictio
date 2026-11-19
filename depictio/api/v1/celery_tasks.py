@@ -606,6 +606,39 @@ def build_figure_preview(payload: dict) -> dict:
     except Exception as exc:  # never lose a figure to its own tidying
         logger.warning(f"celery_tasks.build_figure_preview: facet tidy skipped: {exc}")
 
+    # Guide lines (``reference_lines``): fixed, or at a statistic of a column
+    # over the filtered rows. The statistic is read off its own scan, never off
+    # ``df``, which is capped or sampled for point plots and absent when the
+    # aggregation path drew the figure.
+    if mode != "code" and metadata.get("reference_lines"):
+        from depictio.api.v1.services.figure.reference_lines import (
+            apply_reference_lines,
+            normalise_reference_lines,
+            resolve_reference_lines,
+            stat_requests,
+        )
+
+        try:
+            lines = normalise_reference_lines(metadata.get("reference_lines"))
+            stats_frame = None
+            requests = stat_requests(lines)
+            if requests:
+                from depictio.api.v1.deltatables_utils import open_deltatable_scan
+
+                stats_frame = open_deltatable_scan(
+                    workflow_id=wf_oid,
+                    data_collection_id=str(dc_id),
+                    metadata=filter_metadata or None,
+                    init_data=init_data,
+                    select_columns=sorted({column for column, _ in requests.values()}),
+                    delta_version=payload.get("delta_version"),
+                )
+                if stats_frame is None and df is not None and not render_stats.get("sampled"):
+                    stats_frame = df
+            fig = apply_reference_lines(fig, resolve_reference_lines(lines, stats_frame), theme)
+        except Exception as exc:  # a guide line never costs the figure
+            logger.warning(f"celery_tasks.build_figure_preview: reference lines skipped: {exc}")
+
     if hasattr(fig, "to_json"):
         fig_dict = json.loads(fig.to_json())
     else:

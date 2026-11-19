@@ -17,13 +17,97 @@ find:
 recipe: gtdbtk/rank_composition.py
 fixture: rank_composition.tsv
 renders_as:
-  - { id: recovered_community, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample_id, y: abundance, color: taxon, title: Bins per taxon and binning run} }
-  - { component: card, column: taxon, aggregation: nunique,
-      secondary_layout: top_n, breakdown_col: binner, top_n_count: 5 }
-  - { component: card, column: abundance, aggregation: sum,
-      secondary_layout: composition, breakdown_col: assembler }
-  - { component: card, column: abundance, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: recovered_community
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Community recovered by each binning run
+    roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance}
+    config:
+      default_rank: phylum
+      normalise_to_one: false
+      top_n: 8
+      x_title: Binning run
+      value_title: Bins
+      legend_pos: bottom
+    description: >-
+      Each bar is a binning run, split into the taxa of one rank and sized by the number of bins
+      placed in each. It answers which organisms each combination of assembler and binner
+      recovered.
+
+      How to read: switch the rank with the control. Two binners on the same assembly rarely
+      recover the same set, and a binner with many more taxa than its neighbour is either more
+      sensitive or splitting one genome into pieces. The bin quality tiles say which.
+
+      Note: the eight largest taxa are drawn and the rest are grouped as Other.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample_id
+      y: abundance
+      color: taxon
+      labels: {sample_id: Binning run, abundance: Bins, taxon: Taxon}
+    title: Bins per taxon and binning run
+    description: >-
+      Each bar is a binning run, stacked by taxon and sized by the number of bins. It answers how
+      many bins each run recovered and from which taxa.
+
+      How to read: taller bars are runs that recovered more bins, and a bar with many colours is
+      a run that recovered diverse taxa. Pick a rank in the rank filter, since without one the
+      bars add up the bins of every rank.
+  - component: card
+    column: taxon
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: binner
+    top_n_count: 5
+    filter_expr: "col('rank') == 'phylum'"
+    title: Phyla recovered by binner
+    caption: the binners that recovered the most phyla, with the row count
+    description: >-
+      The hero number is the count of distinct phyla recovered, and the bars rank the binners by
+      their phyla. It answers how diverse the recovered community is and which binner found most.
+
+      How to read: a binner far ahead of the others is more sensitive or splits genomes, so check
+      the bin quality before preferring it.
+  - component: card
+    column: abundance
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: assembler
+    filter_expr: "col('rank') == 'phylum'"
+    title: Bins by assembler
+    caption: split by assembler, with the median and largest count per phylum
+    description: >-
+      The hero number is the total count of bins placed at phylum rank over the rows in view,
+      and the bar splits it by assembler. It answers which assembler produced most of the bins.
+
+      How to read: a bin that stopped above phylum rank is not counted. An assembler with a
+      small share recovered fewer genomes.
+  - component: card
+    column: abundance
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('rank') == 'phylum'"
+    title: Bins per phylum
+    caption: median, with its spread across phyla
+    description: >-
+      The hero number is the median count of bins per phylum in a run, and the box shows the
+      quartiles. It answers how many bins a typical phylum has.
+
+      How to read: a median of one means most taxa are found as a single bin, and larger values
+      mean several bins per taxon, which can be redundant bins of one genome.
+  - component: interactive
+    interactive_type: Select
+    column_name: rank
+    title: Rank filter
+    description: Pick one taxonomic rank to keep. The bar chart adds the bins of every rank when no rank is picked, so choose one.
+  - component: table
+    title: Recovered taxa table
+    description: >-
+      Each row is a binning run, a rank and a taxon, with the number of bins placed in it. It
+      answers the exact counts behind the community views.
+
+      How to read: filter on a rank and sort by bins to find the dominant taxa of a run.

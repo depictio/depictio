@@ -12,8 +12,30 @@ find:
 recipe: hamronization/class_matrix.py
 fixture: class_matrix.tsv
 renders_as:
+  # Sample columns are named at ingest and the other two columns are strings, so
+  # value_columns cannot be written here: every numeric column is a sample.
   - id: arg_class_heatmap
     component: advanced_viz
     kind: complex_heatmap
+    title: Drug class by sample
     roles: {index: drug_class, row_annotation_cols: [top_tool, n_genes_band]}
-  - { component: table }
+    description: >-
+      Each cell is the number of hits of one drug class in one sample, with the tool
+      reporting the class most often and the number of distinct genes it covers as row
+      annotations. It answers which resistance classes each sample carries.
+
+      How to read: a dark row is a class found in most samples and a dark column a
+      sample with a broad resistance profile. The side strips tell you whether a class
+      rests on one tool and on how many genes.
+
+      Note: tool vocabularies are folded onto one leading class per row, so very
+      similar classes can still appear on separate rows.
+
+      Source: https://github.com/pha4ge/hAMRonization/
+  - component: table
+    title: Drug class counts
+    description: >-
+      Each row is a drug class with its hit count per sample, its leading tool and the
+      number of genes it covers. It answers the exact counts behind the heatmap.
+
+      How to read: sort by a sample column to see its main classes.

@@ -13,7 +13,60 @@ fixture: gene_presence.tsv
 renders_as:
   # Dot colour = mean identity of the hits, dot size = share of the screening
   # tools that called the gene in that sample.
-  - { id: arg_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: gene_symbol, mean_expression: mean_identity, frac_expressing: tool_frac} }
-  - { component: card, column: n_tools, aggregation: average, secondary_layout: gauge, coverage_max: 5.0 }
-  - { component: card, column: mean_identity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: arg_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    title: Gene support per sample
+    roles: {cluster: sample, gene: gene_symbol, mean_expression: mean_identity, frac_expressing: tool_frac}
+    description: >-
+      Each dot is a resistance gene in a sample: its size is the share of screening
+      tools that called the gene and its colour is the mean identity of the hits. It
+      answers how well supported each detection is.
+
+      How to read: large, strongly coloured dots are genes called by many tools at high
+      identity and are the most trustworthy. Small dots are called by one tool only
+      and are worth confirming with another screen or the original reads.
+
+      Source: https://github.com/pha4ge/hAMRonization/
+  # n_tools is a count, so a gauge needs a denominator that depends on how many
+  # tools were run; the histogram shows its distribution instead.
+  - component: card
+    column: n_tools
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: distribution, with its median and maximum
+    title: Tools agreeing on a gene
+    description: >-
+      The hero number is the average count of screening tools that report a gene in a
+      sample, and the histogram shows how many genes get one, two or more tools. It
+      answers how much the tools agree.
+
+      How to read: a pile at one tool means most calls rest on a single screen. A
+      large share at several tools means a consistent resistome. The number of tools
+      depends on how many the pipeline ran.
+  - component: card
+    column: mean_identity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Identity of supported genes
+    description: >-
+      The hero number is the median of the mean percent identity of the hits for each
+      gene in each sample, and the box shows the spread. It answers how close the
+      detected genes are to known references.
+
+      How to read: values near 100 percent are confident matches. A tail of low
+      identities holds divergent homologues to check.
+
+      Note: tools define identity at the nucleotide or amino acid level, so values are
+      not strictly comparable across tools.
+  - component: table
+    title: Gene support table
+    description: >-
+      Each row is a resistance gene in a sample with its hit count, the number of
+      tools that agree and the mean identity and coverage. It answers the exact support
+      behind each dot.
+
+      How to read: sort by the number of tools to see the best supported genes first.

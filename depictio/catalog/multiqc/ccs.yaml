@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: ccs }
+  - component: multiqc
+    section: ccs
+    title: CCS ZMW filtering
+    description: >-
+      PacBio ccs summary: how many ZMWs of each chunk gave a consensus read and why
+      the others were filtered. It answers how much of the raw yield survived
+      consensus calling.
+
+      How to read: A high share of passing ZMWs is good. A large share filtered for
+      low predicted accuracy or too few passes points to a short or damaged library,
+      so revisit the preparation and loading.
+
+      Source: https://docs.seqera.io/multiqc/modules/ccs

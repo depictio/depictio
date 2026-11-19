@@ -88,6 +88,19 @@
           "title": "Description",
           "type": "string"
         },
+        "version": {
+          "anyOf": [
+            {
+              "pattern": "^\\d+\\.\\d+\\.\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
         "stage": {
           "anyOf": [
             {
@@ -201,6 +214,124 @@
       "title": "CatalogOutput",
       "type": "object"
     },
+    "ChangelogEntry": {
+      "additionalProperties": false,
+      "description": "One revision of a module: its version and what changed in it.",
+      "properties": {
+        "version": {
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "changes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Changes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "version",
+        "changes"
+      ],
+      "title": "ChangelogEntry",
+      "type": "object"
+    },
+    "ReferenceLine": {
+      "additionalProperties": false,
+      "description": "A guide line on a UI figure: a fixed value, or a statistic of the data on show.\n\n``value`` draws the line where the author says; ``stat`` draws it at the\nmedian (mean, p75..p99) of ``column`` over the filtered rows, computed by\nthe server figure builder and labelled as such (\"median of this table\"),\nwhich is how RULES.md \u00a717 lets a data-defined reference onto a plot.\nExactly one of the two.",
+      "properties": {
+        "axis": {
+          "description": "`y` draws a horizontal line at a y value, `x` a vertical one at an x value",
+          "enum": [
+            "x",
+            "y"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the line sits",
+          "title": "Value"
+        },
+        "stat": {
+          "anyOf": [
+            {
+              "enum": [
+                "median",
+                "mean",
+                "p75",
+                "p90",
+                "p95",
+                "p99"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Place the line at this statistic of `column` over the rows on show",
+          "title": "Stat"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The numeric column `stat` is computed over",
+          "title": "Column"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Text naming the line on the plot. Unset names the statistic (`median of this table`) or writes `y = value`",
+          "title": "Label"
+        }
+      },
+      "required": [
+        "axis"
+      ],
+      "title": "ReferenceLine",
+      "type": "object"
+    },
     "Render": {
       "additionalProperties": false,
       "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `interactive` \u2192 `interactive_type` + `column_name`, the two fields\n  `InteractiveLiteComponent` requires to instantiate a filter control.\n- `table` \u2192 optional display options mirroring `TableLiteComponent`.\n- `multiqc`/`text`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
@@ -240,6 +371,19 @@
           ],
           "title": "Component"
         },
+        "version": {
+          "anyOf": [
+            {
+              "pattern": "^\\d+\\.\\d+\\.\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
         "priority": {
           "anyOf": [
             {
@@ -252,6 +396,30 @@
           ],
           "default": null,
           "title": "Priority"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
         },
         "kind": {
           "anyOf": [
@@ -321,6 +489,11 @@
           "default": null,
           "title": "Kind"
         },
+        "config": {
+          "additionalProperties": true,
+          "title": "Config",
+          "type": "object"
+        },
         "roles": {
           "additionalProperties": {
             "anyOf": [
@@ -366,9 +539,7 @@
           "title": "Visu Type"
         },
         "dict_kwargs": {
-          "additionalProperties": {
-            "type": "string"
-          },
+          "additionalProperties": true,
           "title": "Dict Kwargs",
           "type": "object"
         },
@@ -383,6 +554,13 @@
           ],
           "default": null,
           "title": "Code"
+        },
+        "reference_lines": {
+          "items": {
+            "$ref": "#/$defs/ReferenceLine"
+          },
+          "title": "Reference Lines",
+          "type": "array"
         },
         "column": {
           "anyOf": [
@@ -592,6 +770,18 @@
           "default": null,
           "title": "Filter Expr"
         },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
         "headline": {
           "default": false,
           "title": "Headline",
@@ -737,6 +927,13 @@
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
       "title": "Version",
       "type": "string"
+    },
+    "changelog": {
+      "items": {
+        "$ref": "#/$defs/ChangelogEntry"
+      },
+      "title": "Changelog",
+      "type": "array"
     },
     "description": {
       "default": "",

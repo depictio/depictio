@@ -8,7 +8,16 @@
 # genes, lengths).
 id: agat
 name: AGAT
-version: "1.0.0"
+version: "1.1.0"
+# What changed in each revision, newest first (SCHEMA.md "Versions").
+changelog:
+  - version: "1.1.0"
+    changes:
+      - "agat_statistics: one panel per metric with its own axis, instead of one bar per annotation summing unlike metrics; a Metric selector."
+      - "agat_gene_models: titles and descriptions on every render; log genes axis, median line and labelled points on genes_vs_exons."
+  - version: "1.0.0"
+    changes:
+      - "First revision: gene models per annotation and the full sp_statistics report."
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/agat/spstatistics
 homepage: https://github.com/NBISweden/AGAT
 biotools_url: https://bio.tools/agat

@@ -8,6 +8,7 @@ description: >-
   from the CIGAR parser's per-read indel tables.
 find: { path_glob: "**/*_indels.csv" }
 recipe: crisprseq/indels.py
+# The fixture is enriched synthetically from 16 real alleles, some retyped as insertions (copies with seeded noise), so the preview shows several indel types.
 fixture: indels.tsv
 renders_as:
   # Where each allele starts against how large it is: repair signatures form
@@ -15,9 +16,86 @@ renders_as:
   - id: allele_map
     component: advanced_viz
     kind: scatter_xy
+    title: Indel alleles by position and size
     roles: { x: offset, y: size, label: allele, color: indel_type, size: pct_reads }
-  - { id: allele_count, component: card, column: allele, aggregation: nunique, secondary_layout: donut, breakdown_col: indel_type }
-  - { component: interactive, interactive_type: MultiSelect, column_name: indel_type }
-  - { component: interactive, interactive_type: MultiSelect, column_name: frame }
-  - { component: interactive, interactive_type: MultiSelect, column_name: peak }
-  - { component: table, row_selection_enabled: true, row_selection_column: allele }
+    config:
+      x_title: Offset from the cut site (bp)
+      y_title: Indel size (bp, deletions negative)
+      reference_line: vertical
+      reference_value: 0
+      reference_label: Cut site
+      top_n_labels: 8
+      legend_pos: bottom
+    description: >-
+      Each point is an indel allele of a library: where it starts relative to the cut site
+      against its signed size, coloured by type and sized by its share of the classified
+      reads. It answers which alleles dominate and where they sit.
+
+      How to read: the biggest points are the library's main repair products. Deletions
+      that start upstream of the cut and reach across it, and a single base insertion at
+      the cut, are the usual signatures of a nuclease edit. Small points far from the cut
+      are mostly noise, so look at the labelled ones first.
+
+      Lines and annotations: the vertical line at offset 0 is the cut site the pipeline
+      reports for the amplicon. It is a landmark, not a cut-off.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - id: allele_count
+    component: card
+    column: allele
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: indel_type
+    caption: alleles, by type
+    title: Indel alleles
+    description: >-
+      The hero number counts the alleles of every library in view, and the ring splits
+      them by type: deletion, insertion or deletion-insertion. It answers how many
+      distinct edits were seen and which kind prevails.
+
+      How to read: many alleles with few reads each is typical of noise, so weigh them by
+      the share column of the table. The extra figure counts the distinct alleles across
+      libraries.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: indel_type
+    title: Indel type
+    description: >-
+      Keeps the alleles of the chosen types and filters the tiles with them.
+
+      How to read: pick deletions to study the dominant repair product of a nuclease cut.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: frame
+    title: Reading frame
+    description: >-
+      Keeps the alleles with the chosen frame effect, in-frame or frameshift, and filters
+      the tiles with them.
+
+      How to read: pick frameshift to list the alleles that disrupt the coding sequence.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: peak
+    title: Main indel peak
+    description: >-
+      Keeps the alleles inside or outside the library's main indel peak and filters the
+      tiles with them.
+
+      How to read: alleles outside the main peak are more likely noise or minor variants
+      than the edit itself.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: allele
+    title: Indel allele table
+    description: >-
+      Each row is a distinct indel allele of a library, with its type, position, size,
+      reading frame, read count and its shares of the classified and of the indel reads.
+      It answers the exact numbers behind the scatter.
+
+      How to read: sort by share to list the main alleles of a library. Selecting a row
+      filters the rest of the tab to that allele.

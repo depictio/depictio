@@ -11,8 +11,89 @@ find:
 recipe: bismark/deduplication_summary.py
 fixture: deduplication_summary.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_duplication, color: sample, title: PCR duplication rate per sample} }
-  - { component: card, column: pct_duplication, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_duplication, aggregation: max, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: max, threshold_warn: 10.0 }
-  - { component: card, column: leftover_sequences, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: table }
+  # Bismark documents no duplication cut-off, so the former 20 / 10 % pass marks
+  # (no source) are gone: the cards show the spread and the worst library.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: pct_duplication
+      color: sample
+      labels: {sample: Library, pct_duplication: PCR duplication (%)}
+    title: PCR duplication per library
+    reference_lines:
+      - axis: y
+        stat: median
+        column: pct_duplication
+    description: >-
+      Each bar is a library: the percentage of aligned reads removed as PCR
+      duplicates. It answers which libraries were over-amplified relative to their
+      complexity.
+
+      How to read: libraries prepared alike should have similar rates. A library
+      well above the others carries less unique information than its read count
+      suggests, so weigh its methylation calls with care.
+
+      Note: Bismark publishes no duplication cut-off. Deduplication is not
+      recommended for RRBS, amplicon or other target-enrichment libraries, where
+      duplicates are expected.
+
+      Lines and annotations: The dashed line is the median PCR duplication of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of Bismark.
+
+      Source: https://felixkrueger.github.io/Bismark/usage/deduplication/
+  - component: card
+    column: pct_duplication
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Duplication rate, with its spread
+    title: Average PCR duplication
+    description: >-
+      The hero number is the mean duplication percentage, and the box shows the
+      spread across libraries. It answers how redundant the run is overall.
+
+      How to read: a tight box means libraries share a similar complexity. A long
+      upper whisker is a library to open in the bar chart.
+  - component: card
+    column: pct_duplication
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: compact
+    caption: Highest library, with the median and the lowest
+    title: Highest PCR duplication
+    description: >-
+      The hero number is the largest duplication percentage of any library, shown
+      with the median and the lowest. It answers how far the worst library is from
+      the rest.
+
+      How to read: a maximum close to the median means no library stands out. A
+      wide gap marks a library that was over-amplified.
+
+      Note: Bismark publishes no duplication cut-off, so no pass mark is drawn.
+
+      Source: https://felixkrueger.github.io/Bismark/usage/deduplication/
+  - component: card
+    column: leftover_sequences
+    aggregation: sum
+    aggregations: [median, min]
+    secondary_layout: histogram
+    caption: Alignments kept per library
+    title: Alignments kept after deduplication
+    description: >-
+      The hero number is the total of alignments carried into methylation
+      extraction, and the histogram shows how they spread over libraries. It
+      answers how much usable depth remains.
+
+      How to read: a library with far fewer kept alignments than its peers will
+      contribute little to window-level methylation. Compare it with the
+      duplication bar chart.
+  - component: table
+    title: Deduplication table
+    description: >-
+      Each row is a library with the alignments examined, the duplicates removed,
+      the duplication percentage and the alignments left. It answers the exact
+      counts behind the bar chart.
+
+      How to read: sort by duplication to find the most redundant library.

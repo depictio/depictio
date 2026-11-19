@@ -13,10 +13,112 @@ find:
 recipe: linx/svs.py
 fixture: svs.tsv
 renders_as:
-  - { id: sv_chords, component: advanced_viz, kind: genome_chord, roles: {chrom_a: chrom_a, pos_a: pos_a, chrom_b: chrom_b, pos_b: pos_b, label: label, weight: junction_copy_number, category: resolved_type, sample: sample} }
-  - { id: sv_count, component: card, column: sv_key, aggregation: count, secondary_layout: top_n, breakdown_col: type, top_n_count: 3, headline: true }
-  - { id: sv_cluster_count, component: card, column: cluster_id, aggregation: nunique, secondary_layout: donut, breakdown_col: cluster_category }
-  - { id: junction_cn_spread, component: card, column: junction_copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: resolved_type_bar, component: figure, visu_type: bar, dict_kwargs: {x: resolved_type, color: type} }
-  - { id: sv_type_filter, component: interactive, interactive_type: MultiSelect, column_name: resolved_type }
-  - { id: sv_table, component: table, row_selection_enabled: true, row_selection_column: label }
+  - id: sv_chords
+    component: advanced_viz
+    kind: genome_chord
+    title: Structural variants across the genome
+    roles: {chrom_a: chrom_a, pos_a: pos_a, chrom_b: chrom_b, pos_b: pos_b, label: label, weight: junction_copy_number, category: resolved_type, sample: sample}
+    description: >-
+      Each chord joins the two breakends of a structural variant on a ring of
+      chromosomes. The colour is the event type LINX resolved its cluster to and the
+      width is the junction copy number. It answers where the genome is rearranged and
+      how.
+
+      How to read: many chords between the same two chromosomes suggest a translocation
+      or a complex event. A dense knot on one chromosome is a cluster of local
+      rearrangements.
+
+      Note: a single breakend has no partner locus, so it is not drawn here but it stays
+      in the counts and the table.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/linx/README.md
+  - id: sv_count
+    component: card
+    column: chrom_a
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: type
+    top_n_count: 3
+    headline: true
+    caption: SVs, by type
+    title: Structural variants
+    description: >-
+      The hero number is the count of structural variants, and the bars rank the
+      variant types. The secondary number is the count of chromosomes carrying a first
+      breakend. It answers how rearranged the genome is and by what kind of event.
+
+      How to read: a tumor dominated by one type, such as duplications or translocations,
+      points to a particular mutational process. Open the chord view to see where.
+  - id: sv_cluster_count
+    component: card
+    column: cluster_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: cluster_category
+    caption: SVs, by cluster category
+    title: Clusters
+    description: >-
+      The hero number is the count of clusters LINX groups the variants into, and the
+      ring splits the variants by the category of their cluster. It answers how many
+      independent events there are and whether they are simple or complex.
+
+      How to read: LINX clusters variants whose breakends are within 5 kb of each other by
+      default, so one complex event can hold many variants. A large share of complex
+      clusters means a heavily rearranged genome.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/linx/README.md
+  - id: junction_cn_spread
+    component: card
+    column: junction_copy_number
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Junction copy number
+    description: >-
+      The hero number is the median copy number of the rearranged junctions, and the box
+      shows the quartiles. It answers how many copies of a rearrangement the tumor
+      carries.
+
+      How to read: a higher value means more copies of the rearranged junction in the
+      tumor. Compare variants of the same event type to find the most amplified ones.
+  - id: resolved_type_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: resolved_type
+      color: type
+      labels: {resolved_type: Resolved event type, type: Variant type, count: Variants}
+    title: Variants by resolved event type
+    description: >-
+      Each bar counts structural variants by the event type LINX resolved their cluster
+      to, and each segment splits them by the raw variant type. It answers what kinds of
+      events the variants form.
+
+      How to read: simple deletions and duplications are single variants. Complex or
+      chained events are the ones that bring several variants together.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/linx/README.md
+  - id: sv_type_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: resolved_type
+    title: Resolved event type
+    description: >-
+      Pick one or more event types to keep. It filters every tile of the tab to the
+      variants in those events.
+
+      How to read: pick one type to see where on the genome it occurs in the chord view.
+  - id: sv_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: label
+    title: Structural variants table
+    description: >-
+      Each row is a structural variant with its breakends, event type, cluster, junction
+      copy number and the genes at each end. It answers which variants hit which genes
+      and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by junction copy number and filter by event type.

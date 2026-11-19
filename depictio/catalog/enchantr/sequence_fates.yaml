@@ -10,9 +10,34 @@ fixture: sequence_fates.tsv
 renders_as:
   # Only the pRESTO milestones are bound: they exist on every fastq-mode run.
   # The two Change-O ones ride in the collection for the depth slider to reach.
+  # Every flow leaves the one input node, so colour by target (RULES section 8).
   - id: attrition_sankey
     component: advanced_viz
     kind: sankey
+    title: Where reads are lost
     roles:
       steps: [input, quality, paired, consensus, assembled, representative]
-  - { component: table }
+    config:
+      color_mode: target
+      value_col: reads
+      value_label: Reads
+      value_format: count
+    description: >-
+      Each band is a group of reads moving from one pRESTO stage to the next, and its
+      width is the number of reads. It answers at which stage reads are lost and how
+      many reach the final representative sequences.
+
+      How to read: a wide band leaving to Lost marks a stage that discards many
+      reads. Stages that merge reads onto UMI groups also shed width without being a
+      failure. A loss at quality filtering or pairing points to the library, so open
+      the counts table.
+
+      Note: bands are coloured by the stage they lead to, because every flow starts at
+      the same input node.
+  - component: table
+    title: Read fate table
+    description: >-
+      Each row is a path through the stages for one sample, with the number of reads
+      that took it. It answers how many reads follow each route.
+
+      How to read: filter to one sample and sort by reads to see its main routes.

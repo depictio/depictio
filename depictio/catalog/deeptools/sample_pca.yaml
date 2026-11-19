@@ -10,6 +10,49 @@ find:
 recipe: deeptools/sample_pca.py
 fixture: sample_pca.tsv
 renders_as:
-  - { id: pca_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample, dim_1: pc1, dim_2: pc2, dim_3: pc3} }
-  - { component: figure, visu_type: scatter, dict_kwargs: {x: pc1, y: pc2, color: sample, title: Sample PCA over genome-wide bin counts} }
-  - { component: table }
+  # C1: each library is one point, so the sample is the only categorical column;
+  # colouring by it gives every library a legend entry.
+  - id: pca_embedding
+    component: advanced_viz
+    kind: embedding
+    title: Sample PCA
+    roles: {sample_id: sample, dim_1: pc1, dim_2: pc2, dim_3: pc3, color: sample}
+    config:
+      axis_prefix: PC
+    description: >-
+      Each point is a library: its score on the first principal components of the
+      genome-wide bin counts. It answers which libraries have similar signal and which
+      differ.
+
+      How to read: replicates of one target should sit together, and controls should
+      sit apart from enriched targets. A library that lands with the controls did not
+      enrich, and an outlier within a group points to a batch or quality problem.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/tools/plotPCA.html
+  - id: pca_scatter
+    component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: pc1
+      y: pc2
+      color: sample
+      labels: {pc1: PC1, pc2: PC2, sample: Sample}
+    title: Sample PCA over genome-wide bin counts
+    description: >-
+      Each point is a library, placed by its scores on the first two principal
+      components. It answers the same question as the interactive view above in a plain
+      scatter.
+
+      How to read: look for groups of replicates and for libraries that stray from
+      their group. The share of variance behind each axis is in the table.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/tools/plotPCA.html
+  - component: table
+    title: Principal component scores
+    description: >-
+      Each row is a library with its scores on the principal components and the share of
+      variance the first two explain. It answers the exact coordinates and how much of
+      the signal each axis carries.
+
+      How to read: when the first components explain little variance, the groups in the
+      scatter carry less weight.
