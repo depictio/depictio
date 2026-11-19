@@ -76,7 +76,7 @@ lower bound for a genome whose alignment BLAST splits.
 | `METADATA_FILE` | unset | optional metadata table, the one given to `--metadata`: sample id first (or a `sample` column), one column per factor |
 | `METADATA_ID_COL` | first column | metadata id column |
 | `GROUP_COL`, `GROUP_COL_DISPLAY` | first factor column | group filter, Samples card breakdown and colours |
-| `MAPPING_REFERENCES_FASTA` | unset | indexed FASTA (`.fai`, and `.gzi` when bgzipped) of every reference the run mapped reads to, one sequence per genome, under DATA_ROOT; enables the Genome browser tab |
+| `MAPPING_REFERENCES_FASTA` | unset | indexed FASTA (`.fai`, and `.gzi` when bgzipped) of every reference the run mapped reads to, under DATA_ROOT; enables the Genome browser section of the Variants tab |
 
 The pipeline merges its `--metadata` table into the samples overview but does not publish it, so
 the template takes it as an optional table. The reference dataset ships `input/metadata.tsv`, the
@@ -117,7 +117,8 @@ sample sheet sit in the left panel and at the bottom of every other tab.
    refined or filtered out. Every contig by length and the reads that map back to it (log axes, coloured by its call and sized by its read share, with a 1 kb line and the largest contigs named), and the read depth share of the clusters per sample. Contig and cluster
    tables are collapsed. The tab exists only on the de novo route.
 4. **Consensus.** *How close to a reference and how complete is each genome?* Route, Virus and
-   Segment filters. Four cards: genomes by route, ambiguous bases (5 % N passes, 20 % warns),
+   Segment (virus and segment) filters. The sample x segment matrix, coloured by reference cover,
+   sits under the scatter. Four cards: genomes by route, ambiguous bases (5 % N passes, 20 % warns),
    BLAST reference cover (95 % passes, 50 % warns) and genomes by completeness call. Every genome by its ambiguous bases and reference cover, coloured by its completeness call, cut at 5 % N and 95 % cover, the genomes with the lowest cover named, and the record of the picked one (genome, cluster type and segment; completeness with the reference length and qlen - slen; BLAST, annotation and Mash references with their identity; CheckV with its caveat for segmented viruses); the ambiguous bases of each de novo consensus along
    its refinement (scaffold, mapping iterations, variant-calling round), a code figure with markers on every step, a 5 % N line and a log axis floored at 0.1 %, since the share of N can be exactly 0. A line that ends before the others is labelled "no later step recorded": the pipeline's table holds no later iteration for that genome. A late rise in the share of N is expected, because the variant-calling round masks
    the positions too shallow to call. A Constraint route section plots the Mash identity of each
@@ -126,7 +127,7 @@ sample sheet sit in the left panel and at the bottom of every other tab.
 5. **Mapping.** *How deep and how evenly do the reads cover each genome?* Four cards: reads
    mapped, mean depth, breadth at 10X (90 % passes, 50 % warns) and duplicate pairs. The depth
    along each genome in bins, one panel per virus segment (a code figure on a log axis with a 10X line and the stretches under it shaded), the depth over the first and last 200 bp of each genome in 10 bp bins, read from each tip inwards, then depth against breadth per genome (cut at 10X and 90 %, the thinnest genomes named) beside the cumulative
-   coverage curves. A UMI section (`--with_umi` runs) gives the reads umi_tools dedup collapsed and the UMIs per position. The mapping table is collapsed.
+   coverage curves. The genome ends, a UMI table (`--with_umi` runs) and the mapping table are collapsed.
 
 **Variants**
 
@@ -136,11 +137,10 @@ sample sheet sit in the left panel and at the bottom of every other tab.
    passing calls by allele frequency band (fixed at 0.9 or more, major from 0.5, minor below),
    minor calls kept or filtered, call depth and the genomes carrying a passing call. Every call on
    a genome view, one lane per genome (up to 12, opening on every reference at once), and allele
-   frequency against depth (cut at 10 reads and half frequency, with smaller points because the calls overlap). Intra-host diversity: the Shannon entropy of the alleles at every position with an alternative allele, one lane per genome, from every call before the frequency filter, with a card of the mixed positions (second allele at 5 % or more). The call table and iVar's own table (p-value, codon change; pruned with a bcftools run) are collapsed.
-7. **Genome browser** (`MAPPING_REFERENCES_FASTA` only). *What do the reads look like under each
-   genome, end to end?* Pick one genome; the browser opens on it end to end and steps to its 5'
-   and 3' ends (200 bp) from its header. Tracks: the deduplicated BAM (soft clips shown), mosdepth's
-   per-base depth and iVar's plain-text VCF. Without the variable the tab is removed.
+   frequency against depth (cut at 10 reads and half frequency, with smaller points because the calls overlap). Intra-host diversity (collapsed): the Shannon entropy of the alleles at every position with an alternative allele, one lane per genome, from every call before the frequency filter, with a card of the mixed positions (second allele at 5 % or more). The call table and iVar's own table (p-value, codon change; pruned with a bcftools run) are collapsed.
+   A collapsed Genome browser section (`MAPPING_REFERENCES_FASTA` only) opens the picked genome on
+   its reference and steps between its 5' and 3' ends (200 bp): mosdepth's per-base depth, iVar's
+   plain-text VCF and the deduplicated BAM (soft clips shown). Without the variable it is removed.
 
 ## Notes
 

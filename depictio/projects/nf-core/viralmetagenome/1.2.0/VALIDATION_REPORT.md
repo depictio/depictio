@@ -61,7 +61,7 @@ overrides, with the vendored metadata.
 | `coverage_profile` | 5983 |
 | `genome_ends` | 400 (10 mappings x 2 ends x 20 bins of 10 bp) |
 | `coverage_cumulative` | 1011 |
-| `genome_loci` | 30 with `MAPPING_REFERENCES_FASTA` set (10 genomes x 3 loci) |
+| `genome_loci` | 20 with `MAPPING_REFERENCES_FASTA` set (10 genomes x 2 ends) |
 | `tracks` | 20 with `MAPPING_REFERENCES_FASTA` set (depth and plain VCF per genome; no BAM in the subset) |
 | `umi_stats` | none (no `--with_umi`): pruned |
 
@@ -175,7 +175,7 @@ Each item of section 15 needs a running stack with the template ingested from th
 Other open points:
 
 - Genome browser. The filtered VCFs are published next to the index of the sorted VCF they were
-  filtered from, so no bgzipped VCF has its own index. The Genome browser tab (opt-in,
+  filtered from, so no bgzipped VCF has its own index. The Genome browser section (Variants, opt-in,
   `MAPPING_REFERENCES_FASTA`) reads iVar's plain-text VCF whole, the deduplicated BAM and the
   per-base depth; it has not been seen on a stack, and the pipeline publishes no references FASTA
   yet. The Variants genome view keeps drawing the calls from the table, a lane per genome on its

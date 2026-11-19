@@ -28,11 +28,11 @@ version: 1
 # `--variant_caller bcftools`. The iVar-only columns (p-value, codon change)
 # keep their own table, pruned with the iVar collection.
 #
-# Genome browser (Genome browser tab): every genome is its own reference, and
+# Genome browser (a collapsed section of Variants): every genome is its own reference, and
 # genomic_tracks takes one assembly, so the browser reads one indexed FASTA of
 # every mapping reference of the run (--var MAPPING_REFERENCES_FASTA). The
 # pipeline does not publish one yet: without the variable the template removes
-# the tracks and loci collections and the tab goes with them. The Variants tab
+# the tracks and loci collections and the section goes with them. The Variants tab
 # keeps its table-backed genome_view either way.
 main_dashboard:
   title: nf-core/viralmetagenome
@@ -99,23 +99,6 @@ main_dashboard:
       Fragment: '#e03131'
       Shorter than reference: '#7048e8'
       No BLAST hit: '#adb5bd'
-    cluster_type:
-      Reference-anchored: '#1098ad'
-      Contig-only: '#f76707'
-      Constraint reference: '#7048e8'
-    better_route:
-      de novo: '#7048e8'
-      constraint: '#1098ad'
-      similar: '#2f9e44'
-      de novo only: '#b197fc'
-      constraint only: '#66d9e8'
-      no BLAST hit: '#adb5bd'
-    caller:
-      ivar: '#1c7ed6'
-      bcftools: '#0ca678'
-    end_region:
-      5' end: '#1c7ed6'
-      3' end: '#c2255c'
     checkv_quality:
       Complete: '#2b8a3e'
       High-quality: '#2f9e44'
@@ -148,11 +131,6 @@ main_dashboard:
     filter_bar: true
     visible_filters: 2
     description: What the data says, each with the tab that shows it, then the figures behind it.
-  - name: Segments by sample
-    icon: mdi:grid
-    color: gray
-    appearance: plain
-    description: Every virus segment against every sample, coloured by how much of its reference the best genome covers.
   - name: How to read this dashboard
     icon: mdi:information-outline
     color: gray
@@ -415,7 +393,7 @@ main_dashboard:
       n_minor: {dc: variants, column: variant_key, aggregation: count, filter_expr: "col('frequency_class') == 'Minor'", format: integer}
     body: |
       - **{{ctg_bp}}** bases assembled in {{ctg_n}} de novo contigs – the clusters keep those a genome is rebuilt from [Contigs](tab:Contigs)
-      - **{{n_segments}}** virus segments rebuilt, most often of {{top_virus}} – {{n_complete}} genomes cover 95% of their BLAST reference or more, {{n_longer}} align end to end on a longer reference, worth a look at the hit [Consensus](tab:Consensus)
+      - **{{n_segments}}** virus segments rebuilt, most often of {{top_virus}} – {{n_complete}} genomes cover 95% of their BLAST reference or more, {{n_longer}} align end to end on a longer reference, worth a look at the hit; the segment matrix is in [Consensus](tab:Consensus)
       - **{{breadth}}%** median breadth at 10X across the consensus genomes – at {{depth}}X median depth [Mapping](tab:Mapping)
       - **{{n_pass}}** variant calls pass the caller's filters – {{n_minor}} calls sit under half frequency, minor variants or noise [Variants](tab:Variants)
     section: Findings
@@ -437,7 +415,7 @@ main_dashboard:
     section: Findings
     source_tab: Consensus
     source_component: cns-cover-ambiguity
-    caption: One point per consensus genome, by its ambiguous bases and how much of its BLAST reference it covers; the dashed lines sit at 5 % N and 95 % cover.
+    caption: One point per consensus genome, by its ambiguous bases and how much of its BLAST reference it covers, coloured by its completeness call; the dashed lines sit at 5 % N and 95 % cover.
     hide_legend: true
     tag: vm-ov-hl-consensus
     index: ov-hl-consensus
@@ -475,48 +453,13 @@ main_dashboard:
 
       ### Variants
       - [Variants](tab:Variants)
-      - [Genome browser](tab:Genome browser)
 
-      A tab missing here is one the run gave no data for: no Contigs after `--skip_assembly`,
-      no Variants after `--skip_variant_calling`, no Genome browser without
-      `--var MAPPING_REFERENCES_FASTA` (an indexed FASTA of the run's mapping references, which
-      the pipeline does not publish yet). The run's own settings are behind [Run parameters](params:).
+      A tab missing here is one the run gave no data for: no Contigs after `--skip_assembly`, no
+      Variants after `--skip_variant_calling`. The genome browser needs `--var MAPPING_REFERENCES_FASTA`.
     section: How to read this dashboard
     tag: vm-ov-how-to-read
     index: ov-how-to-read
-    layout: {x: 0, y: 0, w: 8, h: 3}
-  # One row per virus segment, one column per sample: a segment a sample lost
-  # shows as a pale cell in an otherwise dark row.
-  - component_type: advanced_viz
-    workflow_tag: viralmetagenome
-    data_collection_tag: genome_matrix
-    viz_kind: complex_heatmap
-    config:
-      viz_kind: complex_heatmap
-      index_column: virus_segment
-      row_annotation_cols: [virus]
-      cluster_rows: false
-      cluster_cols: false
-      normalize: none
-      colorscale: Viridis
-    section: Segments by sample
-    tag: vm-ov-segment-matrix
-    index: ov-segment-matrix
-    title: Reference cover by segment and sample
-    description: >-
-      Did every sample rebuild every segment of its virus? One row per virus segment, one column per
-      sample, and the cell coloured by the BLAST reference cover of the best genome of that segment in
-      that sample, de novo or constraint, in percent.
-
-      How to read: a dark row is a segment every sample rebuilt whole. A pale cell in a dark row is a
-      segment one sample lost or rebuilt in part, and a pale row is a segment no sample got. The rows of
-      one virus sit together, labelled by the virus strip on the left. A cell of 0 has no genome of that
-      segment, or none with a BLAST hit.
-
-      Note: reference cover is the span of the best BLAST hit over its reference. A segment whose best hit
-      is a longer reference reads low without being truncated; the Consensus tab flags a genome that
-      aligns end to end on a much longer hit as Shorter than reference.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   # Persistent sample filters, the group first.
   - component_type: interactive
     workflow_tag: viralmetagenome
@@ -1263,15 +1206,21 @@ tabs:
   - name: Completeness and ambiguity
     icon: mdi:chart-scatter-plot
     color: grape
-    description: Every genome by its ambiguous bases and its reference cover, with the record of the picked one
+    description: Every genome by its gaps and reference cover, with the picked one's record
+  - name: Segments by sample
+    icon: mdi:chart-box-outline
+    color: grape
+    description: Reference cover of every virus segment in every sample
   - name: Refinement
     icon: mdi:chart-line
     color: grape
     description: Ambiguous bases of each de novo consensus at every refinement step
+    collapsed: true
   - name: Constraint route
-    icon: mdi:source-branch
+    icon: mdi:set-merge
     color: grape
-    description: The reference Mash picked for each constraint genome, and each segment's de novo and constraint genome side by side
+    description: The reference Mash picked, and each segment's two routes side by side
+    collapsed: true
   - name: Genome tables
     icon: mdi:table
     color: gray
@@ -1281,11 +1230,10 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      Each consensus is one genome, one segment of a segmented virus. BLAST against the reference pool
-      gives its reference cover, the share of its closest reference it spans, read segment by segment;
+      Each consensus is one genome, one segment of a segmented virus, and BLAST against the reference
+      pool gives its reference cover, the share of its closest reference it spans, segment by segment;
       [CheckV](https://bitbucket.org/berkeleylab/checkv) scores it too, against whole genomes. QUAST
-      counts its ambiguous bases, the positions too shallow to call. Click a point to open its record,
-      and read the de novo ones down their refinement.
+      counts its ambiguous bases, the positions too shallow to call. Click a point to open its record.
     tag: vm-cns-intro
     index: cns-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1323,11 +1271,11 @@ tabs:
     workflow_tag: viralmetagenome
     data_collection_tag: genomes
     interactive_component_type: MultiSelect
-    column_name: segment
+    column_name: virus_segment
     column_type: object
     display:
       icon_name: mdi:puzzle-outline
-      custom_color: violet
+      custom_color: lime
     section: Genome scope
     group: Genomes
     tag: vm-cns-filter-segment
@@ -1504,6 +1452,37 @@ tabs:
       it for an unsegmented virus, and the reference cover for a segmented one. CheckV reads
       Not-determined, with no completeness, when its database holds no genome close enough.
     layout: {x: 5, y: 0, w: 3, h: 8}
+  # One row per virus segment, one column per sample: a segment a sample lost
+  # shows as a pale cell in an otherwise dark row.
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: genome_matrix
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: virus_segment
+      row_annotation_cols: [virus]
+      cluster_rows: false
+      cluster_cols: false
+      normalize: none
+      colorscale: Blues
+    section: Segments by sample
+    tag: vm-cns-segment-matrix
+    index: cns-segment-matrix
+    title: Reference cover by segment and sample
+    description: >-
+      Did every sample rebuild every segment of its virus? One row per virus segment, one column per
+      sample, and the cell coloured by the BLAST reference cover of the best genome of that segment in
+      that sample, de novo or constraint, in percent.
+
+      How to read: a dark row is a segment every sample rebuilt whole. A pale cell in a dark row is a
+      segment one sample rebuilt in part, and an empty cell one it has no genome of (or none with a
+      BLAST hit). The rows of one virus sit together, labelled by the virus strip beside them.
+
+      Note: reference cover is the span of the best BLAST hit over its reference. A segment whose best hit
+      is a longer reference reads low without being truncated; the plot above flags a genome that
+      aligns end to end on a much longer hit as Shorter than reference.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure
     workflow_tag: viralmetagenome
     data_collection_tag: vmg_contig_iterations
@@ -1595,7 +1574,7 @@ tabs:
       Lines and annotations: the dashed lines sit at 0.95 Mash identity and 90 % breadth, fixed reading
       aids with no published source. Genomes of the de novo route and constraint references named in the
       sheet have no Mash screen and are not drawn.
-    layout: {x: 0, y: 0, w: 4, h: 7}
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
     workflow_tag: viralmetagenome
     data_collection_tag: route_comparison
@@ -1610,7 +1589,7 @@ tabs:
       route whose genome covers 2 points more of its reference; similar is within 2 points. A constraint
       genome far ahead says the assembly fell short; a de novo one ahead says the constraint reference
       was a poor pick.
-    layout: {x: 4, y: 0, w: 4, h: 7}
+    layout: {x: 0, y: 7, w: 8, h: 6}
   - component_type: table
     workflow_tag: viralmetagenome
     data_collection_tag: genomes
@@ -1658,17 +1637,19 @@ tabs:
     color: blue
     description: Mean depth in bins along each genome, one panel per virus segment
   - name: Genome ends
-    icon: mdi:arrow-collapse-horizontal
+    icon: mdi:ruler
     color: blue
     description: Depth over the first and last 200 bp of each genome, in 10 bp bins
+    collapsed: true
   - name: Depth and breadth
     icon: mdi:chart-scatter-plot
     color: blue
     description: Depth against breadth per genome, and the cumulative coverage curves
   - name: UMI deduplication
-    icon: mdi:barcode
+    icon: mdi:filter-variant
     color: blue
-    description: Reads in and out of UMI extraction and deduplication (--with_umi runs only)
+    description: Reads in and out of UMI extraction and deduplication (--with_umi runs)
+    collapsed: true
   - name: Mapping tables
     icon: mdi:table
     color: gray
@@ -1804,16 +1785,17 @@ tabs:
       # position needs to be called; a line under it is a stretch the consensus writes as N.
       d = df.filter(pl.col('mean_depth').is_not_null()).sort(['virus_segment', 'genome_id', 'chrom', 'position']).with_columns(pl.col('mean_depth').clip(lower_bound=0.5).alias('depth'))
       panels = d['virus_segment'].unique().sort().to_list()
-      wrap = 1 if len(panels) <= 2 else 2
+      wrap = 1 if len(panels) <= 2 else (2 if len(panels) <= 4 else 4)
       top = max(d['mean_depth'].max() or 10, 10) * 1.6
-      fig = px.line(d.to_pandas(), x='position', y='depth', color='genome_id', line_group='chrom', facet_col='virus_segment', facet_col_wrap=wrap, facet_row_spacing=0.06, category_orders={'virus_segment': panels}, log_y=True, custom_data=['mean_depth'], color_discrete_map=depictio_category_colors.get('genome_id') or {}, labels={'position': 'Position on the genome (bp)', 'depth': 'Mean depth (log)', 'genome_id': 'Genome', 'virus_segment': ''})
+      fig = px.line(d.to_pandas(), x='position', y='depth', color='genome_id', line_group='chrom', facet_col='virus_segment', facet_col_wrap=wrap, facet_row_spacing=0.04, category_orders={'virus_segment': panels}, log_y=True, custom_data=['mean_depth'], color_discrete_map=depictio_category_colors.get('genome_id') or {}, labels={'position': 'Position on the genome (bp)', 'depth': 'Mean depth (log)', 'genome_id': 'Genome', 'virus_segment': ''})
       fig.update_traces(line=dict(width=1.5), opacity=0.85, hovertemplate='<b>%{fullData.name}</b><br>%{x} bp: %{customdata[0]:.1f}X<extra></extra>')
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       fig.add_hrect(y0=0.4, y1=10, fillcolor='rgba(224, 49, 49, 0.08)', line_width=0, layer='below', row='all', col='all')
       fig.add_hline(y=10, line=dict(dash='dash', width=1), opacity=0.6, row='all', col='all')
       fig.update_yaxes(range=[np.log10(0.4), np.log10(top)], tickmode='array', tickvals=[0.5, 1, 10, 100, 1000, 10000], ticktext=['0', '1', '10', '100', '1000', '10000'], automargin=True)
       fig.update_xaxes(matches=None, showticklabels=True)
-      fig.update_layout(margin=dict(t=30), legend=dict(orientation='h', y=-0.12, title_text=''))
+      # One line per genome can run to hundreds: the genome is named on hover instead of a legend.
+      fig.update_layout(margin=dict(t=30), showlegend=False)
     section: Depth along the genome
     tag: vm-map-av-depth-profile
     index: map-depth-profile
@@ -1840,7 +1822,7 @@ tabs:
 
       Note: the genomes of one panel sit on different references and overlay from their first base, so
       a position means the same place only within one genome.
-    layout: {x: 0, y: 0, w: 8, h: 7}
+    layout: {x: 0, y: 0, w: 8, h: 9}
   - component_type: figure
     workflow_tag: viralmetagenome
     data_collection_tag: genome_ends
@@ -1858,7 +1840,7 @@ tabs:
       fig.add_hline(y=10, line=dict(dash='dash', width=1), opacity=0.6, row='all', col='all')
       fig.update_yaxes(range=[np.log10(0.4), np.log10(top)], tickmode='array', tickvals=[0.5, 1, 10, 100, 1000, 10000], ticktext=['0', '1', '10', '100', '1000', '10000'], automargin=True)
       fig.update_xaxes(range=[0, 205])
-      fig.update_layout(margin=dict(t=30), legend=dict(orientation='h', y=-0.22, title_text=''))
+      fig.update_layout(margin=dict(t=30), showlegend=False)
     section: Genome ends
     tag: vm-map-av-genome-ends
     index: map-genome-ends
@@ -1964,46 +1946,6 @@ tabs:
       Sources: iVar manual, https://andersen-lab.github.io/ivar/html/manualpage.html;
       nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
     layout: {x: 4, y: 0, w: 4, h: 7}
-  - component_type: card
-    workflow_tag: viralmetagenome
-    data_collection_tag: umi_stats
-    aggregation: median
-    column_name: removed_pct
-    column_type: float64
-    filter_expr: "col('step') == 'dedup'"
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    display:
-      icon_name: mdi:barcode
-      icon_color: blue
-      caption: median per mapping, with the spread
-      decimals: 1
-    section: UMI deduplication
-    tag: vm-map-card-umi-dedup
-    index: map-card-umi-dedup
-    title: Reads collapsed by UMI
-    description: Share of a mapping's reads umi_tools dedup collapsed as PCR copies of one UMI at one position, in percent.
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    workflow_tag: viralmetagenome
-    data_collection_tag: umi_stats
-    aggregation: median
-    column_name: mean_umis_per_position
-    column_type: float64
-    filter_expr: "col('step') == 'dedup'"
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    display:
-      icon_name: mdi:counter
-      icon_color: indigo
-      caption: median per mapping, with the spread
-      decimals: 1
-    section: UMI deduplication
-    tag: vm-map-card-umi-per-pos
-    index: map-card-umi-per-pos
-    title: UMIs per position
-    description: Unique UMIs at a deduplicated position, the mean per mapping; few UMIs over a deep position is a library of few molecules copied many times.
-    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: table
     workflow_tag: viralmetagenome
     data_collection_tag: umi_stats
@@ -2014,9 +1956,9 @@ tabs:
     title: UMI read counts
     description: >-
       Reads in and out of umi_tools extract (per sample, before mapping) and umi_tools dedup (per mapping,
-      with `--umi_deduplicate mapping` or `both`). A run deduplicated on the reads with HUMID, the
-      default, has extraction rows only.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+      with `--umi_deduplicate mapping` or `both`), with the unique UMIs per deduplicated position. A run
+      deduplicated on the reads with HUMID, the default, has extraction rows only.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: viralmetagenome
     data_collection_tag: genomes
@@ -2060,13 +2002,19 @@ tabs:
     color: red
     description: Allele frequency against read depth, one point per call
   - name: Intra-host diversity
-    icon: mdi:chart-bell-curve-cumulative
+    icon: mdi:chart-bell-curve
     color: red
     description: Shannon entropy of the alleles at every position, one lane per genome
+    collapsed: true
+  - name: Genome browser
+    icon: mdi:dna
+    color: red
+    description: The reads, depth and calls under each genome, stepping from end to end
+    collapsed: true
   - name: Variant table
     icon: mdi:table
     color: gray
-    description: Every call with its depth, frequency and verdict; iVar's own table with its p-value and codon change
+    description: Every call, and iVar's own table with its p-value and codon change
     collapsed: true
   components:
   - component_type: text
@@ -2119,7 +2067,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:puzzle-outline
-      custom_color: violet
+      custom_color: lime
     section: Call scope
     group: Calls
     tag: vm-var-filter-segment
@@ -2303,18 +2251,18 @@ tabs:
     column_type: int64
     filter_expr: "col('minor_af') >= 0.05"
     secondary_layout: top_n
-    breakdown_col: genome_id
+    breakdown_col: virus_segment
     top_n_count: 3
     display:
       icon_name: mdi:chart-bell-curve-cumulative
       icon_color: red
-      caption: positions with a second allele at 5% or more, by genome
+      caption: positions with a second allele at 5% or more, by segment
     section: Intra-host diversity
     tag: vm-var-card-diverse
     index: var-card-diverse
     title: Mixed positions
-    description: Positions where a second allele holds 5% of the reads or more, the genomes with the most first.
-    layout: {x: 0, y: 0, w: 2, h: 6}
+    description: Positions where a second allele holds 5% of the reads or more, the segments with the most first; 5% is a fixed reading aid, not a published cut-off.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
     data_collection_tag: intrahost_diversity
@@ -2350,6 +2298,44 @@ tabs:
 
       Source: Shannon 1948, https://doi.org/10.1002/j.1538-7305.1948.tb01338.x
     layout: {x: 2, y: 0, w: 6, h: 6}
+  - component_type: jbrowse
+    workflow_tag: viralmetagenome
+    data_collection_tag: tracks
+    section: Genome browser
+    initial_categories: [Depth, Variants, Reads]
+    max_tracks: 6
+    show_overview: false
+    # A custom assembly carries no gene annotation of its own.
+    show_annotation: false
+    selection_enabled: true
+    selection_column: genome_id
+    call_stepper: true
+    # Two locus rows per genome, its 5' and its 3' end, in that order. A
+    # picked genome frames the span of its two rows, the whole genome; the
+    # stepper goes from one end to the other.
+    locus_from:
+      data_collection_tag: genome_loci
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 0
+      max_rows: 60
+      sort_by: region_order
+      descending: false
+      label_column: locus_id
+      sample_column: genome_id
+      columns: [region, length, virus_segment]
+      search_columns: [genome_id, virus_segment]
+    tag: vm-var-browser
+    index: var-browser
+    title: Genome browser
+    description: >-
+      The depth, calls and reads of the genome picked on the tab, on the reference its reads were
+      mapped to; the reads show their soft clips where they run past an end. The stepper goes to the
+      genome's first and last 200 bp, where the reads thin out. Shown when the run is given an indexed
+      FASTA of its mapping references (`--var MAPPING_REFERENCES_FASTA`), which the pipeline does not
+      publish yet.
+    layout: {x: 0, y: 0, w: 8, h: 9}
   - component_type: table
     workflow_tag: viralmetagenome
     data_collection_tag: variants
@@ -2375,118 +2361,3 @@ tabs:
     title: iVar calls
     description: Every iVar call with its depths, allele frequency, p-value, codon change and iVar's verdict; absent from a bcftools run.
     layout: {x: 0, y: 6, w: 8, h: 6}
-# ============================================================================
-# Genome browser (opt-in: --var MAPPING_REFERENCES_FASTA)
-# ============================================================================
-- title: Genome browser
-  subtitle: What do the reads look like under each genome, end to end?
-  tab_group: Variants
-  tab_order: 7
-  tab_icon: mdi:magnify-scan
-  tab_icon_color: red
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  filter_sections:
-  - name: Genome pick
-    icon: mdi:filter-variant
-    color: red
-    description: Pick the genome and the stretch of it to open
-  grid_sections:
-  - name: Browser
-    icon: mdi:dna
-    color: red
-    description: Reads, depth and variant calls of the picked genome, on the run's mapping references
-  - name: Loci
-    icon: mdi:table
-    color: gray
-    description: Every genome with its whole length and its two ends, the loci the browser opens on
-    collapsed: true
-  components:
-  - component_type: text
-    order: 1
-    body: >
-      One genome at a time: pick it in the left panel, then step through its whole length and its two
-      ends in the browser's header. The tracks are its deduplicated reads (soft clips shown, where a
-      read runs past the genome's end), mosdepth's depth along it and its variant calls, on the run's
-      mapping references.
-    tag: vm-gb-intro
-    index: gb-intro
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: interactive
-    workflow_tag: viralmetagenome
-    data_collection_tag: genome_loci
-    interactive_component_type: Select
-    column_name: genome_id
-    column_type: object
-    display:
-      icon_name: mdi:virus
-      custom_color: red
-    section: Genome pick
-    group: Genome
-    tag: vm-gb-filter-genome
-    index: gb-genome-filter
-    title: Genome
-    layout: {x: 0, y: 0, w: 1, h: 2}
-  - component_type: interactive
-    workflow_tag: viralmetagenome
-    data_collection_tag: genome_loci
-    interactive_component_type: MultiSelect
-    column_name: region
-    column_type: object
-    display:
-      icon_name: mdi:arrow-collapse-horizontal
-      custom_color: violet
-    section: Genome pick
-    group: Genome
-    tag: vm-gb-filter-region
-    index: gb-region-filter
-    title: Region
-    layout: {x: 0, y: 2, w: 1, h: 2}
-  - component_type: jbrowse
-    workflow_tag: viralmetagenome
-    data_collection_tag: tracks
-    section: Browser
-    initial_tracks: 3
-    max_tracks: 6
-    show_overview: false
-    # A custom assembly carries no gene annotation of its own.
-    show_annotation: false
-    selection_enabled: true
-    selection_column: genome_id
-    call_stepper: true
-    # One locus row per genome and region (whole, 5' end, 3' end), in that
-    # order: the view opens on the picked genome end to end, and the header
-    # steps to its ends.
-    locus_from:
-      data_collection_tag: genome_loci
-      chrom_column: chrom
-      start_column: start
-      end_column: end
-      padding: 0
-      max_rows: 60
-      sort_by: region_order
-      label_column: locus_id
-      sample_column: genome_id
-      columns: [region, length, virus_segment]
-      search_columns: [genome_id, virus_segment]
-    tag: vm-gb-browser
-    index: gb-browser
-    title: Genome browser
-    description: >-
-      The reads, depth and variant calls of the picked genome, on its own reference. It opens on the
-      whole genome; step to its 5' and 3' end (the first and last 200 bp) in the header, where the reads
-      thin out and the soft clips show whether they ran past the end of the reference.
-    layout: {x: 0, y: 0, w: 8, h: 9}
-  - component_type: table
-    workflow_tag: viralmetagenome
-    data_collection_tag: genome_loci
-    columns: [genome_id, virus_segment, chrom, region, start, end, length]
-    row_selection_enabled: true
-    row_selection_column: genome_id
-    section: Loci
-    tag: vm-gb-table-loci
-    index: gb-table-loci
-    title: Genome loci
-    description: Each genome's sequence in the run's reference FASTA, its length and its two 200 bp ends.
-    layout: {x: 0, y: 0, w: 8, h: 6}

@@ -7,8 +7,8 @@ segment per sample, too long to read across samples. This matrix puts every
 virus segment on a row and every sample on a column, and colours the cell with
 the BLAST reference cover of the best genome of that segment in that sample
 (``ref_cover_pct`` of the genome hub, the de novo and constraint routes both
-counted, the higher one kept). A cell of 0 is a segment the sample has no
-genome of, or one with no BLAST hit: the heatmap clusters on a full matrix.
+counted, the higher one kept). An empty cell is a segment the sample has no
+genome of, or one with no BLAST hit: drawn blank, not as 0 % cover.
 
 ``virus`` rides along as a row annotation, so the segments of one virus sit
 next to each other when the rows are clustered.
@@ -89,5 +89,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return wide.select(
         pl.col("virus_segment").cast(pl.Utf8),
         pl.col("virus").cast(pl.Utf8),
-        *[pl.col(s).cast(pl.Float64).fill_null(0.0).alias(names[s]) for s in samples],
+        *[pl.col(s).cast(pl.Float64).alias(names[s]) for s in samples],
     ).sort(["virus", "virus_segment"])

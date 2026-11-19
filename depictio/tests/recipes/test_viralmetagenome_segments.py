@@ -222,11 +222,11 @@ def test_genome_matrix_puts_segments_against_samples(tmp_path: Path) -> None:
     )
     m = _run("nf-core/viralmetagenome/genome_matrix.py", tmp_path, {"genomes": hub})
     # Sample columns are store-safe; the best genome of a segment wins; a
-    # segment a sample has no genome of reads 0.
+    # segment a sample has no genome of stays empty.
     assert m.columns == ["virus_segment", "virus", "s_1", "s2"]
     rows = {r["virus_segment"]: r for r in m.iter_rows(named=True)}
     assert rows["LASV S"]["s_1"] == 99.0
-    assert rows["LASV L"]["s2"] == 0.0
+    assert rows["LASV L"]["s2"] is None
 
 
 def test_route_comparison_lines_up_the_two_routes(tmp_path: Path) -> None:
@@ -347,7 +347,7 @@ def test_variants_never_count_an_ivar_call_twice(tmp_path: Path) -> None:
     )
     calls = _run("nf-core/viralmetagenome/variants.py", tmp_path, {"ivar_variants": ivar_table})
     assert calls["pos"].to_list() == [5, 9]
-    assert set(calls["caller"]) == {"ivar"}
+    assert set(calls["caller"]) == {"iVar"}
     # Without the table, iVar's own VCF stands in for it.
     alone = _run("nf-core/viralmetagenome/variants.py", tmp_path, {})
     assert alone["pos"].to_list() == [5]
@@ -445,14 +445,15 @@ def test_tracks_list_the_indexed_files_of_each_genome(tmp_path: Path) -> None:
     )
     hub = pl.DataFrame({"genome_id": ["S1_LASVL"], "sample": ["S1"], "reference": ["LASVL"]})
     out = _run("nf-core/viralmetagenome/tracks.py", tmp_path, {"genomes": hub})
-    assert out["kind"].to_list() == ["alignments", "depth", "variants"]
-    assert out["uri"].to_list() == [dedup, depth, vcf]
-    assert out["index_uri"].to_list() == [dedup + ".bai", depth + ".csi", None]
-    assert out["format"].to_list() == ["bam", "bedgraph", "vcf"]
+    # Light tracks first, the reads last (RULES section 16).
+    assert out["kind"].to_list() == ["depth", "variants", "alignments"]
+    assert out["uri"].to_list() == [depth, vcf, dedup]
+    assert out["index_uri"].to_list() == [depth + ".csi", None, dedup + ".bai"]
+    assert out["format"].to_list() == ["bedgraph", "vcf", "bam"]
     assert out["order"].to_list() == [1, 2, 3]
 
 
-def test_genome_loci_open_the_whole_genome_and_its_ends(tmp_path: Path) -> None:
+def test_genome_loci_are_the_two_ends_of_each_genome(tmp_path: Path) -> None:
     bins = pl.DataFrame(
         {
             "genome_id": ["g", "g", "short"],
@@ -463,10 +464,10 @@ def test_genome_loci_open_the_whole_genome_and_its_ends(tmp_path: Path) -> None:
     )
     out = _run("nf-core/viralmetagenome/genome_loci.py", tmp_path, {"coverage_bins": bins})
     g = out.filter(pl.col("genome_id") == "g")
-    assert g["region"].to_list() == ["Whole genome", "5' end", "3' end"]
-    assert list(zip(g["start"], g["end"], strict=True)) == [(1, 7279), (1, 200), (7080, 7279)]
+    assert g["region"].to_list() == ["5' end", "3' end"]
+    assert list(zip(g["start"], g["end"], strict=True)) == [(1, 200), (7080, 7279)]
     s = out.filter(pl.col("genome_id") == "short")
-    assert s["length"].to_list() == [300, 300, 300]
+    assert s["length"].to_list() == [300, 300]
 
 
 def test_genome_ends_bin_the_first_and_last_bases_finely(tmp_path: Path) -> None:
@@ -540,4 +541,4 @@ def test_tracks_keep_a_reference_with_a_version(tmp_path: Path) -> None:
 def test_genome_loci_halve_a_short_genome(tmp_path: Path) -> None:
     bins = pl.DataFrame({"genome_id": ["g"], "sample": ["S1"], "chrom": ["c"], "end": [300]})
     out = _run("nf-core/viralmetagenome/genome_loci.py", tmp_path, {"coverage_bins": bins})
-    assert list(zip(out["start"], out["end"], strict=True)) == [(1, 300), (1, 150), (151, 300)]
+    assert list(zip(out["start"], out["end"], strict=True)) == [(1, 150), (151, 300)]

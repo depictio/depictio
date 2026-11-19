@@ -3,13 +3,11 @@
 The genome browser opens on a locus; a viralmetagenome genome is one sequence of
 the run's mapping references (see ``tracks.py``). The sequence name and length
 are read off mosdepth's per-base depth (``coverage_bins``), which covers each
-mapping's reference from its first base to its last. Three loci per genome:
-
-* ``Whole genome``, the sequence end to end;
-* ``5' end`` and ``3' end``, the first and last ``END_BP`` bases, where a
-  consensus is least certain: the reads thin out towards a linear genome's
-  ends, and a segmented virus keeps conserved termini that primer-free
-  sequencing reads poorly.
+mapping's reference from its first base to its last. Two loci per genome, the
+``5' end`` and ``3' end``: its first and last ``END_BP`` bases, where a
+consensus is least certain, as the reads thin out towards a genome's ends.
+Picking a genome frames the span of its two rows, the whole genome; the
+browser's stepper then goes from one end to the other.
 
 Sources:
     bins     ``coverage_bins``, binned per-base depth
@@ -18,7 +16,7 @@ Sources:
 Output schema:
     locus_id, genome_id, sample, chrom, region : Utf8
     start, end, length : Int64      1-based, inclusive
-    region_order : Int64            1 whole, 2 5' end, 3 3' end
+    region_order : Int64            1 for the 5' end, 2 for the 3' end
     virus_segment : Utf8
 """
 
@@ -76,9 +74,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # genome_ends bins it.
     edge = pl.max_horizontal(pl.min_horizontal(pl.col("length") // 2, pl.lit(END_BP)), pl.lit(1))
     regions = [
-        ("Whole genome", 1, pl.lit(1), pl.col("length")),
-        ("5' end", 2, pl.lit(1), edge),
-        ("3' end", 3, pl.col("length") - edge + 1, pl.col("length")),
+        ("5' end", 1, pl.lit(1), edge),
+        ("3' end", 2, pl.col("length") - edge + 1, pl.col("length")),
     ]
     out = pl.concat(
         [

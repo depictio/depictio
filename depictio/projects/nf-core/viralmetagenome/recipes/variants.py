@@ -79,7 +79,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "reference": pl.Utf8,
     "route": pl.Utf8,
-    "caller": pl.Utf8,
+    "caller": pl.Utf8,  # iVar or bcftools
     "virus": pl.Utf8,
     "segment": pl.Utf8,
     "virus_segment": pl.Utf8,
@@ -97,6 +97,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 _CALLER_IVAR = "ivar"
+_CALLER_NAMES = {"ivar": "iVar", "bcftools": "bcftools"}
 
 
 def _present(frame: pl.DataFrame | None) -> bool:
@@ -147,6 +148,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for col, dtype in OUTPUT_SCHEMA.items():
         if col not in out.columns:
             out = out.with_columns(pl.lit(None, dtype=dtype).alias(col))
+    # The caller as its authors spell it, for the tiles that print it.
+    out = out.with_columns(pl.col("caller").replace(_CALLER_NAMES).alias("caller"))
     return out.select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()]).sort(
         ["sample", "genome_id", "pos", "alt"]
     )

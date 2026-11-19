@@ -90,7 +90,7 @@ template:
       description: "Auto-populated: title-cased GROUP_COL for titles."
       required: false
     - name: "MAPPING_REFERENCES_FASTA"
-      description: "Optional indexed FASTA (.fai next to it, .gzi too when bgzipped) holding every reference the run mapped reads to, constraint and de novo consensus alike, one sequence per genome; a path under DATA_ROOT. Enables the genome browser (one assembly per collection, each genome a sequence of it). Without it the browser and its loci are left out."
+      description: "Optional indexed FASTA (.fai next to it, .gzi too when bgzipped) holding every reference the run mapped reads to, constraint and de novo consensus alike; a path under DATA_ROOT. Enables the genome browser (one assembly per collection: each reference is a sequence of it, shared by the genomes mapped to it). Without it the browser and its loci are left out."
       required: false
   # Variables for the BUNDLED reference dataset: the megatest run with the
   # test_full metadata vendored in input/ (see megatest.yaml).
@@ -585,7 +585,7 @@ workflows:
             format: "TSV"
             columns_description:
               "genome_id": "Genome key, <sample>_<reference>"
-              "caller": "Variant caller: ivar or bcftools"
+              "caller": "Variant caller: iVar or bcftools"
               "virus_segment": "Virus and segment of the genome"
               "chrom": "Reference sequence the variant is on"
               "pos": "1-based position"
@@ -700,7 +700,7 @@ workflows:
       # ----------------------------------------------------------------
       - data_collection_tag: "genome_loci"
         optional: true
-        description: "Where each genome sits in the run's reference FASTA: the whole sequence and its first and last 200 bp, the loci the genome browser opens on"
+        description: "Where each genome sits in the run's reference FASTA: its first and last 200 bp, the loci the genome browser steps through"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -713,7 +713,7 @@ workflows:
               "locus_id": "Genome, sequence and region"
               "genome_id": "Genome key, <sample>_<reference>"
               "chrom": "Sequence of the reference FASTA the genome is"
-              "region": "Whole genome, 5' end or 3' end"
+              "region": "5' end or 3' end"
               "start": "1-based start"
               "end": "1-based end, inclusive"
 
@@ -956,6 +956,36 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "genome_id"}
     description: "Filter the refinement steps by the selected genomes"
+    enabled: true
+  # Tracks: a pick on a genome, a sample or a locus opens that genome's
+  # tracks, and a track picked in the browser narrows the sample hub.
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Open the genome tracks of the selected genomes"
+    enabled: true
+  - source_dc_tag: "genome_loci"
+    source_column: "genome_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Open the genome tracks of the genome whose end is picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Show the genome tracks of the selected samples"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the sample of a track picked in the browser"
     enabled: true
   # Reverse links: a selection on a tab's own scatter narrows the sample hub,
   # and through it every other tab.

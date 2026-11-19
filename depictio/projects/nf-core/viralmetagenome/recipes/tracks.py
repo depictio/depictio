@@ -78,17 +78,6 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 #          category, label)
 _KINDS: tuple[tuple[str, str, tuple[tuple[str, tuple[str, ...]], ...], str, str], ...] = (
     (
-        "alignments",
-        "bam",
-        (
-            ("variants/mapping-info/deduplicate/bam/{s}/*.bam", (".bai",)),
-            ("variants/mapping-info/bwamem2/bam/{s}/*.bam", (".bai",)),
-            ("variants/mapping-info/bowtie2/bam/{s}/*.bam", (".bai",)),
-        ),
-        "Reads",
-        "reads",
-    ),
-    (
         "depth",
         "bedgraph",
         (("variants/mapping-info/metrics/mosdepth/{s}/*.per-base.bed.gz", (".csi", ".tbi")),),
@@ -109,6 +98,17 @@ _KINDS: tuple[tuple[str, str, tuple[tuple[str, tuple[str, ...]], ...], str, str]
         ),
         "Variants",
         "variants",
+    ),
+    (
+        "alignments",
+        "bam",
+        (
+            ("variants/mapping-info/deduplicate/bam/{s}/*.bam", (".bai",)),
+            ("variants/mapping-info/bwamem2/bam/{s}/*.bam", (".bai",)),
+            ("variants/mapping-info/bowtie2/bam/{s}/*.bam", (".bai",)),
+        ),
+        "Reads",
+        "reads",
     ),
 )
 _SKIP_SUFFIXES = ("_all_hap.vcf",)
@@ -184,7 +184,7 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
                 )
     if not rows:
         raise ValueError("viralmetagenome tracks: the run holds no indexed track file")
-    # One block per genome: its reads, depth, then variants.
+    # One block per genome: its depth and variants, light, then its reads.
     kind_order = {k[0]: i for i, k in enumerate(_KINDS)}
     rows.sort(key=lambda r: (r["genome_id"], kind_order[r["kind"]]))
     for i, row in enumerate(rows, start=1):
