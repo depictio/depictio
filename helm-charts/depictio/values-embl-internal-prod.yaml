@@ -319,11 +319,14 @@ global:
 #   -n datasci-depictio-internal-prod
 
 # MongoDB backups: daily at 03:00 UTC, smart retention (30 days daily,
-# 4 weekly, 12 monthly). Off-cluster copy to a backup bucket: to follow.
+# 4 weekly, 12 monthly), so up to ~46 snapshots. Sized for real use, not
+# today's near-empty database: the showcases instance (51 projects) is ~100 MB,
+# so a few hundred MB per snapshot is expected. Off-cluster copy to a backup
+# bucket: to follow.
 backups:
   persistence:
     enabled: true
-    size: 5Gi
+    size: 20Gi
   schedule:
     enabled: true
     intervalHours: 24
