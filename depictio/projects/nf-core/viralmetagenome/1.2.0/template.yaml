@@ -23,6 +23,12 @@
 #   - consensus/quality_control/checkv/: CheckV per consensus (checkv/quality_summary);
 #   - variants/ivar/<sample>/*.tsv: the raw iVar calls per sample and reference
 #     (ivar/variants_tsv);
+#   - variants/<caller>/<sample>/*.filtered.vcf.gz: the calls the consensus took,
+#     from whichever --variant_caller ran (iVar or bcftools), and bcftools'
+#     *.norm.vcf.gz, every call before the frequency filter (variants,
+#     intrahost_diversity);
+#   - variants/mapping-info/deduplicate/, preprocessing/umi/: the BAMs the
+#     genome browser reads, and the umi_tools logs of a --with_umi run;
 #   - variants/mapping-info/metrics/mosdepth/<sample>/: depth per base and the
 #     cumulative coverage per mapping (mosdepth/per_base_bins, cumulative_coverage);
 #   - multiqc/: the run's report has no parquet (MultiQC 1.27); the parquet
@@ -31,6 +37,14 @@
 # Genome keys. A consensus genome is a sample and a reference: a constraint
 # reference of --mapping_constraints, or a de novo contig cluster. Every
 # per-genome collection keys it `<sample>_<reference>` (genome_id).
+#
+# Segments. A segmented virus (Lassa S and L, CCHFV S, M and L, influenza A's
+# eight) is one genome per segment. `virus` is the annotation's acronym and
+# names the virus; `segment` (the annotation's segment, else the constraint
+# sheet's) and `virus_segment` name the genome, so two segments of one virus
+# are never counted as one. Completeness is read per segment off the genome's
+# BLAST hit (`ref_cover_pct`), not off CheckV, whose completeness of one
+# segment is the share of the whole genome it carries.
 #
 # Design. The pipeline takes a sample metadata table through --metadata and
 # merges it into the samples overview, but does not publish the table itself.
@@ -48,13 +62,17 @@
 #     tab and the de novo half of the genome hub go);
 #   - no --mapping_constraints: no constraint mappings;
 #   - --skip_precluster: no contig classification (contigs read Not classified);
-#   - --skip_checkv, --skip_variant_calling: no CheckV or iVar collections;
+#   - --skip_checkv, --skip_variant_calling: no CheckV or variant collections;
+#   - --variant_caller bcftools: no iVar table; the Variants tab reads the
+#     bcftools VCFs through the `variants` collection;
+#   - no --with_umi: no UMI collection;
+#   - MAPPING_REFERENCES_FASTA unset: no genome browser (tracks, genome_loci);
 #   - the design table (METADATA_FILE) feeds the group filter and colours.
 # ============================================================================
 template:
   template_id: "nf-core/viralmetagenome/1.2.0"
   description: "nf-core/viralmetagenome template for viral genome reconstruction from metagenomic reads: read preprocessing and host removal, de novo contigs with their taxonomic call and cluster, consensus genomes from de novo refinement and constraint references with their closest reference, ambiguous bases and CheckV call, mapping depth and breadth, and the iVar variant calls."
-  version: "1.3.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one viralmetagenome run (overview-tables/, preprocessing/, assembly/, consensus/, variants/, multiqc/, pipeline_info/)."
@@ -70,6 +88,9 @@ template:
       required: false
     - name: "GROUP_COL_DISPLAY"
       description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "MAPPING_REFERENCES_FASTA"
+      description: "Optional indexed FASTA (.fai next to it, .gzi too when bgzipped) holding every reference the run mapped reads to, constraint and de novo consensus alike, one sequence per genome; a path under DATA_ROOT. Enables the genome browser (one assembly per collection, each genome a sequence of it). Without it the browser and its loci are left out."
       required: false
   # Variables for the BUNDLED reference dataset: the megatest run with the
   # test_full metadata vendored in input/ (see megatest.yaml).
@@ -131,6 +152,11 @@ template:
   conditional:
     - if_var_absent: "METADATA_FILE"
       remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    # The browser needs one assembly holding every genome of the run; the
+    # pipeline does not publish one yet, so it is opt-in.
+    - if_var_absent: "MAPPING_REFERENCES_FASTA"
+      remove_dc_tags: ["tracks", "genome_loci"]
       dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
@@ -432,7 +458,7 @@ workflows:
       # a dc_ref is read back from the referenced Delta table, which exists
       # only once that collection has been processed.
       - data_collection_tag: "genomes"
-        description: "Consensus genome hub: one row per sample and reference, de novo or constraint, with its closest reference, ambiguous bases, CheckV call, mapping, depth, breadth and variant counts"
+        description: "Consensus genome hub: one row per sample and reference (one per segment of a segmented virus), de novo or constraint, with its closest reference, its BLAST reference cover, ambiguous bases, CheckV call, mapping, depth, breadth and variant counts"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -448,6 +474,9 @@ workflows:
               "route": "de novo or constraint"
               "step": "Refinement step the de novo consensus ended at"
               "virus": "What the genome is: the annotation's acronym or name, else Unclassified"
+              "segment": "Segment of a segmented virus (the annotation's, else the constraint sheet's), null for an unsegmented one"
+              "virus_segment": "Virus and segment, the genome a segmented virus is counted by"
+              "cluster_type": "What the genome was built on: Reference-anchored or Contig-only (de novo, its cluster's centroid), Constraint reference"
               "consensus_length": "Consensus length, bp"
               "n_pct": "Ambiguous bases (N), percent"
               "annotation_name": "Closest reference of the annotation database"
@@ -455,8 +484,14 @@ workflows:
               "annotation_aligned_pct": "Share of the consensus aligned to it, percent"
               "blast_hit": "Best BLAST hit in the reference pool"
               "blast_identity_pct": "Identity of the best BLAST hit, percent"
+              "blast_qlen": "Consensus length BLAST read, bp"
+              "blast_slen": "Length of the best BLAST hit's reference, bp"
+              "ref_cover_pct": "Share of the best hit's reference its alignment spans, (|send - sstart| + 1) / slen, percent; the best HSP only, so a lower bound"
+              "len_minus_ref": "Consensus length minus reference length (qlen - slen), bp"
+              "ref_length_pct": "Consensus length over reference length, percent"
+              "completeness_call": "Complete (reference cover 95% or more), Partial (50 to 95%), Fragment (under 50%), Shorter than reference (the genome aligns along 90% of itself or more but is under 60% of the reference's length: the hit is longer than the segment, as for an influenza segment 8 on a long reference, or the genome stops short of both ends; check the hit before calling it truncated) or No BLAST hit"
               "checkv_quality": "CheckV quality tier"
-              "checkv_completeness": "CheckV completeness, percent"
+              "checkv_completeness": "CheckV completeness, percent; of the whole genome, so one segment of a segmented virus reads low"
               "checkv_contamination": "CheckV contamination, percent"
               "mapped_reads": "Reads mapped (R1+R2)"
               "mapped_pct": "Reads mapped, percent"
@@ -466,6 +501,48 @@ workflows:
               "snps": "SNPs (bcftools)"
               "indels": "Indels (bcftools)"
               "ts_tv": "Transitions over transversions (bcftools)"
+
+      # The genome hub read two other ways: a sample x segment matrix, and
+      # the two routes side by side.
+      - data_collection_tag: "genome_matrix"
+        optional: true
+        description: "Virus segment by sample: the BLAST reference cover of the best genome of each segment in each sample, for the clustered heatmap"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/genome_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "virus_segment": "Virus and segment, one row each"
+              "virus": "Virus the segment belongs to, the row annotation"
+
+      - data_collection_tag: "route_comparison"
+        optional: true
+        description: "De novo against constraint genome per sample and virus segment: length, reference cover, N share, identity, depth and breadth of the best genome of each route, side by side"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/route_comparison.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "virus_segment": "Virus and segment"
+              "denovo_genome_id": "Best de novo genome of the segment"
+              "constraint_genome_id": "Best constraint genome of the segment"
+              "constraint_reference": "Constraint reference of it (Mash's pick from a pool when the sheet asks for one)"
+              "denovo_ref_cover_pct": "De novo genome: BLAST reference cover, percent"
+              "constraint_ref_cover_pct": "Constraint genome: BLAST reference cover, percent"
+              "denovo_n_pct": "De novo genome: ambiguous bases, percent"
+              "constraint_n_pct": "Constraint genome: ambiguous bases, percent"
+              "cover_gain": "Constraint minus de novo reference cover, percentage points"
+              "n_gain": "De novo minus constraint N share, percentage points (positive: the constraint genome has fewer N)"
+              "better_route": "The route with the higher reference cover (2 points or more), similar, or the only route that built the segment"
 
       # ----------------------------------------------------------------
       # Variants and coverage per mapping (catalog ivar/*, mosdepth/*)
@@ -493,6 +570,51 @@ workflows:
               "frequency_class": "Fixed (AF at least 0.9), Major (0.5 to 0.9) or Minor"
               "filter": "PASS when iVar kept the call, else Filtered"
 
+      # Whichever caller ran: the iVar table when there is one, else the
+      # filtered VCFs of --variant_caller bcftools. The Variants tab reads this.
+      - data_collection_tag: "variants"
+        optional: true  # absent with --skip_variant_calling
+        description: "Variant calls of every genome, from the caller the run used (iVar's table, else the filtered bcftools VCFs): position, alleles, depth, allele frequency and verdict, with the genome's virus and segment"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>"
+              "caller": "Variant caller: ivar or bcftools"
+              "virus_segment": "Virus and segment of the genome"
+              "chrom": "Reference sequence the variant is on"
+              "pos": "1-based position"
+              "variant_type": "SNV, MNV, Insertion or Deletion"
+              "af": "Alternative allele frequency, 0 to 1"
+              "total_dp": "Reads at the position"
+              "frequency_class": "Fixed (AF at least 0.9), Major (0.5 to 0.9) or Minor"
+              "filter": "PASS when the caller kept the call, else Filtered (the filtered bcftools VCF holds kept calls only)"
+
+      - data_collection_tag: "intrahost_diversity"
+        optional: true  # absent with --skip_variant_calling
+        description: "Intra-host diversity: the Shannon entropy of the alleles at every position carrying an alternative allele, from iVar's raw table or the bcftools calls before the frequency filter"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/intrahost_diversity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>"
+              "chrom": "Reference sequence"
+              "pos": "1-based position"
+              "n_alt_alleles": "Alternative alleles at the position"
+              "minor_af": "Frequency of the second most frequent allele, 0 to 0.5"
+              "total_dp": "Reads at the position"
+              "entropy": "Shannon entropy of the allele frequencies, natural log: 0 where every read agrees, ln 2 (0.69) for two alleles at half each"
+
       - data_collection_tag: "coverage_bins"
         optional: true
         description: "Read depth along each mapping's reference, binned from mosdepth's per-base depth"
@@ -516,6 +638,44 @@ workflows:
               "mean_depth": "Length-weighted mean depth over the bin"
               "min_depth": "Lowest depth in the bin"
 
+      - data_collection_tag: "coverage_profile"
+        optional: true
+        description: "Binned depth along each genome with the virus segment it is, for the depth profile faceted by segment"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/coverage_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>"
+              "virus_segment": "Virus and segment of the genome"
+              "position": "Bin centre"
+              "mean_depth": "Length-weighted mean depth over the bin"
+
+      - data_collection_tag: "genome_ends"
+        optional: true
+        description: "Depth over the first and last 200 bp of each genome in 10 bp bins, from mosdepth's per-base depth: where the reads thin out and a consensus is least certain"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/genome_ends.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>"
+              "end_region": "5' end or 3' end"
+              "start": "Bin start, 0-based"
+              "end": "Bin end"
+              "end_offset": "Distance of the bin centre from the tip of its end, bp"
+              "length": "Reference length, bp"
+              "mean_depth": "Length-weighted mean depth over the bin"
+              "min_depth": "Lowest depth in the bin"
+
       - data_collection_tag: "coverage_cumulative"
         optional: true
         description: "Share of each mapping's reference covered at least at each depth, from mosdepth's global distribution"
@@ -534,6 +694,76 @@ workflows:
               "genome_id": "Genome key, <sample>_<reference>"
               "depth": "Depth threshold"
               "bases_pct": "Bases covered at least at that depth, percent"
+
+      # ----------------------------------------------------------------
+      # Genome browser (opt-in, MAPPING_REFERENCES_FASTA) and UMIs
+      # ----------------------------------------------------------------
+      - data_collection_tag: "genome_loci"
+        optional: true
+        description: "Where each genome sits in the run's reference FASTA: the whole sequence and its first and last 200 bp, the loci the genome browser opens on"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/genome_loci.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "locus_id": "Genome, sequence and region"
+              "genome_id": "Genome key, <sample>_<reference>"
+              "chrom": "Sequence of the reference FASTA the genome is"
+              "region": "Whole genome, 5' end or 3' end"
+              "start": "1-based start"
+              "end": "1-based end, inclusive"
+
+      - data_collection_tag: "tracks"
+        optional: true
+        description: "Genome-browser tracks of every genome: its deduplicated reads, per-base depth and indexed variant calls, on the run's mapping references"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            index_column: "index_uri"
+            track_id_column: "track_id"
+            sample_column: "genome_id"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
+            assembly:
+              name: "viralmetagenome-references"
+              display_name: "Mapping references of the run"
+              fasta_uri: "{MAPPING_REFERENCES_FASTA}"
+            display_defaults:
+              bam: {displays: [{type: "LinearPileupDisplay", height: 120}]}
+              bedgraph: {displays: [{type: "LinearWiggleDisplay", height: 50}]}
+              vcf: {displays: [{type: "LinearVariantDisplay", height: 40}]}
+
+      - data_collection_tag: "umi_stats"
+        optional: true  # absent without --with_umi
+        description: "UMI read counts from the umi_tools logs: reads in and out of UMI extraction per sample, and of UMI deduplication per mapping, with the UMIs per position"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/umi_stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "genome_id": "Genome key of a dedup row, null for extraction"
+              "step": "extract (umi_tools extract) or dedup (umi_tools dedup)"
+              "input_reads": "Reads into the step"
+              "output_reads": "Reads out of the step"
+              "removed_pct": "Reads the step dropped, percent of its input"
+              "mean_umis_per_position": "Unique UMIs per deduplicated position, mean"
 
 # ============================================================================
 # LINKS: the sample hub filters every per-sample collection, the genome hub
@@ -601,6 +831,55 @@ links:
     enabled: true
   - source_dc_tag: "samples"
     source_column: "sample"
+    target_dc_tag: "variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the variant calls of every caller by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "intrahost_diversity"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the intra-host diversity by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "route_comparison"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the route comparison by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "umi_stats"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the UMI counts by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "genome_loci"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the browser loci by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "genome_ends"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the genome-end depth by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "coverage_profile"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the segment depth profiles by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
     target_dc_tag: "coverage_bins"
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
@@ -621,6 +900,41 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "genome_id"}
     description: "Filter the variant calls by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the variant calls of every caller by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "intrahost_diversity"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the intra-host diversity by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "genome_loci"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Open the browser loci of the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "genome_ends"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the genome-end depth by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "coverage_profile"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the segment depth profiles by the selected genomes"
     enabled: true
   - source_dc_tag: "genomes"
     source_column: "genome_id"

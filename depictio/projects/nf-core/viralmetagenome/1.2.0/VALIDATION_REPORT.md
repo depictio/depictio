@@ -52,9 +52,18 @@ overrides, with the vendored metadata.
 | `vmg_mapping_overview` | 7 |
 | `checkv_quality` | 17 |
 | `genomes` | 11 (4 de novo, 7 constraint) |
+| `genome_matrix` | 2 virus segments x 4 samples |
+| `route_comparison` | 6 sample x segment rows |
 | `ivar_variants` | 2342 |
+| `variants` | 2342 (caller ivar: the table, iVar's VCFs left out) |
+| `intrahost_diversity` | 2252 positions |
 | `coverage_bins` | 5983 (10 mappings, 50 bp bins) |
+| `coverage_profile` | 5983 |
+| `genome_ends` | 400 (10 mappings x 2 ends x 20 bins of 10 bp) |
 | `coverage_cumulative` | 1011 |
+| `genome_loci` | 30 with `MAPPING_REFERENCES_FASTA` set (10 genomes x 3 loci) |
+| `tracks` | 20 with `MAPPING_REFERENCES_FASTA` set (depth and plain VCF per genome; no BAM in the subset) |
+| `umi_stats` | none (no `--with_umi`): pruned |
 
 What the data says, so the tiles are read against it: 369 to 10,092 raw read pairs per sample,
 0.02 % to 5.7 % host, 94 % to 100 % of the pairs retained, Q30 above 99.5 % everywhere. The three
@@ -124,12 +133,19 @@ every consensus is `Not-determined` and completeness is null.
 | VM3 | **constraint route only** | `--skip_assembly` | no contigs, clusters or de novo consensus | Contigs tab, refinement profile, contigs highlight and their Overview lines pruned (simulated). |
 | VM4 | **de novo route only** | no `--mapping_constraints` | no `mapping_overview.tsv`, no Mash screen | The genome hub holds de novo genomes only; the Mash columns of the mapping table are empty. |
 | VM5 | **several assemblers** | `--assemblers spades,megahit,trinity` | one idxstats and one QUAST block per assembler | `assembler` gains values; the samples overview reads the longest assembly. Not seen on data. |
-| VM6 | **several viruses or segments** | a metagenome with more than one virus, or a segmented one | several clusters refined per sample, several annotations | `virus` gains values (the colours, the Virus filter); the genome view lists more references. Not seen on data. |
-| VM7 | **bcftools caller** | `--variant_caller bcftools` | no raw iVar tables | `ivar_variants` is empty and the Variants tab is pruned; the bcftools VCFs are not read yet. |
+| VM6 | **several viruses or segments** | a metagenome with more than one virus, or a segmented one | several clusters refined per sample, several annotations | One genome per segment: `segment` and `virus_segment` split them, the Segment filters and the segment matrix read them, and completeness is the BLAST reference cover per segment. Checked on fixtures (LASV S/L, CCHFV, influenza segment 8 on a 2349 nt hit), not on a real segmented run. |
+| VM7 | **bcftools caller** | `--variant_caller bcftools` | no raw iVar tables | `ivar_variants` and the iVar table are pruned; `variants` reads `variants/bcftools/<sample>/*.filtered.vcf.gz` and the Variants tab stays; `intrahost_diversity` reads the `*.norm.vcf.gz` calls. Checked on fixtures (paths from the pipeline's `modules.config` at 1.2.0). |
 | VM8 | **no global prefix** | `--prefix` unset | file names without the run prefix | The globs match on the suffix and the prefix strip is a no-op; not seen on data. |
 | VM9 | **full CheckV database** | `--checkv_db` the full release | completeness estimated | The CheckV tier and completeness fill in; validated on a fixture only. |
 
 **Ranking by template stress:** VM6 > VM7 > VM3 > VM5 > VM9 > VM4 > VM2 > VM8 > VM1
+
+On the SARS-CoV-2 megatest the constraint sheet's `segment` column holds a strain name
+(`Wuhan-hu-1` for MN908947), so the two MN908947 genomes read `SARS-CoV-2 Wuhan-hu-1` while the
+others read `SARS-CoV-2`: the template reads that column as the sheet's segment, as the pipeline
+documents it. Reference cover on the megatest: 99 % for the two well covered samples, 77 % for
+SRR11140744, whose best HSP starts 6.6 kb into the genome, and 12 % and 2 % for SRR11140750, the
+sample with 27 kb of N.
 
 ## Not verified (pending live check, RULES section 15)
 
@@ -159,10 +175,11 @@ Each item of section 15 needs a running stack with the template ingested from th
 Other open points:
 
 - Genome browser. The filtered VCFs are published next to the index of the sorted VCF they were
-  filtered from, so no published VCF has its own index: an `indexed_file` collection and a
-  file-backed `genome_view` are not possible on this release. The calls are drawn from the table
-  collection instead (`TODO(jbrowse)` in base.yaml). With several references in a run the view's
-  axis lists each reference; each lane holds its calls on its own reference.
+  filtered from, so no bgzipped VCF has its own index. The Genome browser tab (opt-in,
+  `MAPPING_REFERENCES_FASTA`) reads iVar's plain-text VCF whole, the deduplicated BAM and the
+  per-base depth; it has not been seen on a stack, and the pipeline publishes no references FASTA
+  yet. The Variants genome view keeps drawing the calls from the table, a lane per genome on its
+  own reference.
 - MultiQC report rows carry the run prefix (`<prefix>-<sample>_<reference>...`); the link relies
   on `sample_mapping` attaching a name to the hub sample it holds as a whole token
   (`canonicalize_to_hub`, rule 4). Checked offline on the reprocessed parquet: 78 of its 99 row
