@@ -3,8 +3,10 @@
  *
  * Run: pnpm run check:catalog-site
  */
+import { readFileSync } from 'node:fs';
 import {
   currentSlot,
+  knownSlots,
   moduleUrl,
   openInSlotHref,
   outputFileUrl,
@@ -13,6 +15,7 @@ import {
   siteRootUrl,
   slotHref,
 } from '../src/catalog-preview/siteTree';
+import { BUMP_COLOR, fetchJsonCached } from '../src/catalog-preview/siteData';
 import { diffLines, diffRenders, foldUnchanged } from '../src/catalog-preview/lineDiff';
 
 let failures = 0;
@@ -84,8 +87,60 @@ check('fallback on index.version', currentSlot('/somewhere/', vs, '1.23.0'), 'v1
 check('no match', currentSlot('/somewhere/', vs, '9.9.9'), null);
 check('no versions', currentSlot('/final/latest/', [], undefined), 'latest');
 check('pickSlot newest', pickSlot(['v1.22.0', 'latest'], ['latest', 'v1.23.0', 'v1.22.0']), 'latest');
-check('pickSlot unknown order', pickSlot(['v1.22.0'], []), 'v1.22.0');
 check('pickSlot none', pickSlot([], []), null);
+check('pickSlot ignores a slot absent from versions.json', pickSlot(['v0.9.0'], ['latest', 'v1.22.0']), null);
+check('pickSlot skips the unknown one for the known one', pickSlot(['v0.9.0', 'v1.22.0'], ['latest', 'v1.22.0']), 'v1.22.0');
+check('pickSlot with no known slots', pickSlot(['v1.22.0'], []), null);
+check('knownSlots with latest', knownSlots({ latest: 'latest', versions: ['v1.22.0'] }), ['latest', 'v1.22.0']);
+check('knownSlots with "latest": null', knownSlots({ latest: null, versions: ['v1.22.0'] }), ['v1.22.0']);
+check('knownSlots without latest key', knownSlots({ versions: ['v1.22.0'] }), ['v1.22.0']);
+check('pickSlot never lands on a null latest', pickSlot(['latest', 'v1.22.0'], knownSlots({ latest: null, versions: ['v1.22.0'] })), 'v1.22.0');
+
+console.log('\n6. Fetch cache: successes and 404 only');
+const isAny = (v) => true;
+const resp = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+async function cacheCase(label, responses, calls, want) {
+  const cache = new Map();
+  let n = 0;
+  const fetcher = async () => {
+    const r = responses[Math.min(n++, responses.length - 1)];
+    if (r instanceof Error) throw r;
+    return r;
+  };
+  const out = [];
+  for (let i = 0; i < calls; i++) out.push(await fetchJsonCached('u', isAny, cache, fetcher));
+  check(label, { out, fetches: n }, want);
+}
+await cacheCase('success is cached', [resp(200, { a: 1 })], 2, { out: [{ a: 1 }, { a: 1 }], fetches: 1 });
+await cacheCase('404 is cached', [resp(404)], 2, { out: [null, null], fetches: 1 });
+await cacheCase('network error is retried', [new Error('down'), resp(200, { a: 1 })], 2, { out: [null, { a: 1 }], fetches: 2 });
+await cacheCase('HTTP 500 is retried', [resp(500), resp(200, { a: 1 })], 2, { out: [null, { a: 1 }], fetches: 2 });
+await cacheCase('concurrent callers share one fetch', [resp(200, { a: 1 })], 1, { out: [{ a: 1 }], fetches: 1 });
+
+console.log('\n7. Bump badge colours');
+check('downgrade has a theme colour', BUMP_COLOR.downgrade, 'orange');
+check('all bumps coloured', ['major', 'minor', 'patch', 'downgrade'].every((b) => BUMP_COLOR[b]), true);
+
+console.log('\n8. Slot URL without its final slash');
+// The redirect is the inline classic script of catalog-site.html (the module cannot
+// load without the slash), so run that very script against a fake `location`.
+const html = readFileSync('catalog-site.html', 'utf8') // cwd is the viewer dir under pnpm run;
+const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+check('one inline redirect script', inline.length, 1);
+check('no publisher-rewritten asset prefix in it', inline[0].includes('./assets/'), false);
+const redirect = (pathname, search = '', hash = '') => {
+  let to = null;
+  new Function('location', inline[0])({ pathname, search, hash, replace: (u) => { to = u; } });
+  return to;
+};
+check('slot without slash', redirect('/catalog/v1.22.0'), '/catalog/v1.22.0/');
+check('keeps query and hash', redirect('/catalog/latest', '?theme=dark', '#output=x'), '/catalog/latest/?theme=dark#output=x');
+check('slash already there', redirect('/catalog/latest/'), null);
+check('index.html left alone', redirect('/catalog/latest/index.html'), null);
+check('other file left alone', redirect('/catalog/latest/page.htm'), null);
+check('root', redirect('/'), null);
+check('prerelease slot without slash', redirect('/catalog/v1.22.0-rc.1'), '/catalog/v1.22.0-rc.1/');
+check('versioned slot, numeric tail', redirect('/catalog/v2.0'), '/catalog/v2.0/');
 
 console.log();
 if (failures) {

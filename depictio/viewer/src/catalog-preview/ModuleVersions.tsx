@@ -13,11 +13,9 @@ import { CATALOG_ACCENT } from './shared';
 import type { CatalogGlobal, OutputEntry } from './shared';
 import { diffRenders, foldUnchanged } from './lineDiff';
 import type { RenderDiff, RenderLike } from './lineDiff';
-import { fetchModule, fetchVersions } from './siteData';
+import { BUMP_COLOR, fetchModule, fetchVersions } from './siteData';
 import type { Bump, ModuleHistory, ModuleVersion } from './siteData';
-import { openInSlotHref, pickSlot } from './siteTree';
-
-export const BUMP_COLOR: Record<string, string> = { major: 'red', minor: 'blue', patch: 'gray' };
+import { currentSlot, knownSlots, openInSlotHref, pickSlot } from './siteTree';
 
 export const BumpBadge: React.FC<{ bump?: Bump }> = ({ bump }) =>
   bump ? (
@@ -47,7 +45,7 @@ function useModuleHistory(g: CatalogGlobal | undefined, toolId?: string) {
         if (cancelled) return;
         setState({
           history,
-          order: versions ? [versions.latest || 'latest', ...versions.versions] : ['latest'],
+          order: versions ? knownSlots(versions) : [],
         });
       });
     return () => {
@@ -106,6 +104,16 @@ const ModuleVersionsBody: React.FC<{
   const href = window.location.href;
   const dataBase = g.dataBase ?? 'data/';
 
+  // The version on screen: the tool's own when the index carries one; a migrated
+  // slot may have none, so the entry whose `releases` lists this slot stands in.
+  // Unknown when neither identifies it.
+  const currentVersion: string | null = useMemo(() => {
+    if (toolVersion) return toolVersion;
+    const slotNow = currentSlot(window.location.pathname, order, g.version);
+    if (!slotNow) return null;
+    return history.versions.find((v) => v.releases.includes(slotNow))?.version ?? null;
+  }, [toolVersion, order, g.version, history.versions]);
+
   const compared: ModuleVersion | undefined = history.versions.find((v) => v.version === compare);
   const diffs = useMemo(() => {
     if (!compared) return [];
@@ -118,7 +126,7 @@ const ModuleVersionsBody: React.FC<{
   return (
     <Stack gap="sm">
       {history.versions.map((v) => {
-        const current = v.version === toolVersion;
+        const current = currentVersion !== null && v.version === currentVersion;
         const slot = pickSlot(v.releases, order);
         const has = v.outputs.some((o) => o.id === outId);
         const open = slot
@@ -158,7 +166,7 @@ const ModuleVersionsBody: React.FC<{
               ) : null}
             </Group>
             <Group gap={6} wrap="nowrap">
-              {current ? null : (
+              {current || currentVersion === null ? null : (
                 <Button
                   size="compact-xs"
                   variant={compare === v.version ? 'filled' : 'light'}
@@ -182,7 +190,7 @@ const ModuleVersionsBody: React.FC<{
       {compared ? (
         <Box data-testid="yaml-diff">
           <Text size="xs" c="dimmed" mb={6}>
-            {outId}: v{compared.version} (removed lines) → {toolVersion ? `v${toolVersion}` : 'this version'}{' '}
+            {outId}: v{compared.version} (removed lines) → {currentVersion ? `v${currentVersion}` : 'this version'}{' '}
             (added lines)
             {existed ? '' : ' — the output did not exist in v' + compared.version}
           </Text>

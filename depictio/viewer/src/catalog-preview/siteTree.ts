@@ -87,10 +87,17 @@ export function openInSlotHref(
   return u.href;
 }
 
-/** Among the slots shipping a version, the most recent one. `order` is newest
- *  first (`latest`, then versions.json); without it, the first listed. */
+/** The slots a `versions.json` lists, newest first: `latest` only when the file
+ *  names one (`"latest": null` means the site has no such slot), then `versions`. */
+export function knownSlots(v: { latest?: string | null; versions: string[] }): string[] {
+  return [...(v.latest ? [v.latest] : []), ...v.versions];
+}
+
+/** Among the slots shipping a version, the most recent one that exists. `order`
+ *  is the known slots, newest first (`latest` when present, then versions.json).
+ *  A slot absent from `order` is never chosen: null, so no link rather than one
+ *  to a slot that does not exist. */
 export function pickSlot(releases: string[], order: string[] = []): string | null {
-  if (!releases.length) return null;
   let best: string | null = null;
   let bestRank = Infinity;
   for (const r of releases) {
@@ -100,5 +107,5 @@ export function pickSlot(releases: string[], order: string[] = []): string | nul
       bestRank = rank;
     }
   }
-  return best ?? releases[0];
+  return best;
 }

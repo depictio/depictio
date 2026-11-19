@@ -11,7 +11,7 @@ import type { CatalogGlobal } from './shared';
 import { fetchReleases, fetchVersions } from './siteData';
 import type { ReleaseEntry, ReleasesFile, VersionsFile } from './siteData';
 import { BumpBadge } from './ModuleVersions';
-import { currentSlot, slotHref } from './siteTree';
+import { currentSlot, knownSlots, slotHref } from './siteTree';
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <Stack gap={4}>
@@ -142,7 +142,7 @@ const ReleaseBar: React.FC = () => {
     );
   };
 
-  const latestLabel = versions?.latest ?? 'latest';
+  const slotChoices = versions ? knownSlots(versions) : [];
   return (
     <Group gap={6} wrap="nowrap">
       {versions ? (
@@ -153,7 +153,7 @@ const ReleaseBar: React.FC = () => {
             aria-label="Catalog release"
             allowDeselect={false}
             value={slot}
-            data={[latestLabel, ...list].map((s) => ({ value: s, label: s }))}
+            data={slotChoices.map((s) => ({ value: s, label: s }))}
             onChange={go}
             comboboxProps={{ withinPortal: true }}
           />
