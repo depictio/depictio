@@ -1223,11 +1223,28 @@ def interactive_filter_columns(stored_metadata: list[dict[str, Any]]) -> set[str
 
 
 # ---------------------------------------------------------------------------
-# Frozen payload builders (in-process endpoint bodies, empty filter state)
+# Frozen payload builders (in-process endpoint bodies, at the tab's opening
+# filter state: its interactive defaults, ``interactive_defaults``)
 # ---------------------------------------------------------------------------
 
 
-def split_bulk_cards(bulk: dict[str, Any], card_indexes: list[str]) -> dict[str, dict[str, Any]]:
+def _filter_metadata(
+    filters: list[dict[str, Any]] | None, component_type: str, comp: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """What a render endpoint hands the loader for ``filters``: region-scoped for
+    the component, then cleaned. No access token reaches producer A, so links
+    are not resolved, exactly as for the endpoint bodies it calls."""
+    if not filters:
+        return []
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+    from depictio.api.v1.region_scope import scope_region_filters
+
+    return clean_filter_payload(scope_region_filters(list(filters), component_type, comp))
+
+
+def split_bulk_cards(
+    bulk: dict[str, Any], card_indexes: list[str], filter_count: int = 0
+) -> dict[str, dict[str, Any]]:
     """Per-component slices of a ``bulk_compute_cards`` response.
 
     The static runtime's ``bulkComputeCards`` shim merges every frozen
@@ -1242,8 +1259,8 @@ def split_bulk_cards(bulk: dict[str, Any], card_indexes: list[str]) -> dict[str,
             continue
         payload: dict[str, Any] = {
             "values": {idx: values[idx]},
-            "filter_applied": False,
-            "filter_count": 0,
+            "filter_applied": filter_count > 0,
+            "filter_count": filter_count,
         }
         if idx in secondary:
             payload["secondary_values"] = {idx: secondary[idx]}
@@ -1254,9 +1271,13 @@ def split_bulk_cards(bulk: dict[str, Any], card_indexes: list[str]) -> dict[str,
 
 
 def _freeze_cards(
-    dashboard_oid: ObjectId, cards: list[dict[str, Any]], user: ExportUser
+    dashboard_oid: ObjectId,
+    cards: list[dict[str, Any]],
+    user: ExportUser,
+    filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Fallback card payloads (bulk response shape) at the default filter state.
+    """Fallback card payloads (bulk response shape) at the default filter state
+    (``filters``: the tab's interactive defaults).
 
     Cards are live in the bundle; the frozen snapshot is the value the shim
     shows if the in-browser computation fails (live results win on merge).
@@ -1264,11 +1285,11 @@ def _freeze_cards(
     indexes = [str(c.get("index")) for c in cards]
     bulk = _routes().bulk_compute_cards(
         dashboard_oid,
-        {"filters": [], "component_ids": indexes},
+        {"filters": list(filters or []), "component_ids": indexes},
         current_user=user,
         access_token=None,
     )
-    return split_bulk_cards(bulk, indexes)
+    return split_bulk_cards(bulk, indexes, len(filters or []))
 
 
 def _freeze_table(
@@ -1276,8 +1297,10 @@ def _freeze_table(
     component_id: str,
     user: ExportUser,
     max_rows: int = TABLE_FROZEN_MAX_ROWS,
+    filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """The renderTable response shape, paged up to the shared row cap."""
+    """The renderTable response shape, paged up to the shared row cap, at the
+    default filter state (``filters``)."""
     routes = _routes()
     rows: list[dict[str, Any]] = []
     columns: list[dict[str, Any]] = []
@@ -1288,7 +1311,7 @@ def _freeze_table(
         page = routes.render_table_endpoint(
             dashboard_oid,
             component_id,
-            {"filters": [], "start": start, "limit": limit},
+            {"filters": list(filters or []), "start": start, "limit": limit},
             _response(),
             current_user=user,
             access_token=None,
@@ -1304,13 +1327,18 @@ def _freeze_table(
     return {"columns": columns, "rows": rows[:max_rows], "total": total}
 
 
-def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[str, Any], bool]:
+def _freeze_figure(
+    comp: dict[str, Any],
+    full_load: bool = False,
+    filters: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], bool]:
     """Build a figure by calling the Celery task *function* directly.
 
     ``build_figure_preview`` is the single worker code path preview and render
     share (RFC errata #4); calling the function (not ``.delay()``) runs it
     in-process. The payload mirrors ``render_figure_endpoint``'s task payload
-    with the default (empty) filter state.
+    at the default filter state: ``filters`` (the tab's interactive defaults),
+    none for a binding's scaffold, which must hold every row.
 
     ui-mode figures reach this only when ``build_binding`` refused them
     (bind-and-refill, RFC §4) — a bound figure ships a binding table and no
@@ -1344,7 +1372,7 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
             "selection_column": comp.get("selection_column"),
             "max_points": comp.get("max_points"),
         },
-        "filter_metadata": [],
+        "filter_metadata": _filter_metadata(filters, "figure", comp),
         "theme": "light",
         "full_load": full_load,
     }
@@ -1361,7 +1389,9 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
     return result, bool(meta.get("was_sampled", False))
 
 
-def advanced_viz_request(comp: dict[str, Any]) -> dict[str, Any] | None:
+def advanced_viz_request(
+    comp: dict[str, Any], filters: list[dict[str, Any]] | None = None
+) -> dict[str, Any] | None:
     """The ``/advanced_viz/data`` request an advanced_viz component implies.
 
     Columns and roles are derived from the component's persisted ``config``
@@ -1380,13 +1410,15 @@ def advanced_viz_request(comp: dict[str, Any]) -> dict[str, Any] | None:
         "wf_id": str(comp["wf_id"]),
         "dc_id": str(comp["dc_id"]),
         "columns": columns,
-        "filter_metadata": [],
+        "filter_metadata": list(filters or []),
         "viz_kind": advanced_viz_kind(comp) or None,
         "roles": advanced_viz_roles(comp),
     }
 
 
-def _freeze_advanced_viz(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
+def _freeze_advanced_viz(
+    comp: dict[str, Any], user: ExportUser, filters: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Freeze a data-path advanced_viz via the real ``/advanced_viz/data`` body.
 
     The response's ``sampling`` block is kept verbatim — it is what the
@@ -1398,7 +1430,7 @@ def _freeze_advanced_viz(comp: dict[str, Any], user: ExportUser) -> dict[str, An
     only costs the colours while a missing or unreadable tree is fatal
     (:class:`ProducerAError` here, ``omitted`` with the reason in the manifest).
     """
-    request = advanced_viz_request(comp)
+    request = advanced_viz_request(comp, filters)
     if request is None:
         raise ProducerAError(
             "advanced_viz component has no derivable columns (config carries no '*_col' bindings)"
@@ -1579,12 +1611,15 @@ def _run_with_timeout(func: Any, payload: dict[str, Any], timeout: float) -> Any
     return box.get("value")
 
 
-def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+def celery_compute_request(
+    comp: dict[str, Any], filters: list[dict[str, Any]] | None = None
+) -> tuple[str, dict[str, Any]] | None:
     """``(task function name, payload)`` for a Celery-computed advanced_viz.
 
     Mirrors the payload the component's renderer POSTs on first paint: the
     persisted ``config`` with every interactive control at the default the
-    renderer seeds it with, and an empty ``filter_metadata``. ``None`` when the
+    renderer seeds it with, and ``filters`` (the tab's interactive defaults) as
+    its ``filter_metadata``, residue-scoped as the dispatch endpoints scope it. ``None`` when the
     component implies no compute at all — an ``embedding`` without
     ``compute_method`` (its renderer reads coordinates from the table instead),
     or a config missing what its task requires.
@@ -1596,7 +1631,13 @@ def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] |
     if not wf_id or not dc_id:
         return None
     config = comp.get("config") or {}
-    base: dict[str, Any] = {"wf_id": str(wf_id), "dc_id": str(dc_id), "filter_metadata": []}
+    from depictio.api.v1.region_scope import scope_residue_filters
+
+    base: dict[str, Any] = {
+        "wf_id": str(wf_id),
+        "dc_id": str(dc_id),
+        "filter_metadata": scope_residue_filters(list(filters or []), kind),
+    }
 
     if kind == "embedding":
         method = str(config.get("compute_method") or "").lower()
@@ -1721,7 +1762,9 @@ _LOCAL_TASKS: dict[str, Any] = {"group_compare_opening": _group_compare_opening}
 
 
 def freeze_celery_compute(
-    comp: dict[str, Any], budget: ComputeBudget
+    comp: dict[str, Any],
+    budget: ComputeBudget,
+    filters: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, str]:
     """Run one advanced_viz Celery compute in-process. ``(payload, detail)``.
 
@@ -1731,7 +1774,7 @@ def freeze_celery_compute(
     successful compute returns the frozen payload the runtime's shim serves.
     """
     kind = advanced_viz_kind(comp) or "?"
-    plan = celery_compute_request(comp)
+    plan = celery_compute_request(comp, filters)
     if plan is None:
         return None, f"advanced_viz '{kind}' compute request cannot be derived from its config"
     task_name, request = plan
@@ -1835,6 +1878,8 @@ def _multiqc_call(
     (General Stats or a plot, mirroring ``MultiQCDispatch``), as a call."""
     routes = _routes()
     component_id = str(comp.get("index"))
+    # No filters, not even the tab's defaults: a bundled MultiQC tile is live,
+    # and this payload is the whole figure the runtime re-slices per filter.
     request = {"filters": [], "theme": "light"}
     _, _, _, is_gs = routes._resolve_selected_keys(comp)
     if is_gs:
@@ -2067,9 +2112,12 @@ def _multiqc_payload(
 
 
 def _freeze_map(
-    comp: dict[str, Any], user: ExportUser, category_colors: dict | None = None
+    comp: dict[str, Any],
+    user: ExportUser,
+    category_colors: dict | None = None,
+    filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Freeze a map at the default filter state, keeping its own basemap.
+    """Freeze a map at the default filter state (``filters``), keeping its own basemap.
 
     Mirrors ``render_map_endpoint``'s body (which reads the component from
     Mongo, so it cannot be reused verbatim) through the shared
@@ -2084,7 +2132,7 @@ def _freeze_map(
     df = _dtu().load_deltatable_lite(
         workflow_id=ObjectId(str(comp["wf_id"])),
         data_collection_id=dc_id,
-        metadata=None,
+        metadata=_filter_metadata(filters, "map", comp) or None,
         init_data={dc_id: init_entry},
     )
     return freeze_map_payload(comp, df, category_colors)
@@ -2680,6 +2728,7 @@ def decide_figure(
     comp: dict[str, Any],
     data_refs: dict[str, DataRef],
     pruned_frames: dict[str, pl.DataFrame],
+    filters: list[dict[str, Any]] | None = None,
 ) -> FigureDecision:
     """Offer a figure to the bind-and-refill builder and read off its tier.
 
@@ -2700,6 +2749,11 @@ def decide_figure(
     the payload away: the build-time ``was_sampled`` flag it returns is what
     separates ``frozen`` from ``partial``, and there is no cheaper way to learn
     it than to build the figure the server would have built.
+
+    ``filters`` is the tab's opening filter state (its interactive defaults): a
+    frozen figure is built under it, so it shows what the live tiles beside it
+    show when the bundle opens. A code figure's scaffold is built without it
+    (the binder needs every row), and rebuilt under it when it does not bind.
     """
     binding: BindingTable | None = None
     miss: BindingMiss | None = None
@@ -2773,8 +2827,8 @@ def decide_figure(
             )
         return FigureDecision(ComponentTier.LIVE, binding=binding, prologue=prologue)
 
-    if payload is None:
-        payload, sampled = _freeze_figure(comp)
+    if payload is None or filters:
+        payload, sampled = _freeze_figure(comp, filters=filters)
     if binder_error is not None:
         # Distinguishable from a real binding miss on purpose: the binder never
         # reached a verdict here, so reporting its "no unambiguous binding"
@@ -3498,10 +3552,15 @@ def export_manifest(
     )
     apply_dc_outcomes(items, tier_by_id, data_refs, dc_failures)
 
-    # Frozen tier: real endpoint bodies, default (empty) filter state.
-    # Bindings (bind-and-refill, RFC §4) — and, for code-mode figures, the
-    # prologue IR the runtime replays first (RFC §7) — are filled per figure
-    # below.
+    # Frozen tier: real endpoint bodies, at each tab's default filter state —
+    # its interactive defaults, the state the bundle's App opens the tab on
+    # (``withInteractiveDefaults``), so a frozen tile agrees with the live ones
+    # beside it until the reader changes a filter. Bindings (bind-and-refill,
+    # RFC §4) — and, for code-mode figures, the prologue IR the runtime replays
+    # first (RFC §7) — are filled per figure below.
+    from depictio.serverless.interactive_defaults import default_filters
+
+    tab_defaults = {tab.id: default_filters(tab.components) for tab in tabs}
     frozen: dict[str, FrozenPayload] = {}
     bindings: dict[str, BindingTable] = {}
     prologues: dict[str, list[PrologueOp]] = {}
@@ -3532,7 +3591,9 @@ def export_manifest(
             if not cards:
                 continue
             try:
-                for idx, payload in _freeze_cards(ObjectId(tab.id), cards, user).items():
+                for idx, payload in _freeze_cards(
+                    ObjectId(tab.id), cards, user, tab_defaults[tab.id]
+                ).items():
                     frozen[idx] = FrozenPayload(kind="card", payload=payload)
             except Exception as exc:
                 # Fallback payloads only — cards stay live off the bundled data.
@@ -3578,14 +3639,15 @@ def export_manifest(
             # not what a preflight is for.
             continue
         dashboard_oid = ObjectId(tab.id)
+        defaults = tab_defaults[tab.id]
         try:
             if ctype == "table":
                 frozen[component_id] = FrozenPayload(
                     kind="table",
-                    payload=_freeze_table(dashboard_oid, component_id, user),
+                    payload=_freeze_table(dashboard_oid, component_id, user, filters=defaults),
                 )
             elif ctype == "figure":
-                decision = decide_figure(comp, data_refs, pruned_frames)
+                decision = decide_figure(comp, data_refs, pruned_frames, defaults)
                 row.tier = decision.tier
                 row.reason = decision.reason
                 row.detail = decision.detail
@@ -3602,7 +3664,7 @@ def export_manifest(
                     # result the poll endpoint would have returned. A failure
                     # degrades this one component to omitted (with the error in
                     # its detail) and never aborts the export.
-                    compute_payload, detail = freeze_celery_compute(comp, budget)
+                    compute_payload, detail = freeze_celery_compute(comp, budget, defaults)
                     row.reason = TierReason.CELERY_COMPUTE
                     row.detail = detail
                     if compute_payload is None:
@@ -3616,7 +3678,7 @@ def export_manifest(
                 else:
                     frozen[component_id] = FrozenPayload(
                         kind="advanced-viz-data",
-                        payload=_freeze_advanced_viz(comp, user),
+                        payload=_freeze_advanced_viz(comp, user, defaults),
                     )
             elif ctype == "multiqc":
                 kind, payload = _freeze_multiqc(dashboard_oid, comp, user, multiqc_wait)
@@ -3627,11 +3689,11 @@ def export_manifest(
                 except Exception:
                     map_colors = None
                 frozen[component_id] = FrozenPayload(
-                    kind="map", payload=_freeze_map(comp, user, map_colors)
+                    kind="map", payload=_freeze_map(comp, user, map_colors, defaults)
                 )
             elif ctype == "image":
                 payload, note = _freeze_image(
-                    dashboard_oid, comp, component_id, user, object_budget, inline_blobs
+                    dashboard_oid, comp, component_id, user, object_budget, inline_blobs, defaults
                 )
                 frozen[component_id] = FrozenPayload(kind="image", payload=payload)
                 if note:
@@ -3653,6 +3715,7 @@ def export_manifest(
                     object_budget,
                     inline_blobs,
                     dry_run=decide_only,
+                    filters=defaults,
                 )
                 row.detail = outcome.detail()
                 if not decide_only:
@@ -3822,8 +3885,10 @@ def _freeze_image(
     user: ExportUser,
     budget: ObjectBudget,
     inline_blobs: dict[str, str],
+    filters: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], str | None]:
-    """A gallery's export-time snapshot: its default rows, images as thumbnails.
+    """A gallery's export-time snapshot: its default rows (under ``filters``, the
+    tab's interactive defaults), images as thumbnails.
 
     The rows come from ``render_image_paths_endpoint`` (the gallery's own
     order and cap); each image is read from the instance's bucket, downsampled
@@ -3840,7 +3905,7 @@ def _freeze_image(
     payload = routes.render_image_paths_endpoint(
         dashboard_oid,
         component_id,
-        {"filters": [], "max": cap},
+        {"filters": list(filters or []), "max": cap},
         current_user=user,
         access_token=None,
     )
@@ -3930,8 +3995,10 @@ def _freeze_jbrowse(
     budget: ObjectBudget,
     inline_blobs: dict[str, str] | None,
     dry_run: bool = False,
+    filters: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], Any]:
-    """The genome browser's session at the default filter state, with its files.
+    """The genome browser's session at the default filter state (``filters``),
+    with its files.
 
     ``render_jbrowse`` mints the session the live viewer would open; its
     assembly, track and index files are then read here, through the same
@@ -3946,7 +4013,7 @@ def _freeze_jbrowse(
     session = _routes().render_jbrowse_endpoint(
         dashboard_oid,
         component_id,
-        {"filters": []},
+        {"filters": list(filters or [])},
         current_user=user,
         access_token=None,
     )

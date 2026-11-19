@@ -1282,6 +1282,64 @@ def test_preflight_data_refs_describe_the_bundle_without_serialising_it(
     assert ref.aggregation_hash == "agghash-1"  # the server token still holds
 
 
+def test_frozen_payloads_are_taken_at_the_tabs_interactive_defaults(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch
+):
+    """The bundle's App opens a tab with its declared filter defaults applied
+    (``withInteractiveDefaults``), so live tiles open narrowed to them. Frozen
+    tiles are taken at that same state, or they would show every row beside
+    them under a "default state" badge. Only a binding scaffold stays whole."""
+    from depictio.api.v1 import celery_tasks as celery_mod
+    from depictio.api.v1 import db as db_mod
+    from depictio.api.v1.endpoints.advanced_viz_endpoints import routes as av_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as routes_mod
+
+    doc = _dashboard_doc()
+    for comp in doc["stored_metadata"]:
+        if comp["index"] == "filter-1":
+            comp["default_state"] = {"default_value": [2021]}
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
+    seen: dict[str, list] = {"cards": [], "figures": [], "av": []}
+
+    def cards(dashboard_id, request, current_user, access_token):
+        seen["cards"].append(request["filters"])
+        return {"values": {"card-1": 1.0}}
+
+    real_preview = celery_mod.build_figure_preview
+
+    def preview(payload):
+        seen["figures"].append((payload["metadata"]["visu_type"], payload["filter_metadata"]))
+        return real_preview({**payload, "filter_metadata": []})
+
+    real_av = av_mod.fetch_advanced_viz_data
+
+    def av(response, payload, current_user, access_token):
+        seen["av"].append(payload["filter_metadata"])
+        return real_av(response, {**payload, "filter_metadata": []}, current_user, access_token)
+
+    monkeypatch.setattr(routes_mod, "bulk_compute_cards", cards)
+    monkeypatch.setattr(celery_mod, "build_figure_preview", preview)
+    monkeypatch.setattr(av_mod, "fetch_advanced_viz_data", av)
+
+    manifest = export_manifest(
+        str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True)
+    ).manifest
+    assert manifest is not None
+
+    (card_filters,) = seen["cards"]
+    assert [(f["index"], f["value"]) for f in card_filters] == [("filter-1", ["2021"])]
+    assert manifest.frozen["card-1"].payload["filter_applied"] is True
+    # The code figure: its scaffold whole, its frozen payload under the default;
+    # the heatmap (no binding) under the default.
+    year = [{"interactive_component_type": "MultiSelect", "column_name": "year"}]
+    narrowed = [
+        (kind, [{k: f.get(k) for k in ("interactive_component_type", "column_name")} for f in fm])
+        for kind, fm in seen["figures"]
+    ]
+    assert narrowed == [("scatter", []), ("scatter", year), ("heatmap", year)]
+    assert [[f["index"] for f in fm] for fm in seen["av"]] == [["filter-1"]]
+
+
 FOREIGN_DC_OID = ObjectId("746b0f3c1e4a2d7f8e5b9cff")  # another project's collection
 
 
