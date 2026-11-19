@@ -11,7 +11,38 @@ find:
 recipe: mirtop/isomir_composition.py
 fixture: isomir_composition.tsv
 renders_as:
-  - { id: isomir_classes, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: sample, taxon: taxon, rank: rank, abundance: abundance} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: taxon }
-  - { component: table }
+  - id: isomir_classes
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: isomiR classes per sample
+    roles: {sample_id: sample, taxon: taxon, rank: rank, abundance: abundance}
+    config:
+      x_title: Sample
+      value_title: Share of miRNA reads
+      legend_pos: bottom
+    description: >-
+      Each bar is a sample, split into the classes of one partition of its miRNA reads,
+      such as the state of the 3' end or the 5' end. It answers how much of each
+      sample's miRNA reads matches the reference sequence and how the rest differs.
+
+      How to read: switch the partition with the rank control. A shifted 5' end moves the seed region and with it the targets. Compare samples or groups, since a class that differs
+      between conditions is worth following up in the landscape tile.
+
+      Note: a nucleotide change cannot be told from an editing event, a SNP or a
+      sequencing error, and a change seen in one sample only is most likely an error.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/31504201/
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: taxon
+    title: isomiR class filter
+    description: Pick one or more isomiR classes to keep. It filters the tiles of the dashboard that read this table.
+  - component: table
+    title: isomiR class table
+    description: >-
+      Each row is a sample, a partition and a class, with the reads in the class and
+      their percentage of the sample's miRNA reads. It answers how many reads fall
+      in each isomiR class.
+
+      How to read: filter by partition, sort by percentage to find the dominant
+      classes, and compare samples of different groups.

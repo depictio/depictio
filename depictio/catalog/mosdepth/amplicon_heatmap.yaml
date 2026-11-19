@@ -10,4 +10,24 @@ renders_as:
   # falls back to the literal "sample_id", which this matrix does not have,
   # and the component fails to render on the dashboard even though the
   # catalog preview (which infers the index from the frame) looks fine.
-  - { id: complex_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
+  # C6 N/A: value columns are the run's amplicons, known only at ingest.
+  - id: complex_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Amplicon coverage matrix
+    roles: {index: sample}
+    config:
+      cluster_cols: false
+      cluster_rows: true
+    description: >-
+      Each cell is an amplicon in one sample, coloured by its log10 read depth, with
+      amplicons in genome order and samples clustered by similarity. It answers
+      which amplicons fail and which samples fail together.
+
+      How to read: a pale column is an amplicon with low depth in many samples, which
+      points at a failing primer pair. A pale row is a poorly sequenced sample, and
+      samples that cluster together share the same drop-out pattern, often from the
+      same batch or primer scheme.
+
+      Lines and annotations: no mark is drawn. Values are log10 of the mean amplicon
+      depth, so 1 is 10 reads and 3 is 1000 reads.

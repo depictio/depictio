@@ -13,11 +13,10 @@
 # write around it (`*.consensus.peak_counts.bed`, `*.frags.len.txt`).
 id: seacr
 name: SEACR
-version: "1.0.0"
+version: "1.1.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/seacr/callpeak
 biotools_url: https://bio.tools/SEACR # from nf-core meta.yml identifier
 description: >-
-  Calls peaks and enriched regions from sparse CUT&RUN and chromatin profiling
-  data.
+  Calls peaks and enriched regions from sparse CUT&RUN and chromatin profiling data.
 homepage: https://github.com/FredHutch/SEACR
 stage: peaks

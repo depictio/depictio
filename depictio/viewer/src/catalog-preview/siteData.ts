@@ -28,16 +28,23 @@ export interface ModuleRender {
   index: string;
   component_type?: string;
   _yaml?: string | null;
+  /** The module revision this render last changed in, when it says. */
+  version?: string;
 }
 export interface ModuleOutput {
   id: string;
   name?: string;
+  /** The module revision this output last changed in, when it says. */
+  version?: string;
   renders?: ModuleRender[];
 }
 export interface ModuleVersion {
   version: string;
   bump?: Bump;
   releases: string[];
+  /** The module changelog's entry for this version, when it has one. */
+  date?: string;
+  changelog?: string[];
   outputs: ModuleOutput[];
 }
 export interface ModuleHistory {

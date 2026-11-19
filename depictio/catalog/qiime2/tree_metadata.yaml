@@ -11,11 +11,93 @@ fixture: tree_metadata.tsv
 renders_as:
   # `uniqueness` needs no second column, so it survives a run whose taxonomy
   # table carries no rank columns (they are optional in the recipe schema).
-  - { component: card, column: taxon, aggregation: nunique, secondary_layout: uniqueness }
-  - { component: card, column: confidence, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: taxon
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: uniqueness
+    title: Classified ASVs
+    caption: distinct ASVs, against all rows
+    description: >-
+      The hero number is the count of distinct ASVs that received a taxonomic assignment,
+      and the count beside it is the number of rows. It answers how many sequence variants
+      the classifier labelled.
+
+      How to read: the two numbers match when every ASV has a single assignment, so a gap
+      means some sequence variants appear in more than one row.
+  - component: card
+    column: confidence
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Classifier confidence
+    caption: median, with its spread
+    description: >-
+      The hero number is the median classifier confidence over the ASVs in view, and the box
+      shows their quartiles. It answers how certain the taxonomic assignments are.
+
+      How to read: values close to 1 are firm assignments, and a long lower whisker is a set
+      of ASVs assigned with little support. The classifier only keeps an assignment at a
+      rank when its confidence reaches the minimum set for the run, 0.7 by default, so the
+      lowest values sit near that floor.
+
+      Source: https://raw.githubusercontent.com/qiime2/q2-feature-classifier/master/q2_feature_classifier/classifier.py
+  - component: table
+    title: ASV taxonomy table
+    description: >-
+      Each row is an ASV with its assigned taxon, its ranks from kingdom to species, the
+      classifier confidence and the habitat where it is most abundant. It answers what
+      each sequence variant was called.
+
+      How to read: sort by confidence to find the weakest assignments, and look at empty
+      rank cells to see where the classifier stopped.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
-  - { component: card, column: Genus, aggregation: count, secondary_layout: completeness, top_n_count: 3 }
-  - { component: card, column: Genus, aggregation: nunique, secondary_layout: concentration, breakdown_col: Genus, top_n_count: 3 }
+  - component: card
+    column: taxon
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: Phylum
+    top_n_count: 3
+    filter_expr: "pl.col('Phylum') != ''"
+    title: ASVs by phylum
+    caption: ASVs, by phylum
+    description: >-
+      The hero number is the count of distinct ASVs with a phylum assignment, and the bars
+      rank the phyla by how many ASVs they hold. It answers which phyla are the most
+      diverse.
+
+      How to read: the leading phyla hold most of the sequence variants. ASVs without a
+      phylum are left out, so the number is below the total when some stay unclassified.
+  - component: card
+    column: Genus
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: completeness
+    title: Reached genus
+    caption: ASVs classified to genus
+    description: >-
+      The hero number is the count of ASVs with a genus assignment, shown as the share of
+      all ASVs, and the count beside it is the number of distinct genera. It answers how
+      deep the classification reaches.
+
+      How to read: a low share is common for environmental samples, where many sequences have
+      no close relative in the reference database. Compare with the phylum card to see
+      where the classifier stops.
+  - component: card
+    column: Genus
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: concentration
+    breakdown_col: Genus
+    top_n_count: 3
+    filter_expr: "pl.col('Genus') != ''"
+    title: Genus concentration
+    caption: ASVs held by the leading genera
+    description: >-
+      The hero number is the count of distinct genera, and the strip shows how much of the
+      classified ASVs the leading genera hold. It answers whether a few genera dominate.
+
+      How to read: a high share in the first genera means a narrow set of genera accounts for
+      most variants, and a flat strip means a diverse set. ASVs without a genus are left out.

@@ -50,7 +50,8 @@ def _render_to_dict(render, output) -> dict[str, Any]:
     bindings + data-derived viz-control defaults) so a catalog-added component
     persists exactly what the preview rendered — see ``advanced_viz_persist_config``.
     """
-    spec = render.model_dump(exclude_none=True, exclude_defaults=True)
+    # `version` is catalog bookkeeping, not a field of the component it builds.
+    spec = render.model_dump(exclude_none=True, exclude_defaults=True, exclude={"version"})
     if render.component == "advanced_viz":
         config = advanced_viz_persist_config(output, render)
         if config is not None:
@@ -109,6 +110,8 @@ def _match_dc_to_catalog(
                     {
                         "tool_id": entry.id,
                         "tool_name": entry.name,
+                        "module_version": entry.version,
+                        "output_version": output.version,
                         "output_id": output.id,
                         "name": output.name or output.id,
                         # The producing tool, when the catalog tool aggregates

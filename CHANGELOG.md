@@ -3,6 +3,39 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.22.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.22.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.22.0 → 1.22.1 [c6f46238f]
+* fix(local): build the viewer with pnpm 10, through corepack when PATH has an older pnpm [df02ea0c6]
+* fix(links): non-admin owners and editors refused by the links API [9c6cca9ac]
+* feat(helm): nightly off-cluster copy of backups and S3 data (rclone CronJob) [c1029fa6b]
+* chore(helm): EMBL internal prod backups volume 50Gi [3ebe5c397]
+* chore(helm): size the EMBL internal prod backups volume for real use (20Gi) [85a1c3565]
+* feat(helm): backups volume and scheduled MongoDB backups [698866554]
+* Update CHANGELOG.md for v1.22.0 [513ef4884]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.22.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable

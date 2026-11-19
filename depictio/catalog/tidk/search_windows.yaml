@@ -15,11 +15,63 @@ find:
 recipe: tidk/search_windows.py
 fixture: search_windows.tsv
 renders_as:
-  - { id: telomere_karyotype, component: advanced_viz, kind: ideogram,
-      roles: {chrom: sequence, start: start, end: end, value: repeats, sample: genome,
-              chrom_length: sequence_length} }
-  - { id: repeats_along_sequences, component: advanced_viz, kind: coverage_track,
-      roles: {chromosome: sequence, position: start, end: end, value: repeats, sample: genome} }
-  - { component: card, column: repeats, aggregation: sum,
-      secondary_layout: composition, breakdown_col: genome }
-  - { component: table }
+  - id: telomere_karyotype
+    component: advanced_viz
+    kind: ideogram
+    title: Telomeric repeats along sequences
+    roles: {chrom: sequence, start: start, end: end, value: repeats, sample: genome,
+            chrom_length: sequence_length}
+    description: >-
+      Each bar is a sequence of an assembly, drawn to its length and shaded in windows
+      by the count of telomeric repeat copies, with one karyotype per assembly. It
+      answers which sequences end in a telomere.
+
+      How to read: a sequence that is dark at both ends is capped by telomeres at both
+      sides, which is the signature of a complete chromosome. A sequence dark at one
+      end only was broken at the other. Repeats in the middle of a sequence are an
+      interstitial array or a repeat unit that is not the telomere.
+
+      Source: https://raw.githubusercontent.com/tolkit/telomeric-identifier/main/README.md
+  - id: repeats_along_sequences
+    component: advanced_viz
+    kind: coverage_track
+    title: Telomeric repeat counts per window
+    roles: {chromosome: sequence, position: start, end: end, value: repeats, sample: genome}
+    config:
+      color_by: sample
+    description: >-
+      Each point is a window along a sequence, with the count of telomeric repeat
+      copies found in it, drawn per assembly. It answers where along a sequence the
+      repeats pile up.
+
+      How to read: peaks at the first and last windows mark the telomeres. A flat low
+      track means no telomere was found, and a peak away from the ends is an internal
+      repeat array. Pick one sequence at a time to read the ends.
+
+      Source: https://raw.githubusercontent.com/tolkit/telomeric-identifier/main/README.md
+  - component: card
+    column: repeats
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: genome
+    headline: true
+    title: Telomeric repeat copies
+    caption: copies, by assembly
+    description: >-
+      The hero number is the total count of telomeric repeat copies in all windows, with
+      the median and the largest window beside it, and the bar splits the copies by
+      assembly. It answers how much telomeric repeat each assembly holds.
+
+      How to read: a larger share means more telomeric sequence assembled. Compare with
+      the number of sequences, because an assembly of many small pieces can hold many
+      repeats without complete chromosomes.
+  - component: table
+    title: Repeat windows
+    description: >-
+      Each row is a window of a sequence with the forward and reverse repeat counts,
+      their sum, the repeat unit searched and the sequence length. It answers the exact
+      counts behind the karyotype.
+
+      How to read: sort by repeats to list the strongest windows, then check whether
+      they sit at the start or the end of their sequence.

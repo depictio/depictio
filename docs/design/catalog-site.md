@@ -26,8 +26,17 @@ data/index.json               every tool, output and render, without their data
 data/outputs/<output_id>.json each output's {fixturePreview, data}, fetched when it is shown
 ```
 
-`data/index.json` has `version`, `tools[]` (each with the module `version` from its
-`module.yaml`) and, per output, `ok` (and `error` when its previews could not be built).
+`data/index.json` has `version`, `tools[]` and, per output, `ok` (and `error` when its
+previews could not be built). The versions it carries follow the catalog's own model
+(`depictio/catalog/SCHEMA.md`, "Versions"); the publisher reads them where `payload.py`
+writes them:
+
+| What                                 | Where in `data/index.json`                                     |
+| ------------------------------------ | -------------------------------------------------------------- |
+| module version                       | `tools[].version` (also `outputs[].output.module_version`)     |
+| module changelog (newest first)      | `tools[].changelog[]`: `{version, date?, changes[]}`           |
+| output last changed in               | `tools[].outputs[].output.output_version` (optional)           |
+| render last changed in               | `tools[].outputs[].renders[]._version` (optional)              |
 
 The export is **reproducible**: the same catalog gives the same bytes, in any process. The
 measured `compute_ms` of the computed renders (upset, sankey, embedding) is written as `0`,
@@ -63,7 +72,7 @@ not listed in `assets.json`, and the slot's `index.html` keeps pointing at it as
 
 - An output whose data did not change between two releases points at the same object, and a
   bundle that did not change at the same chunks. A release that changes nothing costs its
-  `index.json` (~230 KB gzip). Every release is kept.
+  `index.json` (~640 KB gzip). Every release is kept.
 - The viewer reads an output from `../objects/<dataRef>.json` when its entry has a `dataRef`,
   else from `data/outputs/<id>.json` (a bare export).
 - `assets/` and `objects/` only grow while a slot references them. The publisher drops what
@@ -98,7 +107,14 @@ not listed in `assets.json`, and the slot's `index.html` keeps pointing at it as
       "version": "1.1.0",
       "bump": "minor",
       "releases": ["latest", "v1.23.0"],
-      "outputs": [{"id": "ivar_variants", "name": "...", "renders": [{"index": "...", "component_type": "...", "_yaml": "..."}]}]
+      "date": "2026-11-18",
+      "changelog": ["ivar_variants: one row per variant and sample"],
+      "outputs": [
+        {
+          "id": "ivar_variants", "name": "...", "version": "1.1.0",
+          "renders": [{"index": "...", "component_type": "...", "_yaml": "...", "version": "1.1.0"}]
+        }
+      ]
     },
     {"version": "1.0.0", "bump": null, "releases": ["v1.22.0"], "outputs": [...]}
   ]
@@ -108,6 +124,20 @@ not listed in `assets.json`, and the slot's `index.html` keeps pointing at it as
 Newest first by semver. `releases` lists the slots that ship that version, so the viewer can
 open the module in a release that had it. `bump` is the semver step from the version below it
 (`major`: an output column changed, `minor`: a reader, recipe or render, `patch`: text).
+
+`changelog` is the `changes` of that version's entry in the module's changelog, and `date`
+its date; both are absent when no slot's changelog has an entry for that version. A changelog
+is cumulative, so the newest slot holding an entry for a version gives its text, whichever
+slot shipped it. An output's `version` and a render's `version` are the module revision they
+last changed in (`output_version` and `_version` in the index); absent when it does not say,
+which means "not said", not "unchanged". With them the viewer names the output and the
+renders a version changed, beside the YAML diff.
+
+In the viewer the history completes the output's version chip (`VersionChip`, which shows
+the revision this slot ships: module, output, render and changelog). On a published site
+the chip's popover ends with "History across releases", which opens this file as a list of
+versions (changelog, what changed in this output, "Open in <slot>", "Compare" for the YAML
+diff). A bare export has no `modules/` and the chip stays as it is.
 
 A version that went back (say `latest` ships `1.0.0` while `v1.23.0` shipped `1.1.0`) stays in
 the history at its semver place and `releases` stays exact: `1.0.0` lists `latest`. The step
@@ -147,7 +177,7 @@ against an unknown version; it still appears in `added` / `removed` and in the o
 
 Any static host works. It should:
 
-- serve `.json`, `.js` and `.css` compressed (`index.json` is 1.8 MB raw, 230 KB gzip);
+- serve `.json`, `.js` and `.css` compressed (`index.json` is 5.4 MB raw, 640 KB gzip);
 - cache `assets/` and `objects/` as immutable, and revalidate `index.html`, `*.json` at the
   slot level, `versions.json`, `releases.json` and `modules/`;
 - sit on the same origin as the documentation (`docs.example.org/catalog/` rather than

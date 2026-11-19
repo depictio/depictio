@@ -12,10 +12,70 @@ renders_as:
   - id: substitution_profile
     component: advanced_viz
     kind: profile
+    title: Substituted bases around the cut site
     roles: { series: sample, x: offset, y: substitution_pct }
+    config:
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with a substituted base (%)
+      legend_pos: bottom
+    description: >-
+      Each curve is a library: at every offset from the cut site, the share of aligned
+      reads carrying a base other than the most common one at that position. It answers
+      where bases change around the cut.
+
+      How to read: a flat line near zero is a nuclease run with no substitution signal. A
+      hump near the cut can mean base editing, and isolated spikes are usually single
+      nucleotide variants of the sample or sequencing errors. Compare with the deletion
+      profile to tell editing from noise.
+
+      Lines and annotations: the vertical marker at offset 0 is the cut site the pipeline
+      reports for the amplicon (the cut site file written by the CIGAR parser). This
+      catalog's recipe takes the most common base of the library at each position as
+      the reference, not the genome base, so a homozygous variant shows no substitution.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
   - id: gap_profile
     component: advanced_viz
     kind: profile
+    title: Gaps around the cut site
     roles: { series: sample, x: offset, y: gap_pct }
-  - { component: interactive, interactive_type: RangeSlider, column_name: offset }
-  - { component: table }
+    config:
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with a gap (%)
+      legend_pos: bottom
+    description: >-
+      Each curve is a library: at every offset from the cut site, the share of aligned
+      reads with a gap, meaning a deleted base. It answers where deletions pile up around
+      the cut.
+
+      How to read: a nuclease edit shows a gap peak at the cut that decays on both sides.
+      A gap level that is high everywhere points to an alignment or amplicon issue rather
+      than editing. Compare with the deletion profile of the same library.
+
+      Lines and annotations: the vertical marker at offset 0 is the cut site the pipeline
+      reports for the amplicon. It is a landmark, not a cut-off.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: offset
+    title: Offset window
+    description: >-
+      Restricts the tiles to a range of offsets from the cut site.
+
+      How to read: narrow it to the protospacer to read the bases the guide targets.
+  - component: table
+    title: Substitution rate table
+    description: >-
+      Each row is a library and an amplicon position, with its offset from the cut site,
+      its most common base and the shares of reads with another base or a gap. It answers
+      the exact values behind the curves.
+
+      How to read: sort by substitution share to list the positions that change most, and
+      filter on a library to read one sample.

@@ -8,12 +8,117 @@ description: >-
 find:
   path_glob: "**/analysis/diffexp/gene_expression_graphclust/differential_expression.csv"
 recipe: cellranger/diffexp.py
+# The fixture is enriched synthetically from 18 real rows (copies with seeded noise), so the preview shows several clusters.
 fixture: diffexp.tsv
 renders_as:
-  - { id: cluster_markers, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene, contrast: cluster, lfc: log2fc, significance: adjusted_pvalue, label: gene} }
-  - { id: cluster_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene, effect_size: log2fc, significance: adjusted_pvalue, category: cluster_label, label: gene} }
-  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: cluster, top_n_count: 3 }
-  - { id: diffexp_resolution_picker, component: interactive, interactive_type: Select, column_name: resolution }
-  - { component: card, column: log2fc, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: adjusted_pvalue, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene }
+  # Cell Ranger publishes no cut-off for its marker tests. The lines below are the
+  # recipe's own labelling cut-off (`_LABEL_PADJ_MAX = 0.05` in diffexp.py, no
+  # fold-change line), not a Cell Ranger call, and the descriptions say so.
+  - id: cluster_markers
+    component: advanced_viz
+    kind: da_barplot
+    title: Top markers per cluster
+    roles: {feature_id: gene, contrast: cluster, lfc: log2fc, significance: adjusted_pvalue, label: gene}
+    config:
+      significance_threshold: 0.05
+      effect_label: Log2 fold change
+      top_n: 10
+    description: >-
+      Each bar is a gene: its log2 fold change in one cluster against all other cells, for the
+      genes with the largest change. It answers which genes characterise each cluster.
+
+      How to read: long bars to the right are markers of that cluster. Bars are marked when
+      their adjusted p-value passes the display limit, and a strong change without it usually
+      comes from very few cells.
+
+      Lines and annotations: the limit is an adjusted p-value of 0.05, the cut-off this
+      module's recipe uses to label marker genes, not read from the run. Cell Ranger defines
+      no cut-off for its marker tests.
+  - id: cluster_volcano
+    component: advanced_viz
+    kind: volcano
+    title: Marker volcano per cluster
+    roles: {feature_id: gene, effect_size: log2fc, significance: adjusted_pvalue, category: cluster_label, label: gene}
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 0.0
+      top_n_labels: 10
+      effect_label: Log2 fold change
+      significance_label: -log10 adjusted p-value
+    description: >-
+      Each point is a gene tested in one cluster against all other cells: its log2 fold change
+      on the horizontal axis and its adjusted p-value on the vertical axis. It answers which
+      genes separate a cluster and how confidently.
+
+      How to read: genes in the upper right are strong, confident markers of the cluster, and
+      genes in the upper left are depleted in it. Only the most significant genes per cluster
+      are kept, so the lower part of the plot is truncated.
+
+      Lines and annotations: the horizontal line is an adjusted p-value of 0.05, the cut-off
+      this module's recipe uses to label marker genes, not read from the run. No fold-change
+      line is drawn, because Cell Ranger defines no cut-off for its marker tests.
+  - component: card
+    column: log2fc
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: cluster
+    top_n_count: 3
+    caption: strongest marker fold change, by cluster
+    title: Strongest marker per cluster
+    description: >-
+      The hero number is the largest log2 fold change among the marker genes, and the bars
+      rank the clusters with the strongest marker. It answers which clusters are most clearly
+      defined.
+
+      How to read: a cluster with a high top marker is well separated from the others. A low
+      value means its markers are weak, so its identity is less clear.
+  - id: diffexp_resolution_picker
+    component: interactive
+    interactive_type: Select
+    column_name: resolution
+    title: Clustering resolution
+    description: >-
+      Switches between the graph-based clustering and the k-means clusterings Cell Ranger
+      ran. It answers how the markers change with the number of clusters.
+
+      How to read: pick one clustering at a time, since a cluster name belongs to one of them.
+  - component: card
+    column: log2fc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "pl.col('log2fc') > 0"
+    caption: fold change of up-regulated markers, with its spread
+    title: Fold change of up markers
+    description: >-
+      The hero number is the median log2 fold change of the marker genes that are higher in
+      their cluster, and the box shows its spread. It answers how strong the up-regulated
+      markers are.
+
+      How to read: the card keeps only positive changes, because a median over both
+      directions cancels to about zero. A high median means sharply defined clusters.
+  - component: card
+    column: mean_counts
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: mean counts of markers, with their spread
+    title: Expression of markers
+    description: >-
+      The hero number is the median of the mean UMI counts of the marker genes in their
+      cluster, and the histogram shows the distribution. It answers whether the markers are
+      expressed at a usable level.
+
+      How to read: a pile near zero means markers detected in few counts, which are less
+      reliable for annotating a cluster.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene
+    title: Cluster marker genes
+    description: >-
+      Each row is a marker gene of one cluster with its rank, mean counts, log2 fold change
+      and adjusted p-value. It answers the exact statistics behind the plots and lets a row
+      selection filter the others.
+
+      How to read: sort by rank within a cluster to read its best markers first.

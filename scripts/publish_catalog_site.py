@@ -300,9 +300,34 @@ def _drop_unreferenced(directory: Path, keep: set[str], suffix: str = "") -> lis
 
 
 def _reduced_render(render: dict[str, Any]) -> dict[str, Any]:
-    return {
+    reduced = {
         k: render[k] for k in ("index", "component_type", "_yaml", "kind", "_variant") if k in render
     }
+    # The module revision this render last changed in (`renders_as[].version`), which
+    # the index carries as `_version`; absent when the render does not say.
+    if render.get("_version"):
+        reduced["version"] = str(render["_version"])
+    return reduced
+
+
+def _reduced_output(entry: dict[str, Any]) -> dict[str, Any]:
+    info = entry.get("output") or {}
+    reduced: dict[str, Any] = {"id": _output_id(entry), "name": info.get("name")}
+    # The module revision this output last changed in (the output's `version`).
+    if info.get("output_version"):
+        reduced["version"] = str(info["output_version"])
+    reduced["renders"] = [_reduced_render(r) for r in entry.get("renders") or []]
+    return reduced
+
+
+def _changelog_entries(tool: dict[str, Any]) -> list[dict[str, Any]]:
+    """The module's `changelog` from an index entry: the tool's own, else (an index
+    exported between the two) the first output's copy of it."""
+    log = tool.get("changelog")
+    if not isinstance(log, list):
+        outs = _outputs(tool)
+        log = ((outs[0].get("output") or {}).get("changelog") if outs else None) or []
+    return [e for e in log if isinstance(e, dict) and e.get("version")]
 
 
 def build_modules(site: Path, names: list[str]) -> dict[str, dict[str, Any]]:
@@ -314,8 +339,12 @@ def build_modules(site: Path, names: list[str]) -> dict[str, dict[str, Any]]:
             if not _SAFE_NAME.fullmatch(tid):
                 raise SystemExit(f"tool id {tid!r} cannot name a file of the catalog site")
             module = modules.setdefault(
-                tid, {"id": tid, "name": tool.get("name") or tid, "_versions": {}}
+                tid, {"id": tid, "name": tool.get("name") or tid, "_versions": {}, "_log": {}}
             )
+            # A changelog is cumulative: the newest slot that has an entry for a
+            # version gives its text, whichever slot shipped that version.
+            for e in _changelog_entries(tool):
+                module["_log"].setdefault(str(e["version"]), e)
             version = _tool_version(tool)
             if version is None:
                 continue  # an export that predates module versions: unknown, not 1.0.0
@@ -325,14 +354,7 @@ def build_modules(site: Path, names: list[str]) -> dict[str, dict[str, Any]]:
                 module["_versions"][version] = {
                     "version": version,
                     "releases": [slot],
-                    "outputs": [
-                        {
-                            "id": _output_id(e),
-                            "name": (e.get("output") or {}).get("name"),
-                            "renders": [_reduced_render(r) for r in e.get("renders") or []],
-                        }
-                        for e in _outputs(tool)
-                    ],
+                    "outputs": [_reduced_output(e) for e in _outputs(tool)],
                 }
             else:
                 known["releases"].append(slot)
@@ -345,14 +367,18 @@ def build_modules(site: Path, names: list[str]) -> dict[str, dict[str, Any]]:
         history = []
         for i, v in enumerate(ordered):
             lower = ordered[i + 1]["version"] if i + 1 < len(ordered) else None
-            history.append(
-                {
-                    "version": v["version"],
-                    "bump": bump_between(lower, v["version"]) if lower else None,
-                    "releases": v["releases"],
-                    "outputs": v["outputs"],
-                }
-            )
+            item: dict[str, Any] = {
+                "version": v["version"],
+                "bump": bump_between(lower, v["version"]) if lower else None,
+                "releases": v["releases"],
+            }
+            log = module["_log"].get(v["version"])
+            if log is not None:
+                if log.get("date"):
+                    item["date"] = str(log["date"])
+                item["changelog"] = [str(c) for c in log.get("changes") or []]
+            item["outputs"] = v["outputs"]
+            history.append(item)
         result[tid] = {"id": tid, "name": module["name"], "versions": history}
     return result
 

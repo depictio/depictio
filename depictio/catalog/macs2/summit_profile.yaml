@@ -18,10 +18,103 @@ fixture: summit_profile.tsv
 renders_as:
   # Cross-sample summit concordance first: a central spike is agreement between
   # libraries, a flat curve is none.
-  - { id: summit_concordance_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: offset_bp, y: neighbour_summit_density} }
+  - id: summit_concordance_profile
+    component: advanced_viz
+    kind: profile
+    title: Summit agreement between samples
+    roles: {series: sample, x: offset_bp, y: neighbour_summit_density}
+    config:
+      x_title: Distance from summit (bp)
+      y_title: Other samples' summits per kb
+      reference_x: 0
+      reference_label: Summit
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample: how densely the summits called in the other samples fall
+      around its own summits, by distance from the summit. It answers whether
+      independent libraries place their peaks on the same sites.
+
+      How to read: a sharp spike at the centre means the other samples put their
+      summits on this sample's summits, so replicates agree or factors share sites. A
+      flat curve means they do not. The count is over every other sample of the run,
+      so filter to a comparison of interest.
+
+      Lines and annotations: the vertical marker at zero is the summit of each anchor
+      peak, which is the centre of the window by construction. This is an aggregate of
+      peak calls and not a read coverage signal.
   # The same grid, read as the average shape of one call around its summit.
-  - { id: summit_footprint_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: offset_bp, y: peak_footprint} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: offset_bp, y: neighbour_summit_density, color: sample, title: Other samples' summits around each summit} }
-  - { component: card, column: neighbour_summit_density, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: peak_footprint, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: summit_footprint_profile
+    component: advanced_viz
+    kind: profile
+    title: Average peak footprint
+    roles: {series: sample, x: offset_bp, y: peak_footprint}
+    config:
+      x_title: Distance from summit (bp)
+      y_title: Share of peaks covering the position
+      reference_x: 0
+      reference_label: Summit
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample: the share of its peaks whose called interval covers each
+      position, by distance from their own summit. It answers how wide the typical
+      peak is around its summit.
+
+      How to read: the curve is one at the summit and falls as peaks end. A curve that
+      drops within a few hundred base pairs is a sharp, transcription factor like
+      sample, and one that stays high for kilobases is a broad mark. The distance at
+      which a curve crosses one half is the median half-width of its peaks.
+
+      Lines and annotations: the vertical marker at zero is the summit of each peak,
+      the centre of the window by construction.
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: offset_bp
+      y: neighbour_summit_density
+      color: sample
+      labels: {offset_bp: Distance from summit (bp), neighbour_summit_density: Other samples' summits per kb, sample: Sample}
+    title: Other samples' summits around each summit
+    description: >-
+      Each line is a sample: how densely the summits of the other samples fall around
+      its own summits, by distance from the summit. It answers the same question as
+      the profile above in a plain line chart.
+
+      How to read: a central peak means agreement between libraries, and a flat line at
+      the background means none. Compare the lines of replicates, which should
+      overlap.
+  - component: card
+    column: neighbour_summit_density
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: compact
+    caption: highest density, with the median and lowest
+    title: Peak summit agreement
+    description: >-
+      The hero number is the highest density of other samples' summits found around an
+      anchor summit, with the median and the lowest across bins. It answers how
+      strongly libraries concentrate their summits on the same sites.
+
+      How to read: a maximum far above the median means a central spike, so summits
+      agree. A maximum close to the median is a flat curve with no agreement.
+  - component: card
+    column: peak_footprint
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: footprint share, with its spread
+    title: Peak footprint
+    description: >-
+      The hero number is the median share of peaks covering a position in the window,
+      and the box shows its spread. It answers how far the typical peak extends from
+      its summit.
+
+      How to read: a high median means peaks cover most of the window, which is
+      typical of broad calls. A low median means narrow peaks.
+  - component: table
+    title: Summit profile table
+    description: >-
+      Each row is a sample at one distance from the summit, with the number of
+      anchor summits, the peak footprint and the density of other samples' summits. It
+      answers the exact values behind the curves.
+
+      How to read: filter to one sample and sort by distance to read its profile.

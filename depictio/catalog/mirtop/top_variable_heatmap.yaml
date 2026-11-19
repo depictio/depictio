@@ -10,5 +10,26 @@ find:
 recipe: mirtop/top_variable_heatmap.py
 fixture: top_variable_heatmap.tsv
 renders_as:
-  - { id: top_variable_mirna_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: mirna} }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples, known only at ingest; and no
+  # row annotation column exists beyond the miRNA name.
+  - id: top_variable_mirna_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Most variable miRNAs
+    roles: {index: mirna}
+    description: >-
+      Each cell is the expression of one miRNA in one sample, as log2 counts per million
+      plus one, for the most variable expressed miRNAs. It answers which miRNAs vary
+      across samples and which samples resemble each other.
+
+      How to read: rows and columns are clustered, so samples of one condition should
+      fall into the same block, with a block of miRNAs that is high in that block of
+      samples. A sample that clusters apart from its group is a candidate outlier. When the
+      design columns are given, they are drawn as annotations above the columns.
+  - component: table
+    title: Most variable miRNAs table
+    description: >-
+      Each row is a miRNA, with its log2 expression in every sample. It answers the exact
+      values behind the heatmap.
+
+      How to read: sort a sample column to find its highest miRNAs.

@@ -12,8 +12,62 @@ find:
 recipe: mcquant/marker_summary.py
 fixture: marker_summary.tsv
 renders_as:
-  - { id: brightest_markers, component: card, column: median_intensity, aggregation: median, secondary_layout: top_n, breakdown_col: marker, top_n_count: 3 }
-  - { id: marker_spread, component: card, column: cv, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: bar, dict_kwargs: { x: marker, y: median_asinh, color: segmenter, barmode: group } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: marker }
-  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }
+  - id: brightest_markers
+    component: card
+    column: median_intensity
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: marker
+    top_n_count: 3
+    title: Typical marker brightness
+    caption: median intensity, brightest markers
+    description: >-
+      The hero number is the median over images of each marker's median cell intensity, and the bars rank the brightest markers. It answers which channels carry the most signal.
+
+      How to read: a wide gap between the brightest and the dimmest marker is normal in a panel, because stains differ in dynamic range. A marker near the floor in every image deserves a check of its antibody or exposure.
+  - id: marker_spread
+    component: card
+    column: cv
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Marker variability
+    caption: median variation, with its spread
+    description: >-
+      The hero number is the median coefficient of variation of a marker's intensity across the cells of an image, and the box shows its spread. It answers how unevenly markers are expressed across cells.
+
+      How to read: a high value means the marker is expressed in a subset of cells, as a lineage marker should be. A low value means a uniform signal, which suits a nuclear stain but is suspicious for a lineage marker.
+  - id: marker_median_bar
+    component: figure
+    visu_type: box
+    title: Median intensity per marker
+    dict_kwargs:
+      x: marker
+      y: median_asinh
+      color: segmenter
+      boxmode: group
+      labels:
+        marker: Marker
+        median_asinh: "Median intensity, asinh(x / 150)"
+        segmenter: Segmentation method
+    description: >-
+      Each box spreads the median asinh intensity of one marker over the images in view, one value per image, grouped by segmentation method. It answers how bright each channel is and whether the methods measure it alike.
+
+      How to read: similar boxes across methods mean the measurement does not depend on the mask. A marker that is bright under one method only is picking up neighbouring signal or a different cell compartment.
+
+      Note: intensities are shown on the asinh(x / 150) scale, a fixed cofactor of this catalog module and not read from the run.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: marker
+    title: Marker
+    description: >-
+      Pick one or more markers to restrict the tiles to them.
+  - component: table
+    title: Marker summary per image
+    description: >-
+      One row per image, segmentation method and marker with the cell count, intensity quartiles and variation. Selecting rows filters the tab to them.
+
+      How to read: sort by variation to find markers that are uniform or patchy.
+    row_selection_enabled: true
+    row_selection_column: summary_key

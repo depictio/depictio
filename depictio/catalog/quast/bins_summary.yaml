@@ -14,19 +14,161 @@ find:
 recipe: quast/bins_summary.py
 fixture: bins_summary.tsv
 renders_as:
-  - { id: bin_n50_vs_length, component: advanced_viz, kind: scatter_xy,
-      roles: {x: total_length, y: n50, label: bin_id, color: binner, size: n_contigs} }
-  - { id: bin_gc_vs_length, component: advanced_viz, kind: scatter_xy,
-      roles: {x: total_length, y: gc_percent, label: bin_id, color: assembler, size: n_contigs} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: n_contigs, color: binner, title: Contigs per bin by binner} }
-  - { component: card, column: total_length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: n50, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: n_contigs, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: bin_id, aggregation: nunique,
-      secondary_layout: top_n, breakdown_col: binner, top_n_count: 5 }
-  - { component: card, column: gc_percent, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: table }
+  # C1: coloured by binner (the comparison of interest). QUAST defines no cut-off for
+  # N50 or bin length, so there are no reference lines.
+  - id: bin_n50_vs_length
+    component: advanced_viz
+    kind: scatter_xy
+    title: Bin contiguity against bin length
+    roles: {x: total_length, y: n50, label: bin_id, color: binner, size: n_contigs}
+    config:
+      x_title: Bin length (bp)
+      y_title: Contig N50 of the bin (bp)
+      log_y: true
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a recovered bin: its total length on the horizontal axis and
+      the N50 of its contigs on the vertical axis, coloured by binner and sized by
+      the number of contigs. It answers which bins are a few long contigs and
+      which are a pile of fragments.
+
+      How to read: bins toward the top are close to a single contiguous genome.
+      Large points low on the axis hold many small contigs, so a high completeness
+      estimate for them may be carried by fragments. Compare binners on the same
+      assembly.
+
+      Note: QUAST defines no pass mark for N50 or bin length. The vertical axis is
+      logarithmic.
+
+      Lines and annotations: The dashed line is the median contig N50 of the bins
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of QUAST.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - id: bin_gc_vs_length
+    component: advanced_viz
+    kind: scatter_xy
+    title: Bin GC content against length
+    roles: {x: total_length, y: gc_percent, label: bin_id, color: assembler, size: n_contigs}
+    config:
+      x_title: Bin length (bp)
+      y_title: GC content (%)
+      top_n_labels: 5
+    description: >-
+      Each point is a recovered bin: its total length and its GC percentage, coloured
+      by the assembler it came from and sized by the number of contigs. It answers
+      whether bins have a coherent base composition.
+
+      How to read: bins of one organism sit at a single GC. A bin far from its
+      neighbours, or one that is much longer than the rest, may mix several
+      organisms, so check it against a completeness and contamination estimate.
+  - component: figure
+    visu_type: histogram
+    title: Contigs per bin by binner
+    dict_kwargs:
+      x: n_contigs
+      color: binner
+      labels: {n_contigs: Contigs in the bin, binner: Binner, count: Bins}
+    reference_lines:
+      - axis: x
+        stat: median
+        column: n_contigs
+    description: >-
+      Each bar counts the bins that hold a given number of contigs, coloured by
+      binner. It answers how fragmented the recovered bins are.
+
+      How to read: a distribution piled at low counts means bins close to whole
+      genomes. A long tail of bins with hundreds of contigs is fragmented, and the
+      binner that produces more of them is the weaker choice for this assembly.
+
+      Lines and annotations: The dashed line is the median number of contigs per
+      bin of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of QUAST.
+  - component: card
+    column: total_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median bin length, with its spread
+    title: Bin length
+    description: >-
+      The hero number is the median length of a recovered bin, and the box shows the
+      spread across bins. It answers how large a typical bin is.
+
+      How to read: compare bins of the same sample and binner. A bin much shorter than
+      its siblings may be a partial genome, so read it with the contig counts.
+  - component: card
+    column: n50
+    aggregation: median
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: binner
+    top_n_count: 4
+    caption: median N50, by binner
+    title: Bin contig N50
+    description: >-
+      The hero number is the median contig N50 of the bins in view, and the bars
+      rank the binners by their median. It answers which binner recovers the most
+      contiguous bins.
+
+      How to read: N50 is the contig length such that contigs of at least that length
+      cover half of the bin, so higher is better. Values span orders of magnitude,
+      so the card ranks medians instead of drawing a box.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - component: card
+    column: n_contigs
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: median contigs per bin, by assembler
+    title: Contigs per bin
+    description: >-
+      The hero number is the median count of contigs in a bin, and the bars rank the
+      assemblers by the median of their bins. It answers which assembler gives the
+      least fragmented bins.
+
+      How to read: a low median means bins close to whole genomes. A high median
+      means bins assembled from many fragments, whichever binner grouped them.
+  - component: card
+    column: bin_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: binner
+    top_n_count: 4
+    caption: bins, by binner
+    title: Recovered bins
+    description: >-
+      The hero number is the count of distinct bins, and the bars rank the binners by
+      how many each recovered. It answers how productive each binner was.
+
+      How to read: more bins is not better by itself, since fragmented or
+      contaminated bins also count. Read it with the N50 and completeness tiles.
+  - component: card
+    column: gc_percent
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: bins, by GC content
+    title: Bin GC content
+    description: >-
+      The hero number is the median GC percentage of the bins in view, and the
+      histogram shows how bins distribute over GC. It answers how varied the
+      community's base composition is.
+
+      How to read: a broad, multi-peaked histogram is a diverse community. A single
+      narrow peak points to few organisms or to a few dominant ones.
+  - component: table
+    title: Bin assembly statistics
+    description: >-
+      Each row is one recovered bin, with its sample, assembler, binner, contig
+      counts, length, N50, GC and predicted rRNA genes. It answers the exact figures
+      behind every tile.
+
+      How to read: sort by N50 or contig count to find the best and the most
+      fragmented bins, or filter by binner to compare them.

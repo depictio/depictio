@@ -15,13 +15,112 @@ find:
 recipe: merqury/assembly_qv.py
 fixture: assembly_qv.tsv
 renders_as:
-  - { id: qv_vs_completeness, component: advanced_viz, kind: scatter_xy,
-      roles: {x: kmer_completeness, y: qv, label: assembly_id, color: assembly_id, size: total_kmers} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: qv, title: Consensus QV per assembly} }
-  - { component: card, column: qv, aggregation: max,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: kmer_completeness, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: asm_only_kmers, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
-  - { component: table }
+  # Merqury publishes no QV or completeness cut-off (README, wiki), so no
+  # reference line is drawn (RULES section 17).
+  - id: qv_vs_completeness
+    component: advanced_viz
+    kind: scatter_xy
+    title: Consensus QV against k-mer completeness
+    roles: {x: kmer_completeness, y: qv, label: assembly_id, color: assembly_id, size: total_kmers}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: K-mer completeness (%)
+      y_title: Consensus QV
+      legend_pos: bottom
+      top_n_labels: 5
+    description: >-
+      Each point is an assembly: the share of solid read k-mers it recovers on the
+      horizontal axis and its consensus quality value (QV) on the vertical axis,
+      sized by its number of k-mers. It answers which assemblies are both complete
+      and accurate.
+
+      How to read: the best assemblies sit top right. High completeness with a low
+      QV is an assembly that kept everything but was not polished; high QV with low
+      completeness is an accurate assembly that lost sequence. Open the copy-number
+      tile to see whether the lost k-mers are absent or only duplicated.
+
+      Lines and annotations: the dashed line is the median consensus QV of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      Merqury. QV is the Phred-scaled error rate (QV 40 is one error per 10 kb), so
+      compare assemblies of the same project with each other.
+
+      Source: https://raw.githubusercontent.com/wiki/marbl/merqury/2.-Overall-k-mer-evaluation.md
+      and https://pubmed.ncbi.nlm.nih.gov/32928274/
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: assembly_id
+      y: qv
+      color: kmer_completeness
+      labels: {assembly_id: Assembly, qv: Consensus QV, kmer_completeness: K-mer completeness (%)}
+    title: Consensus QV per assembly
+    reference_lines:
+      - {axis: y, stat: median, column: qv}
+    description: >-
+      Each bar is an assembly and its height is the consensus QV Merqury derives
+      from k-mers found in the assembly but not in the reads. The bar colour is the
+      k-mer completeness, so one tile shows accuracy and completeness together.
+
+      How to read: taller bars are more accurate. A tall pale bar is accurate but
+      incomplete, a short dark bar complete but error-prone; polish the second and
+      investigate the first.
+
+      Lines and annotations: the dashed line is the median consensus QV of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      Merqury.
+
+      Source: https://raw.githubusercontent.com/wiki/marbl/merqury/2.-Overall-k-mer-evaluation.md
+  - component: card
+    column: qv
+    aggregation: max
+    aggregations: [min, box_plot_stats]
+    secondary_layout: box_plot
+    title: Best consensus QV
+    caption: QV, quartiles over assemblies
+    headline: true
+    description: >-
+      The hero number is the highest consensus QV over the assemblies in view and the
+      box shows how the assemblies spread. It answers how accurate the best assembly
+      is and how far the others sit from it.
+
+      How to read: a wide box means the assemblies differ a lot in polish, so compare
+      them in the scatter above before choosing one. QV is logarithmic, so every 10
+      points is a tenfold lower error rate.
+  - component: card
+    column: kmer_completeness
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Median k-mer completeness
+    caption: completeness, quartiles over assemblies
+    description: >-
+      The hero number is the median share of solid read k-mers found in the
+      assemblies, and the box shows the spread. It answers how much of the sequenced
+      genome the assemblies kept.
+
+      How to read: values near 100 mean almost nothing was lost. A low box means
+      missing sequence, so check the copy-number composition for the absent share.
+  - component: card
+    column: asm_only_kmers
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: histogram
+    title: Error k-mers in the worst assembly
+    caption: error k-mers, distribution over assemblies
+    description: >-
+      Error k-mers are k-mers present in the assembly and absent from the reads, so
+      each marks a probable base error. The hero number is the largest count over the
+      assemblies and the histogram shows their distribution.
+
+      How to read: a count that stands far above the median points to one assembly in
+      need of polishing. Counts depend on assembly size, so read them next to the QV.
+  - component: table
+    title: Assembly quality table
+    description: >-
+      Each row is an assembly with its error k-mers, total k-mers, QV, error rate and
+      the solid k-mers shared with the reads. It answers the exact numbers behind the
+      scatter and the cards.
+
+      How to read: sort by QV or completeness to rank the assemblies, and compare the
+      solid k-mers of the assembly and of the reads to see what was lost.

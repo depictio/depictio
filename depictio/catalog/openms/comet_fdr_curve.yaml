@@ -12,6 +12,56 @@ renders_as:
   - id: fdr_profile
     component: advanced_viz
     kind: profile
+    title: Accepted PSMs against FDR
     roles: { series: run_id, x: q_value, y: accepted_psms }
-  - { component: figure, visu_type: line, dict_kwargs: { x: q_value, y: accepted_psms, color: run_id } }
-  - { component: table }
+    config:
+      x_title: Target-decoy q-value
+      y_title: Accepted target PSMs
+      reference_x: 0.01
+      reference_label: 1% FDR
+      legend_pos: bottom
+    description: >-
+      Each curve is a raw file: the number of target peptide-spectrum matches (PSMs)
+      accepted as the target-decoy q-value threshold on the raw Comet score is
+      relaxed. It answers how many identifications each file yields at a given error
+      rate.
+
+      How to read: a curve that rises steeply and early belongs to a file with good
+      spectra, while a flat curve has few confident matches and points to an
+      acquisition or search-space problem. Compare files: one far below its peers is
+      the one to investigate.
+
+      Lines and annotations: the vertical marker is the 1% false discovery rate, the
+      nf-core/mhcquant default fdr_threshold at which peptide hits are selected. This
+      curve applies it to target-decoy competition on the raw Comet score, from the
+      table the pipeline hands to its rescoring engine (Percolator by default). Its
+      counts therefore differ from the final peptide table, which is rescored and
+      filtered at peptide level by default.
+
+      Source: https://raw.githubusercontent.com/nf-core/mhcquant/master/nextflow_schema.json
+      and https://pubmed.ncbi.nlm.nih.gov/17327847/
+  - component: figure
+    visu_type: line
+    title: Accepted PSMs by FDR threshold
+    dict_kwargs:
+      x: q_value
+      y: accepted_psms
+      color: run_id
+      labels: {q_value: Target-decoy q-value, accepted_psms: Accepted target PSMs, run_id: Raw file}
+    description: >-
+      Each line is a raw file: the accepted target PSMs at each q-value threshold. It
+      answers how the files compare across the whole 0 to 10% range, not only at one
+      cut-off.
+
+      How to read: lines that run in parallel differ in depth but not in quality. Lines
+      that cross differ in how their score distributions separate targets from
+      decoys.
+  - component: table
+    title: Accepted PSMs per threshold
+    description: >-
+      Each row is a threshold on one raw file: the q-value, the number of accepted
+      target PSMs and the Comet score cut-off that gives it. It answers which score
+      cut-off corresponds to a given error rate.
+
+      How to read: pick the row nearest the error rate you report at and read its
+      score cut-off.

@@ -12,39 +12,125 @@ find:
 recipe: nonpareil/summary.py
 fixture: summary.tsv
 renders_as:
-  - {
-      component: card,
-      column: coverage,
-      aggregation: average,
-      secondary_layout: gauge,
-      coverage_max: 1,
-    }
-  - {
-      component: card,
-      column: diversity,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: effort_multiple,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: library,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: sample,
-      top_n_count: 3,
-    }
-  - {
-      component: figure,
-      visu_type: scatter,
-      dict_kwargs: { x: diversity, y: coverage, color: sample, size: effort_multiple },
-    }
-  - { component: interactive, interactive_type: RangeSlider, column_name: coverage }
-  - { component: table }
+  # 95% is the coverage Nonpareil projects effort for by default (Nonpareil.R, the
+  # LRstar slot), the "nearly complete coverage" the tool is run to reach. It is a
+  # target of the method, not a QC pass mark, and the card says so.
+  - component: card
+    column: coverage
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 0.95
+    threshold_direction: min
+    caption: average coverage, against the 95 percent target
+    title: Average coverage
+    description: >-
+      The hero number is the average share of the metagenome that the reads already
+      reach, with the lowest and highest library. It answers how completely the
+      libraries describe their communities.
+
+      How to read: a value near 1 means more sequencing would add few new sequences. A
+      low value means a large part of the community is still unseen, so check the
+      effort multiple card for how much deeper to go.
+
+      Lines and annotations: the marker is 95 percent coverage, the default coverage
+      for which Nonpareil projects the effort needed. It is the target of the method
+      and not a pass or fail rule.
+
+      Source: https://raw.githubusercontent.com/lmrodriguezr/nonpareil/master/utils/Nonpareil/R/Nonpareil.R
+  - component: card
+    column: diversity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Sequence diversity
+    description: >-
+      The hero number is the median Nonpareil diversity index (Nd) of the libraries,
+      and the box shows their spread. It answers how diverse the sequenced communities
+      are.
+
+      How to read: the index is on a log scale, so a higher value means a more diverse
+      community that needs more sequencing to cover. Compare libraries of the same
+      habitat.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/29657970/
+  # The effort multiple spans orders of magnitude between a nearly covered library
+  # and a very diverse one, so a box would draw a flat line: show the extremes.
+  - component: card
+    column: effort_multiple
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: grid
+    caption: median, with the shallowest and the deepest need
+    title: Effort still needed
+    description: >-
+      The hero number is the median of how many times deeper a library must be
+      sequenced to reach 95 percent coverage, with the smallest and largest multiple.
+      It answers how far the run is from the projected target.
+
+      How to read: a multiple close to 1 means the library is nearly there. A large
+      multiple marks a diverse community that the current depth only samples.
+
+      Lines and annotations: the target is the 95 percent coverage Nonpareil projects
+      by default, and the multiple is its projected effort divided by the effort
+      sequenced.
+
+      Source: https://raw.githubusercontent.com/lmrodriguezr/nonpareil/master/utils/Nonpareil/R/Nonpareil.R
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: compact
+    caption: samples, with the libraries counted
+    title: Samples and libraries
+    description: >-
+      The hero number is the count of samples with a Nonpareil fit, and the strip
+      counts their sequencing libraries. It answers how many libraries the coverage
+      figures are drawn from.
+
+      How to read: more libraries than samples means a sample was sequenced in several
+      runs, each with its own curve.
+  - component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: diversity
+      y: coverage
+      color: sample
+      size: effort_multiple
+      labels: {diversity: Nonpareil diversity (Nd), coverage: Estimated average coverage, sample: Sample, effort_multiple: Effort multiple}
+    title: Coverage against diversity
+    reference_lines:
+      - {axis: y, stat: median, column: coverage, label: Median coverage}
+    description: >-
+      Each point is a sequencing library: its diversity index on the horizontal axis,
+      its estimated coverage on the vertical axis, coloured by sample and sized by the
+      effort still needed. It answers whether the libraries that are least covered are
+      the most diverse.
+
+      How to read: points at the lower right are diverse communities that are far from
+      covered, the ones to sequence deeper. Large points need the most extra effort.
+
+      Lines and annotations: The dashed line is the median estimated coverage of this
+      table, a reference computed from the rows on show (it follows the filters), not
+      a cut-off of Nonpareil.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/29657970/
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: coverage
+    title: Coverage range
+    description: >-
+      Filters the tiles to libraries whose estimated coverage falls inside the chosen
+      range.
+  - component: table
+    title: Coverage and diversity table
+    description: >-
+      Each row is a sequencing library with its fitted model: coverage, sequencing
+      effort, projected effort for 95 percent coverage, the effort multiple and the
+      diversity index. It answers the exact numbers behind each card.
+
+      How to read: sort by effort multiple to find the libraries that need the most
+      extra sequencing.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/29657970/

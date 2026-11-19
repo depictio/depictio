@@ -17,5 +17,45 @@ columns:
   hrd_type: String
 fixture: prediction.tsv
 renders_as:
-  - { id: hrd_probability_gauge, component: card, column: p_hrd, aggregation: max, secondary_layout: gauge, coverage_max: 1.0, headline: true }
-  - { id: hrd_table, component: table }
+  # A 0-1 probability, so a gauge would print "x% of 1": the call is shown
+  # against CHORD's own 0.5 cut-off instead.
+  - id: hrd_probability_gauge
+    component: card
+    column: p_hrd
+    aggregation: max
+    aggregations: [min, median]
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: max
+    headline: true
+    caption: against the 0.5 HRD cut-off
+    title: HRD probability
+    description: >-
+      The hero number is the highest probability of homologous recombination deficiency
+      over the tumors in view, shown against the cut-off CHORD uses to call a tumor
+      deficient. It answers whether any tumor is called HR deficient.
+
+      How to read: a value below the cut-off is called HR proficient and a value at or
+      above it HR deficient. A call can still be undetermined when the tumor has too few
+      indels or SVs, so check the table remarks.
+
+      Lines and annotations: the cut-off is a probability of 0.5, the value at which CHORD
+      calls a sample HR deficient. The probability is the sum of the BRCA1-type and BRCA2-type probabilities, as CHORD's code
+      computes it.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/chord/README.md and
+      https://raw.githubusercontent.com/UMCUGenetics/CHORD/master/R/chordPredict.R
+  - id: hrd_table
+    component: table
+    title: HRD prediction table
+    description: >-
+      Each row is a tumor with its BRCA1-type, BRCA2-type and overall HRD probabilities,
+      the HR status call, the HRD subtype and the remarks that explain an undetermined
+      call. It answers which tumors are deficient and of which type.
+
+      How to read: the status is deficient when the HRD probability is at least 0.5. CHORD
+      needs at least 100 indels to call the status and at least 30 SVs to call the
+      subtype, and it cannot be applied to MSI tumors, so read the remarks before
+      trusting a call.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/chord/README.md

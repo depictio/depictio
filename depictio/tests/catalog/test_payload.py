@@ -457,3 +457,13 @@ def test_a_clean_export_reports_no_render_error(tmp_path) -> None:
 
     assert stats["render_errors"] == 0
     assert stats["render_error_ids"] == []
+
+
+def test_a_tied_card_mode_is_the_smallest_value_as_on_the_server() -> None:
+    """Polars gives tied modes in hash order; pandas (the dashboard's card) sorts
+    them. A card listing `mode` beside a strip made the export differ between runs."""
+    from depictio.catalog.payload import _aggregate
+
+    df = pl.DataFrame({"g": ["novel", "known", "novel", "known", None, None, None]})
+    assert {_aggregate(df, "g", "mode") for _ in range(20)} == {"known"}
+    assert df["g"].to_pandas().mode().iloc[0] == "known"

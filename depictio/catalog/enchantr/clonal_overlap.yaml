@@ -9,10 +9,26 @@ find: { path_glob: "**/repertoire_analysis_report/tables/clonal_overlap.tsv" }
 recipe: enchantr/clonal_overlap.py
 fixture: clonal_overlap.tsv
 renders_as:
+  # C6 N/A: value columns are the run's samples, known only at ingest.
   - id: overlap_heatmap
     component: advanced_viz
     kind: complex_heatmap
-    roles: { index: sample_id }
+    title: Shared clones between samples
+    roles: { index: sample_id, row_annotation_cols: [subject_id] }
+    description: >-
+      Each cell is a pair of samples: the number of clones they share. It answers
+      which samples carry the same clones, and so which belong to one lineage of
+      cells.
+
+      How to read: dark blocks along a subject are samples that share many clones, as
+      expected for replicates or related tissues of one individual. A sample with
+      pale cells against its own subject shares little and may be a different
+      compartment or a poor library. Cells between subjects stay empty because clones
+      are defined within a subject.
+
+      Lines and annotations: the diagonal is set to zero, since a sample shares all of
+      its clones with itself and would flatten the colour scale. The annotation strip
+      names the subject of each row.
   # The same square matrix read as an ordination. Every sample is a row of
   # shared-clone counts, so a distance over those rows places samples that share
   # clones next to each other: the repertoire-overlap MDS immunarch and VDJtools
@@ -22,5 +38,27 @@ renders_as:
   - id: overlap_mds
     component: advanced_viz
     kind: embedding
-    roles: { sample_id: sample_id, cluster: subject_id }
-  - { component: table }
+    title: Samples by clonal overlap
+    roles: { sample_id: sample_id, cluster: subject_id, color: subject_id }
+    config:
+      axis_prefix: PCo
+    description: >-
+      Each point is a sample, placed so that samples sharing many clones sit close
+      together, and coloured by subject. It answers how the samples group by their
+      shared clones.
+
+      How to read: tight groups are samples with similar clonal content, usually the
+      same subject. A sample far from its subject-mates has few shared clones. The
+      axes are ordination coordinates, so read the distances between points and not
+      the axis values.
+
+      Note: the coordinates are computed from the matrix at render time and follow
+      the active sample filter.
+  - component: table
+    title: Clonal overlap table
+    description: >-
+      Each row is a sample, with the number of clones it shares with every other
+      sample. It answers the exact counts behind the heatmap.
+
+      How to read: read across a row to see which samples it shares clones with, and
+      filter by subject to compare like with like.

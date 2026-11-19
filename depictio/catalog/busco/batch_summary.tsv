@@ -2,3 +2,9 @@ assembly_id	input_file	lineage	busco_mode	complete_pct	single_pct	duplicated_pct
 test_hifi_hifiasm_assembly	test_hifi_hifiasm.fa	brassicales_odb12.2		99.8	99.4	0.4	0.0	0.2	7083	0.7	17670732	17670732	0.0	760
 test_hifiasm_flye_assembly	test_hifiasm_flye_assembly_patch.patch.fa	brassicales_odb12.2		99.8	99.4	0.4	0.0	0.2	7083	0.7	10710070	10710070	0.0	62
 test_hifiasm_flye_links	test_hifiasm_flye_links.scaffolds.fa	brassicales_odb12.2		99.8	99.4	0.4	0.0	0.2	7083	0.7	10743537	10710070	0.001	52
+test_hifi_hifiasm_assembly_viridiplantae	test_hifi_hifiasm.fa	viridiplantae_odb12		97.3	96.1	1.2	1.6	1.1	1219	0.9	17670732	17670732	0.0	760
+test_hifiasm_flye_assembly_viridiplantae	test_hifiasm_flye_assembly_patch.patch.fa	viridiplantae_odb12		97.3	95.4	1.9	1.8	0.9	1219	1.1	10710070	10710070	0.0	62
+test_hifiasm_flye_links_viridiplantae	test_hifiasm_flye_links.scaffolds.fa	viridiplantae_odb12		97.3	95.4	1.9	1.9	0.8	1219	1.1	10743537	10710070	0.001	52
+test_hifi_hifiasm_assembly_eukaryota	test_hifi_hifiasm.fa	eukaryota_odb12		99.2	98.4	0.8	0.4	0.4	255	0.4	17670732	17670732	0.0	760
+test_hifiasm_flye_assembly_eukaryota	test_hifiasm_flye_assembly_patch.patch.fa	eukaryota_odb12		98.8	97.6	1.2	0.8	0.4	255	0.8	10710070	10710070	0.0	62
+test_hifiasm_flye_links_eukaryota	test_hifiasm_flye_links.scaffolds.fa	eukaryota_odb12		98.8	97.6	1.2	0.8	0.4	255	0.8	10743537	10710070	0.001	52

@@ -20,11 +20,106 @@ renders_as:
   - id: stability_ranking
     component: advanced_viz
     kind: ranked_distribution
-    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section,
-             q1: q1, median: median, q3: q3, lower: lower, upper: upper, mean: mean }
-  - { id: ranked_gene_count, component: card, column: gene_id, aggregation: nunique, secondary_layout: composition, breakdown_col: expression_level }
-  - { id: ranked_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }
-  - { id: ranked_iqr_figure, component: figure, visu_type: scatter, dict_kwargs: { x: median, y: stability_score, color: section } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: section }
-  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    title: Most stable genes and their spread
+    roles: {feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section,
+             q1: q1, median: median, q3: q3, lower: lower, upper: upper, mean: mean}
+    config:
+      score_label: Stability score (lower is more stable)
+      value_label: Normalised expression
+    description: >-
+      Each row is one of the best-ranked candidate genes of an expression section,
+      coloured by section: a box of its normalised expression over the samples that
+      measured it, beside the stability score that ranked it. It answers which genes
+      are the best reference candidates and how steady their expression is.
+
+      How to read: a good reference has a short box and a low score. A long box or a
+      long whisker means the gene varies between samples or datasets, whatever its
+      rank. Compare genes of the same section, since sections differ in level.
+
+      Lines and annotations: the box spans the first to the third quartile with the
+      median inside, and whiskers reach the furthest values within 1.5 times the
+      interquartile range (Tukey's rule, computed by this catalog's recipe). The
+      pipeline's report also draws boxes of the normalised expression of the top 25 genes
+      per section.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - id: ranked_gene_count
+    component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: composition
+    breakdown_col: expression_level
+    title: Top genes drawn
+    caption: genes, by expression level
+    description: >-
+      The hero number is the count of distinct top-ranked genes, and the bar splits
+      them by expression level. It answers which part of the expression range the best
+      candidates come from.
+
+      How to read: top candidates are taken per section, so each level should be
+      represented. A level with none has no stable genes in this run.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - id: ranked_measured_share
+    component: card
+    column: measured_share
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Share of samples measuring a gene
+    caption: share measured, per gene
+    description: >-
+      The hero number is the median share of samples in which a top gene was
+      measured, and the histogram shows its spread. It answers how much evidence
+      stands behind the box statistics.
+
+      How to read: genes measured in only a few samples are less reliable references,
+      even with a low score. Prefer genes near the right edge.
+  - id: ranked_iqr_figure
+    component: figure
+    visu_type: scatter
+    title: Stability score against median expression
+    dict_kwargs:
+      x: median
+      y: stability_score
+      color: section
+      labels: {median: Median normalised expression, stability_score: Stability score, section: Expression section}
+    reference_lines:
+      - {axis: y, stat: median, column: stability_score, label: Median stability score}
+    description: >-
+      Each point is a top-ranked gene: its median normalised expression against its
+      stability score, coloured by section. It answers whether the most stable genes
+      are also the most highly expressed.
+
+      How to read: lower scores are more stable. Points low at their level are good
+      reference candidates, and a trend with expression means the score depends on
+      level.
+
+      Lines and annotations: The dashed line is the median stability score of this
+      table, a reference computed from the rows on show (it follows the filters), not
+      a cut-off of the pipeline.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: section
+    title: Expression section
+    description: >-
+      Keeps only the genes of the chosen sections.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: stability_score
+    title: Stability score
+    description: >-
+      Keeps only genes whose stability score falls in the chosen range. Lower scores
+      are more stable.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Top genes table
+    description: >-
+      Each row is a top-ranked candidate gene with its stability score, ranks, box
+      statistics and measured share. It answers the exact numbers behind the box
+      view and lets a row selection filter the other tiles.
+
+      How to read: sort by section rank to see the best gene of each section, and
+      read the quartiles for the spread of its expression.

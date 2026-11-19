@@ -9,21 +9,146 @@ description: >-
 find:
   path_glob: "**/qc/*/*_after.tsv"
 recipe: proteinannotator/sample_summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: sample_summary.tsv
 renders_as:
-  - { id: kept_proteins, component: card, column: kept_sequences, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3, headline: true }
-  - { id: kept_residues, component: card, column: kept_residues, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
-  - { id: removed_sequences, component: card, column: removed_sequences, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
-  - { id: annotated_proteins, component: card, column: annotated_proteins, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
-  - { id: annotated_share, component: card, column: annotated_protein_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: sample_mean_length, component: card, column: mean_length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: sample_domain_hits, component: card, column: domain_hits, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample_id, y: kept_sequences} }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }
+  - id: kept_proteins
+    component: card
+    column: kept_sequences
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    headline: true
+    caption: kept proteins per sample
+    title: Proteins kept
+    description: >-
+      The hero number is the total count of sequences kept after the length and
+      duplicate filter, with the median and largest per sample below it, and the
+      histogram shows the samples. It answers how much sequence enters the annotation.
+
+      How to read: a sample far below the others lost most of its sequences to the
+      filter, so compare it with the removed count.
+  - id: kept_residues
+    component: card
+    column: kept_residues
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: kept residues per sample
+    title: Residues kept
+    description: >-
+      The hero number is the total count of residues in the kept sequences, with the
+      median and largest per sample below it, and the histogram shows the samples. It
+      answers how large the annotated sequence set is.
+
+      How to read: compare with the protein count to judge the mean length of what
+      was kept.
+  - id: removed_sequences
+    component: card
+    column: removed_sequences
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: removed sequences per sample
+    title: Sequences removed
+    description: >-
+      The hero number is the total count of sequences the length and duplicate filter
+      removed, with the median and largest per sample below it, and the histogram
+      shows the samples. It answers how much input was discarded.
+
+      How to read: a sample with many removed sequences has many duplicates or
+      sequences outside the length limits. Check the pipeline's minimum and maximum
+      length settings.
+  - id: annotated_proteins
+    component: card
+    column: annotated_proteins
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: annotated proteins per sample
+    title: Proteins annotated
+    description: >-
+      The hero number is the total count of proteins with at least one domain, with the
+      median and largest per sample below it, and the histogram shows the samples. It
+      answers how many proteins the databases describe.
+
+      How to read: compare with the kept proteins to see the share left without
+      annotation.
+  - id: annotated_share
+    component: card
+    column: annotated_protein_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with its spread
+    title: Share of proteins annotated
+    description: >-
+      The hero number is the median percentage of a sample's proteins that carry at
+      least one domain, and the box shows the spread across samples. It answers how
+      well the databases cover the sequences.
+
+      How to read: a low value means many proteins fall outside the searched
+      databases. Samples far below the others deserve a look at the input and at the
+      databases that were skipped.
+  - id: sample_mean_length
+    component: card
+    column: mean_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Mean protein length
+    description: >-
+      The hero number is the median over the samples of their mean protein length in
+      residues, and the box shows the spread. It answers how long the proteins are.
+
+      How to read: a sample with a very different mean length may hold fragments or a
+      different kind of sequence, which changes its annotation rate.
+  - id: sample_domain_hits
+    component: card
+    column: domain_hits
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: domain hits per sample
+    title: Domain hits
+    description: >-
+      The hero number is the total count of domain hits over every database, with the
+      median and largest per sample below it, and the histogram shows the samples. It
+      answers how much annotation the run produced.
+
+      How to read: one protein can carry many hits, so a high count does not mean a
+      high annotated share.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample_id
+      y: kept_sequences
+      color: annotated_protein_pct
+      labels: {sample_id: Sample, kept_sequences: Proteins kept, annotated_protein_pct: Proteins annotated (%)}
+    reference_lines:
+      - {axis: y, stat: median, column: kept_sequences}
+    title: Proteins kept per sample
+    description: >-
+      Each bar is a sample: the count of sequences kept after filtering, coloured by the
+      percentage of its proteins that carry a domain. It answers which samples are
+      large and how well each is annotated.
+
+      How to read: a tall bar with a pale or dark colour at the low end of the scale is
+      a large sample the databases describe poorly. No cut-off is drawn, because no
+      published rule defines a sufficient annotated share.
+
+      Lines and annotations: The dashed line is the median number of proteins kept of
+      this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of the annotation pipeline.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Sample table
+    description: >-
+      Each row is a sample with its sequences given and kept, residues, mean length and
+      N50, and its annotated proteins and domain hits. It answers the exact values
+      behind the tiles of this view.
+
+      How to read: sort by annotated share to find the samples to inspect first.

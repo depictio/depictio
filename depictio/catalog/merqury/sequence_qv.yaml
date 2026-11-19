@@ -11,11 +11,107 @@ find:
 recipe: merqury/sequence_qv.py
 fixture: sequence_qv.tsv
 renders_as:
-  - { id: sequence_qv_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: total_kmers, y: qv, label: sequence, color: assembly_id} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: qv, color: assembly_id, title: Per-sequence QV distribution} }
-  - { component: card, column: sequence, aggregation: count,
-      secondary_layout: donut, breakdown_col: error_free }
-  - { component: card, column: asm_only_kmers, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
-  - { component: table }
+  - id: sequence_qv_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Sequence QV against size
+    roles: {x: total_kmers, y: qv, label: sequence, color: assembly_id}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: K-mers in the sequence (size)
+      y_title: Consensus QV
+      log_x: true
+      legend_pos: bottom
+      top_n_labels: 8
+      label_order_col: qv
+    description: >-
+      Each point is a contig or scaffold: its number of k-mers, a proxy for its
+      length, against its consensus QV. It answers which sequences carry the lowest
+      accuracy and whether they are small or large.
+
+      How to read: errors are rarely even, so a few short low-QV sequences often hold
+      most error k-mers. The lowest points are labelled; inspect, polish or drop them.
+      A low QV on a large sequence matters more than on a short one.
+
+      Lines and annotations: the dashed line is the median consensus QV of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      Merqury. The horizontal axis is logarithmic.
+
+      Source: https://raw.githubusercontent.com/wiki/marbl/merqury/2.-Overall-k-mer-evaluation.md
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: qv
+      color: assembly_id
+      barmode: overlay
+      opacity: 0.6
+      labels: {qv: Consensus QV, assembly_id: Assembly}
+    title: Per-sequence QV distribution
+    reference_lines:
+      - {axis: x, stat: median, column: qv}
+    description: >-
+      Each bar counts sequences in a QV bin, one overlaid histogram per assembly. It
+      answers how uniform the accuracy of an assembly is.
+
+      How to read: a narrow histogram at high QV is an evenly accurate assembly. A
+      long tail to the left is a set of weak sequences, so open the scatter to see
+      which. Histograms of different assemblies are overlaid, not stacked.
+
+      Note: sequences with no error k-mer have no finite QV and are not drawn.
+
+      Lines and annotations: the dashed line is the median consensus QV of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      Merqury.
+  - component: card
+    column: qv
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: histogram
+    title: Lowest sequence QV
+    caption: QV, distribution over sequences
+    description: >-
+      The hero number is the lowest QV over all sequences in view and the histogram
+      shows the distribution. It answers how bad the worst sequence is compared with
+      a typical one.
+
+      How to read: a minimum far below the median marks a sequence worth inspecting.
+      QV is logarithmic, so a few points of difference are a large error ratio.
+  - component: card
+    column: assembly_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: error_free
+    title: Sequences with no error k-mer
+    caption: sequences, by error-free status
+    description: >-
+      The hero number is the number of assemblies and the second figure the number of
+      sequences; the ring splits the sequences into those with and without any error
+      k-mer. It answers how many sequences are perfectly supported by the reads.
+
+      How to read: error-free sequences are mostly short, so a large error-free share
+      alone is not proof of a good assembly. Read it next to the QV of the large
+      sequences.
+  - component: card
+    column: asm_only_kmers
+    aggregation: max
+    aggregations: [median, sum]
+    secondary_layout: histogram
+    title: Error k-mers per sequence
+    caption: error k-mers, distribution over sequences
+    description: >-
+      The hero number is the largest count of error k-mers on a single sequence, with
+      the median and the total beside it. It answers whether the errors are
+      concentrated on a few sequences.
+
+      How to read: a maximum far above the median means a handful of sequences carry
+      most errors and polishing them gives the biggest gain.
+  - component: table
+    title: Sequence QV table
+    description: >-
+      Each row is a sequence of an assembly with its error k-mers, total k-mers, QV
+      and error rate. It answers which named sequences to inspect.
+
+      How to read: sort by QV ascending to list the weakest sequences first, and by
+      error k-mers to find where most errors sit.

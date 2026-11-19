@@ -556,6 +556,20 @@ def verify_raw_lane(
         raise SystemExit("Raw-lane staging is ambiguous:\n  " + "\n  ".join(problems))
 
 
+def _current_template_version() -> str:
+    """The `template.version` already committed, so a regeneration keeps it.
+
+    The version is bumped by hand with the change that needs it (the template lock
+    checks it); a hardcoded value here silently reset every bump on each rerun.
+    """
+    path = PROJECT_DIR / "template.yaml"
+    if path.exists():
+        current = (yaml.safe_load(path.read_text()) or {}).get("template", {}).get("version")
+        if current:
+            return str(current)
+    return "1.0.0"
+
+
 def write_project(collections: list[dict]) -> None:
     project = {
         # Parsed and stripped before Project validation. Only DATA_ROOT is
@@ -564,7 +578,7 @@ def write_project(collections: list[dict]) -> None:
         "template": {
             "template_id": f"init/{DATASET_NAME}",
             "description": "Every catalog output, staged from the catalog's own fixtures",
-            "version": "2.0.0",
+            "version": _current_template_version(),
             "variables": [
                 {
                     "name": "DATA_ROOT",

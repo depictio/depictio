@@ -13,15 +13,110 @@ renders_as:
   # domain placed along the partner that contributes it and the breakpoint
   # marked between them. A domain the breakpoint truncated is short where the
   # same domain kept whole on the other side is not.
-  - { id: fusion_domains, component: advanced_viz, kind: fusion_structure, roles: {fusion_id: fusion, partner: partner, feature: domain, start: domain_start, end: domain_end} }
+  - id: fusion_domains
+    component: advanced_viz
+    kind: fusion_structure
+    title: Domains along the fusion protein
+    roles: {fusion_id: fusion, partner: partner, feature: domain, start: domain_start, end: domain_end, colour_by: partner}
+    description: >-
+      Each block is a Pfam domain placed along the fusion protein, one lane per
+      partner, and the colour tells which partner contributes it. It answers which
+      protein domains a fusion keeps from each side.
+
+      How to read: look for a kinase or DNA-binding domain kept intact on the 3' side
+      next to a dimerisation domain from the 5' side, which is the classic activating
+      pattern. A domain that is cut short is probably not functional in the fusion.
+
+      Note: FusionInspector reports Pfam domains with their e-values and applies no
+      cut-off of its own to them, so weak hits can appear.
+
+      Source: https://github.com/FusionInspector/FusionInspector
   # Domain starts along the fusion protein, one lane per fusion, split by the
   # partner that contributes the domain. Kept beside the structure view: it
   # ranks many fusions at a glance where the structure reads a handful closely.
-  - { id: domain_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: domain_start, category: partner} }
-  # Domain extents as bars, so a domain the breakpoint truncated is visibly
-  # shorter than the same domain kept whole on the other side.
-  - { component: figure, visu_type: bar, dict_kwargs: {x: domain, y: domain_length, color: partner} }
-  - { component: card, column: domain, aggregation: nunique, secondary_layout: top_n, breakdown_col: partner, top_n_count: 3 }
-  - { component: card, column: domain_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: neg_log10_evalue, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
+  - id: domain_lollipop
+    component: advanced_viz
+    kind: lollipop
+    title: Domain positions per fusion
+    roles: {feature_id: fusion, position: domain_start, category: partner, label: domain}
+    config:
+      top_n_labels: 8
+    description: >-
+      Each stem is a Pfam domain at the amino-acid position where it starts, drawn on
+      one lane per fusion and coloured by the partner that contributes it. It answers
+      how domains are distributed across fusions.
+
+      How to read: domains from the 5' partner cluster at the start of the protein and
+      those of the 3' partner come after the breakpoint. A lane with stems from only
+      one partner is a fusion whose other side adds no annotated domain.
+  # Domain lengths as points (one per occurrence, never summed), so a domain the
+  # breakpoint truncated sits visibly lower than the same domain kept whole.
+  - component: figure
+    visu_type: strip
+    dict_kwargs:
+      x: domain
+      y: domain_length
+      color: partner
+      labels: {domain: Pfam domain, domain_length: Length (amino acids), partner: Partner}
+    title: Domain lengths
+    description: >-
+      Each point is one occurrence of a Pfam domain on a fusion protein, with its length in
+      amino acids and the colour of the partner that contributes it. It answers which domains
+      are long and whether the two partners contribute similar ones.
+
+      How to read: a domain shorter than its usual size in the family was probably cut
+      by the breakpoint. Compare it with the same domain on the other partner.
+  - component: card
+    column: domain
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: partner
+    top_n_count: 3
+    caption: domains, by partner
+    title: Distinct domains
+    description: >-
+      The hero number is the count of distinct Pfam domains, and the bars rank the
+      partners by how many domain rows each contributes. It answers how much protein
+      annotation the fusions carry.
+
+      How to read: a large imbalance between the 5' and 3' partner means one side
+      brings most of the annotated function.
+  - component: card
+    column: domain_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Domain length
+    description: >-
+      The hero number is the median length of the annotated domains in amino acids, and
+      the box shows their quartiles. It answers how large the typical domain is.
+
+      How to read: a very short domain is often a truncated one, so filter by fusion and
+      check it in the structure view.
+  - component: card
+    column: neg_log10_evalue
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: average, with its range
+    title: Domain hit strength
+    description: >-
+      The hero number is the average minus log10 e-value of the domain hits, and the
+      histogram shows how it is spread. It answers how confident the Pfam annotation
+      is.
+
+      How to read: higher values are stronger hits. Domains with a score near zero have
+      an e-value close to one and should be read as weak annotations.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: Fusion domains table
+    description: >-
+      Each row is a Pfam domain on one partner of a fusion, with its start, end, length
+      and e-value. It answers which domains each fusion keeps and lets a row selection
+      filter the rest of the dashboard.
+
+      How to read: sort by e-value to see the strongest hits first and filter by
+      partner to compare the two sides.

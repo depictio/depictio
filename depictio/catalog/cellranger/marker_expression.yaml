@@ -8,10 +8,67 @@ description: >-
 find:
   path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
 recipe: cellranger/marker_expression.py
+# The fixture is enriched synthetically from 20 real rows (copies with seeded noise), so the preview shows several clusters.
 fixture: marker_expression.tsv
 renders_as:
-  - { id: marker_dotplot, component: advanced_viz, kind: dot_plot, roles: {cluster: cluster_label, gene: gene, mean_expression: mean_expression, frac_expressing: frac_expressing} }
-  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: cluster_label, top_n_count: 3 }
-  - { component: card, column: mean_expression, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: frac_expressing, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: table }
+  - id: marker_dotplot
+    component: advanced_viz
+    kind: dot_plot
+    title: Marker genes per cluster
+    roles: {cluster: cluster_label, gene: gene, mean_expression: mean_expression, frac_expressing: frac_expressing}
+    description: >-
+      Each dot is a gene in a cluster: its size is the share of cells expressing it and its
+      colour the mean expression. It answers which genes mark which cluster.
+
+      How to read: a large, dark dot in one cluster and small, pale dots elsewhere is a clean
+      marker. A gene with big dots in many clusters is broadly expressed and does not identify
+      a cell type.
+  - component: card
+    column: mean_expression
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: cluster_label
+    top_n_count: 3
+    caption: highest mean expression, by cluster
+    title: Strongest marker expression
+    description: >-
+      The hero number is the highest mean expression of any marker in any cluster, and the bars
+      rank the clusters with the strongest marker. It answers which clusters carry the most
+      strongly expressed markers.
+
+      How to read: a cluster with a low top value has only weak markers, so its identity is
+      harder to call.
+  - component: card
+    column: mean_expression
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean expression, with its spread
+    title: Mean marker expression
+    description: >-
+      The hero number is the median mean expression over the marker and cluster pairs, and the
+      box shows its spread. It answers how strongly the markers are expressed overall.
+
+      How to read: a median near zero means most pairs are off, as expected when each marker is
+      specific to a cluster. A long upper tail holds the true markers.
+  - component: card
+    column: frac_expressing
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: share of cells expressing, over genes
+    title: Share of cells expressing
+    description: >-
+      The hero number is the average share of cells that express a marker within a cluster, and
+      the histogram shows the distribution. It answers how widely the markers are detected.
+
+      How to read: markers expressed in most cells of a cluster are reliable. A pile at low
+      shares shows markers seen in only a few cells.
+  - component: table
+    title: Marker expression per cluster
+    description: >-
+      Each row is a marker gene in a cluster with its mean expression and the share of cells
+      expressing it. It answers the exact values behind the dot plot.
+
+      How to read: sort by the share of cells to find the most widely detected markers.

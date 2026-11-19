@@ -13,4 +13,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: kraken }
+  - component: multiqc
+    section: kraken
+    title: Read classification
+    description: >-
+      Kraken 2's MultiQC plot: the top taxa of each library as a stacked bar per
+      sample. It answers which species or clades the reads come from.
+
+      How to read: The expected organisms should dominate. A large unclassified
+      share means the database misses what is present, and unexpected taxa across
+      all samples suggest contamination.
+
+      Source: https://docs.seqera.io/multiqc/modules/kraken

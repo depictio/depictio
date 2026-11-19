@@ -10,7 +10,7 @@
 # its own priority (translation > mRNA abundance > buffering).
 id: anota2seq
 name: anota2seq
-version: "1.1.0"
+version: "1.2.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/anota2seq/anota2seqrun
 homepage: https://bioconductor.org/packages/anota2seq
 description: >-

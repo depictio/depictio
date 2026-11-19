@@ -12,9 +12,71 @@ find:
 recipe: stableexpression/id_mapping.py
 fixture: id_mapping.tsv
 renders_as:
-  - { id: id_fates, component: card, column: gene_ids, aggregation: sum, secondary_layout: composition, breakdown_col: fate }
-  - { id: id_fate_bars, component: figure, visu_type: bar, dict_kwargs: { x: dataset, y: share, color: fate } }
-  - { id: id_fate_by_platform, component: figure, visu_type: histogram,
-      dict_kwargs: { x: platform, y: gene_ids, color: fate, histfunc: sum } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: fate }
-  - { component: table }
+  - id: id_fates
+    component: card
+    column: gene_ids
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: fate
+    title: Fate of gene IDs
+    caption: gene IDs, by fate
+    description: >-
+      The hero number is the total of gene IDs the datasets came with, and the bar
+      splits them by fate: kept, collapsed, dropped as rare, or not mapped. It
+      answers how much of the source identifiers reach the merged matrix.
+
+      How to read: a large kept share is healthy. A large not-mapped share means the
+      datasets use identifiers the mapping service does not know, and a large rare
+      share means genes seen in too few datasets were removed.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - id: id_fate_bars
+    component: figure
+    visu_type: bar
+    title: Gene ID fate per dataset
+    dict_kwargs:
+      x: dataset
+      y: share
+      color: fate
+      labels: {dataset: Dataset, share: Share of gene IDs, fate: Fate}
+    description: >-
+      Each bar is a dataset and its segments are the share of its gene IDs in each
+      fate: kept, collapsed, rare or not mapped. It answers which datasets map well
+      and which lose their genes.
+
+      How to read: bars mostly kept are well mapped. A bar mostly not mapped is a
+      dataset the pipeline could not use, so check its platform and identifier type.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - id: id_fate_by_platform
+    component: figure
+    visu_type: histogram
+    title: Gene ID fate by platform
+    dict_kwargs:
+      x: platform
+      y: gene_ids
+      color: fate
+      histfunc: sum
+      labels: {platform: Platform, gene_ids: Gene IDs, fate: Fate}
+    description: >-
+      Each bar adds up the gene IDs of every dataset on one platform, split by fate.
+      It answers whether microarray and RNA-seq datasets lose genes in the same way.
+
+      How to read: microarray probes usually collapse onto fewer genes, while
+      RNA-seq identifiers are closer to genes already. A platform with many
+      unmapped IDs points to an identifier scheme the mapping does not cover.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: fate
+    title: Fate
+    description: >-
+      Keeps only the chosen fates, for example the IDs that were not mapped.
+  - component: table
+    title: Gene ID mapping table
+    description: >-
+      Each row is a dataset and a fate, with the number of gene IDs and their share
+      of the dataset. It answers exactly how many IDs each dataset lost and why.
+
+      How to read: sort by gene IDs within a fate to find the datasets that lose
+      most, then check their outcome in the dataset summary.

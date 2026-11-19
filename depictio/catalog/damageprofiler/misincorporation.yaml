@@ -7,11 +7,72 @@ description: >-
 find:
   path_glob: "**/*_freq_misincorporations.txt"
 recipe: damageprofiler/misincorporation.py
+# The fixture is enriched synthetically from 18 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: misincorporation.tsv
 renders_as:
   # New in lot 2 (depictio.models.components.advanced_viz kind damage_profile):
   # a `use:` on this id may fail model validation until that kind lands.
-  - { id: eager_damage_profile, component: advanced_viz, kind: damage_profile, roles: {sample: sample, end: end, position: position, base_change: base_change, frequency: frequency} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: frequency, color: base_change, line_dash: end, title: Misincorporation frequency by position} }
-  - { component: card, column: frequency, aggregation: max, secondary_layout: top_n, breakdown_col: base_change, top_n_count: 3 }
-  - { component: table }
+  # DamageProfiler sets no damage cut-off, so no reference mark is drawn (C3 N/A).
+  # Colour is the substitution (base_change), set by the kind.
+  - id: eager_damage_profile
+    component: advanced_viz
+    kind: damage_profile
+    roles: {sample: sample, end: end, position: position, base_change: base_change, frequency: frequency}
+    title: Misincorporation profile
+    description: >-
+      Each line is a substitution type at one end of the reads: its frequency at each
+      distance from the 5' or 3' end, with C to T and G to A highlighted by default and the other substitutions drawn muted. It answers whether the library carries the deamination damage
+      of ancient DNA.
+
+      How to read: ancient DNA shows C to T rising towards the 5' end and G to A towards
+      the 3' end on a double-stranded library, while the other substitutions stay low and
+      flat. Flat lines at both ends mean little damage. Check the fragment length profile
+      before calling a library authentic.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/17715061/ and
+      https://damageprofiler.readthedocs.io/en/latest/contents/output.html
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: position
+      y: frequency
+      color: base_change
+      line_dash: end
+      labels: {position: Distance from the read end (bases), frequency: Substitution frequency, base_change: Substitution, end: Read end}
+    title: Misincorporation frequency by position
+    description: >-
+      Each line is a substitution type at the 5' or 3' end of the reads, with its
+      frequency at each distance from that end. It answers how damage decays away from the
+      read ends.
+
+      How to read: a high frequency at the first base that falls within a few positions is
+      the shape of terminal deamination. A line that stays high along the read points to
+      chemical damage or errors in the data and not to ancient DNA damage.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/17715061/
+  - component: card
+    column: frequency
+    aggregation: max
+    aggregations: [average]
+    secondary_layout: top_n
+    breakdown_col: base_change
+    top_n_count: 3
+    caption: highest frequency, by substitution
+    title: Strongest substitution
+    description: >-
+      The hero number is the highest substitution frequency in the table, and the bars
+      rank the substitution types by their own maximum. It answers which substitution
+      stands out and how strongly.
+
+      How to read: C to T and G to A leading the ranking is the deamination pattern
+      expected of ancient DNA. Another substitution on top is not explained by damage and
+      deserves a look at the data.
+
+      Source: https://damageprofiler.readthedocs.io/en/latest/contents/output.html
+  - component: table
+    title: Misincorporation table
+    description: >-
+      Each row is a substitution type at one position from one read end of a library, with
+      its frequency. It answers the exact numbers behind the damage curves.
+
+      How to read: filter to position 0 to compare the terminal frequency of each library.

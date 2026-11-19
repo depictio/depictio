@@ -20,6 +20,7 @@ renders_as:
   - id: family_logo
     component: advanced_viz
     kind: hmm_logo
+    title: Family profile logo
     roles:
       entity: entity
       position: position
@@ -33,8 +34,62 @@ renders_as:
       consensus: consensus
       rf: rf
       cs: cs
-  - { id: state_information, component: card, column: info_bits, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: state_occupancy, component: card, column: occupancy, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+    config:
+      height_mode: relent_abovebg
+      show_consensus: true
+    description: >-
+      Each column is a match state of the family's profile HMM, drawn as a stack of amino acids whose height
+      is the state's information content in bits. It answers which positions of the family are conserved and
+      which residues are allowed there.
+
+      How to read: tall stacks are conserved positions, often the functional or structural core of the
+      family, and low flat stacks tolerate substitutions. The lanes under the logo show how often a state is
+      occupied and how likely and how long insertions are, so a gappy region is a poor place to trust the
+      alignment. Select a state to see the residue it matches in the representative structure.
+
+      Lines and annotations: the total height of a stack is the state's relative entropy in bits, as in
+      hmmlogo. The tile draws only residues more frequent than background, hmmlogo's above-background
+      option. The
+      consensus, RF and CS rows come from the profile file annotation.
+
+      Source: http://eddylab.org/software/hmmer/Userguide.pdf
+  - id: state_information
+    component: card
+    column: info_bits
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: information per state, with its spread
+    title: Information per state
+    description: >-
+      The hero number is the mean information content of the match states, in bits, and the box shows its
+      quartiles. It answers how conserved the family is overall.
+
+      How to read: a high mean means a tightly conserved family, and a low one a diverse family. A box
+      with a long upper whisker means a few highly conserved positions stand out from a variable background.
+
+      Source: http://eddylab.org/software/hmmer/Userguide.pdf
+  - id: state_occupancy
+    component: card
+    column: occupancy
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: state occupancy, with its spread
+    title: State occupancy
+    description: >-
+      The hero number is the mean occupancy of the match states, the probability that a family member has a
+      residue at the state, and the box shows its quartiles. It answers how gap-free the alignment behind the
+      model is.
+
+      How to read: values near one mean most members cover every state. A low tail marks states often skipped
+      by members, such as fragment ends or variable loops.
+  - component: table
+    title: Profile states table
+    description: >-
+      Each row is a match state and an amino acid with its emission probability, letter height in bits, the
+      state's information content, insert and delete behaviour, occupancy and the consensus annotation. It
+      answers the exact numbers behind the logo.
+
+      How to read: filter on one state to see which residues the model allows there, or sort by information
+      content to list the most conserved positions.

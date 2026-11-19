@@ -11,5 +11,33 @@ fixture: expression_heatmap.tsv
 renders_as:
   # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls
   # back to the literal "sample_id", which this matrix does not have.
-  - { id: top_variable_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_name} }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples (known only at ingest).
+  # Colour is the expression value itself, on a continuous scale.
+  - id: top_variable_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: {index: gene_name}
+    title: Most variable genes across samples
+    description: >-
+      Each cell is a gene in one sample: its expression as log2(TPM + 1), with genes
+      as rows and samples as columns. It answers which genes separate the samples and
+      whether replicates group together.
+
+      How to read: columns of one condition that cluster together and share a pattern
+      mean the experiment is reproducible. A replicate that clusters away from its
+      group is a candidate outlier, so check the sample overview. Rows with the same
+      pattern across samples are co-regulated genes, the first candidates for a
+      signature.
+
+      Lines and annotations: the coloured bar above the columns is the experimental
+      factor read from the sample sheet or the sample names, and rows and columns
+      are clustered with the tile's default Ward linkage. The matrix holds the 500
+      genes with the highest variance, a fixed selection of this view.
+  - component: table
+    title: Most variable genes table
+    description: >-
+      Each row is one of the most variable genes with its log2(TPM + 1) in every
+      sample. It answers what the heatmap colours stand for in numbers.
+
+      How to read: sort a sample column to find the genes it expresses most, and search
+      a gene symbol to read its values across samples.

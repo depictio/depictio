@@ -4,7 +4,8 @@
  * Unlike `main.tsx` (single-file, payload embedded in the HTML), this fetches the
  * light `data/index.json` first, installs it as `window.__CATALOG_PREVIEW__`
  * (with `lazyOutputs` set so each output's data is fetched when first shown) and
- * mounts the same `CatalogApp`. Theme: `?theme=light|dark`, else the OS setting.
+ * mounts the same `CatalogApp`, in the same chrome (`chrome.ts`, Paper by default).
+ * Theme: `?theme=light|dark`, else the OS setting.
  */
 // REQUIRED FIRST: registers the bundled Iconify icons (see src/icons.ts).
 import '../icons';
@@ -25,6 +26,7 @@ import '../styles/app.css';
 
 import { depictioTheme } from '../theme';
 import CatalogApp from './App';
+import { applyCatalogChrome } from './chrome';
 import type { CatalogGlobal } from './shared';
 
 const DATA_BASE = 'data/';
@@ -99,6 +101,9 @@ const Boot: React.FC<{ scheme: 'light' | 'dark' }> = ({ scheme }) => {
 };
 
 const scheme = resolveTheme();
+// The same chrome as the single-file bundle (Paper unless `#chrome=base`),
+// applied before the first render so no frame paints in another style.
+applyCatalogChrome();
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Shell scheme={scheme}>

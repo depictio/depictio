@@ -17,21 +17,170 @@ fixture: family_metadata.tsv
 renders_as:
   # Big families spread left to right; a low point is a family whose members
   # agree on few residues, a candidate for a second look or a split.
-  - { id: family_landscape, component: advanced_viz, kind: scatter_xy,
-      roles: {x: size, y: mean_conservation, label: family, color: origin, size: representative_length} }
-  - { id: families_total, component: card, column: family, aggregation: count,
-      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }
-  - { id: members_total, component: card, column: size, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }
-  - { id: family_size, component: card, column: size, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: representative_length, component: card, column: representative_length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: family_identity, component: card, column: mean_identity, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: family_conservation, component: card, column: mean_conservation, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: recruited_total, component: card, column: recruited, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: size, color: origin} }
-  - { component: table }
+  - id: family_landscape
+    component: advanced_viz
+    kind: scatter_xy
+    title: Family size against conservation
+    roles: {x: size, y: mean_conservation, label: family, color: origin, size: representative_length}
+    config:
+      x_title: Member sequences
+      y_title: Mean residue conservation
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a family: its number of member sequences against the mean
+      conservation of its residues, coloured by whether it is new or an updated existing
+      family and sized by the representative length. It answers which families are big and
+      which are well conserved.
+
+      How to read: big families spread to the right. A low point is a family whose members
+      agree on few residues, a candidate for a second look or a split. A small, highly
+      conserved family is a tight group of close homologs.
+
+      Lines and annotations: The dashed line is the median mean residue conservation of
+      this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of the pipeline.
+  - id: families_total
+    component: card
+    column: sample
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: compact
+    headline: true
+    caption: families, with the samples they come from
+    title: Protein families
+    description: >-
+      The hero number is the count of families built or updated, and the second number is
+      the count of samples they come from. It answers how many families the run produced.
+
+      How to read: few families from a large input usually means the minimum cluster size
+      was high. Lower it to get more families.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfamilies/2.5.0/nextflow_schema.json
+  - id: members_total
+    component: card
+    column: size
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: compact
+    headline: true
+    caption: members, with the largest family
+    title: Family members
+    description: >-
+      The hero number is the total of member sequences over all families, and the second
+      number is the size of the largest family. It answers how many sequences the families
+      hold and how skewed they are.
+
+      How to read: a largest family far above the average means one family dominates.
+      Open the scatter to see how the others spread.
+  - id: family_size
+    component: card
+    column: size
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: median, with the smallest and largest
+    title: Family size
+    description: >-
+      The hero number is the median number of member sequences per family, with the
+      smallest and largest family beside it. It answers how big a typical family is and
+      how wide the range is.
+
+      How to read: sizes span a wide range, so a median close to the minimum means many
+      small families and a few big ones.
+  - id: representative_length
+    component: card
+    column: representative_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Representative length
+    description: >-
+      The hero number is the median length of the family representatives in residues, and
+      the box shows the spread. It answers how long the proteins of the families are.
+
+      How to read: short representatives are often single domains and long ones multi-domain
+      proteins or fragments. A very short value can mark fragmentary families.
+  - id: family_identity
+    component: card
+    column: mean_identity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Family identity
+    description: >-
+      The hero number is the median of each family's mean identity of members to the
+      representative, and the box shows the spread. It answers how similar the family
+      members are.
+
+      How to read: the pipeline clusters distant homologs by default, with a minimum
+      identity of 0.3, so modest values are expected. A family far below its peers may
+      merge unrelated sequences.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfamilies/2.5.0/nextflow_schema.json
+  - id: family_conservation
+    component: card
+    column: mean_conservation
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Family conservation
+    description: >-
+      The hero number is the median of each family's mean residue conservation along the
+      representative, and the box shows the spread. It answers how well the alignments
+      agree column by column.
+
+      How to read: higher means more conserved families. Low values point to diverse or
+      poorly aligned families worth a second look.
+  - id: recruited_total
+    component: card
+    column: recruited
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: compact
+    caption: recruits, with the largest family
+    title: Recruited members
+    description: >-
+      The hero number is the total of members added beyond the seed sequences, and the
+      second number is the largest recruitment into one family. It answers how much the
+      family models gained after the first clustering.
+
+      How to read: recruits are found by searching the model against the input, with a
+      minimum length filter of 90% of the model by default. A family with a large
+      recruitment grew far beyond its seed.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfamilies/2.5.0/nextflow_schema.json
+  - id: family_size_box
+    component: figure
+    visu_type: box
+    dict_kwargs:
+      x: sample
+      y: size
+      color: origin
+      log_y: true
+      labels: {sample: Sample, size: Member sequences, origin: Origin}
+    reference_lines:
+      - {axis: y, stat: median, column: size}
+    title: Family size per sample
+    description: >-
+      Each box is a sample: the spread of its family sizes on a logarithmic scale,
+      coloured by whether families are new or updated. It answers how family sizes
+      compare between samples.
+
+      How to read: compare the medians and the whiskers. A sample with only small
+      families had little redundancy in its input.
+
+      Lines and annotations: The dashed line is the median family size of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off
+      of the pipeline.
+  - component: table
+    title: Protein family table
+    description: >-
+      Each row is a family with its origin, size, representative, seed, model and
+      alignment statistics. It answers every number behind the tiles of this tab.
+
+      How to read: sort by conservation or size to find families to inspect.

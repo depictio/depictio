@@ -20,13 +20,130 @@ renders_as:
   # axis but hAMRonization does not normalise it, so AMINOGLYCOSIDE,
   # aminoglycoside and "aminoglycoside antibiotic" would each take a hue of
   # their own and the island would read as more diverse than it is.
-  - { id: arg_island_track, component: advanced_viz, kind: gene_arrow_track, roles: {contig: contig, feature_id: gene_symbol, start: start, end: stop, strand: strand, class: tool} }
+  - id: arg_island_track
+    component: advanced_viz
+    kind: gene_arrow_track
+    title: Resistance genes along contigs
+    roles: {contig: contig, feature_id: gene_symbol, start: start, end: stop, strand: strand, class: tool, label: gene_symbol}
+    description: >-
+      Each arrow is one resistance gene hit placed on its contig, pointing in the
+      direction of the gene and coloured by the screening tool that reported it. It
+      answers whether resistance genes sit together on the same contig.
+
+      How to read: several arrows head to tail on one contig suggest a resistance
+      island or a mobile cassette, which an aggregate over drug classes cannot show.
+      Arrows of different colours on the same locus are the same gene found by
+      several tools, so agreement between tools raises confidence in the call.
+
+      Note: hAMRonization does not harmonise gene names or drug classes across tools,
+      so one gene can appear under different symbols.
+
+      Source: https://github.com/pha4ge/hAMRonization/
   # Screen -> drug class -> gene: which tool contributes which part of the
   # resistome. hAMRonization does not normalise the drug-class vocabulary
   # across tools, so the tool ring keeps the three vocabularies apart.
-  - { id: arg_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [tool, drug_class, gene_symbol], abundance: hits} }
-  - { component: card, column: hits, aggregation: sum, secondary_layout: top_n, breakdown_col: drug_class, top_n_count: 4 }
-  - { component: card, column: gene_symbol, aggregation: nunique, secondary_layout: donut, breakdown_col: tool, headline: true }
-  - { component: card, column: identity_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: coverage_pct, aggregation: average, secondary_layout: threshold, threshold_value: 80.0, threshold_direction: min, threshold_warn: 90.0 }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_symbol }
+  - id: arg_hierarchy
+    component: advanced_viz
+    kind: sunburst
+    title: Tool, drug class and gene hierarchy
+    roles: {ranks: [tool, drug_class, gene_symbol], abundance: hits}
+    config:
+      colour_by_rank: tool
+    description: >-
+      Each arc is a group of hits: the inner ring is the screening tool, the middle
+      ring the drug class it reports and the outer ring the gene, sized by the number
+      of hits and coloured by tool. It answers which tool contributes which part of
+      the resistome.
+
+      How to read: a wide arc in one tool and nothing in the others means that tool
+      alone detects the class. Drug class names differ between tools, so the same
+      class can appear as separate arcs under different tools; compare within a tool.
+      Click an arc to zoom in on it.
+
+      Source: https://github.com/pha4ge/hAMRonization/
+  - component: card
+    column: hits
+    aggregation: sum
+    aggregations: [count]
+    secondary_layout: top_n
+    caption: hits, by drug class
+    breakdown_col: drug_class
+    top_n_count: 4
+    title: Hits by drug class
+    description: >-
+      The hero number is the total count of resistance gene hits, and the bars rank
+      the drug classes that account for most of them. It answers which resistance
+      classes dominate.
+
+      How to read: a class leading the ranking is the main resistance signal. Names
+      come from each tool's own vocabulary and are not merged, so a class can be split
+      across spellings.
+  - component: card
+    column: gene_symbol
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    caption: distinct genes, by tool
+    breakdown_col: tool
+    top_n_count: 5
+    headline: true
+    title: Distinct resistance genes
+    description: >-
+      The hero number is the count of distinct gene symbols found, and the bars rank
+      the screening tools by how many distinct genes each reports. It answers how rich
+      the resistome is and which tool contributes most.
+
+      How to read: a tool far ahead of the others may use a broader database or looser
+      cut-offs. Gene symbols are not harmonised between tools, so the same gene can be
+      counted twice under different names.
+  - component: card
+    column: identity_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Sequence identity of hits
+    description: >-
+      The hero number is the median percent identity between a hit and its reference
+      gene, and the box shows the spread. It answers how close the detected genes are
+      to known resistance genes.
+
+      How to read: identities near 100 percent mean confident, well characterised
+      matches. A tail of low identities holds divergent homologues that deserve a look
+      before being counted as resistance.
+
+      Note: tools define identity at the nucleotide or amino acid level, so values are
+      not strictly comparable across tools.
+  # hAMRonization defines no coverage cut-off, and each screening tool sets its own
+  # default, so the card shows the distribution and draws no pass mark.
+  - component: card
+    column: coverage_pct
+    aggregation: average
+    aggregations: [median, min]
+    secondary_layout: histogram
+    caption: average, with its median and minimum
+    title: Coverage of hits
+    description: >-
+      The hero number is the average percent of the reference gene covered by a hit,
+      and the histogram shows the distribution. It answers how complete the detected
+      genes are.
+
+      How to read: a pile at 100 percent means complete genes. A tail of partial hits
+      holds fragments, which may be truncated genes or hits on a contig edge.
+
+      Note: hAMRonization does not set a coverage threshold and each screening tool
+      applies its own, so no pass mark is drawn here.
+
+      Source: https://github.com/pha4ge/hAMRonization/
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_symbol
+    title: Resistance gene hits
+    description: >-
+      Each row is a hit reported by one screening tool, with the sample, gene, drug
+      class, database, coverage, identity and position on its contig. It answers the
+      exact detail behind every other tile and lets a row selection filter the
+      dashboard.
+
+      How to read: filter by tool to compare what each one found, or by gene to see
+      every sample that carries it.

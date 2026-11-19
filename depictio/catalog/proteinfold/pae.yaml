@@ -12,9 +12,42 @@ find:
 recipe: proteinfold/pae.py
 fixture: pae.tsv
 renders_as:
-  - { id: pae_heatmap, component: advanced_viz, kind: complex_heatmap,
-      roles: {index: residue_range} }
-  - { id: mean_pae, component: card, column: mean_pae, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: Select, column_name: engine }
-  - { component: table }
+  # C6 N/A: the bin columns (b01, b02 ...) count up to the structure's length
+  # and are known only at ingest.
+  - id: pae_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Predicted aligned error
+    roles: {index: residue_range, row_annotation_cols: [engine]}
+    description: >-
+      Each cell is the predicted aligned error, in Angstrom, between a row of residues and a column of residues of the top-ranked model, averaged into bins. It answers how confidently two regions of the structure are placed relative to each other.
+
+      How to read: low values off the diagonal mean two domains, or two chains, are confidently positioned. High values mean their relative position is uncertain even if each domain is well folded. Rows are annotated by engine.
+
+      Note: the error is capped at 31.75 Angstrom by AlphaFold, and no cut-off grades it, so no line is drawn.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: mean_pae
+    component: card
+    column: mean_pae
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Mean predicted error
+    caption: mean error, with its spread
+    description: >-
+      The hero number is the mean predicted aligned error over the matrix, and the box shows the spread of the row means. It answers how well placed the structure is overall.
+
+      How to read: lower is better. A low mean with a few high rows points to one badly placed region, so open the matrix to find it.
+  - component: interactive
+    interactive_type: Select
+    column_name: engine
+    title: Engine
+    description: >-
+      Show the matrices of one engine.
+  - component: table
+    title: Predicted aligned error bins
+    description: >-
+      One row per residue bin with its mean error and the error against every other bin.
+
+      How to read: sort by mean error to find the bins that are least well placed.

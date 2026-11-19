@@ -7,11 +7,45 @@ description: >-
   pair hugs the diagonal.
 find: { path_glob: "*.tsv" }
 recipe: mhcquant/replicate_pairs.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several replicate pairs.
 fixture: replicate_pairs.tsv
 renders_as:
+  # The diagonal is the identity line: equal intensity in both replicates.
   - id: replicate_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: Intensity agreement between replicates
     roles: { x: intensity_a, y: intensity_b, label: peptide, color: pair }
-  - { component: interactive, interactive_type: MultiSelect, column_name: pair }
-  - { component: table }
+    config:
+      x_title: Log10 intensity, first replicate
+      y_title: Log10 intensity, second replicate
+      reference_line: diagonal
+      reference_label: Equal intensity
+      top_n_labels: 0
+    description: >-
+      Each point is a peptide quantified in two replicates of a sample: its log10
+      intensity in the first on the horizontal axis and in the second on the vertical
+      axis, coloured by replicate pair. It answers how reproducible the quantification
+      is.
+
+      How to read: a pair that hugs the diagonal is reproducible. A wide cloud or a
+      cloud shifted off the diagonal has noisy or biased intensities, so check the
+      replicate correlation card before comparing samples.
+
+      Lines and annotations: the diagonal is where the two replicates have equal
+      intensity. It is an identity line, not a cut-off.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: pair
+    title: Replicate pair
+    description: >-
+      Pick one or more replicate pairs to restrict the scatter and the table to them.
+      It answers how a single pair agrees.
+  - component: table
+    title: Replicate intensity pairs
+    description: >-
+      Each row is a peptide in one replicate pair of a sample, with its log10
+      intensity in each replicate. It answers the exact values behind the scatter.
+
+      How to read: sort by the difference between the two columns to find the
+      peptides that disagree most.

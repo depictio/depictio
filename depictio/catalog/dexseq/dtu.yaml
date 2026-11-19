@@ -13,8 +13,82 @@ renders_as:
   - id: dtu_volcano
     component: advanced_viz
     kind: volcano
+    title: Transcript usage volcano
     roles: { feature_id: transcript_id, effect_size: log2fc, significance: padj, label: gene_id, category: direction }
-  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
-  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: direction }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 0.0
+      top_n_labels: 10
+      effect_label: Usage log2 fold change
+      significance_label: -log10 adjusted p-value
+    description: >-
+      Each point is a transcript in one contrast: the log2 fold change of its usage within its gene on the
+      horizontal axis and its adjusted p-value on the vertical axis. It answers which isoforms gain or lose
+      share of their gene's expression between conditions, and how confidently.
+
+      How to read: points in the upper right gain usage in the treatment and points in the upper left lose
+      it. Usage is relative to the other isoforms of the gene, so an isoform can change without any change
+      in the gene's total expression. Open the table tile to see the gene behind a labelled transcript.
+
+      Lines and annotations: the horizontal line is an adjusted p-value of 0.05, the cut-off the catalog
+      recipe uses for the significant, up and down calls (its fdr parameter). The DEXSeq vignette
+      illustrates a 10% false discovery rate instead, so 0.05 is the stricter choice. No fold-change line
+      is drawn because the calls use none.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html
+  - component: card
+    column: transcript_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: direction
+    caption: transcripts, by usage call
+    title: Transcripts by usage call
+    description: >-
+      Each unit is one transcript tested in one contrast, and the ring splits them into gain, loss and
+      not significant. The second figure counts the distinct transcripts. It answers how many isoforms
+      change usage overall.
+
+      How to read: a ring that is mostly not significant means few isoform switches, or too little
+      replication to detect them. Open the volcano to see the borderline transcripts.
+
+      Lines and annotations: a transcript is called when its adjusted p-value is below 0.05, the catalog
+      recipe default, and the direction is the sign of its usage log2 fold change.
+  - component: card
+    column: log2fc
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: usage log2 fold change, with its spread
+    title: Usage change spread
+    description: >-
+      The hero number is the range of usage log2 fold changes over all transcripts and contrasts in view,
+      and the box shows their quartiles. It answers how large the usage shifts are.
+
+      How to read: a box tight around zero with a long range means most isoforms keep their share and a
+      few switch strongly. A median is not shown as a hero because gains and losses cancel to about zero.
+      Filter to one contrast to compare them.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: direction
+    title: Usage call
+    description: >-
+      Pick one or more usage calls (up, down, not significant) to restrict every tile of the tab to those
+      transcripts. It answers which isoforms gain or lose usage when you only want one side.
+
+      How to read: select up and down together to hide the unchanged transcripts, then read the volcano and
+      the table on the significant ones only.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Transcript usage table
+    description: >-
+      Each row is a transcript in one contrast with its mean expression, usage log2 fold change, p-value,
+      adjusted p-value, the gene-level q-value and the call. It answers which transcripts and genes to
+      follow up, and a row selection filters the rest of the dashboard to that gene.
+
+      How to read: sort by adjusted p-value, then check the gene-level q-value, which controls the false
+      discovery rate per gene rather than per transcript. A gene with several significant isoforms is a
+      stronger candidate than a single one.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html

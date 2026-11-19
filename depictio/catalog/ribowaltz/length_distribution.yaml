@@ -7,11 +7,46 @@ description: >-
   or shifted distribution points at digestion or contamination problems.
 find: { path_glob: "**/*.ribowaltz.length_distribution.tsv" }
 recipe: ribowaltz/length_distribution.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: length_distribution.tsv
 renders_as:
   - id: length_profile
     component: advanced_viz
     kind: profile
+    title: Footprint length distribution
     roles: { series: sample, x: length, y: pct }
-  - { component: figure, visu_type: line, dict_kwargs: { x: length, y: pct, color: sample } }
-  - { component: table }
+    config: {x_title: Read length (nt), y_title: Reads (%)}
+    description: >-
+      Each line is a library: the share of its reads at every read length that riboWaltz
+      kept. It answers which footprint lengths dominate and whether libraries agree.
+
+      How to read: ribosome-protected fragments form a narrow peak, and a broad or
+      shifted distribution points at digestion or contamination problems. Libraries
+      of one experiment should have the same peak. Several peaks can mark distinct
+      ribosome conformations.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: length_line
+    component: figure
+    visu_type: line
+    dict_kwargs:
+      x: length
+      y: pct
+      color: sample
+      labels: {length: Read length (nt), pct: Reads (%), sample: Sample}
+    title: Reads by footprint length
+    description: >-
+      Each line is a library: the share of its reads at each read length. It answers the
+      same question as the profile above with a plain chart.
+
+      How to read: look for one narrow peak and for libraries whose peak sits at a
+      different length from the rest.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - component: table
+    title: Footprint length table
+    description: >-
+      Each row is a library and read length with its read count and share. It answers
+      the exact numbers behind the lines.
+
+      How to read: sort by share to find the dominant lengths.

@@ -11,7 +11,34 @@ find:
 recipe: fcsadaptor/actions.py
 fixture: actions.tsv
 renders_as:
-  - { id: adaptor_ranges, component: card, column: seq_id, aggregation: count,
-      secondary_layout: composition, breakdown_col: action,
-      filter_expr: "col('action') != 'none'" }
-  - { component: table }
+  - id: adaptor_ranges
+    component: card
+    column: seq_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: action
+    filter_expr: "col('action') != 'none'"
+    headline: true
+    title: Ranges flagged as adaptor or vector
+    caption: ranges, by recommended action
+    description: >-
+      The hero number is the count of ranges FCS-adaptor flags as adaptor or vector
+      sequence, with the number of distinct sequences they sit on, and the bar splits
+      them by the action it recommends. It answers how much of the assembly carries
+      leftover adaptors.
+
+      How to read: TRIM removes an adaptor at a sequence end and EXCLUDE drops a whole
+      sequence. A clean assembly shows zero here, and the table still lists it as
+      screened. Internal adaptor hits are not removed automatically, so review them.
+
+      Source: https://raw.githubusercontent.com/wiki/ncbi/fcs/FCS-adaptor-quickstart.md
+  - component: table
+    title: Adaptor and vector calls
+    description: >-
+      Each row is a range FCS-adaptor flags, with the action, the matching adaptor, the
+      source type and the bases involved. An assembly with nothing flagged keeps one
+      row with action none. It answers exactly which sequences to trim or exclude.
+
+      How to read: filter by action to plan the cleaning, and read the adaptor name to
+      trace which library kit left it.

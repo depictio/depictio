@@ -9,10 +9,122 @@ find: { filename: "*.fusion-genes.txt" }
 recipe: fusioncatcher/fusion_genes.py
 fixture: fusion_genes.tsv
 renders_as:
-  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: predicted_effect, gene: fusion, mean_expression: log_support, frac_expressing: unique_fraction} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: predicted_effect, y: supporting_reads, color: finding_method} }
-  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: predicted_effect, top_n_count: 3, headline: true }
-  - { component: card, column: spanning_unique_reads, aggregation: sum, secondary_layout: donut, breakdown_col: finding_method }
-  - { component: card, column: n_annotations, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
+  # C1: the dot colour is the continuous log of the supporting reads.
+  - id: evidence_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    title: Evidence per fusion and predicted effect
+    roles: {cluster: predicted_effect, gene: fusion, mean_expression: log_support, frac_expressing: unique_fraction}
+    config:
+      gene_sort: mean
+    description: >-
+      Each dot is a candidate fusion in one predicted effect on the coding sequence:
+      its colour is the log of the supporting reads (spanning pairs plus unique
+      spanning reads) and its size the share of that support that comes from unique
+      reads. It answers which fusions have the strongest read evidence.
+
+      How to read: a large, dark dot is a fusion backed by many reads that are mostly
+      unique. A small, pale dot rests on few reads or on multimapping ones and needs
+      scrutiny. FusionCatcher gives no single cut-off that separates true from false
+      fusions.
+
+      Source: https://raw.githubusercontent.com/ndaniel/fusioncatcher/master/doc/manual.md
+  - component: figure
+    visu_type: bar
+    title: Supporting reads by predicted effect
+    dict_kwargs:
+      x: predicted_effect
+      y: supporting_reads
+      color: finding_method
+      labels: {predicted_effect: Predicted effect, supporting_reads: Supporting reads, finding_method: Finding method}
+    description: >-
+      Each segment is a candidate fusion: its supporting reads, grouped by the predicted
+      effect on the coding sequence and coloured by the method that found it. It
+      answers which kinds of fusion have the most read support and which aligners
+      agree.
+
+      How to read: tall bars in the in-frame group are the candidates most likely to
+      produce a fusion protein. The colour shows which aligners found each
+      candidate, so check candidates found by one method in the table.
+
+      Source: https://raw.githubusercontent.com/ndaniel/fusioncatcher/master/doc/manual.md
+  - component: card
+    column: supporting_reads
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: Supporting reads
+    description: >-
+      The hero number is the median count of reads supporting a candidate fusion
+      (spanning pairs plus unique spanning reads), with the spread in the box. It
+      answers how strong the typical evidence is.
+
+      How to read: a low median with a long upper whisker is the usual picture of many
+      weak candidates and a few strong ones. Open the dot plot to see which fusions the
+      whisker belongs to.
+  - component: card
+    column: fusion
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: predicted_effect
+    top_n_count: 3
+    headline: true
+    caption: fusions, by predicted effect
+    title: Candidate fusions
+    description: >-
+      The hero number is the count of distinct fusion gene pairs, with the number of
+      breakpoint rows next to it, and the bars rank the predicted effects. It answers
+      how many candidates there are and what they do to the coding sequence.
+
+      How to read: more rows than distinct pairs means some fusions have several
+      breakpoints. In-frame candidates are the ones that can make a fusion protein.
+  - component: card
+    column: spanning_unique_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: finding_method
+    caption: unique spanning reads, by finding method
+    title: Unique spanning reads
+    description: >-
+      The hero number is the total of unique reads that map on a fusion junction, with
+      the median and the largest per candidate next to it, and the ring splits it by the
+      method that found the fusion. It answers how much junction evidence there is and
+      which aligners contribute it.
+
+      How to read: unique reads exclude PCR duplicates, so they are a conservative
+      measure of evidence. A ring dominated by one method means the other methods found
+      few candidates.
+
+      Source: https://raw.githubusercontent.com/ndaniel/fusioncatcher/master/doc/manual.md
+  - component: card
+    column: n_annotations
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: annotation labels per fusion
+    title: Annotation labels per fusion
+    description: >-
+      The hero number is the mean count of annotation labels FusionCatcher attached to
+      a fusion pair (known fusion, oncogene, a cancer study it appeared in), with the
+      median and the maximum next to it, and the histogram shows their distribution. It
+      answers how well documented the candidates are.
+
+      How to read: a fusion with many labels is a known event. A fusion with none is a
+      novel candidate and needs stronger evidence. Labels such as a healthy-sample
+      label can also flag likely false positives, so read them in the table.
+
+      Source: https://raw.githubusercontent.com/ndaniel/fusioncatcher/master/doc/manual.md
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: Candidate fusion genes
+    description: >-
+      Each row is a candidate fusion breakpoint: both partner genes, the annotation
+      labels, the read evidence, the breakpoints and the predicted effect. It answers
+      which fusions to validate first.
+
+      How to read: sort by supporting reads and read the labels, then click a row to
+      filter the other tiles to that fusion.

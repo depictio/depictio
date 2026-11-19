@@ -10,68 +10,152 @@ find: { path_glob: "**/taxpasta/*.tsv" }
 recipe: taxpasta/sample_summary.py
 fixture: sample_summary.tsv
 renders_as:
-  - {
-      id: richness_dot_plot,
-      component: advanced_viz,
-      kind: dot_plot,
-      roles:
-        {
-          cluster: sample,
-          gene: profiler_db,
-          mean_expression: shannon,
-          frac_expressing: top_taxon_fraction,
-        },
-    }
-  - {
-      headline: true,
-      component: card,
-      column: taxa_observed,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: shannon,
-      aggregation: average,
-      secondary_layout: gauge,
-      coverage_max: 6,
-    }
-  - {
-      component: card,
-      column: evenness,
-      aggregation: average,
-      secondary_layout: threshold,
-      threshold_value: 0.6,
-      threshold_direction: min,
-      threshold_warn: 0.4,
-    }
-  - {
-      component: card,
-      column: profiler_db,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: profiler,
-      top_n_count: 4,
-    }
-  - {
-      component: card,
-      column: assigned_count,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: figure,
-      visu_type: scatter,
-      dict_kwargs: { x: taxa_observed, y: shannon, color: profiler, symbol: platform },
-    }
+  - id: richness_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    title: Diversity per sample and profiler
+    roles: {cluster: sample, gene: profiler_db, mean_expression: shannon, frac_expressing: top_taxon_fraction}
+    description: >-
+      Each dot is one profiling run, a sample (column) classified by one profiler and
+      database (row). Its colour is the Shannon diversity of the profile and its size
+      is the share held by the single top taxon. It answers which runs report a
+      diverse community and which report one dominated by a taxon.
+
+      How to read: large dots mean one taxon takes a big share of the profile, and
+      pale or dark colour gives the diversity. Rows of different profilers that
+      disagree on a sample point to a database or method difference, so compare them
+      in the ordination. No cut-off is drawn, because no published rule separates a
+      diverse profile from a dominated one.
+  - headline: true
+    component: card
+    column: taxa_observed
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Taxa observed per run
+    description: >-
+      The hero number is the median count of taxa a profiling run reports, and the
+      box shows the spread. It answers how rich the profiles are.
+
+      How to read: a wide box means the profilers disagree strongly on richness, so
+      compare them with the bar chart below. A high count is not necessarily better,
+      since a long tail of rare taxa can be false positives.
+  - component: card
+    column: shannon
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: Shannon diversity of every run
+    title: Shannon diversity
+    description: >-
+      The hero number is the mean Shannon diversity of the runs, with the smallest and
+      largest below it, and the histogram shows the distribution. It answers how
+      diverse the reported communities are.
+
+      How to read: higher values mean more taxa and a more even spread. Compare runs of
+      the same sample, since profilers that report more rare taxa score higher.
+      Shannon diversity has no published pass level, so no cut-off is drawn.
+  - component: card
+    column: evenness
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with the spread
+    title: Pielou evenness
+    description: >-
+      The hero number is the mean Pielou evenness of the runs, and the box shows the
+      spread. It answers whether the abundance is spread evenly over the taxa or held
+      by a few.
+
+      How to read: values near 1 mean an even community and values near 0 one
+      dominated by a taxon. A low score points to a profiler that over-reports a few taxa. No cut-off is
+      drawn, because no published rule defines a good evenness.
+  - component: card
+    column: profiler_db
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: profiler
+    top_n_count: 4
+    caption: runs, by profiler
+    title: Profiler and database pairs
+    description: >-
+      The hero number is the count of distinct profiler and database pairs, the second
+      number counts every run, and the bars rank the profilers by their runs. It
+      answers how many classifiers are compared and which ones have most runs.
+
+      How to read: a profiler with several databases has a longer bar. Interpret
+      comparisons across profilers with unequal run counts with care.
+  - component: card
+    column: assigned_count
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: assigned counts of every run
+    title: Assigned counts per run
+    description: >-
+      The hero number is the median count assigned to taxa in a run, with the smallest
+      and largest below it, and the histogram shows every run. It answers how much of
+      the data a typical run assigns.
+
+      How to read: the values span orders of magnitude between profilers and
+      platforms, so read the extremes as a range and not as a spread. A very small
+      count against the others suggests a run with little usable data.
+  - component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: taxa_observed
+      y: shannon
+      color: profiler
+      symbol: platform
+      labels: {taxa_observed: Taxa observed, shannon: Shannon diversity, profiler: Profiler, platform: Platform}
+    title: Richness against diversity
+    reference_lines: [{axis: y, stat: median, column: shannon}]
+    description: >-
+      Each point is one profiling run: the number of taxa it reports against its
+      Shannon diversity, coloured by profiler with the sequencing platform as the
+      marker shape. It answers whether runs that report more taxa also report a more
+      diverse community.
+
+      How to read: points rise together because Shannon diversity grows with richness.
+      A profiler whose points sit above the others for the same richness has a more
+      even profile, and one below is dominated by a few taxa. No reference line is
+      drawn, since no published rule defines a good value.
+
+      Lines and annotations: The dashed line is the median Shannon diversity of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of taxpasta.
   # How concentrated a run's profile is: the share its single top taxon holds,
   # which separates classifiers reporting a few dominant taxa from those that
   # spread the same community over a long tail.
-  - {
-      component: figure,
-      visu_type: bar,
-      dict_kwargs: { x: profiler_db, y: top_taxon_fraction, color: profiler },
-    }
-  - { component: table }
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: profiler_db
+      y: top_taxon_fraction
+      color: profiler
+      labels: {profiler_db: Profiler and database, top_taxon_fraction: Share of the top taxon, profiler: Profiler}
+    title: Share held by the top taxon
+    reference_lines: [{axis: y, stat: median, column: top_taxon_fraction}]
+    description: >-
+      Each box is a profiler and database: the share of each sample's profile held by
+      its single most abundant taxon, coloured by profiler. It answers which classifiers
+      report a few dominant taxa and which spread the community over a long tail.
+
+      How to read: a high box means the profiles are concentrated on one taxon, and a
+      low box a flatter profile. Filter to one sample to compare profilers on the same
+      community, since the share depends on the community as well as on the profiler.
+
+      Lines and annotations: The dashed line is the median share held by the top
+      taxon of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of taxpasta.
+  - component: table
+    title: Run statistics table
+    description: >-
+      Each row is one profiling run with its taxa observed, assigned count, top taxon
+      and its share, Shannon diversity and evenness. It answers the exact values
+      behind the tiles above.
+
+      How to read: sort by a statistic to find the extreme runs, or filter by profiler
+      to compare its runs.

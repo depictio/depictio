@@ -13,15 +13,139 @@ find:
 recipe: epitopeprediction/peptides.py
 fixture: peptides.tsv
 renders_as:
-  - { id: peptide_count, component: card, column: peptide_key, aggregation: count, secondary_layout: composition, breakdown_col: call, headline: true }
-  - { id: binder_count, component: card, column: peptide_key, aggregation: count, filter_expr: "col('binder') == 1", secondary_layout: composition, breakdown_col: length_class, headline: true }
-  - { id: binding_alleles, component: card, column: binding_alleles, aggregation: median, filter_expr: "col('binder') == 1", secondary_layout: histogram }
-  - { id: peptide_length, component: card, column: length, aggregation: median, secondary_layout: histogram }
+  - id: peptide_count
+    component: card
+    column: sequence
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: call
+    headline: true
+    caption: peptides, by call
+    title: Peptides scored
+    description: >-
+      The hero number is the count of sample and peptide rows, the compact line gives
+      the distinct sequences, and the bar splits the rows into binder, non-binder and
+      not scored. It answers how many peptides went through prediction and how many a
+      tool could score.
+
+      How to read: a large not-scored share means the alleles or peptide lengths are
+      outside what the tools support. A binder share far above a few percent suggests a
+      binder filter was applied upstream. Calls are the pipeline's own, a percentile
+      rank of 2 or less for most tools and an IC50 of 500 nM or less for MHCnuggets.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: binder_count
+    component: card
+    column: sequence
+    aggregation: count
+    aggregations: [nunique]
+    filter_expr: "col('binder') == 1"
+    secondary_layout: composition
+    breakdown_col: length_class
+    headline: true
+    caption: binders, by peptide length
+    title: Binder peptides
+    description: >-
+      The hero number is the count of peptides that at least one tool calls a binder,
+      the compact line gives the distinct sequences, and the bar splits them by peptide
+      length. It answers how many candidates remain and which lengths dominate.
+
+      How to read: the lengths come from the run's minimum and maximum peptide length
+      settings, so a length with no binders may simply be a length the tools score
+      poorly. Binders are the pipeline's own calls, see the Peptides scored tile.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: binding_alleles
+    component: card
+    column: binding_alleles
+    aggregation: median
+    aggregations: [min, max]
+    filter_expr: "col('binder') == 1"
+    secondary_layout: histogram
+    caption: alleles bound, distribution
+    title: Alleles bound per binder
+    description: >-
+      The hero number is the median count of alleles a binder peptide binds, and the
+      histogram shows the distribution. It answers whether binders are allele-specific
+      or promiscuous.
+
+      How to read: a median of one means most peptides fit a single allele. Peptides
+      that bind several alleles are more likely to be presented in the patient and are
+      good candidates to prioritise.
+  - id: peptide_length
+    component: card
+    column: length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: peptide length, distribution
+    title: Peptide length
+    description: >-
+      The hero number is the median peptide length in residues and the histogram shows
+      the distribution. It answers whether the peptide set matches the MHC class that
+      was scored.
+
+      How to read: the lengths are set by the run's minimum and maximum peptide length
+      options for each MHC class, and each tool has its own fixed range. A wide spread
+      shows a run that scored both classes.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/usage.md
   - id: length_by_class
     component: figure
     visu_type: bar
-    dict_kwargs: { x: length_class, color: call, facet_col: mhc_class, barmode: stack }
-  - { component: figure, visu_type: bar, dict_kwargs: { x: sample, color: call } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: call }
-  - { component: interactive, interactive_type: MultiSelect, column_name: length_class }
-  - { component: table, row_selection_enabled: true, row_selection_column: peptide_key }
+    dict_kwargs:
+      x: length_class
+      color: call
+      facet_col: mhc_class
+      barmode: stack
+      labels: { length_class: Peptide length, call: Call, mhc_class: MHC class, count: Peptides }
+    title: Calls by peptide length
+    description: >-
+      Each bar counts peptides of one length, stacked by binder call and split by MHC
+      class. It answers which lengths yield binders.
+
+      How to read: a length with many peptides and no binders is mostly noise, and a
+      length with a high binder share is where to look first. Lengths outside a tool's
+      supported range are not scored by it.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/usage.md
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      color: call
+      labels: { sample: Sample, call: Call, count: Peptides }
+    title: Calls per sample
+    description: >-
+      Each bar counts the peptides of a sample, stacked by call. It answers how big
+      each peptide set is and how its calls split.
+
+      How to read: compare the binder share across samples. A sample with far more
+      not-scored peptides used alleles or lengths that the tools do not support.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: call
+    title: Call
+    description: >-
+      Pick binder, non-binder or not scored to restrict the cards, the plots and the
+      table to those peptides. It answers what a single call looks like.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: length_class
+    title: Peptide length
+    description: >-
+      Pick one or more peptide lengths to restrict the tiles to them. It answers how
+      binders behave at one length.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: peptide_key
+    title: Peptide table
+    description: >-
+      Each row is a peptide in a sample with its best prediction over all alleles and
+      tools, the number of alleles it binds and its source gene and protein change for
+      variant input. It answers which peptides to follow up and lets a row selection
+      filter the rest of the dashboard.
+
+      How to read: sort by best IC50 or by the number of binding alleles, and filter to
+      mutant peptides to see the neoepitope candidates.

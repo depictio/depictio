@@ -634,7 +634,10 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Fusion structure'}
-      subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      subtitle={
+        (metadata as { description?: string; subtitle?: string }).description ||
+        (metadata as { description?: string; subtitle?: string }).subtitle
+      }
       primaryControls={primaryControls}
       controls={controls}
       loading={loading}

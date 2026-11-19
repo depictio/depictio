@@ -12,4 +12,14 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: porechop }
+  - component: multiqc
+    section: porechop
+    title: Long-read adapter trimming
+    description: >-
+      Porechop_ABI's summary of reads and bases kept after adapter trimming, per
+      sample. It answers how much of the long-read library carried adapters.
+
+      How to read: Most reads should be kept. A very large trimmed share or many
+      reads split in the middle suggest chimeric reads or a wrong adapter set.
+
+      Source: https://docs.seqera.io/multiqc/modules/porechop

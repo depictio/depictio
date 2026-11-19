@@ -9,19 +9,195 @@ description: >-
   routes with the same vocabulary.
 find: { path_glob: "**/summary/tables/rtgtools/rtgtools.summary.csv" }
 recipe: rtgtools/vcfeval_summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several callsets.
 fixture: vcfeval_summary.tsv
 renders_as:
-  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark (F1 iso-contours)
-  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: label, tp: tp_comp, fp: fp, fn: fn} } # TP/FP/FN matrix
-  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1_by_tool
-  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1
-  - { component: table }
+  # Each point is a callset at its (recall, precision). The default point colour
+  # is the F1 scale, so the colour is already bound to the quantity that ranks
+  # the callsets; the point size is the true positives it recovers.
+  - id: pr_scatter
+    component: advanced_viz
+    kind: pr_benchmark
+    title: Precision against recall per callset
+    roles: {label: label, recall: recall, precision: precision, f1: f1, support: tp_comp}
+    description: >-
+      Each point is a callset compared with its truth set: its recall on the
+      horizontal axis and its precision on the vertical axis, coloured by F1 and
+      sized by the true positives it recovers. It answers which callset finds the
+      most true variants without adding false ones.
+
+      How to read: the top right corner is best, with every true variant found and
+      no false call. A point far to the left misses true variants, a point low down
+      adds false calls, so look at the false negative and false positive cards to see
+      which one dominates.
+
+      Lines and annotations: the curved contours are lines of equal F1, the harmonic
+      mean of precision and recall, and the diagonal marks precision equal to
+      recall. They are drawn from the definitions of the metrics, not from a cut-off.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30858580/
+      and https://raw.githubusercontent.com/Illumina/hap.py/master/doc/happy.md
+  - id: confusion
+    component: advanced_viz
+    kind: confusion_matrix
+    title: True and false calls per callset
+    roles: {label: label, tp: tp_comp, fp: fp, fn: fn}
+    description: >-
+      Each cell is a count of variants for one callset: the true positives, the
+      false positives or the false negatives of its comparison with the truth set.
+      It answers how many variants stand behind each precision and recall value.
+
+      How to read: a callset with many more false negatives than false positives
+      loses recall, and the reverse loses precision. Compare cells within a callset
+      first, because callsets of different size are not comparable by raw count.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30858580/
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: label
+      y: f1
+      color: caller
+      labels: {label: Callset, f1: F1 score, caller: Caller}
+    title: F1 score per callset
+    reference_lines:
+      - {axis: y, stat: median, column: f1}
+    description: >-
+      Each bar is a callset, with its F1 score, the harmonic mean of its precision and
+      recall, and a colour for the caller that made it. It answers which callset
+      scores best overall.
+
+      How to read: a short bar means either many missed variants or many false
+      calls, so open the precision-recall tile to see which. Compare bars of the same
+      truth set only.
+
+      Lines and annotations: The dashed line is the median F1 score of this table, a reference computed from the rows on show (it follows the filters), not a cut-off of RTG Tools.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30858580/
+      and https://raw.githubusercontent.com/Illumina/hap.py/master/doc/happy.md
+  # Best F1, with the spread across callsets: the one number that ranks them.
+  - component: card
+    column: f1
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: best callset, with the spread
+    title: Best F1 score
+    description: >-
+      The hero number is the highest F1 score among the callsets in view, and the box
+      shows how all of them spread. It answers how good the best callset is and how far
+      the others lag.
+
+      How to read: a best score close to 1 means a callset that agrees with the truth
+      set. A wide box means the callers differ a lot, so check which one is ahead
+      before pooling them.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30858580/
+  - component: table
+    title: Benchmark table
+    description: >-
+      Each row is a callset compared with a truth set, with the caller, the true
+      positives on both sides, the false positives and negatives, and the precision,
+      recall and F1 derived from them. It answers the exact numbers behind every other
+      tile.
+
+      How to read: sort by F1, or filter by caller or truth set to compare like with
+      like.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: label, aggregation: nunique, secondary_layout: donut, breakdown_col: caller, top_n_count: 3 }
-  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: card, column: precision, aggregation: average, secondary_layout: gauge, coverage_max: 1 }
-  - { component: card, column: recall, aggregation: median, secondary_layout: threshold, threshold_value: 0.9, threshold_direction: min, threshold_warn: 0.8 }
-  - { component: card, column: fp, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fn, aggregation: sum, secondary_layout: histogram }
-  - { component: card, column: f1, aggregation: max, aggregations: [min, median, average, max], secondary_layout: grid }
+  # Callsets by caller always split evenly (one per caller and sample), so the
+  # breakdown is a measure: the true positives each caller recovers.
+  - component: card
+    column: tp_comp
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: true positives, by caller
+    title: True positives by caller
+    description: >-
+      The hero number is the total of true positives across the callsets in view, and
+      the bars rank the callers by how many they recover. It answers which caller
+      finds the most true variants.
+
+      How to read: a caller far ahead recovers more of the truth set, but compare it
+      with the false positive card, since a looser caller finds more of both.
+  - component: card
+    column: f1
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with its spread
+    title: Median F1 score
+    description: >-
+      The hero number is the median F1 score across the callsets in view, and the box
+      shows their spread. It answers how accurate the benchmark is as a whole.
+
+      How to read: a median near 1 means most callsets reproduce the truth set. A box
+      that reaches far below the median points to a few weak callsets.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30858580/
+  - component: card
+    column: precision
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: grid
+    caption: average precision, with its range
+    title: Precision
+    description: >-
+      The hero number is the average precision, the share of a callset's calls that
+      are true, with the lowest and highest values across callsets. It answers how
+      free of false calls the callsets are.
+
+      How to read: a high average with a low minimum points to one callset adding
+      false calls.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30858580/
+  # vcfeval and the GA4GH benchmarking best practices define recall, but neither
+  # publishes a pass mark for it, so the card shows the distribution and draws none.
+  - component: card
+    column: recall
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Recall
+    description: >-
+      The hero number is the median recall, the share of the truth set that a callset
+      recovers, and the box shows the spread across callsets. It answers how much of
+      the truth the callsets find.
+
+      How to read: a low recall means missed variants, which the false negative card
+      counts. The cited paper states no cut-off for recall, so none is drawn.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/30858580/
+  - component: card
+    column: fp
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: total, with the spread across callsets
+    title: False positives
+    description: >-
+      The hero number is the total count of false positive calls across the callsets,
+      and the box shows how they spread. It answers how many calls have no match in
+      the truth set.
+
+      How to read: a callset far above the rest is where precision is lost. Open the
+      confusion matrix to compare it with its true positives.
+  - component: card
+    column: fn
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: total, with the distribution across callsets
+    title: False negatives
+    description: >-
+      The hero number is the total count of truth variants that no callset found, and
+      the histogram shows how they distribute across callsets. It answers how many true
+      variants are missed.
+
+      How to read: a pile of callsets near zero with a few far to the right means a
+      few callers lose recall. Check those against the recall card.

@@ -1,12 +1,25 @@
 /**
- * Release selector + "What's new" for the multi-file catalog site, in the top bar.
+ * Release selector + "What's new" for the multi-file catalog site, in the top bar
+ * (the Paper bar's extras, before the view switch; the Classic bar's right group).
  * Each half hides itself, silently, when its file (`../versions.json`,
  * `../releases.json`) is missing: a bare export has neither.
  */
 import React, { useEffect, useState } from 'react';
-import { Anchor, Badge, Button, Group, Modal, Select, Stack, Text, Tooltip } from '@mantine/core';
+import {
+  ActionIcon,
+  Anchor,
+  Badge,
+  Button,
+  Group,
+  Modal,
+  Select,
+  Stack,
+  Text,
+  Tooltip,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { CATALOG_ACCENT } from './shared';
+import { Sparkles } from 'lucide-react';
+import { useCatalogPaper } from './shared';
 import type { CatalogGlobal } from './shared';
 import { fetchReleases, fetchVersions } from './siteData';
 import type { ReleaseEntry, ReleasesFile, VersionsFile } from './siteData';
@@ -109,6 +122,7 @@ const ReleaseBar: React.FC = () => {
   const [versions, setVersions] = useState<VersionsFile | null>(null);
   const [releases, setReleases] = useState<ReleasesFile | null>(null);
   const [open, setOpen] = useState(false);
+  const { paper, tone } = useCatalogPaper();
 
   useEffect(() => {
     if (!lazy || !g) return;
@@ -149,7 +163,7 @@ const ReleaseBar: React.FC = () => {
         <Tooltip label="Catalog release" withArrow>
           <Select
             size="xs"
-            w={112}
+            w={paper ? 96 : 112}
             aria-label="Catalog release"
             allowDeselect={false}
             value={slot}
@@ -161,15 +175,31 @@ const ReleaseBar: React.FC = () => {
       ) : null}
       {release && slot ? (
         <>
-          <Button
-            size="xs"
-            variant="light"
-            color={CATALOG_ACCENT}
-            leftSection={<Icon icon="mdi:new-box" width={16} />}
-            onClick={() => setOpen(true)}
-          >
-            What&rsquo;s new
-          </Button>
+          {paper ? (
+            // Paper's bar is a row of icon keys; a labelled button there pushed the
+            // bar's title ("Tools catalog") into an ellipsis at desktop width.
+            <Tooltip label="What’s new" withArrow openDelay={250}>
+              <ActionIcon
+                size="lg"
+                variant="subtle"
+                color="gray"
+                aria-label="What’s new"
+                onClick={() => setOpen(true)}
+              >
+                <Sparkles size={19} strokeWidth={1.6} aria-hidden />
+              </ActionIcon>
+            </Tooltip>
+          ) : (
+            <Button
+              size="xs"
+              variant="light"
+              color={tone}
+              leftSection={<Icon icon="mdi:new-box" width={16} />}
+              onClick={() => setOpen(true)}
+            >
+              What&rsquo;s new
+            </Button>
+          )}
           <Modal
             opened={open}
             onClose={() => setOpen(false)}

@@ -12,20 +12,118 @@ description: >-
 find:
   path_glob: "**/top_ranked_structures/*.pdb"
 recipe: proteinfold/residues.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several engines.
 fixture: residues.tsv
 renders_as:
-  - { id: structure_plddt, component: advanced_viz, kind: molecule_3d,
-      roles: {position: position, entity: entity, chain: chain, value: value, category: category} }
+  - id: structure_plddt
+    component: advanced_viz
+    kind: molecule_3d
+    title: Structure coloured by confidence
+    roles: {position: position, entity: entity, chain: chain, value: value, category: category}
+    description: >-
+      Each atom of the top-ranked structure is coloured by the pLDDT of its residue, in the four AlphaFold DB confidence bands. It answers which parts of the fold can be trusted.
+
+      How to read: regions in the two upper bands are reliable. Well folded cores usually sit there, while loops, termini and disordered regions fall in the two lower bands. Interpret the arrangement of the low bands with caution.
+
+      Lines and annotations: the bands are pLDDT above 90 (very high), 70 to 90 (confident), 50 to 70 (low) and below 50 (very low), as used by AlphaFold DB.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
   # No category lane: the pLDDT lane already colours each residue by its band.
-  - { id: plddt_sequence_track, component: advanced_viz, kind: sequence_track,
-      roles: {position: position, entity: entity, residue: residue, value: value} }
-  - { id: residue_plddt, component: card, column: value, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: confident_share, component: card, column: confidently_placed, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: residue_bands, component: card, column: position, aggregation: count,
-      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: value, color: engine} }
-  - { component: interactive, interactive_type: Select, column_name: engine }
-  - { component: interactive, interactive_type: RangeSlider, column_name: position }
-  - { component: table, row_selection_enabled: true, row_selection_column: position }
+  - id: plddt_sequence_track
+    component: advanced_viz
+    kind: sequence_track
+    title: Confidence along the sequence
+    roles: {position: position, entity: entity, residue: residue, value: value}
+    config:
+      value_label: pLDDT
+    description: >-
+      Each cell is one residue of the sequence, with its amino acid and a lane coloured by its pLDDT. It answers which stretches of the sequence are confidently predicted.
+
+      How to read: continuous high stretches are well predicted domains, and runs of low values are flexible or disordered segments. Selecting a residue highlights it on the structure.
+
+      Lines and annotations: the lane uses the AlphaFold DB bands, above 90 very high, 70 to 90 confident, 50 to 70 low and below 50 very low.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: residue_plddt
+    component: card
+    column: value
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Residue confidence
+    caption: median pLDDT, with its spread
+    description: >-
+      The hero number is the median pLDDT over the residues in view, and the box shows its quartiles. It answers how confident a typical residue is.
+
+      How to read: a median above 70 means most residues are confidently placed. A long lower box points to disordered or poorly predicted regions.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: confident_share
+    component: card
+    column: confidently_placed
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Confidently placed residues
+    caption: share of residues, with its spread
+    description: >-
+      The hero number is the percentage of residues at pLDDT 70 or more, and the box shows its spread across structures. It answers how much of the predicted structure is reliable.
+
+      How to read: a high percentage means a mostly confident model. A low one marks hard or disordered targets, so check the per-residue tiles.
+
+      Lines and annotations: 70 is the lower edge of the confident band of AlphaFold DB.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: residue_bands
+    component: card
+    column: position
+    aggregation: count
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: category
+    top_n_count: 3
+    title: Residues by confidence band
+    caption: residues, by confidence band
+    description: >-
+      The hero number is the count of residues in view, the bars rank the confidence bands by how many residues fall in each, and the line below gives the longest structure. It answers which band dominates.
+
+      How to read: a leading very high or confident band means a reliable model. A leading low or very low band means most of the structure is uncertain.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: plddt_histogram
+    component: figure
+    visu_type: histogram
+    title: Residue confidence distribution
+    dict_kwargs:
+      x: value
+      color: engine
+      labels:
+        value: pLDDT
+        engine: Engine
+    description: >-
+      Each bar counts residues in a pLDDT bin, coloured by engine. It answers how confidence is distributed over the residues.
+
+      How to read: a pile near 90 to 100 means a confident model, and a second mass below 50 marks disordered residues. Compare engines to see which one is more decided.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - component: interactive
+    interactive_type: Select
+    column_name: engine
+    title: Engine
+    description: >-
+      Show the structures of one engine.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: position
+    title: Residue position
+    description: >-
+      Restrict the tiles to a stretch of residues, for example a domain.
+  - component: table
+    title: Residue confidence
+    description: >-
+      One row per residue with its chain, amino acid, pLDDT and confidence band. Selecting rows highlights the residues on the structure.
+
+      How to read: sort by pLDDT to list the weakest residues.
+    row_selection_enabled: true
+    row_selection_column: position

@@ -16,20 +16,111 @@ renders_as:
   # The cells where they sit in their image, coloured by a marker picked in the
   # tile (the marker columns are named by pattern at the dashboard: a panel is
   # only known at ingest) or by segmenter.
+  # C6 N/A: value columns are the run's panel markers, known only at ingest.
   - id: spatial_cells
     component: advanced_viz
     kind: spatial_cells
+    title: Cells in the image
     roles: { cell_id: cell_key, x: X_centroid, y: Y_centroid, category: segmenter, sample: sample, area: Area }
+    description: >-
+      Each point is a segmented cell placed at its centroid in the registered image, coloured by segmentation method or by the intensity of a marker chosen in the controls. It answers where cells and marker signal sit in the tissue.
+
+      How to read: marker positive cells should form the structures the marker is known for, and a patchy or empty region may be a stitching gap or an out-of-focus tile. Compare two segmentation methods on the same image to see where one finds cells the other misses.
+
+      Note: the origin is the top left of the image and y grows downwards, as in image coordinates.
   # Size against shape: segmentation artefacts (merged or fragmented cells) sit
   # apart from the bulk.
+  # C3 N/A: neither regionprops area nor eccentricity has a published cut-off.
   - id: shape_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: Cell size against shape
     roles: { x: Area, y: Eccentricity, label: cell_key, color: segmenter }
-  - { id: cell_count, component: card, column: cell_key, aggregation: count, secondary_layout: composition, breakdown_col: segmenter, headline: true }
-  - { id: median_area, component: card, column: Area, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3, headline: true }
-  - { component: card, column: Eccentricity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: area_box, component: figure, visu_type: box, dict_kwargs: { x: segmenter, y: Area, color: segmenter } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }
-  - { component: interactive, interactive_type: RangeSlider, column_name: Area }
-  - { component: table, row_selection_enabled: true, row_selection_column: cell_key }
+    config:
+      x_title: Cell area (pixels)
+      y_title: Eccentricity
+      top_n_labels: 5
+      legend_pos: bottom
+    description: >-
+      Each point is a segmented cell: its area in pixels on the horizontal axis and its eccentricity on the vertical axis, coloured by segmentation method. It answers whether the masks hold cells of plausible size and shape.
+
+      How to read: most cells form a compact cloud. Points far to the right are large objects, often merged cells, and points at the top of the axis are elongated slivers, often fragments or debris. Compare the methods: one cloud shifted from the other means different masking rules.
+
+      Note: eccentricity is that of the ellipse with the same second moments as the mask, from 0 for a circle towards 1 for a line. Neither quantity has a published cut-off, so no reference line is drawn.
+
+      Source: https://scikit-image.org/docs/stable/api/skimage.measure.html
+  - id: cell_count
+    component: card
+    column: Area
+    aggregation: count
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: segmenter
+    headline: true
+    title: Segmented cells
+    caption: cells, by segmentation method
+    description: >-
+      The hero number is the count of segmented cells in view, the bar splits them by segmentation method, and the line below gives the median and largest cell area. It answers how many cells were found and which method found them.
+
+      How to read: a method finding many times more cells than another is usually splitting cells or segmenting nuclei rather than whole cells. Filter to one image to compare them fairly.
+  - id: median_area
+    component: card
+    column: Area
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: segmenter
+    top_n_count: 3
+    headline: true
+    title: Typical cell area
+    caption: median area, by segmentation method
+    description: >-
+      The hero number is the median cell area in pixels, and the bars rank the segmentation methods by their own median. It answers how large the segmented objects are.
+
+      How to read: nuclear masks are smaller than whole-cell masks by design. A median far below the expected cell size points to over-segmentation, and one far above to merged cells.
+  - component: card
+    column: Eccentricity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Cell roundness
+    caption: median eccentricity, with its spread
+    description: >-
+      The hero number is the median eccentricity of the segmented cells, and the box shows its quartiles. It answers how elongated the masks are.
+
+      How to read: tissue cells are rarely perfect circles, so a moderate median is normal. A box pushed towards 1 means many sliver-like masks, which points to over-segmentation along cell borders.
+  - id: area_box
+    component: figure
+    visu_type: box
+    title: Cell area by method
+    dict_kwargs:
+      x: segmenter
+      y: Area
+      color: segmenter
+      labels:
+        segmenter: Segmentation method
+        Area: Cell area (pixels)
+    description: >-
+      Each box is the spread of cell areas for one segmentation method. It answers whether the methods agree on how big a cell is.
+
+      How to read: overlapping boxes mean the methods mask similar objects. A method with a much smaller box is segmenting nuclei or fragments, and a long upper whisker marks merged cells.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: segmenter
+    title: Segmentation method
+    description: >-
+      Keep the cells of one or more segmentation methods, to read each mask set on its own.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: Area
+    title: Cell area
+    description: >-
+      Restrict the tiles to cells within an area range, for example to drop debris or merged cells.
+  - component: table
+    title: Segmented cells
+    description: >-
+      One row per segmented cell with its marker intensities, centroid and shape measures. Selecting rows filters the tab to those cells.
+
+      How to read: sort by area or eccentricity to inspect the outliers of the size and shape plot.
+    row_selection_enabled: true
+    row_selection_column: cell_key

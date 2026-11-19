@@ -9,16 +9,145 @@ description: >-
 find:
   path_glob: "**/*.bedGraph.gz"
 recipe: bismark/binned_methylation.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: binned_methylation.tsv
 renders_as:
-  - { id: methylation_track, component: advanced_viz, kind: coverage_track, roles: {chromosome: chromosome, position: position, value: methylation_pct, end: end, sample: sample} }
-  - { id: methylation_genome_view, component: advanced_viz, kind: genome_view, roles: {chr: chromosome, pos: position, score: methylation_pct, end: end, sample: sample} }
-  - { component: card, column: methylation_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: methylation_pct, aggregation: median, secondary_layout: gauge, coverage_max: 100 }
-  - { component: card, column: n_cpg, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: n_cpg, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: methylation_track
+    component: advanced_viz
+    kind: coverage_track
+    roles: {chromosome: chromosome, position: position, value: methylation_pct, end: end, sample: sample}
+    config:
+      color_by: sample
+    title: Methylation along the genome
+    description: >-
+      Each trace is a library: the mean CpG methylation of every 10 kb window
+      along a chromosome. It answers where methylation rises or drops, and whether
+      libraries share the pattern.
+
+      How to read: traces that move together show a shared methylome. A library
+      that departs over a long stretch is a candidate for a copy-number change, a
+      sex or cell-type difference, or a technical problem. Zoom to a chromosome to
+      read the detail.
+
+      Note: windows with too few CpGs in a library are dropped, so gaps are
+      expected in CpG-poor regions.
+  - id: methylation_genome_view
+    component: advanced_viz
+    kind: genome_view
+    roles: {chr: chromosome, pos: position, score: methylation_pct, end: end, sample: sample}
+    config:
+      score_title: Methylation (%)
+    title: Methylation genome view
+    description: >-
+      Each mark is a 10 kb window of a library, placed on the genome and coloured by
+      library, with its mean CpG methylation as the height. It answers where along
+      the genome methylation is high or low.
+
+      How to read: compare libraries on the same region to spot a difference. Drag
+      to select a region and open the windows in the table to read the exact values.
+
+      Note: the window size is fixed at 10 kb, so smaller features, such as a single
+      CpG island, are averaged out.
+  - component: card
+    column: methylation_pct
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Window methylation, with its spread
+    title: Average window methylation
+    description: >-
+      The hero number is the mean CpG methylation over all 10 kb windows, and the
+      box shows how windows differ. It answers the overall methylation level and
+      its spread.
+
+      How to read: a box that reaches from low to high values is normal, since
+      methylation varies by region. A shift of the whole box between libraries is a
+      global difference.
+  - component: card
+    column: methylation_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100
+    caption: Median window methylation, out of 100%
+    title: Median window methylation
+    description: >-
+      The hero number is the median CpG methylation of a window, drawn against the
+      full 0 to 100 percent scale, with the lowest and highest window. It answers
+      where the typical window sits.
+
+      How to read: a median near the top is typical of mammalian somatic cells. A
+      low median is typical of a hypomethylated sample or a conversion problem.
+  - component: card
+    column: n_cpg
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: cpg_density_class
+    caption: CpGs, by density class
+    title: CpGs by density class
+    description: >-
+      The hero number is the total of CpGs behind all windows, and the bar splits it
+      by CpG density class. It answers how many CpGs sit in sparse and dense
+      regions.
+
+      How to read: the classes are tertiles of the CpG count per window, an
+      annotation-free stand-in for CpG islands. Dense windows hold most of the CpGs.
+  - component: card
+    column: n_cpg
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: CpGs per window, with their spread
+    title: CpGs per window
+    description: >-
+      The hero number is the mean number of CpGs in a window, and the box shows the
+      spread. It answers how much evidence sits behind each window mean.
+
+      How to read: a window with few CpGs has a noisier methylation value. A wide
+      box means windows differ strongly in density.
   # CpG density is what a CGI is defined by, so its tertiles stand in for the
-  # island annotation nf-core/methylseq bundles at no version.
-  - { component: card, column: methylation_pct, aggregation: count, secondary_layout: donut, breakdown_col: cpg_density_class }
-  - { component: figure, visu_type: box, dict_kwargs: {x: cpg_density_class, y: methylation_pct, color: cpg_density_class, title: Methylation by CpG-density class} }
-  - { component: table }
+  # island annotation nf-core/methylseq bundles at no version. The tertiles hold
+  # equal shares by design, so the former donut over them is replaced by a
+  # count of windows with their methylation range.
+  - component: card
+    column: methylation_pct
+    aggregation: count
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: Windows, with the methylation spread
+    title: Windows in the matrix
+    description: >-
+      The hero number is the count of library windows kept, and the histogram shows
+      how their methylation spreads. It answers how many windows the genome view
+      rests on and how bimodal they are.
+
+      How to read: a histogram with peaks near the two ends is typical of
+      methylation. A single peak in the middle suggests noise or poor conversion.
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: cpg_density_class
+      y: methylation_pct
+      color: cpg_density_class
+      labels: {cpg_density_class: CpG density class, methylation_pct: Window methylation (%)}
+    title: Methylation by CpG density
+    description: >-
+      Each box is the distribution of window methylation within one CpG density
+      class. It answers whether CpG-dense windows are less methylated than sparse
+      ones.
+
+      How to read: methylation is typically lower in CpG-dense, island-like regions
+      and higher in CpG-poor regions. A box that departs from this pattern points to
+      a conversion problem or an unusual sample.
+
+      Note: the classes are tertiles of the CpG count per window, not an island
+      annotation.
+  - component: table
+    title: Binned methylation table
+    description: >-
+      Each row is a 10 kb window of a library, with its mean CpG methylation, the
+      number of CpGs and the density class. It answers the exact value of a window.
+
+      How to read: filter on a chromosome and sort by methylation to list extreme
+      windows.

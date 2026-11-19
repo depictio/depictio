@@ -14,13 +14,91 @@ find:
 recipe: busco/composition.py
 fixture: composition.tsv
 renders_as:
-  - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: assembly_id, taxon: busco_class, rank: rank, abundance: percent} }
+  - id: class_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: BUSCO classes per assembly
+    roles: {sample_id: assembly_id, taxon: busco_class, rank: rank, abundance: percent}
+    config:
+      value_title: Share of BUSCO markers (%)
+      x_title: Assembly
+    description: >-
+      Each bar is an assembly, split into the four BUSCO classes that add up to the
+      lineage set: complete single-copy, complete duplicated, fragmented and
+      missing. It answers whether the genes an assembly lacks are lost or kept
+      twice.
+
+      How to read: a bar that is mostly complete single-copy is the target. A large
+      duplicated part points at haplotypes or a duplication event, a large
+      fragmented part at breaks inside gene models, and a large missing part at
+      absent genes.
+
+      Note: BUSCO publishes no cut-off for any class and asks for results to be read
+      in the biology of the organism, so none is drawn.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
   # One bar per BUSCO run: an assembly assessed in two modes (genome and its
   # annotated proteins) draws two bars side by side instead of one at 200%.
-  - { id: class_composition_by_run, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: run_id, taxon: busco_class, rank: rank, abundance: percent} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: percent, color: busco_class, barmode: stack, title: BUSCO classes per assembly} }
-  - { component: card, column: percent, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: class_composition_by_run
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: BUSCO classes per run
+    roles: {sample_id: run_id, taxon: busco_class, rank: rank, abundance: percent}
+    config:
+      value_title: Share of BUSCO markers (%)
+      x_title: BUSCO run
+    description: >-
+      Each bar is one BUSCO run, split into the four BUSCO classes. An assembly
+      scored in two modes, for example as a genome and as its annotated proteins,
+      draws two bars. It answers how the same assembly compares between modes.
+
+      How to read: a protein run that scores below its genome run points at an
+      annotation that missed genes the assembly holds. Matching bars mean the
+      annotation recovers what the assembly contains.
+
+      Note: BUSCO publishes no cut-off for any class, so none is drawn.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: figure
+    visu_type: bar
+    title: BUSCO classes per assembly
+    dict_kwargs:
+      x: assembly_id
+      y: percent
+      color: busco_class
+      barmode: stack
+      labels: {assembly_id: Assembly, percent: Share of BUSCO markers (%), busco_class: BUSCO class}
+    description: >-
+      Each bar is an assembly, stacked by BUSCO class. It answers how the lineage
+      set divides between complete single-copy, complete duplicated, fragmented and
+      missing genes.
+
+      How to read: the stack should add up to 100 percent, mostly complete
+      single-copy. A stack split between two assessed modes of one assembly can
+      exceed 100 percent, which the per-run tile above avoids.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: card
+    column: percent
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('busco_class') == 'Complete single-copy'"
+    caption: median, with its spread
+    title: Complete single-copy BUSCOs
+    description: >-
+      The hero number is the median percent of BUSCO markers found complete and in
+      one copy, and the box shows the spread over runs. It answers how many of the
+      expected genes each assembly holds cleanly.
+
+      How to read: this is the class to maximise. A box well below the others marks
+      assemblies where genes are lost, fragmented or duplicated.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: table
+    title: BUSCO class composition
+    description: >-
+      Each row is one BUSCO class of one run, with its share of the lineage set in
+      percent. It answers the exact share behind every bar.
+
+      How to read: filter by class to compare one class across assemblies.

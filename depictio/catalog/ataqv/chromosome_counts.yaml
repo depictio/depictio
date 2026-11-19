@@ -10,9 +10,92 @@ find:
 recipe: ataqv/chromosome_counts.py
 fixture: chromosome_counts.tsv
 renders_as:
-  - { id: read_distribution, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: chromosome, mean_expression: log10_read_count, frac_expressing: fraction_of_reads} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: chromosome, y: fraction_of_reads, color: sample, title: Share of reads per reference sequence} }
-  - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
-  - { component: card, column: fraction_of_reads, aggregation: max, secondary_layout: threshold, threshold_value: 0.12, threshold_direction: max, threshold_warn: 0.15 }
-  - { component: card, column: fraction_of_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: read_distribution
+    component: advanced_viz
+    kind: dot_plot
+    title: Reads per reference sequence
+    roles: {cluster: sample, gene: chromosome, mean_expression: log10_read_count, frac_expressing: fraction_of_reads}
+    description: >-
+      Each dot is a reference sequence in a library: its size is the share of the
+      library's reads on that sequence and its colour the log10 read count. It
+      answers whether reads spread over the genome as expected.
+
+      How to read: dots should grow with the length of the sequence, and the
+      libraries should look alike. A sequence with a disproportionate share, such as
+      the mitochondrial genome, or a library whose pattern differs from its peers
+      points to a problem to fix before calling peaks.
+
+      Source: https://github.com/ParkerLab/ataqv
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: chromosome
+      y: fraction_of_reads
+      color: sample
+      labels: {chromosome: Reference sequence, fraction_of_reads: Share of reads, sample: Library}
+    title: Share of reads per reference sequence
+    description: >-
+      Each bar is a reference sequence in a library: the fraction of its reads that
+      fall on it. It answers which sequences take the largest part of each library.
+
+      How to read: compare the bars between libraries. Large sequences should take
+      larger shares, and any sequence standing out of that order deserves a look.
+      ataqv reports no cut-off for this share, so none is drawn.
+  - component: card
+    column: read_count
+    aggregation: sum
+    aggregations: [max, median]
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    title: Reads per reference sequence
+    caption: total reads, with the busiest sequences ranked
+    description: >-
+      The hero number is the total number of reads counted by ataqv, and the bars
+      rank the sequences that hold most of them. It answers where the reads of the
+      run go.
+
+      How to read: the leaders should be the longest sequences. A short sequence
+      among them is a sign of enrichment or contamination.
+  # ataqv publishes no cut-off for the share of reads on one sequence (the old 0.12 line had
+  # no source, RULES section 17), so the card shows the value alone.
+  - component: card
+    column: fraction_of_reads
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: Largest share on one sequence
+    caption: highest share of reads on a single sequence, with the libraries ranked
+    description: >-
+      The hero number is the largest share of a library's reads found on a single
+      reference sequence, and the bars rank the libraries with the highest one. It
+      answers whether a library is dominated by one sequence.
+
+      How to read: a high value is expected for a long chromosome and is worrying
+      for a short one. ataqv defines no cut-off for it, so no pass mark is drawn.
+  - component: card
+    column: fraction_of_reads
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Spread of read shares
+    caption: median share per sequence, with its spread
+    description: >-
+      The hero number is the median share of reads on a reference sequence, and the
+      box shows how the shares spread. It answers how evenly the reads are shared
+      out.
+
+      How to read: a wide box with a long upper whisker means a few sequences take
+      most of the reads. A tight box means an even spread over sequences of similar
+      size.
+  - component: table
+    title: Read counts per sequence
+    description: >-
+      Each row is a reference sequence in a library with its read count, share of
+      the reads and log10 read count. It answers the exact values behind the dot
+      plot.
+
+      How to read: sort by share to find the busiest sequences, or filter to one
+      library to compare it with its peers.

@@ -11,8 +11,97 @@ find:
 recipe: cellranger/library_metrics_long.py
 fixture: library_metrics_long.tsv
 renders_as:
-  - { id: library_metric_picker, component: interactive, interactive_type: Select, column_name: metric }
-  - { id: library_status_picker, component: interactive, interactive_type: SegmentedControl, column_name: status }
-  - { component: card, column: value, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: metric, aggregation: nunique, secondary_layout: top_n, breakdown_col: status, top_n_count: 3 }
-  - { component: table }
+  - id: library_metric_picker
+    component: interactive
+    interactive_type: Select
+    column_name: metric
+    title: Library metric
+    description: >-
+      Shows one library quality metric at a time. It answers how every sample does on that
+      metric.
+
+      How to read: clear the selection to list the four metrics again.
+  - id: library_status_picker
+    component: interactive
+    interactive_type: SegmentedControl
+    column_name: status
+    title: Metric status
+    description: >-
+      Keeps the metrics that pass or the ones that fall below their expected value. It
+      answers which samples need attention.
+
+      How to read: choose warn or fail to list only the metrics below their limit.
+  - component: card
+    column: metric
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: status
+    caption: metrics, by status
+    title: Library metrics by status
+    description: >-
+      The hero number is the count of metric values checked and the bar splits them into pass,
+      warn and fail. It answers how many checks the libraries meet.
+
+      How to read: a bar that is mostly pass means healthy libraries. Open the table to see
+      which sample and metric fell below its limit.
+
+      Lines and annotations: each status compares a value with the expected value 10x gives for
+      that metric: reads in cells above 70 percent, valid barcodes above 75 percent, Q30 of RNA
+      reads above 65 percent and confidently mapped reads above 30 percent. The split between
+      warn and fail is chosen by this catalogue, since the note states one expected value.
+
+      Source: https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf
+  - component: card
+    column: value
+    aggregation: average
+    aggregations: [min]
+    secondary_layout: threshold
+    threshold_value: 0.7
+    threshold_direction: min
+    filter_expr: "pl.col('metric') == 'fraction_reads_in_cells'"
+    caption: reads in cells against the 70% expectation
+    title: Reads in cells
+    description: >-
+      The hero number is the average fraction of reads that fall in called cells, shown against
+      the expected minimum. It answers whether the library is rich in cells and poor in ambient
+      RNA.
+
+      How to read: a value below the line means many reads come from empty droplets. Check the
+      barcode rank plot and the ambient RNA before trusting the counts.
+
+      Lines and annotations: the line is 0.7, the value 10x lists as expected for the fraction
+      of reads in cells.
+
+      Source: https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf
+  - component: card
+    column: value
+    aggregation: average
+    aggregations: [min]
+    secondary_layout: threshold
+    threshold_value: 0.75
+    threshold_direction: min
+    filter_expr: "pl.col('metric') == 'valid_barcodes'"
+    caption: valid barcodes against the 75% expectation
+    title: Valid barcodes
+    description: >-
+      The hero number is the average fraction of reads whose barcode matches the whitelist,
+      shown against the expected minimum. It answers whether the barcode reads are of good
+      quality.
+
+      How to read: a value below the line points to a sequencing or chemistry problem with the
+      barcode read. Look at the Q30 of the barcode in the summary table.
+
+      Lines and annotations: the line is 0.75, the value 10x lists as expected for valid
+      barcodes.
+
+      Source: https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf
+  - component: table
+    title: Library metrics against expectations
+    description: >-
+      Each row is one metric of one sample with its value, the expected limit and a pass, warn
+      or fail status. It answers which sample falls short on which metric.
+
+      How to read: filter on status to list the metrics below their limit.
+
+      Source: https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf

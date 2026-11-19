@@ -311,6 +311,69 @@ def test_a_patch_step_and_the_optional_render_keys(tmp_path) -> None:
     assert top["outputs"][0]["renders"][0]["kind"] == "k"
 
 
+def _changelogged(tmp_path: Path, name: str, version: str, tool_version: str, log: Any) -> Path:
+    """Tool ``t`` with a module changelog, output ``a`` changed in ``tool_version`` and
+    its render too (the index's ``output_version`` / ``_version``)."""
+    tools = [_tool("t", tool_version, {"a": {"d": tool_version}, "b": {"d": 1}})]
+    tools[0]["changelog"] = log
+    a = tools[0]["outputs"][0]
+    a["output"]["output_version"] = tool_version
+    a["renders"][0]["_version"] = tool_version
+    a["renders"][0]["_yaml"] = f"y: {tool_version}"
+    return _export(tmp_path, name, version, tools, {"a": {"d": tool_version}, "b": {"d": 1}})
+
+
+def test_a_version_carries_its_changelog_and_the_output_and_render_versions(tmp_path) -> None:
+    site = tmp_path / "site"
+    v1 = [{"version": "1.0.0", "changes": ["First revision."]}]
+    v2 = [
+        {"version": "1.1.0", "date": "2026-11-18", "changes": ["a: one panel per metric"]},
+        *v1,
+    ]
+    pcs.publish(site, _changelogged(tmp_path, "1", "1.22.0", "1.0.0", v1), "v1.22.0", now=T0)
+    pcs.publish(site, _changelogged(tmp_path, "m", "1.23.0+x", "1.1.0", v2), "latest", now=T1)
+
+    top, below = _json(site, "modules/t.json")["versions"]
+    assert (top["version"], top["date"], top["changelog"]) == (
+        "1.1.0",
+        "2026-11-18",
+        ["a: one panel per metric"],
+    )
+    assert "date" not in below and below["changelog"] == ["First revision."]
+    a, b = top["outputs"]
+    assert a["version"] == "1.1.0" and a["renders"][0]["version"] == "1.1.0"
+    # An output or render that says nothing has no `version`: not "unchanged".
+    assert "version" not in b and "version" not in b["renders"][0]
+    assert below["outputs"][0]["renders"][0] == {
+        "index": "a-0",
+        "component_type": "figure",
+        "_yaml": "y: 1.0.0",
+        "version": "1.0.0",
+    }
+
+
+def test_a_changelog_entry_comes_from_the_newest_slot_that_has_one(tmp_path) -> None:
+    site = tmp_path / "site"
+    # v1.22.0 shipped 1.0.0 with no changelog; latest's module.yaml documents it.
+    log = [
+        {"version": "1.1.0", "changes": ["b: new"]},
+        {"version": "1.0.0", "changes": ["First."]},
+    ]
+    pcs.publish(site, _changelogged(tmp_path, "1", "1.22.0", "1.0.0", []), "v1.22.0", now=T0)
+    pcs.publish(site, _changelogged(tmp_path, "m", "1.23.0+x", "1.1.0", log), "latest", now=T1)
+
+    versions = _json(site, "modules/t.json")["versions"]
+    assert [v.get("changelog") for v in versions] == [["b: new"], ["First."]]
+
+
+def test_a_version_without_a_changelog_entry_has_no_changelog_key(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "1", "1.21.0", "1.0.0"), "v1.21.0", now=T0)
+
+    (only,) = _json(site, "modules/t.json")["versions"]
+    assert "changelog" not in only and "date" not in only
+
+
 def test_modules_of_tools_that_no_slot_has_are_deleted(tmp_path) -> None:
     site = tmp_path / "site"
     pcs.publish(site, _simple(tmp_path, "1", "1.21.0"), "v1.21.0", now=T0)

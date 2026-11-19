@@ -12,5 +12,28 @@ find:
 recipe: snpeff/variant_upset.py
 fixture: variant_upset.tsv
 renders_as:
-  - { id: callset_variant_overlap, component: advanced_viz, kind: upset_plot, roles: {} }
-  - { component: table }
+  # C6 N/A: the set columns are the callers and samples of the run, known only at ingest
+  - id: callset_variant_overlap
+    component: advanced_viz
+    kind: upset_plot
+    title: Variant overlap between callsets
+    roles: {}
+    config:
+      color_intersections_by: degree
+    description: >-
+      Each bar is a combination of callsets (a caller on a sample) and counts the PASS
+      variants that exactly those callsets report, coloured by how many callsets are
+      in the combination. It answers which calls a caller keeps that the others drop.
+
+      How to read: a tall bar for all callsets is the consensus. Bars for one caller
+      alone are its private calls, and for a deeper and a shallower sample of the same
+      individual the gap measures sensitivity, not truth.
+
+      Note: filtered calls are left out, because a caller does not claim them.
+  - component: table
+    title: Variant membership by callset
+    description: >-
+      Each row is a PASS variant with a 1 or 0 per callset. It answers which callsets
+      report a given variant.
+
+      How to read: filter on one callset column to list its private calls.
