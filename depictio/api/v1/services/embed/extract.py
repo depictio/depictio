@@ -1,9 +1,10 @@
 """Extract a component's Plotly figure from the real React renderer.
 
 Same machinery as the dashboard screenshots (``screenshot_service``): the
-worker's Playwright drives the viewer with the admin token, but instead of
-capturing pixels it reads ``gd.data`` / ``gd.layout`` off the Plotly graph
-div. Same renderer, same numbers, no reimplementation.
+worker's Playwright drives the viewer, with a token of the requester's own
+rather than the admin's, but instead of capturing pixels it reads
+``gd.data`` / ``gd.layout`` off the Plotly graph div. Same renderer, same
+numbers, no reimplementation.
 
 A renderer that is not Plotly (SVG, canvas, WebGL, plain HTML) has no figure
 to read, so for those the same pass takes a PNG of the tile once the
@@ -187,19 +188,25 @@ async def extract_component_figure(
     theme: str = "light",
     timeout_s: int | None = None,
     expect: Expect = "plotly",
+    *,
+    token_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Load the embed page headlessly and read its Plotly figure, or snapshot it."""
+    """Load the embed page headlessly and read its Plotly figure, or snapshot it.
+
+    ``token_payload`` is the session the page runs with: the requester's own,
+    minted for this pass (``task_tokens.browser_token_payload``), so the page
+    shows what they may see and runs with no more rights than theirs.
+    """
     from playwright.async_api import async_playwright
 
     from depictio.api.v1.services.screenshot_helpers import (
         HOST_UNREACHABLE_MARKERS,
         apply_init_script,
     )
-    from depictio.api.v1.services.screenshot_service import get_admin_auth_token
 
     timeout_s = timeout_s or settings.notebook_export.extract_timeout_s
     url = embed_url(settings.viewer.url, dashboard_id, component_id, state, theme)
-    token_data = await get_admin_auth_token()
+    token_data = token_payload
     logger.info(f"embed extract: {dashboard_id}/{component_id} via {url.split('#')[0]}")
 
     async with async_playwright() as p:

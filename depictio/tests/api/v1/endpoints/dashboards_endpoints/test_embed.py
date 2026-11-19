@@ -46,9 +46,11 @@ def patched_env():
         }
     )
     routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+    jobs_mod = "depictio.api.v1.services.notebook_export.jobs"
     emb._results.clear()
-    emb._jobs.clear()
     with (
+        patch(f"{jobs_mod}.jobs_collection", db.notebook_export_jobs),
+        patch(f"{jobs_mod}.slots_collection", db.notebook_export_slots),
         patch(f"{routes_mod}.dashboards_collection", db.dashboards),
         patch(f"{routes_mod}.check_project_permission", lambda *a, **k: True),
     ):
@@ -72,14 +74,30 @@ def _state():
     )
 
 
-def _figure(component):
+class _Reader:
+    id = ObjectId()
+
+
+class _Other:
+    id = ObjectId()
+
+
+READER = _Reader()
+
+
+def _figure(component, user=READER):
     return emb.component_figure(
         dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
         component_id=component,
         request=ComponentEmbedRequest(state=_state(), theme="dark"),
-        current_user=object(),
+        current_user=user,  # type: ignore[arg-type]
         access_token=None,
     )
+
+
+def _sent(task) -> dict:
+    """The payload the last ``apply_async`` call queued."""
+    return task.apply_async.call_args.kwargs["args"][0]
 
 
 def test_non_plotly_component_is_unsupported(patched_env):
@@ -91,24 +109,22 @@ def test_a_kind_drawn_without_plotly_is_snapshotted(patched_env):
     """The browser pass is told to take a PNG once the renderer is drawn, rather
     than wait 90 s for a Plotly div the renderer never draws."""
     with patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task:
-        task.delay.return_value = SimpleNamespace(id="job-rec")
         resp = _figure("rec-1")
         assert resp.status == "pending"
-        assert task.delay.call_args.args[0]["expect"] == "image"
+        assert _sent(task)["expect"] == "image"
         _figure("viz-1")
-        assert task.delay.call_args.args[0]["expect"] == "plotly"
+        assert _sent(task)["expect"] == "plotly"
 
 
 def test_a_snapshot_job_hands_back_its_image(patched_env):
-    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task:
-        task.delay.return_value = SimpleNamespace(id="job-rec")
-        _figure("rec-1")
+    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task"):
+        job_id = _figure("rec-1").job_id
     done = SimpleNamespace(
         state="SUCCESS",
         result={"status": "ready", "image": "data:image/png;base64,AAAA", "source": "snapshot"},
     )
     with patch("celery.result.AsyncResult", return_value=done):
-        resp = emb.component_figure_job(job_id="job-rec", current_user=object())
+        resp = emb.component_figure_job(job_id=job_id, current_user=READER)  # type: ignore[arg-type]
     assert resp.status == "ready" and resp.figure is None
     assert resp.image == "data:image/png;base64,AAAA" and resp.source == "snapshot"
 
@@ -132,17 +148,15 @@ def test_parse_extracted_carries_the_renderer_reason():
 
 
 def test_dispatch_then_poll_then_cache(patched_env):
-    sent = {}
-
-    def fake_delay(payload):
-        sent.update(payload)
-        return SimpleNamespace(id="job-1")
-
-    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task.delay", fake_delay):
+    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task:
         first = _figure("viz-1")
-    assert first.status == "pending" and first.job_id == "job-1"
+        sent = _sent(task)
+        assert task.apply_async.call_args.kwargs["task_id"] == first.job_id
+    assert first.status == "pending" and first.job_id
     assert sent["dashboard_id"] == DASHBOARD_ID and sent["component_id"] == "viz-1"
     assert sent["theme"] == "dark" and sent["state"]["filters"][0]["value"] == ["a"]
+    # Run as the reader who asked, never as the admin.
+    assert sent["user_id"] == str(READER.id) and sent["job_id"] == first.job_id
 
     figure = {"data": [{"type": "scatter", "x": [1], "y": [2]}], "layout": {}}
     pending = SimpleNamespace(state="STARTED", result=None)
@@ -150,13 +164,13 @@ def test_dispatch_then_poll_then_cache(patched_env):
         state="SUCCESS", result={"status": "ready", "figure": figure, "source": "extracted"}
     )
     with patch("celery.result.AsyncResult", lambda job_id, app=None: pending):
-        assert emb.component_figure_job("job-1", current_user=object()).status == "pending"
+        assert emb.component_figure_job(first.job_id, current_user=READER).status == "pending"  # type: ignore[arg-type]
     with patch("celery.result.AsyncResult", lambda job_id, app=None: done):
-        got = emb.component_figure_job("job-1", current_user=object())
+        got = emb.component_figure_job(first.job_id, current_user=READER)  # type: ignore[arg-type]
     assert got.status == "ready" and got.figure == figure and got.source == "extracted"
     # The same request now hits the cache and dispatches nothing.
     with patch(
-        "depictio.api.v1.celery_tasks.extract_component_figure_task.delay",
+        "depictio.api.v1.celery_tasks.extract_component_figure_task.apply_async",
         side_effect=AssertionError,
     ):
         again = _figure("viz-1")
@@ -164,10 +178,59 @@ def test_dispatch_then_poll_then_cache(patched_env):
 
 
 def test_failed_job_reports_error(patched_env):
-    failed = SimpleNamespace(state="FAILURE", result=RuntimeError("chromium died"))
+    """A sentence of ours: the exception's text is the worker's."""
+    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task"):
+        job_id = _figure("viz-1").job_id
+    failed = SimpleNamespace(state="FAILURE", result=RuntimeError("/srv/chromium died"))
     with patch("celery.result.AsyncResult", lambda job_id, app=None: failed):
-        got = emb.component_figure_job("job-x", current_user=object())
-    assert got.status == "error" and "chromium" in (got.reason or "")
+        got = emb.component_figure_job(job_id, current_user=READER)  # type: ignore[arg-type]
+    assert got.status == "error" and "/srv" not in (got.reason or "")
+
+
+def test_a_job_is_only_its_requester_s(patched_env):
+    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task"):
+        job_id = _figure("viz-1").job_id
+    for user, job in ((_Other(), job_id), (READER, "never-queued")):
+        with pytest.raises(HTTPException) as exc:
+            emb.component_figure_job(job, current_user=user)  # type: ignore[arg-type]
+        assert exc.value.status_code == 404
+
+
+def test_extractions_are_limited_per_user(patched_env):
+    with (
+        patch("depictio.api.v1.celery_tasks.extract_component_figure_task"),
+        patch.object(emb.settings.notebook_export, "extract_max_active_per_user", 2),
+    ):
+        _figure("viz-1")
+        _figure("rec-1")
+        with pytest.raises(HTTPException) as exc:
+            _figure("fig-1")
+        assert exc.value.status_code == 429
+        # Someone else is not held up by this reader.
+        assert _figure("fig-1", user=_Other()).status == "pending"
+
+
+def test_a_pinned_state_never_takes_the_server_builder(patched_env):
+    """The builders read current data; under pins the renderer draws the tile."""
+    state = AnalysisState.model_validate(
+        {**_state().model_dump(mode="json"), "pins": {"as_of_version": "v1"}}
+    )
+
+    async def build(**kwargs):  # pragma: no cover - must not be reached
+        raise AssertionError("server builder used for a pinned tile")
+
+    with (
+        patch("depictio.api.v1.services.export.plotly_export.build_plotly_export", build),
+        patch("depictio.api.v1.celery_tasks.extract_component_figure_task"),
+    ):
+        resp = emb.component_figure(
+            dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+            component_id="viz-1",
+            request=ComponentEmbedRequest(state=state, theme="light"),
+            current_user=READER,  # type: ignore[arg-type]
+            access_token=None,
+        )
+    assert resp.status == "pending"
 
 
 def test_unknown_component_and_permission(patched_env):
@@ -188,7 +251,7 @@ def test_embed_html_frames_the_viewer_route(patched_env):
         dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
         component_id="fig-1",
         request=ComponentEmbedRequest(state=_state(), theme="light"),
-        current_user=object(),
+        current_user=READER,  # type: ignore[arg-type]
     )
     doc = resp.body.decode()
     assert resp.media_type.startswith("text/html")
@@ -343,11 +406,12 @@ def _run_extract(page: _FakePage, expect: str):
 
     with (
         patch("playwright.async_api.async_playwright", lambda: _PW()),
-        patch("depictio.api.v1.services.screenshot_service.get_admin_auth_token", _noop),
         patch("depictio.api.v1.services.screenshot_helpers.apply_init_script", _noop),
     ):
         return asyncio.run(
-            extract.extract_component_figure(DASHBOARD_ID, "c", {}, timeout_s=1, expect=expect)
+            extract.extract_component_figure(
+                DASHBOARD_ID, "c", {}, timeout_s=1, expect=expect, token_payload={}
+            )
         )
 
 
@@ -390,7 +454,7 @@ def test_a_kind_with_a_server_builder_skips_the_browser(patched_env):
         resp = _figure("viz-1")
     assert resp.status == "ready" and resp.source == "server"
     assert resp.figure == spec
-    task.delay.assert_not_called()
+    task.apply_async.assert_not_called()
 
 
 def test_a_tile_coloured_by_groups_goes_to_the_renderer(patched_env):
@@ -404,14 +468,13 @@ def test_a_tile_coloured_by_groups_goes_to_the_renderer(patched_env):
 
     with (
         patch("depictio.api.v1.services.export.plotly_export.build_plotly_export", build),
-        patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task,
+        patch("depictio.api.v1.celery_tasks.extract_component_figure_task"),
     ):
-        task.delay.return_value = SimpleNamespace(id="job-g")
         resp = emb.component_figure(
             dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
             component_id="viz-1",
             request=ComponentEmbedRequest(state=state, theme="light"),
-            current_user=object(),
+            current_user=READER,  # type: ignore[arg-type]
             access_token=None,
         )
     assert resp.status == "pending"
