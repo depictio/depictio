@@ -301,3 +301,15 @@ global:
 #   -f ./helm-charts/depictio/values-embl-internal-dev.yaml \
 #   -f ./helm-charts/depictio/values-embl-secrets.yaml \
 #   -n datasci-depictio-internal-dev
+
+# MongoDB backups: daily at 03:00 UTC, kept 14 days. Also where restores are
+# rehearsed before touching prod.
+backups:
+  persistence:
+    enabled: true
+    size: 2Gi
+  schedule:
+    enabled: true
+    intervalHours: 24
+    timeOfDay: "03:00"
+    retentionDays: 14
