@@ -6,9 +6,17 @@
  * polars runtime the serverless bundle ships, over a sample of the raw file;
  * its result becomes the committed fixture, so the renders are bound to what
  * the recipe really returns. Nothing loads until "Run" is pressed.
+ *
+ * The step is laid out as the pipeline it is, three stages in order:
+ *   ① raw sample(s)  the tool's own file, any extension; stays in the browser
+ *   ② recipe         the Python module; exported as <tool>/<slug>.py
+ *   ③ fixture        the recipe's result; exported as <tool>/<slug>.tsv
+ * Each stage shows its own state, so it is clear which file goes where and
+ * what is left to do. The fixture stage's body (columns, preview) and the
+ * secondary "drop the expected output" path come from FixtureDrop.
  */
-import { useState } from 'react';
-import { Alert, Badge, Button, Code, FileButton, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { useState, type ReactNode } from 'react';
+import { Alert, Badge, Button, Code, Group, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import Editor from '@monaco-editor/react';
 // Bundles Monaco locally instead of fetching it from a CDN (as depictio's own Code Mode does).
@@ -19,7 +27,9 @@ import { parseFixture } from '../catalog/parseFixture';
 import { recipeOutputColumns } from '../catalog/diagnostics';
 import { recipeRefOf } from '../catalog/yamlGen';
 import { readRawSample } from '../catalog/rawSample';
-
+import DropZone from '../components/DropZone';
+import PipelineStage, { PipelineArrow, type StageStatus } from '../components/PipelineStage';
+import { STUDIO_TONE } from '../theme';
 
 type RunState =
   | { status: 'idle' }
@@ -27,10 +37,25 @@ type RunState =
   | { status: 'ok'; rows: number; columns: Array<{ name: string; dtype: string }>; stdout: string }
   | { status: 'error'; message: string; stdout?: string };
 
-export default function RecipePanel() {
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function RecipePanel({
+  fixtureBody,
+  fixtureDrop,
+}: {
+  /** Columns and preview of the current fixture (stage ③), when there is one. */
+  fixtureBody?: ReactNode;
+  /** The secondary path: drop the recipe's expected output directly. */
+  fixtureDrop?: ReactNode;
+}) {
   const output = useStudioStore((s) => s.output);
   const setOutput = useStudioStore((s) => s.setOutput);
   const setFixtureAt = useStudioStore((s) => s.setFixtureAt);
+  const fixture = useStudioStore((s) => s.fixture);
   const toolId = useStudioStore((s) => s.tool.id);
   const scheme = useComputedColorScheme('light');
   const [run, setRun] = useState<RunState>({ status: 'idle' });
@@ -39,6 +64,7 @@ export default function RecipePanel() {
 
   const inputs = recipe.inputs ?? [];
   const declared = recipeOutputColumns(recipe.code);
+  const recipeRef = recipeRefOf(toolId || '<tool>', output);
 
   const addInputs = async (files: File[]) => {
     try {
@@ -83,31 +109,110 @@ export default function RecipePanel() {
     }
   };
 
+  // Stage states. The fixture is checked against OUTPUT_SCHEMA: a fixture that
+  // lacks a declared column is the recipe's result from an older version of
+  // the code, or a hand-dropped file that is not its output.
+  const fixtureCols = new Set(fixture?.columns.map((c) => c.name) ?? []);
+  const missing = fixture && declared ? declared.filter((c) => !fixtureCols.has(c)) : [];
+  const rawStatus: StageStatus = inputs.length ? 'ready' : 'empty';
+  const recipeStatus: StageStatus =
+    run.status === 'running'
+      ? 'running'
+      : run.status === 'error'
+        ? 'error'
+        : run.status === 'ok' || (fixture && !missing.length)
+          ? 'ready'
+          : 'empty';
+  const fixtureStatus: StageStatus = !fixture ? 'empty' : missing.length ? 'error' : 'ready';
+
   return (
-    <Paper withBorder radius="md" p="md" data-testid="recipe-panel">
-      <Stack gap="sm">
-        <Group justify="space-between">
-          <Group gap="xs">
-            <Icon icon="mdi:language-python" width={20} />
-            <Title order={2} size="h5">
-              Recipe <Code>{recipeRefOf(toolId || '<tool>', output).split('/').pop()}</Code>
-            </Title>
-          </Group>
-          {declared && (
-            <Group gap={4}>
-              <Text size="xs" c="dimmed">
-                OUTPUT_SCHEMA:
-              </Text>
-              {declared.length ? declared.map((c) => <Badge key={c} size="xs" variant="light">{c}</Badge>) : <Text size="xs" c="orange">empty</Text>}
-            </Group>
-          )}
-        </Group>
+    <Stack gap="sm" data-testid="recipe-panel">
+      {/* ① Raw sample(s) */}
+      <PipelineStage
+        index={1}
+        title="Raw sample"
+        status={rawStatus}
+        statusText={inputs.length ? `${inputs.length} file${inputs.length > 1 ? 's' : ''}` : undefined}
+        exportNote="Stays in your browser: not exported, shared in links or saved with the draft (add it again after a reload)."
+        testId="stage-raw"
+      >
         <Text size="sm" c="dimmed">
-          The raw file is reshaped at ingestion by this module. Drop a sample of the raw file, then run
-          the recipe here: its result becomes the committed fixture the renders bind against. The raw
-          sample stays in this tab: it is not exported, shared in links or saved with the draft, so add
-          it again after a reload.
+          The tool's own output file, as it comes out of a run: any extension, compressed or not. Add
+          several to check the recipe across samples.
         </Text>
+        <DropZone
+          multiple
+          compact={inputs.length > 0}
+          onFiles={(f) => void addInputs(f)}
+          emptyLabel="Drop the raw file(s) here, or click to browse"
+          emptyHint="Any text file: .narrowPeak, .bed, .xls, .json, .log, .tsv.gz…"
+          loaded={null}
+          testId="recipe-add-input"
+        />
+        {inputs.length > 0 && (
+          <Stack gap={4} data-testid="recipe-inputs">
+            {inputs.map((i) => (
+              <Group key={i.fileName} gap="xs" wrap="nowrap">
+                <Icon icon="mdi:file-check-outline" width={16} color={`var(--mantine-color-${STUDIO_TONE}-6)`} />
+                <Text size="sm" style={{ flex: 1, minWidth: 0 }} truncate>
+                  {i.sourcePath ?? i.fileName}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {formatBytes(new Blob([i.text]).size)}
+                </Text>
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  color="gray"
+                  aria-label={`Remove ${i.fileName}`}
+                  onClick={() => setOutput({ recipe: { ...recipe, inputs: inputs.filter((x) => x !== i) } })}
+                >
+                  <Icon icon="mdi:close" width={14} />
+                </Button>
+              </Group>
+            ))}
+          </Stack>
+        )}
+      </PipelineStage>
+
+      <PipelineArrow />
+
+      {/* ② Recipe */}
+      <PipelineStage
+        index={2}
+        title="Recipe"
+        status={recipeStatus}
+        statusText={run.status === 'running' ? 'running' : undefined}
+        exportNote={
+          <>
+            Exported as <Code fz="xs">{recipeRef}</Code>, referenced by <Code fz="xs">recipe:</Code> in the output YAML.
+          </>
+        }
+        testId="stage-recipe"
+      >
+        <Text size="sm" c="dimmed">
+          A polars module (<Code fz="xs">SOURCES</Code>, <Code fz="xs">OUTPUT_SCHEMA</Code>,{' '}
+          <Code fz="xs">transform</Code>) that depictio runs at ingestion. Run it here on the raw
+          sample: its result becomes the fixture below.
+        </Text>
+        {declared && (
+          <Group gap={4} data-testid="recipe-output-schema">
+            <Text size="xs" c="dimmed" mr={2}>
+              Columns it returns (OUTPUT_SCHEMA):
+            </Text>
+            {declared.length ? (
+              declared.map((c) => (
+                <Badge key={c} size="xs" variant="light" color={fixture && !fixtureCols.has(c) ? 'red' : STUDIO_TONE}>
+                  {c}
+                </Badge>
+              ))
+            ) : (
+              <Text size="xs" c="orange">
+                none declared
+              </Text>
+            )}
+          </Group>
+        )}
 
         {recipe._untrusted && (
           <Alert
@@ -121,33 +226,6 @@ export default function RecipePanel() {
             page, with access to everything the page can reach. Read it below before you run it.
           </Alert>
         )}
-
-        <Group gap="xs">
-          <FileButton onChange={(f) => f.length && void addInputs(f)} multiple accept=".csv,.tsv,.txt,.tab,.tsv.gz">
-            {(props) => (
-              <Button {...props} size="xs" variant="default" leftSection={<Icon icon="mdi:file-upload-outline" width={14} />} data-testid="recipe-add-input">
-                Add raw sample
-              </Button>
-            )}
-          </FileButton>
-          {inputs.map((i) => (
-            <Badge
-              key={i.fileName}
-              variant="light"
-              rightSection={
-                <Icon
-                  icon="mdi:close"
-                  width={12}
-                  style={{ cursor: 'pointer' }}
-                  aria-label={`Remove ${i.fileName}`}
-                  onClick={() => setOutput({ recipe: { ...recipe, inputs: inputs.filter((x) => x !== i) } })}
-                />
-              }
-            >
-              {i.fileName}
-            </Badge>
-          ))}
-        </Group>
 
         <div style={{ border: '1px solid var(--app-border-color, var(--mantine-color-default-border))', borderRadius: 8, overflow: 'hidden' }}>
           <Editor
@@ -174,16 +252,11 @@ export default function RecipePanel() {
             {run.status === 'running'
               ? run.phase
               : !inputs.length
-                ? 'Add a raw sample first, or drop the expected output below as the fixture.'
+                ? 'Add a raw sample in ① first.'
                 : 'Python + polars in your browser (Pyodide); the first run downloads it.'}
           </Text>
         </Group>
 
-        {run.status === 'ok' && (
-          <Alert color="teal" variant="light" icon={<Icon icon="mdi:check-circle-outline" />} data-testid="recipe-ok">
-            {run.rows} row(s) returned; the fixture now holds them ({run.columns.map((c) => `${c.name} · ${c.dtype}`).join(', ')}).
-          </Alert>
-        )}
         {run.status === 'error' && (
           <Alert color="red" variant="light" icon={<Icon icon="mdi:alert-circle" />} title="The recipe failed" data-testid="recipe-error">
             <Code block style={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto' }}>
@@ -196,7 +269,45 @@ export default function RecipePanel() {
             {run.stdout}
           </Code>
         ) : null}
-      </Stack>
-    </Paper>
+      </PipelineStage>
+
+      <PipelineArrow />
+
+      {/* ③ Fixture: the recipe's result */}
+      <PipelineStage
+        index={3}
+        title="Fixture (the recipe's result)"
+        status={fixtureStatus}
+        statusText={fixture ? `${fixture.rows.length} rows · ${fixture.columns.length} cols` : undefined}
+        exportNote={
+          fixture ? (
+            <>
+              Exported as <Code fz="xs">{`${toolId || '<tool>'}/${fixture.fileName}`}</Code>: the sample
+              CI checks the renders against.
+            </>
+          ) : undefined
+        }
+        testId="stage-fixture"
+      >
+        {run.status === 'ok' && (
+          <Text size="sm" c="dimmed" data-testid="recipe-ok">
+            From the last run of the recipe: {run.rows} row(s).
+          </Text>
+        )}
+        {missing.length > 0 && (
+          <Alert color="red" variant="light" icon={<Icon icon="mdi:alert-circle" />} data-testid="fixture-schema-mismatch">
+            This fixture lacks {missing.join(', ')} from <Code fz="xs">OUTPUT_SCHEMA</Code>. Run the
+            recipe again so the fixture is its current output.
+          </Alert>
+        )}
+        {!fixture && (
+          <Text size="sm" c="dimmed">
+            Run the recipe in ② to produce the fixture. Its columns and rows show here.
+          </Text>
+        )}
+        {fixtureBody}
+        {fixtureDrop}
+      </PipelineStage>
+    </Stack>
   );
 }

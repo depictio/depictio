@@ -67,7 +67,7 @@ function sniffDelimiter(raw: string): ',' | '\t' {
  * on ` 25.41\t147167\t147167\tU\t0\tunclassified`, so the parse turns numbers
  * into column names and every binding made against them is nonsense. Nothing
  * downstream can catch that, and the file cannot be fixed by renaming it: an
- * output with no header needs a recipe, which this app does not author.
+ * output with no header needs a recipe, which the Fixture step offers to start.
  *
  * The tell is numeric column names. Real headers essentially never have them,
  * and a data row usually has several, so a third of the columns is a safe line.

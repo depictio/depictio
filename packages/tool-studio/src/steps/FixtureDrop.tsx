@@ -1,9 +1,8 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   Stack,
   Title,
   Text,
-  Center,
   Group,
   Badge,
   Paper,
@@ -13,6 +12,7 @@ import {
   Button,
   Divider,
   Anchor,
+  Collapse,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
@@ -20,9 +20,12 @@ import RecipePanel from './RecipePanel';
 import { useStudioStore } from '../state/useStudioStore';
 import { parseFixture, headerLooksLikeData } from '../catalog/parseFixture';
 import { fetchFixtureText, TABULAR_EXT_RE } from '../catalog/fetchFixture';
+import { readRawSample } from '../catalog/rawSample';
+import { recipeTemplate } from '../catalog/yamlGen';
 import TablePreviewLocal from '../builder/TablePreviewLocal';
-import type { Dtype } from '../types';
+import type { Dtype, ParsedFixture } from '../types';
 import StepHead from '../components/StepHead';
+import DropZone from '../components/DropZone';
 
 const DTYPE_COLOR: Record<Dtype, string> = {
   String: 'gray',
@@ -44,18 +47,80 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * A file that looks like a tool's raw output rather than a bindable table:
+ * an extension the fixture reader does not take, or a first row of data where
+ * the header should be. Held until the author picks what to do with it.
+ */
+interface PendingRaw {
+  file: File;
+  reason: 'extension' | 'headerless';
+  /** The parse, kept so "use it as is" does not read the file twice. */
+  parsed?: ParsedFixture;
+  bytes: number;
+}
+
+/** Columns, dtypes and the table preview of the current fixture. */
+function FixtureDetails({ fixture }: { fixture: ParsedFixture }) {
+  return (
+    <Paper withBorder p="md" radius="md">
+      <Group justify="space-between" mb="sm">
+        <Title order={2} size="h5">Columns</Title>
+        <Group gap="xs">
+          <Badge variant="light">{fixture.columns.length} cols</Badge>
+          <Badge variant="light" color="gray">
+            {fixture.rows.length} rows
+          </Badge>
+          <Badge variant="light" color={fixture.delimiter === '\t' ? 'orange' : 'blue'}>
+            {fixture.delimiter === '\t' ? 'TSV' : 'CSV'}
+          </Badge>
+        </Group>
+      </Group>
+      <Group gap="xs" mb="md">
+        {fixture.columns.map((c) => (
+          <Badge key={c.name} color={DTYPE_COLOR[c.dtype]} variant="light" radius="sm">
+            {c.name} · {c.dtype}
+          </Badge>
+        ))}
+      </Group>
+      <TablePreviewLocal fixture={fixture} height={360} />
+    </Paper>
+  );
+}
+
 export default function FixtureDrop() {
   const fixture = useStudioStore((s) => s.fixture);
   const setFixture = useStudioStore((s) => s.setFixture);
   const output = useStudioStore((s) => s.output);
-  const [dragActive, setDragActive] = useState(false);
+  const setOutput = useStudioStore((s) => s.setOutput);
+  const tool = useStudioStore((s) => s.tool);
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<PendingRaw | null>(null);
+  const [showExpectedDrop, setShowExpectedDrop] = useState(false);
+
+  /** Commit a parsed table as the fixture, with the notices worth showing. */
+  const commit = (fileName: string, parsed: ParsedFixture, bytes: number) => {
+    setPending(null);
+    setFixture(parsed);
+    if (bytes > LARGE_FIXTURE_BYTES) {
+      notifications.show({
+        color: 'yellow',
+        message: `${fileName} is ${formatBytes(bytes)}, large for a committed fixture. A smaller sample reviews better.`,
+      });
+    }
+    notifications.show({
+      color: parsed.parseWarnings?.length ? 'yellow' : 'teal',
+      message: parsed.parseWarnings?.length
+        ? `${fileName}: parsed with ${parsed.parseWarnings.length} problem(s), see below.`
+        : `${fileName}: ${parsed.columns.length} columns, ${parsed.rows.length} rows.`,
+    });
+  };
 
   /** Everything after the bytes are in hand, shared by the drop and the fetch:
-   *  the size cap, the parse, and the checks worth warning about. */
-  const accept = (fileName: string, raw: string, bytes: number) => {
+   *  the size cap, the parse, and the checks worth warning about. `file` is
+   *  set for a local file, so a raw-looking one can be handed to a recipe. */
+  const accept = (fileName: string, raw: string, bytes: number, file?: File) => {
     // A fixture is a committed *sample*, not the run's output: the largest one
     // in the catalog today is ~900 KB. Above the hard cap the tab freezes on
     // parse and the GitHub blob API fails with an opaque error, so refuse early
@@ -92,41 +157,33 @@ export default function FixtureDrop() {
           : 'The delimiter was sniffed from the header line. If this file is not one column, its header may be further down.',
       });
     }
-    if (headerLooksLikeData(parsed.columns.map((c) => c.name))) {
-      // Nothing downstream can catch this: the numbers become column names and
-      // every binding made against them is meaningless.
+    // Nothing downstream can catch a header made of data: the numbers become
+    // column names and every binding made against them is meaningless. Such a
+    // file is the tool's raw output, which is what a recipe is for, so offer
+    // that instead of committing it.
+    if (headerLooksLikeData(parsed.columns.map((c) => c.name)) && !output.recipe) {
+      if (file) {
+        setPending({ file, reason: 'headerless', parsed, bytes });
+        return;
+      }
       notifications.show({
         color: 'yellow',
         autoClose: 14000,
         title: 'This file may have no header row',
         message:
           'The first line was read as the column names and several of them are numbers. ' +
-          'An output with no header is not directly bindable, so its catalog entry needs a ' +
-          'recipe, which this Studio does not author.',
+          'Turn on "The file needs reshaping first (recipe)" on the Tool step and add it as a raw sample.',
       });
     }
-    setFixture(parsed);
-    if (bytes > LARGE_FIXTURE_BYTES) {
-      notifications.show({
-        color: 'yellow',
-        message: `${fileName} is ${formatBytes(bytes)}, large for a committed fixture. A smaller sample reviews better.`,
-      });
-    }
-    notifications.show({
-      color: parsed.parseWarnings?.length ? 'yellow' : 'teal',
-      message: parsed.parseWarnings?.length
-        ? `${fileName}: parsed with ${parsed.parseWarnings.length} problem(s), see below.`
-        : `${fileName}: ${parsed.columns.length} columns, ${parsed.rows.length} rows.`,
-    });
+    commit(fileName, parsed, bytes);
   };
 
   const ingest = async (file: File) => {
-    if (!TABULAR_EXT_RE.test(file.name)) {
-      notifications.show({
-        color: 'red',
-        autoClose: 8000,
-        message: `${file.name} was not loaded: drop a .csv, .tsv, .txt or .tab file.${fixture ? ` ${fixture.fileName} is still the fixture.` : ''}`,
-      });
+    // Without a recipe, a file the fixture reader does not take is almost
+    // always the tool's raw output (.narrowPeak, .bed, .json, .log…): offer to
+    // reshape it rather than refuse it.
+    if (!TABULAR_EXT_RE.test(file.name) && !output.recipe) {
+      setPending({ file, reason: 'extension', bytes: file.size });
       return;
     }
     let raw: string;
@@ -141,7 +198,48 @@ export default function FixtureDrop() {
       });
       return;
     }
-    accept(file.name, raw, file.size);
+    accept(file.name, raw, file.size, file);
+  };
+
+  /** Turn this output into a recipe output, with the pending file as its raw sample. */
+  const reshapeWithRecipe = async (p: PendingRaw) => {
+    try {
+      const sample = await readRawSample(p.file);
+      setOutput({
+        recipe: {
+          code: output.recipe?.code ?? recipeTemplate(tool.id || 'tool', output.slug || 'output', tool.name),
+          ...output.recipe,
+          inputs: [...(output.recipe?.inputs ?? []).filter((i) => i.fileName !== sample.fileName), sample],
+        },
+      });
+      setPending(null);
+      notifications.show({
+        color: 'teal',
+        message: `${p.file.name} is now the raw sample. Edit the recipe below and run it to produce the fixture.`,
+      });
+    } catch (e) {
+      notifications.show({ color: 'red', message: `Could not read ${p.file.name}: ${(e as Error).message}` });
+    }
+  };
+
+  /** Commit the pending file as the fixture anyway. */
+  const useAsIs = async (p: PendingRaw) => {
+    if (p.parsed) {
+      commit(p.file.name, p.parsed, p.bytes);
+      return;
+    }
+    try {
+      const raw = await p.file.text();
+      setPending(null);
+      const parsed = parseFixture(p.file.name, raw);
+      if (parsed.columns.length === 0) {
+        notifications.show({ color: 'red', message: 'No columns detected. Is the header row present?' });
+        return;
+      }
+      commit(p.file.name, parsed, p.bytes);
+    } catch (e) {
+      notifications.show({ color: 'red', message: `Could not read ${p.file.name}: ${(e as Error).message}` });
+    }
   };
 
   const ingestUrl = async () => {
@@ -157,14 +255,6 @@ export default function FixtureDrop() {
     }
   };
 
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    // `ingest` reports its own failures, so nothing escapes this promise.
-    if (file) void ingest(file);
-  };
-
   // Only flag an unambiguous contradiction: the glob names one tabular
   // extension and the fixture carries the other. A `.txt` output matches
   // nothing here, so it is left alone rather than reported as a mismatch.
@@ -172,68 +262,133 @@ export default function FixtureDrop() {
   const fixtureExt = fixture?.fileName.toLowerCase().match(/\.(csv|tsv)$/)?.[1];
   const globMismatch = Boolean(fixture && globExt && fixtureExt && globExt !== fixtureExt);
 
+  const loadedSummary = fixture
+    ? { label: fixture.fileName, summary: `${fixture.rows.length} rows · ${fixture.columns.length} cols` }
+    : null;
+
+  const parseWarnings = fixture?.parseWarnings?.length ? (
+    <Alert
+      color="orange"
+      variant="light"
+      icon={<Icon icon="mdi:alert-outline" />}
+      title="The file did not parse cleanly"
+      data-testid="parse-warnings"
+    >
+      <Stack gap={4}>
+        {fixture.parseWarnings.map((w) => (
+          <Text size="sm" key={w}>
+            {w}
+          </Text>
+        ))}
+        <Text size="sm" c="dimmed">
+          Rows that do not match the header are previewed as best they can be, but CI reads the
+          file strictly. Fix the file and drop it again.
+        </Text>
+      </Stack>
+    </Alert>
+  ) : null;
+
+  // ── With a recipe: the three-stage pipeline ────────────────────────────────
+  if (output.recipe) {
+    return (
+      <Stack gap="lg">
+        <StepHead
+          step={1}
+          title="Fixture"
+          description="This output is reshaped by a recipe: add a sample of the raw file (①), run the recipe on it (②), and its result becomes the fixture (③). Files never leave your browser."
+        />
+        <RecipePanel
+          fixtureBody={
+            fixture ? (
+              <Stack gap="sm">
+                {parseWarnings}
+                <FixtureDetails fixture={fixture} />
+              </Stack>
+            ) : null
+          }
+          fixtureDrop={
+            <Stack gap={6}>
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                c="dimmed"
+                onClick={() => setShowExpectedDrop((v) => !v)}
+                data-testid="expected-output-toggle"
+              >
+                {showExpectedDrop ? 'Hide' : 'Or drop the expected output directly instead of running the recipe'}
+              </Anchor>
+              <Collapse in={showExpectedDrop}>
+                {showExpectedDrop && (
+                  <DropZone
+                    compact
+                    onFiles={(f) => void ingest(f[0])}
+                    emptyLabel="Drop the recipe's expected output (.csv / .tsv)"
+                    loaded={null}
+                    testId="expected-output-drop"
+                  />
+                )}
+              </Collapse>
+            </Stack>
+          }
+        />
+      </Stack>
+    );
+  }
+
+  // ── Without a recipe: the file is the fixture ──────────────────────────────
   return (
     <Stack gap="lg">
       <StepHead
         step={1}
         title="Fixture"
-        description={
-          output.recipe
-            ? "This output is reshaped by a recipe, so the fixture is the recipe's output: run the recipe on a raw sample below, or drop its expected output. A dropped file never leaves your browser."
-            : "Provide the tool's output file. It's bundled verbatim as the fixture and grounds your bindings in CI. A dropped file never leaves your browser."
-        }
+        description="Provide the tool's output file. It's bundled verbatim as the fixture and grounds your bindings in CI. A dropped file never leaves your browser."
       />
 
-      <RecipePanel />
+      <DropZone
+        onFiles={(f) => void ingest(f[0])}
+        emptyLabel="Drop the output file, or click to browse"
+        emptyHint="A table with a header row (.csv, .tsv, .txt, .tab). Anything else can be reshaped with a recipe."
+        loaded={loadedSummary}
+        testId="fixture-drop"
+      />
 
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={onDrop}
-        style={{
-          width: '100%',
-          borderWidth: 2,
-          borderStyle: 'dashed',
-          // The Paper tile radius and hairline (glass.css), so the drop zone
-          // reads as one of the page's cards waiting to be filled.
-          borderRadius: 'var(--gl-tile-radius, 8px)',
-          borderColor: dragActive
-            ? 'var(--mantine-primary-color-filled)'
-            : 'var(--gp-input-line, var(--mantine-color-default-border))',
-          padding: '40px 20px',
-          cursor: 'pointer',
-          background: dragActive ? 'var(--mantine-primary-color-light)' : 'var(--gp-card-bg, transparent)',
-          color: 'inherit',
-          transition: 'border-color 120ms, background-color 120ms',
-        }}
-      >
-        <Center>
-          <Stack align="center" gap={4}>
-            <Icon icon="mdi:file-upload-outline" width={40} />
-            <Text fw={600}>
-              {fixture ? fixture.fileName : 'Drop a .csv, .tsv, .txt or .tab file, or click to browse'}
+      {pending && (
+        <Alert
+          color="yellow"
+          variant="light"
+          icon={<Icon icon="mdi:file-alert-outline" />}
+          title={
+            pending.reason === 'extension'
+              ? `${pending.file.name} looks like a raw output, not a table`
+              : `${pending.file.name} may have no header row`
+          }
+          data-testid="raw-file-offer"
+          withCloseButton
+          onClose={() => setPending(null)}
+        >
+          <Stack gap="sm">
+            <Text size="sm">
+              {pending.reason === 'extension'
+                ? 'Its extension is not one the fixture reader takes (.csv, .tsv, .txt, .tab). A file like this is usually reshaped at ingestion by a recipe, a small polars module you write and run here.'
+                : 'The first line was read as the column names and several of them are numbers, so the file probably starts on data. An output with no header is not directly bindable: a recipe gives it its columns.'}
             </Text>
-            <Text size="xs" c="dimmed">
-              Delimiter from the extension for .csv and .tsv, sniffed otherwise
-            </Text>
+            <Group gap="sm">
+              <Button
+                size="xs"
+                leftSection={<Icon icon="mdi:language-python" width={16} />}
+                onClick={() => void reshapeWithRecipe(pending)}
+                data-testid="raw-file-use-recipe"
+              >
+                Reshape it with a recipe
+              </Button>
+              <Button size="xs" variant="default" onClick={() => void useAsIs(pending)} data-testid="raw-file-as-is">
+                Use it as is
+              </Button>
+            </Group>
           </Stack>
-        </Center>
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".csv,.tsv,.txt,.tab"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const f = e.currentTarget.files?.[0];
-          if (f) void ingest(f);
-        }}
-      />
+        </Alert>
+      )}
 
       {/* Fetch from a URL. The path glob is a pattern rather than an address,
           so there is nothing to pull from the tool source itself; what this is
@@ -262,16 +417,15 @@ export default function FixtureDrop() {
       </Group>
       <Text size="xs" c="dimmed" mt={-8}>
         Where to find real outputs:{' '}
-        <Anchor
-          size="xs"
-          href="https://nf-co.re/pipelines"
-          target="_blank"
-          rel="noreferrer"
-        >
+        <Anchor size="xs" href="https://nf-co.re/pipelines" target="_blank" rel="noreferrer">
           nf-core megatests
         </Anchor>{' '}
         (each pipeline's <em>Results</em> tab browses its full-scale run, the closest thing to your
         own output),{' '}
+        <Anchor size="xs" href="https://github.com/nf-core/test-datasets" target="_blank" rel="noreferrer">
+          nf-core test-datasets
+        </Anchor>{' '}
+        (branch <Code fz="xs">modules</Code>, <Code fz="xs">data/genomics/…</Code>),{' '}
         <Anchor
           size="xs"
           href="https://github.com/MultiQC/test-data/tree/main/data/modules"
@@ -289,8 +443,7 @@ export default function FixtureDrop() {
         >
           Galaxy tools-iuc
         </Anchor>{' '}
-        (each tool's <Code fz="xs">test-data/</Code>). nf-core module tests are no help: they hold
-        checksums, not output files.
+        (each tool's <Code fz="xs">test-data/</Code>).
       </Text>
 
       {fixture && output.path_glob && (
@@ -321,52 +474,8 @@ export default function FixtureDrop() {
         </Alert>
       )}
 
-      {fixture?.parseWarnings?.length ? (
-        <Alert
-          color="orange"
-          variant="light"
-          icon={<Icon icon="mdi:alert-outline" />}
-          title="The file did not parse cleanly"
-          data-testid="parse-warnings"
-        >
-          <Stack gap={4}>
-            {fixture.parseWarnings.map((w) => (
-              <Text size="sm" key={w}>
-                {w}
-              </Text>
-            ))}
-            <Text size="sm" c="dimmed">
-              Rows that do not match the header are previewed as best they can be, but CI reads the
-              file strictly. Fix the file and drop it again.
-            </Text>
-          </Stack>
-        </Alert>
-      ) : null}
-
-      {fixture && (
-        <Paper withBorder p="md" radius="md">
-          <Group justify="space-between" mb="sm">
-            <Title order={2} size="h5">Columns</Title>
-            <Group gap="xs">
-              <Badge variant="light">{fixture.columns.length} cols</Badge>
-              <Badge variant="light" color="gray">
-                {fixture.rows.length} rows
-              </Badge>
-              <Badge variant="light" color={fixture.delimiter === '\t' ? 'orange' : 'blue'}>
-                {fixture.delimiter === '\t' ? 'TSV' : 'CSV'}
-              </Badge>
-            </Group>
-          </Group>
-          <Group gap="xs" mb="md">
-            {fixture.columns.map((c) => (
-              <Badge key={c.name} color={DTYPE_COLOR[c.dtype]} variant="light" radius="sm">
-                {c.name} · {c.dtype}
-              </Badge>
-            ))}
-          </Group>
-          <TablePreviewLocal fixture={fixture} height={360} />
-        </Paper>
-      )}
+      {parseWarnings}
+      {fixture && <FixtureDetails fixture={fixture} />}
     </Stack>
   );
 }
