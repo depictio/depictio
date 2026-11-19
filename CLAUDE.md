@@ -312,6 +312,11 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 - **Opaque blobs** — `geojson` (fixed S3 key), `phylogeny` (bare filesystem path, never uploaded)
 
 `metatype` is a free-form unvalidated string — never key behaviour on it.
+- Delta writes keep row order **within one Arrow batch only**: deltalake 1.6.2 writes a stream's
+  batches concurrently. `write_delta_table_versioned` hands a whole frame over as one batch
+  (one-line-per-row scans are only readable in order, #1418); a recipe's `transform_batches`
+  frames each keep their rows in order but may land in any order. Never feed deltalake a
+  multi-batch stream of a table whose order is data
 
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
