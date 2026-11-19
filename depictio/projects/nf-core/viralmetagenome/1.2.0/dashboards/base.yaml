@@ -1410,7 +1410,10 @@ tabs:
     tag: vm-cns-card-completeness
     index: cns-card-completeness
     title: Completeness
-    description: Complete at 95% reference cover or more, Partial from 50%, Fragment under. Shorter than reference is a genome that aligns end to end but spans under 60% of its hit: the hit may be longer than the segment, or the genome stops short of both ends; check the hit before calling it truncated.
+    description: >-
+      Complete at 95% reference cover or more, Partial from 50%, Fragment under. Shorter than
+      reference is a genome that aligns end to end but spans under 60% of its hit: the hit may be longer
+      than the segment, or the genome stops short of both ends; check the hit before calling it truncated.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
