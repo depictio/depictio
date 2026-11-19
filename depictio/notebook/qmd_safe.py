@@ -95,7 +95,8 @@ def meta_text(value: Any) -> str:
     are read from the source). A closing pair is broken too: Quarto 1.9 fails
     the whole render on a title holding ``>}}`` alone.
     """
-    text = html.escape(one_line("" if value is None else str(value)), quote=False)
+    # ``<`` only: a tag is what pandoc would keep raw; ``&`` stays readable.
+    text = one_line("" if value is None else str(value)).replace("<", "&lt;")
     text = _CLOSE_PAIR.sub("}" + ZWSP, _BRACE_PAIR.sub("{" + ZWSP, text))
     return text.replace("`", "&#96;")
 

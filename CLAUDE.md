@@ -320,7 +320,20 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 - Any component in a notebook: `depictio/notebook/` (`DepictioClient`), headless figure
   extraction via the viewer's `/embed/{dashboard}/{component}` route (`services/embed/`)
 - The rendered HTML report is that same `.qmd` run by `quarto render` on a worker, behind
-  `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (off), owner-only when the dashboard carries code-mode figures
+  `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (on). The server render never runs an author's Python:
+  code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`), and a dashboard
+  carrying them renders for project owners only; anonymous visitors cannot render
+- **Nothing dynamic reaches the `.qmd` raw**: Quarto runs inline `` `{python}` ``, chunk fences and
+  `{{< shortcodes >}}` (in prose, raw HTML/typst, code-cell strings and cell *output*). Every site
+  writes through `depictio/notebook/qmd_safe.py` (`esc`, `defuse`, `comment`, `typst_str`,
+  `meta_text`), `cells.render_cell` defuses every cell again, and the kernel's outputs are
+  shortcode-free (`inert_outputs`). `test_injection.py` renders a poisoned export through Quarto
+- Quarto runs with an allow-listed environment (`render.render_environment`: no S3/Mongo/`DEPICTIO_*`
+  secrets, only the API URL and a token the worker mints at task start and revokes), in its own
+  process group (killed whole on timeout). Jobs (`notebook_export/jobs.py`) are bound to their
+  requester in every state, limited per user (429), reports bounded deployment-wide
+  (`report_concurrency`, below the report worker's pool), kept `report_retention_hours`. Headless
+  extraction runs as the requester, never with the admin token
 - Design: `docs/design/rfc-notebook-export.md`
 
 ### Auth & Storage

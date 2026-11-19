@@ -297,8 +297,15 @@ services:
   # these queues too, so this is needed only when reports are rendered: bring
   # it up with `docker compose --profile export up -d` and set
   # DEPICTIO_CELERY_QUEUES=celery on depictio-celery-worker. Keep its
-  # concurrency above the number of reports rendered at once, since each
-  # report holds one slot while its passes use the others.
+  # concurrency above DEPICTIO_NOTEBOOK_EXPORT_REPORT_CONCURRENCY (reports
+  # rendered at once on the deployment, 1 by default), since each report holds
+  # one slot while its passes use the others; a report finding no free report
+  # slot is retried later rather than holding a worker.
+  # The keys volume is mounted because the worker mints each render's (and
+  # each pass's) token for the requester. Quarto and its kernel run with an
+  # allow-listed environment, but as this container's user: a deployment that
+  # wants the render without the signing key in reach runs reports in a
+  # container of their own and mints tokens elsewhere.
   depictio-export-worker:
     container_name: depictio-export-worker
     profiles: ["export"]

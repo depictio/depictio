@@ -3,6 +3,8 @@ Celery application for background task processing.
 Integrated with FastAPI backend for dashboard component generation.
 """
 
+from typing import Any
+
 from celery import Celery
 from celery.signals import task_failure
 
@@ -1009,12 +1011,20 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
             logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
 
 
+_REPORT_SLOT = "report"
+# A report that finds every report slot taken waits this long before asking
+# again, without holding a worker meanwhile.
+_REPORT_SLOT_RETRY_S = 30
+
+
 @celery_app.task(
     bind=True,
     name="render_notebook_report",
     # Room for the optional PDF, a second render of the same document.
     soft_time_limit=2 * settings.notebook_export.render_timeout_s + 60,
     time_limit=2 * settings.notebook_export.render_timeout_s + 120,
+    # Waiting for a report slot: retried until the job's own record expires.
+    max_retries=None,
 )
 def render_notebook_report(
     self,
@@ -1023,69 +1033,89 @@ def render_notebook_report(
     notebook_key: str,
     stem: str,
     api_url: str,
-    token_id: str,
     pdf: bool = False,
+    **_legacy: Any,
 ) -> dict:
     """Execute an exported notebook and keep the report Quarto renders from it.
 
     The notebook itself is staged in S3 by the endpoint rather than sent here:
-    an export runs to ~10 MB, which is not what a broker message is for. The
-    same goes for the token — only the id of a short-lived one minted for the
-    caller travels through Redis, and it is revoked as soon as the render is
-    over, whichever way it ends.
+    an export runs to ~10 MB, which is not what a broker message is for.
 
-    The render executes the notebook against this deployment's own API, with
-    the caller's rights: every tile that is rendered rather than computed costs
-    a browser pass, which is why this is a worker task and not a request.
+    The render executes the notebook against this deployment's own API with the
+    caller's rights, through a token minted here, when the work starts (a job
+    can wait in the queue), for at least the task's time limit, and revoked as
+    soon as the render is over, whichever way it ends. Every tile that is
+    rendered rather than computed costs a browser pass, which is why this is a
+    worker task and not a request.
+
+    At most ``report_concurrency`` reports run at once on the deployment: a
+    report holds its worker while the passes it waits on need workers too.
+    A report finding no free slot is retried later rather than holding one.
+
+    A failure is reported to the user as a sentence; Quarto's log, which can
+    carry worker paths and whatever the document printed, stays in the
+    worker's log.
     """
     import asyncio
 
     from beanie import init_beanie
+    from celery.exceptions import SoftTimeLimitExceeded
     from pymongo import AsyncMongoClient
 
     from depictio.api.v1.configs.config import MONGODB_URL
     from depictio.api.v1.configs.logging_init import logger
-    from depictio.api.v1.services.notebook_export import store
+    from depictio.api.v1.services.notebook_export import jobs, store
     from depictio.api.v1.services.notebook_export.render import (
+        RenderUnavailable,
         render_quarto_html,
         render_quarto_pdf,
     )
+    from depictio.api.v1.services.task_tokens import mint_task_token, revoke
     from depictio.models.models.users import TokenBeanie, UserBeanie
 
-    async def _with_token(action):
+    limit_s = 2 * settings.notebook_export.render_timeout_s + 120
+    if not jobs.acquire_slot(
+        _REPORT_SLOT,
+        job_id,
+        capacity=settings.notebook_export.report_concurrency,
+        hold_s=limit_s,
+    ):
+        raise self.retry(countdown=_REPORT_SLOT_RETRY_S)
+
+    async def _with_beanie(action):
         client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
         try:
             await init_beanie(
                 database=client[settings.mongodb.db_name],
                 document_models=[TokenBeanie, UserBeanie],
             )
-            token = await TokenBeanie.get(token_id)
-            return await action(token)
+            return await action()
         finally:
             await client.close()
 
-    async def _read(token):
-        return token.access_token if token else None
-
-    async def _revoke(token):
-        if token:
-            await token.delete()
-        return None
-
+    token: TokenBeanie | None = None
     html_key = store.job_key(user_id, job_id, f"{stem}.html")
+    status = "failed"
     try:
-        access_token = asyncio.run(_with_token(_read))
-        if not access_token:
-            raise RuntimeError("the render token expired before the job started")
+        token = asyncio.run(
+            _with_beanie(
+                lambda: mint_task_token(user_id, f"notebook-report-{job_id}", limit_s + 300)
+            )
+        )
         self.update_state(state="PROGRESS", meta={"phase": "rendering", "job_id": job_id})
         notebook = store.get(notebook_key)
-        html = render_quarto_html(
-            notebook,
-            stem=stem,
-            api_url=api_url,
-            api_token=access_token,
-            timeout_s=settings.notebook_export.render_timeout_s,
-        )
+        try:
+            html = render_quarto_html(
+                notebook,
+                stem=stem,
+                api_url=api_url,
+                api_token=token.access_token,
+                timeout_s=settings.notebook_export.render_timeout_s,
+            )
+        except RenderUnavailable as exc:
+            if exc.log:
+                logger.warning(f"render_notebook_report {job_id}: quarto log:\n{exc.log}")
+            raise
         self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
         store.put(html_key, html, store.HTML_MEDIA_TYPE)
         logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
@@ -1106,24 +1136,50 @@ def render_notebook_report(
                     notebook,
                     stem=stem,
                     api_url=api_url,
-                    api_token=access_token,
+                    api_token=token.access_token,
                     timeout_s=settings.notebook_export.render_timeout_s,
                 )
                 pdf_key = store.job_key(user_id, job_id, f"{stem}.pdf")
                 store.put(pdf_key, pdf_bytes, store.PDF_MEDIA_TYPE)
                 out.update(pdf_key=pdf_key, pdf_filename=f"{stem}.pdf")
+            except SoftTimeLimitExceeded:
+                raise
             except Exception as exc:  # noqa: BLE001 — the HTML report stands on its own
-                logger.warning(f"render_notebook_report: PDF failed for {job_id}: {exc}")
-                out["pdf_error"] = str(exc)[-500:]
+                log = getattr(exc, "log", "")
+                logger.warning(f"render_notebook_report: PDF failed for {job_id}: {exc}\n{log}")
+                out["pdf_error"] = (
+                    str(exc) if isinstance(exc, RenderUnavailable) else "The PDF could not be made."
+                )
+        status = "success"
         return out
+    except BaseException as exc:
+        # What the user is told: a sentence of ours, never the exception's
+        # text (a Quarto log, a worker path, what the document printed).
+        reason = (
+            str(exc)
+            if isinstance(exc, RenderUnavailable)
+            else "the report ran past its time limit"
+            if isinstance(exc, SoftTimeLimitExceeded)
+            else "the report could not be rendered (the server log has the details)"
+        )
+        logger.warning(f"render_notebook_report {job_id} failed: {exc!r}")
+        jobs.finish(job_id, "failed", reason=reason)
+        raise
     finally:
         # The staged notebook has served its purpose either way, and a token
         # minted for one render outlives its usefulness the moment it ends.
         store.delete(notebook_key)
+        jobs.release_slot(_REPORT_SLOT, job_id)
+        if status == "success":
+            jobs.finish(job_id, status)
         try:
-            asyncio.run(_with_token(_revoke))
+            asyncio.run(_with_beanie(lambda: revoke(token)))
         except Exception as exc:  # noqa: BLE001 — never mask the render's own error
-            logger.warning(f"render_notebook_report: failed to revoke token {token_id}: {exc}")
+            logger.warning(f"render_notebook_report: failed to revoke the token of {job_id}: {exc}")
+        try:
+            jobs.prune_reports()
+        except Exception as exc:  # noqa: BLE001 — retention is best effort
+            logger.warning(f"render_notebook_report: pruning old reports failed: {exc}")
 
 
 # NOTE: Dash apps will import celery_app when they're created in flask_dispatcher.py

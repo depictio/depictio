@@ -1196,6 +1196,12 @@ async def save_dashboard(
         # Visibility is project-driven: dashboards are born with their
         # project's flag, whatever the client sent.
         save_payload["is_public"] = get_project_visibility(project_id)
+        # Ownership is the server's too: a client could otherwise create a
+        # dashboard owned by anyone it names (or by nobody), and owners are
+        # who may change it.
+        save_payload["permissions"] = _creation_permissions(
+            current_user, save_payload.get("parent_dashboard_id"), project_id
+        )
 
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
@@ -1247,6 +1253,43 @@ async def save_dashboard(
         return {"message": message, "dashboard_id": dashboard_id_str}
     else:
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
+
+
+def _creation_permissions(
+    current_user: User, parent_dashboard_id: Any, project_id: Any
+) -> dict[str, Any]:
+    """A new dashboard's permissions, set by the server rather than the client.
+
+    A main tab (a new or duplicated dashboard) is owned by its creator alone,
+    the shape the React client sends. A child tab belongs to its family and
+    takes its main tab's permissions, which only someone who may edit that main
+    tab can add to.
+    """
+    if parent_dashboard_id:
+        parent = dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(str(parent_dashboard_id))},
+            {"permissions": 1, "project_id": 1},
+        )
+        if parent is None or str(parent.get("project_id")) != str(project_id):
+            raise HTTPException(
+                status_code=422, detail="A tab's parent dashboard must exist in its project."
+            )
+        if not check_dashboard_mutation_permission(parent, current_user, "editor"):
+            raise HTTPException(
+                status_code=403, detail="You don't have permission to add a tab to this dashboard."
+            )
+        return parent.get("permissions") or {"owners": [], "editors": [], "viewers": []}
+    return {
+        "owners": [
+            {
+                "_id": ObjectId(str(current_user.id)),
+                "email": current_user.email,
+                "is_admin": bool(getattr(current_user, "is_admin", False)),
+            }
+        ],
+        "editors": [],
+        "viewers": [],
+    }
 
 
 def _queue_screenshot(dashboard_id_str: str, current_user: Any, *, force: bool) -> None:

@@ -2901,11 +2901,12 @@ class NotebookExportConfig(BaseSettings):
         ),
     )
     max_rows: int = Field(
-        default=5_000_000,
+        default=1_000_000,
         description=(
             "Largest table the Parquet data endpoint will serve in one response; "
             "bigger collections are refused with 413 so a notebook cannot pull an "
-            "arbitrarily large table through the API."
+            "arbitrarily large table through the API. The table is built in the API's "
+            "memory, so this is also that request's memory bound."
         ),
     )
     extract_timeout_s: int = Field(
@@ -2923,8 +2924,9 @@ class NotebookExportConfig(BaseSettings):
             "ships Quarto and the Jupyter kernel (`WITH_QUARTO`, `--extra render`). Turn it "
             "off for a worker built without them; the render executes the exported document "
             "on a worker and costs a browser pass per rendered tile. "
-            "A dashboard carrying code-mode figures is only rendered for its owners, since "
-            "their Python runs on the worker."
+            "The render never runs an author's Python itself: code-mode figures are drawn "
+            "through the API's sandbox, and a dashboard carrying them is rendered only for "
+            "the project's owners. Anonymous visitors cannot render."
         ),
     )
     render_timeout_s: int = Field(
@@ -2934,6 +2936,40 @@ class NotebookExportConfig(BaseSettings):
     render_prefix: str = Field(
         default="notebook_reports",
         description="S3 key prefix the rendered reports and their staged notebooks are written to.",
+    )
+    report_retention_hours: int = Field(
+        default=72,
+        description=(
+            "How long a rendered report (HTML, PDF) is kept for download. Older objects "
+            "under `render_prefix` are deleted by the next render that finishes, and the "
+            "job's record expires with them (a TTL index)."
+        ),
+    )
+    render_max_active_per_user: int = Field(
+        default=2,
+        description="Report renders one user may have queued or running at once (429 past it).",
+    )
+    render_max_per_hour: int = Field(
+        default=20, description="Report renders one user may start in an hour (429 past it)."
+    )
+    report_concurrency: int = Field(
+        default=1,
+        description=(
+            "Reports rendering at once on the whole deployment. Keep it below the slots of "
+            "the worker(s) consuming the report queue: a report waits on its tiles' browser "
+            "passes (export queue), and a pass can wait on a compute task (default queue). "
+            "A report that finds no free slot is retried later, without holding one."
+        ),
+    )
+    extract_max_active_per_user: int = Field(
+        default=4,
+        description=(
+            "Headless figure extractions one user may have pending at once (429 past it)."
+        ),
+    )
+    extract_max_per_hour: int = Field(
+        default=600,
+        description="Headless figure extractions one user may start in an hour (429 past it).",
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_")
