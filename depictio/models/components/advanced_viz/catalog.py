@@ -1076,11 +1076,15 @@ def read_fixture_schema(path: Path) -> dict[str, str]:
     return {name: _dtype_name(dtype) for name, dtype in schema.items()}
 
 
-def recipe_output_columns(recipe_ref: str) -> list[str]:
-    """Return the output column names a recipe produces (its OUTPUT_SCHEMA)."""
+def recipe_output_columns(recipe_ref: str, search_dir: Path | None = None) -> list[str]:
+    """Return the output column names a recipe produces (its OUTPUT_SCHEMA).
+
+    ``search_dir``: the tool folder being validated, tried first for a
+    module-owned recipe that is not in the catalog yet.
+    """
     from depictio.recipes import load_recipe
 
-    module = load_recipe(recipe_ref)
+    module = load_recipe(recipe_ref, search_dir=search_dir)
     return list(module.OUTPUT_SCHEMA.keys())
 
 
