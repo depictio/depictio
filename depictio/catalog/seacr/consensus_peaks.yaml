@@ -2,9 +2,9 @@ id: seacr_consensus_peaks
 name: Consensus peak overlap
 mode: peaks/consensus
 description: >-
-  Merged consensus intervals per target against the replicates that called a
-  peak on them, as one 0/1 column per replicate. The intersections say how
-  reproducible the peak set is between replicates.
+  Merged consensus intervals per target against the replicates that called a peak on
+  them, as one 0/1 column per replicate. The intersections say how reproducible the
+  peak set is between replicates.
 # The CUT&RUN-family pipelines write this table for whichever caller ran; the
 # member file names carry both the replicate and the caller, which is where the
 # `caller` column and the set columns come from.
@@ -15,13 +15,146 @@ fixture: consensus_peaks.tsv
 renders_as:
   # The renderer enumerates the binary replicate columns itself, so the upset
   # render binds no role.
-  - { id: seacr_consensus_upset, component: advanced_viz, kind: upset_plot }
+  # C1 N/A: the sets are the replicate columns themselves, there is no other column to colour by.
+  - id: seacr_consensus_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Replicate overlap of consensus peaks
+    config:
+      color_intersections_by: degree
+    description: >-
+      Each bar is a combination of replicates and counts the merged consensus intervals
+      that every replicate of the combination called a peak on. It answers how
+      reproducible the peak set is between replicates.
+
+      How to read: a tall bar for all replicates together means the peaks are
+      reproducible. Tall bars for single replicates mean that replicate calls peaks the
+      others miss, which is typical of a noisy or over-sensitive library. Compare the set
+      sizes on the left with the intersections.
+
+      Note: SEACR publishes no minimum number of replicates, and the pipeline decides
+      which consensus peaks to keep with its own replicate threshold.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
   # The merged intervals on a chromosome-aware axis, coloured by target, for a
   # locus section to stack under the per-sample calls.
-  - { id: seacr_consensus_track, component: advanced_viz, kind: genome_view, roles: {chr: chr, pos: start, score: max_signal, feature: peak_id, end: end, category: target} }
-  - { id: seacr_consensus_width_hist, component: figure, visu_type: histogram, dict_kwargs: {x: width, color: support, title: Consensus interval width by replicate support} }
-  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: target, top_n_count: 3 }
-  - { component: card, column: num_samples, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: support, aggregation: count, secondary_layout: donut, breakdown_col: support }
-  - { component: card, column: total_signal, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }
+  - id: seacr_consensus_track
+    component: advanced_viz
+    kind: genome_view
+    title: Consensus intervals along the genome
+    roles: {chr: chr, pos: start, score: max_signal, feature: peak_id, end: end, category: target}
+    config:
+      score_title: Maximum signal
+      score_threshold_stat: p95
+    description: >-
+      Each mark is a merged consensus interval on its chromosome, coloured by target and
+      high according to the strongest maximum signal among the peaks merged into it. It
+      answers where the replicates agree and how strong the signal is there.
+
+      How to read: clusters of tall intervals are enriched domains, and an isolated tall
+      interval is a candidate site. Compare targets to see which regions they share. Brush
+      a region to filter the tiles of the tab.
+
+      Lines and annotations: the line is the 95th percentile of the maximum signal
+      in the table, a data-defined reference computed from the rows on show and not
+      a SEACR cut-off.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - id: seacr_consensus_width_hist
+    component: figure
+    visu_type: box
+    dict_kwargs:
+      x: support
+      y: width
+      color: support
+      labels: {support: Replicates calling the interval, width: Interval width (bp)}
+    title: Consensus interval width by replicate support
+    description: >-
+      Each box is a replicate support level: the spread of the widths of the consensus
+      intervals that this many replicates called. It answers whether intervals confirmed
+      by more replicates are wider or narrower.
+
+      How to read: a box that moves up with support means reproducible calls are broader
+      domains, as expected for a broad mark. Similar boxes mean width does not depend on
+      support. Very wide outliers are merged neighbouring peaks.
+
+      Note: no width cut-off is drawn, because SEACR defines none.
+  - component: card
+    column: target
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    caption: intervals, by target
+    title: Consensus intervals
+    description: >-
+      The hero number counts the consensus intervals in view and the bars rank the targets
+      by how many they hold. The extra figure is the number of targets. It answers how
+      large each peak set is.
+
+      How to read: a target with far fewer intervals than the others has a weaker or more
+      selective peak set. Compare it with the peak counts of its replicates.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: num_samples
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with its spread
+    title: Replicates per interval
+    description: >-
+      The hero number is the mean number of replicates that called a peak on a consensus
+      interval, and the box shows its spread. It answers how reproducible the peaks are on
+      average.
+
+      How to read: a mean close to the number of replicates means most intervals are
+      shared. A mean close to one means most peaks are private to one replicate.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: support
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: support
+    caption: intervals, by replicate support
+    title: Intervals by replicate support
+    description: >-
+      Each unit is a consensus interval and the ring splits them by how many replicates
+      called a peak on it. It answers how much of the peak set is confirmed by more than
+      one replicate.
+
+      How to read: a large share at the highest support is a reproducible peak set. A ring
+      dominated by single replicates means the replicates disagree.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: total_signal
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: mean, with the distribution
+    title: Total signal of consensus intervals
+    description: >-
+      The hero number is the mean total signal, the summed fragment coverage of the peaks
+      merged into an interval, and the histogram shows how it is distributed. It answers
+      how strong the consensus intervals are.
+
+      How to read: signal is strongly skewed, so the median sits well below the mean. A
+      long right tail is a few very strong domains. SEACR gives no cut-off for the total
+      signal.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: peak_id
+    title: Consensus peak table
+    description: >-
+      Each row is a merged consensus interval with its target, caller, coordinates, width,
+      replicates, signals and one 0 or 1 column per replicate. It answers which intervals
+      are shared and how strong they are.
+
+      How to read: sort by replicates to list the confirmed peaks, and by signal to list
+      the strongest. Selecting a row filters the rest of the tab to it.

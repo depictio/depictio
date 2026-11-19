@@ -11,18 +11,117 @@ find:
   path_glob_alt:
     - "**/update_families/family_reps/*/*.tsv"
 recipe: proteinfamilies/family_members.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several families and origins.
 fixture: family_members.tsv
 renders_as:
   # Fragments sit left (low coverage), divergent members low (low identity).
-  - { id: member_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: coverage, y: identity, label: member_id, color: origin, size: length} }
-  - { id: members_count, component: card, column: member_id, aggregation: count,
-      secondary_layout: top_n, breakdown_col: family, top_n_count: 3 }
-  - { id: member_identity, component: card, column: identity, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: member_coverage, component: card, column: coverage, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: member_length, component: card, column: length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: box, dict_kwargs: {x: family, y: identity, color: origin} }
-  - { component: table }
+  - id: member_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Member coverage against identity
+    roles: {x: coverage, y: identity, label: member_id, color: origin, size: length}
+    config:
+      x_title: Share of the representative covered
+      y_title: Identity to the representative
+      top_n_labels: 5
+    description: >-
+      Each point is a member sequence of a family: the share of the representative it
+      covers against its identity to the representative, coloured by whether the family is
+      new or an updated existing one and sized by length. It answers which members are
+      fragments and which are divergent.
+
+      How to read: well-behaved members sit top right. Fragments sit to the left, and
+      divergent members, which may be false recruits, sit low. The pipeline recruits only
+      members covering at least 90% of the family model length by default, so a member
+      far left deserves a look.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfamilies/2.5.0/nextflow_schema.json
+  - id: members_count
+    component: card
+    column: family
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: compact
+    caption: members, with the families they belong to
+    title: Family members
+    description: >-
+      The hero number is the count of members over the families in view, and the second
+      number is the count of families. It answers how many sequences the families hold.
+
+      How to read: divide the members by the families to get the average family size.
+      Filter to one family to list its members in the table.
+  - id: member_identity
+    component: card
+    column: identity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Member identity
+    description: >-
+      The hero number is the median identity of members to their family representative,
+      and the box shows the spread. It answers how similar the members are to the
+      representative.
+
+      How to read: families built from distant homologs are expected to have a modest
+      identity, since the clustering identity default is low. A long box means some
+      members are far from the representative.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfamilies/2.5.0/nextflow_schema.json
+  - id: member_coverage
+    component: card
+    column: coverage
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Member coverage
+    description: >-
+      The hero number is the median share of the representative that members cover, and
+      the box shows the spread. It answers how complete the members are.
+
+      How to read: values near one mean members span the whole family. A long lower tail
+      means fragments, which the scatter shows one by one.
+  - id: member_length
+    component: card
+    column: length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Member length
+    description: >-
+      The hero number is the median ungapped length of members in residues, and the box
+      shows the spread. It answers how long the family sequences are.
+
+      How to read: lengths within one family should be close. Filter to a family to check
+      that, since pooled families of different domains differ widely.
+  - id: identity_box
+    component: figure
+    visu_type: box
+    dict_kwargs:
+      x: family
+      y: identity
+      color: origin
+      labels: {family: Family, identity: Identity to the representative, origin: Origin}
+    reference_lines:
+      - {axis: y, stat: median, column: identity}
+    title: Member identity per family
+    description: >-
+      Each box is a family: the spread of its members' identity to the representative,
+      coloured by whether the family is new or updated. It answers which families are
+      tight and which are diverse.
+
+      How to read: a high, short box is a tight family. A low or long box is a diverse
+      one, a candidate for a split or a second look.
+
+      Lines and annotations: The dashed line is the median identity to the
+      representative of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of the pipeline.
+  - component: table
+    title: Family member table
+    description: >-
+      Each row is a member sequence with its family, origin, identity, coverage and
+      length. It answers the exact values behind the scatter and the cards.
+
+      How to read: filter to a family and sort by coverage to list its fragments.

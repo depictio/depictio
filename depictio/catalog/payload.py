@@ -21,7 +21,11 @@ from typing import Any
 
 import yaml
 
-from depictio.models.components.advanced_viz.catalog import CATALOG_DIR, role_config_key
+from depictio.models.components.advanced_viz.catalog import (
+    CATALOG_DIR,
+    _config_columns,
+    role_config_key,
+)
 
 # Prebuilt single-file viewer bundle (`pnpm run build:catalog-preview`).
 TEMPLATE_PATH = CATALOG_DIR.parent / "viewer" / "dist-catalog-preview" / "catalog-preview.html"
@@ -51,6 +55,7 @@ _CARD_STRIP_META = (
     "threshold_warn",
     "attrition_cols",
     "trend_col",
+    "caption",
 )
 _TABLE_PREVIEW_ROWS = 1000
 
@@ -121,6 +126,17 @@ def _figure_payload(df, render) -> dict[str, Any]:
         if fn is None:
             raise CatalogPayloadError(f"unknown plotly-express visu_type {render.visu_type!r}")
         fig = fn(df.to_pandas(), **render.dict_kwargs)
+        if render.reference_lines:
+            # The server builder's own helpers: a `stat` line is placed on the
+            # whole fixture, the preview's rows on show, and named as such.
+            from depictio.api.v1.services.figure.reference_lines import (
+                apply_reference_lines,
+                normalise_reference_lines,
+                resolve_reference_lines,
+            )
+
+            lines = normalise_reference_lines(render.reference_lines)
+            apply_reference_lines(fig, resolve_reference_lines(lines, df))
 
     _apply_template(fig)
     return {
@@ -287,6 +303,20 @@ def _column_menu_support(df, dc_id: str, data: dict[str, Any], columns: list[str
         ]
 
 
+def _render_viz_config(render) -> dict[str, Any]:
+    """The render's role bindings as config keys, then its declared `config`.
+
+    The declared options (labels, top-N, thresholds, reference lines) come last
+    so they win over anything derived; the data-derived defaults in
+    ``_advanced_viz_defaults`` only fill keys still unset.
+    """
+    config: dict[str, Any] = {"viz_kind": render.kind}
+    for role, col in (render.roles or {}).items():
+        config[role_config_key(render.kind, role)] = col
+    config.update(getattr(render, "config", None) or {})
+    return config
+
+
 def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the advanced-viz ``config`` blob + the projected role columns.
 
@@ -296,13 +326,13 @@ def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str,
     so the payload is just those columns projected from the fixture — plus, for
     a kind with a column menu, whatever else the menu may be pointed at.
     """
-    config: dict[str, Any] = {"viz_kind": render.kind}
+    config = _render_viz_config(render)
     columns: list[str] = []
     for role, col in (render.roles or {}).items():
-        config[role_config_key(render.kind, role)] = col
         if role == "compute_method":
             continue  # a setting (pca/umap/…), not a column to project
         columns.extend(col if isinstance(col, list) else [col])
+    columns.extend(sorted(_config_columns(getattr(render, "config", None) or {})))
 
     # Sunburst needs ≥2 hierarchical rank columns. Catalog cards bind only
     # `abundance` and let the runtime auto-bind the taxonomy ranks by name;
@@ -363,6 +393,7 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
         config["sample_col"] = sample_col
     if end_col:
         config["end_col"] = end_col
+    config.update(getattr(render, "config", None) or {})
 
     proj = [c for c in dict.fromkeys([chrom, pos, val, end_col, sample_col]) if c]
     result = {
@@ -474,6 +505,7 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
       - ``column`` + ``value``: present iff the fixture is in long format and
         needs pivoting (long → wide) before clustering.
     """
+    import numpy as np
     import polars as pl
     from plotly_complexheatmap import ComplexHeatmap
 
@@ -494,6 +526,9 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
     index_col = roles.get("index")
     pivot_col = roles.get("column")
     value_col = roles.get("value")
+    # The value columns a render names, as the live tile draws them: without
+    # them every numeric column is drawn and a count column washes the rest out.
+    named_values = list(roles.get("value_columns") or [])
 
     # Main's catalog binds complex_heatmap with `roles: {}` and lets the live
     # backend infer structure from the DC. Replicate that inference so the
@@ -527,7 +562,7 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
         wide = df.pivot(values=value_col, index=index_col, on=pivot_col, aggregate_function="mean")
         pdf = wide.fill_null(0.0).to_pandas().set_index(index_col)
     else:
-        numeric_cols = [
+        numeric_cols = named_values or [
             c
             for c in df.columns
             if c != index_col
@@ -551,7 +586,20 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
             )
         pdf = df.select([index_col] + numeric_cols).to_pandas().set_index(index_col)
 
-    hm = ComplexHeatmap(pdf, cluster_rows=True, cluster_cols=True)
+    # The render's own normalisation, as the live tile applies it
+    # (celery_tasks: row_z / col_z map to the library's row / column; log1p is
+    # applied to the values first), so a tile described as scaled per gene
+    # previews scaled per gene.
+    cfg = getattr(render, "config", None) or {}
+    normalize = cfg.get("normalize", "none")
+    if normalize == "log1p":
+        pdf = pdf.astype(float).apply(np.log1p)
+    hm = ComplexHeatmap(
+        pdf,
+        cluster_rows=cfg.get("cluster_rows", True),
+        cluster_cols=cfg.get("cluster_cols", True),
+        normalize={"row_z": "row", "col_z": "column"}.get(normalize, "none"),
+    )
     fig = hm.to_plotly()
     _apply_template(fig)
     # Shape mirrors ComplexHeatmapResult (row_count/col_count/compute_ms expected by renderer)
@@ -584,20 +632,27 @@ def _card_secondary_payload(df, render) -> tuple[dict[str, Any], list[str]]:
     """
     layout = render.secondary_layout
     aggregations = list(render.aggregations or [])
+    # The declared scalar aggregations, computed under every layout like the
+    # server does: the card lists them below whatever strip it draws.
+    scalar_aggs = [a for a in aggregations if a != "box_plot_stats"]
+    scalars = {a: _aggregate(df, render.column, a) for a in scalar_aggs}
     # Tukey: one synthetic aggregation, computed locally (the server's own
     # box_plot_stats path is not a frame-level service).
     if layout == "box_plot" or "box_plot_stats" in aggregations:
-        return {"box_plot_stats": _box_plot_stats(df, render.column)}, ["box_plot_stats"]
+        return (
+            {"box_plot_stats": _box_plot_stats(df, render.column), **scalars},
+            ["box_plot_stats", *scalar_aggs],
+        )
     if not layout or layout in ("coverage", "gauge"):
         # coverage/gauge draw from the hero value + `coverage_max` alone.
-        return {}, []
+        return scalars, scalar_aggs
 
     from depictio.api.v1.services.card_breakdown import BREAKDOWN_LAYOUTS, compute_breakdown
     from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
 
     if layout in BREAKDOWN_LAYOUTS:
         if not render.breakdown_col:
-            return {}, []
+            return scalars, scalar_aggs
         breakdown = compute_breakdown(
             df,
             render.column,
@@ -605,12 +660,13 @@ def _card_secondary_payload(df, render) -> tuple[dict[str, Any], list[str]]:
             render.aggregation or "count",
             render.top_n_count or 3,
         )
-        return {"__breakdown__": breakdown}, []
+        return {"__breakdown__": breakdown, **scalars}, scalar_aggs
     if layout in NUMERIC_LAYOUTS:
         payload = numeric_layout_payload(df, render.model_dump(), render.column, layout)
-        return ({f"__{layout}__": payload}, []) if payload is not None else ({}, [])
+        strip = {f"__{layout}__": payload} if payload is not None else {}
+        return {**strip, **scalars}, scalar_aggs
     # vertical / compact / grid — the declared scalar aggregations.
-    return {a: _aggregate(df, render.column, a) for a in aggregations}, aggregations
+    return scalars, scalar_aggs
 
 
 def _empty_data() -> dict[str, Any]:
@@ -713,13 +769,42 @@ _FIXTURE_PREVIEW_ROWS = 50
 def _advanced_viz_defaults(df, render, config: dict[str, Any]) -> None:
     """Set sensible default viz params so the plot isn't bare on first open."""
     if render.kind == "manhattan":
-        score_col = (render.roles or {}).get("score")
-        if score_col and score_col in df.columns and "score_threshold" not in config:
-            try:
-                config["score_threshold"] = round(float(df[score_col].quantile(0.95)), 4)
-            except Exception:  # noqa: BLE001 — defaults are best-effort
-                pass
+        # The line a Manhattan opens with is the 95th percentile of its own
+        # score, named as such and recomputed on the rows on show: a fixed
+        # number taken off the fixture would neither follow the filters nor say
+        # where it came from (RULES §17).
+        if config.get("score_threshold") is None and not config.get("score_threshold_stat"):
+            config["score_threshold_stat"] = "p95"
         config.setdefault("top_n_labels", 8)
+
+
+def _reference_stats(df, config: dict[str, Any]) -> dict[str, Any] | None:
+    """The ``reference_stats`` the data route would answer for this config.
+
+    Computed on the whole fixture with the server's own helper, so the preview
+    draws the line where a dashboard over the same rows would. The requests
+    travel too (``reference_stat_requests``), so the offline ``mockApi`` only
+    answers a field when the renderer asks the same column and statistic (a
+    reader who flips a scatter's line to vertical asks for x, not y).
+    """
+    from depictio.api.v1.services.advanced_viz.reference_stats import (
+        compute_requests,
+        config_reference_requests,
+    )
+
+    requests = config_reference_requests(config.get("viz_kind"), config)
+    if not requests:
+        return None
+    values = {
+        field: (float(f"{value:.6g}") if value is not None else None)
+        for field, value in compute_requests(df, requests).items()
+    }
+    return {
+        "reference_stats": values,
+        "reference_stat_requests": {
+            field: {"column": column, "stat": stat} for field, (column, stat) in requests.items()
+        },
+    }
 
 
 def advanced_viz_persist_config(output: Any, render, df: Any = None) -> dict[str, Any] | None:
@@ -727,7 +812,7 @@ def advanced_viz_persist_config(output: Any, render, df: Any = None) -> dict[str
 
     Returns *exactly* the config the offline preview renders with — role bindings
     (``<role>_col`` + the ``rank_cols`` / ``compute_method`` special cases) plus
-    the same data-derived viz-control defaults (e.g. manhattan ``score_threshold``,
+    the same viz-control defaults (e.g. manhattan ``score_threshold_stat: p95``,
     ``top_n_labels``). Mirrors ``buildAdvancedVizConfigBlob`` on the JS side, so a
     component added from the catalog renders identically to the catalog preview
     instead of re-deriving a bare config from roles alone.
@@ -815,8 +900,8 @@ def _sankey_payload(df, render) -> dict[str, Any]:
         df,
         value_col=roles.get("value"),
         step_cols=step_cols,
-        sort_mode="total_flow",
-        min_link_value=0.0,
+        sort_mode=(render.config or {}).get("sort_mode", "total_flow"),
+        min_link_value=float((render.config or {}).get("min_link_value", 0.0)),
         step_filters={},
     )
 
@@ -918,6 +1003,17 @@ def _output_info(output: Any, tool: Any = None, df: Any = None) -> dict[str, Any
         "nf_core_url": output.nf_core_url or (tool.nf_core_url if tool else None),
         "biotools_url": output.biotools_url or (tool.biotools_url if tool else None),
         "edam": edam,
+        # The module revision this output's definition comes from
+        # (`module.yaml` `version`, held by catalog_versions.lock.json): the
+        # catalog keeps one revision of each module, so this says which one.
+        "tool_id": tool.id if tool else None,
+        "tool_name": tool.name if tool else None,
+        "module_version": getattr(tool, "version", None) if tool else None,
+        # Since which module revision this output is as it is (optional).
+        "output_version": getattr(output, "version", None),
+        "changelog": [
+            e.model_dump(exclude_none=True) for e in (getattr(tool, "changelog", None) or [])
+        ],
     }
     if df is not None:
         info["n_rows"] = df.height
@@ -943,8 +1039,15 @@ def _render_meta(render, output: Any, i: int) -> dict[str, Any]:
         # The `renders_as` entry itself, so the panel can build the dashboard
         # tile that reproduces this render without reconstructing it from the
         # preview metadata (which is a lossy, differently-shaped view of it).
-        "_render": render.model_dump(exclude_none=True, exclude_defaults=True),
+        # Without `version`: that is catalog bookkeeping, not part of the tile.
+        "_render": render.model_dump(exclude_none=True, exclude_defaults=True, exclude={"version"}),
     }
+    if render.version:
+        meta["_version"] = render.version
+    if render.title:
+        meta["title"] = render.title
+    if render.description:
+        meta["description"] = render.description
     binds = _render_binds(render)
     if binds:
         meta["_binds"] = binds
@@ -1037,7 +1140,7 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 # the point — but `_aggregate` has no default, so the hero falls
                 # back to the median the strip already computed.
                 if is_box_plot:
-                    meta["title"] = render.column
+                    meta["title"] = render.title or render.column
                     meta["aggregation"] = render.aggregation or "median"
                     meta["icon_name"] = "mdi:chart-box-outline"
                     hero = (
@@ -1075,15 +1178,18 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 # mockApi.dispatchComplexHeatmap → finishedJob(dc_id) → DATA().compute[dc_id]
                 # Store ComplexHeatmapResult so ComplexHeatmapRenderer gets its figure immediately.
                 meta["viz_kind"] = "complex_heatmap"
+                meta["config"] = _render_viz_config(render)
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("complex_heatmap", 680)
                 data["compute"][dc_id] = _complex_heatmap_payload(df, render)
             elif comp == "advanced_viz" and render.kind in _UPSET_KINDS:
                 # mockApi.dispatchUpset → finishedJob(dc_id) → DATA().compute[dc_id]
                 meta["viz_kind"] = render.kind
+                meta["config"] = _render_viz_config(render)
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get(render.kind, 520)
                 data["compute"][dc_id] = _upset_payload(df, render)
             elif comp == "advanced_viz" and render.kind == "sankey":
                 meta["viz_kind"] = "sankey"
+                meta["config"] = _render_viz_config(render)
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("sankey", 520)
                 data["compute"][dc_id] = _sankey_payload(df, render)
             elif (
@@ -1095,12 +1201,16 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 meta["config"] = {
                     "viz_kind": "embedding",
                     "compute_method": render.roles["compute_method"],
+                    **(render.config or {}),
                 }
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("embedding", 480)
                 data["compute"][dc_id] = _embedding_payload(df, render)
             elif comp == "advanced_viz":
                 config, av = _advanced_viz_config_and_data(df, render)
                 _advanced_viz_defaults(df, render, config)
+                stats = _reference_stats(df, config)
+                if stats is not None:
+                    av.update(stats)
                 meta["viz_kind"] = render.kind
                 meta["config"] = config
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get(render.kind, 480)
@@ -1176,6 +1286,8 @@ def _tool_dict(tool: Any, outputs: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "id": tool.id,
         "name": tool.name,
+        "version": getattr(tool, "version", None),
+        "changelog": [e.model_dump(exclude_none=True) for e in (tool.changelog or [])],
         "description": tool.description or "",
         "homepage": tool.homepage,
         "nf_core_url": tool.nf_core_url,

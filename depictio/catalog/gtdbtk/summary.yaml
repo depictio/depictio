@@ -16,24 +16,169 @@ find:
 recipe: gtdbtk/summary.py
 fixture: summary.tsv
 renders_as:
-  - { id: lineage_sunburst, component: advanced_viz, kind: sunburst,
-      roles: {ranks: [domain, phylum, class_name, order, family, genus], abundance: bin_count} }
-  - { id: assembler_binner_phylum, component: advanced_viz, kind: sankey,
-      roles: {steps: [assembler, binner, phylum]} }
-  - { id: ani_vs_alignment, component: advanced_viz, kind: scatter_xy,
-      roles: {x: closest_ani, y: closest_af, label: bin_id, color: phylum} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: phylum, y: bin_count, color: binner, title: Bins recovered per phylum} }
-  - { component: card, column: bin_id, aggregation: nunique,
-      secondary_layout: top_n, breakdown_col: phylum, top_n_count: 5 }
-  - { component: card, column: species, aggregation: nunique,
-      secondary_layout: top_n, breakdown_col: genus, top_n_count: 5 }
-  - { component: card, column: bin_id, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: rank_assigned }
-  - { component: card, column: closest_ani, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: lineage_sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Taxonomic lineage of the bins
+    roles: {ranks: [domain, phylum, class_name, order, family, genus], abundance: bin_count}
+    config:
+      colour_by_rank: phylum
+    description: >-
+      Each arc is a taxon of the GTDB lineage, from domain in the centre outwards, sized by
+      the number of bins placed in it and coloured by phylum. It answers which organisms the
+      recovered bins belong to.
+
+      How to read: a wide arc is a taxon with many bins. A bin that stops at a high rank was
+      placed only that far, which can mean the database holds few related genomes.
+      Use the rank control to move the inner ring and open the table for the bins.
+  - id: assembler_binner_phylum
+    component: advanced_viz
+    kind: sankey
+    title: Assembler, binner and phylum of the bins
+    roles: {steps: [assembler, binner, phylum]}
+    config:
+      value_label: Bins
+    description: >-
+      Each flow is a group of bins that goes from an assembler through a binner to a
+      phylum, with the width of the flow equal to the number of bins. It answers which
+      combinations of assembler and binner recover which phyla.
+
+      How to read: a phylum reached from every binner is recovered robustly, and a phylum
+      reached from one binner only is a candidate for being missed by the others. Thick flows
+      into a node mark the combinations that recover the most bins.
+  - id: ani_vs_alignment
+    component: advanced_viz
+    kind: scatter_xy
+    title: Closest reference identity against alignment fraction
+    roles: {x: closest_ani, y: closest_af, label: bin_id, color: phylum}
+    config:
+      x_title: Average nucleotide identity to the closest reference (%)
+      y_title: Alignment fraction to the closest reference
+      reference_line: horizontal
+      reference_value: 0.5
+      reference_label: Minimum alignment fraction (0.5)
+      top_n_labels: 5
+      legend_pos: bottom
+    description: >-
+      Each point is a bin: its average nucleotide identity (ANI) to the closest GTDB species
+      representative on the horizontal axis and the fraction of the genome aligned to it on the
+      vertical axis, coloured by phylum. It answers how confidently a bin matches a known species.
+
+      How to read: points to the upper right, with high identity and alignment, are
+      assigned to a species. A point with a low alignment fraction or low identity is a
+      novel lineage or a poor bin, and may stop at a higher rank. The ANI needed is specific
+      to each species, typically 95 percent, so no vertical line is drawn.
+
+      Lines and annotations: the horizontal line is the minimum alignment fraction of 0.5,
+      the GTDB-Tk default (--min_af) for assigning a genome to a species during the ANI
+      screen. The species-specific ANI radius is typically 95 percent.
+
+      Source: https://ecogenomics.github.io/GTDBTk/faq.html
+      and https://ecogenomics.github.io/GTDBTk/commands/classify.html
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: phylum
+      y: bin_count
+      color: binner
+      labels: {phylum: Phylum, bin_count: Bins, binner: Binner}
+    title: Bins recovered per phylum
+    description: >-
+      Each bar is a phylum, sized by the number of bins placed in it and split by the binner
+      that recovered them. It answers which phyla were recovered and by which binners.
+
+      How to read: a phylum recovered by one binner only is a candidate for being missed by the
+      others. A long tail of phyla with one bin each is typical of a diverse community.
+  - component: card
+    column: bin_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: phylum
+    top_n_count: 5
+    title: Bins by phylum
+    caption: the five phyla with the most bins, with the row count
+    description: >-
+      The hero number is the count of distinct bins classified, and the bars rank the phyla
+      that hold the most. It answers how many bins were placed in the database and in which
+      phyla.
+
+      How to read: a single phylum holding most bins points to a low diversity community or to
+      bins that are fragments of the same genomes.
+  - component: card
+    column: species
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: genus
+    top_n_count: 5
+    title: Species by genus
+    caption: the five genera with the most species, with the row count
+    description: >-
+      The hero number is the count of distinct species the bins were assigned to, and the
+      bars rank the genera that hold the most. It answers how many species level identities
+      the run recovered.
+
+      How to read: the row count above the distinct count means several bins share a species,
+      which is expected when binners or assemblers recover the same genome. Bins stopped at a
+      higher rank have no species and are not counted.
+  - component: card
+    column: bin_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: rank_assigned
+    title: Bins by deepest rank
+    caption: split by the deepest rank reached, with the row count
+    description: >-
+      The hero number is the count of distinct bins, and the ring splits them by the deepest
+      taxonomic rank GTDB-Tk reached. It answers how many bins are identified to species and how
+      many stop earlier.
+
+      How to read: a ring mostly at species means the community is well represented in
+      the database. A large share at a higher rank marks novel lineages or bins of poor quality.
+  - component: card
+    column: closest_ani
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Identity to the closest reference
+    caption: median, with its spread across bins
+    description: >-
+      The hero number is the median ANI of a bin to its closest reference genome, and the box
+      shows the quartiles. It answers how close the recovered genomes are to known species.
+
+      How to read: values near the top of the scale mean the bins are close to known species.
+      Only bins classified by the ANI screen carry a value, so an empty card means the run was
+      placed through the tree. The species specific radius is typically 95 percent.
+
+      Source: https://ecogenomics.github.io/GTDBTk/faq.html
   # closest_af and not msa_percent: GTDB-Tk fills msa_percent only on the
   # pplacer path, and a run classified through ANI screening leaves it empty
   # for every bin, which makes a card over it a column of blanks.
-  - { component: card, column: closest_af, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: table }
+  - component: card
+    column: closest_af
+    aggregation: average
+    aggregations: [median, min]
+    secondary_layout: histogram
+    title: Alignment fraction to the closest reference
+    caption: average and median, with the smallest and the distribution
+    description: >-
+      The hero number is the mean fraction of a bin aligned to its closest reference genome,
+      and the histogram shows how the values are distributed. It answers how much of each bin
+      is covered by a known genome.
+
+      How to read: values near 1 mean the bin and the reference share nearly all their
+      sequence, and low values mean only part of the bin matches. GTDB-Tk requires an
+      alignment fraction of at least 0.5 for a species assignment by ANI.
+
+      Source: https://ecogenomics.github.io/GTDBTk/commands/classify.html
+  - component: table
+    title: Bin taxonomy table
+    description: >-
+      Each row is a bin with its assembler, binner, lineage split by rank, closest reference,
+      ANI, alignment fraction and classification method. It answers which organism each bin is
+      and how it was placed.
+
+      How to read: filter by phylum or by deepest rank, and sort by ANI to find the least
+      certain species assignments.

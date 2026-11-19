@@ -8,5 +8,34 @@ find: { path_glob: "**/benchmarks/happy/*.summary.csv" }
 recipe: happy/summary.py
 fixture: summary.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: variant_type, y: f1, color: filter} } # F1 by SNP/INDEL
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: variant_type
+      y: f1
+      color: filter
+      barmode: group
+      labels: {variant_type: Variant type, f1: F1 score, filter: Filter}
+    title: F1 by variant type
+    description: >-
+      Each bar is the F1 score of the callset against the truth set for one variant
+      type, with all calls and passing calls side by side. It answers how accurate
+      the calls are for SNPs and for indels, and what the filter changes.
+
+      How to read: a bar near one means the callset agrees with the truth. A pass bar
+      clearly above its all bar shows the filter removed false calls, and equal bars
+      show it removed none.
+
+      Note: F1 is the harmonic mean of recall and precision, and the cited hap.py
+      documentation states no cut-off for it, so none is drawn.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/happy.md
+  - component: table
+    title: Benchmark summary
+    description: >-
+      Each row is a variant type and filter with the true positives, false negatives
+      and false positives and the recall, precision and F1 recomputed from them. It
+      answers the counts behind the F1 bars.
+
+      How to read: a low recall with a high precision means the callset misses truth
+      variants, and the reverse means it calls false ones.

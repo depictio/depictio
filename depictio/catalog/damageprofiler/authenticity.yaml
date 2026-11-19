@@ -12,13 +12,134 @@ find:
   path_glob_alt:
     - "**/lgdistribution.txt"
 recipe: damageprofiler/authenticity.py
+# The fixture is enriched synthetically from 2 real samples (copies with seeded noise), so the preview shows several samples.
 fixture: authenticity.tsv
 renders_as:
-  - { id: authenticity_plane, component: advanced_viz, kind: scatter_xy,
-      roles: {x: mean_length, y: ct_5p_first, label: sample, color: sample, size: n_reads} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: terminal_damage, color: sample, title: Terminal deamination per library} }
-  - { component: card, column: ct_5p_first, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mean_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: ga_3p_first, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: n_reads, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
-  - { component: table }
+  # Neither DamageProfiler nor the ancient-DNA literature this view cites fixes a
+  # numeric authenticity cut-off, so no zone or line is drawn (C3, RULES section 17).
+  # Colour is the library, the one categorical column of this one-row-per-library table.
+  - id: authenticity_plane
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: mean_length, y: ct_5p_first, label: sample, color: sample, size: n_reads}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: Mean fragment length (bp)
+      y_title: C to T at the first 5' base
+      legend_pos: bottom
+    title: Authenticity plane
+    description: >-
+      Each point is a library: its mean mapped fragment length on the horizontal axis and
+      the C to T frequency at the first 5' base on the vertical axis, with the marker
+      sized by mapped fragments. It answers whether a library carries the two signals of
+      ancient DNA, short fragments and terminal deamination.
+
+      How to read: a library high on the vertical axis and short on the horizontal one
+      combines damage and fragmentation, as expected for ancient DNA. A long, undamaged
+      library looks modern, which may be a contaminant, and a short but undamaged one
+      may be over-sheared modern DNA. No pass mark is drawn because none is defined by
+      the tool, so judge each library against the others and the extraction history.
+
+      Lines and annotations: the dashed line is the median C to T frequency at the first
+      5' base of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of DamageProfiler.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/17715061/ and https://pubmed.ncbi.nlm.nih.gov/22479540/
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: terminal_damage
+      color: sample
+      labels: {sample: Library, terminal_damage: Terminal deamination (mean of 5' C to T and 3' G to A)}
+    title: Terminal deamination per library
+    reference_lines:
+      - {axis: y, stat: median, column: terminal_damage}
+    description: >-
+      Each bar is a library: the mean of its C to T frequency at the first 5' base and
+      its G to A frequency at the first 3' base. It answers which libraries show the most
+      damage at the read ends.
+
+      How to read: a higher bar means stronger terminal deamination, the signature of
+      ancient DNA. A bar near the background level is a library without clear damage,
+      so check its fragment length too.
+
+      Lines and annotations: the dashed line is the median terminal deamination of this
+      table, a reference computed from the rows on show (it follows the filters), not a
+      cut-off of DamageProfiler.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/17715061/
+  - component: card
+    column: ct_5p_first
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: mean, with its spread
+    title: C to T at the 5' end
+    description: >-
+      The hero number is the mean frequency of C to T substitutions at the first 5' base
+      over the libraries, and the box shows the spread. It answers how damaged the
+      libraries are at the 5' end.
+
+      How to read: a higher value means stronger deamination. A library far below its
+      peers has little damage, which is expected for modern or repaired libraries.
+
+      Source: https://damageprofiler.readthedocs.io/en/latest/contents/output.html
+  - component: card
+    column: mean_length
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with its spread
+    title: Mean fragment length
+    description: >-
+      The hero number is the mean mapped fragment length in bases over the libraries, and
+      the box shows the spread. It answers how fragmented the DNA is.
+
+      How to read: shorter fragments fit ancient DNA, which is fragmented by depurination.
+      A library with much longer fragments than its peers may hold modern DNA.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/17715061/
+  - component: card
+    column: ga_3p_first
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with its spread
+    title: G to A at the 3' end
+    description: >-
+      The hero number is the mean frequency of G to A substitutions at the first 3' base
+      over the libraries, and the box shows the spread. It answers how damaged the
+      libraries are at the 3' end.
+
+      How to read: on a double-stranded library the 3' G to A signal reflects deamination at the 5'
+      end of the complementary strand, so it should agree with the 5' C to T signal. A strong 5'
+      signal with no 3' signal is not explained by that pattern, so check how the library was built.
+
+      Source: https://damageprofiler.readthedocs.io/en/latest/contents/output.html and
+      https://pubmed.ncbi.nlm.nih.gov/22479540/
+  - component: card
+    column: n_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: distribution across libraries
+    title: Mapped fragments
+    description: >-
+      The hero number is the count of mapped fragments over the libraries, and the
+      histogram shows how the libraries spread. It answers how much data backs the damage
+      estimates.
+
+      How to read: estimates from a library with few fragments are noisy, so treat its
+      damage and length values with caution.
+  - component: table
+    title: Authenticity table
+    description: >-
+      Each row is a library with its terminal damage at both ends, its background
+      substitution rate, its fragment length and its mapped fragments. It answers the
+      exact values behind the authenticity tiles.
+
+      How to read: sort by terminal damage to rank libraries, then compare with the
+      fragment length.

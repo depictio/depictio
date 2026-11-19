@@ -12,4 +12,23 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: mirtrace }
+  - component: multiqc
+    section: mirtrace
+    title: Small RNA library QC
+    description: >-
+      miRTrace's own MultiQC plots: read QC outcome, RNA type composition, read
+      length, clade contamination check and miRNA complexity per sample. They answer
+      whether a small RNA library is clean and complex enough.
+
+      How to read: A clean library has most reads passing, a high miRNA share and a
+      length peak near 22 nucleotides, the typical miRNA length. Reads from another clade suggest
+      contamination, and a flat complexity curve says deeper sequencing finds few
+      new miRNAs.
+
+      Lines and annotations: The read length plot is banded at 18, 26 and 40
+      nucleotides, the length classes miRTrace uses, with the miRNA range from 18 to
+      26. The bands are drawn by the MultiQC miRTrace module.
+
+      Sources:
+      https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/mirtrace/mirtrace.py
+      and https://pubmed.ncbi.nlm.nih.gov/30514392/

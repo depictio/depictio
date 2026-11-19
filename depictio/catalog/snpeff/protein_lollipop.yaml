@@ -12,11 +12,61 @@ find:
 recipe: snpeff/protein_lollipop.py
 fixture: protein_lollipop.tsv
 renders_as:
-  - { id: coding_variant_needles, component: advanced_viz, kind: lollipop,
-      roles: {feature_id: gene, position: aa_pos, category: impact, label: hgvs_p, effect: vaf} }
-  - { id: coding_variant_structure, component: advanced_viz, kind: molecule_3d,
-      roles: {entity: gene, gene: gene, position: aa_pos, ref_aa: ref_aa, category: impact,
-              value: vaf, label: hgvs_p} }
-  - { component: card, column: variant_key, aggregation: count, secondary_layout: top_n,
-      breakdown_col: gene, top_n_count: 5 }
-  - { component: table }
+  - id: coding_variant_needles
+    component: advanced_viz
+    kind: lollipop
+    title: Coding variants along proteins
+    roles: {feature_id: gene, position: aa_pos, category: impact, label: hgvs_p, effect: vaf}
+    config:
+      top_n_labels: 5
+    description: >-
+      Each stem is a coding variant placed at its amino-acid position on a gene's
+      protein, coloured by SnpEff impact class and sized by allele fraction. It
+      answers where in the protein the variants fall.
+
+      How to read: a cluster of stems in one stretch of the protein suggests a hotspot
+      or a functional domain worth checking. Stems that several callers share are
+      stacked at the same position, so compare them by caller before trusting an
+      isolated one.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+  - id: coding_variant_structure
+    component: advanced_viz
+    kind: molecule_3d
+    title: Variants on the protein structure
+    roles: {entity: gene, gene: gene, position: aa_pos, ref_aa: ref_aa, category: impact,
+            value: vaf, label: hgvs_p}
+    description: >-
+      Each marked residue on the 3D structure is a coding variant, coloured by impact
+      class, on a structure fetched by gene symbol. It answers where the variants sit
+      in space, not only along the sequence.
+
+      How to read: variants that neighbour each other in 3D but not in sequence can
+      belong to one functional site. A variant whose residue differs between the model
+      and the annotation is listed as a mismatch, because SnpEff counts along a
+      transcript and the model along another isoform.
+  - component: card
+    column: variant_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: gene
+    top_n_count: 5
+    caption: the genes with the most coding variants
+    title: Genes with most coding variants
+    description: >-
+      The hero number is the count of coding variants with a protein change and the
+      bars rank the genes that carry most of them. It answers which proteins are the
+      most altered.
+
+      How to read: long genes lead the ranking, so compare the count with the gene
+      length before reading biology into it.
+  - component: table
+    title: Coding variants table
+    description: >-
+      Each row is a coding variant with its gene, protein position, impact class,
+      consequence, protein change and allele fraction. It answers the exact detail
+      behind the lollipop and the structure.
+
+      How to read: filter by gene to list its variants, or by impact class to list the
+      damaging ones.

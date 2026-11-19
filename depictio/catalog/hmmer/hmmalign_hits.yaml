@@ -19,6 +19,7 @@ renders_as:
   - id: member_architecture
     component: advanced_viz
     kind: domain_architecture
+    title: Family member coverage of the model
     roles:
       entity: entity
       start: ali_from
@@ -29,9 +30,76 @@ renders_as:
       hmm_to: hmm_to
       hmm_length: hmm_length
       hmm_coverage: hmm_coverage
-  - { id: member_count, component: card, column: entity, aggregation: count,
-      secondary_layout: top_n, breakdown_col: label, top_n_count: 3 }
-  - { id: model_coverage, component: card, column: hmm_coverage, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: box, dict_kwargs: {x: label, y: hmm_coverage, color: label} }
-  - { component: table }
+    config:
+      color_by: label
+    description: >-
+      Each row is a member of a family alignment: a backbone for its sequence with a bar for the stretch
+      that aligns to the family HMM, coloured by family. It answers whether the members cover the whole model
+      or only part of it.
+
+      How to read: members whose bar spans the whole backbone are full-length. A zigzag edge marks a member
+      that starts after the first or ends before the last match state of the HMM, so it is a fragment or a
+      truncated sequence. Many fragments suggest the family needs a closer look before building a structure
+      or a logo from it.
+
+      Lines and annotations: the zigzag edge is drawn from the first and last HMM state each member covers
+      against the length of the model, with no score cut-off, since an hmmalign alignment carries no E-value.
+
+      Source: http://eddylab.org/software/hmmer/Userguide.pdf
+  - id: member_count
+    component: card
+    column: entity
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: label
+    top_n_count: 3
+    caption: members, by family
+    title: Family members
+    description: >-
+      The hero number counts the aligned family members, and the bars rank the families with the most members.
+      The second figure counts the distinct sequences. It answers how large the families are.
+
+      How to read: a family with very few members gives a weak profile, so treat its logo with caution.
+      Large families give more reliable conservation estimates.
+  - id: model_coverage
+    component: card
+    column: hmm_coverage
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: model coverage, with its spread
+    title: Share of the model covered
+    description: >-
+      The hero number is the median share of the HMM that a member's alignment covers, and the box shows its
+      quartiles. It answers how complete the members are.
+
+      How to read: a median near one means most members are full length. A low median or a long lower whisker
+      means many fragments, which weaken the conservation signal at the ends of the model.
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: label
+      y: hmm_coverage
+      color: label
+      labels: {label: Family, hmm_coverage: Share of the model covered}
+    title: Model coverage by family
+    reference_lines:
+      - {axis: y, stat: median, column: hmm_coverage}
+    description: >-
+      Each box is a family: the spread of the share of the HMM covered by its members. It answers which
+      families are made of full-length members and which of fragments.
+
+      How to read: a box close to one is a complete family, and a box that reaches low values holds many
+      fragments. Open the architecture tile for the families with a low box.
+
+      Lines and annotations: the dashed line is the median share of the model covered of
+      this table, a reference computed from the rows on show (it follows the filters), not
+      a cut-off of HMMER.
+  - component: table
+    title: Member coverage table
+    description: >-
+      Each row is a member of a family alignment with the first and last HMM state it covers, its length and
+      the share of the model between them. It answers which sequences are fragments.
+
+      How to read: sort by model coverage and open the lowest rows to see the truncated members.

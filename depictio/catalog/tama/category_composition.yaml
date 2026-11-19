@@ -9,7 +9,46 @@ find:
 recipe: tama/category_composition.py
 fixture: category_composition.tsv
 renders_as:
-  - { id: category_bars, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: sample, taxon: structural_category, rank: level, abundance: pct} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: level }
-  - { component: table }
+  - id: category_bars
+    component: advanced_viz
+    kind: stacked_taxonomy
+    roles: {sample_id: sample, taxon: structural_category, rank: level, abundance: pct}
+    title: Structural categories per sample
+    config:
+      default_rank: Isoforms
+      value_title: Share of the sample (%)
+      x_title: Sample
+    description: >-
+      Each bar is a sample, split into the share of its isoforms (or of its FLNC reads, with the level
+      control) in each structural category. It answers how much of a sample's transcriptome matches the
+      reference annotation and how much is novel.
+
+      How to read: a high share of full splice matches means the sample is well covered by the reference.
+      Large novel categories (NIC, NNC) are either real new isoforms or artefacts, so compare the isoform
+      level with the read level: novel isoforms backed by few reads are the first to doubt. Switch the
+      level to see whether the novelty is in many rare isoforms or in a few abundant ones.
+
+      Lines and annotations: the categories follow SQANTI3. FSM is a full splice match to a reference
+      transcript, ISM an incomplete one, NIC a new combination of known splice sites, NNC an isoform with at least one unannotated splice site. Genic intron isoforms sit inside an
+      annotated intron, genic genomic ones overlap introns and exons, antisense ones lie on the
+      opposite strand of a gene and intergenic ones outside any gene.
+
+      Source: https://raw.githubusercontent.com/wiki/ConesaLab/SQANTI3/SQANTI3-isoform-classification:-categories-and-subcategories.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: level
+    title: Isoforms or reads
+    description: >-
+      Choose whether the shares count isoforms or FLNC reads. It answers whether a category is large because
+      it holds many distinct isoforms or because it holds many reads.
+
+      How to read: select one level at a time. Selecting both stacks two different denominators in the same
+      table.
+  - component: table
+    title: Category composition table
+    description: >-
+      Each row is a sample, a level (isoforms or reads) and a structural category with its count and its
+      share of that sample and level. It answers the exact numbers behind the bars.
+
+      How to read: sort by share to find the dominant category of each sample, and compare the two levels
+      for the same category.

@@ -9,11 +9,80 @@ find: { path_glob: "**/summary/tables/truvari/truvari.summary.csv" }
 recipe: truvari/summary.py
 fixture: summary.tsv
 renders_as:
-  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark
-  - { component: table }
+  - id: pr_scatter
+    component: advanced_viz
+    kind: pr_benchmark
+    title: Precision against recall per callset
+    roles: {label: label, recall: recall, precision: precision, f1: f1}
+    description: >-
+      Each point is a benchmarked callset: its recall on the horizontal axis and its precision on the vertical
+      axis, coloured by F1. It answers which caller finds the most true structural variants without adding
+      false ones.
+
+      How to read: points in the upper right corner are both sensitive and precise. A point high but far left
+      misses true variants, and one far right but low adds false calls. Compare callsets of the same truth set
+      only.
+
+      Lines and annotations: the curved lines are contours of equal F1, the harmonic mean of precision and
+      recall, and the diagonal marks equal precision and recall. They are mathematical references, not
+      cut-offs, and Truvari publishes no pass mark.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: label, aggregation: nunique, secondary_layout: top_n, breakdown_col: label, top_n_count: 3 }
-  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: card, column: precision, aggregation: average, secondary_layout: gauge, coverage_max: 1 }
-  - { component: card, column: recall, aggregation: median, secondary_layout: threshold, threshold_value: 0.8, threshold_direction: min, threshold_warn: 0.6 }
+  - component: card
+    column: f1
+    aggregation: count
+    aggregations: [min, max]
+    secondary_layout: compact
+    title: Callsets benchmarked
+    caption: lowest and highest F1
+    description: >-
+      The hero number is the count of callsets with a defined F1, with the lowest and highest F1 beside it. It
+      answers how many callsets were compared and how far apart they are.
+
+      How to read: a callset without calls has no defined F1 and is left out of this count.
+  - component: card
+    column: f1
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: F1 score
+    caption: F1 per callset, with its spread
+    description: >-
+      The hero number is the median F1 over callsets, and the box shows its quartiles. It answers how accurate
+      the structural variant calls are overall, balancing precision and recall.
+
+      How to read: higher is better, and a wide box means the callers differ a lot. Use the precision-recall
+      plot to see which side limits each caller.
+  - component: card
+    column: precision
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Precision
+    caption: precision per callset, with its spread
+    description: >-
+      The hero number is the median precision over callsets, the share of calls that match the truth set, and
+      the box shows its quartiles. It answers how many of the reported variants are real.
+
+      How to read: low precision means false calls, which filtering the callset can reduce.
+  - component: card
+    column: recall
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Recall
+    caption: recall per callset, with its spread
+    description: >-
+      The hero number is the median recall over callsets, the share of truth variants that were found, and the
+      box shows its quartiles. It answers how many of the real variants are detected.
+
+      How to read: low recall means missed variants, which more coverage or a more sensitive caller can
+      recover.
+  - component: table
+    title: Benchmark summary
+    description: >-
+      Each row is a benchmarked callset with its precision, recall and F1. It answers how each caller and
+      sample compare against the truth set.
+
+      How to read: sort by F1 to rank the callsets.

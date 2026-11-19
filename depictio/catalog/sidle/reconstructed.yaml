@@ -13,12 +13,112 @@ fixture: reconstructed.tsv
 renders_as:
   # Wide per-rank columns, so the nested view is a sunburst; `stacked_taxonomy`
   # needs the single long rank column this table lacks.
-  - { id: reconstructed_sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: count} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Phylum, title: Composition by phylum} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Genus, title: Composition by genus} }
+  - id: reconstructed_sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Reconstructed community by rank
+    roles: {ranks: [Kingdom, Phylum, Class, Genus], abundance: count}
+    config:
+      colour_by_rank: Phylum
+    description: >-
+      Each arc is a taxon of the reconstructed community, with kingdom in the centre and
+      genus on the outside, sized by its read count and coloured by phylum. It answers
+      which groups make up the community resolved across all amplified regions.
+
+      How to read: wide arcs are the dominant taxa. A large share of arcs labelled
+      Unclassified means the reference database could not name those sequences at that
+      rank, so read the deeper ranks with care.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: count
+      color: Phylum
+      labels: {sample: Sample, count: Reads, Phylum: Phylum}
+    title: Composition by phylum
+    description: >-
+      Each bar is a sample and each segment is the read count of one phylum in the
+      reconstructed table. It answers how the phylum composition differs between
+      samples.
+
+      How to read: compare the heights of the same colour across bars. A phylum that
+      dominates one sample but not the others is worth a look at the sample metadata.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: count
+      color: Genus
+      labels: {sample: Sample, count: Reads, Genus: Genus}
+    title: Composition by genus
+    description: >-
+      Each bar is a sample and each segment is the read count of one genus in the
+      reconstructed table. It answers which genera drive the differences between samples.
+
+      How to read: the reconstruction resolves finer ranks than a single region does, so
+      genus level is meaningful here. Many segments in a bar mean a diverse sample.
   # How much was reconstructed, from how many samples, across how many phyla.
-  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3, headline: true }
-  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum }
-  - { component: interactive, interactive_type: MultiSelect, column_name: Phylum }
-  - { component: table }
+  - component: card
+    column: feature_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: Phylum
+    top_n_count: 3
+    headline: true
+    caption: features, by phylum
+    title: Reconstructed features
+    description: >-
+      The hero number is the count of distinct reconstructed features, and the bars rank
+      the phyla that hold most of them. It answers how rich the reconstructed community
+      is.
+
+      How to read: the secondary number counts feature and sample rows. A feature found in
+      few samples is rare, so check its confidence in the reconstruction tab.
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    caption: rows, by sample
+    title: Samples
+    description: >-
+      The hero number is the count of samples in the table, and the bars rank the samples
+      by the number of feature rows they hold. It answers how many samples were
+      reconstructed and how rich each is.
+
+      How to read: a sample with far fewer rows than the others had less depth or lost
+      features during reconstruction.
+  - component: card
+    column: Phylum
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: composition
+    breakdown_col: Phylum
+    caption: rows, by phylum
+    title: Phyla
+    description: >-
+      The hero number is the count of distinct phyla, and the bar shows each phylum's
+      share of the feature rows. It answers how broad the community is and whether a few
+      phyla dominate.
+
+      How to read: a bar mostly made of one phylum means a community with low evenness at
+      this rank.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: Phylum
+    title: Phylum
+    description: >-
+      Pick one or more phyla to keep. It filters every tile of the tab to the features of
+      those phyla.
+
+      How to read: pick one phylum to see its genera in the composition bars.
+  - component: table
+    title: Reconstructed features table
+    description: >-
+      Each row is a feature in a sample with its read count, full lineage and the rank
+      columns. It answers exactly what was found and in how many reads.
+
+      How to read: sort by count, or filter by phylum or genus to find a taxon.

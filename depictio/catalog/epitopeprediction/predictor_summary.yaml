@@ -15,9 +15,93 @@ renders_as:
   - id: binder_rate_bar
     component: figure
     visu_type: bar
-    dict_kwargs: { x: sample, y: binder_rate, color: predictor, barmode: group }
-  - { id: tool_binders, component: card, column: binders, aggregation: sum, secondary_layout: donut, breakdown_col: predictor }
-  - { id: tool_unsupported, component: card, column: unsupported, aggregation: sum, secondary_layout: composition, breakdown_col: predictor }
-  - { component: card, column: binder_rate, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: predictor }
-  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }
+    dict_kwargs:
+      x: sample
+      y: binder_rate
+      color: predictor
+      barmode: group
+      labels: { sample: Sample, binder_rate: Binder share, predictor: Tool }
+    title: Binder share per tool
+    reference_lines:
+      - {axis: y, stat: median, column: binder_rate}
+    description: >-
+      Each bar is the share of a tool's scored peptides that it calls a binder, grouped by
+      sample. It answers how permissive each tool is on the same peptides.
+
+      How to read: tools use different rules, a percentile rank of 2 or less for most and
+      an IC50 of 500 nM or less for MHCnuggets, so their shares are not directly
+      comparable. A tool far above the others in every sample is the most permissive.
+      Wild-type peptides are left out, as in the pipeline's own statistics.
+
+      Lines and annotations: the dashed line is the median binder share of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/epitopeprediction.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: tool_binders
+    component: card
+    column: binders
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: predictor
+    caption: binders, by tool
+    title: Binders per tool
+    description: >-
+      The hero number is the sum of binder peptides over the tools and samples in view,
+      and the ring splits them by tool. It answers which tool contributes the most
+      candidates.
+
+      How to read: a tool with a large slice is permissive or scored more peptides. The
+      compact line gives the median and the highest count of one tool and sample.
+  - id: tool_unsupported
+    component: card
+    column: unsupported
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: predictor
+    caption: unscored peptides, by tool
+    title: Peptides a tool could not score
+    description: >-
+      The hero number is the sum of peptides that a tool could not score because of an
+      unsupported allele or length, and the bar splits them by tool. It answers how much
+      of the input each tool leaves out.
+
+      How to read: a tool that leaves out many peptides covers less of the input, so its
+      binder count understates the candidates. Check the supported alleles and lengths
+      in the pipeline's usage notes.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/usage.md
+  - component: card
+    column: binder_rate
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: binder share, with its spread
+    title: Binder share per tool and sample
+    description: >-
+      The hero number is the median binder share over the tool and sample rows in view,
+      and the box shows the quartiles. It answers what share of scored peptides a tool
+      usually calls a binder.
+
+      How to read: a low median is expected, since few peptides bind any allele. A wide
+      box shows tools or samples that differ strongly, so open the bar chart to see which.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: predictor
+    title: Prediction tool
+    description: >-
+      Pick one or more tools to restrict the bars, the cards and the table to them. It
+      answers how one tool behaves.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: summary_key
+    title: Tool summary table
+    description: >-
+      Each row is a tool in a sample with the peptides it was given, scored, could not
+      score and called binders, its binder share, the alleles scored and its median IC50.
+      It answers the exact numbers behind the tiles and lets a row selection filter the
+      rest of the dashboard.
+
+      How to read: compare scored with unsupported counts before comparing binder shares.

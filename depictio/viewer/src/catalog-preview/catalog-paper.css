@@ -1,0 +1,462 @@
+/* The catalog preview in Paper, the app's default chrome.
+ *
+ * The catalogue (`depictio catalog gallery`, `catalog preview`, the docs and
+ * the editor's catalog picker) is one more Depictio page: the floating top bar
+ * of the management pages, two paper panes like the picker's (the list and the
+ * preview), rounded rows with the open one in the accent wash, hairline tags,
+ * and the instance's primary as the only accent. Every token comes from
+ * ../chrome/variants/glass/glass.css and pages/pages.css; nothing here defines
+ * a colour of its own. Every rule is scoped to [data-chrome='glass'], so
+ * Classic keeps its look. */
+
+/* ================================================================= shell */
+
+:root[data-chrome='glass'] .gp-shell.cp-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .cp-shell > .hy-top {
+  flex: none;
+}
+/* The bar sits in the shell's column, not on a dashboard grid: compact, it
+ * keeps its place in the flow instead of floating over the list. */
+:root[data-chrome='glass'] .cp-shell > .hy-top--compact {
+  position: relative;
+  flex-basis: 60px;
+}
+:root[data-chrome='glass'] .cp-shell .hy-top .cp-top-home {
+  text-decoration: none;
+}
+:root[data-chrome='glass'] .cp-shell .hy-top .cp-top-home:hover {
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .cp-shell .cp-top-extras {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+/* The credit, as the dashboards' bar draws it: "Powered by" then the mark. */
+:root[data-chrome='glass'] .cp-shell .cp-powered {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--gl-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+:root[data-chrome='glass'] .cp-shell .cp-powered img {
+  height: 20px;
+  width: auto;
+}
+@media (max-width: 61.99em) {
+  :root[data-chrome='glass'] .cp-shell :is(.cp-key-wide, .hy-top-powered) {
+    display: none;
+  }
+}
+/* The page views scroll inside the shell, under the bar. */
+:root[data-chrome='glass'] .cp-shell > .gp-main.cp-main {
+  flex: 1;
+  padding: 18px 20px 48px;
+}
+
+/* The view switch: the paper segmented well of the admin panes. */
+:root[data-chrome='glass'] .cp-shell .cp-views.mantine-SegmentedControl-root {
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .cp-shell .cp-views .mantine-SegmentedControl-indicator {
+  border-radius: 10px;
+  background: var(--gl-surface);
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 2px 6px -2px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .cp-shell .cp-views .mantine-SegmentedControl-label {
+  padding: 6px 12px;
+  color: var(--gl-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .cp-shell .cp-views .mantine-SegmentedControl-label[data-active] {
+  color: var(--gl-fg);
+}
+
+/* Fields: the outlined inputs of the pages. */
+:root[data-chrome='glass'] .cp-shell .mantine-Input-input {
+  border-radius: var(--gp-radius-input);
+  border-color: var(--gp-input-line);
+  background: var(--gp-input-bg);
+}
+:root[data-chrome='glass'] .cp-shell .mantine-Input-input:hover {
+  border-color: var(--gp-input-line-hover);
+}
+:root[data-chrome='glass'] .cp-shell .mantine-Input-input:focus,
+:root[data-chrome='glass'] .cp-shell .mantine-Input-input:focus-within {
+  border-color: color-mix(in srgb, var(--gl-accent) 55%, transparent);
+  box-shadow: var(--gp-focus);
+}
+:root[data-chrome='glass'] .cp-shell .mantine-Chip-label {
+  border-radius: 999px;
+  border-color: var(--gp-input-line);
+}
+:root[data-chrome='glass'] .cp-shell .mantine-Chip-label[data-checked] {
+  border-color: color-mix(in srgb, var(--gl-accent) 45%, transparent);
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+
+/* ============================================================ the browser */
+
+/* Two floating panes instead of one ruled box: the list and the preview. */
+:root[data-chrome='glass'] .cp-shell .cp-split {
+  gap: 0 !important;
+  padding: 14px 10px 10px;
+}
+:root[data-chrome='glass'] .cp-shell :is(.cp-rail, .cp-pane) {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gp-radius-lg);
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .cp-shell .cp-pane {
+  overflow-y: auto;
+}
+:root[data-chrome='glass'] .cp-shell .cp-rail-head {
+  padding: 14px 14px 10px !important;
+  border-color: var(--gl-hair) !important;
+}
+
+/* The tool list: a tool is a quiet header, its outputs rounded rows; the one
+ * open in the preview is lit with the accent. */
+:root[data-chrome='glass'] .cp-shell .cp-rail-list {
+  padding: 4px 0 8px;
+}
+:root[data-chrome='glass'] .cp-shell .cp-tool {
+  border-bottom: 0 !important;
+}
+:root[data-chrome='glass'] .cp-shell .cp-tool-head {
+  width: calc(100% - 12px) !important;
+  margin: 6px 6px 2px;
+  border-radius: 12px;
+  color: var(--gl-fg);
+  transition: background-color 120ms ease;
+}
+:root[data-chrome='glass'] .cp-shell .cp-tool-head:hover {
+  background: var(--gl-well) !important;
+}
+:root[data-chrome='glass'] .cp-shell .cp-row {
+  width: calc(100% - 12px) !important;
+  margin: 1px 6px;
+  padding-inline: 12px !important;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--gl-fg);
+  transition: background-color 120ms ease;
+}
+:root[data-chrome='glass'] .cp-shell .cp-row:hover {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .cp-shell .cp-row[data-selected] {
+  background: var(--gl-accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 26%, transparent);
+}
+:root[data-chrome='glass'] .cp-shell .cp-row[data-selected] .cp-row-title {
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .cp-shell :is(.cp-row, .cp-tool-head):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+
+/* ============================================================ the preview */
+
+:root[data-chrome='glass'] .cp-out .cp-out-head {
+  padding: 12px 16px !important;
+  border-color: var(--gl-hair) !important;
+}
+:root[data-chrome='glass'] .cp-out .cp-out-title {
+  color: var(--gl-fg);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* An id is a handle to copy: mono, on a hairline chip. */
+:root[data-chrome='glass'] .cp-out .cp-out-id {
+  padding: 2px 7px;
+  border: 1px solid var(--gl-hair);
+  border-radius: 7px;
+  background: var(--gl-paper);
+  color: var(--gl-muted);
+}
+/* The render switch: one row of pills. */
+:root[data-chrome='glass'] .cp-out .cp-switch {
+  gap: 6px !important;
+  padding: 10px 16px !important;
+  border-color: var(--gl-hair) !important;
+}
+:root[data-chrome='glass'] .cp-out .cp-switch .mantine-Button-root {
+  height: 30px;
+  padding-inline: 12px;
+  color: var(--gl-muted);
+  font-weight: 550;
+}
+:root[data-chrome='glass'] .cp-out .cp-switch .mantine-Button-root:hover {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .cp-out .cp-switch .mantine-Button-root[data-active] {
+  background: var(--gl-accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 26%, transparent);
+  color: var(--gl-accent-fg);
+}
+/* The stage: the render as a dashboard tile, on a soft well. */
+:root[data-chrome='glass'] .cp-out .cp-stage {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .cp-out[data-variant='pane'] .cp-stage {
+  border-radius: 0 0 var(--gp-radius-lg) var(--gp-radius-lg);
+}
+:root[data-chrome='glass'] .cp-out .cp-frame {
+  border-radius: var(--gl-tile-radius);
+  background: var(--gl-surface);
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 14px 30px -20px var(--gl-shade-b);
+  overflow: hidden;
+}
+/* The tile is the frame: the renderer's own Paper loses its edge inside it. */
+:root[data-chrome='glass'] .cp-out .cp-frame > .mantine-Paper-root,
+:root[data-chrome='glass'] .cp-out .cp-frame > * > .mantine-Paper-root {
+  border-color: transparent !important;
+  border-radius: inherit;
+  box-shadow: none !important;
+}
+:root[data-chrome='glass'] .cp-out .cp-frame-foot {
+  margin-top: 10px !important;
+}
+/* The fixture: a paper card under the tile. */
+:root[data-chrome='glass'] .cp-out .cp-fixture .mantine-Accordion-item {
+  border: 1px solid var(--gl-rim);
+  border-radius: var(--gp-radius);
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .cp-out .cp-fixture .mantine-Accordion-control:hover {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .cp-info {
+  border-color: var(--gl-hair) !important;
+  border-radius: 14px !important;
+  background: var(--gl-well) !important;
+}
+
+/* ============================================================ page views */
+
+:root[data-chrome='glass'] .cp-shell :is(.cp-facets, .cp-table, .cp-section) {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gp-radius-lg) !important;
+  background: var(--gp-card-bg) !important;
+  box-shadow: var(--gp-card-shadow) !important;
+}
+:root[data-chrome='glass'] .cp-shell .cp-facets {
+  padding: 14px 16px !important;
+}
+:root[data-chrome='glass'] .cp-shell .cp-section .mantine-Divider-root {
+  border-color: var(--gl-hair);
+}
+:root[data-chrome='glass'] .cp-shell .cp-card {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gp-radius) !important;
+  background: var(--gl-surface) !important;
+  box-shadow: 0 0 0 1px transparent, 0 1px 2px var(--gl-shade-a) !important;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+:root[data-chrome='glass'] .cp-shell .cp-card:hover {
+  box-shadow: var(--gp-card-shadow-hover) !important;
+  transform: translateY(-1px);
+}
+:root[data-chrome='glass'] .cp-shell .cp-card .mantine-ThemeIcon-root {
+  border-radius: 13px;
+}
+:root[data-chrome='glass'] .cp-shell .cp-table .mantine-Table-thead {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .cp-shell .cp-table :is(.mantine-Table-th, .mantine-Table-td) {
+  border-color: var(--gl-hair);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-chrome='glass'] .cp-shell .cp-card {
+    transition: none;
+  }
+  :root[data-chrome='glass'] .cp-shell .cp-card:hover {
+    transform: none;
+  }
+}
+
+/* A count is a plain hairline chip; Mantine's `circle` fixes its width, which
+ * the chip's padding would leave no room in. */
+:root[data-chrome='glass'] .cp-shell .cp-count.mantine-Badge-root {
+  width: auto;
+  min-width: 24px;
+  height: 20px;
+  padding-inline: 7px;
+  justify-content: center;
+  color: var(--gl-muted);
+  font-size: 11.5px;
+}
+
+/* An output on a page of its own: the pane grows with its content. */
+:root[data-chrome='glass'] .cp-shell .cp-page-pane {
+  overflow: hidden;
+}
+
+/* ============================================================== the rail */
+
+/* The handle between the list and the preview: the gap between the two panes,
+ * with a hairline that lights up on hover, drag and focus. Classic gets the
+ * same handle as a thin strip on the rail's border. */
+.cp-resizer {
+  position: relative;
+  flex: 0 0 6px;
+  margin-left: -3px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+  z-index: 1;
+}
+.cp-resizer::after {
+  content: '';
+  position: absolute;
+  inset: 0 2px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+.cp-resizer:hover::after,
+.cp-resizer:focus-visible::after,
+.cp-resizer[data-dragging]::after {
+  background: var(--mantine-primary-color-filled);
+}
+:root[data-chrome='glass'] .cp-shell .cp-resizer {
+  flex-basis: 14px;
+  margin-left: 0;
+}
+:root[data-chrome='glass'] .cp-shell .cp-resizer::after {
+  inset: 18px 6px;
+}
+:root[data-chrome='glass'] .cp-shell .cp-resizer:hover::after,
+:root[data-chrome='glass'] .cp-shell .cp-resizer:focus-visible::after,
+:root[data-chrome='glass'] .cp-shell .cp-resizer[data-dragging]::after {
+  background: color-mix(in srgb, var(--gl-accent) 55%, transparent);
+}
+
+/* The rail folded away: a slim strip with the way back. */
+.cp-rail-strip {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 48px;
+  padding: 10px 0;
+  border-right: 1px solid var(--mantine-color-default-border);
+}
+.cp-rail-strip-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+:root[data-chrome='glass'] .cp-shell .cp-rail-strip {
+  margin-right: 14px;
+  border: 1px solid var(--gl-rim);
+  border-radius: var(--gp-radius-lg);
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+}
+
+/* A module's revision: quiet mono, beside the tool's name. */
+.cp-tool-ver {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 10.5px;
+}
+
+/* The version chip: the module revision, a dot when this output changed in it. */
+.cp-ver {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 999px;
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11px;
+  line-height: 1;
+}
+.cp-ver:hover {
+  color: var(--mantine-color-text);
+  background: var(--mantine-color-default-hover);
+}
+.cp-ver:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+.cp-ver-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mantine-primary-color-filled);
+}
+.cp-ver-changes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.45;
+  color: var(--mantine-color-dimmed);
+}
+.cp-ver-changes li[data-mine] {
+  color: var(--mantine-color-text);
+}
+.cp-ver-log {
+  max-height: 260px;
+  overflow-y: auto;
+}
+:root[data-chrome='glass'] .cp-ver {
+  border-color: var(--gl-hair);
+  background: var(--gl-paper);
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .cp-ver:hover {
+  background: var(--gl-well);
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .cp-ver-dot {
+  background: var(--gl-accent);
+}
+
+/* A rail row whose output changed in its module's current revision. */
+.cp-row-changed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mantine-primary-color-filled);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.cp-row-changed::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+:root[data-chrome='glass'] .cp-row-changed {
+  color: var(--gl-accent-fg);
+}

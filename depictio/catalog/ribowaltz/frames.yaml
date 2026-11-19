@@ -13,6 +13,47 @@ renders_as:
   - id: frame_composition
     component: advanced_viz
     kind: stacked_taxonomy
+    title: P-site reading frame per library
     roles: { sample_id: sample, taxon: frame, rank: region, abundance: pct }
-  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: frame, top_n_count: 3 }
-  - { component: table }
+    config:
+      rank_label: Region
+      value_title: P-sites in the frame (%)
+    description: >-
+      Each bar is a library: the share of its P-sites that fall in each of the three
+      reading frames, for one transcript region. It answers whether the footprints show
+      the three-nucleotide periodicity of translating ribosomes.
+
+      How to read: on the CDS, one frame should dominate, usually frame 0. The UTRs are
+      not translated, so they stay close to a third per frame. A CDS that looks like the
+      UTRs means the P-site offsets are wrong or the library lacks periodicity.
+
+      Lines and annotations: a third per frame is the split of reads with no frame
+      preference, a plain expectation of three frames and not a riboWaltz cut-off.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: frame_psites_card
+    component: card
+    column: count
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: frame
+    top_n_count: 3
+    caption: P-sites, by frame
+    title: P-sites by frame
+    description: >-
+      The hero number is the total of P-sites, the second number is the largest single
+      count, and the bars rank the three frames by P-sites. It answers which frame holds
+      most of the signal.
+
+      How to read: pooled over regions the frames are mixed, so filter to the CDS to
+      read the periodicity. One frame far ahead of the others means a phased library.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - component: table
+    title: P-site frame counts
+    description: >-
+      Each row is a library, region and frame with its P-site count and share. It
+      answers the exact numbers behind the bars.
+
+      How to read: filter the region to the CDS and compare frame 0 with the other two.

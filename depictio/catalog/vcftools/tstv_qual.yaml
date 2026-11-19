@@ -9,12 +9,78 @@ description: >-
 find:
   path_glob: "**/*.TsTv.qual"
 recipe: vcftools/tstv_qual.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several callers.
 fixture: tstv_qual.tsv
 renders_as:
-  - { id: tstv_quality_sweep, component: advanced_viz, kind: profile,
-      roles: {series: series, x: qual_threshold, y: ts_tv_above} }
-  - { component: figure, visu_type: line,
-      dict_kwargs: {x: qual_threshold, y: ts_tv_above, color: series} }
-  - { component: card, column: ts_tv_above, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: tstv_quality_sweep
+    component: advanced_viz
+    kind: profile
+    title: Ts/Tv by quality threshold
+    roles: {series: series, x: qual_threshold, y: ts_tv_above}
+    config:
+      x_title: Minimum quality score
+      y_title: Ts/Tv of the calls above it
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample and caller: the transition to transversion ratio of the
+      SNPs whose quality is above each threshold. It answers whether raising the quality
+      floor makes the calls more like real variants.
+
+      How to read: a ratio that rises with the threshold means quality separates real
+      from false calls, and a curve that stays flat means the quality score carries no
+      information. The level to expect depends on the genome region sequenced, so compare
+      callers on the same data.
+
+      Note: the tool publishes no ideal ratio, so no reference line is drawn. Only
+      bi-allelic SNPs are counted.
+
+      Source: https://vcftools.github.io/man_latest.html
+      and https://pubmed.ncbi.nlm.nih.gov/25297068/
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: qual_threshold
+      y: ts_tv_above
+      color: series
+      labels: {qual_threshold: Minimum quality score, ts_tv_above: Ts/Tv of the calls above it, series: Sample and caller}
+    title: Ts/Tv by quality, static view
+    description: >-
+      Each line is a sample and caller: the Ts/Tv ratio of the calls above each quality
+      threshold. It answers the same question as the interactive sweep, in a plain figure
+      that can be exported.
+
+      How to read: a line that climbs and levels off marks the quality score from which
+      extra filtering gains little.
+
+      Source: https://vcftools.github.io/man_latest.html
+  # The median runs over every threshold step and series, so the card reads the
+  # typical ratio of the sweep and the box its spread.
+  - component: card
+    column: ts_tv_above
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median over the sweep, with its spread
+    title: Ts/Tv across the sweep
+    description: >-
+      The hero number is the median Ts/Tv ratio over every quality threshold and series
+      in view, and the box shows the spread. It answers the typical balance of
+      transitions and transversions of the callsets.
+
+      How to read: callsets with a lower box add more noise. Filter to one caller to read
+      its own level.
+
+      Note: the tool publishes no ideal ratio, which depends on the genome region.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/25297068/
+  - component: table
+    title: Ts/Tv sweep table
+    description: >-
+      Each row is a quality threshold of a sample and caller, with the transitions and
+      transversions above it and their ratio. It answers the exact numbers behind the
+      curves.
+
+      How to read: filter by series and read down the thresholds to see where the ratio
+      stops improving.
+
+      Source: https://vcftools.github.io/man_latest.html

@@ -12,10 +12,77 @@ find:
 recipe: viralmetagenome/clusters.py
 fixture: clusters.tsv
 renders_as:
-  - { id: clusters_by_status, component: card, column: cluster, aggregation: count,
-      secondary_layout: composition, breakdown_col: status }
-  - { component: card, column: read_depth_pct, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: cluster_type, top_n_count: 2 }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: sample, y: read_depth_pct, color: status, title: Read depth share per cluster} }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+  - id: clusters_by_status
+    component: card
+    column: member_bp
+    aggregation: count
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: status
+    title: Contig clusters
+    caption: clusters, by status
+    description: >-
+      The hero number is the count of contig clusters, and the bar splits them into
+      those a consensus was refined from and those that were filtered out. It answers
+      how many clusters turned into genomes.
+
+      How to read: clusters filtered out are usually small groups of contigs holding
+      few reads, which the pipeline treats as likely false positives. A sample with
+      every cluster filtered out produced no de novo genome.
+
+      Lines and annotations: a cluster is filtered out when the contigs in it hold
+      less than 5 percent of the mapped reads by default (perc_reads_contig), or when
+      it is a singleton and singleton filtering is on.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/nextflow_schema.json
+  - component: card
+    column: read_depth_pct
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: cluster_type
+    top_n_count: 2
+    title: Read depth by cluster type
+    caption: depth share, by cluster type
+    description: >-
+      The hero number is the summed share of contig read depth held by all clusters,
+      and the bars rank the cluster types, reference-anchored or contig-only. It
+      answers whether the reads sit in clusters anchored on a reference sequence.
+
+      How to read: a high share in reference-anchored clusters means the sample's
+      contigs match known viruses. A high share in contig-only clusters points to
+      sequence with no close reference, or to contamination.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  - component: figure
+    visu_type: bar
+    title: Read depth share per cluster
+    dict_kwargs:
+      x: sample
+      y: read_depth_pct
+      color: status
+      labels: {sample: Sample, read_depth_pct: Share of contig read depth (%), status: Cluster status}
+    description: >-
+      Each bar is a sample and its segments are its contig clusters, sized by the
+      share of the sample's contig read depth they hold and coloured by status. It
+      answers how the reads of each sample divide among clusters.
+
+      How to read: one large refined segment is a clean single-virus sample. Many
+      segments or a large filtered-out segment mean mixed or fragmented assembly, so
+      check the contigs and their taxonomic calls.
+
+      Lines and annotations: none are drawn. The pipeline's own cut-off is 5 percent of
+      mapped reads per cluster (perc_reads_contig), a run parameter.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/nextflow_schema.json
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Contig clusters table
+    description: >-
+      Each row is a contig cluster with its taxon, centroid, member contigs, summed
+      length, read depth share and status. It answers what each cluster holds and
+      whether it became a consensus, and lets a row selection filter the other tiles.
+
+      How to read: sort by read depth share to find the dominant clusters, and read
+      the status to see which were discarded.

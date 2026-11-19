@@ -12,4 +12,18 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: ataqv }
+  - component: multiqc
+    section: ataqv
+    title: ATAC library quality
+    description: >-
+      ataqv's own MultiQC plots: the fragment-length ladder, the peak-enrichment
+      percentiles, the MAPQ spread and the per-chromosome read distribution, one
+      line or bar per sample. They answer whether an ATAC library shows the expected
+      nucleosomal structure and signal in peaks.
+
+      How to read: A good library shows a nucleosome-free peak followed by mono- and
+      di-nucleosome peaks, and a sharp rise of reads in peaks. A flat ladder or
+      reads piled on mitochondrial or unplaced contigs point to over-transposition,
+      low enrichment or contamination.
+
+      Source: https://docs.seqera.io/multiqc/modules/ataqv

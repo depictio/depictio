@@ -15,20 +15,166 @@ fixture: dataset_summary.tsv
 renders_as:
   # Datasets through the pipeline's steps, as attrition: downloaded, ID-mapped,
   # merged.
-  - { id: dataset_attrition, component: card, column: downloaded, aggregation: sum,
-      secondary_layout: attrition, attrition_cols: [id_mapped, merged], headline: true }
-  - { id: sample_attrition, component: card, column: samples_downloaded, aggregation: sum,
-      secondary_layout: attrition, attrition_cols: [samples_id_mapped, samples_after_zero_filter, samples_kept] }
-  - { id: dataset_outcomes, component: card, column: dataset, aggregation: count, secondary_layout: donut, breakdown_col: outcome }
-  - { id: mapped_share_card, component: card, column: mapped_share, aggregation: median, secondary_layout: histogram }
-  - { id: samples_per_dataset, component: figure, visu_type: histogram, dict_kwargs: { x: samples_kept, color: platform } }
+  - id: dataset_attrition
+    component: card
+    column: downloaded
+    aggregation: sum
+    aggregations: [count]
+    secondary_layout: attrition
+    attrition_cols: [id_mapped, merged]
+    headline: true
+    title: Datasets through the pipeline
+    caption: datasets, at each step
+    description: >-
+      The hero number is the count of datasets the run downloaded, and the bars show
+      how many were mapped to Ensembl genes and how many reached the merged matrix.
+      It answers how many of the public datasets end up usable.
+
+      How to read: a large gap between downloaded and mapped means many gene ID
+      schemes could not be translated, and a gap between mapped and merged means
+      the sample filters or the rare-gene filter removed whole datasets. Open the
+      outcome ring to see the reason for each.
+  - id: sample_attrition
+    component: card
+    column: samples_downloaded
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: attrition
+    attrition_cols: [samples_id_mapped, samples_after_zero_filter, samples_kept]
+    title: Samples through the pipeline
+    caption: samples, at each step
+    description: >-
+      The hero number is the total of downloaded samples, and the bars show how many
+      remain after the ID mapping, the zero filter and the missing-value filter. It
+      answers how much of the downloaded data the merged matrix keeps.
+
+      How to read: a small loss at the zero and missing-value filters is normal. A
+      large loss points to datasets with many empty measurements, so check the
+      per-dataset table.
+
+      Lines and annotations: the filters reject samples with more than 0.9 zeros or
+      0.9 missing values by default (max_zero_ratio and max_null_ratio), unless the
+      run changed them.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/nextflow_schema.json
+  - id: dataset_outcomes
+    component: card
+    column: samples_kept
+    aggregation: count
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: outcome
+    title: Dataset outcomes
+    caption: datasets, by outcome
+    description: >-
+      Each unit is one downloaded dataset and the ring splits them by what happened
+      to it: merged, no gene mapped, only rare genes, or all samples filtered out. It
+      answers why datasets drop out.
+
+      How to read: a ring mostly merged is the healthy case. A large share with no
+      gene mapped means the dataset's gene IDs are not covered by the mapping
+      service, which is a limit of the source and not of the data.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - id: mapped_share_card
+    component: card
+    column: mapped_share
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Gene IDs mapped
+    caption: share mapped, per dataset
+    description: >-
+      The hero number is the median share of gene IDs a dataset had that mapped to
+      an Ensembl gene, and the histogram shows the share of each dataset. It answers
+      how well the source gene IDs translate.
+
+      How to read: a distribution piled near one is healthy. A low tail means
+      datasets whose probes or transcript IDs are poorly annotated, and they add
+      little to the merged matrix.
+  - id: samples_per_dataset
+    component: figure
+    visu_type: histogram
+    title: Samples kept per dataset
+    dict_kwargs:
+      x: samples_kept
+      color: platform
+      labels: {samples_kept: Samples kept, platform: Platform}
+    reference_lines:
+      - axis: x
+        stat: median
+        column: samples_kept
+    description: >-
+      Each bar counts datasets that kept a given number of samples in the merged
+      matrix, split by platform. It answers how the cohort is spread over
+      datasets.
+
+      How to read: a few very large datasets next to many small ones mean the
+      stability scores lean on those large datasets. A bar at zero lists datasets
+      that did not reach the merged matrix.
+
+      Lines and annotations: The dashed line is the median number of samples kept
+      per dataset of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of nf-core/stableexpression.
   # The share of genes a dataset misses is set by what measured it: one
   # strip per array design (RNA-seq its own), one point per dataset.
-  - { id: missing_by_design, component: figure, visu_type: strip, dict_kwargs: { x: design, y: missing_share, color: platform } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: outcome }
-  - { component: interactive, interactive_type: MultiSelect, column_name: platform }
-  - { id: dataset_table, component: table, row_selection_enabled: true, row_selection_column: dataset }
+  - id: missing_by_design
+    component: figure
+    visu_type: strip
+    title: Missing values by array design
+    dict_kwargs:
+      x: design
+      y: missing_share
+      color: platform
+      labels: {design: Array design, missing_share: Share of missing values, platform: Platform}
+    description: >-
+      Each point is a dataset: the median share of missing values over its samples,
+      against the array design that measured it. It answers whether a design leaves
+      many genes unmeasured.
+
+      How to read: points near zero are complete datasets. A design with every point
+      high leaves many genes unmeasured, and those genes are scored on fewer
+      datasets. Compare the platforms by colour.
+
+      Lines and annotations: none are drawn. The pipeline's own limit is a missing
+      share of 0.9 per sample (max_null_ratio), a run parameter.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/nextflow_schema.json
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: outcome
+    title: Dataset outcome
+    description: >-
+      Keeps only datasets with the chosen outcome, for example the merged ones, so
+      the tiles describe what reached the analysis.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: platform
+    title: Platform
+    description: >-
+      Keeps only datasets measured on the chosen platform, RNA-seq or microarray.
+  - id: dataset_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: dataset
+    title: Downloaded datasets table
+    description: >-
+      Each row is a downloaded dataset with its platform, gene ID mapping counts,
+      the samples each filter rejected, its outcome and the reason it failed when it
+      did. It answers what happened to each dataset and lets a row selection open its
+      record.
+
+      How to read: sort by outcome to group the failures, then read the failure
+      reason and the mapping note to see whether the cause is the dataset or the
+      mapping service.
   - id: dataset_record
     component: advanced_viz
     kind: record_card
-    roles: { id: dataset, title: accession }
+    roles: {id: dataset, title: accession}
+    title: Dataset record
+    description: >-
+      One card per dataset, listing every field of its summary row. It answers what
+      is known about the dataset picked in the table.
+
+      How to read: select a row in the table to load its record, then check the
+      mapping note and the samples rejected at each filter.

@@ -7,12 +7,124 @@ description: >-
   sample filter can reach: the wide matrix next to it carries no sample column.
 find: { path_glob: "**/bambu/counts_gene.txt" }
 recipe: bambu/counts_gene_long.py
+# The fixture is enriched synthetically from 1 real library of 12 genes (copies with seeded noise), so the preview shows several libraries and conditions.
 fixture: counts_gene_long.tsv
 renders_as:
-  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: log_cpm, color: condition, title: Expression distribution per library} }
-  - { component: card, column: log_cpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
-  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: donut, breakdown_col: gene_biotype }
-  - { component: card, column: cpm, aggregation: max, secondary_layout: top_n, breakdown_col: condition, top_n_count: 2 }
-  - { component: table, page_size: 25 }
+  - id: gene_expression_box
+    component: figure
+    visu_type: box
+    dict_kwargs:
+      x: sample
+      y: log_cpm
+      color: condition
+      labels: {sample: Library, log_cpm: "Expression, log2(CPM + 1)", condition: Condition}
+    reference_lines:
+      - {axis: y, stat: median, column: log_cpm}
+    title: Expression distribution per library
+    description: >-
+      Each box is the distribution of log2(CPM + 1) over the genes of one library,
+      coloured by condition. It answers whether the libraries are comparable after
+      normalising for depth.
+
+      How to read: boxes of similar height and position mean comparable libraries. A
+      library whose box sits well above or below its replicates has a composition or
+      quality difference to check before comparing conditions.
+
+      Lines and annotations: this catalog's recipe computes counts per million from the
+      Bambu gene counts against the library total, then adds 1 before the log2 transform.
+      The dashed line is the median log2(CPM + 1) of this table, a reference computed
+      from the rows on show (it follows the filters), not a cut-off of Bambu.
+
+      Source: https://raw.githubusercontent.com/GoekeLab/bambu/master/README.md
+  - id: log_cpm_spread
+    component: card
+    column: log_cpm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median expression, with its spread
+    title: Typical expression
+    description: >-
+      The hero number is the median log2(CPM + 1) over every gene and library in view, and
+      the box shows the quartiles. It answers where expression typically sits.
+
+      How to read: many genes are not detected in a library, so the median is low and the
+      upper quartile is the more informative number. Filter to one condition to compare
+      them.
+  - id: genes_by_biotype
+    component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: gene_biotype
+    top_n_count: 3
+    caption: genes, by biotype
+    title: Genes quantified
+    description: >-
+      The hero number is the count of distinct genes, the compact line gives the gene and
+      library rows, and the bars rank the biotypes by their genes. It answers how much of
+      the annotation is covered and by what kind of gene.
+
+      How to read: protein-coding genes usually lead. Rows divide by genes to give the
+      number of libraries in view.
+  - id: reads_by_library
+    component: card
+    column: count
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    caption: reads, by library
+    title: Reads assigned
+    description: >-
+      The hero number is the sum of Bambu counts over the libraries in view, and the bars
+      rank the libraries by their share. It answers how deep the sequencing is and how
+      evenly it is spread.
+
+      How to read: a library far below the others carries less information and its low
+      counts are noisier. The compact line gives the median and maximum count of a single
+      gene and library.
+  - id: biotype_rows
+    component: card
+    column: gene_biotype
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: gene_biotype
+    caption: gene rows, by biotype
+    title: Gene biotypes
+    description: >-
+      The hero number is the count of distinct gene biotypes and the ring splits the gene
+      and library rows by biotype. It answers what kinds of genes the table holds.
+
+      How to read: one large slice is the usual protein-coding majority. The compact line
+      gives the number of rows.
+  - id: cpm_peak
+    component: card
+    column: cpm
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: top_n
+    breakdown_col: condition
+    top_n_count: 2
+    caption: highest CPM, by condition
+    title: Highest expression
+    description: >-
+      The hero number is the highest counts per million of any gene in a library, and the
+      bars rank the conditions by their top value. It answers whether one gene takes a
+      large share of a library.
+
+      How to read: a very high maximum means one gene dominates the library, which
+      compresses the rest of the distribution. The compact line gives the median and the
+      upper quartile.
+  - component: table
+    page_size: 25
+    title: Gene counts per library
+    description: >-
+      Each row is a gene in one library with its biotype, Bambu count, counts per million
+      and log2(CPM + 1). It answers the exact values behind the plots.
+
+      How to read: filter to one library or condition and sort by counts per million to
+      list the most expressed genes.

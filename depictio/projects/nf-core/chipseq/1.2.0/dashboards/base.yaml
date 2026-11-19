@@ -2247,6 +2247,7 @@ tabs:
     data_collection_tag: deseq2_qc_pca
     use: deseq2/qc_pca_embedding
     config:
+      color_col: consensus_set
       cluster_col: consensus_set
       default_color_by: consensus_set
       hover_cols: [dim_1_percent, dim_2_percent]

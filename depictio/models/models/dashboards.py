@@ -1632,6 +1632,9 @@ class DashboardDataLite(BaseModel):
                 for field in FIGURE_DISPLAY_FIELDS:
                     if comp.get(field):
                         lite_comp[field] = comp[field]
+                # Guide lines, fixed or computed from the data (RULES §17).
+                if comp.get("reference_lines"):
+                    lite_comp["reference_lines"] = comp["reference_lines"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -2129,6 +2132,8 @@ class DashboardDataLite(BaseModel):
                 for field in FIGURE_DISPLAY_FIELDS:
                     if comp_dict.get(field) is not None:
                         full_comp[field] = comp_dict[field]
+                if comp_dict.get("reference_lines"):
+                    full_comp["reference_lines"] = comp_dict["reference_lines"]
 
             elif comp_type == "card":
                 full_comp.update(

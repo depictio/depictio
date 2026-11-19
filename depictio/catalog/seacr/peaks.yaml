@@ -2,9 +2,9 @@ id: seacr_peaks
 name: Peak calls
 mode: peaks/seacr
 description: >-
-  Every SEACR region of every sample in one table, with the total and the
-  maximum fragment coverage over the region, its width and where inside it the
-  maximum was reached.
+  Every SEACR region of every sample in one table, with the total and the maximum
+  fragment coverage over the region, its width and where inside it the maximum was
+  reached.
 # SEACR reports no p-value and no fold enrichment, so significance is read off
 # the coverage itself: `log10_total_signal` is the height of the genome track
 # and `signal_density` the coverage per base.
@@ -15,19 +15,190 @@ fixture: peaks.tsv
 renders_as:
   # Where the signal is, then how the two coverage measures relate and how wide
   # the calls are behind them.
-  - { id: seacr_peak_signal, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: summit, score: log10_total_signal} }
+  - id: seacr_peak_signal
+    component: advanced_viz
+    kind: manhattan
+    title: Peak signal along the genome
+    roles: {chr: chr, pos: summit, score: log10_total_signal, feature: peak_id}
+    config:
+      score_kind: log10 total signal
+      score_threshold_stat: p95
+    description: >-
+      Each point is a SEACR region at the position of its summit, with the base 10
+      logarithm of its total fragment coverage on the vertical axis. It answers where in
+      the genome the strongest signal sits.
+
+      How to read: tall points mark strong enriched domains and clusters of them mark
+      broad regions. A level, dense band means weak calls that all sit close to the
+      threshold. Use the track view to read individual loci.
+
+      Lines and annotations: the horizontal line is the 95th percentile of the scores in
+      the table, a data-defined reference and not a SEACR cut-off. SEACR gives no
+      significance for a region, since it reports coverage and not a p-value.
+
+      Note: with tens of thousands of calls per sample the points overplot, so read the
+      clusters rather than single points.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
   # The same three roles on a chromosome-aware locus axis, plus `end` so a call
   # is drawn as the interval it is rather than as a point at its summit. The
   # coverage track binds the same columns through the Plotly renderer, which is
   # what a tab falls back to when the GenomeSpy canvas is unavailable.
-  - { id: seacr_peak_track, component: advanced_viz, kind: genome_view, roles: {chr: chr, pos: start, score: log10_total_signal, feature: peak_id, end: end} }
-  - { id: seacr_peak_coverage, component: advanced_viz, kind: coverage_track, roles: {chromosome: chr, position: start, value: log10_total_signal, end: end, sample: sample} }
-  - { id: seacr_signal_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: total_signal, y: max_signal, color: sample, title: Total against maximum signal} }
-  - { id: seacr_width_hist, component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }
+  - id: seacr_peak_track
+    component: advanced_viz
+    kind: genome_view
+    title: Peak calls along the genome
+    roles: {chr: chr, pos: start, score: log10_total_signal, feature: peak_id, end: end, category: sample}
+    config:
+      score_title: log10 total signal
+      score_threshold_stat: p95
+    description: >-
+      Each mark is a SEACR region drawn as the interval it covers, coloured by sample and
+      high according to the logarithm of its total fragment coverage. It answers where
+      each sample has enriched regions and how strong they are.
+
+      How to read: regions shared by the replicates of a target are reproducible
+      candidates, and a region seen in only one sample needs checking. Brush a locus to
+      filter the tiles of the tab.
+
+      Lines and annotations: the line is the 95th percentile of the scores in the
+      table, a data-defined reference computed from the rows on show and not a SEACR
+      cut-off.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - id: seacr_peak_coverage
+    component: advanced_viz
+    kind: coverage_track
+    title: Peak signal track
+    roles: {chromosome: chr, position: start, value: log10_total_signal, end: end, sample: sample}
+    config:
+      color_by: sample
+    description: >-
+      Each bar is a SEACR region at its coordinates, high according to the logarithm of
+      its total fragment coverage and coloured by sample. It answers how the calls of the
+      samples line up at a locus.
+
+      How to read: matching bars in the replicates of a target are a reproducible peak,
+      and a bar in only one sample is a private call. Compare targets to find specific
+      regions.
+
+      Note: no signal threshold is drawn, because SEACR defines none.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - id: seacr_signal_scatter
+    component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: total_signal
+      y: max_signal
+      color: sample
+      log_x: true
+      log_y: true
+      labels: {total_signal: Total signal, max_signal: Maximum signal, sample: Sample}
+    title: Total against maximum signal
+    description: >-
+      Each point is a region: its total fragment coverage against the highest coverage
+      inside it, on logarithmic axes and coloured by sample. It answers whether strong
+      regions are strong because they are tall or because they are wide.
+
+      How to read: the points rise together, and a region far below the trend is wide and
+      flat, such as a broad domain. A region far above it is a narrow spike. Compare
+      samples to see which has the taller peaks.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - id: seacr_width_hist
+    component: figure
+    visu_type: box
+    dict_kwargs:
+      x: sample
+      y: width
+      color: sample
+      log_y: true
+      labels: {sample: Sample, width: Region width (bp)}
+    title: Region width per sample
+    reference_lines:
+      - {axis: y, stat: median, column: width}
+    description: >-
+      Each box is a sample: the spread of the widths of its regions in bases, on a
+      logarithmic axis. It answers how broad the calls of each sample are.
+
+      How to read: sharp marks give narrow regions and broad marks wide ones, so
+      replicates of one target should look alike. A sample with a very different box has a
+      different threshold or depth.
+
+      Lines and annotations: the dashed line is the median region width of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of SEACR.
   # How many regions and where they concentrate, then the spread of width,
   # total coverage and coverage per base behind that count.
-  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: total_signal, aggregation: sum, secondary_layout: histogram }
-  - { component: card, column: signal_density, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }
+  - component: card
+    column: sample
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: sample
+    caption: regions, by sample
+    title: Regions called
+    description: >-
+      The hero number counts the regions in view and the ring splits them by sample. The
+      extra figure is the number of samples. It answers how the calls are shared between
+      libraries.
+
+      How to read: a ring dominated by one sample means that sample calls far more
+      regions, usually a broad mark or a deeper library.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - component: card
+    column: width
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Median region width
+    description: >-
+      The hero number is the median region width in bases and the box shows the quartiles.
+      It answers how broad the calls are.
+
+      How to read: narrow regions fit sharp marks and wide ones broad marks. A long upper
+      whisker is merged neighbouring signal blocks.
+  - component: card
+    column: total_signal
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: total, with the distribution of regions
+    title: Total signal in regions
+    description: >-
+      The hero number is the summed fragment coverage inside all regions in view and the
+      histogram shows how it is distributed over the regions. It answers how much signal
+      the calls hold.
+
+      How to read: signal is strongly skewed, so a few regions carry most of it. The extra
+      figures are the median and the strongest region.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - component: card
+    column: signal_density
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: mean, with the distribution of regions
+    title: Coverage per base
+    description: >-
+      The hero number is the mean fragment coverage per base inside a region and the
+      histogram shows how it is distributed. It answers how dense the signal is.
+
+      How to read: a target that worked has much more coverage per base than an IgG
+      control. Compare it between samples and replicates.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: peak_id
+    title: Peak call table
+    description: >-
+      Each row is a SEACR region with its sample, coordinates, width, summit, total and
+      maximum signal and coverage per base. It answers the exact numbers behind the tiles.
+
+      How to read: sort by total signal to list the strongest regions. Selecting a row
+      filters the rest of the tab to it.

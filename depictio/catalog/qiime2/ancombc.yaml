@@ -10,13 +10,165 @@ find: { path_glob: "**/qiime2/ancombc/differentials/*/lfc_slice.csv" }
 recipe: qiime2/ancombc.py
 fixture: ancombc.tsv
 renders_as:
-  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }
-  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }
-  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: p_val} }
+  # Calls follow the nf-core/ampliseq ANCOM-BC defaults: a q-value below 0.05
+  # (--p-alpha 0.05, ancombc_significance) and an effect size of 1 for the
+  # differential-abundance barplot (ancombc_effect_size). The recipe's
+  # `significant` column applies the same q-value rule.
+  - id: volcano
+    component: advanced_viz
+    kind: volcano
+    title: Differential abundance volcano
+    roles: {feature_id: id, effect_size: lfc, significance: q_val, label: Phylum, category: contrast}
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      top_n_labels: 10
+      effect_label: Log fold change
+      significance_label: -log10 q-value
+    description: >-
+      Each point is a taxon in one contrast: its ANCOM-BC log fold change on the
+      horizontal axis and its q-value (adjusted p-value) on the vertical axis, coloured
+      by contrast. It answers which taxa differ most between the groups, in which
+      direction, and how confidently.
+
+      How to read: taxa in the upper left and upper right corners are less and more
+      abundant than in the reference group, with high confidence. A cloud with almost
+      nothing past the lines means little differential signal. Open the table tile to
+      inspect the labelled taxa.
+
+      Lines and annotations: the horizontal line is the q-value cut-off of 0.05 and the
+      vertical lines mark an absolute effect size of 1. Both are the nf-core/ampliseq
+      defaults for its differential-abundance barplot.
+
+      Source: https://raw.githubusercontent.com/nf-core/ampliseq/master/nextflow_schema.json
+  - id: da_barplot
+    component: advanced_viz
+    kind: da_barplot
+    title: Top changed taxa per contrast
+    roles: {feature_id: id, contrast: contrast, lfc: lfc, significance: q_val, label: Phylum}
+    config:
+      significance_threshold: 0.05
+      effect_label: Log fold change
+    description: >-
+      Each bar is a taxon: its ANCOM-BC log fold change in a contrast, for the taxa with
+      the largest absolute change. It answers which taxa drive each contrast and in which
+      direction.
+
+      How to read: long bars to the right are more abundant than in the reference group
+      and bars to the left less abundant; bars are marked when their q-value passes the
+      cut-off. A large change without significance usually means a rare or variable
+      taxon, so open the MA plot and the table to check it.
+
+      Lines and annotations: significance is marked at a q-value below 0.05, the
+      nf-core/ampliseq default.
+
+      Source: https://raw.githubusercontent.com/nf-core/ampliseq/master/nextflow_schema.json
+  - id: qq
+    component: advanced_viz
+    kind: qq
+    title: P-value QQ plot
+    roles: {p_value: p_val, category: contrast, feature_id: id}
+    config:
+      show_ci: true
+      show_identity: true
+      top_n_labels: 5
+    description: >-
+      Each point is a taxon: its observed raw p-value, as minus log10, against the value
+      expected if no taxon differed between the groups. One trace is drawn per contrast.
+      It answers whether the test statistics are well calibrated.
+
+      How to read: points hugging the diagonal for most of the range and lifting off at
+      the far end mean a few real signals over a calibrated null. A curve that leaves the
+      diagonal early points to strong group structure or to a model that does not fit.
+      Compare the contrasts and the ordination when one curve differs.
+
+      Lines and annotations: the diagonal is y = x, the expectation when p-values are
+      uniformly distributed under no effect. The shaded band is the 95% confidence
+      interval of that null, so points inside it are consistent with chance.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
-  - { component: card, column: id, aggregation: nunique, secondary_layout: donut, breakdown_col: Phylum, top_n_count: 3 }
-  - { component: card, column: q_val, aggregation: median, secondary_layout: threshold, top_n_count: 3, threshold_value: 0.05, threshold_direction: max, threshold_warn: 0.1 }
-  - { component: card, column: lfc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: contrast
+    top_n_count: 3
+    filter_expr: "pl.col('significant')"
+    title: Significant taxa by contrast
+    caption: calls, by contrast
+    description: >-
+      The hero number is the count of taxon calls with a q-value below 0.05, and the bars
+      rank the contrasts by how many they hold. It answers which comparison shows the
+      strongest differential signal.
+
+      How to read: a contrast with many calls separates its groups clearly, and one with
+      none shows no detectable difference. The count beside the hero is the number of
+      distinct taxa behind the calls.
+
+      Source: https://raw.githubusercontent.com/nf-core/ampliseq/master/nextflow_schema.json
+  - component: card
+    column: id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: Kingdom
+    top_n_count: 3
+    filter_expr: "pl.col('significant')"
+    title: Significant calls by kingdom
+    caption: calls, by kingdom
+    description: >-
+      The hero number is the count of taxon calls with a q-value below 0.05, and the ring
+      splits them by kingdom. It answers whether the differential signal sits in bacteria,
+      archaea or both.
+
+      How to read: a ring dominated by one kingdom says where the groups differ. Calls are
+      counted per contrast, so a taxon significant in two contrasts counts twice.
+
+      Source: https://raw.githubusercontent.com/nf-core/ampliseq/master/nextflow_schema.json
+  - component: card
+    column: q_val
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 0.05
+    threshold_direction: max
+    title: Median q-value
+    caption: median, against the 0.05 cut-off
+    description: >-
+      The hero number is the median q-value over every taxon and contrast in view, shown
+      against the 0.05 cut-off. It answers whether a typical taxon differs between the
+      groups.
+
+      How to read: a median below the cut-off means most taxa differ, which is unusual
+      outside strongly structured habitats. The smallest and largest q-values are listed
+      beside it.
+
+      Lines and annotations: the marker is the q-value of 0.05 used by nf-core/ampliseq as
+      the ANCOM-BC significance level.
+
+      Source: https://raw.githubusercontent.com/nf-core/ampliseq/master/nextflow_schema.json
+  - component: card
+    column: lfc
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Fold change spread
+    caption: range, with the quartiles
+    description: >-
+      The hero number is the range of ANCOM-BC log fold changes over every taxon and
+      contrast in view, and the box shows their quartiles. It answers how large the
+      differences are overall.
+
+      How to read: a box tight around zero with a long range means most taxa are unchanged
+      and a few change a lot. A median would cancel the two directions, so the range is
+      shown instead. Filter to one contrast to compare them.
+  - component: table
+    title: Differential abundance table
+    description: >-
+      Each row is a taxon in one contrast, with its log fold change, standard error, test
+      statistic, p-value, q-value and whether the call is significant. It answers the
+      exact estimate behind each point of the plots.
+
+      How to read: sort by q-value to list the strongest calls, and filter on the
+      significant column to keep the calls only.

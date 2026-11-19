@@ -10,10 +10,114 @@ find:
 recipe: cellranger/cell_cycle.py
 fixture: cell_cycle.tsv
 renders_as:
-  - { id: phase_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: s_score, y: g2m_score, color: phase, label: barcode} }
-  - { id: phase_by_cluster, component: figure, visu_type: bar, dict_kwargs: {x: cluster_label, color: phase, title: Cell-cycle phase per cluster} }
-  - { id: phase_filter, component: interactive, interactive_type: MultiSelect, column_name: phase }
-  - { component: card, column: barcode, aggregation: count, secondary_layout: donut, breakdown_col: phase, top_n_count: 3 }
-  - { component: card, column: s_score, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: card, column: g2m_score, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: table }
+  - id: phase_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: S and G2/M scores per cell
+    roles: {x: s_score, y: g2m_score, color: phase, label: barcode}
+    config:
+      x_title: S-phase score
+      y_title: G2/M-phase score
+      quadrants:
+        x: 0
+        y: 0
+        labels: [G2M, "S or G2M", G1, S]
+    description: >-
+      Each point is a cell: its S-phase score on the horizontal axis and its G2/M score on
+      the vertical axis, coloured by the phase assigned. It answers which cells are
+      cycling and in which phase.
+
+      How to read: a large cloud in the lower left corner is G1 or resting cells, the
+      normal majority of a tissue sample. Arms toward the upper or right regions are
+      cycling cells, so check whether a cluster is mostly cycling before treating it as a
+      distinct cell type.
+
+      Lines and annotations: the two lines sit at a score of 0 on each axis. A cell with
+      both scores negative is called G1, otherwise the higher score gives S or G2M, the
+      rule of scanpy's score_genes_cell_cycle. The gene sets are the S and G2/M sets of
+      Tirosh et al.; the scores here subtract the cell's mean expression instead of
+      expression-matched control genes.
+
+      Sources: https://raw.githubusercontent.com/scverse/scanpy/main/src/scanpy/tools/_score_genes.py
+      and https://satijalab.org/seurat/articles/cell_cycle_vignette
+  - id: phase_by_cluster
+    component: figure
+    visu_type: bar
+    title: Cell-cycle phase per cluster
+    dict_kwargs:
+      x: cluster_label
+      color: phase
+      labels: {cluster_label: Cluster, phase: Phase}
+    description: >-
+      Each bar is a cluster and its segments count the cells in each cell-cycle phase. It
+      answers which clusters are made of cycling cells.
+
+      How to read: a cluster dominated by S and G2M cells is a proliferating population, and
+      its markers may reflect the cycle rather than a cell type. A cluster of mostly G1 cells
+      is resting.
+
+      Source: https://scanpy.readthedocs.io/en/stable/api/generated/scanpy.tl.score_genes_cell_cycle.html
+  - id: phase_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: phase
+    title: Cell-cycle phase
+    description: >-
+      Keeps only the cells in the chosen phases. It answers how the tab looks for cycling or
+      resting cells alone.
+
+      How to read: select S and G2M to isolate proliferating cells.
+  - component: card
+    column: barcode
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: phase
+    top_n_count: 3
+    caption: cells, by phase
+    title: Cells per phase
+    description: >-
+      The hero number is the count of cells scored and the ring splits them by phase. It
+      answers what share of the cells is cycling.
+
+      How to read: a G1 majority is the usual pattern. A large S or G2M share suggests a
+      proliferating tissue or a culture, and a cell-cycle effect worth regressing out.
+  - component: card
+    column: s_score
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: S-phase score, with its spread
+    title: S-phase score
+    description: >-
+      The hero number is the median S-phase score over the cells, and the box shows its
+      spread. It answers how strongly S-phase genes are expressed overall.
+
+      How to read: the score is relative to the cell's mean expression, so a median near or
+      below zero means most cells do not express S genes above background.
+
+      Source: https://scanpy.readthedocs.io/en/stable/api/generated/scanpy.tl.score_genes_cell_cycle.html
+  - component: card
+    column: g2m_score
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: G2/M score, with its spread
+    title: G2/M-phase score
+    description: >-
+      The hero number is the median G2/M score over the cells, and the box shows its spread.
+      It answers how strongly G2/M genes are expressed overall.
+
+      How to read: a median near or below zero means most cells are not in G2 or mitosis. A
+      long upper tail holds the dividing cells.
+
+      Source: https://scanpy.readthedocs.io/en/stable/api/generated/scanpy.tl.score_genes_cell_cycle.html
+  - component: table
+    title: Cell-cycle scores per cell
+    description: >-
+      Each row is a cell with its cluster, S and G2/M scores, assigned phase and the number
+      of genes of each set found in the reference. It answers the exact values behind the
+      tiles.
+
+      How to read: a low gene count in a set means the reference lacks part of the gene set,
+      so its score is less reliable.

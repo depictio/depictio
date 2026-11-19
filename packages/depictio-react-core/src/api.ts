@@ -25,6 +25,10 @@ import type {
   AnnotationStyle,
   Geometry,
 } from './annotations/types';
+import type {
+  ReferenceStat,
+  ReferenceStatRequests,
+} from './components/advanced_viz/referenceStats';
 import type { VariantLegendPayload } from './components/jbrowse/trackLegend';
 import type {
   BuilderDcDraft,
@@ -1972,6 +1976,13 @@ export interface AdvancedVizDataResponse {
    *  estimate rather than a total. */
   sampling?: { policy: string; exact: boolean; degraded: boolean };
   filter_applied: boolean;
+  /** The statistics the request's `referenceStats` asked for, keyed by the
+   *  config field each stands in for (`reference_value`, `reference_y`,
+   *  `score_threshold`). Computed server-side on the filtered rows *before*
+   *  sampling, so a line at "the median of this table" is the table's median
+   *  and not the sample's. Null when no finite value was left; absent when
+   *  nothing was asked. */
+  reference_stats?: Record<string, number | null>;
 }
 
 /** The rows a tail-preserving reduction must keep whole — the significant end
@@ -1979,11 +1990,20 @@ export interface AdvancedVizDataResponse {
  *  keeps exactly the rows the plot would mark as hits instead of guessing a
  *  cutoff. `direction` is `low` for a raw p-value, `high` for a -log10 score,
  *  `both` for a signed effect size. */
-export interface AdvancedVizTailSpec {
-  column: string;
-  direction: 'low' | 'high' | 'both';
-  threshold: number;
-}
+export type AdvancedVizTailSpec =
+  | {
+      column: string;
+      direction: 'low' | 'high' | 'both';
+      threshold: number;
+    }
+  | {
+      column: string;
+      direction: 'low' | 'high' | 'both';
+      /** The cut as a statistic of `column` (a line at "the 95th percentile of
+       *  this table"): the server settles it on the unreduced rows, so the
+       *  tail kept whole is the side of the line the plot marks. */
+      threshold_stat: ReferenceStat;
+    };
 
 export interface AdvancedVizDataRequest {
   wfId: string;
@@ -2007,6 +2027,9 @@ export interface AdvancedVizDataRequest {
    *  needs (e.g. which column carries significance). */
   roles?: Record<string, string>;
   tail?: AdvancedVizTailSpec;
+  /** References computed from the data on show, `{config field: {column,
+   *  stat}}`; answered in the response's `reference_stats`. */
+  referenceStats?: ReferenceStatRequests;
   /** Sum `sum` per distinct `group_by` combination on the server, for a renderer
    *  that only adds the rows up (the sunburst). One row per lineage instead of
    *  one per lineage and sample. */
@@ -2038,6 +2061,7 @@ export async function fetchAdvancedVizData(
         roles: req.roles,
         tail: req.tail,
         aggregate: req.aggregate,
+        reference_stats: req.referenceStats,
       }),
       signal,
     });
@@ -9827,15 +9851,35 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
 // Catalog compose — matches ingested DCs against catalog entries
 // =============================================================================
 
+/** A guide line on a UI figure: a fixed `value`, or a `stat` of `column` over
+ *  the rows on show, computed by the server figure builder and named as such
+ *  ("median of this table"). Mirrors `ReferenceLine` in
+ *  depictio/models/components/lite.py: exactly one of `value` / `stat`. */
+export interface FigureReferenceLine {
+  axis: 'x' | 'y';
+  value?: number | null;
+  stat?: ReferenceStat | null;
+  column?: string | null;
+  label?: string | null;
+}
+
 export interface CatalogRender {
   component: string;
   /** Tool-unique render handle, when declared in the catalog. Combined with the
    *  tool id it forms the `use: <tool>/<id>` snippet (advanced_viz renders). */
   id?: string;
+  /** Any component: the tile title and its info popover text ("About this
+   *  component"), when the catalog declares them. */
+  title?: string;
+  description?: string;
   kind?: string;
   roles?: Record<string, string>;
   visu_type?: string;
-  dict_kwargs?: Record<string, string>;
+  /** Column-valued kwargs are strings; `labels` maps column -> axis title. */
+  dict_kwargs?: Record<string, unknown>;
+  /** figure (UI mode): guide lines, fixed or at a statistic of the rows on
+   *  show. Mirrors `ReferenceLine` in depictio/models/components/lite.py. */
+  reference_lines?: FigureReferenceLine[];
   column?: string;
   aggregation?: string;
   /** card only: the secondary-metric strip. `aggregations` drives the stats
@@ -9852,6 +9896,8 @@ export interface CatalogRender {
   attrition_cols?: string[];
   trend_col?: string | null;
   filter_expr?: string | null;
+  /** card: what the secondary strip shows ("median, with its spread"). */
+  caption?: string;
   /** multiqc only: the report module this render surfaces. */
   section?: string;
   code?: string;

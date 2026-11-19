@@ -2,9 +2,8 @@ id: seacr_peak_summary
 name: Peak QC summary
 mode: peaks/qc
 description: >-
-  One row per sample: how many regions SEACR called, how much of the genome
-  they cover and the median width, total coverage and coverage per base across
-  them.
+  One row per sample: how many regions SEACR called, how much of the genome they cover
+  and the median width, total coverage and coverage per base across them.
 # SEACR writes no FRiP score, so the signal-to-noise proxy here is the coverage
 # the calls carry: a target that worked has far more of it than an IgG control
 # taken through the same thresholding.
@@ -13,9 +12,100 @@ find:
 recipe: seacr/peak_summary.py
 fixture: peak_summary.tsv
 renders_as:
-  - { id: seacr_summary_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: num_peaks, color: sample, title: Regions called per sample} }
-  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }
-  - { component: card, column: width_median, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: total_bp, aggregation: sum, secondary_layout: histogram }
-  - { component: card, column: signal_density_median, aggregation: average, secondary_layout: histogram }
-  - { component: table }
+  # C1: coloured by sample, the table carries no group column (the target is only in the sample name).
+  - id: seacr_summary_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: num_peaks
+      color: sample
+      labels: {sample: Sample, num_peaks: Regions called}
+    title: Regions called per sample
+    reference_lines:
+      - {axis: y, stat: median, column: num_peaks}
+    description: >-
+      Each bar is a sample: the number of enriched regions SEACR called in it. It answers
+      how many peaks each library yields.
+
+      How to read: replicates of one target should be close, and a very different count is
+      a sign of a depth or quality problem. A sharp mark calls few, wide regions and a
+      broad mark many.
+
+      Lines and annotations: the dashed line is the median number of regions per
+      sample of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of SEACR. The count depends on the threshold mode
+      and on the control.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md and
+      https://pubmed.ncbi.nlm.nih.gov/31300027/
+  - component: card
+    column: num_peaks
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    headline: true
+    caption: regions, with the spread of samples
+    title: Regions called
+    description: >-
+      The hero number is the total of regions called over the samples in view and the
+      histogram shows how the samples spread. The extra figures are the median and largest
+      sample. It answers how many peaks the run produced.
+
+      How to read: a single sample far from the rest has a different depth or a different
+      target. Open the bar chart for the individual samples.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - component: card
+    column: width_median
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Median region width
+    description: >-
+      The hero number is the median over samples of each sample's median region width in
+      bases, and the box shows the quartiles. It answers how broad the calls are.
+
+      How to read: narrow regions, about a kilobase or less, fit promoter and
+      transcription factor marks. Kilobase wide regions fit broad histone marks.
+  - component: card
+    column: total_bp
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: bases covered, with the spread of samples
+    title: Bases covered by regions
+    description: >-
+      The hero number is the total number of bases covered by the called regions over the
+      samples in view, and the histogram shows how the samples spread. It answers how much
+      of the genome the calls cover.
+
+      How to read: broad marks cover far more of the genome than sharp ones. Replicates of
+      a target should cover similar amounts.
+  - component: card
+    column: signal_density_median
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: mean coverage per base, with the spread of samples
+    title: Coverage per base inside regions
+    description: >-
+      The hero number is the mean over samples of the median fragment coverage per base
+      inside their regions, and the histogram shows how samples spread. It answers how
+      strong the signal inside the calls is.
+
+      How to read: SEACR writes no FRiP score, so the coverage inside the calls is the
+      signal to noise proxy. A target that worked carries far more than an IgG control
+      taken through the same thresholding.
+
+      Source: https://raw.githubusercontent.com/FredHutch/SEACR/master/README.md
+  - component: table
+    title: Peak summary table
+    description: >-
+      Each row is a sample with its threshold mode, the regions called, the bases they
+      cover and the width and signal statistics. It answers the quality of each library in
+      numbers.
+
+      How to read: compare replicates of one target row by row, and compare targets with
+      the IgG control where there is one.

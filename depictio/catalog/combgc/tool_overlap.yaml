@@ -9,5 +9,24 @@ find: { path_glob: "**/combgc/combgc_complete_summary.tsv" }
 recipe: combgc/tool_overlap.py
 fixture: tool_overlap.tsv
 renders_as:
-  - { id: bgc_upset, component: advanced_viz, kind: upset_plot }
-  - { component: table }
+  # C6 N/A: the set columns are the callers the run used, known only at ingest.
+  - id: bgc_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Caller concordance
+    config:
+      color_intersections_by: set
+    description: >-
+      Each bar is the number of contigs predicted to hold a cluster by one combination of callers, and the dots below show which callers. It answers which callers agree on a contig and which find clusters alone.
+
+      How to read: tall bars of one caller alone mean clusters only that caller finds, and bars shared by all callers mark the most reliable calls. Little overlap is normal because callers use different methods.
+
+      Note: agreement is scored on the contig, because callers set region boundaries differently and a coordinate join would report no overlap.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: table
+    title: Callers per contig
+    description: >-
+      One row per contig with a 0 or 1 for each caller that predicted a cluster on it.
+
+      How to read: filter on a caller to list the contigs it alone reports.

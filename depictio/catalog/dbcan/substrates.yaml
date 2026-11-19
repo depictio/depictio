@@ -8,7 +8,71 @@ find: { path_glob: "**/dbcan/substrate/*/*_substrate_prediction.tsv" }
 recipe: dbcan/substrates.py
 fixture: substrates.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: substrate, y: clusters, color: sample, title: Predicted substrates per sample} }
-  - { component: card, column: clusters, aggregation: sum, secondary_layout: top_n, breakdown_col: substrate, top_n_count: 4 }
-  - { component: card, column: bitscore, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    title: Predicted substrates per sample
+    dict_kwargs:
+      x: substrate
+      y: clusters
+      color: sample
+      labels: {substrate: Predicted substrate, clusters: Gene clusters, sample: Sample}
+    description: >-
+      Each bar is a predicted substrate, with the number of CAZyme gene clusters
+      that point at it, split by sample. It answers which carbohydrates the clusters
+      of each sample are predicted to process.
+
+      How to read: a tall bar is a substrate many clusters target. A substrate that
+      one sample holds alone marks a difference in degradation potential between
+      samples.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html
+  - component: card
+    column: clusters
+    aggregation: sum
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: substrate
+    top_n_count: 4
+    caption: substrates with the most clusters
+    title: CAZyme gene clusters
+    description: >-
+      The hero number is the count of CAZyme gene clusters with a predicted
+      substrate, and the bars rank the substrates by the clusters that target them.
+      It answers how many clusters have a substrate and which ones dominate.
+
+      How to read: the leading substrate is what the community degrades most.
+      run_dbCAN prefers the dbCAN-PUL homology call over the dbCAN-sub majority
+      vote when both exist.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html
+  - component: card
+    column: bitscore
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Homology support of substrate calls
+    description: >-
+      The hero number is the median of the summed bit scores of the homologous gene
+      pairs between a cluster and its best dbCAN-PUL hit, and the box shows the
+      spread. It answers how strong the homology behind a substrate call is.
+
+      How to read: a high score means the cluster resembles a characterised
+      polysaccharide utilization locus over several genes. A low score is a
+      tentative call, to read with the majority-vote column of the table.
+
+      Note: the run_dbCAN documentation describes this value as a sum and publishes
+      no minimum score, so no cut-off is drawn.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html
+  - component: table
+    title: CAZyme gene clusters
+    description: >-
+      Each row is a CAZyme gene cluster, with its contig, its best dbCAN-PUL hit and
+      substrate, the homology score, and the substrate and score of the dbCAN-sub
+      majority vote. It answers the exact detail behind every other tile.
+
+      How to read: compare the two substrate calls of a cluster. When they differ,
+      the documentation recommends the dbCAN-PUL call first.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html

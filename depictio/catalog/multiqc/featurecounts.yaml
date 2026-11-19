@@ -14,4 +14,16 @@ find:
 # plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: featurecounts }
+  - component: multiqc
+    section: featurecounts
+    title: Read assignment
+    description: >-
+      featureCounts' MultiQC plot: how many reads were assigned to a feature and why
+      the rest were not (no feature, ambiguity, multimapping), one bar per sample.
+      It answers how much of the library can be counted.
+
+      How to read: A high assigned share is good. A large no-feature share points to
+      the wrong annotation or genomic DNA, and a large multimapping share to
+      repeats.
+
+      Source: https://docs.seqera.io/multiqc/modules/featurecounts

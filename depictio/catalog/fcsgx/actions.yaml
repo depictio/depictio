@@ -10,13 +10,75 @@ description: >-
 find:
   path_glob: "**/*.fcs_gx_report.txt"
 recipe: fcsgx/actions.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several genomes and contaminant divisions.
 fixture: actions.tsv
 renders_as:
-  - { id: flagged_ranges, component: card, column: seq_id, aggregation: count,
-      secondary_layout: composition, breakdown_col: action,
-      filter_expr: "col('action') != 'none'" }
-  - { id: flagged_bases, component: card, column: flagged_bp, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: division, top_n_count: 4 }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: genome, y: flagged_bp, color: division, title: Bases flagged as foreign} }
-  - { component: table }
+  - id: flagged_ranges
+    component: card
+    column: seq_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: action
+    filter_expr: "col('action') != 'none'"
+    headline: true
+    title: Ranges flagged as foreign
+    caption: ranges, by recommended action
+    description: >-
+      The hero number is the count of ranges FCS-GX flags as foreign, with the
+      number of distinct sequences they sit on, and the bar splits them by the action
+      it recommends. It answers how much of the assembly needs cleaning and how.
+
+      How to read: EXCLUDE drops a whole sequence, TRIM cuts a range at a sequence end
+      and FIX masks a range inside a sequence. A clean assembly shows zero here, and
+      the table still lists it as screened.
+
+      Source: https://raw.githubusercontent.com/wiki/ncbi/fcs/FCS-GX-quickstart.md
+  - id: flagged_bases
+    component: card
+    column: flagged_bp
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: division_group
+    top_n_count: 4
+    title: Bases flagged as foreign
+    caption: bases, by division group
+    description: >-
+      The hero number is the total count of bases in flagged ranges, with the median
+      and the largest range beside it, and the bars rank the taxonomic division
+      groups of the contaminants by bases. It answers how much sequence is foreign
+      and which kind of organism it comes from.
+
+      How to read: a division group that dominates, bacteria for instance, points to
+      the likely source of the contamination. Compare with the number of ranges to
+      tell a few long contaminants from many short ones.
+
+      Source: https://raw.githubusercontent.com/ncbi/fcs/main/README.md
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: genome
+      y: flagged_bp
+      color: division
+      labels: {genome: Assembly, flagged_bp: Bases flagged as foreign, division: Taxonomic division}
+    title: Foreign bases per assembly
+    description: >-
+      Each bar is the count of bases FCS-GX flags as foreign in one assembly,
+      stacked by the taxonomic division of the contaminant. It answers which
+      assemblies are contaminated and by what.
+
+      How to read: an assembly with no bar is clean. A tall bar of one colour is a
+      single contaminant source, and several colours point to mixed contamination, so
+      open the table to inspect the ranges before trimming.
+  - component: table
+    title: Contamination calls
+    description: >-
+      Each row is a range FCS-GX flags as foreign, with the action it recommends, its
+      taxonomic division, the top taxon of the contaminant, the share of the range
+      the contaminant covers and its length. An assembly with nothing flagged keeps
+      one row with action none. It answers exactly which sequences to exclude, trim
+      or fix.
+
+      How to read: filter by action to plan the cleaning, and read the top taxon to
+      confirm the contaminant is plausible for this assembly.

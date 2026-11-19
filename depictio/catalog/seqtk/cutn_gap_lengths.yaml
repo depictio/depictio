@@ -16,10 +16,70 @@ renders_as:
   # One row per assembly, log10 length bins across, the share of its runs of N
   # as colour: a fixed filler is one dark cell, estimated sizes a spread, and
   # assemblies with a handful or a hundred thousand gaps share one scale.
-  - { id: gap_length_matrix, component: advanced_viz, kind: signal_matrix,
-      roles: {region_id: genome, position: log10_gap_length, value: gaps_pct} }
-  - { id: gap_length_profile, component: advanced_viz, kind: profile,
-      roles: {series: genome, x: gap_length_bp, y: gaps} }
-  - { component: figure, visu_type: line,
-      dict_kwargs: {x: log10_gap_length, y: gaps, color: genome, title: Assembly gaps per log10 length bin} }
-  - { component: table }
+  # A length axis has no reference point, so the marker is set out of range.
+  - id: gap_length_matrix
+    component: advanced_viz
+    kind: signal_matrix
+    title: Gap length distribution per assembly
+    roles: {region_id: genome, position: log10_gap_length, value: gaps_pct}
+    config:
+      reference_position: -1
+    description: >-
+      Each row is an assembly and each column a bin of gap length on a log10 scale,
+      coloured by the share of that assembly's runs of N that fall in the bin. It
+      answers how an assembly was scaffolded and whether two assemblies used the same
+      gap sizes.
+
+      How to read: a single dark cell means one fixed gap length, typical of a filler
+      inserted by a scaffolder. A spread across many bins means estimated gap sizes. The
+      curve on top is the mean over the assemblies shown.
+
+      Note: seqtk cutN reports runs of N, which stand for assembly gaps. Rows are
+      compared as shares, so assemblies with few and with many gaps share one scale.
+
+      Source: https://raw.githubusercontent.com/lh3/seqtk/master/seqtk.c
+  - id: gap_length_profile
+    component: advanced_viz
+    kind: profile
+    title: Gaps per length bin
+    roles: {series: genome, x: gap_length_bp, y: gaps}
+    config:
+      log_x: true
+      x_title: Gap length (bp)
+      y_title: Gaps per bin
+      legend_pos: bottom
+    description: >-
+      Each curve is an assembly: the number of its gaps in each length bin, on a log
+      scale of gap length. It answers which gap sizes dominate each assembly.
+
+      How to read: a sharp peak is a fixed gap length. A broad curve means gap sizes
+      were estimated. Compare the heights with care, because an assembly with many gaps
+      dwarfs one with few, and the matrix tile puts them on one scale.
+
+      Source: https://raw.githubusercontent.com/lh3/seqtk/master/seqtk.c
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: log10_gap_length
+      y: gaps
+      color: genome
+      labels: {log10_gap_length: Gap length (log10 bp), gaps: Gaps per bin, genome: Assembly}
+    title: Assembly gaps per log10 length bin
+    description: >-
+      Each line is an assembly: the number of gaps in each bin of log10 gap length. It
+      answers the same question as the profile tile, in a plain figure that can be
+      exported.
+
+      How to read: peaks show the dominant gap sizes of an assembly, and lines that peak
+      at the same place were scaffolded in the same way.
+
+      Source: https://raw.githubusercontent.com/lh3/seqtk/master/seqtk.c
+  - component: table
+    title: Gap length bins
+    description: >-
+      Each row is an assembly and a bin of gap length, with the number of gaps, their
+      share of the assembly's gaps and the bases they cover. It answers the exact counts
+      behind the matrix.
+
+      How to read: filter by assembly and sort by gap length to see its gap sizes in
+      order.

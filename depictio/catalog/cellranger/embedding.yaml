@@ -9,8 +9,64 @@ find:
 recipe: cellranger/embedding.py
 fixture: embedding.tsv
 renders_as:
-  - { id: umap_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster, color: cluster} }
-  - { id: tsne_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster, color: cluster} }
-  - { id: pca_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: pc_1, dim_2: pc_2, dim_3: pc_3, cluster: cluster, color: cluster} }
-  - { component: card, column: barcode, aggregation: nunique, secondary_layout: donut, breakdown_col: cluster }
-  - { component: table }
+  - id: umap_clusters
+    component: advanced_viz
+    kind: embedding
+    title: UMAP of the cells
+    roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster, color: cluster}
+    config:
+      axis_prefix: UMAP
+    description: >-
+      Each point is a cell placed by UMAP and coloured by its graph-based cluster. It answers
+      how the cells group by expression.
+
+      How to read: separate islands are distinct populations and touching islands are related
+      states. Distances between far islands are not reliable, so judge membership and not
+      distance.
+  - id: tsne_clusters
+    component: advanced_viz
+    kind: embedding
+    title: t-SNE of the cells
+    roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster, color: cluster}
+    config:
+      axis_prefix: t-SNE
+    description: >-
+      Each point is a cell placed by t-SNE and coloured by its graph-based cluster. It answers
+      whether the grouping seen on the UMAP holds on a second embedding.
+
+      How to read: clusters that stay compact on both maps are robust. Distances between
+      islands are not meaningful on a t-SNE.
+  - id: pca_clusters
+    component: advanced_viz
+    kind: embedding
+    title: PCA of the cells
+    roles: {sample_id: barcode, dim_1: pc_1, dim_2: pc_2, dim_3: pc_3, cluster: cluster, color: cluster}
+    config:
+      axis_prefix: PC
+    description: >-
+      Each point is a cell on the first three principal components, coloured by its
+      graph-based cluster. It answers which axes of variation separate the clusters.
+
+      How to read: clusters that separate along a component are driven by the genes loading on
+      it. Overlapping clusters are separated only on later components or not at all.
+  - component: card
+    column: barcode
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: cluster
+    caption: cells, by cluster
+    title: Cells per cluster
+    description: >-
+      The hero number is the count of distinct cells and the ring splits them by cluster. It
+      answers how the cells divide between clusters.
+
+      How to read: one cluster holding most cells dominates the maps. A tiny slice may be a
+      rare population or an artefact.
+  - component: table
+    title: Cell embedding coordinates
+    description: >-
+      Each row is a cell with its cluster and its coordinates on the UMAP, t-SNE and first
+      three principal components. It answers the exact positions behind the maps.
+
+      How to read: sort by a coordinate to find the cells at the edge of the map.

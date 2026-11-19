@@ -12,4 +12,13 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: percolator }
+  - component: multiqc
+    section: percolator
+    title: Percolator feature weights
+    description: >-
+      The median weight Percolator gave each rescoring feature, per sample. It
+      answers which features the rescoring relies on.
+
+      How to read: A feature carrying most of the weight is the one the rescoring
+      depends on. A shift of weight between samples is where a search or prediction
+      model problem shows first.

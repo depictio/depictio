@@ -9,7 +9,61 @@ find: { path_glob: "**/ion_annotations/*_matching_ions.tsv" }
 recipe: mhcquant/fragment_ions.py
 fixture: fragment_ions.tsv
 renders_as:
-  - { component: card, column: fragment_ions, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fragment_error_ppm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: histogram, dict_kwargs: { x: fragment_error_ppm, color: sample } }
-  - { component: table }
+  - component: card
+    column: fragment_ions
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median ions per peptide, with their spread
+    title: Matched fragment ions
+    description: >-
+      The hero number is the median count of fragment ions matched to a peptide's
+      spectrum, and the box shows the spread across peptides. It answers how well
+      the spectra support their identifications.
+
+      How to read: more matched ions mean a better-supported spectrum. A box pushed
+      toward few ions holds identifications resting on little evidence, so read it
+      with the score distribution.
+  - component: card
+    column: fragment_error_ppm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median error, with its spread
+    title: Fragment mass error
+    description: >-
+      The hero number is the median absolute fragment mass error in ppm of a
+      peptide's matched ions, and the box shows the spread across peptides. It
+      answers how accurately the fragment masses match the theory.
+
+      How to read: a small error that is similar across samples means a well
+      calibrated instrument. A sample with a larger error points to a calibration
+      drift.
+
+      Note: mhcquant sets its fragment tolerance in daltons for the search (default
+      0.01), not in ppm, so no ppm cut-off is drawn.
+
+      Source: https://github.com/nf-core/mhcquant/blob/3.2.0/nextflow_schema.json
+  - component: figure
+    visu_type: histogram
+    title: Fragment mass error by sample
+    dict_kwargs:
+      x: fragment_error_ppm
+      color: sample
+      labels: {fragment_error_ppm: Median absolute fragment error (ppm), sample: Sample, count: Peptides}
+    description: >-
+      Each bar counts the peptides whose median absolute fragment error falls in a
+      range, coloured by sample. It answers how the mass accuracy is distributed
+      within and between samples.
+
+      How to read: distributions that overlap mean comparable mass accuracy. A sample
+      shifted to the right has a calibration problem and less reliable matches.
+  - component: table
+    title: Fragment ions per peptide
+    description: >-
+      Each row is one identified peptide, with its matched b, y and other fragment
+      ions, the median absolute fragment error in ppm and the matched intensity. It
+      answers the exact figures behind every tile.
+
+      How to read: sort by matched ions to find the best and the weakest supported
+      peptides.

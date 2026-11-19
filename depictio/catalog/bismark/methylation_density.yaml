@@ -12,8 +12,74 @@ find:
 recipe: bismark/methylation_density.py
 fixture: methylation_density.tsv
 renders_as:
-  - { id: density_profile, component: advanced_viz, kind: profile, roles: {series: series, x: methylation_bin, y: fraction_of_cpgs} }
-  - { component: card, column: fraction_of_cpgs, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: n_cpgs, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: figure, visu_type: line, dict_kwargs: {x: methylation_bin, y: fraction_of_cpgs, color: sample, title: Per-CpG methylation density} }
-  - { component: table }
+  - id: density_profile
+    component: advanced_viz
+    kind: profile
+    roles: {series: series, x: methylation_bin, y: fraction_of_cpgs}
+    config:
+      x_title: CpG methylation (%)
+      y_title: Share of CpGs (%)
+      legend_pos: bottom
+    title: Distribution of per-CpG methylation
+    description: >-
+      Each line is a library: the share of its CpGs that fall in each 2 percent
+      methylation bin. It answers how methylation is distributed across individual
+      CpGs.
+
+      How to read: in most human cell types 70 to 80 percent of CpGs are methylated,
+      so a main peak near 100 percent with a smaller one near 0 percent is expected. A library whose curve is flat, or whose peak near zero has
+      drifted up, suggests incomplete conversion or too little depth for site calls.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/23925113/
+  - component: card
+    column: fraction_of_cpgs
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: compact
+    caption: Fullest bin, with the median and upper quartile bin
+    title: Tallest methylation peak
+    description: >-
+      The hero number is the largest share of CpGs found in a single bin of any
+      library, shown with the median and upper quartile bin share. It answers how
+      sharp the methylation peaks are.
+
+      How to read: a tall peak means most CpGs of a library share one methylation
+      level. Low peaks mean the methylation is spread out.
+  - component: card
+    column: n_cpgs
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: compact
+    caption: CpGs counted, with the median and fullest bin
+    title: CpGs counted
+    description: >-
+      The hero number is the total of CpGs counted in the density bins, shown with
+      the median and the largest bin. It answers how much data the densities rest
+      on.
+
+      How to read: a total far lower for one library means its density is noisier
+      than the others.
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: methylation_bin
+      y: fraction_of_cpgs
+      color: sample
+      labels: {methylation_bin: CpG methylation (%), fraction_of_cpgs: Share of CpGs (%), sample: Library}
+    title: Per-CpG methylation density
+    description: >-
+      Each line is a library: the share of its CpGs in each 2 percent methylation
+      bin. It answers how methylation is distributed across CpGs.
+
+      How to read: compare the height of the peaks near 0 and near 100 percent
+      between libraries. A library that departs from the others has a different
+      methylome or a conversion problem.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/23925113/
+  - component: table
+    title: Methylation density table
+    description: >-
+      Each row is a methylation bin of one library, with the CpG count and the share
+      of its CpGs. It answers the exact counts behind the density curves.
+
+      How to read: filter on a library and sort by bin to follow its curve.

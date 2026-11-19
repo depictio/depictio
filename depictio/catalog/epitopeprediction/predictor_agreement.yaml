@@ -16,9 +16,98 @@ renders_as:
   - id: agreement_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: IC50 of one tool against another
     roles: { x: ic50_a_nm, y: ic50_b_nm, label: sequence, color: agreement }
-  - { id: paired_predictions, component: card, column: pair_key, aggregation: count, secondary_layout: composition, breakdown_col: agreement }
-  - { id: ic50_gap, component: card, column: abs_log10_ratio, aggregation: median, secondary_layout: histogram }
-  - { id: disputed_binders, component: card, column: pair_key, aggregation: count, filter_expr: "col('concordant') == 0", secondary_layout: composition, breakdown_col: agreement }
-  - { component: interactive, interactive_type: MultiSelect, column_name: agreement }
-  - { component: table, row_selection_enabled: true, row_selection_column: pair_key }
+    config:
+      x_title: IC50 of the first tool (nM)
+      y_title: IC50 of the second tool (nM)
+      log_x: true
+      log_y: true
+      reference_line: diagonal
+      reference_label: Both tools agree
+      top_n_labels: 5
+    description: >-
+      Each point is a peptide scored against an allele by two tools: the IC50 of the
+      first on the horizontal axis and of the second on the vertical axis, coloured by
+      whether both, neither or only one calls a binder. It answers how consistent the
+      tools are.
+
+      How to read: points on the diagonal get the same affinity from both tools. Points
+      far from it, or coloured as one tool only, are peptides whose call depends on the
+      tool and should be confirmed before they are trusted.
+
+      Lines and annotations: the diagonal is where the two IC50 are equal, an identity
+      line and not a cut-off. Binder calls are each tool's own rule, a percentile rank
+      of 2 or less for most tools and an IC50 of 500 nM or less for MHCnuggets.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: paired_predictions
+    component: card
+    column: sequence
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: agreement
+    caption: pairs, by agreement
+    title: Tool pairs compared
+    description: >-
+      The hero number is the count of peptide, allele and tool-pair rows, the compact
+      line gives the distinct peptides, and the bar splits them by outcome. It answers
+      how often the tools agree.
+
+      How to read: a large share where neither tool calls a binder is normal, since most
+      peptides do not bind. The share where only one tool calls a binder is the part
+      that needs a second opinion.
+  - id: ic50_gap
+    component: card
+    column: abs_log10_ratio
+    aggregation: median
+    aggregations: [q3, max]
+    secondary_layout: histogram
+    caption: IC50 gap, distribution
+    title: Typical IC50 gap
+    description: >-
+      The hero number is the median absolute log10 ratio between the two tools' IC50,
+      and the histogram shows the distribution. A value of 1 is a ten-fold difference.
+      It answers how far apart the tools are on a typical peptide.
+
+      How to read: a median near zero means the tools agree on the scale. A median of one
+      or more means they score on different scales, so compare binder calls and not raw
+      IC50 values.
+  - id: disputed_binders
+    component: card
+    column: sequence
+    aggregation: count
+    aggregations: [nunique]
+    filter_expr: "col('concordant') == 0"
+    secondary_layout: composition
+    breakdown_col: agreement
+    caption: disputed pairs, by who calls a binder
+    title: Disputed binder calls
+    description: >-
+      The hero number is the count of pairs where exactly one tool calls a binder, the
+      compact line gives the distinct peptides, and the bar shows which tool is the
+      caller. It answers how many candidates depend on the choice of tool.
+
+      How to read: a disputed pair is not wrong, since the tools use different rank
+      rules, but its peptide is a weaker candidate than one that every tool calls. Check
+      the scatter to see how far apart the IC50 values are.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: agreement
+    title: Agreement
+    description: >-
+      Pick an outcome, both, neither or one tool only, to restrict the scatter, the cards
+      and the table to it. It answers what the disputed peptides look like.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: pair_key
+    title: Tool agreement table
+    description: >-
+      Each row is a peptide and allele scored by two tools, with both IC50, their log10
+      ratio, both binder calls and the outcome. It answers the exact values behind the
+      scatter and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by the absolute log ratio to find the largest disagreements.

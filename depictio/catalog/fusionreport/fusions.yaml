@@ -10,16 +10,155 @@ find: { path_glob: "**/fusionreport/*/*.fusions.csv" }
 recipe: fusionreport/fusions.py
 fixture: fusions.tsv
 renders_as:
-  # The caller flags are the binary columns the renderer picks on its own. On a
-  # small run n_databases, n_tools or rank can be 0/1 too, so a dashboard names
-  # the sets by exclusion: set_columns_pattern "^(?!(n_databases|n_tools|rank)$)".
-  - { id: caller_upset, component: advanced_viz, kind: upset_plot }
+  # The caller flags are the binary columns the renderer picks on its own.
+  # C6 N/A: the set columns are whichever callers the run executed, known only at
+  # ingest. On a small run n_databases, n_tools or rank can be 0/1 too, so a
+  # dashboard names the sets by exclusion: set_columns_pattern
+  # "^(?!(n_databases|n_tools|rank)$)".
+  # FII is fusion-report's own score: 0.5 x the tools component + 0.5 x the databases
+  # component, database weights COSMIC 50, Mitelman 50, FusionGDB2 0
+  # (docs/score.md of Clinical-Genomics/fusion-report). Not a probability.
+  - id: caller_upset
+    component: advanced_viz
+    kind: upset_plot
+    config:
+      color_intersections_by: degree
+    title: Caller agreement
+    description: >-
+      Each bar is a combination of callers and its height the number of fusions that exactly
+      those callers reported, with the bars on the left giving each caller's total. It answers
+      which callers agree on a fusion and which find calls alone.
+
+      How to read: tall bars at high degree, where most callers agree, are the safest
+      fusions to follow up. Fusions seen by one caller only are the most likely false
+      positives, because the callers use different approaches. A caller with a large private
+      bar adds sensitivity and noise in the same measure.
+
+      Lines and annotations: bars are coloured by the number of callers in the combination,
+      the degree of the intersection.
+
+      Source: https://raw.githubusercontent.com/Clinical-Genomics/fusion-report/master/docs/score.md
   # Rank is the position in fusion-report's own FII ordering, so the lollipop
   # reads as a ranked list of the run's fusions.
-  - { id: fii_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: rank, category: tool_support} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion, y: fii, color: tool_support} }
-  - { component: card, column: fii, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: tool_support, top_n_count: 3, headline: true }
-  - { component: card, column: n_tools, aggregation: average, secondary_layout: donut, breakdown_col: tool_support }
-  - { component: card, column: n_databases, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
+  - id: fii_lollipop
+    component: advanced_viz
+    kind: lollipop
+    roles: {feature_id: fusion, position: rank, category: tool_support, effect: fii, label: fusion}
+    config:
+      top_n_labels: 10
+    title: Fusions ranked by indication index
+    description: >-
+      Each lollipop is a fusion placed at its rank in fusion-report's ordering, coloured by how
+      many callers found it and sized by its Fusion Indication Index. It answers which fusions
+      fusion-report puts first and how many callers back them.
+
+      How to read: the leftmost, large lollipops are the best candidates. A top-ranked fusion
+      found by one caller only ranks high on database evidence alone, so look at the caller
+      evidence tab before trusting it.
+
+      Lines and annotations: the index is computed by fusion-report as 0.5 times the share of
+      callers that found the fusion plus 0.5 times a weighted database score, with COSMIC and
+      Mitelman weighted 50 each and FusionGDB2 0. It is a ranking score and not a probability.
+
+      Source: https://raw.githubusercontent.com/Clinical-Genomics/fusion-report/master/docs/score.md
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: fusion
+      y: fii
+      color: tool_support
+      labels: {fusion: Fusion, fii: Fusion Indication Index, tool_support: Callers}
+    title: Fusion Indication Index per fusion
+    reference_lines: [{axis: y, stat: median, column: fii}]
+    description: >-
+      Each bar is a fusion with its Fusion Indication Index, coloured by how many callers found
+      it. It answers how strong the combined caller and database evidence is for each fusion.
+
+      How to read: a high bar in the colour of several callers is a fusion both found by
+      the tools and known to the databases. A short bar means few callers or no known
+      database record.
+
+      Lines and annotations: the index mixes caller agreement and database knowledge with
+      equal weight, and database weights of COSMIC 50, Mitelman 50 and FusionGDB2 0.
+       The dashed line is the median Fusion Indication Index of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-
+      off of fusion-report.
+
+      Source: https://raw.githubusercontent.com/Clinical-Genomics/fusion-report/master/docs/score.md
+  - component: card
+    column: fii
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Fusion Indication Index
+    description: >-
+      The hero number is the median Fusion Indication Index over the fusions in view, a score
+      from 0 to 1, and the box shows the spread. It answers how well supported the fusions are
+      as a set.
+
+      How to read: a high median means most calls are backed by several callers or by databases.
+      The index is fusion-report's own ranking score and is not a probability.
+
+      Source: https://raw.githubusercontent.com/Clinical-Genomics/fusion-report/master/docs/score.md
+      and
+      https://raw.githubusercontent.com/Clinical-Genomics/fusion-report/master/fusion_report/app.py
+  - component: card
+    column: fusion
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: tool_support
+    top_n_count: 3
+    headline: true
+    caption: fusions, by caller agreement
+    title: Fusions reported
+    description: >-
+      The hero number is the count of distinct fusions, and the bars rank the caller agreement
+      classes by how many fusions they hold. It answers how many fusions the callers report and
+      how many several of them agree on.
+
+      How to read: a large class of fusions found by one caller is the usual noisy part of a
+      run. Follow up the classes with more callers first.
+  - component: card
+    column: tool_support
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: tool_support
+    caption: fusions, by caller agreement
+    title: Caller agreement composition
+    description: >-
+      The hero number is the count of fusions and the ring splits them by how many callers
+      found each. It answers what share of fusions have broad caller support.
+
+      How to read: a big slice of single-caller fusions means a noisy run, and a big slice of
+      many-caller fusions a well supported one. The second number is how many agreement levels
+      appear.
+  - component: card
+    column: n_databases
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: distribution across fusions
+    title: Known to databases
+    description: >-
+      The hero number is the mean count of fusion databases that already list a fusion, and
+      the histogram shows its distribution. It answers how many of the calls are previously
+      described.
+
+      How to read: a fusion listed in several databases is known, a plus for a candidate. A
+      fusion known to none may be novel or an artefact, and needs separate validation.
+
+      Source: https://raw.githubusercontent.com/Clinical-Genomics/fusion-report/master/docs/score.md
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: Fusion consensus table
+    description: >-
+      Each row is a fusion in one sample with its partner genes, the databases that know it, its
+      Fusion Indication Index, the arithmetic behind it and a flag for each caller. It answers
+      which fusions to validate and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by index or rank, then read the caller flags and the database list
+      of the top calls.

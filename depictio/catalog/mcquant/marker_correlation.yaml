@@ -12,9 +12,27 @@ find:
 recipe: mcquant/marker_correlation.py
 fixture: marker_correlation.tsv
 renders_as:
+  # C6 N/A: value columns are the run's panel markers, known only at ingest.
   - id: correlation_heatmap
     component: advanced_viz
     kind: complex_heatmap
+    title: Marker correlation
     roles: { index: marker_row, row_annotation_cols: [segmenter, marker_role] }
-  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }
-  - { component: table }
+    description: >-
+      Each cell of the heatmap is the Pearson correlation between two markers across all segmented cells, with the rows annotated by segmentation method and marker role. It answers which markers are expressed by the same cells.
+
+      How to read: strong positive blocks group markers of one cell lineage or compartment, and negative values separate exclusive populations. A marker with no correlation to anything either has no signal or marks a rare population. A nuclear stain should correlate with the other nuclear signals, not with membrane markers.
+
+      Note: correlations are computed on asinh intensities, so a few very bright cells do not dominate them. No cut-off separates strong from weak correlation, so none is drawn.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: segmenter
+    title: Segmentation method
+    description: >-
+      Show the correlation matrices of one or more segmentation methods.
+  - component: table
+    title: Marker correlations
+    description: >-
+      One row per segmentation method and marker, with its correlation to every marker of the panel.
+
+      How to read: sort a marker's column to list the markers that move with it.

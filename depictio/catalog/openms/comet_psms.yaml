@@ -10,11 +10,92 @@ find: { path_glob: "**/*_pin.tsv" }
 recipe: openms/comet_psms.py
 fixture: comet_psms.tsv
 renders_as:
-  - { component: card, column: psms_1pct_fdr, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: identification_rate, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: median_mass_error_ppm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - component: card
+    column: psms_1pct_fdr
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: PSMs at 1% FDR
+    description: >-
+      The hero number is the median count of target PSMs accepted at a 1% target-decoy
+      false discovery rate on the raw Comet score, with the spread across raw files in
+      the box. It answers how productive the search is before rescoring.
+
+      How to read: a tight box means files of similar yield. A file far below the others
+      has an acquisition or search-space problem rather than a rescoring one.
+
+      Note: the 1% is the nf-core/mhcquant default fdr_threshold,
+      applied here by this module to the raw Comet score rather than after rescoring.
+
+      Source: https://raw.githubusercontent.com/nf-core/mhcquant/master/nextflow_schema.json
+  - component: card
+    column: identification_rate
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: Identification rate
+    description: >-
+      The hero number is the median share of searched spectra that give a target PSM
+      passing the filter, as a fraction between 0 and 1, with the spread across raw
+      files in the box. It answers how efficiently the acquired spectra are
+      explained.
+
+      How to read: a low rate with many spectra searched points to noisy spectra or a
+      search space that does not fit the sample. Search engines publish no universal
+      cut-off for this rate.
+  - component: card
+    column: median_mass_error_ppm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: Precursor mass error
+    description: >-
+      The hero number is the median precursor mass error in parts per million across raw
+      files, with the spread in the box. It answers whether the instrument is
+      calibrated.
+
+      How to read: values close to zero with a tight spread mean good calibration. A
+      file shifted away from the others needs recalibration or a wider search
+      tolerance.
+  # C1: each point is a raw file, coloured by its own id (no grouping column).
   - id: target_decoy_separation
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: median_xcorr_decoy, y: median_xcorr_target, label: run_id, size: spectra_searched }
-  - { component: table, row_selection_enabled: true, row_selection_column: run_id }
+    title: Target and decoy score separation
+    roles: { x: median_xcorr_decoy, y: median_xcorr_target, label: run_id, size: spectra_searched, color: run_id }
+    config:
+      x_title: Median decoy Xcorr
+      y_title: Median target Xcorr
+      reference_line: diagonal
+      reference_label: Target = decoy
+      legend_pos: bottom
+    description: >-
+      Each point is a raw file: the median Comet score of its decoy matches
+      (horizontal) against that of its target matches (vertical), sized by the number
+      of spectra searched. It answers how well the search separates real matches from
+      random ones.
+
+      How to read: points well above the diagonal have target scores clearly higher
+      than decoy scores, which is what a good search looks like. A point near the
+      diagonal has a search that cannot tell targets from decoys, so its identifications
+      are unreliable.
+
+      Lines and annotations: the diagonal is y = x, where target and decoy scores are
+      equal, a reference defined by the plot and not a tool cut-off. The target-decoy
+      strategy it rests on is described in the source.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/17327847/
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: run_id
+    title: Search yield per raw file
+    description: >-
+      Each row is a raw file: spectra searched, target and decoy PSMs, the PSMs
+      accepted at 1% and 5% FDR, the identification rate, the median scores, the mass
+      error and the peptide length. It answers which files to look at first.
+
+      How to read: sort by the 1% FDR count to rank the files, then click a row to
+      filter the other tiles to that file.

@@ -14,54 +14,142 @@ fixture: lineage.tsv
 renders_as:
   # Wide per-rank columns -> sunburst, exactly the shape melon's pooled table has,
   # except this one keeps the profiler, database and sample it came from.
-  - {
-      id: lineage_sunburst,
-      component: advanced_viz,
-      kind: sunburst,
-      roles:
-        {
-          ranks: [superkingdom, phylum, class, order, family, genus, species],
-          abundance: rel_abundance,
-        },
-    }
+  - id: lineage_sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Taxonomic hierarchy
+    roles:
+      ranks: [superkingdom, phylum, class, order, family, genus, species]
+      abundance: rel_abundance
+    config:
+      colour_by_rank: phylum
+    description: >-
+      Each arc is a taxon: the rings run from superkingdom at the centre to species
+      at the edge, sized by the summed relative abundance of the profiling runs in
+      view and coloured by phylum. It answers which lineages dominate the community
+      the profilers report.
+
+      How to read: a wide arc at an inner ring means that lineage holds most of the
+      abundance, and its children show how it splits. Reads no profiler could place
+      keep their own unclassified branch, so a large one means the database misses
+      much of the sample. Filter to one profiler to compare its hierarchy with
+      another.
+
+      Lines and annotations: none are drawn. Arc sizes add the relative abundances of
+      every run in view, so filter to a single run for shares that sum to one.
   # Pavian's flow view: the root fans out into the domains, and the reads the
   # profiler could not place leave it as their own branch. `steps` is the catalog
   # spelling of the tile's `step_cols`; a dashboard widens or narrows it.
-  - {
-      id: lineage_sankey,
-      component: advanced_viz,
-      kind: sankey,
-      roles: { steps: [root, superkingdom, phylum, genus] },
-    }
-  - {
-      component: card,
-      column: species,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: phylum,
-      top_n_count: 4,
-    }
-  - {
-      component: card,
-      column: rel_abundance,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: phylum,
-      aggregation: nunique,
-      secondary_layout: composition,
-      breakdown_col: superkingdom,
-    }
-  - {
-      component: card,
-      column: rel_abundance,
-      aggregation: max,
-      secondary_layout: gauge,
-      coverage_max: 1,
-    }
-  - { component: interactive, interactive_type: MultiSelect, column_name: superkingdom }
-  - { component: interactive, interactive_type: MultiSelect, column_name: phylum }
-  - { component: table }
+  # Every flow leaves the root, so colour by target (RULES section 8).
+  - id: lineage_sankey
+    component: advanced_viz
+    kind: sankey
+    title: Taxonomic flow
+    roles: {steps: [root, superkingdom, phylum, genus]}
+    config:
+      color_mode: target
+      value_col: rel_abundance
+      value_label: Summed relative abundance
+    description: >-
+      Each band is a group of taxa flowing from the root through superkingdom and
+      phylum down to genus, sized by the summed relative abundance of the runs in
+      view. It answers how the community divides at each rank and where the
+      unclassified reads leave the tree.
+
+      How to read: a thick band from the root into one superkingdom means that domain
+      dominates. A band that splits into many thin ones at the genus step marks a
+      diverse phylum. Compare a profiler with a large unclassified band against one
+      with a small band to see how much each database covers.
+
+      Lines and annotations: none are drawn. Band widths add the relative
+      abundances of every run in view.
+  - component: card
+    column: species
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: phylum
+    top_n_count: 4
+    filter_expr: "(col('phylum') != 'unclassified') & (col('phylum') != 'unresolved')"
+    caption: species rows, by the richest phyla
+    title: Distinct species
+    description: >-
+      The hero number is the count of distinct species reported, the second number
+      counts every species row, and the bars rank the phyla by how many rows they
+      hold. It answers how rich the profiles are and which phyla contribute most.
+
+      How to read: a few phyla holding most of the rows is the usual shape of a
+      mock or low-complexity community. Rows without a placed phylum are left out
+      of the ranking.
+  - component: card
+    column: rel_abundance
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: relative abundance of every taxon
+    title: Typical taxon abundance
+    description: >-
+      The hero number is the median relative abundance of a taxon in a run, with the
+      smallest and largest below it, and the histogram shows the distribution. It
+      answers how evenly the abundance is spread over the reported taxa.
+
+      How to read: a distribution piled near zero with a long right tail means a
+      few taxa dominate over a long tail of rare ones. The values span orders of
+      magnitude, so the histogram reads better filtered to one profiler.
+  - component: card
+    column: phylum
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: superkingdom
+    top_n_count: 4
+    filter_expr: "(col('phylum') != 'unclassified') & (col('phylum') != 'unresolved')"
+    caption: phylum rows, by domain of life
+    title: Distinct phyla
+    description: >-
+      The hero number is the count of distinct phyla reported, and the bars rank the
+      superkingdoms by how many phylum rows they hold. It answers which domains of
+      life the profilers place their taxa in.
+
+      How to read: a ranking led by Bacteria with a short Archaea bar is typical.
+      Compare profilers with the filters to see which ones reach a domain the
+      others miss.
+  - component: card
+    column: rel_abundance
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: histogram
+    caption: relative abundance of every taxon
+    title: Largest taxon share
+    description: >-
+      The hero number is the largest relative abundance any taxon reaches in a run,
+      with the median below it, and the histogram shows all values. It answers
+      whether one taxon dominates a profile.
+
+      How to read: a maximum far above the median means one taxon takes a large
+      share of the run. It is a fraction of the run's total, so a high value also
+      follows from a profile reporting few taxa.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: superkingdom
+    title: Superkingdom
+    description: >-
+      Filters every tile of this view to the chosen superkingdoms. It answers
+      whether a pattern holds within one domain of life.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: phylum
+    title: Phylum
+    description: >-
+      Filters every tile of this view to the chosen phyla. It answers which phyla
+      drive a profile.
+  - component: table
+    title: Lineage table
+    description: >-
+      Each row is a taxon reported by one profiler in one sample, with its seven
+      NCBI ranks, its read count and its relative abundance. It answers which
+      lineage a given taxon belongs to and how abundant it is.
+
+      How to read: sort by relative abundance to see the leading taxa, or filter by
+      rank columns. Rows labelled unclassified or unresolved are reads the profiler
+      could not place at that rank.

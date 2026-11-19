@@ -9,11 +9,72 @@ description: >-
 find:
   path_glob: "**/*_balanced.txt"
 recipe: cooler/contact_matrix.py
+# The fixture is enriched synthetically from 25 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: contact_matrix.tsv
 renders_as:
+  # The colour is the balanced contact value itself on a continuous scale, so the
+  # C1 colour rule is met by the matrix.
   - id: binned_contact_map
     component: advanced_viz
     kind: contact_map
-    roles: {chrom1: chrom1, start1: start1, chrom2: chrom2, start2: start2, count: count, resolution: resolution}
-  - { component: card, column: count, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+    title: Chromosome contact map
+    roles: {chrom1: chrom1, start1: start1, chrom2: chrom2, start2: start2, count: count, resolution: resolution, sample: sample}
+    config:
+      log_scale: true
+    description: >-
+      Each cell is a pair of genomic bins on one chromosome, coloured by the balanced
+      contact frequency between them, with position on both axes. It answers how the
+      chromosome folds: which regions touch each other more than their distance
+      predicts.
+
+      How to read: the diagonal is always brightest because neighbouring bins contact
+      most, and contact falls away with distance. Squares along the diagonal are
+      self-interacting domains, and bright spots off the diagonal are loops or
+      long-range contacts. The map re-bins to a finer resolution as you zoom in.
+
+      Lines and annotations: the colour scale is logarithmic, since contact frequency
+      spans several orders of magnitude. The values are balanced with the ICE method,
+      which removes per-bin coverage biases, so a bin is comparable with another.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/22941365/
+  - component: card
+    column: chrom1
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: compact
+    caption: contacts measured
+    title: Chromosomes and contacts
+    description: >-
+      The hero number is the count of chromosomes in view, with the number of bin pairs
+      measured next to it. It answers how much of the genome the matrix covers.
+
+      How to read: a coarser resolution has fewer bin pairs. The number of pairs
+      grows as the bins get finer, so compare resolutions with this in mind.
+  - component: card
+    column: count
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: balanced contact, lowest to highest
+    title: Balanced contact frequency
+    description: >-
+      The hero number is the median balanced contact frequency over the bin pairs in
+      view, with the lowest and highest values next to it. It answers the typical
+      strength of a contact and how far it spans.
+
+      How to read: contact values span several orders of magnitude, from strong
+      neighbour contacts to faint long-range ones, so the median sits far below the
+      maximum. Compare samples at the same resolution only.
+
+      Note: balanced values are relative contact frequencies and not read counts, so
+      their scale depends on the resolution.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/22941365/
+  - component: table
+    title: Contact table
+    description: >-
+      Each row is a pair of bins with its sample, resolution, coordinates and balanced
+      contact frequency. It answers the exact value of any contact on the map.
+
+      How to read: filter to one sample, resolution and chromosome, and sort by
+      contact to list the strongest pairs.

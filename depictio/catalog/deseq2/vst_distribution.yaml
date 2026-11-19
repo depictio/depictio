@@ -10,25 +10,84 @@ description: >-
   says whether a library is shaped like its neighbours at all, which a PCA cannot.
 find: { path_glob: "**/all.vst.tsv" }
 recipe: deseq2/vst_distribution.py
+# The fixture is enriched synthetically from 12 real bins (copies with seeded noise), so the preview shows several samples.
 fixture: vst_distribution.tsv
 renders_as:
+  # The profile kind has no group role, so each curve takes the series colour; the
+  # group column is shown by the donut card below.
   - id: distribution_profile
     component: advanced_viz
     kind: profile
-    roles: { series: sample_id, x: bin_centre, y: density }
-  - {
-      component: card,
-      column: median,
-      aggregation: range,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: floor_share,
-      aggregation: average,
-      secondary_layout: gauge,
-      coverage_max: 1,
-    }
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
-  - { component: table }
+    title: Expression density per sample
+    roles: {series: sample_id, x: bin_centre, y: density}
+    config:
+      x_title: Variance-stabilised expression (log2 scale)
+      y_title: Share of expressed features
+      legend_pos: bottom
+    description: >-
+      Each curve is one sample: the share of its expressed features in each bin of
+      variance-stabilised expression, on a grid shared by every sample. It answers
+      whether the libraries have the same shape before any comparison is made.
+
+      How to read: curves should overlay each other. A curve shifted along the axis, or
+      with a shorter upper tail, is normalised differently from its neighbours and
+      every contrast inherits that. Features at the matrix floor are left out of the
+      curves and reported as a share on the card.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+  # The median column repeats on every bin row of a sample, so the box weights each
+  # sample by its number of bins; kept because no per-sample table is published.
+  - component: card
+    column: median
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: quartiles of the sample medians
+    title: Median expression across samples
+    description: >-
+      The hero number is the range of sample medians of variance-stabilised
+      expression, and the box shows their quartiles. It answers how far apart the
+      libraries sit.
+
+      How to read: a narrow range means comparable libraries. One sample far from the
+      rest is a candidate outlier; find it on the density tile.
+  # A share between 0 and 1 under a gauge would print "x% of 1", so the card shows
+  # its distribution instead.
+  - component: card
+    column: floor_share
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: distribution, with its median and maximum
+    title: Share of features at the floor
+    description: >-
+      The hero number is the average share of features sitting at the floor of the
+      matrix, the value given to genes with no counts, and the histogram shows the
+      spread over samples. It answers how many genes are effectively unexpressed.
+
+      How to read: similar shares across samples are expected. A sample with a much
+      larger share is shallower or lower in complexity than its neighbours.
+  - component: card
+    column: sample_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    caption: samples, by group
+    breakdown_col: group
+    top_n_count: 3
+    title: Samples per group
+    description: >-
+      The hero number is the count of samples, and the bars rank the groups of the
+      sample sheet by their number of samples. It answers how balanced the design is.
+
+      How to read: very uneven groups make contrasts less reliable, and a group with
+      one sample cannot be tested.
+  - component: table
+    title: Expression summary per sample
+    description: >-
+      Each row is a sample and expression bin, with the sample's group and its
+      five-number summary of variance-stabilised expression. It answers the exact
+      numbers behind each curve.
+
+      How to read: filter to one sample to read its quartiles and its share at the
+      floor.

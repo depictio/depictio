@@ -9,7 +9,57 @@ find: { path_glob: "**/ampcombi2/Ampcombi_summary_cluster_representative_seq.tsv
 recipe: ampcombi/clusters.py
 fixture: clusters.tsv
 renders_as:
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: members, title: Cluster size distribution} }
-  - { component: card, column: members, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
-  - { component: card, column: members, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: members
+      color: sample
+      labels: {members: Cluster size (sequences), sample: Sample, count: Clusters}
+    title: Cluster size distribution
+    description: >-
+      Each bar counts peptide clusters by the number of sequences they hold, split by the
+      sample that contributed the representative. It answers how many AMP families are
+      singletons and how many are large.
+
+      How to read: many clusters of one member mean diverse, unrelated peptides. A long tail
+      of large clusters means families found again and again, which are good candidates to
+      look at first.
+  - component: card
+    column: members
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 4
+    caption: largest cluster, by sample
+    title: Largest cluster
+    description: >-
+      The hero number is the size of the largest cluster, and the bars rank the samples by
+      the biggest cluster they contributed. It answers which families are the most
+      widespread.
+
+      How to read: a large cluster that spans several samples is a conserved peptide family.
+      Check its representative in the table.
+  - component: card
+    column: members
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Cluster size
+    description: >-
+      The hero number is the median number of sequences per cluster, and the box shows the
+      quartiles. It answers how redundant the peptides are.
+
+      How to read: a median of one means most peptides are unique. A long upper whisker marks
+      a few big families.
+  - component: table
+    title: Peptide clusters table
+    description: >-
+      Each row is a cluster built by MMseqs2 with its representative sequence, the sample
+      that contributed it and its number of members. It answers which families exist and how
+      large they are.
+
+      How to read: sort by members to find the biggest families.
+
+      Source: https://ampcombi.readthedocs.io/en/main/about.html

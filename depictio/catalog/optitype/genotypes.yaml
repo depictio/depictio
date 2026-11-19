@@ -10,24 +10,135 @@ description: >-
 find:
   path_glob: "**/optitype/*/*_result.tsv"
 recipe: optitype/genotypes.py
+# The fixture is enriched synthetically from 12 real rows (copies with seeded noise), so the preview shows several donors.
 fixture: genotypes.tsv
 renders_as:
+  # C1 N/A: OptiType types HLA class I only (A, B, C), so hla_class is constant by design.
   # Sample by locus, each cell split into its two haplotypes; an allele click
-  # selects on the normalised allele.
+  # selects on the normalised allele. Coloured by allele group (a hue family per
+  # first field).
   - id: genotype_grid
     component: advanced_viz
     kind: allele_grid
+    title: HLA class I genotype grid
     roles: { sample_id: sample_id, locus: locus, allele: allele, haplotype: haplotype, category: hla_class, value: objective, reads: reads }
-  - { id: allele_count, component: card, column: allele, aggregation: nunique, secondary_layout: top_n, breakdown_col: locus, top_n_count: 3, headline: true }
-  - { id: homozygous_loci, component: card, column: call_id, aggregation: count, filter_expr: "(col('zygosity') == 'Homozygous') & (col('haplotype') == 1)", secondary_layout: composition, breakdown_col: locus, headline: true }
-  - { id: allele_calls, component: card, column: call_id, aggregation: count, secondary_layout: composition, breakdown_col: zygosity }
+    config:
+      allele_group_col: allele_group
+      zygosity_col: zygosity
+      value_label: Solver objective
+      reads_label: Reads explained
+    description: >-
+      Each row is a sample and each column an HLA class I locus (A, B, C); a cell is
+      split in two halves, one per haplotype, coloured by allele group. It answers
+      which alleles every sample carries and which loci are homozygous.
+
+      How to read: alleles of one group share a hue, so a family recurring across the
+      cohort stands out. A merged cell with a marker is a homozygous locus; the side
+      bars give the reads the genotype explains and the solver objective. A sample with
+      few reads deserves a second look before its alleles are used downstream.
+
+      Note: OptiType documents no minimum number of reads for a reliable call, so none
+      is drawn.
+
+      Source: https://raw.githubusercontent.com/FRED-2/OptiType/master/README.md
+      and https://pubmed.ncbi.nlm.nih.gov/25143287/
+  - id: allele_count
+    component: card
+    column: allele
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: locus
+    top_n_count: 3
+    headline: true
+    title: Distinct alleles
+    caption: distinct alleles, by locus
+    description: >-
+      The hero number is the count of distinct alleles across the samples in view, and
+      the second figure the count of allele calls. The bars rank the loci by distinct
+      alleles. It answers how diverse the cohort is.
+
+      How to read: the locus with the longest bar carries the most alleles in this
+      cohort. A small cohort naturally shows few alleles, so read it with the sample
+      count.
+  - id: homozygous_loci
+    component: card
+    column: locus
+    aggregation: count
+    aggregations: [mode]
+    filter_expr: "(col('zygosity') == 'Homozygous') & (col('haplotype') == 1)"
+    secondary_layout: composition
+    breakdown_col: locus
+    headline: true
+    title: Homozygous loci
+    caption: homozygous loci, by locus
+    description: >-
+      Each unit is a homozygous locus in a sample, counted once, and the bar splits
+      them by locus. It answers where the cohort loses allelic diversity.
+
+      How to read: homozygosity reduces the peptides a patient can present, so a locus
+      with many homozygous calls matters for epitope prediction. A typing error also
+      looks homozygous when one allele is under-covered, so check the reads in the grid.
+  - id: allele_calls
+    component: card
+    column: zygosity
+    aggregation: count
+    aggregations: [mode]
+    secondary_layout: composition
+    breakdown_col: zygosity
+    title: Allele calls by zygosity
+    caption: allele calls, by zygosity
+    description: >-
+      Each unit is an allele call and the bar shows the share that is homozygous or
+      heterozygous. It answers how often the loci are heterozygous in this cohort.
+
+      How to read: compare the homozygous share with what you expect of the cohort. A
+      high share can be real or a typing artefact, so confirm it against the reads in
+      the grid.
   # Allele frequency within each locus: one trace per locus, each normalised
   # over its own calls (two per sample).
   - id: allele_frequency
     component: figure
     visu_type: histogram
-    dict_kwargs: { x: allele, color: locus, histnorm: percent }
-  - { component: interactive, interactive_type: MultiSelect, column_name: allele }
-  - { component: interactive, interactive_type: MultiSelect, column_name: locus }
-  - { component: interactive, interactive_type: MultiSelect, column_name: zygosity }
-  - { component: table, row_selection_enabled: true, row_selection_column: call_id }
+    dict_kwargs:
+      x: allele
+      color: locus
+      histnorm: percent
+      labels: {allele: Allele, locus: Locus}
+    title: Allele frequency per locus
+    description: >-
+      Each bar is an allele, with its share of the calls of its locus. It answers which
+      alleles are common in the cohort.
+
+      How to read: a few dominant alleles per locus are typical. The frequencies
+      describe this cohort only, since a small number of samples gives coarse shares.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: allele
+    title: Allele
+    description: >-
+      Filters the tiles to samples carrying the chosen alleles.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: locus
+    title: Locus
+    description: >-
+      Filters the tiles to one or more HLA class I loci.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: zygosity
+    title: Zygosity
+    description: >-
+      Filters the tiles to homozygous or heterozygous calls.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: call_id
+    title: Allele call table
+    description: >-
+      Each row is an allele call: one sample, locus and haplotype, with the allele,
+      allele group, zygosity, reads and solver objective. It answers the exact alleles
+      to carry into epitope prediction and lets a row selection filter the rest of the
+      dashboard.
+
+      How to read: the allele is spelled as in the epitope prediction tables, so a
+      selected allele matches the same string there.

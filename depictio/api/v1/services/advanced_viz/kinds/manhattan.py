@@ -91,6 +91,20 @@ def build(
 
     threshold = controls.get("score_threshold", config.get("score_threshold"))
     threshold = _as_float(threshold) if threshold is not None else None
+    threshold_label: str | None = None
+    threshold_stat = controls.get("score_threshold_stat", config.get("score_threshold_stat"))
+    if threshold is None and threshold_stat:
+        # A threshold named as a statistic of the score column (RULES §17: a
+        # data-defined reference is allowed when it is called that). Taken on
+        # the rows handed to the export, which are the filtered rows.
+        from depictio.api.v1.services.advanced_viz.reference_stats import (
+            compute_stat,
+            reference_label,
+        )
+
+        threshold = compute_stat(list(rows.get(score_col) or []), str(threshold_stat))
+        if threshold is not None:
+            threshold_label = reference_label(str(threshold_stat))
     top_n = int(controls.get("top_n_labels", config.get("top_n_labels", 8)))
     highlight = str(controls.get("highlight", config.get("highlight", "above")))
     size_above = float(controls.get("marker_size_above", config.get("marker_size_above", 6)))
@@ -204,6 +218,19 @@ def build(
         )
 
     annotations: list[dict[str, Any]] = []
+    if threshold is not None and threshold_label:
+        annotations.append(
+            {
+                "xref": "paper",
+                "x": 1,
+                "y": threshold,
+                "text": threshold_label,
+                "showarrow": False,
+                "xanchor": "right",
+                "yanchor": "bottom",
+                "font": {"size": 10},
+            }
+        )
     if top_n > 0:
         candidates = []
         for i, name in enumerate(chrs):

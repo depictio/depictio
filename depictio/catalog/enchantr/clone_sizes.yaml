@@ -12,7 +12,61 @@ renders_as:
   - id: clone_composition
     component: advanced_viz
     kind: sunburst
+    title: Clone size classes by sample
     roles: { ranks: [subject_id, sample_id, size_class], abundance: seq_count }
-  - { component: card, column: seq_count, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: clone_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: size_class, top_n_count: 5 }
-  - { component: table }
+    config:
+      colour_by_rank: size_class
+    description: >-
+      Each arc is a group of sequences: the inner ring is the subject, the middle ring
+      the sample and the outer ring the clone size class, sized by sequence count and
+      coloured by size class. It answers how much of each repertoire sits in large
+      clones.
+
+      How to read: a sample whose outer ring is mostly the largest class is dominated by
+      expanded clones. A ring spread over small classes is polyclonal. Click an arc
+      to zoom in on it.
+
+      Lines and annotations: the size classes are clonal homeostasis bins on clone
+      frequency, from rare to hyperexpanded, using the default class boundaries of the
+      immunarch repClonality function (1e-5, 1e-4, 1e-3 and 0.01 of the repertoire).
+      They are descriptive groupings and not a clinical cut-off.
+
+      Source: https://immunarch.com/reference/repClonality.html
+  - component: card
+    column: seq_count
+    aggregation: max
+    aggregations: [average, q3]
+    secondary_layout: compact
+    caption: largest clone, with the mean and upper quartile
+    title: Largest clone size
+    description: >-
+      The hero number is the sequence count of the largest clone in view, with the mean
+      and upper quartile of clone sizes. It answers how large the biggest expansion is
+      against a typical clone.
+
+      How to read: most clones hold a single sequence, so the mean stays near the
+      bottom. A maximum far above the upper quartile marks a clearly expanded clone.
+  - component: card
+    column: clone_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: size_class
+    top_n_count: 5
+    caption: clones, by size class
+    title: Clones by size class
+    description: >-
+      The hero number is the count of distinct clones, and the bars rank the size
+      classes by how many clones they hold. It answers whether the repertoire is made
+      of many small clones or a few large ones.
+
+      How to read: a ranking led by the small classes is the usual polyclonal shape.
+      Large classes near the top point to expansion. Filter to one sample to compare.
+  - component: table
+    title: Clone size table
+    description: >-
+      Each row is a clone of a sample, with its sequence count, frequency, rank and
+      size class. It answers which clones lead each sample.
+
+      How to read: sort by rank or by frequency, and filter by size class to list the
+      expanded clones.

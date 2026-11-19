@@ -10,7 +10,67 @@ find:
 recipe: qcatch/metrics_summary.py
 fixture: metrics_summary.tsv
 renders_as:
-  - { component: card, column: retained_cells, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mapping_rate_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: table }
+  - component: card
+    column: retained_cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Retained cells
+    caption: median, with quartiles
+    description: >-
+      The hero number is the median count of cells QCatch keeps after cell calling,
+      and the box shows the quartiles over samples. It answers how many cells each
+      sample yields for analysis.
+
+      How to read: compare it with the cells you aimed to capture. A much lower count
+      points to a stringent call or a failed capture, so open the table for the
+      processed cells.
+
+      Source: https://raw.githubusercontent.com/COMBINE-lab/QCatch/main/README.md
+  - component: card
+    column: mapping_rate_pct
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100.0
+    title: Mapping rate
+    caption: average, of 100 percent
+    description: >-
+      The hero number is the average percent of reads that map to the reference, and
+      the gauge shows it on a 0 to 100 scale with the lowest and highest sample beside
+      it. It answers how much of the sequencing the reference explains.
+
+      How to read: a high rate means the reads match the reference. A low rate points to
+      a wrong reference or a wrong chemistry, so check the index first.
+
+      Note: QCatch publishes no pass mark for the mapping rate, so the gauge is a scale
+      and not a threshold.
+  - component: card
+    column: sequencing_saturation_pct
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100.0
+    title: Sequencing saturation
+    caption: average, of 100 percent
+    description: >-
+      The hero number is the average sequencing saturation in percent, the share of
+      reads that repeat an already observed molecule, with the lowest and highest
+      sample beside it. It answers whether more sequencing would reveal more molecules.
+
+      How to read: a high saturation means extra reads mostly re-count known
+      molecules, so deeper sequencing adds little. A low saturation means the library
+      is not yet exhausted and more reads would still add information.
+
+      Note: QCatch publishes no pass mark for saturation, so the gauge is a scale and
+      not a threshold.
+  - component: table
+    title: QC summary
+    description: >-
+      Each row is a sample with the retained and processed cells, the mean reads, the
+      median UMIs and genes per retained cell, the genes detected, the mapping rate and
+      the sequencing saturation. It answers the numbers behind the cards.
+
+      How to read: compare the retained with the processed cells to see how strict the
+      cell calling was, and the median genes per cell to judge the depth of each cell.

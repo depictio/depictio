@@ -11,9 +11,91 @@ find:
 recipe: bcftools/stats_summary.py
 fixture: stats_summary.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: n_snps, color: sample, barmode: group} }
-  - { component: card, column: n_snps, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }
-  - { component: card, column: n_indels, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }
-  - { component: card, column: n_multiallelic_sites, aggregation: sum, secondary_layout: donut, breakdown_col: caller }
-  - { id: caller_yield_dotplot, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: caller, mean_expression: log10_n_records, frac_expressing: snp_fraction} }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    title: SNPs per caller
+    dict_kwargs:
+      x: caller
+      y: n_snps
+      color: sample
+      barmode: group
+      labels: {caller: Caller, n_snps: SNP records, sample: Sample}
+    description: >-
+      Each bar is the number of SNP records one caller reports for one sample,
+      coloured by sample. It answers how productive each caller is and whether the
+      ranking holds across samples.
+
+      How to read: callers on the same sample should land in the same order of
+      magnitude. A caller far above the others may be calling noise, and one far
+      below may be missing variants, so confirm with the Ts/Tv tile.
+
+      Source: https://samtools.github.io/bcftools/bcftools.html
+  - component: card
+    column: n_snps
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: callers with the most SNPs
+    title: SNP records
+    description: >-
+      The hero number is the SNP records over every caller and sample, and the bars
+      rank the callers by the SNPs they report. It answers which caller finds the
+      most SNPs.
+
+      How to read: more calls is not better calls. Compare with the Ts/Tv tile and
+      with the indel count before preferring a caller.
+  - component: card
+    column: n_indels
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: callers with the most indels
+    title: Indel records
+    description: >-
+      The hero number is the indel records over every caller and sample, and the
+      bars rank the callers by the indels they report. It answers which caller finds
+      the most indels.
+
+      How to read: callers differ more on indels than on SNPs, so a large spread here
+      is common. Check the indel length distribution before trusting the largest
+      count.
+  - component: card
+    column: n_multiallelic_sites
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: caller
+    caption: multiallelic sites, by caller
+    title: Multiallelic sites
+    description: >-
+      The hero number is the sites carrying more than one alternate allele, and the
+      ring splits them by caller. It answers which callers report multiallelic
+      sites.
+
+      How to read: a caller with a large share splits sites into several alleles
+      where others do not. A caller with none may not support multiallelic calls.
+  - id: caller_yield_dotplot
+    component: advanced_viz
+    kind: dot_plot
+    title: Variant yield per caller and sample
+    roles: {cluster: sample, gene: caller, mean_expression: log10_n_records, frac_expressing: snp_fraction}
+    description: >-
+      Each dot is one caller on one sample, sized by the share of its records that
+      are SNPs and coloured by the log10 of its record count. It answers how much a
+      caller finds and how its calls split between SNPs and other variants.
+
+      How to read: a big dot is a SNP dominated call set and a small one holds many
+      indels or other records. A pale or dark dot shows a caller that finds fewer or
+      more records than its peers on the same sample.
+  - component: table
+    title: Variant counts per caller
+    description: >-
+      Each row is one caller on one sample, with its record, SNP, MNP, indel,
+      multiallelic and other counts, the SNP fraction and the log10 of the records.
+      It answers the exact numbers behind every other tile.
+
+      How to read: sort by records to compare callers within a sample.

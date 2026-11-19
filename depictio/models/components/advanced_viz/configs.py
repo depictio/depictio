@@ -21,12 +21,24 @@ from pydantic import (
 )
 
 from depictio.models.components.color_scale import ColorScale
+from depictio.models.components.types import ReferenceStat
 
 # The continuous colour scales every viz kind that exposes one offers. Single
 # definition on the Python side; its React twin lives in
 # packages/depictio-react-core/src/components/advanced_viz/colourScales.ts and
 # must list the same names in the same order.
 ColourScale = Literal["Viridis", "Plasma", "Inferno", "Magma", "Cividis", "RdBu", "Spectral"]
+
+
+#: A reference computed from the data on show, named for what it is. RULES.md
+#: §17 allows a data-defined reference only when it is called that, so every
+#: ``*_stat`` field below draws a line labelled "median of this table" and
+#: never passes for a tool threshold. The value is computed server-side on the
+#: filtered, unsampled rows and comes back with the data
+#: (``reference_stats``); an explicit value on the sibling field always wins.
+#: Defined in ``types.py`` (``Literal["median", "mean", "p75", "p90", "p95",
+#: "p99"]``) so a UI figure's ``reference_lines`` share it without importing
+#: this package; imported above, and importable from here.
 
 
 #: Assembly aliases a template's ``GENOME`` variable may carry, mapped onto
@@ -184,6 +196,14 @@ class VolcanoConfig(_BaseVizConfig):
         max_length=40,
         description=(
             "Volcano y-axis title, e.g. '-log10 q-value'. Null shows -log10(<significance_col>)"
+        ),
+    )
+    intensity_label: str | None = Field(
+        default=None,
+        max_length=40,
+        description=(
+            "MA view x-axis title, e.g. 'Mean expression (log2)'. Null shows "
+            "avg_log_intensity_col. The MA y axis is the effect size, so it takes effect_label"
         ),
     )
 
@@ -437,6 +457,14 @@ class ManhattanConfig(_BaseVizConfig):
     )
     score_threshold: float | None = Field(
         default=None, description="Horizontal threshold line; None hides it"
+    )
+    score_threshold_stat: ReferenceStat | None = Field(
+        default=None,
+        description=(
+            "Draw the threshold at a statistic of the score column over the rows on "
+            "show (median, mean, p75..p99), computed server-side before sampling and "
+            "labelled as such. An explicit ``score_threshold`` wins"
+        ),
     )
     marker_size_above: int = Field(
         default=6,
@@ -2154,6 +2182,15 @@ class ScatterXyConfig(_BaseVizConfig):
     reference_value: float | None = Field(
         default=None, description="Where a horizontal or vertical reference line sits"
     )
+    reference_stat: ReferenceStat | None = Field(
+        default=None,
+        description=(
+            "Place a horizontal line at this statistic of the y column, a vertical "
+            "one at this statistic of the x column, over the rows on show (computed "
+            "server-side before sampling). An explicit ``reference_value`` wins; the "
+            "default label names the statistic (``median of this table``)"
+        ),
+    )
     reference_label: str | None = Field(
         default=None,
         description=(
@@ -2248,6 +2285,19 @@ class ScatterXyConfig(_BaseVizConfig):
         ),
     )
 
+    @model_validator(mode="after")
+    def _reference_stat_needs_a_straight_line(self) -> ScatterXyConfig:
+        """A computed reference is a horizontal (y) or vertical (x) line."""
+        if self.reference_stat is not None and self.reference_line not in (
+            "horizontal",
+            "vertical",
+        ):
+            raise ValueError(
+                "reference_stat needs reference_line: horizontal (a statistic of y) "
+                "or vertical (a statistic of x)"
+            )
+        return self
+
     @field_validator("quadrants")
     @classmethod
     def _quadrants_are_two_numbers_and_four_labels(
@@ -2305,6 +2355,24 @@ class ProfileConfig(_BaseVizConfig):
         description="Draw a marker at this x, e.g. 0 for a transcription start site",
     )
     reference_label: str | None = Field(default=None, description="Label for the marker")
+    reference_y: float | None = Field(
+        default=None, description="Draw a horizontal reference line at this y"
+    )
+    reference_y_stat: ReferenceStat | None = Field(
+        default=None,
+        description=(
+            "Draw the horizontal line at this statistic of the y column over the rows "
+            "on show (computed server-side before sampling). An explicit "
+            "``reference_y`` wins"
+        ),
+    )
+    reference_y_label: str | None = Field(
+        default=None,
+        description=(
+            "Label for the horizontal line; null names the statistic "
+            "(``median of this table``) or writes ``y = value``"
+        ),
+    )
     shaded_bands: list[tuple[float, float, str]] = Field(
         default_factory=list,
         description="x ranges to shade, as (start, end, label); e.g. nucleosome windows",
@@ -2945,6 +3013,14 @@ class GenomeViewConfig(_BaseVizConfig):
     score_title: str = Field(default="score", description="Y-axis label")
     score_threshold: float | None = Field(
         default=None, description="Horizontal reference rule; None hides it"
+    )
+    score_threshold_stat: ReferenceStat | None = Field(
+        default=None,
+        description=(
+            "Draw the rule at a statistic of the score column over the rows on show "
+            "(median, mean, p75..p99), computed server-side before sampling and "
+            "labelled as such. An explicit ``score_threshold`` wins"
+        ),
     )
     point_size: int = Field(default=5, ge=1, le=30, description="Point diameter in pixels")
     hover_cols: list[str] = Field(

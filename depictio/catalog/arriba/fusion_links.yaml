@@ -12,48 +12,113 @@ find: { filename: "*.arriba.fusions.tsv" }
 recipe: arriba/fusion_links.py
 fixture: fusion_links.tsv
 renders_as:
-  - {
-      id: partner_chords,
-      component: advanced_viz,
-      kind: genome_chord,
-      roles:
-        {
-          chrom_a: chrom_a,
-          pos_a: pos_a,
-          chrom_b: chrom_b,
-          pos_b: pos_b,
-          label: label,
-          weight: weight,
-          category: category,
-        },
-    }
-  - {
-      id: class_by_confidence,
-      component: figure,
-      visu_type: bar,
-      dict_kwargs: { x: category, y: weight, color: confidence },
-    }
-  - {
-      component: card,
-      column: weight,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: label,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: category,
-      top_n_count: 3,
-    }
-  - {
-      component: card,
-      column: category,
-      aggregation: nunique,
-      secondary_layout: donut,
-      breakdown_col: category,
-    }
-  - { component: interactive, interactive_type: MultiSelect, column_name: confidence }
-  - { component: table, row_selection_enabled: true, row_selection_column: label }
+  # Colour is the event class (category), Arriba's own `type`.
+  - id: partner_chords
+    component: advanced_viz
+    kind: genome_chord
+    roles:
+      chrom_a: chrom_a
+      pos_a: pos_a
+      chrom_b: chrom_b
+      pos_b: pos_b
+      label: label
+      weight: weight
+      category: category
+    title: Fusion partner map
+    description: >-
+      Each chord joins the two breakpoints of a fusion on the genome, with its width the
+      read support and its colour the event class. It answers where in the genome the
+      partners sit and how strongly each fusion is supported.
+
+      How to read: chords within one chromosome arc are local events such as deletions
+      and duplications, and chords between chromosomes are translocations. A thick
+      chord is a well supported fusion, so hover it for its partner genes.
+
+      Lines and annotations: chord width is the split reads on both sides plus the
+      discordant mates, as defined by the recipe, and the event class is Arriba's own
+      type.
+  - id: class_by_confidence
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: category
+      y: weight
+      color: confidence
+      labels: {category: Event type, weight: Supporting reads, confidence: Confidence}
+    title: Support by event type and confidence
+    description: >-
+      Each bar stacks the fusions of one event type, with height their supporting reads
+      and colour Arriba's confidence class. It answers which kinds of event are well
+      supported.
+
+      How to read: tall high-confidence segments mark reliable events. Low-confidence
+      segments are the calls Arriba's authors advise treating with skepticism.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/33441414/
+  - component: card
+    column: weight
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: vertical
+    caption: median, lowest and highest
+    title: Link weight
+    description: >-
+      The hero number is the median read support of a fusion link, the split reads on
+      both sides plus the discordant mates, with the lowest and highest beside it. It
+      answers how thick a typical chord is.
+
+      How to read: a low median means the map is made of weakly supported links. The
+      range is wide, so a box would draw a flat line.
+  - component: card
+    column: label
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: category
+    top_n_count: 3
+    caption: fusions, by event type
+    title: Fusions by event type
+    description: >-
+      The hero number is the count of distinct fusions drawn, and the bars rank the
+      event types by how many they hold. It answers which kind of rearrangement
+      dominates.
+
+      How to read: translocations and deletions point to different mechanisms, and a
+      run with mostly read-through events may reflect transcription between neighbours
+      and not a true fusion.
+  - component: card
+    column: category
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: category
+    caption: links, by event type
+    title: Event type composition
+    description: >-
+      The hero number is the count of links and the ring splits them by event type. It
+      answers what share of links each kind of event holds.
+
+      How to read: a ring with one dominant slice means one mechanism accounts for most
+      of the calls. The second number is how many event types are present.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: confidence
+    title: Confidence filter
+    description: >-
+      Pick one or more of Arriba's confidence classes to restrict the tiles of this tab to
+      them. It answers what the map looks like when only the reliable calls are kept.
+
+      How to read: choose high, or high and medium, to drop the low-confidence calls that
+      Arriba's authors advise treating with skepticism.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/33441414/
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: label
+    title: Breakpoint links table
+    description: >-
+      Each row is a fusion link with its two breakpoint loci, its read support, its event
+      type and its confidence. It answers the exact coordinates behind each chord and
+      lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by weight to find the best supported links.

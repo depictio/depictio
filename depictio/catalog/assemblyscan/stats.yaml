@@ -13,22 +13,173 @@ recipe: assemblyscan/stats.py
 fixture: stats.tsv
 renders_as:
   # Fragmented assemblies sit right (many sequences) and low (short N50); the
-  # point size is the assembly length.
-  - { id: contiguity_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: contigs, y: n50, label: genome, size: total_length} }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: genome, y: gc_pct, title: GC content per assembly} }
-  - { id: assembly_n50, component: card, column: n50, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: assembly_length, component: card, column: total_length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # point size is the assembly length and the colour the share of N bases. Both
+  # axes span orders of magnitude between a draft and a chromosome-level assembly,
+  # so they are logarithmic.
+  - id: contiguity_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Contiguity of each assembly
+    roles: {x: contigs, y: n50, label: genome, size: total_length}
+    config:
+      color_col: n_pct
+      log_x: true
+      log_y: true
+      x_title: Sequences in the assembly
+      y_title: N50 (bp)
+      top_n_labels: 8
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is an assembly: its number of sequences on the horizontal axis and its
+      N50 on the vertical axis, sized by its total length and coloured by the share of
+      N bases. It answers which assemblies are chromosome-level and which are
+      fragmented drafts.
+
+      How to read: the upper left corner holds few, long sequences, the signature of a
+      chromosome-level assembly. Points at the lower right are fragmented, and long
+      alignments between genomes cannot span their breaks. A dark point carries many N
+      bases, which are gaps that cannot align.
+
+      Note: N50 is the sequence length at which half of the assembly is reached, longest
+      first, and the assembly-scan README states no quality cut-off, so none is drawn.
+
+      Lines and annotations: The dashed line is the median N50 of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-
+      off of assembly-scan.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md
+      and https://en.wikipedia.org/wiki/N50,_L50,_and_related_statistics
+  # C1 N/A: one bar per assembly, the x axis already names it and no other column splits it.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: genome
+      y: gc_pct
+      labels: {genome: Assembly, gc_pct: GC content (%)}
+    title: GC content per assembly
+    reference_lines: [{axis: y, stat: median, column: gc_pct}]
+    description: >-
+      Each bar is an assembly, with its GC content as a percentage of its bases. It
+      answers whether the assemblies have a similar base composition.
+
+      How to read: bars of similar height are expected for closely related genomes. An
+      assembly far from the rest may be a different species, or may be contaminated
+      or built from another source.
+
+      Lines and annotations: The dashed line is the median GC content of this table,
+      a reference computed from the rows on show (it follows the filters), not a
+      cut-off of assembly-scan.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md
+  # N50 and the total length span orders of magnitude between assemblies, so a box
+  # would draw a flat line: the cards show the median with the extremes.
+  - id: assembly_n50
+    component: card
+    column: n50
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: grid
+    headline: true
+    caption: median, with the shortest and longest
+    title: Assembly N50
+    description: >-
+      The hero number is the median N50 of the assemblies, the length of the sequence at
+      which half of the assembly is reached when sorted longest first, with the lowest
+      and highest values. It answers how contiguous the assemblies are.
+
+      How to read: a high N50 means long sequences, up to chromosome scale. A low N50
+      beside a large sequence count marks a fragmented draft.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md
+      and https://en.wikipedia.org/wiki/N50,_L50,_and_related_statistics
+  - id: assembly_length
+    component: card
+    column: total_length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: grid
+    caption: median, with the smallest and largest
+    title: Assembly length
+    description: >-
+      The hero number is the median total length of the assemblies in base pairs, runs
+      of N included, with the smallest and largest. It answers how large the genomes are.
+
+      How to read: assemblies of related species should be of similar length. A much
+      smaller assembly is probably incomplete, and a larger one may hold duplicated or
+      contaminating sequence.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md
   # Chromosome-level and fragmented assemblies make two groups, so the share of
   # sequences past 1 Mb reads as a histogram rather than as one median.
-  - { id: assembly_large_share, component: card, column: contigs_over_1mb_pct, aggregation: median,
-      secondary_layout: histogram }
-  - { id: assembly_gc, component: card, column: gc_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: assembly_contigs, component: card, column: contigs, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: RangeSlider, column_name: n50 }
-  - { component: table, row_selection_enabled: true, row_selection_column: genome }
+  - id: assembly_large_share
+    component: card
+    column: contigs_over_1mb_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: share of sequences over 1 Mb, per assembly
+    title: Sequences over 1 Mb
+    description: >-
+      The hero number is the median share of an assembly's sequences that are longer
+      than 1 Mb, and the histogram shows how the assemblies distribute. It answers how
+      many assemblies are built from megabase-scale sequences.
+
+      How to read: chromosome-level assemblies pile near 100 percent and fragmented
+      ones near 0, so two humps mean two kinds of assembly.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md
+  - id: assembly_gc
+    component: card
+    column: gc_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: GC content
+    description: >-
+      The hero number is the median GC content of the assemblies as a percentage, and
+      the box shows the spread. It answers how similar the base composition is across
+      assemblies.
+
+      How to read: a narrow box means related genomes. An outlier assembly may be a
+      different organism or contaminated.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md
+  # The sequence count spans a wide range, so the card shows the extremes.
+  - id: assembly_contigs
+    component: card
+    column: contigs
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: grid
+    caption: median, with the fewest and the most
+    title: Sequences per assembly
+    description: >-
+      The hero number is the median count of sequences (contigs or scaffolds) in an
+      assembly, with the fewest and the most. It answers how fragmented the assemblies
+      are.
+
+      How to read: a count close to the number of chromosomes means a near-complete
+      assembly. Hundreds or thousands of sequences mean a draft.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: n50
+    title: N50 range
+    description: >-
+      Filters the tiles to assemblies whose N50 falls inside the chosen range.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: genome
+    title: Assembly statistics table
+    description: >-
+      Each row is an assembly with its sequence count, total, median and longest
+      length, N50 and L50, GC and N content, and the sequences past 1 kb, 10 kb, 100 kb
+      and 1 Mb. It answers the exact numbers behind every tile and lets a row selection
+      filter the dashboard.
+
+      How to read: sort by N50 to rank the assemblies by contiguity.
+
+      Source: https://raw.githubusercontent.com/rpetit3/assembly-scan/master/README.md

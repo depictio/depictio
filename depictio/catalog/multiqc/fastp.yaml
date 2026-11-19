@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: fastp }
+  - component: multiqc
+    section: fastp
+    title: Read pre-processing
+    description: >-
+      fastp's MultiQC plots: filtering outcome, insert-size distribution and GC and
+      N content per sample. They answer how much of the library was removed and how
+      the retained reads look.
+
+      How to read: Most reads should pass the filters. A broad or double-peaked
+      insert size can mean adapter read-through, and a high N content points to a
+      sequencing problem.
+
+      Source: https://docs.seqera.io/multiqc/modules/fastp

@@ -13,4 +13,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: mosdepth }
+  - component: multiqc
+    section: mosdepth
+    title: Coverage distribution
+    description: >-
+      mosdepth's MultiQC plots: the coverage distribution and coverage per contig,
+      one line per sample. They answer how deeply and evenly the genome is covered.
+
+      How to read: A narrow distribution around the target depth is good. A long
+      tail at low coverage means gaps, and a second peak can mean copy-number
+      changes or contamination.
+
+      Source: https://docs.seqera.io/multiqc/modules/mosdepth

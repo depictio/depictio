@@ -13,6 +13,42 @@ renders_as:
   - id: v_usage_composition
     component: advanced_viz
     kind: stacked_taxonomy
+    title: V gene usage composition
     roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: seq_freq }
-  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: v_family, top_n_count: 5 }
-  - { component: table }
+    config:
+      value_title: Fraction of sequences
+      legend_pos: bottom
+    description: >-
+      Each bar is a sample and each segment a V family or V gene, sized by the share of
+      the sample's sequences that use it. It answers which V segments dominate each
+      repertoire.
+
+      How to read: switch between the family and the gene level with the rank control.
+      Samples with the same segment proportions are similar. A segment that takes a
+      large share in one sample only may point to a clonal expansion using it.
+  - component: card
+    column: taxon
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: v_family
+    top_n_count: 5
+    filter_expr: "col('rank') == 'V gene'"
+    caption: V genes seen, by family
+    title: V genes by family
+    description: >-
+      The hero number is the count of distinct V genes seen in view, and the bars rank
+      the V families by how many genes they contribute. It answers how broad the V
+      gene usage is.
+
+      How to read: a family with many genes seen has a broad usage. A short list means
+      the repertoire uses few segments, or the samples are shallow.
+  - component: table
+    title: V gene usage table
+    description: >-
+      Each row is a V family or V gene in one sample, with its sequence count and its
+      share of the sample's sequences for that locus. It answers the exact usage
+      behind the bars.
+
+      How to read: filter by rank to compare families or genes, and sort by share to
+      list the dominant segments.

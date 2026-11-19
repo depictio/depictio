@@ -14,7 +14,43 @@ fixture: score_components.tsv
 renders_as:
   # The mean part per section, stacked: the height is the section's mean score
   # and the segments say what drives it.
-  - { id: components_by_section, component: figure, visu_type: histogram,
-      dict_kwargs: { x: section, y: contribution, color: component, histfunc: avg } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: component }
-  - { component: table }
+  - id: components_by_section
+    component: figure
+    visu_type: histogram
+    title: What drives the score in each section
+    dict_kwargs:
+      x: section
+      y: contribution
+      color: component
+      histfunc: avg
+      labels: {section: Expression section, contribution: Mean contribution to the score, component: Part of the score}
+    description: >-
+      Each bar is an expression section and its segments are the mean weighted part
+      of each measure in the stability score: Normfinder, geNorm M, the coefficient
+      of variation, the robust coefficient and the missing-value penalty. It answers
+      which measure drives the score of each section.
+
+      How to read: the height is the section's mean score, where lower is more
+      stable. A large penalty segment means genes were missing from many samples, and
+      a large segment for one measure means that measure separates the genes most.
+
+      Lines and annotations: none are drawn. The weights of the four measures are a
+      run parameter, equal by default.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/nextflow_schema.json
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: component
+    title: Part of the score
+    description: >-
+      Keeps only the chosen parts of the score, to compare one measure across
+      sections.
+  - component: table
+    title: Score parts table
+    description: >-
+      Each row is one part of one candidate gene's stability score, with the
+      normalised measure and its weighted contribution. It answers how a gene's score
+      adds up.
+
+      How to read: a gene's parts sum to its stability score, so sort by contribution
+      to see which measure holds a gene back.

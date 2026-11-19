@@ -25,8 +25,72 @@ find:
 recipe: bcftools/stats_sections.py
 fixture: stats_sections.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: bin, y: count, color: caller} }
+  # Each `section` counts a different kind of record on its own x scale, so the
+  # sections never share an axis: one panel per section, independent axes.
+  - component: figure
+    title: Variant distributions per caller
+    code: |
+      # the x value of a section: its label when it has one (categorical sections and
+      # the open-ended depth bucket), else its numeric bin
+      d = df.with_columns(
+          pl.coalesce([pl.col("label"), pl.col("bin").map_elements(lambda v: f"{v:g}", return_dtype=pl.Utf8)]).alias("key")
+      ).drop_nulls(["key", "count"]).sort(["section", "bin", "label"], nulls_last=True)
+      fig = px.bar(
+          d.to_pandas(),
+          x="key",
+          y="count",
+          color="caller",
+          barmode="group",
+          facet_col="section",
+          facet_col_wrap=2,
+          facet_row_spacing=0.14,
+          facet_col_spacing=0.08,
+          labels={"key": "Bin", "count": "Variant records", "caller": "Caller", "section": "Section"},
+      )
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split("=", 1)[-1].replace("_", " ")))
+      fig.update_xaxes(matches=None, showticklabels=True, title_text="", type="category")
+      fig.update_yaxes(matches=None, showticklabels=True, title_text="")
+      fig.update_layout(margin={"t": 32, "l": 48, "r": 16, "b": 32})
+    description: >-
+      Each panel is one bcftools distribution (indel length, substitution, read depth,
+      allele frequency, singletons), and each bar the number of variant records in one of
+      its bins, grouped by caller. It answers how the call sets of different callers are
+      distributed.
+
+      How to read: every panel has its own axes, because the sections count different
+      kinds of records on different scales; compare callers within a panel. Callers that
+      peak in the same bins agree, and a caller with an extra mode, for instance very low
+      allele frequencies, adds calls the others do not make.
+
+      Lines and annotations: no reference line is drawn, because a median of bin counts
+      says nothing about a distribution.
+
+      Source: https://samtools.github.io/bcftools/bcftools.html
   # Which distribution a filtered view is looking at, and how the total
   # splits across the sections still in scope.
-  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: section, top_n_count: 3 }
-  - { component: table }
+  - component: card
+    column: count
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: section
+    top_n_count: 3
+    caption: sections with the most records
+    title: Records in the distributions
+    description: >-
+      The hero number is the variant records counted in the distributions in view,
+      and the bars rank the sections by the records they hold, with the median and
+      maximum bin beside it. It answers how large the selected distributions are.
+
+      How to read: each section counts a different kind of record, such as sites,
+      SNPs or substitutions, so a sum across sections is not a variant count. Filter
+      to one section for a figure that means something.
+  - component: table
+    title: Distribution bins
+    description: >-
+      Each row is a bin of one distribution for one sample and caller, with its
+      section, its numeric or categorical label and the records it holds. It answers
+      the exact value behind the bar chart.
+
+      How to read: filter by section, then sort by count to find the most populated
+      bins.
