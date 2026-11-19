@@ -1174,10 +1174,14 @@ def render_notebook_report(
             jobs.finish(job_id, status)
         try:
             asyncio.run(_with_beanie(lambda: revoke(token)))
+        except SoftTimeLimitExceeded:
+            raise
         except Exception as exc:  # noqa: BLE001 — never mask the render's own error
             logger.warning(f"render_notebook_report: failed to revoke the token of {job_id}: {exc}")
         try:
             jobs.prune_reports()
+        except SoftTimeLimitExceeded:
+            raise
         except Exception as exc:  # noqa: BLE001 — retention is best effort
             logger.warning(f"render_notebook_report: pruning old reports failed: {exc}")
 

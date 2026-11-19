@@ -33,6 +33,17 @@ from depictio.models.timestamps import utc_now_naive
 RENDER = "render"
 EXTRACT = "extract"
 
+
+def _reraise_time_limit(exc: BaseException) -> None:
+    """A worker's soft time limit is never bookkeeping to swallow."""
+    try:
+        from celery.exceptions import SoftTimeLimitExceeded
+    except ImportError:  # pragma: no cover - celery ships with the server
+        return
+    if isinstance(exc, SoftTimeLimitExceeded):
+        raise exc
+
+
 jobs_collection = db["notebook_export_jobs"]
 slots_collection = db["notebook_export_slots"]
 
@@ -123,6 +134,7 @@ def finish(job_id: str, status: str, *, reason: str | None = None) -> None:
     try:
         jobs_collection.update_one({"_id": job_id}, {"$set": update})
     except Exception as exc:  # noqa: BLE001 - the record is bookkeeping, the job stands
+        _reraise_time_limit(exc)
         logger.warning(f"notebook export jobs: could not mark {job_id} finished: {exc}")
 
 
@@ -159,6 +171,7 @@ def release_slot(name: str, holder: str) -> None:
             {"_id": {"$regex": f"^{name}:"}, "holder": holder}, {"$set": {"holder": None}}
         )
     except Exception as exc:  # noqa: BLE001 - the claim lapses on its own
+        _reraise_time_limit(exc)
         logger.warning(f"notebook export jobs: could not release {name} for {holder}: {exc}")
 
 

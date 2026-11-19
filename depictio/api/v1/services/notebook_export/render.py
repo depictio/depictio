@@ -104,7 +104,7 @@ def _kill_group(proc: subprocess.Popen) -> None:
         pass
     try:
         proc.wait(timeout=10)
-    except Exception:  # noqa: BLE001 - nothing more to do for a process that will not die
+    except subprocess.TimeoutExpired:  # nothing more to do for a process that will not die
         pass
 
 
