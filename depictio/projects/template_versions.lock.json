@@ -809,7 +809,7 @@
     },
     "nf-core/viralmetagenome/1.2.0": {
       "version": "2.0.0",
-      "content_hash": "c7832523a882f5b83107861a2c0d86fcd852e873df299ad2ed2bd1f0b2370f75",
+      "content_hash": "93d7ea5476d984414b89c459dc3deac0b3853f376b1fb20b2dc036bb71a3dd83",
       "catalog": {
         "checkv": "1.0.0",
         "ivar": "1.0.0",

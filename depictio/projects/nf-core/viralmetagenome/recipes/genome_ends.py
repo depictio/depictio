@@ -113,7 +113,7 @@ def _bin_window(runs: pl.DataFrame, region: str, lo: pl.Expr, hi: pl.Expr) -> pl
                 (pl.col("re") - 1 - pl.col("lo")) // BIN_BP + 1,
             ).alias("bin")
         )
-        .explode("bin", empty_as_null=True)
+        .explode("bin")
         .with_columns(
             (pl.col("lo") + pl.col("bin") * BIN_BP).alias("start"),
             pl.min_horizontal(pl.col("lo") + (pl.col("bin") + 1) * BIN_BP, pl.col("hi")).alias(
