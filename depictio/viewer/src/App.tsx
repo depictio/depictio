@@ -2290,7 +2290,7 @@ const App: React.FC = () => {
           closeSettings();
           openExportStatic();
         }}
-        isOwner={isOwner}
+        previewing={Boolean(previewVersionId)}
         filters={
           remembering
             ? {

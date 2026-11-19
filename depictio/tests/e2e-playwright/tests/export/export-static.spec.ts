@@ -428,7 +428,7 @@ test.describe("Static export (non-owner)", () => {
       // a tooltip a disabled button would never fire.
       await expect(btn).toBeVisible();
       await expect(btn).toBeDisabled();
-      await expect(drawer).toContainText(/only export dashboards you own/i);
+      await expect(drawer).toContainText(/owner rights on this dashboard's project/i);
     } finally {
       // Cascading delete — takes the fixture dashboard with it.
       await request.delete(
@@ -473,7 +473,7 @@ test.describe("Static export in public/demo mode", () => {
     const btn = page.locator("[data-testid='export-static-btn']");
     await expect(btn).toBeVisible();
     await expect(btn).toBeDisabled();
-    await expect(drawer).toContainText(/only export dashboards you own/i);
+    await expect(drawer).toContainText(/owner rights on this dashboard's project/i);
   });
 
   test("temporary user cannot dispatch an export (404)", async ({

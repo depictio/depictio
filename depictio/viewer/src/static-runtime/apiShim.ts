@@ -32,14 +32,11 @@
  *   - a shimmed function does not make its module safe: `availableValues`
  *     dispatches to `fetchUniqueValues` (shimmed) OR
  *     `fetchMultiQCSampleMappings` (was not).
- * Still unshimmed and deliberately so: `preflightStaticExport` /
- * `dispatchStaticExport` / `pollStaticExport` / `downloadStaticExport`.
- * `ExportStaticModal` IS in the graph (App renders it unconditionally) and
- * only the `!isStaticBundle` guard on its opener keeps it shut — that opener
- * now lives in `SettingsDrawer`'s Actions section (it used to be a header
- * button), i.e. inside a surface that IS reachable in a bundle, so the guard
- * has to stay there. Any future second opener turns those four into live
- * calls.
+ * The static-export calls (`preflightStaticExport` & co.) are refused below
+ * and `canExportStatic` answers false: `ExportStaticModal` IS in the graph
+ * (App renders it unconditionally) and its opener lives in `SettingsDrawer`'s
+ * Actions section, a surface that IS reachable in a bundle, behind the
+ * `!isStaticBundle` guard.
  *
  * NOT an api.ts concern, but the last thing standing between a bundle and a
  * zero-network load: Iconify. `../icons` registers only the source-SCANNED
@@ -152,6 +149,19 @@ const RESOLVE_RE = /\/advanced_viz\/structure\/resolve(?:[?#]|$)/;
 function idKey(v: unknown): string | null {
   const s = typeof v === 'string' ? v.replace(/\s+/g, '').toUpperCase() : '';
   return s || null;
+}
+
+const READ_ONLY = 'not available in a read-only static bundle';
+
+/**
+ * A call a bundle answers with a rejection and no request: a write path, or a
+ * read of server state the file does not carry. `what` is the message (most
+ * say what is `READ_ONLY`). The callers catch it as they would an HTTP error.
+ */
+function refuse(what: string): (..._args: unknown[]) => Promise<never> {
+  return async () => {
+    throw new Error(what);
+  };
 }
 
 /**
@@ -343,10 +353,8 @@ export async function fetchFloatingComponents(
   return { parent_dashboard_id: parentId, components };
 }
 
-export async function fetchProjectFromDashboard(_dashboardId: string) {
-  // App's ingestion-banner effect is best-effort and swallows failures.
-  throw new Error('static bundle: no project backend');
-}
+// App's ingestion-banner effect is best-effort and swallows failures.
+export const fetchProjectFromDashboard = refuse('static bundle: no project backend');
 
 /** The project, from the summary producer A ships (`manifest.project`).
  *
@@ -369,18 +377,14 @@ export async function fetchProject(
   };
 }
 
-export async function fetchIngestionHealth(_projectId: string) {
-  throw new Error('static bundle: no ingestion backend');
-}
+export const fetchIngestionHealth = refuse('static bundle: no ingestion backend');
 
 // ---- the project page (the live ProjectDetailApp, mounted by ProjectPage) ---
 
 /** Ingestion reports live on the server. Their readers on the project page
  *  (the header's run names, a derived collection's lineage) keep the facts
  *  the project document gives them on a rejection. */
-export async function fetchIngestionReport(_projectId: string): Promise<never> {
-  throw new Error('static bundle: no ingestion reports');
-}
+export const fetchIngestionReport = refuse('static bundle: no ingestion reports');
 
 /** The links section and the collection viewer's Links: the summary's links,
  *  without their value mappings (never shipped). */
@@ -395,36 +399,20 @@ export async function listLinkResolvers(_projectId: string): Promise<ResolverInf
 
 /** A link's resolved mapping is computed on the server from its value
  *  mappings, which a bundle does not carry. */
-export async function fetchLinkMappingPreview(): Promise<never> {
-  throw new Error(`Link mappings are ${READ_ONLY}.`);
-}
+export const fetchLinkMappingPreview = refuse(`Link mappings are ${READ_ONLY}.`);
 
 /** A MultiQC collection's reports and samples are read from object storage;
  *  the viewer shows the collection's facts instead in a bundle. */
-export async function fetchMultiQCByDataCollection(): Promise<never> {
-  throw new Error(`MultiQC reports are ${READ_ONLY}.`);
-}
+export const fetchMultiQCByDataCollection = refuse(`MultiQC reports are ${READ_ONLY}.`);
 
 // The project page's write paths. Their controls are not offered in a bundle
 // (`useIsStaticBundle`); these refuse all the same, without a request.
-export async function renameDataCollection(): Promise<never> {
-  throw new Error(`Editing the project is ${READ_ONLY}.`);
-}
-export async function deleteDataCollection(): Promise<never> {
-  throw new Error(`Editing the project is ${READ_ONLY}.`);
-}
-export async function updateProjectLink(): Promise<never> {
-  throw new Error(`Editing the project is ${READ_ONLY}.`);
-}
-export async function deleteProjectLink(): Promise<never> {
-  throw new Error(`Editing the project is ${READ_ONLY}.`);
-}
-export async function setTableEditLock(): Promise<never> {
-  throw new Error(`Table editing is ${READ_ONLY}.`);
-}
-export async function restoreTableVersion(): Promise<never> {
-  throw new Error(`Data history is ${READ_ONLY}.`);
-}
+export const renameDataCollection = refuse(`Editing the project is ${READ_ONLY}.`);
+export const deleteDataCollection = refuse(`Editing the project is ${READ_ONLY}.`);
+export const updateProjectLink = refuse(`Editing the project is ${READ_ONLY}.`);
+export const deleteProjectLink = refuse(`Editing the project is ${READ_ONLY}.`);
+export const setTableEditLock = refuse(`Table editing is ${READ_ONLY}.`);
+export const restoreTableVersion = refuse(`Data history is ${READ_ONLY}.`);
 
 /** The "Recommended advanced charts" pills score the collection's schema on
  *  the server: offline, no pills rather than a guess. */
@@ -493,21 +481,13 @@ export async function fetchProjectTimeline() {
   return { events: [], next_before: null };
 }
 
-export async function fetchDashboardChanges(): Promise<never> {
-  throw new Error('static bundle: no change history to compare against');
-}
+export const fetchDashboardChanges = refuse('static bundle: no change history to compare against');
 
-export async function fetchProjectChanges(): Promise<never> {
-  throw new Error('static bundle: no change history to compare against');
-}
+export const fetchProjectChanges = refuse('static bundle: no change history to compare against');
 
-export async function fetchComponentDiff(): Promise<never> {
-  throw new Error('static bundle: no change history to compare against');
-}
+export const fetchComponentDiff = refuse('static bundle: no change history to compare against');
 
-export async function saveDashboardNotes(_dashboardId: string, _notes: unknown) {
-  throw new Error('static bundle: read-only — notes cannot be saved');
-}
+export const saveDashboardNotes = refuse('static bundle: read-only — notes cannot be saved');
 
 // ---- frozen render-path lookups (keyed by component index) -----------------
 
@@ -1383,7 +1363,6 @@ export async function fetchDataVersionStatus(): Promise<{ collections: never[] }
   return { collections: [] };
 }
 
-const READ_ONLY = 'not available in a read-only static bundle';
 const unavailable = { ok: false as const, status: 0, detail: READ_ONLY };
 
 export async function fetchDashboardAnnotations() {
@@ -1392,24 +1371,12 @@ export async function fetchDashboardAnnotations() {
 export async function fetchAnnotationTables() {
   return unavailable;
 }
-export async function saveDashboardAnnotations(): Promise<never> {
-  throw new Error(`Annotations are ${READ_ONLY}.`);
-}
-export async function saveSharedLabels(): Promise<never> {
-  throw new Error(`Shared labels are ${READ_ONLY}.`);
-}
-export async function fetchTableEditStatus(): Promise<never> {
-  throw new Error(`Table editing is ${READ_ONLY}.`);
-}
-export async function fetchTableForEdit(): Promise<never> {
-  throw new Error(`Table editing is ${READ_ONLY}.`);
-}
-export async function patchTableCells(): Promise<never> {
-  throw new Error(`Table editing is ${READ_ONLY}.`);
-}
-export async function mergeTableFile(): Promise<never> {
-  throw new Error(`Table editing is ${READ_ONLY}.`);
-}
+export const saveDashboardAnnotations = refuse(`Annotations are ${READ_ONLY}.`);
+export const saveSharedLabels = refuse(`Shared labels are ${READ_ONLY}.`);
+export const fetchTableEditStatus = refuse(`Table editing is ${READ_ONLY}.`);
+export const fetchTableForEdit = refuse(`Table editing is ${READ_ONLY}.`);
+export const patchTableCells = refuse(`Table editing is ${READ_ONLY}.`);
+export const mergeTableFile = refuse(`Table editing is ${READ_ONLY}.`);
 /** `{}` is what the real call answers on a miss: the spatial underlay (the
  *  one caller) then draws the cells without a background image. */
 export async function fetchDataCollectionConfig(): Promise<Record<string, unknown>> {
@@ -1418,22 +1385,16 @@ export async function fetchDataCollectionConfig(): Promise<Record<string, unknow
 export async function fetchMyAvatarBlob(): Promise<Blob | null> {
   return null;
 }
-export async function fetchExportManifest(): Promise<never> {
-  throw new Error(`Component export is ${READ_ONLY}.`);
-}
+export const fetchExportManifest = refuse(`Component export is ${READ_ONLY}.`);
 // The export modal's opener is guarded by `!isStaticBundle`; these keep a
 // future second opener from reaching a server all the same.
-export async function preflightStaticExport(): Promise<never> {
-  throw new Error(`Exporting is ${READ_ONLY}.`);
-}
-export async function dispatchStaticExport(): Promise<never> {
-  throw new Error(`Exporting is ${READ_ONLY}.`);
-}
-export async function pollStaticExport(): Promise<never> {
-  throw new Error(`Exporting is ${READ_ONLY}.`);
-}
-export async function downloadStaticExport(): Promise<never> {
-  throw new Error(`Exporting is ${READ_ONLY}.`);
+export const preflightStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
+export const dispatchStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
+export const pollStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
+export const downloadStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
+/** The Export button's state: a bundle has no server to export from. */
+export async function canExportStatic(): Promise<boolean> {
+  return false;
 }
 
 // Comments: a write path with a server-side ACL. `can_comment: false` is what
@@ -1450,54 +1411,28 @@ export async function fetchCommentCounts(): Promise<{ open: Record<string, numbe
 export async function fetchPublishedAnnotations(): Promise<never[]> {
   return [];
 }
-export async function createCommentThread(): Promise<never> {
-  throw new Error(`Comments are ${READ_ONLY}.`);
-}
-export async function updateCommentThread(): Promise<never> {
-  throw new Error(`Comments are ${READ_ONLY}.`);
-}
-export async function deleteCommentThread(): Promise<never> {
-  throw new Error(`Comments are ${READ_ONLY}.`);
-}
-export async function reviewCommentThread(): Promise<never> {
-  throw new Error(`Comments are ${READ_ONLY}.`);
-}
-export async function addThreadComment(): Promise<never> {
-  throw new Error(`Comments are ${READ_ONLY}.`);
-}
-export async function editThreadComment(): Promise<never> {
-  throw new Error(`Comments are ${READ_ONLY}.`);
-}
-export async function deleteThreadComment(): Promise<never> {
-  throw new Error(`Comments are ${READ_ONLY}.`);
-}
+export const createCommentThread = refuse(`Comments are ${READ_ONLY}.`);
+export const updateCommentThread = refuse(`Comments are ${READ_ONLY}.`);
+export const deleteCommentThread = refuse(`Comments are ${READ_ONLY}.`);
+export const reviewCommentThread = refuse(`Comments are ${READ_ONLY}.`);
+export const addThreadComment = refuse(`Comments are ${READ_ONLY}.`);
+export const editThreadComment = refuse(`Comments are ${READ_ONLY}.`);
+export const deleteThreadComment = refuse(`Comments are ${READ_ONLY}.`);
 
 /** The brand-theme draft preview: its caller falls back to the unresolved
  *  draft on a rejection, which is the right answer with no server. */
-export async function resolveBrandTheme(): Promise<never> {
-  throw new Error(`Brand theme resolution is ${READ_ONLY}.`);
-}
+export const resolveBrandTheme = refuse(`Brand theme resolution is ${READ_ONLY}.`);
 
 /** Server details (version, links): there is no server. The store reads a
  *  rejection as "unknown" and the chrome shows nothing. */
-export async function fetchServerInfo(): Promise<never> {
-  throw new Error('static bundle: no server');
-}
+export const fetchServerInfo = refuse('static bundle: no server');
 
 // Version history and data time travel (edit-mode UI): a bundle is one point
 // in time, so there is no history to list and nothing to restore.
-export async function fetchDashboardVersions(): Promise<never> {
-  throw new Error(`Version history is ${READ_ONLY}.`);
-}
-export async function fetchDashboardVersion(): Promise<never> {
-  throw new Error(`Version history is ${READ_ONLY}.`);
-}
-export async function restoreComponentFromVersion(): Promise<never> {
-  throw new Error(`Version history is ${READ_ONLY}.`);
-}
-export async function fetchDeltaHistory(): Promise<never> {
-  throw new Error(`Data history is ${READ_ONLY}.`);
-}
+export const fetchDashboardVersions = refuse(`Version history is ${READ_ONLY}.`);
+export const fetchDashboardVersion = refuse(`Version history is ${READ_ONLY}.`);
+export const restoreComponentFromVersion = refuse(`Version history is ${READ_ONLY}.`);
+export const fetchDeltaHistory = refuse(`Data history is ${READ_ONLY}.`);
 
 /**
  * api.ts network calls the static graph reaches that are deliberately left

@@ -19,6 +19,7 @@ import { Icon } from '@iconify/react';
 import {
   BrandThemeForm,
   BrandThemePreview,
+  canExportStatic,
   isEmptyBrandTheme,
   useBrandScopeAttributes,
   useIsStaticBundle,
@@ -647,47 +648,75 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
 // Export static
 // ---------------------------------------------------------------------------
 
-/** Shown both as the disabled button's tooltip and, when the gate is closed,
- *  as the always-visible caption underneath it — a tooltip on a disabled
- *  Mantine button never fires, and the whole point of disabling (rather than
- *  hiding) is that the reason stays discoverable. */
+/** Why the export is off, shown both as the disabled button's tooltip and as
+ *  the always-visible caption underneath it — a tooltip on a disabled Mantine
+ *  button never fires, and the whole point of disabling (rather than hiding)
+ *  is that the reason stays discoverable. */
 const OWNER_GATE_HINT =
-  'You can only export dashboards you own. Duplicate this one to get your own copy.';
+  "Exporting needs owner rights on this dashboard's project: a bundle carries the " +
+  "project's data. Ask a project owner to export it.";
+const PREVIEW_HINT =
+  'A static export draws the live dashboard and its current data, not this past ' +
+  'version. Leave the version preview to export.';
 
 /**
- * The owner-gated "Export static" action: a rare, owner-only action that does
- * not warrant permanent header real estate. The click hands off to
+ * The project-owner-gated "Export static" action: a rare action that does not
+ * warrant permanent header real estate. The click hands off to
  * `ExportStaticModal` (opened by the viewer), which runs the preflight.
+ *
+ * Whether it is offered is the server's answer (`canExportStatic`, the very
+ * rule the dispatch applies), asked when the section is shown, so a dashboard
+ * a user owns in a project they only view is not offered, and a project owner
+ * is, whoever owns the dashboard document. A version preview disables it: the
+ * build has no pins and would export today's dashboard under the preview.
  */
 const ExportStaticBlock: React.FC<{
   dashboardId?: string | null;
-  isOwner: boolean;
+  previewing: boolean;
   onExportStatic: () => void;
-}> = ({ dashboardId, isOwner, onExportStatic }) => (
-  <Stack gap="xs" data-testid="export-static-section">
-    {/* The button sizes to its label; only the caption spans the section, so
-        it stays readable instead of wrapping at button width. */}
-    <Group>
-      <Tooltip label={OWNER_GATE_HINT} disabled={isOwner} withArrow>
-        <Button
-          leftSection={<Icon icon="mdi:export-variant" width={16} />}
-          variant="light"
-          size="sm"
-          onClick={onExportStatic}
-          disabled={!dashboardId || !isOwner}
-          data-testid="export-static-btn"
-        >
-          Export static
-        </Button>
-      </Tooltip>
-    </Group>
-    <Text size="xs" c="dimmed">
-      {isOwner
-        ? 'Builds a single self-contained HTML file of this dashboard that opens without a server.'
-        : OWNER_GATE_HINT}
-    </Text>
-  </Stack>
-);
+}> = ({ dashboardId, previewing, onExportStatic }) => {
+  // null while the server is asked: disabled, without a reason yet.
+  const [allowed, setAllowed] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (!dashboardId) {
+      setAllowed(false);
+      return;
+    }
+    let alive = true;
+    setAllowed(null);
+    void canExportStatic(dashboardId).then((ok) => {
+      if (alive) setAllowed(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [dashboardId]);
+  const reason = previewing ? PREVIEW_HINT : allowed === false ? OWNER_GATE_HINT : null;
+  return (
+    <Stack gap="xs" data-testid="export-static-section">
+      {/* The button sizes to its label; only the caption spans the section, so
+          it stays readable instead of wrapping at button width. */}
+      <Group>
+        <Tooltip label={reason} disabled={!reason} withArrow>
+          <Button
+            leftSection={<Icon icon="mdi:export-variant" width={16} />}
+            variant="light"
+            size="sm"
+            onClick={onExportStatic}
+            disabled={!dashboardId || previewing || allowed !== true}
+            data-testid="export-static-btn"
+          >
+            Export static
+          </Button>
+        </Tooltip>
+      </Group>
+      <Text size="xs" c="dimmed">
+        {reason ??
+          'Builds a single self-contained HTML file of this dashboard that opens without a server.'}
+      </Text>
+    </Stack>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Sections
@@ -887,9 +916,9 @@ interface SettingsDrawerProps {
    *  the export out. Also suppressed inside static bundles, which have no
    *  backend to build from. */
   onExportStatic?: () => void;
-  /** False renders the export action disabled (never hidden) with the
-   *  owner-gate explanation. Defaults to `true`. */
-  isOwner?: boolean;
+  /** A past version is shown (`?version=`): the export action is disabled
+   *  (never hidden) with the reason, since a build exports the live state. */
+  previewing?: boolean;
 }
 
 /** What the "Your filters" section needs from the viewer. */
@@ -950,7 +979,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   initialSection,
   dashboardId,
   onExportStatic,
-  isOwner = true,
+  previewing = false,
 }) => {
   // Static bundles are offline snapshots: there is no API to preflight or build
   // against, so the export is absent rather than disabled. Inert (false) in
@@ -1101,7 +1130,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       body: (
         <ExportStaticBlock
           dashboardId={dashboardId}
-          isOwner={isOwner}
+          previewing={previewing}
           onExportStatic={onExportStatic}
         />
       ),

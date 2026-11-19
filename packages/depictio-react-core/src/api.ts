@@ -7561,6 +7561,39 @@ export async function fetchUserByEmail(email: string): Promise<{
   };
 }
 
+/** The filename a `Content-Disposition` header names, else `fallback`.
+ *  The RFC 5987 `filename*=UTF-8''…` form wins over the plain `filename=`
+ *  (which a server may have reduced to ASCII). */
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  const extended = header?.match(/filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/);
+  if (extended) {
+    try {
+      return decodeURIComponent(extended[1].trim());
+    } catch {
+      // A malformed escape: fall through to the plain form.
+    }
+  }
+  const m = header?.match(/filename\s*=\s*"?([^";]+)"?/);
+  return m ? m[1].trim() : fallback;
+}
+
+/** Save a successful download response to the user's disk (blob → anchor
+ *  click), under the name its `Content-Disposition` gives, else
+ *  `fallbackName`. Returns the name used. */
+async function saveResponseAs(res: Response, fallbackName: string): Promise<string> {
+  const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), fallbackName);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 /** Export a project bundle as a ZIP. Backend returns binary content; we
  *  wrap it in a Blob and trigger a browser download. Mirrors the Dash
  *  flow at projects.py:2360 (`/migrate/export-project`). */
@@ -7570,15 +7603,7 @@ export async function exportProjectZip(projectId: string): Promise<void> {
     body: JSON.stringify({ project_id: projectId, mode: 'all' }),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to export project');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `depictio_export_${projectId}.zip`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, `depictio_export_${projectId}.zip`);
 }
 
 /** POST body for /projects/{id}/export_template. `template_id` is a
@@ -8562,23 +8587,32 @@ export async function pollStaticExport(jobId: string): Promise<StaticExportJob> 
   return res.json();
 }
 
-/** Download the built HTML artifact (409 while not ready) and save it via the
- *  blob → anchor-click flow, same as exportProjectZip(). */
+/** Download the built HTML artifact (409 while not ready) and save it under
+ *  the server's name for it (`filename` when the response names none). */
 export async function downloadStaticExport(
   jobId: string,
   filename: string,
 ): Promise<void> {
   const res = await authFetch(`${API_BASE}/serverless/export-static/download/${jobId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to download static export');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, filename);
+}
+
+/** Whether the server would accept a static export of this dashboard from the
+ *  current user: the very rule `dispatchStaticExport` is held to (project
+ *  owner), so the button is enabled exactly when the export would go through.
+ *  Any failure reads as "no". */
+export async function canExportStatic(dashboardId: string): Promise<boolean> {
+  try {
+    const res = await authFetch(
+      `${API_BASE}/serverless/export-static/${dashboardId}/can-export`,
+    );
+    if (!res.ok) return false;
+    const body = (await res.json()) as { can_export?: unknown };
+    return body.can_export === true;
+  } catch {
+    return false;
+  }
 }
 
 // ---- Admin (system-wide) helpers ----------------------------------------
@@ -8890,15 +8924,7 @@ export async function createBackup(): Promise<BackupCreateResult> {
 export async function downloadBackup(backupId: string): Promise<void> {
   const res = await authFetch(`${API_BASE}/backup/download/${backupId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to download backup');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `depictio_backup_${backupId}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, `depictio_backup_${backupId}.json`);
 }
 
 /** Upload a backup file; the server stores it as a first-class backup and

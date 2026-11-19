@@ -641,6 +641,7 @@ export {
   dispatchStaticExport,
   pollStaticExport,
   downloadStaticExport,
+  canExportStatic,
   // Project management
   fetchProject,
   fetchIngestionReport,
