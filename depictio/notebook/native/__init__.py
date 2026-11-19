@@ -23,12 +23,13 @@ this. ``use_native(False)`` turns the whole package off.
 
 from __future__ import annotations
 
-import html as _html
 import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
 import polars as pl
+
+from ..qmd_safe import esc as _qmd_esc
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..components import AdvancedVizComponent
@@ -195,7 +196,8 @@ class Tile:
 
 
 def esc(value: Any) -> str:
-    return _html.escape("" if value is None else str(value), quote=True)
+    """Text for the HTML a renderer prints (``qmd_safe.esc``)."""
+    return _qmd_esc(value)
 
 
 def head_html(tile: Tile, sub: str | None = None) -> str:

@@ -23,8 +23,11 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from html import escape as _esc
 from typing import Any
+
+from depictio.notebook.qmd_safe import defuse, one_line
+from depictio.notebook.qmd_safe import esc as _esc
+from depictio.notebook.qmd_safe import typst_str as _typst_str
 
 from .report_theme import SCHEME_TOGGLE
 
@@ -129,7 +132,8 @@ def _linkify_source(entry: str) -> str:
 def about_markdown(description: str, *, rewrite: Callable[[str], str] = lambda s: s) -> str:
     """The body of a tile's "About this component" note, as markdown."""
     parts: list[str] = []
-    for sec in description_sections(description):
+    # An author's markdown: kept, with no Quarto construct left in it.
+    for sec in description_sections(defuse(description)):
         text = rewrite(sec.text)
         if sec.kind == "source":
             entries = [e.strip() for e in re.split(r";(?![^()]*\))|\n", text) if e.strip()]
@@ -163,7 +167,7 @@ def _about_item(body: str, *, name: str = "", index: str = "", pos: int | None =
 
 def _attr(value: str) -> str:
     """A value for a pandoc attribute: no quote or brace to end it early."""
-    return re.sub(r'["{}\n]', " ", value).strip()
+    return re.sub(r'["{}`]', " ", one_line(value)).strip()
 
 
 def about_callout(
@@ -190,7 +194,7 @@ def about_callout(
     # divs (`::: steps`) cannot close the callout.
     longest = max((len(m.group(0)) for m in re.finditer(r":{3,}", body)), default=2)
     fence = ":" * max(4, longest + 1)
-    safe_title = title.replace('"', "'")
+    safe_title = _attr(title.replace('"', "'"))
     return (
         f'{fence} {{.callout-note .dpx-about collapse="true" appearance="simple" '
         f'icon="false" title="{safe_title}"}}\n{body}\n\n{fence}'
@@ -617,7 +621,7 @@ def about_callout_many(
             # has no tile placeholder to read the cards' order from.
             parts.append(
                 _about_item(
-                    f"**{name}**\n\n{body}",
+                    f"**{_esc(name)}**\n\n{body}",
                     name=name,
                     index=index,
                     pos=pos if index else None,
@@ -630,7 +634,7 @@ def about_callout_many(
     fence = ":" * max(4, longest + 1)
     return (
         f'{fence} {{.callout-note .dpx-about collapse="true" appearance="simple" '
-        f'icon="false" title="{title}"}}\n{body}\n\n{fence}'
+        f'icon="false" title="{_attr(title)}"}}\n{body}\n\n{fence}'
     )
 
 
@@ -882,10 +886,6 @@ def _plain(text: str) -> str:
         r"\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`", lambda m: next(g for g in m.groups() if g), text
     )
     return re.sub(r"\s+", " ", text).strip(" ·")
-
-
-def _typst_str(text: str) -> str:
-    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _typst_icon(svg: str | None, color: str) -> str:

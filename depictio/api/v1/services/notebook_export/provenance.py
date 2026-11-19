@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from html import escape as _esc
 from typing import Any
+
+from depictio.notebook.qmd_safe import defuse, one_line
+from depictio.notebook.qmd_safe import esc as _esc
 
 HOW_TO_RUN = """\
 ```bash
@@ -42,7 +44,14 @@ RUN_ICON = "mdi:console-line"
 
 
 def _md_escape(text: object) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ")
+    return _esc(text, quote=False).replace("|", "\\|")
+
+
+def _code_span(text: object) -> str:
+    """``text`` as inline code in a table cell: an entity would print as
+    written there, so the span is defused as a whole instead."""
+    inner = one_line(str(text)).replace("`", "'").replace("|", "\\|")
+    return defuse(f"`{inner}`")
 
 
 def provenance_table(entries: list[dict[str, Any]], *, limit: int = 40) -> str:
@@ -170,11 +179,11 @@ def header_markdown(
         engine = wf.get("engine") or {}
         engine_txt = ""
         if isinstance(engine, dict) and engine.get("name"):
-            engine_txt = f" ({engine.get('name')}"
+            engine_txt = f" ({_md_escape(engine.get('name'))}"
             if engine.get("version"):
-                engine_txt += f" {engine.get('version')}"
+                engine_txt += f" {_md_escape(engine.get('version'))}"
             engine_txt += ")"
-        wf_bits.append(f"`{wf.get('workflow_tag') or wf.get('name')}`{engine_txt}")
+        wf_bits.append(f"{_code_span(wf.get('workflow_tag') or wf.get('name'))}{engine_txt}")
 
     # A table scans faster than a run-on sentence.
     meta_rows = [("Live dashboard", f"[{dashboard_url}]({dashboard_url})")]
@@ -182,7 +191,7 @@ def header_markdown(
     if exported_by:
         exported_line += f" by {_md_escape(exported_by)}"
     if instance:
-        exported_line += f" from `{_md_escape(instance)}`"
+        exported_line += f" from {_code_span(instance)}"
     exported_line += f" · analysis state v{state_version}"
     meta_rows.append(("Exported", exported_line))
     if project.get("name") or wf_bits:
@@ -233,5 +242,5 @@ def header_markdown(
         )
     )
     if warnings:
-        parts.append("**Notes from the export**\n\n" + "\n".join(f"- {w}" for w in warnings))
+        parts.append("**Notes from the export**\n\n" + "\n".join(f"- {_esc(w)}" for w in warnings))
     return "\n\n".join(parts)

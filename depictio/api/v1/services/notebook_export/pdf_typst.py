@@ -26,6 +26,8 @@ import base64
 import struct
 from typing import Literal
 
+from depictio.notebook.qmd_safe import typst_str
+
 PdfStyle = Literal["colour", "mono"]
 PDF_STYLES: tuple[str, ...] = ("colour", "mono")
 
@@ -51,8 +53,8 @@ TYPST_TILE_DONE = "```{=typst}\n#dpx-tile-done\n```"
 
 
 def tstr(text: str) -> str:
-    """A typst string literal."""
-    return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
+    """A typst string literal (``qmd_safe.typst_str``)."""
+    return typst_str(text)
 
 
 def tcolor(hex_color: str) -> str:

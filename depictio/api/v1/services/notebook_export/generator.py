@@ -12,7 +12,6 @@ import pprint
 import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from html import escape as _esc
 from typing import Any
 
 import polars as pl
@@ -25,14 +24,17 @@ from depictio.models.models.analysis_state import (
     NotebookPreflightStage,
 )
 from depictio.notebook.components import readable_name
+from depictio.notebook.qmd_safe import comment as _qmd_comment
+from depictio.notebook.qmd_safe import defuse, defuse_code, one_line
+from depictio.notebook.qmd_safe import esc as _esc
+from depictio.notebook.qmd_safe import typst_str as _typst_str
 from depictio.notebook.theme import resolve_primary
 
 from .aggregations import agg_expr_source
 from .cells import Cell, md_cell, render_qmd
-from .classify import Classification, classify
+from .classify import API_REASON, Classification, classify
 from .names import NameAllocator, slug
 from .pdf_typst import TYPST_TILE_DONE, typst_preamble
-from .pdf_typst import tstr as _typst_str
 from .predicates import PredicateSource, emit_filter_expr, emit_predicate
 from .provenance import (
     EXPORT_DETAILS_ICON,
@@ -97,7 +99,8 @@ _MANTINE_SHADE_6 = {
     "yellow": "#fab005",
     "orange": "#fd7e14",
 }
-_CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()")
+# A literal colour, whole: it lands in attributes and style values unescaped.
+_CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|(rgba?|hsla?)\([0-9.,%\s/]+\))$")
 # SectionAccordion's TAB_LINK: a markdown link whose target is another tab.
 # A target may hold one level of parentheses: `tab:Environment (CTD)`.
 _TARGET = r"((?:[^()\n]|\([^()\n]*\))+)"
@@ -185,6 +188,7 @@ body {
 body code, body pre, body kbd, body samp {
   font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
 }
+.dpx-filter-name { font-weight: 500; }
 /* Mantine's heading scale (h1 2.125rem … h4 1.125rem), all at weight 700. */
 body h1 { font-size: 2.125rem; line-height: 1.3; font-weight: 700; }
 body h2 { font-size: 1.625rem; line-height: 1.35; font-weight: 700; }
@@ -885,8 +889,8 @@ def _resolve_accent_hex(color: str | None, fallback: str) -> str:
     """
     if not color:
         return fallback
-    if _CSS_COLOR_RE.match(color):
-        return color
+    if _CSS_COLOR_RE.match(color.strip()):
+        return color.strip()
     return _MANTINE_SHADE_6.get(color.split(".")[0].strip().lower(), fallback)
 
 
@@ -987,6 +991,10 @@ class ExportPlan:
     dashboard_public: bool = False
     # Also a PDF: the document carries a typst format beside the HTML one.
     pdf: bool = False
+    # Code-mode figures as their author's code (the downloaded notebook, which
+    # its reader runs), or through the API (``False``: the server-rendered
+    # report, which never executes an author's Python outside the sandbox).
+    author_code: bool = True
     # The PDF's colours: ``colour`` (tab colours on headings and in the
     # contents, tinted notes) or ``mono`` (print-friendly, the text colour).
     pdf_style: str = "colour"
@@ -1053,7 +1061,12 @@ def _sentence(text: str) -> str:
 
 
 def _comment(text: str) -> str:
-    return "\n".join(f"# {line}" if line else "#" for line in _sentence(text).split("\n"))
+    return _qmd_comment(_sentence(text))
+
+
+def _author_line(value: Any) -> str:
+    """An author's one-line markdown (a caption): kept, defused, on one line."""
+    return defuse(one_line(str(value or ""))).strip()
 
 
 def _fmt_value(value: Any) -> str:
@@ -1214,6 +1227,17 @@ class NotebookBuilder:
                     unit = replace(source, section=unit.section, persistent=unit.persistent)
             meta = unit.meta
             verdict = classify(meta)
+            if verdict.kind == "code" and not self.plan.author_code:
+                # The server never runs an author's Python itself: the report
+                # asks Depictio for the figure, which runs that code in the
+                # dashboard's own sandbox. The downloaded notebook keeps it.
+                verdict = Classification(
+                    "api",
+                    "a code-mode figure, drawn by Depictio, which runs its author's code "
+                    "in the dashboard's sandbox; " + API_REASON,
+                    kind="code",
+                    output="interactive",
+                )
             dc_id = str(meta.get("dc_id") or "")
             if verdict.status == "code" and meta.get("component_type") not in ("text", "highlight"):
                 if dc_id not in self.dc_by_id:
@@ -1673,6 +1697,8 @@ class NotebookBuilder:
             "import plotly.graph_objects as go\n"
             "import polars as pl\n"
             "from IPython.display import HTML\n"
+            "from depictio.notebook.qmd_safe import esc as html_text\n"
+            "from depictio.notebook.qmd_safe import inert_outputs\n"
             "from depictio.notebook import (\n"
             "    DepictioClient,\n"
             "    fill_text,\n"
@@ -1690,14 +1716,19 @@ class NotebookBuilder:
             "from polars import col, lit\n"
             "\n"
             + _comment(
+                "No output reads as Quarto markup: a title or a value that spells a "
+                "shortcode is printed as text"
+            )
+            # Assigned to a throwaway: the call returns a bool, and a bare
+            # expression at the end of a cell is that cell's output — the report
+            # would open on the word "True".
+            + "\n_ = inert_outputs()\n"
+            + _comment(
                 "One copy of plotly.js for the whole document, and no MathJax request "
                 "per figure. Executed as a notebook, every figure otherwise embeds its "
                 "own ~5 MB copy of the library, which is what a self-contained HTML "
                 "export is made of: 35 figures came to 170 MB, of which 2.5 MB was data"
             )
-            # Assigned to a throwaway: the call returns a bool, and a bare
-            # expression at the end of a cell is that cell's output — the report
-            # would open on the word "True".
             + "\n_ = use_document_renderer()\n"
             + _comment(
                 "Tables as sortable, searchable, paginated tables (itables, with DataTables "
@@ -1771,8 +1802,8 @@ class NotebookBuilder:
         f'padding:0.85rem 1.1rem;border:1px solid #e3e3e8;border-radius:12px;'
         f'font-family:inherit;background:#fafafa">'
         f'<div class="dpx-card-title" style="font-size:0.78rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:0.02em;margin-bottom:0.3rem">{title}</div>'
-        f'<div class="dpx-card-value" style="font-size:1.65rem;font-weight:650;color:#111827">{text}</div>'
+        f'letter-spacing:0.02em;margin-bottom:0.3rem">{html_text(title)}</div>'
+        f'<div class="dpx-card-value" style="font-size:1.65rem;font-weight:650;color:#111827">{html_text(text)}</div>'
         f'</div>'
     )
 
@@ -2141,7 +2172,9 @@ def card_row(cards):
             rows.append(
                 '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;min-width:0">'
                 + (icon or "")
-                + f'<span style="font-size:0.8rem;font-weight:500">{_esc(stage.label)}</span>'
+                # The weight from the stylesheet: Quarto 1.9 turns an inline
+                # numeric `font-weight` into a typst string the PDF refuses.
+                + f'<span class="dpx-filter-name" style="font-size:0.8rem">{_esc(stage.label)}</span>'
                 + (
                     f'<span style="font-size:0.8rem;color:#868e96;overflow-wrap:anywhere">'
                     f"{_esc(value)}</span>"
@@ -2185,7 +2218,10 @@ def card_row(cards):
             value = self._filter_value_text(stage)
             short = value if len(value) <= 24 else value[:23] + "…"
             name = self._stage_title(position, stage)
-            labels.append(f"{position}. {name} = {short}" if short else f"{position}. {name}")
+            label = f"{position}. {name} = {short}" if short else f"{position}. {name}"
+            # One line, no control character: a stage is an axis label, and a
+            # vertical tab in one fails the PDF's figure export outright.
+            labels.append(one_line(label))
 
         frames = []
         for dc in self.plan.dcs:
@@ -2751,7 +2787,7 @@ fig_funnel"""
             if title:
                 caption_bits.append(f"**{_esc(title)}**.")
             if entry.highlight is None and str(meta.get("caption") or "").strip():
-                caption_bits.append(self._rewrite_links(str(meta["caption"]).strip()))
+                caption_bits.append(self._rewrite_links(_author_line(meta["caption"])))
             badge = self._data_badge(meta)
             if badge and self.plan.pdf:
                 # The PDF's badge is typst: it stays silent under a tile that
@@ -3017,7 +3053,9 @@ fig_funnel"""
         if ctype == "highlight":
             return self._highlight_cell(meta, title)
         if entry.verdict.status == "omitted":
-            return md_cell(f"> **{title}** is not in this notebook: {entry.verdict.reason}.")
+            return md_cell(
+                f"> **{_esc(title)}** is not in this notebook: {_esc(entry.verdict.reason)}."
+            )
         if entry.verdict.status == "api":
             cell = self._api_cell(entry, title, show=show)
             return cell if show else (cell, entry.name or self.names.claim("viz", title))
@@ -3064,7 +3102,7 @@ fig_funnel"""
             return Cell("\n".join(body))
         if ctype == "figure":
             return self._figure_cell(meta, name, source, prelude, title)
-        return md_cell(f"> **{title}** ({ctype}) has no code path yet.")
+        return md_cell(f"> **{_esc(title)}** ({_esc(ctype)}) has no code path yet.")
 
     def _highlight_note(self, entry: ComponentEntry) -> Cell:
         """A highlight drawn in place: where its figure lives, then its caption.
@@ -3082,7 +3120,7 @@ fig_funnel"""
         where = f"[{name}](#{anchor})" if anchor else f"**{name}**"
         # The highlight's own caption: the figure, drawn from its own tab's
         # definition, carries the source's.
-        caption = self._rewrite_tab_links(str((entry.highlight or {}).get("caption") or "").strip())
+        caption = self._rewrite_tab_links(_author_line((entry.highlight or {}).get("caption")))
         line = f"*From the {where} tab.*"
         return md_cell(line + (f" {caption}" if caption else ""))
 
@@ -3091,14 +3129,17 @@ fig_funnel"""
         tab = str(meta.get("source_tab") or "").strip()
         where = f"the **{_esc(tab)}** tab" if tab else "another tab"
         line = f"> **{_esc(title)}** shows *{_esc(source)}* from {where}, drawn in that tab's part."
-        caption = self._rewrite_tab_links(str(meta.get("caption") or "").strip())
+        caption = self._rewrite_tab_links(_author_line(meta.get("caption")))
         return md_cell(line + (f"\n>\n> {caption}" if caption else ""))
 
     def _text_cell(
         self, meta: dict[str, Any], section: str | None = None, *, tab_id: str = ""
     ) -> Cell:
-        title = str(meta.get("title") or "").strip()
-        body = str(meta.get("body") or "").strip()
+        # The author's markdown, kept as markdown but with no Quarto construct
+        # left in it (``qmd_safe.defuse``): a fence or a shortcode in a text
+        # tile is shown as the text it is, never run.
+        title = defuse(one_line(str(meta.get("title") or ""))).strip()
+        body = defuse(str(meta.get("body") or "")).strip()
         # On the dashboard a section's narration tile sits *under* the section
         # header, so repeating the name there reads as a caption. Stacked in a
         # document the two headings land on consecutive lines and read as a
@@ -3289,16 +3330,20 @@ fig_funnel"""
                 f"    depictio_group_kwargs={pprint.pformat(kwargs, width=80, sort_dicts=False)},\n"
                 f"    depictio_group_by={by!r},\n)"
             )
-        lines += [
+        # The cell is the author's (``Cell.authored``: emitted as written), so
+        # what the generator adds around their code is defused here instead.
+        head = defuse_code("\n".join(lines))
+        lines = [
+            head,
             f"def _make_{name}(df, depictio_group_kwargs=depictio_group_kwargs, "
             "depictio_group_by=depictio_group_by):",
             *code_lines,
             "    return fig",
             "",
-            call,
+            defuse_code(call),
             name,
         ]
-        return Cell("\n".join(lines))
+        return Cell("\n".join(lines), authored=True)
 
 
 def generate_qmd(plan: ExportPlan) -> str:

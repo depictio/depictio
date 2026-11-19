@@ -34,6 +34,7 @@ import polars as pl
 from . import text as _text
 from . import theme as _theme
 from . import typst as _typst
+from .qmd_safe import esc as _esc
 
 if TYPE_CHECKING:  # pragma: no cover
     from .client import DepictioClient
@@ -596,14 +597,14 @@ def snapshot_html(image_uri: str, title: str, live_url: str | None, note: str = 
     the live tile.
     """
     link = (
-        f'<a href="{_html.escape(live_url, quote=True)}">live dashboard</a>'
+        f'<a href="{_esc(live_url, quote=True)}">live dashboard</a>'
         if live_url
         else "live dashboard"
     )
-    extra = f" {_html.escape(note)}" if note else ""
+    extra = f" {_esc(note)}" if note else ""
     return (
         '<figure class="dpx-snapshot" style="margin:0.25rem 0 0.75rem">'
-        f'<img src="{_html.escape(image_uri, quote=True)}" alt="{_html.escape(title, quote=True)}" '
+        f'<img src="{_esc(image_uri, quote=True)}" alt="{_esc(title, quote=True)}" '
         'style="max-width:100%;height:auto;border:1px solid #e9ecef;border-radius:8px">'
         '<figcaption style="font-size:12px;color:#868e96;margin-top:4px">'
         f"Static snapshot; interactive in the {link}.{extra}</figcaption></figure>"
@@ -852,7 +853,7 @@ class DepictioComponent:
     # -------------------------------------------------------------- display
     def _iframe(self, doc: str, height: int = 480) -> str:
         return (
-            f'<iframe srcdoc="{_html.escape(doc, quote=True)}" '
+            f'<iframe srcdoc="{_esc(doc, quote=True)}" '
             f'style="width:100%;height:{height}px;border:0" '
             'sandbox="allow-scripts allow-same-origin" title="Depictio component"></iframe>'
         )
@@ -867,7 +868,7 @@ class DepictioComponent:
         url = self.live_url
         if not url:
             return ""
-        return f'<a href="{_html.escape(url, quote=True)}">{_html.escape(text)}</a>'
+        return f'<a href="{_esc(url, quote=True)}">{_esc(text)}</a>'
 
     def _placeholder_html(self, reason: str) -> str:
         """What a tile shows when it cannot be drawn: its title, why, and where it lives.
@@ -881,8 +882,8 @@ class DepictioComponent:
             '<div class="dpx-unavailable" data-dpx-unavailable="1" style="border:1px dashed '
             "#adb5bd;border-radius:8px;padding:10px 14px;margin:4px 0;font-size:13px;"
             'color:#495057">'
-            f"<b>{_html.escape(self.title)}</b> could not be drawn in this report."
-            f'<div style="margin-top:4px;color:#868e96">{_html.escape(reason)}</div>'
+            f"<b>{_esc(self.title)}</b> could not be drawn in this report."
+            f'<div style="margin-top:4px;color:#868e96">{_esc(reason)}</div>'
             '<div style="margin-top:6px;font-size:12px">'
             + (f"{link} · " if link else "")
             + "re-run this cell, or call <code>.refresh()</code> on the component, to try again"
@@ -953,7 +954,7 @@ class DepictioComponent:
             return str(bundle[HTML_MIME])
         if MARKDOWN_MIME in bundle:
             return None
-        return f"<pre>{_html.escape(str(bundle.get(PLAIN_MIME, '')))}</pre>"
+        return f"<pre>{_esc(str(bundle.get(PLAIN_MIME, '')), multiline=True)}</pre>"
 
     def show(self) -> Any:
         """Display now (``IPython.display.display`` when available)."""
@@ -1298,17 +1299,17 @@ class CardComponent(DepictioComponent):
     def _fmt(value: Any) -> str:
         if isinstance(value, float):
             return f"{value:,.4g}" if abs(value) < 1e6 else f"{value:,.0f}"
-        return "–" if value is None else _html.escape(str(value))
+        return "–" if value is None else _esc(str(value))
 
     def _display_html(self) -> str:
-        agg = _html.escape(str(self.meta.get("aggregation") or ""))
-        column = _html.escape(str(self.meta.get("column_name") or ""))
+        agg = _esc(str(self.meta.get("aggregation") or ""))
+        column = _esc(str(self.meta.get("column_name") or ""))
         icon_color = str(self.meta.get("icon_color") or "#868e96")
         title_color = str(self.meta.get("title_color") or "#868e96")
         background = str(self.meta.get("background_color") or "#ffffff")
         icon_svg = self.data.get("icon_svg") or ""
         icon = (
-            f'<span style="color:{_html.escape(icon_color)};font-size:20px;line-height:1;'
+            f'<span style="color:{_esc(icon_color)};font-size:20px;line-height:1;'
             f'position:absolute;top:12px;right:14px">{icon_svg}</span>'
             if icon_svg
             else ""
@@ -1319,10 +1320,10 @@ class CardComponent(DepictioComponent):
             # `dpx-card*` are the hooks the report's theme restyles them by.
             '<div class="dpx-card" style="position:relative;display:inline-block;min-width:180px;'
             "padding:12px 16px;border:1.5px solid #e9ecef;border-radius:12px;font-family:inherit;"
-            f'background:{_html.escape(background)}">'
+            f'background:{_esc(background)}">'
             f"{icon}"
-            f'<div class="dpx-card-title" style="font-size:12px;color:{_html.escape(title_color)}">'
-            f"{_html.escape(self.title)}</div>"
+            f'<div class="dpx-card-title" style="font-size:12px;color:{_esc(title_color)}">'
+            f"{_esc(self.title)}</div>"
             '<div class="dpx-card-value" style="font-size:28px;font-weight:600;line-height:1.2">'
             f"{self._fmt(self.value)}</div>"
             f'<div style="font-size:11px;color:#adb5bd">{agg} · {column}</div>'
@@ -1391,7 +1392,7 @@ class CardComponent(DepictioComponent):
         return (
             '<div style="margin:4px 0 0;font-size:11px;color:#495057">'
             f'<div style="display:flex;justify-content:space-between">'
-            f"<span>{_html.escape(label)}</span><span>{_html.escape(note)}</span></div>"
+            f"<span>{_esc(label)}</span><span>{_esc(note)}</span></div>"
             '<div style="background:rgba(160,160,160,0.18);border-radius:3px;height:6px;margin-top:2px">'
             f'<div style="background:{fill};border-radius:3px;height:6px;width:{pct:.1f}%"></div>'
             "</div></div>"
@@ -1543,7 +1544,7 @@ class CardComponent(DepictioComponent):
             return (
                 f'<div style="margin-top:6px"><svg width="{width}" height="{height}">'
                 f'<polyline points="{poly}" fill="none" stroke="{stroke}" stroke-width="1.5"/></svg>'
-                f'<div style="font-size:10px;color:#adb5bd">{_html.escape(note)}</div></div>'
+                f'<div style="font-size:10px;color:#adb5bd">{_esc(note)}</div></div>'
             )
         if layout == "threshold":
             th = sec.get("__threshold__")
@@ -1602,7 +1603,7 @@ class CardComponent(DepictioComponent):
             names = [n for n in self.meta.get("aggregations") or [] if n in sec]
             if not names:
                 return ""
-            rows = " · ".join(f"{_html.escape(n)} {self._fmt(sec[n])}" for n in names)
+            rows = " · ".join(f"{_esc(n)} {self._fmt(sec[n])}" for n in names)
             return f'<div style="margin-top:4px;font-size:11px;color:#495057">{rows}</div>'
         return ""
 
@@ -1636,9 +1637,9 @@ class InteractiveComponent(DepictioComponent):
         )
         return (
             '<div style="font-family:system-ui,sans-serif;font-size:13px">'
-            f"<b>{_html.escape(self.title)}</b> · {_html.escape(self.control)} on "
-            f"<code>{_html.escape(self.column)}</code><br>"
-            f'<span style="color:#868e96">{_html.escape(preview)}</span></div>'
+            f"<b>{_esc(self.title)}</b> · {_esc(self.control)} on "
+            f"<code>{_esc(self.column)}</code><br>"
+            f'<span style="color:#868e96">{_esc(preview)}</span></div>'
         )
 
 
@@ -1797,7 +1798,7 @@ class JBrowseComponent(DepictioComponent):
         ]
         head = "".join(
             f'<tr><th style="text-align:left;padding:2px 12px 2px 0;color:#868e96;'
-            f'font-weight:500">{_html.escape(k)}</th><td>{_html.escape(v)}</td></tr>'
+            f'font-weight:500">{_esc(k)}</th><td>{_esc(v)}</td></tr>'
             for k, v in facts
         )
         snap = self._snapshot()
@@ -1812,12 +1813,12 @@ class JBrowseComponent(DepictioComponent):
         else:
             picture = (
                 '<div style="font-size:12px;color:#868e96;margin:6px 0">No snapshot of the view '
-                f"({_html.escape(str(snap.get('reason') or 'unavailable'))}). "
+                f"({_esc(str(snap.get('reason') or 'unavailable'))}). "
                 f"{self._live_link('Browse it in the live dashboard')}</div>"
             )
         listing = shown.select([c for c in ("name", "type", "category") if c in shown.columns])
         rows = "".join(
-            "<tr>" + "".join(f"<td>{_html.escape(str(v or ''))}</td>" for v in r) + "</tr>"
+            "<tr>" + "".join(f"<td>{_esc(str(v or ''))}</td>" for v in r) + "</tr>"
             for r in listing.iter_rows()
         )
         table = (
