@@ -18,6 +18,11 @@ collection narrowing another through a shared key) is resolved by the server.
 The export passes the resolution it made as ``links``; it is applied only
 while the stage's filter is still the one it was resolved for, and a stage
 whose filter changed says so instead of applying a stale resolution.
+
+A genome region (or a protein's residue range) is a place to look, not a subset
+to summarise: the server keeps it off cards, and off figures that never encode
+one of its columns (``region_scope.scope_region_filters``). ``region=False``
+computes the same frames without it, for those tiles.
 """
 
 from __future__ import annotations
@@ -34,6 +39,18 @@ from .predicates import emit_filter_expr, emit_predicate
 FUNNEL_MAX_STAGES = 12
 
 _NAMESPACE = {"pl": pl, "col": pl.col, "lit": pl.lit, "datetime": datetime}
+
+
+# ``region_scope``'s locus sources: either half of a region pair.
+_LOCUS_SOURCES = frozenset({"genome_selection", "residue_selection"})
+
+
+def is_region_filter(f: Any) -> bool:
+    """``region_scope.is_region_filter``."""
+    if not isinstance(f, dict):
+        return False
+    meta = f.get("metadata") or {}
+    return (f.get("source") or meta.get("source")) in _LOCUS_SOURCES
 
 
 def _is_active(f: dict[str, Any]) -> bool:
@@ -86,6 +103,7 @@ def _apply_entry(frame: pl.DataFrame, entry: dict[str, Any]) -> pl.DataFrame:
         slider_mode=_field(entry, "slider_mode"),
         case_sensitive=_field(entry, "case_sensitive"),
         match_mode=_field(entry, "match_mode"),
+        source=_field(entry, "source"),
     )
     if src is not None:
         scope = dict(_NAMESPACE)
@@ -112,14 +130,18 @@ def funnel_stage(
     dc_id: str | None = None,
     links: list[dict[str, Any]] | None = None,
     resolved_for: dict[str, Any] | None = None,
+    region: bool = True,
 ) -> pl.DataFrame:
     """``frame`` narrowed by stage ``k`` of ``state``'s funnel, for collection ``dc_id``.
 
     ``links`` are the cross-collection entries the export resolved for this
     stage, ``resolved_for`` the filter they were resolved for: applied while
-    the stage's filter is unchanged, and reported otherwise.
+    the stage's filter is unchanged, and reported otherwise. ``region=False``
+    leaves a region stage (and what its links brought) out.
     """
     f = stage_filter(state, k)
+    if not region and is_region_filter(f):
+        return frame
     if f is not None and _applies_to(f, dc_id):
         frame = _apply_entry(frame, f)
     if links:
@@ -137,9 +159,14 @@ def funnel_stage(
 
 
 def funnel_rest(
-    frame: pl.DataFrame, state: dict[str, Any], after: int, *, dc_id: str | None = None
+    frame: pl.DataFrame,
+    state: dict[str, Any],
+    after: int,
+    *,
+    dc_id: str | None = None,
+    region: bool = True,
 ) -> pl.DataFrame:
     """``frame`` narrowed by every stage past ``after``: filters the state gained since export."""
     for k in range(after + 1, len(active_filters(state)) + 1):
-        frame = funnel_stage(frame, state, k, dc_id=dc_id)
+        frame = funnel_stage(frame, state, k, dc_id=dc_id, region=region)
     return frame

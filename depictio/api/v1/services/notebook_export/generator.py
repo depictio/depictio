@@ -35,7 +35,7 @@ from .cells import Cell, md_cell, render_qmd
 from .classify import API_REASON, Classification, classify
 from .names import NameAllocator, slug
 from .pdf_typst import TYPST_TILE_DONE, typst_preamble
-from .predicates import PredicateSource, emit_filter_expr, emit_predicate
+from .predicates import PredicateSource, emit_filter_expr, emit_predicate, is_region_filter
 from .provenance import (
     EXPORT_DETAILS_ICON,
     PARAMS_ANCHOR,
@@ -1085,10 +1085,15 @@ class NotebookBuilder:
         self.dc_by_id: dict[str, DCPlan] = {dc.dc_id: dc for dc in plan.dcs}
         self.df_names: dict[str, str] = {}
         self.final_names: dict[str, str] = {}
+        # The final frame without a genome region: what cards (and figures that
+        # draw no region column) read, as the server scopes them.
+        self.region_free_names: dict[str, str] = {}
         for dc in plan.dcs:
             self.df_names[dc.dc_id] = self.names.claim("df", dc.tag, fallback="table")
             self.names.reserve(f"final_{self.df_names[dc.dc_id][3:]}")
             self.final_names[dc.dc_id] = f"final_{self.df_names[dc.dc_id][3:]}"
+            self.region_free_names[dc.dc_id] = f"unregioned_{self.df_names[dc.dc_id][3:]}"
+            self.names.reserve(self.region_free_names[dc.dc_id])
         self._entries: list[tuple[MarkdownUnit | ComponentEntry, str | None]] | None = None
         self.tab_anchors, self._anchor_by_tab_name = self._tab_anchors()
         self._section_anchor_seq: list[str] = []
@@ -2370,6 +2375,8 @@ fig_funnel"""
                 )
             )
         prev = dict(self.df_names)
+        # Each stage's call per collection, for the region-free frames below.
+        stage_calls: dict[str, list[str]] = {dc.dc_id: [] for dc in self.plan.dcs}
         for k, stage in enumerate(stages, start=1):
             lines: list[str] = []
             head = f'Stage {k}, "{stage.label}"'
@@ -2432,6 +2439,7 @@ fig_funnel"""
                         f"\n    resolved_for={ {'index': stage.index, 'value': stage.value}!r},\n"
                     )
                 run.append(call + ")")
+                stage_calls[dc.dc_id].append(call)
                 prev[dc.dc_id] = name
             cells.append(Cell("\n".join(lines + run)))
         final_lines = [
@@ -2446,6 +2454,27 @@ fig_funnel"""
                 f"{len(stages)}, dc_id={dc.dc_id!r})"
             )
         cells.append(Cell("\n".join(final_lines)))
+        if self._region_stages():
+            region_lines = [
+                _comment(
+                    "The same stages without the genome region: a region is a place to look, "
+                    "not a subset to summarise, so cards (and figures that draw none of its "
+                    "columns) read this frame, as on the dashboard"
+                )
+            ]
+            for dc in self.plan.dcs:
+                name = self.region_free_names[dc.dc_id]
+                region_lines.append(f"{name} = {self.df_names[dc.dc_id]}")
+                for call in stage_calls[dc.dc_id]:
+                    # `x = funnel_stage(prev, ...` -> `name = funnel_stage(name, ..., region=False)`
+                    rest = call.split("funnel_stage(", 1)[1].split(",", 1)[1]
+                    rest = rest.rstrip().rstrip(",")
+                    region_lines.append(f"{name} = funnel_stage({name},{rest}, region=False)")
+                region_lines.append(
+                    f"{name} = funnel_rest({name}, depictio_state, {len(stages)}, "
+                    f"dc_id={dc.dc_id!r}, region=False)"
+                )
+            cells.append(Cell("\n".join(region_lines)))
         if stages:
             cells.append(
                 md_cell(
@@ -2471,7 +2500,42 @@ fig_funnel"""
             slider_mode=entry.get("slider_mode"),
             case_sensitive=entry.get("case_sensitive"),
             match_mode=entry.get("match_mode"),
+            source=entry.get("source") or (entry.get("metadata") or {}).get("source"),
         )
+
+    def _region_stages(self) -> set[str]:
+        """The stages that are half of a genome region (or residue range) pair."""
+        cached = getattr(self, "_region_stages_cache", None)
+        if cached is not None:
+            return cached
+        by_index = {str(f.get("index")): f for f in self.plan.state.filters_as_payload()}
+        self._region_stages_cache: set[str] = {
+            s.index
+            for s in self.plan.stages
+            if is_region_filter(by_index.get(s.index))
+            or any(is_region_filter(e) for entries in s.per_dc.values() for e in entries)
+        }
+        return self._region_stages_cache
+
+    def _tile_frame(self, meta: dict[str, Any], dc: DCPlan) -> str:
+        """The frame a code tile reads: the final one, or the one without the
+        region when the server keeps the region off this component
+        (``region_scope.scope_region_filters``)."""
+        final = self.final_names[dc.dc_id]
+        if not self._region_stages():
+            return final
+        from depictio.api.v1.region_scope import scope_region_filters
+
+        region = [{"source": "genome_selection", "column_name": c} for c in self._region_columns()]
+        ctype = str(meta.get("component_type") or "")
+        if scope_region_filters(region, ctype, meta):
+            return final
+        return self.region_free_names[dc.dc_id]
+
+    def _region_columns(self) -> set[str]:
+        return {
+            str(s.column) for s in self.plan.stages if s.index in self._region_stages() and s.column
+        }
 
     # ---------------------------------------------------------------- groups
     def _pick_dc(self, dc_id: str | None) -> DCPlan | None:
@@ -3060,7 +3124,7 @@ fig_funnel"""
             cell = self._api_cell(entry, title, show=show)
             return cell if show else (cell, entry.name or self.names.claim("viz", title))
         dc = self.dc_by_id[str(meta.get("dc_id") or "")]
-        final = self.final_names[dc.dc_id]
+        final = self._tile_frame(meta, dc)
         name = entry.name or self.names.claim("tile", title)
         fexpr = meta.get("filter_expr")
         source = final
