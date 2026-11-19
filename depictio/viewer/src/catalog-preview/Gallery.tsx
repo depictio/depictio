@@ -53,6 +53,7 @@ import {
 import type { OutputEntry, ToolEntry } from './shared';
 import OutputView from './OutputView';
 import CatalogHeader from './CatalogHeader';
+import ReleaseBar from './ReleaseBar';
 
 type ViewMode = 'split' | 'cards' | 'table';
 type SortCol = 'tool' | 'output' | 'fixture';
@@ -266,6 +267,15 @@ const OutputCard: React.FC<{ tool: ToolEntry; entry: OutputEntry; onOpen: (id: s
   );
 };
 
+/** The module revision beside a tool's name, in the rail and the cards view: the
+ *  gallery's one display of it (an output's own versions are its VersionChip). */
+const ToolVersion: React.FC<{ version?: string | null }> = ({ version }) =>
+  version ? (
+    <Text span className="cp-tool-ver" title={`Module revision ${version}`}>
+      v{version}
+    </Text>
+  ) : null;
+
 const ToolSection: React.FC<{
   tool: ToolEntry;
   entries: OutputEntry[];
@@ -294,6 +304,7 @@ const ToolSection: React.FC<{
         <Title order={4} style={{ lineHeight: 1.1 }}>
           {tool.name}
         </Title>
+        <ToolVersion version={tool.version} />
         <Badge size="sm" variant="light" color="gray" radius="sm">
           {entries.length}
         </Badge>
@@ -623,15 +634,7 @@ const Rail: React.FC<{
                 <Text size="sm" fw={700} lineClamp={1} style={{ flex: 1, textAlign: 'left' }}>
                   {g.tool.name}
                 </Text>
-                {g.tool.version ? (
-                  <Text
-                    span
-                    className="cp-tool-ver"
-                    title={`Module revision ${g.tool.version}`}
-                  >
-                    v{g.tool.version}
-                  </Text>
-                ) : null}
+                <ToolVersion version={g.tool.version} />
                 <Badge size="xs" variant="light" color="gray" circle className="gp-tag-plain cp-count">
                   {g.entries.length}
                 </Badge>
@@ -1130,7 +1133,12 @@ const Gallery: React.FC<{
   const paperTopBar = (
     <CatalogHeader
       context={`${tools.length} tools · ${totalOutputs} outputs · ${totalRenders} renders`}
-      extras={viewControl}
+      extras={
+        <>
+          <ReleaseBar />
+          {viewControl}
+        </>
+      }
     />
   );
 
@@ -1160,6 +1168,7 @@ const Gallery: React.FC<{
         </Text>
       </Group>
       <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+        <ReleaseBar />
         {viewControl}
         {/* Tool Studio — the no-backend web app to author a new tool entry.
             Hosted on GitHub Pages from the depictio-tool-studio showcase repo. */}

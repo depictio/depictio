@@ -36,6 +36,7 @@
   flex: none;
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 /* The credit, as the dashboards' bar draws it: "Powered by" then the mark. */
 :root[data-chrome='glass'] .cp-shell .cp-powered {
@@ -459,4 +460,17 @@
 }
 :root[data-chrome='glass'] .cp-row-changed {
   color: var(--gl-accent-fg);
+}
+
+/* A module's history across releases (site build, ModuleVersions): one row per
+ * version, the one on screen marked by a rule in the accent. */
+.cp-hist-row {
+  padding-left: 10px;
+  border-left: 3px solid transparent;
+}
+.cp-hist-row[data-current] {
+  border-left-color: var(--mantine-primary-color-filled);
+}
+:root[data-chrome='glass'] .cp-hist-row[data-current] {
+  border-left-color: var(--gl-accent);
 }

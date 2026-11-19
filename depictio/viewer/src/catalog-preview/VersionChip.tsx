@@ -7,9 +7,9 @@
  * marked when the output changed in it; its popover lays out the three levels
  * and the history, the entries that touch this output first in line.
  */
-import React from 'react';
-import { Badge, Box, Code, Group, Popover, Stack, Text, UnstyledButton } from '@mantine/core';
-import { History } from 'lucide-react';
+import React, { useState } from 'react';
+import { Badge, Box, Button, Code, Group, Popover, Stack, Text, UnstyledButton } from '@mantine/core';
+import { ChevronRight, History } from 'lucide-react';
 
 import type { OutputInfo } from './shared';
 
@@ -49,27 +49,64 @@ function Level({
   );
 }
 
+/** The module's history across the site's releases (site build only, when its
+ *  `modules/<tool>.json` loaded): the popover then ends with a way into it. */
+export interface ChipHistory {
+  /** How many versions the history holds. */
+  count: number;
+  onOpen: () => void;
+}
+
 export default function VersionChip({
   out,
   renderVersion,
   renderLabel,
+  history,
+  toolId,
 }: {
   out: OutputInfo;
   /** The version of the render shown below, when it declares one. */
   renderVersion?: string | null;
   renderLabel?: string;
+  history?: ChipHistory;
+  /** The owning tool, for an index whose outputs do not name it. */
+  toolId?: string;
 }) {
+  const [opened, setOpened] = useState(false);
   const module = out.module_version;
-  if (!module) return null;
+  if (!module) {
+    // A slot exported before module versions (no revision in its index) can
+    // still be placed in the module's history; nothing else is known to show.
+    if (!history) return null;
+    return (
+      <UnstyledButton
+        className="cp-ver"
+        onClick={history.onOpen}
+        aria-label={`History of ${out.tool_id || toolId || 'the module'} across releases`}
+        data-testid="version-chip"
+      >
+        <History size={12} strokeWidth={2} aria-hidden />
+        <span>{out.tool_id || toolId} history</span>
+      </UnstyledButton>
+    );
+  }
   const changelog = (out.changelog ?? []) as ChangelogEntry[];
   // The output changed in the module's current revision: say so on the chip.
   const fresh = out.output_version === module;
   const tool = out.tool_name || out.tool_id || 'module';
 
   return (
-    <Popover position="bottom-start" withArrow shadow="md" width={380}>
+    <Popover
+      position="bottom-start"
+      withArrow
+      shadow="md"
+      width={380}
+      opened={opened}
+      onChange={setOpened}
+    >
       <Popover.Target>
         <UnstyledButton
+          onClick={() => setOpened((o) => !o)}
           className="cp-ver"
           data-fresh={fresh || undefined}
           aria-label={`Version: ${out.tool_id} ${module}${fresh ? ', this output changed in it' : ''}`}
@@ -147,6 +184,24 @@ export default function VersionChip({
               No changelog in this module's <Code fz={10}>module.yaml</Code>.
             </Text>
           )}
+          {history ? (
+            <Button
+              size="xs"
+              variant="light"
+              color="gray"
+              fullWidth
+              justify="space-between"
+              leftSection={<History size={14} strokeWidth={1.8} aria-hidden />}
+              rightSection={<ChevronRight size={14} strokeWidth={1.8} aria-hidden />}
+              onClick={() => {
+                setOpened(false);
+                history.onOpen();
+              }}
+              data-testid="history-across-releases"
+            >
+              History across releases ({history.count} version{history.count === 1 ? '' : 's'})
+            </Button>
+          ) : null}
         </Stack>
       </Popover.Dropdown>
     </Popover>

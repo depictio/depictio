@@ -315,6 +315,16 @@ def test_the_site_index_lists_every_output_without_its_data(tmp_path) -> None:
     assert stats["outputs"] == len(entry.outputs)
 
 
+def test_the_site_index_carries_the_module_version(tmp_path) -> None:
+    import json
+
+    entry = _flagship_entry()
+    export_site_data([entry], tmp_path, "9.9.9")
+
+    [tool] = json.loads((tmp_path / "index.json").read_text())["tools"]
+    assert tool["version"] == entry.version
+
+
 def test_each_site_output_file_holds_what_the_gallery_embeds(tmp_path) -> None:
     """Same fixture and data as the one-page gallery: only the download moves."""
     import json
@@ -366,3 +376,94 @@ def test_multiqc_logo_paths_become_data_uris() -> None:
     out = inline_logos(text)
     assert "/dashboard" not in out
     assert out.count("data:image/svg+xml;base64,") == 2
+
+
+def test_a_coverage_track_lists_chromosomes_and_samples_in_file_order() -> None:
+    """Hash-ordered lists change between runs, and the catalog site stores an
+    output's data once per content: every export would look like a new version."""
+    from depictio.catalog.payload import _load_fixture_df
+
+    output = _get_output("macs2_peaks")
+    [summary] = [
+        v["summary"]
+        for v in build_payload(output, "light")["data"]["compute"].values()
+        if "summary" in v
+    ]
+    df = _load_fixture_df(output)
+
+    def first_seen(values: list[str]) -> list[str]:
+        column = next(c for c in df.columns if set(df[c].cast(str).to_list()) == set(values))
+        return list(dict.fromkeys(df[column].cast(str).to_list()))
+
+    assert summary["chromosomes"] == first_seen(summary["chromosomes"])
+    assert summary["samples"] == first_seen(summary["samples"])
+
+
+def _output_of_kind(kind: str):
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            if any(r.component == "advanced_viz" and r.kind == kind for r in output.renders_as):
+                return entry, output
+    raise AssertionError(f"no catalog output renders a {kind}")
+
+
+@pytest.mark.parametrize("kind", ["sankey", "upset_plot"])
+def test_a_computed_render_is_reproducible_and_has_no_error(kind) -> None:
+    """The kernels live in the Celery module, which refuses an unconfigured server on
+    import: a failure there is swallowed into a per-render `_error` (and no data), so
+    the two payloads would compare equal while both being empty."""
+    import json
+
+    entry, output = _output_of_kind(kind)
+
+    first = build_payload(output, "light", entry)
+    second = build_payload(output, "light", entry)
+
+    wanted = [r for r in first["renders"] if r.get("viz_kind") in ("sankey", "upset_plot", "upset")]
+    assert wanted
+    assert not [r["_error"] for r in first["renders"] if "_error" in r]
+    assert not [r["_error"] for r in second["renders"] if "_error" in r]
+    computed = [first["data"]["compute"][r["dc_id"]] for r in wanted]
+    assert all(c.get("figure") for c in computed)
+    assert all(c["compute_ms"] == 0 for c in computed)
+    assert json.dumps(json_safe(first), sort_keys=False, default=str) == json.dumps(
+        json_safe(second), sort_keys=False, default=str
+    )
+
+
+def test_the_export_counts_the_renders_that_failed(tmp_path, monkeypatch) -> None:
+    def failing(output, tool, theme):
+        renders = [{"index": f"r{i}", "_error": "boom"} for i in range(3)]
+        return {
+            "output": {"id": output.id},
+            "fixturePreview": None,
+            "renders": renders,
+            "ok": True,
+        }, {}
+
+    monkeypatch.setattr("depictio.catalog.payload._output_entry", failing)
+    entry = _flagship_entry()
+    stats = export_site_data([entry], tmp_path, "dev")
+
+    assert stats["failed"] == 0
+    assert stats["render_errors"] == 3 * len(entry.outputs)
+    ids = stats["render_error_ids"]
+    assert ids[:3] == [f"{entry.outputs[0].id}:r{i}" for i in range(3)]
+    assert len(ids) == min(20, stats["render_errors"])
+
+
+def test_a_clean_export_reports_no_render_error(tmp_path) -> None:
+    stats = export_site_data([_flagship_entry()], tmp_path, "dev")
+
+    assert stats["render_errors"] == 0
+    assert stats["render_error_ids"] == []
+
+
+def test_a_tied_card_mode_is_the_smallest_value_as_on_the_server() -> None:
+    """Polars gives tied modes in hash order; pandas (the dashboard's card) sorts
+    them. A card listing `mode` beside a strip made the export differ between runs."""
+    from depictio.catalog.payload import _aggregate
+
+    df = pl.DataFrame({"g": ["novel", "known", "novel", "known", None, None, None]})
+    assert {_aggregate(df, "g", "mode") for _ in range(20)} == {"known"}
+    assert df["g"].to_pandas().mode().iloc[0] == "known"

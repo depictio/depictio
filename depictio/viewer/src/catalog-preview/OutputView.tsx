@@ -53,6 +53,7 @@ import {
 } from './shared';
 import type { CatalogGlobal, FixturePreview, OutputEntry, OutputInfo } from './shared';
 import ChunkErrorBoundary from './ChunkErrorBoundary';
+import { ModuleHistoryModal, useModuleHistory } from './ModuleVersions';
 import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 import CatalogHeader from './CatalogHeader';
 import VersionChip from './VersionChip';
@@ -271,6 +272,16 @@ const OutputView: React.FC<{
   toolId?: string;
 }> = ({ entry, onBack, theme, renderId, tileHeight, variant = 'page', toolId }) => {
   const out = entry.output;
+  // The owning tool, for its history across releases (site build only): the index
+  // names it on the output (`tool_id`), an older one only by listing.
+  const catalog = window.__CATALOG_PREVIEW__ as unknown as CatalogGlobal | undefined;
+  const ownerId =
+    out.tool_id ??
+    toolId ??
+    catalog?.tools?.find((t) => t.outputs.some((o) => o.output.id === out.id))?.id;
+  const ownerVersion = out.module_version ?? catalog?.tools?.find((t) => t.id === ownerId)?.version;
+  const historyState = useModuleHistory(isLazy(catalog) ? catalog : undefined, ownerId);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const fixture = entry.fixturePreview;
   const renders = entry.renders as unknown as StoredMetadata[];
   const { paper, tone } = useCatalogPaper();
@@ -408,12 +419,21 @@ const OutputView: React.FC<{
           </Code>
           <VersionChip
             out={out}
+            toolId={ownerId}
             renderVersion={(active as Record<string, unknown> | undefined)?._version as
               | string
               | undefined}
             renderLabel={
               (active as Record<string, unknown> | undefined)?.title
                 ? `“${String((active as Record<string, unknown>).title)}”`
+                : undefined
+            }
+            history={
+              historyState?.history
+                ? {
+                    count: historyState.history.versions.length,
+                    onOpen: () => setHistoryOpen(true),
+                  }
                 : undefined
             }
           />
@@ -578,6 +598,16 @@ const OutputView: React.FC<{
           <Box mt="lg">
             <FixturePreviewPanel fixture={fixture} theme={theme} />
           </Box>
+        ) : null}
+        {historyState?.history ? (
+          <ModuleHistoryModal
+            opened={historyOpen}
+            onClose={() => setHistoryOpen(false)}
+            entry={entry}
+            moduleVersion={ownerVersion}
+            state={historyState}
+            theme={theme}
+          />
         ) : null}
       </Box>
     </Stack>

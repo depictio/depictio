@@ -167,6 +167,8 @@ export interface OutputInfo {
   fixture?: string | null;
   nf_core_url?: string | null;
   biotools_url?: string | null;
+  /** Content hash of the payload in the site's `objects/` (published slots). */
+  dataRef?: string | null;
   edam?: string[];
   /** The tool (catalog module) this output belongs to, and its revision. */
   tool_id?: string | null;
@@ -189,6 +191,8 @@ export interface FixturePreview {
 export interface OutputEntry {
   output: OutputInfo;
   fixturePreview?: FixturePreview | null;
+  /** Content hash of the payload in the site's `objects/` (published slots). */
+  dataRef?: string | null;
   renders: Record<string, unknown>[];
   ok: boolean;
   error?: string;
@@ -210,6 +214,8 @@ export interface ToolEntry {
 
 export interface CatalogGlobal {
   theme?: 'light' | 'dark';
+  /** The release's version, from the exporter. */
+  version?: string;
   initialOutputId?: string | null;
   /** When set, the viewer skips all catalog chrome and renders only this render. */
   initialRenderId?: string | null;

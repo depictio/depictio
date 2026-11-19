@@ -11,6 +11,7 @@
  * so none of this runs there.
  */
 import type { CatalogGlobal, FixturePreview, OutputEntry } from './shared';
+import { outputFileUrl } from './siteTree';
 
 interface OutputFile {
   fixturePreview?: FixturePreview | null;
@@ -58,7 +59,7 @@ export function ensureOutputLoaded(g: CatalogGlobal, entry: OutputEntry): Promis
   const pending = inflight.get(id);
   if (pending) return pending;
   const base = g.dataBase ?? 'data/';
-  const p = fetch(`${base}outputs/${encodeURIComponent(id)}.json`)
+  const p = fetch(outputFileUrl(entry, base, window.location.href))
     .then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status} while loading output "${id}"`);
       return r.json() as Promise<OutputFile>;

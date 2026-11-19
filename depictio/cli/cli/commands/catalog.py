@@ -356,11 +356,22 @@ def catalog_export_site(
         raise typer.Exit(code=1)
 
     failed = f", {stats['failed']} without a preview" if stats["failed"] else ""
-    if strict and stats["failed"]:
-        typer.echo(
-            f"  {stats['failed']} output(s) could not be previewed; their entries in "
-            f"{data_dir / 'index.json'} carry the error"
-        )
+    render_errors = stats.get("render_errors", 0)
+    if render_errors:
+        failed += f", {render_errors} render(s) in error"
+    if strict and (stats["failed"] or render_errors):
+        if stats["failed"]:
+            typer.echo(
+                f"  {stats['failed']} output(s) could not be previewed; their entries in "
+                f"{data_dir / 'index.json'} carry the error"
+            )
+        if render_errors:
+            ids = stats.get("render_error_ids") or []
+            more = f" (first {len(ids)})" if render_errors > len(ids) else ""
+            typer.echo(
+                f"  {render_errors} render(s) failed inside outputs that are otherwise fine"
+                f"{more}: {', '.join(ids)}"
+            )
         raise typer.Exit(code=1)
     typer.echo(
         f"  Wrote catalog site ({stats['tools']} tools, {stats['outputs']} outputs{failed}) "
