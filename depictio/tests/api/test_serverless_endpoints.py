@@ -300,16 +300,30 @@ def _fake_export_result() -> ExportResult:
     )
 
 
+def _may_export(monkeypatch: pytest.MonkeyPatch, allowed: bool = True) -> None:
+    """Answer the preflight's export rule without a project fixture."""
+    monkeypatch.setattr(
+        routes_mod, "export_denial", lambda *a, **k: None if allowed else "permission denied"
+    )
+
+
 def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, Any] = {}
 
     def fake_export_static(
-        dashboard_id, out_path=None, mode=None, check=False, user=None, python_runtime="off"
+        dashboard_id,
+        out_path=None,
+        mode=None,
+        check=False,
+        user=None,
+        python_runtime="off",
+        bind=True,
     ):
         captured.update(dashboard_id=dashboard_id, check=check, user=user)
         return _fake_export_result()
 
     monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
@@ -319,6 +333,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
     assert captured["user"] is owner
     assert resp.json() == {
         "dashboard_id": str(DASHBOARD_OID),
+        "bound": True,
         "tiers": [
             {
                 "component_id": "c1",
@@ -394,6 +409,7 @@ def test_preflight_without_a_sized_report_says_so_explicitly(
     result = _fake_export_result()
     result.size = None
     monkeypatch.setattr(routes_mod, "export_static", lambda *a, **kw: result)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
@@ -414,12 +430,19 @@ def test_preflight_defaults_to_the_python_runtime_a_build_defaults_to(
     seen: list[str] = []
 
     def fake_export_static(
-        dashboard_id, out_path=None, mode=None, check=False, user=None, python_runtime="?"
+        dashboard_id,
+        out_path=None,
+        mode=None,
+        check=False,
+        user=None,
+        python_runtime="?",
+        bind=True,
     ):
         seen.append(python_runtime)
         return _fake_export_result()
 
     monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 200
@@ -436,11 +459,56 @@ def test_preflight_defaults_to_the_python_runtime_a_build_defaults_to(
     assert build_default == "off"
 
 
+def test_a_viewer_who_cannot_export_gets_the_data_free_plan(
+    client, stranger, monkeypatch: pytest.MonkeyPatch
+):
+    """The binding preflight loads every collection a bundle would carry; its
+    only reader is the export modal, which only someone who may export opens.
+    Anyone else (anonymous in public mode) gets the plan: no data read."""
+    seen: list[bool] = []
+
+    def fake_export_static(dashboard_id, check=False, user=None, python_runtime="off", bind=True):
+        seen.append(bind)
+        return _fake_export_result()
+
+    monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    _may_export(monkeypatch, allowed=False)
+    _as_user(client, stranger)
+
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
+    assert resp.status_code == 200
+    assert resp.json()["bound"] is False
+    assert seen == [False]
+
+
+def test_data_reading_preflights_are_capped_per_process(
+    client, owner, monkeypatch: pytest.MonkeyPatch
+):
+    """Past PREFLIGHT_CONCURRENCY running at once, the next one is a 429 the
+    modal can retry rather than one more set of frames in API memory."""
+    import threading
+
+    monkeypatch.setattr(routes_mod, "_preflight_slots", threading.BoundedSemaphore(1))
+    monkeypatch.setattr(routes_mod, "export_static", lambda *a, **kw: _fake_export_result())
+    _may_export(monkeypatch, allowed=True)
+    _as_user(client, owner)
+
+    routes_mod._preflight_slots.acquire()  # one already running
+    try:
+        resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
+        assert resp.status_code == 429
+        assert resp.headers["Retry-After"] == "5"
+    finally:
+        routes_mod._preflight_slots.release()
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 200
+
+
 def test_preflight_producer_error_is_404(client, stranger, monkeypatch: pytest.MonkeyPatch):
     def boom(*args, **kwargs):
         raise ProducerAError("permission denied: exporting needs 'viewer'")
 
     monkeypatch.setattr(routes_mod, "export_static", boom)
+    _may_export(monkeypatch, allowed=False)
     _as_user(client, stranger)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
@@ -460,6 +528,7 @@ def test_preflight_over_the_size_ceiling_is_413_with_the_reason(
         raise BundleTooLargeError("static bundle too large: 140.0 MB after 2 of 3 …")
 
     monkeypatch.setattr(routes_mod, "export_static", too_big)
+    _may_export(monkeypatch, allowed=True)
     _as_user(client, owner)
 
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")

@@ -4,11 +4,12 @@ Five thin endpoints around ``depictio.serverless.producer_a.export_static``:
 
 * ``GET  /export-static/{dashboard_id}/preflight`` — the ``--check`` tier table,
   per component and per tab of the dashboard's family, plus the bundle's
-  estimated size against the two ceilings (viewer permission, writes nothing).
-  It *does* read data: deciding a figure's tier means running the
+  estimated size against the two ceilings (writes nothing). For a caller who
+  may export it *does* read data: deciding a figure's tier means running the
   bind-and-refill builder over the frame the bundle would carry, so this is a
-  seconds-long call, not an instant one — and it is bounded by the same hard
-  size ceiling the build is, which it reports as a 413 rather than a 404.
+  seconds-long call, bounded by the same hard size ceiling the build is (413)
+  and by a per-process concurrency cap (429). Any other viewer gets the
+  data-free plan.
 * ``GET  /export-static/{dashboard_id}/can-export`` — whether the dispatch would
   accept this caller (the UI's button state); the same rule, no data read.
 * ``POST /export-static/{dashboard_id}`` — owner-gated; enqueues the build as a
@@ -27,6 +28,7 @@ not expose someone else's dashboard.
 from __future__ import annotations
 
 import functools
+import threading
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
@@ -259,6 +261,42 @@ def _compact_timestamp(built_at: Any) -> str:
 #: wants the runtime's offer (the export modal) asks for ``auto`` explicitly.
 DEFAULT_PYTHON_RUNTIME: Literal["auto", "on", "off"] = "off"
 
+#: Data-reading preflights one API process runs at once. Each loads and prunes
+#: every collection the bundle would carry (up to the size ceiling) and runs the
+#: figure builder in an API thread, so they are counted; one past the limit is
+#: a 429 the modal can retry, not a queue that holds memory.
+PREFLIGHT_CONCURRENCY = 2
+_preflight_slots = threading.BoundedSemaphore(PREFLIGHT_CONCURRENCY)
+
+
+class _PreflightBusy(Exception):
+    """Every data-reading preflight slot of this process is taken."""
+
+
+def _run_preflight(dashboard_id: str, user: Any, python_runtime: str) -> tuple[Any, bool]:
+    """``(ExportResult, bound)``: the binding preflight for whoever may export,
+    the data-free plan for everyone else.
+
+    The binding preflight reads data (see :func:`preflight_export_static`), and
+    its only reader is the export modal, which only a project owner can open.
+    A viewer (anonymous in public mode) gets the instant plan instead: the same
+    rows, figures still ``provisional``, no size and no data read.
+    """
+    if export_denial(dashboard_id, user, "owner") is not None:
+        result = export_static(
+            dashboard_id, check=True, bind=False, user=user, python_runtime=python_runtime
+        )
+        return result, False
+    if not _preflight_slots.acquire(blocking=False):
+        raise _PreflightBusy()
+    try:
+        result = export_static(
+            dashboard_id, check=True, user=user, python_runtime=python_runtime
+        )
+    finally:
+        _preflight_slots.release()
+    return result, True
+
 
 @serverless_endpoint_router.get("/export-static/{dashboard_id}/preflight")
 async def preflight_export_static(
@@ -302,20 +340,24 @@ async def preflight_export_static(
     exactly as it is a refusal there — the ceiling bounds this path's memory
     too.
 
-    Needs *viewer* on the dashboard's project — every row it reads is a row the
-    normal render endpoints would already serve that viewer — and writes nothing.
-    ``export_static`` is synchronous and blocks on Mongo, S3 and plotly, so it
-    runs in a worker thread rather than on the event loop.
+    Only a caller who may export (``owner`` on the project, the dispatch's own
+    rule) gets that binding preflight, and at most ``PREFLIGHT_CONCURRENCY`` run
+    at once per API process (429 past that). Any other *viewer* — anonymous in
+    public mode — gets the data-free plan: the same rows, figures left
+    ``provisional``, no ``size_estimate``, and nothing read but the documents.
+    ``bound`` says which one answered. Writes nothing. ``export_static`` is
+    synchronous and blocks on Mongo, S3 and plotly, so it runs in a worker
+    thread rather than on the event loop.
     """
     try:
-        result = await anyio.to_thread.run_sync(
-            functools.partial(
-                export_static,
-                dashboard_id,
-                check=True,
-                user=current_user,
-                python_runtime=python_runtime,
-            )
+        result, bound = await anyio.to_thread.run_sync(
+            functools.partial(_run_preflight, dashboard_id, current_user, python_runtime)
+        )
+    except _PreflightBusy:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many export previews are running; try again in a few seconds.",
+            headers={"Retry-After": "5"},
         )
     except BundleTooLargeError as exc:
         # Not a 404: the dashboard exists and this caller may read it. Answering
@@ -378,6 +420,7 @@ async def preflight_export_static(
 
     return {
         "dashboard_id": dashboard_id,
+        "bound": bound,
         "tiers": tiers,
         "tabs": tabs,
         "links": links,

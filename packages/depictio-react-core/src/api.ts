@@ -8529,6 +8529,9 @@ export type PythonRuntimeMode = 'auto' | 'on' | 'off';
 
 export interface StaticExportPreflight {
   dashboard_id: string;
+  /** True when the figures were really bound (data read: a caller who may
+   *  export); false for the data-free plan everyone else gets. */
+  bound?: boolean;
   tiers: StaticExportTierRow[];
   links: StaticExportLinkRow[];
   counts: { live: number; partial: number; frozen: number; omitted: number };
