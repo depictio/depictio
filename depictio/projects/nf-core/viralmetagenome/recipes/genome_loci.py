@@ -72,7 +72,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     if seqs.is_empty():
         raise ValueError("viralmetagenome genome_loci: no binned depth to read the genomes off")
-    edge = pl.min_horizontal(pl.col("length"), pl.lit(END_BP))
+    # A genome shorter than both ends together is cut in two halves, as
+    # genome_ends bins it.
+    edge = pl.max_horizontal(pl.min_horizontal(pl.col("length") // 2, pl.lit(END_BP)), pl.lit(1))
     regions = [
         ("Whole genome", 1, pl.lit(1), pl.col("length")),
         ("5' end", 2, pl.lit(1), edge),

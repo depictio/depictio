@@ -42,6 +42,7 @@ Output schema:
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePosixPath
 
 import polars as pl
@@ -113,15 +114,22 @@ _KINDS: tuple[tuple[str, str, tuple[tuple[str, tuple[str, ...]], ...], str, str]
 _SKIP_SUFFIXES = ("_all_hap.vcf",)
 
 
+#: The tools' own name suffixes, stripped from the end one at a time; a dot
+#: inside a reference (``MN908947.3``) or a sample name stays.
+_TOOL_SUFFIX = re.compile(
+    r"\.(?:bam|cram|vcf|gz|bed|per-base|dedup|deduplicated|umi_deduplicated|markdup|"
+    r"sorted|sort|filtered|norm|org)$"
+)
+
+
 def file_genome(path: str, sample: str) -> str | None:
     """The reference a published file of ``sample`` is named after, else None."""
     stem = strip_global_prefix(PurePosixPath(path).name)
-    at = stem.find(sample)
-    if at < 0:
+    while (shorter := _TOOL_SUFFIX.sub("", stem)) != stem:
+        stem = shorter
+    if not stem.startswith(sample):
         return None
-    # Everything after the first dot is the tool's own suffix (.dedup.bam, .per-base.bed.gz).
-    core = stem[at:].split(".", 1)[0]
-    reference, _route, _step = split_mapping_name(core, sample)
+    reference, _route, _step = split_mapping_name(stem, sample)
     return reference
 
 

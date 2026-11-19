@@ -123,7 +123,7 @@ def log_ids(path: str, step: str) -> list[str | None]:
         # `<sample>` or `<sample>_<previous step>` (umi_tools extract runs on the raw reads).
         return [stem.split(".")[0], None]
     sample = p.parent.name
-    stem = _strip(p.name, _DEDUP_SUFFIX)
+    stem = strip_global_prefix(_strip(p.name, _DEDUP_SUFFIX))
     reference, _route, _step = split_mapping_name(stem, sample)
     return [sample, genome_id(sample, reference)]
 

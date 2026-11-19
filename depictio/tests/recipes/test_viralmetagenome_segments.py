@@ -489,3 +489,55 @@ def test_genome_ends_bin_the_first_and_last_bases_finely(tmp_path: Path) -> None
     assert three["mean_depth"][-1] == 21.0
     assert three["end_offset"][-1] == 5
     assert set(out["genome_id"]) == {"S1_LASVL"}
+
+
+# ---------------------------------------------------------------------------
+# Regressions
+# ---------------------------------------------------------------------------
+
+
+def test_split_multiallelic_records_read_alt_over_depth(tmp_path: Path) -> None:
+    # One tri-allelic site after `norm --multiallelics -any`: each record's AD
+    # holds the reference and its own allele only. Plus the `<*>` record
+    # `call --keep-alts` writes, which is not a call.
+    body = _VCF_HEAD + (
+        "L\t50\t.\tC\tA\t90\t.\tDP=100\tGT:PL:DP:AD\t1:0,255:100:10,45\n"
+        "L\t50\t.\tC\tG\t90\t.\tDP=100\tGT:PL:DP:AD\t1:0,255:100:10,45\n"
+        "L\t60\t.\tC\t<*>\t0\t.\tDP=100\tGT:PL:DP:AD\t0:0,255:100:100,0\n"
+    )
+    name = f"{PREFIX}S1_L-CONSTRAINT_constraint"
+    _write(tmp_path / f"variants/bcftools/S1/{name}.norm.vcf.gz", body, gz=True)
+    _write(tmp_path / f"variants/bcftools/S1/{name}.filtered.vcf.gz", body, gz=True)
+    calls = _run("nf-core/viralmetagenome/variants.py", tmp_path, {})
+    assert calls["pos"].to_list() == [50, 50]
+    assert calls["af"].to_list() == [0.45, 0.45]
+    div = _run("nf-core/viralmetagenome/intrahost_diversity.py", tmp_path, {})
+    row = div.row(0, named=True)
+    assert row["minor_af"] == 0.45
+    expected = -(2 * 0.45 * math.log(0.45) + 0.1 * math.log(0.1))
+    assert row["entropy"] == pytest.approx(expected, abs=1e-3)
+
+
+def test_a_run_prefix_holding_the_sample_name_is_stripped_first(tmp_path: Path) -> None:
+    name = "lassa_20260916_1.2.0_run-lassa_L-CONSTRAINT_constraint"
+    body = _VCF_HEAD + "L\t5\t.\tA\tG\t90\t.\tDP=20\tGT:PL:DP:AD\t1:0,255:20:0,20\n"
+    _write(tmp_path / f"variants/bcftools/lassa/{name}.filtered.vcf.gz", body, gz=True)
+    calls = _run("nf-core/viralmetagenome/variants.py", tmp_path, {})
+    assert calls["genome_id"].to_list() == ["lassa_L"]
+    assert calls["reference"].to_list() == ["L"]
+
+
+def test_tracks_keep_a_reference_with_a_version(tmp_path: Path) -> None:
+    bam = f"variants/mapping-info/deduplicate/bam/S1/{PREFIX}S1_MN908947.3-CONSTRAINT_constraint.dedup.sorted.bam"
+    _touch(tmp_path, bam, bam + ".bai")
+    hub = pl.DataFrame(
+        {"genome_id": ["S1_MN908947.3"], "sample": ["S1"], "reference": ["MN908947.3"]}
+    )
+    out = _run("nf-core/viralmetagenome/tracks.py", tmp_path, {"genomes": hub})
+    assert out["uri"].to_list() == [bam]
+
+
+def test_genome_loci_halve_a_short_genome(tmp_path: Path) -> None:
+    bins = pl.DataFrame({"genome_id": ["g"], "sample": ["S1"], "chrom": ["c"], "end": [300]})
+    out = _run("nf-core/viralmetagenome/genome_loci.py", tmp_path, {"coverage_bins": bins})
+    assert list(zip(out["start"], out["end"], strict=True)) == [(1, 300), (1, 150), (151, 300)]

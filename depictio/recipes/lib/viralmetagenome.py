@@ -475,7 +475,9 @@ _VCF_SUFFIX = re.compile(r"(?:\.(?:filtered|norm|org|sort))?\.vcf(?:\.gz)?$")
 def path_ids(path: str) -> list[str | None]:
     """``[caller, sample, reference, route, genome_id]`` read off a VCF's place."""
     p = PurePosixPath(path)
-    stem = _VCF_SUFFIX.sub("", p.name)
+    # The run prefix goes first: a prefix holding the sample name would
+    # otherwise be read as the start of the sample's own part.
+    stem = strip_global_prefix(_VCF_SUFFIX.sub("", p.name))
     parts = p.parts
     caller = parts[-3] if len(parts) >= 3 else None
     sample = sample_from_path(f"{p.parent}/{stem}", (caller or "", "variants"))
@@ -547,6 +549,8 @@ def vcf_calls(raw: pl.DataFrame) -> pl.DataFrame:
             fields.list.get(9, null_on_oob=True).alias("sample_field"),
         )
         .join(ids, on=VCF_PATH_COL, how="left")
+        # `call --keep-alts` writes the unobserved-allele placeholder `<*>`.
+        .filter(pl.col("alt").is_not_null() & ~pl.col("alt").str.contains(r"^<.*>$|^\*$"))
     )
     ad = _format_value("AD").str.split(",")
     ad_ref = ad.list.get(0, null_on_oob=True).cast(pl.Float64, strict=False)
@@ -566,10 +570,14 @@ def vcf_calls(raw: pl.DataFrame) -> pl.DataFrame:
         .alias("_ad_af"),
         _format_value("ALT_FREQ").cast(pl.Float64, strict=False).alias("_alt_freq"),
     ).with_columns(
+        # The alternative depth over the depth first: after `norm --multiallelics
+        # -any` a record's AD holds the reference and its own allele only, so
+        # AD[1] / (AD[0] + AD[1]) leaves the other alleles' reads out. The
+        # pipeline filters on the same AD[1] / DP.
         pl.coalesce(
             pl.col("_alt_freq"),
-            pl.col("_ad_af"),
             pl.when(pl.col("total_dp") > 0).then(pl.col("alt_dp") / pl.col("total_dp")),
+            pl.col("_ad_af"),
         )
         .round(4)
         .alias("af"),
