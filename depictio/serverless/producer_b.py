@@ -41,7 +41,6 @@ import base64
 import hashlib
 import io
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,6 +73,12 @@ from depictio.serverless.binding import (
     miss_tier_reason,
 )
 from depictio.serverless.companions import build_companions, filter_expr_targets
+from depictio.serverless.dist import (  # noqa: F401 - re-exported
+    TEMPLATE_PATH,
+    TEMPLATE_PATH_ENV,
+    dist_static_dir,
+    template_path,
+)
 from depictio.serverless.maps import freeze_map_payload
 from depictio.serverless.preflight import (
     LINK_TIER_A,
@@ -94,23 +99,9 @@ from depictio.serverless.pruning import (
     spec_links,
 )
 
-# Prebuilt single-file static-runtime bundle (`cd depictio/viewer && pnpm run build:static`).
-TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "viewer" / "dist-static" / "static.html"
-TEMPLATE_PATH_ENV = "DEPICTIO_SERVERLESS_TEMPLATE_PATH"
+# Prebuilt single-file static-runtime bundle (`cd depictio/viewer && pnpm run
+# build:static`); where it lives is `serverless.dist`'s concern.
 BUNDLE_TOKEN = "__BUNDLE_MANIFEST__"
-
-
-def _template_path() -> Path:
-    """Where the static-runtime template lives for this process.
-
-    Defaults to the in-tree build output, which official images do not carry
-    (`dist-static/` is gitignored and needs a Node build). Containers without a
-    Node toolchain mount the template elsewhere and point
-    ``DEPICTIO_SERVERLESS_TEMPLATE_PATH`` at it. Resolved per call, not at
-    import time, so the env var can be set after the module loads.
-    """
-    override = os.environ.get(TEMPLATE_PATH_ENV)
-    return Path(override) if override else TEMPLATE_PATH
 
 
 # The static runtime is the floor under every single-file bundle: measured at
@@ -132,7 +123,7 @@ def runtime_floor_bytes() -> int:
     not the primary source.
     """
     try:
-        return _template_path().stat().st_size
+        return template_path().stat().st_size
     except OSError:
         return RUNTIME_FLOOR_FALLBACK_BYTES
 
@@ -1188,7 +1179,7 @@ def build_manifest(
     # `./assets/genomes/...`, so the bundle carries the ones its tiles name.
     from depictio.serverless.gene_assets import gene_blobs
 
-    genes, _ = gene_blobs(components, _template_path().parent)
+    genes, _ = gene_blobs(components, dist_static_dir())
     inline_blobs.update(genes)
     python_components, python_addon = _settle_python_b(
         components, tier_by_id, bindings, data_refs, python_candidates, python_runtime, spec
@@ -1257,7 +1248,7 @@ def render_bundle_html(manifest: BundleManifest) -> str:
     """Inject a manifest into the prebuilt static-runtime template."""
     from depictio.serverless.inject import inject
 
-    template = _template_path()
+    template = template_path()
     if not template.exists():
         raise ProducerBError(
             f"static-runtime bundle not built: {template} is missing — run "

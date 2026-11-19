@@ -159,9 +159,7 @@ class _Reader:
         return out
 
 
-def bgzf_decompress(
-    data: bytes, limit: int | None = None, max_output: int | None = None
-) -> bytes:
+def bgzf_decompress(data: bytes, limit: int | None = None, max_output: int | None = None) -> bytes:
     """Concatenated gzip members (BGZF) decompressed, up to ``limit`` bytes.
 
     A truncated last member (the caller read a prefix of the file) is decoded

@@ -3798,12 +3798,12 @@ def export_manifest(
     )
     # The gene tables the genome tiles draw from: the server serves them under
     # its base URL, a bundle has to carry them (``gene_assets``).
+    from depictio.serverless.dist import dist_static_dir
     from depictio.serverless.gene_assets import gene_blobs
-    from depictio.serverless.producer_b import _template_path
 
     genes, _ = gene_blobs(
         (comp for _tab, comp, cid in items if tier_by_id[cid].tier is not ComponentTier.OMITTED),
-        _template_path().parent,
+        dist_static_dir(),
     )
     inline_blobs.update(genes)
     if python_info.get("embedded"):

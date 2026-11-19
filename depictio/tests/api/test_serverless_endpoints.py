@@ -997,14 +997,19 @@ def test_export_task_propagates_missing_template(monkeypatch: pytest.MonkeyPatch
 
 
 def test_template_path_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    from depictio.serverless import producer_b
+    from depictio.serverless import addons, dist
 
-    assert producer_b._template_path() == producer_b.TEMPLATE_PATH
+    assert dist.template_path() == dist.TEMPLATE_PATH
+    assert dist.dist_static_dir() == dist.TEMPLATE_PATH.parent
 
     custom = tmp_path / "static.html"
     custom.write_text("__BUNDLE_MANIFEST__", encoding="utf-8")
-    monkeypatch.setenv(producer_b.TEMPLATE_PATH_ENV, str(custom))
-    assert producer_b._template_path() == custom
+    monkeypatch.setenv(dist.TEMPLATE_PATH_ENV, str(custom))
+    assert dist.template_path() == custom
+    # Everything beside the template moves with it.
+    assert dist.dist_static_dir() == tmp_path
+    monkeypatch.delenv(addons.ADDONS_DIR_ENV, raising=False)
+    assert addons.addons_dir() == tmp_path / "addons"
 
-    monkeypatch.delenv(producer_b.TEMPLATE_PATH_ENV)
-    assert producer_b._template_path() == producer_b.TEMPLATE_PATH
+    monkeypatch.delenv(dist.TEMPLATE_PATH_ENV)
+    assert dist.template_path() == dist.TEMPLATE_PATH

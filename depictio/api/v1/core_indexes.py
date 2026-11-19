@@ -78,7 +78,11 @@ def ensure_static_exports_ttl(collection=None, retention_days: int | None = None
     index that already exists. Never raises.
     """
     collection = static_exports_collection if collection is None else collection
-    days = settings.performance.static_export_retention_days if retention_days is None else retention_days
+    days = (
+        settings.performance.static_export_retention_days
+        if retention_days is None
+        else retention_days
+    )
     try:
         if days <= 0:
             if STATIC_EXPORTS_TTL_INDEX in collection.index_information():

@@ -290,9 +290,7 @@ def _run_preflight(dashboard_id: str, user: Any, python_runtime: str) -> tuple[A
     if not _preflight_slots.acquire(blocking=False):
         raise _PreflightBusy()
     try:
-        result = export_static(
-            dashboard_id, check=True, user=user, python_runtime=python_runtime
-        )
+        result = export_static(dashboard_id, check=True, user=user, python_runtime=python_runtime)
     finally:
         _preflight_slots.release()
     return result, True

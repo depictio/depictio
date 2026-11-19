@@ -3363,7 +3363,9 @@ def static_export_key(dashboard_id: str, built_at: Any, job_id: str) -> str:
     (a double click, or two owners with different options) must not overwrite
     each other's bundle.
     """
-    return f"{STATIC_EXPORT_PREFIX}{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}-{job_id}.html"
+    return (
+        f"{STATIC_EXPORT_PREFIX}{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}-{job_id}.html"
+    )
 
 
 def prune_static_exports(
@@ -3431,13 +3433,12 @@ def export_static_bundle(payload: dict) -> dict:
     import tempfile
     from datetime import datetime, timezone
     from pathlib import Path
+    from uuid import uuid4
 
     # Deferred: producer A pulls in polars / the endpoint bodies, and importing
     # it lazily keeps the module-attribute monkeypatch seam that tests use.
     from depictio.api.v1.s3 import s3_client
     from depictio.serverless import producer_a
-
-    from uuid import uuid4
 
     dashboard_id = str(payload["dashboard_id"])
     export_user = producer_a.ExportUser(**payload["user"])
