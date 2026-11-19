@@ -94,7 +94,7 @@
 template:
   template_id: "nf-core/atacseq/2.1.2"
   description: "nf-core/atacseq template: ataqv library quality, deepTools and Picard signal QC, MACS2 broad peaks, HOMER peak annotation, the consensus peak set and its DESeq2 QC, on top of the pipeline's MultiQC report."
-  version: "4.1.0"
+  version: "5.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "The atacseq --outdir: ALIGNER/merged_library/, fastqc/, trimgalore/, multiqc/, pipeline_info/, plus a MultiQC 1.31 or later parquet, either the pipeline's own under multiqc/broad_peak/multiqc_data/ or a reprocessed one under multiqc/multiqc_data/."
@@ -584,9 +584,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the MarkDuplicates report"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the library id is derived from its name"
 
       - data_collection_tag: "picard_markduplicates_metrics"

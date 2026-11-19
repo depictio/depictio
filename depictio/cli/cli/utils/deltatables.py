@@ -2335,13 +2335,16 @@ def process_recipe_data_collection(
             recipe_module = _load_recipe(recipe_name, pipeline_version)
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             first_run = runs[0] if runs else None
+            from depictio.recipes import RecipeContext, call_transform, in_file_order
+
             if refs:
-                sources.update(
+                frames = (
                     ref_frames_for_run(refs, first_run.tag, run_tags)
                     if first_run is not None
                     else {ref: value.frame for ref, value in refs.items()}
                 )
-            from depictio.recipes import RecipeContext, call_transform
+                # As execute_recipe does: a raw text scan in its files' line order.
+                sources.update({ref: in_file_order(frame) for ref, frame in frames.items()})
 
             _validate_sources(recipe_module, sources, recipe_name)
             result_df = call_transform(

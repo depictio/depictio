@@ -70,7 +70,7 @@
 template:
   template_id: "nf-core/chipseq/2.1.0"
   description: "nf-core/chipseq 2.x template: MACS3 peak calls (narrowPeak or broadPeak), HOMER peak annotation, consensus peak sets per antibody and their DESeq2 sample QC, for any aligner, on top of the MultiQC report."
-  version: "4.3.0"
+  version: "5.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "The chipseq --outdir (one directory per aligner, fastqc/, trimgalore/, multiqc/, pipeline_info/), with the MultiQC parquet under multiqc/narrow_peak/multiqc_data/ or multiqc/broad_peak/multiqc_data/, or multiqc/multiqc_data/ for a reprocessed run."
@@ -609,9 +609,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the MarkDuplicates report"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the library id is derived from its name"
 
       - data_collection_tag: "picard_markduplicates_metrics"

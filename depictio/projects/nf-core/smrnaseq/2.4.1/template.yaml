@@ -33,7 +33,7 @@
 template:
   template_id: "nf-core/smrnaseq/2.4.1"
   description: "nf-core/smrnaseq template for small RNA sequencing: MultiQC funnel, library QC, miRNA expression and two-group comparison, isomiRs, novel miRNAs"
-  version: "1.3.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one smrnaseq run (multiqc/, mirna_quant/, the miRDeep2 result_*.csv tables, pipeline_info/)"
@@ -435,9 +435,12 @@ workflows:
               quote_char: null
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the miRDeep2 result table"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the sample id is derived from its name"
 
       - data_collection_tag: "mirdeep2_predictions"

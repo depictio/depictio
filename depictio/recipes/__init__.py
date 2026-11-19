@@ -817,6 +817,45 @@ def execute_recipe_batches(
     return checked()
 
 
+#: The file a one-line-per-row scan read each row from, and the row's line in
+#: it: what a raw text collection is scanned with (``row_index_name``).
+SOURCE_PATH_COLUMN = "source_path"
+SOURCE_LINE_COLUMN = "source_line"
+_RUN_COLUMN = "depictio_run_id"
+
+
+def in_file_order(df: pl.DataFrame | None) -> pl.DataFrame | None:
+    """A one-line-per-row scan with each file's lines back in order.
+
+    A Delta table does not promise to keep the order its rows were written in,
+    and a scanned file is only readable in its own order. A scan that numbered
+    its lines (``source_line``) is put back in that order: each file's lines
+    in line order, files where their first line was. A table already in order
+    is left as it is, which is the common case and costs one pass. The column
+    is then dropped, so a recipe sees the scan it always saw. Rows a scan did
+    not number (written before it did) keep their stored order; a frame
+    without the column is returned as it is.
+    """
+    if df is None or SOURCE_LINE_COLUMN not in df.columns:
+        return df
+    if SOURCE_PATH_COLUMN in df.columns and df.get_column(SOURCE_LINE_COLUMN).null_count() == 0:
+        # One file per run and path: a file shared by every run is read once per run.
+        keys = [c for c in (_RUN_COLUMN, SOURCE_PATH_COLUMN) if c in df.columns]
+        file = pl.struct(keys)
+        ordered = df.select(
+            (file.n_unique() == file.rle_id().n_unique())
+            & (pl.col(SOURCE_LINE_COLUMN).diff().over(file.rle_id()).fill_null(1) == 1).all()
+        ).item()
+        if not ordered:
+            df = (
+                df.with_row_index("_first_row")
+                .with_columns(pl.col("_first_row").min().over(keys))
+                .sort("_first_row", SOURCE_LINE_COLUMN, maintain_order=True)
+                .drop("_first_row")
+            )
+    return df.drop(SOURCE_LINE_COLUMN)
+
+
 def _prepared_sources(
     recipe_name: str,
     data_dir: str | Path | DataRoot,
@@ -832,9 +871,9 @@ def _prepared_sources(
     # Checkpoint 2: resolve
     sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
 
-    # Inject dc_ref sources
+    # Inject dc_ref sources, a raw text scan with its lines in file order
     if extra_sources:
-        sources.update(extra_sources)
+        sources.update({ref: in_file_order(df) for ref, df in extra_sources.items()})
 
     # Check all sources are resolved; optional missing dc_ref sources are injected as None
     for source in module.SOURCES:

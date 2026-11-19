@@ -30,7 +30,7 @@
 template:
   template_id: "nf-core/demultiplex/1.8.0"
   description: "nf-core/demultiplex template for sequencing-facility run QC: run health per lane and read, demultiplexing balance, undetermined reads and index swaps, per-library read QC"
-  version: "1.3.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one nf-core/demultiplex run (the flowcell folders, multiqc/, pipeline_info/)"
@@ -244,9 +244,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of a Stats.json report"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from"
 
       # ----------------------------------------------------------------
@@ -450,9 +453,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the summary table"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from"
 
       - data_collection_tag: "interop_summary"
@@ -511,9 +517,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of a fastp JSON report"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the library and lane come from its name"
 
       - data_collection_tag: "fastp_library_qc"
@@ -590,9 +599,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of a CheckQC report"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from"
 
       - data_collection_tag: "checkqc_verdicts"
