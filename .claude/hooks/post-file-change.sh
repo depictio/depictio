@@ -1,54 +1,39 @@
 #!/bin/bash
-# Post-file-change hook for depictio
-# Runs after Write/Edit operations on Python files
-# Environment variables available:
-#   TOOL_INPUT - JSON with tool parameters
-#   TOOL_OUTPUT - JSON with tool result
+# PostToolUse hook (matcher: Write|Edit) for depictio.
+#
+# Claude Code passes one JSON document on stdin: {"tool_input": {"file_path": "..."}}.
+# After a Python file under depictio/ is written or edited, run a quick ruff check on
+# that file and hand any findings back to Claude as additional context. Never blocks.
 
-set -e
+PAYLOAD=$(cat)
 
-# Parse the file path from tool input
-FILE_PATH=$(echo "$TOOL_INPUT" | jq -r '.file_path // empty')
+command -v jq >/dev/null 2>&1 || exit 0
+command -v ruff >/dev/null 2>&1 || exit 0
 
-# Exit if no file path or not a Python file
-if [[ -z "$FILE_PATH" ]]; then
+FILE_PATH=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+
+if [[ -z "$FILE_PATH" || ! -f "$FILE_PATH" ]]; then
     exit 0
 fi
 
-# Only process files in depictio/ directory
-if [[ ! "$FILE_PATH" =~ ^.*depictio/(models|api|dash|cli|tests)/.*.py$ ]]; then
+# Only Python files of the packages that exist.
+if [[ ! "$FILE_PATH" =~ depictio/(models|api|cli|tests|catalog|project_builder|dev_scripts)/.*\.py$ ]]; then
     exit 0
 fi
 
-# Check if the file exists (Write creates, Edit modifies)
-if [[ ! -f "$FILE_PATH" ]]; then
-    exit 0
-fi
-
-# Run quick format check on the specific file
 MESSAGES=()
 
-# Check with ruff format (dry-run)
-if command -v ruff &> /dev/null; then
-    if ! ruff format --check "$FILE_PATH" 2>/dev/null; then
-        MESSAGES+=("Format issues detected in $FILE_PATH - consider running 'ruff format $FILE_PATH'")
-    fi
+if ! ruff format --check "$FILE_PATH" >/dev/null 2>&1; then
+    MESSAGES+=("Format issues in $FILE_PATH: run 'ruff format $FILE_PATH'.")
 fi
 
-# Check with ruff lint (quick check)
-if command -v ruff &> /dev/null; then
-    LINT_OUTPUT=$(ruff check "$FILE_PATH" 2>&1 || true)
-    if [[ -n "$LINT_OUTPUT" && "$LINT_OUTPUT" != *"All checks passed"* ]]; then
-        ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -c "error\|warning" || echo "0")
-        if [[ "$ERROR_COUNT" -gt 0 ]]; then
-            MESSAGES+=("Lint issues found in $FILE_PATH ($ERROR_COUNT issues) - run 'ruff check --fix $FILE_PATH'")
-        fi
-    fi
+if ! ruff check "$FILE_PATH" >/dev/null 2>&1; then
+    MESSAGES+=("Lint issues in $FILE_PATH: run 'ruff check --fix $FILE_PATH'.")
 fi
 
-# Output messages if any
 if [[ ${#MESSAGES[@]} -gt 0 ]]; then
-    echo '{"stdout": "'"$(printf '%s\n' "${MESSAGES[@]}" | jq -Rs .)"'"}'
+    jq -n --arg msg "$(printf '%s\n' "${MESSAGES[@]}")" \
+        '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $msg}}'
 fi
 
 exit 0

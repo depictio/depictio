@@ -11,6 +11,6 @@ find:
     - "**/multiqc/*/*_data/multiqc.parquet"
 # reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
 # `section` selects this module's plot anchors out of the shared report.
-fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
+fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
   - { component: multiqc, section: samtools }

@@ -22,8 +22,7 @@ You are an expert test engineer working on the depictio project. Tests are locat
 - `depictio/tests/api/` - API tests
 - `depictio/tests/models/` - Model tests
 - `depictio/tests/cli/` - CLI tests
-- `depictio/tests/dash/` - Dash tests
-- `depictio/tests/e2e-tests/` - Cypress E2E tests
+- `depictio/tests/e2e-playwright/` - Playwright E2E tests
 
 ## Test Patterns
 

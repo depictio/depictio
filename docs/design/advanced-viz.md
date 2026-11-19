@@ -1,6 +1,6 @@
 # Advanced Visualisations for Depictio (React)
 
-**Status:** Design proposal — not yet implemented
+**Status:** Implemented. Kept as the design record; the code under `depictio/models/components/advanced_viz/` is the source of truth.
 **Branch:** `claude/volcano-plot-interactive-cTRTQ`
 **Predecessor:** `claude/python-bioinformatics-setup-oVDOo` (Dash prototypes; lessons distilled below)
 **Audience:** maintainers reviewing before any code lands.

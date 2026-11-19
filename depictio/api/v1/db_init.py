@@ -178,7 +178,7 @@ def _dataset_of_dashboard(name: str) -> str:
 
     Dashboard names are consistently prefixed by their dataset, e.g.
     ``ampliseq_multiqc`` → ``ampliseq``, ``advanced_viz_volcano`` →
-    ``advanced_viz_showcase``, ``viralrecon_variants`` → ``viralrecon``.
+    ``advanced_viz_showcase``.
 
     Every arm is a prefix match, including iris/penguins: their child tabs
     (``iris_petal``, ``penguins_island_season``) are dashboards in their own
@@ -193,8 +193,6 @@ def _dataset_of_dashboard(name: str) -> str:
         return "ampliseq"
     if name.startswith("advanced_viz"):
         return "advanced_viz_showcase"
-    if name.startswith("viralrecon"):
-        return "viralrecon"
     if name.startswith("catalog_conformance"):
         return "catalog_conformance"
     if name.startswith("genome_tracks"):
@@ -239,7 +237,6 @@ async def create_initial_dashboards(
             "penguins",
             "ampliseq",
             "advanced_viz_showcase",
-            "viralrecon",
             "catalog_conformance",
             "genome_tracks_examples",
         )
@@ -475,36 +472,6 @@ async def create_initial_dashboards(
                 "static_dc_id": None,
             }
             for slug in ("strandseq", "sarscov2")
-        ),
-        # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted
-        # from a local CLI ingest of viralrecon test_illumina output — see
-        # depictio/projects/nf-core/viralrecon/3.0.0/CLAUDE.md +
-        # generate_seeds.sh. The recipe canonical DCs are required for these
-        # to render; without local data files, scan-time DCs end up empty but
-        # the dashboards still load (just with missing tiles).
-        *(
-            {
-                "name": f"viralrecon_{slug}",
-                "json_path": os.path.join(
-                    projects_base,
-                    rel_paths["viralrecon"],
-                    ".db_seeds",
-                    f"dashboard_{slug}.json",
-                ),
-                "static_dc_id": None,
-            }
-            # The Overview is the family's main tab: listed first so the child
-            # tabs find their parent already imported.
-            for slug in (
-                "overview",
-                "multiqc",
-                "coverage_depth",
-                "lineage_clustering",
-                "variants",
-                "gene",
-                "sample",
-                "sample_qc",
-            )
         ),
         # Optional (DEPICTIO_SEED_EXTRA_PROJECTS) — filtered out below unless the
         # conformance project itself was seeded. Multi-DC, so DC ids come from

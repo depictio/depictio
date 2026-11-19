@@ -33,7 +33,6 @@ cd /path/to/depictio && claude
 │   ├── quality.md        # /quality - Code quality checks
 │   ├── test.md           # /test - Run tests
 │   ├── api-endpoint.md   # /api-endpoint - Create API endpoints
-│   ├── dash-component.md # /dash-component - Create Dash components
 │   ├── model.md          # /model - Create Pydantic models
 │   ├── logs.md           # /logs - View service logs
 │   ├── review.md         # /review - Code review helper
@@ -41,13 +40,11 @@ cd /path/to/depictio && claude
 │   ├── autopilot.md      # /autopilot - Solve one `autopilot`-labelled issue end to end
 │   └── arch.md           # /arch - Architecture explorer
 ├── workflows/            # Development workflow guides
-│   ├── new-feature.md    # Feature implementation workflow
+│   ├── standard-feature-workflow.md    # Feature implementation workflow
 │   ├── bug-fix.md        # Bug fix workflow
-│   ├── api-development.md        # API development guide
-│   └── dash-component-development.md  # Component development guide
+│   └── api-development.md        # API development guide
 ├── agents/               # Specialized agent definitions
 │   ├── api-agent.md      # FastAPI backend specialist
-│   ├── dash-agent.md     # Dash frontend specialist
 │   ├── testing-agent.md  # Testing specialist
 │   ├── data-agent.md     # Data processing specialist
 │   ├── devops-agent.md   # DevOps specialist
@@ -68,7 +65,6 @@ cd /path/to/depictio && claude
 | Skill | Description | Example |
 |-------|-------------|---------|
 | `/api-endpoint` | Create API endpoint | `/api-endpoint user preferences` |
-| `/dash-component` | Create Dash component | `/dash-component figure heatmap` |
 | `/model` | Create Pydantic model | `/model UserPreferences` |
 
 ### Operations
@@ -178,7 +174,7 @@ Agents are domain-specific AI assistants with deep expertise in particular areas
 | **API Agent** | FastAPI, Beanie ODM, REST APIs | Backend endpoint development |
 | **Dash Agent** | Plotly Dash, DMC 2.0+, Callbacks | Frontend component development |
 | **Testing Agent** | pytest, async testing, fixtures | Writing and running tests |
-| **Data Agent** | Polars, Delta Lake, S3/MinIO | Data processing pipelines |
+| **Data Agent** | Polars, Delta Lake, S3 | Data processing pipelines |
 | **DevOps Agent** | Docker, Helm, GitHub Actions | Infrastructure and CI/CD |
 | **Security Agent** | Auth, validation, OWASP | Security review and implementation |
 
@@ -208,7 +204,7 @@ Each agent has:
 ## Workflows
 
 ### New Feature Workflow
-`workflows/new-feature.md` - Complete guide for implementing features:
+`workflows/standard-feature-workflow.md` - Complete guide for implementing features:
 1. Planning & Analysis
 2. Backend implementation (Models, API, Tests)
 3. Frontend implementation (Components, Callbacks, Tests)
@@ -231,21 +227,13 @@ Each agent has:
 - Testing patterns
 - Best practices
 
-### Dash Component Workflow
-`workflows/dash-component-development.md` - Dash component development:
-- Component structure
-- DMC 2.0+ requirements
-- Theme compatibility
-- Callback patterns
-- State management
-
 ## Permissions
 
 The settings.json configures allowed and denied operations:
 
 ### Allowed
 - Testing: pytest, ruff, ty, pre-commit
-- Package management: uv, pip, npm
+- Package management: uv, pnpm
 - Git operations: all standard commands
 - Docker: logs, ps, compose logs
 - Database: mongosh queries

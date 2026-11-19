@@ -1,4 +1,0 @@
-fastapi
-fastapi-users[beanie]
-uvicorn[standard]
-jinja2

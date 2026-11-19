@@ -21,6 +21,7 @@ live in :data:`COLUMN_DESCRIPTIONS`.
 from __future__ import annotations
 
 import math
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,8 +32,13 @@ from pathlib import Path
 # copy a known-good report instead. Resolved relative to the repo root.
 _MULTIQC_FIXTURES: dict[str, str] = {
     "small": "depictio/projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet",  # ~2.6M
-    "large": "depictio/projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",  # ~24M
 }
+
+# The ~24M report is not vendored (git keeps every version of a big file for good):
+# download viralrecon's test run with
+# depictio/projects/nf-core/viralrecon/3.0.0/download_test_data.sh <dir> and point this
+# variable at <dir>/run_1/multiqc/multiqc_data/multiqc.parquet.
+LARGE_FIXTURE_ENV = "DEPICTIO_BENCH_LARGE_MULTIQC"
 
 # Ordered canonical columns shared by every data collection. Kept as a superset
 # so figure (scatter/bar/box), table, and advanced_viz (volcano/ma/dot_plot) all
@@ -247,7 +253,16 @@ def generate_multiqc_dataset(
     a ``.manifest`` marker.
     """
     dataset_dir = Path(dataset_dir)
-    src = _repo_root() / _MULTIQC_FIXTURES[fixture]
+    if fixture == "large":
+        large = os.environ.get(LARGE_FIXTURE_ENV)
+        if not large:
+            raise FileNotFoundError(
+                f"The large MultiQC fixture is not vendored: set {LARGE_FIXTURE_ENV} "
+                "(see the comment above LARGE_FIXTURE_ENV in benchmark/datagen.py)"
+            )
+        src = Path(large).expanduser()
+    else:
+        src = _repo_root() / _MULTIQC_FIXTURES[fixture]
     if not src.exists():
         raise FileNotFoundError(f"MultiQC fixture not found: {src}")
     source_bytes = src.stat().st_size

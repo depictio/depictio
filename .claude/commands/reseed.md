@@ -1,12 +1,12 @@
 # Reseed a reference project (in-place, no container restart)
 
 Reseeds one or more bundled reference projects (iris, penguins, ampliseq,
-advanced_viz_showcase, …) **without** wiping the whole MongoDB / MinIO state.
+advanced_viz_showcase, …) **without** wiping the whole MongoDB / S3 state.
 Use after editing `template.yaml`, a canonical recipe, or a `.db_seeds/*.json`
 on the project, when you want the changes reflected in the running app.
 
-Backed by `dev/reseed_project.py`. Runs **inside the API container** so it has
-MongoDB + MinIO + the depictio module path.
+Backed by `depictio/dev_scripts/reseed_project.py`. Runs **inside the API container** so it has
+MongoDB + S3 + the depictio module path.
 
 ## When to use
 
@@ -43,7 +43,7 @@ MongoDB + MinIO + the depictio module path.
 
 1. Look up the project by name via `ReferenceDatasetRegistry.STATIC_IDS`.
 2. Cascade-delete the project + DC docs + Delta-table docs + files docs +
-   matching dashboards from MongoDB. Wipes S3 objects from MinIO too
+   matching dashboards from MongoDB. Wipes S3 objects from S3 too
    (best-effort).
 3. Re-run `create_reference_project()` → fresh project + DC documents with
    the same static IDs.
@@ -69,7 +69,7 @@ When the user invokes `/reseed <dataset> [<dataset> ...] [--no-data]`:
      exec depictio-backend python -m depictio.dev_scripts.reseed_project $ARGUMENTS
    ```
 
-3. Stream the container logs (`docker logs depictio-api -f --tail 0 &`) so the
+3. Stream the container logs (`docker logs depictio-backend -f --tail 0 &`) so the
    user sees the resolver / scan progress. Stop the log follower when the
    exec call returns.
 
@@ -86,7 +86,7 @@ When the user invokes `/reseed <dataset> [<dataset> ...] [--no-data]`:
 
 - The cascade is scoped to the named projects' static IDs — it cannot
   accidentally drop unrelated projects or user-created dashboards.
-- If the MinIO bucket is unreachable, the script logs a warning and
+- If the S3 bucket is unreachable, the script logs a warning and
   continues — MongoDB cascade still runs so the next `--no-data` reseed
   isn't blocked.
 - The script is idempotent: running it on a project that's already deleted

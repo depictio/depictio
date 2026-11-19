@@ -72,6 +72,25 @@ pre-commit run --all-files         # mandatory after all code changes
   `[tool.ty.src]`. `depictio/api/` and `depictio/cli/` carry known type-debt and are
   off the gate — don't widen the gate casually, don't add new debt
 
+### Keeping the repo light
+- Git keeps every version of every file in every clone (the history, not the tree, is what
+  weighed 350 MB). **No added or modified file over 500 KB**: `scripts/check-large-files.sh`
+  runs as a pre-commit hook and on every PR (`.github/workflows/size-guard.yaml`).
+  Shrink it (images: `magick ... -colors 128`), subsample it, or publish it as a release asset
+  and list it in `fixtures.lock` (`scripts/fetch_fixtures.py`: url, sha256, size, destination)
+- `.large-files-allowlist` is the exception list; keep it short, a test fails on an entry that
+  matches no tracked file
+- **`fixtures.lock` holds what git does not**: the full ampliseq 3.1.0 tables (the repo keeps
+  a subsample of each big table, cut to its first N rows) and the seeded dashboard thumbnails
+  (`depictio/api/static/screenshots`, gitignored). Release `fixtures-v1`, downloaded at image
+  build by a `fixtures` stage in the api, worker and allinone Dockerfiles. A source checkout
+  has the subsample and no thumbnails (the viewer shows an icon): run
+  `python scripts/fetch_fixtures.py` to get the full set. To change one, pack it with
+  `scripts/package_fixture.py`, publish a new release (`fixtures-v2`, assets are immutable)
+  and update the lock. Thumbnails must be captured after the data is ingested
+- Contributors who only need the code can clone without file history:
+  `git clone --filter=blob:none https://github.com/depictio/depictio.git`
+
 ### Documentation
 - After significant PRs, update depictio-docs and Obsidian notes
 

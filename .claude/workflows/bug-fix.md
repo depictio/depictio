@@ -60,7 +60,7 @@ A structured workflow for fixing bugs in depictio.
    ```bash
    ruff format depictio/
    ruff check depictio/ --fix
-   ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/
+   ty check depictio/models/
    ```
 
 2. **Test suite**

@@ -278,12 +278,22 @@ def content_hash(
 
 
 def module_hash(module_dir: Path) -> str:
-    """sha256 over a catalog module's ``.py`` and ``.yaml`` files (fixtures excluded)."""
-    files = [
-        (path.relative_to(module_dir).as_posix(), path)
-        for path in _files_under(module_dir, _MODULE_SUFFIXES)
-    ]
-    return _digest(files)
+    """sha256 over a catalog module's ``.py`` and ``.yaml`` files (fixtures excluded).
+
+    The ``fixture:`` line of an output's yaml names a test file, so it is left out as
+    well: moving a fixture is not a change to what the module produces.
+    """
+    digest = hashlib.sha256()
+    for path in _files_under(module_dir, _MODULE_SUFFIXES):
+        data = path.read_bytes().replace(b"\r\n", b"\n")
+        if path.suffix in (".yaml", ".yml"):
+            data = b"\n".join(
+                line for line in data.split(b"\n") if not line.startswith(b"fixture:")
+            )
+        digest.update(f"{path.relative_to(module_dir).as_posix()}\n{len(data)}\n".encode())
+        digest.update(data)
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def compute_catalog(catalog_dir: Path | None) -> dict[str, dict[str, Any]]:

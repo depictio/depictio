@@ -783,6 +783,7 @@ def _compare_header(
             f"{', '.join(f'`{c}`' for c in kept[:5]) or 'none'})",
         ))  # fmt: skip
         return out
+
     def hint(col: str) -> str:
         if col in required:
             return "the recipe reads it"

@@ -291,7 +291,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     wanted = [s.lower() for s in args.project]
     projects = [
-        p for p in projects if not wanted or any(s in str(p.get("name", "")).lower() for s in wanted)
+        p
+        for p in projects
+        if not wanted or any(s in str(p.get("name", "")).lower() for s in wanted)
     ]
     projects.sort(key=lambda p: str(p.get("name", "")).lower())
 

@@ -44,6 +44,15 @@ RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
     VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
     pnpm --filter depictio-viewer build:embed
 
+# ---- Fixtures: example data pinned by fixtures.lock ----
+# The full ampliseq tables and the seeded dashboard thumbnails (not in git).
+# This stage depends only on the manifest and the fetch script, so a source change does
+# not download the data again. A checksum mismatch fails the build.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS fixtures
+WORKDIR /fx
+COPY scripts/fetch_fixtures.py fixtures.lock ./
+RUN python3 fetch_fixtures.py --manifest fixtures.lock --root /fx/out
+
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
 
 ARG VERSION=latest
@@ -97,6 +106,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # re-run this fast step, not the dependency install above.
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
+# Example data over the repository's subsample (and the seeded thumbnails).
+COPY --from=fixtures --chown=depictio:depictio /fx/out/depictio/ ./depictio/
 COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server \

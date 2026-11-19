@@ -689,7 +689,7 @@ they are connected.
 
 When a pipeline publishes indexed BAM/CRAM, VCF, bigWig or peak files, a genome browser can sit
 beside the tiles that point at a locus. The per-workflow pages are in
-`docs/design/jbrowse/`; `docs/design/jbrowse-genome-tracks.md` is the reference.
+`docs/design/jbrowse/`; the genome browser page of the docs (https://depictio.github.io/depictio-docs/features/genome-browser/) is the reference.
 
 - A `recipes/tracks.py` builds the manifest from the sample sheet, not from a glob: one row per
   sample and kind, light tracks first (bigWig, VCF, peaks), BAM and CRAM last, `order` assigned

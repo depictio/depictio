@@ -31,10 +31,11 @@ REPORT_KEY = "multiqc/multiqc_data/multiqc.parquet"
 DC_ID = "507f1f77bcf86cd799439012"
 DC_TAG = "multiqc_data"
 
-# The live run's own report, small enough to parse for real.
+# A real ampliseq report, small enough to parse. It is the one MultiQC report kept in the
+# repo (the catalog's cutadapt and fastqc modules and the benchmark read it too).
 FIXTURE = (
     Path(__file__).resolve().parents[3]
-    / "projects/nf-core/ampliseq/2.18.0/multiqc/multiqc_data/multiqc.parquet"
+    / "projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet"
 )
 
 

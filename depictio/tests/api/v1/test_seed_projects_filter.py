@@ -27,7 +27,7 @@ from depictio.api.v1.db_init import _dataset_of_dashboard
         ("iris", {"iris"}),
         ("iris,penguins", {"iris", "penguins"}),
         (" iris , penguins ", {"iris", "penguins"}),
-        ("iris,,viralrecon,", {"iris", "viralrecon"}),
+        ("iris,,ampliseq,", {"iris", "ampliseq"}),
     ],
 )
 def test_seed_projects_filter_parsing(monkeypatch, raw, expected):
@@ -110,8 +110,6 @@ def test_genome_tracks_showcase_is_opt_in():
         ("ampliseq_phylogeny", "ampliseq"),
         ("advanced_viz_volcano", "advanced_viz_showcase"),
         ("advanced_viz_upset", "advanced_viz_showcase"),
-        ("viralrecon_overview", "viralrecon"),
-        ("viralrecon_variants", "viralrecon"),
         ("catalog_conformance_overview", "catalog_conformance"),
         ("genome_tracks_strandseq", "genome_tracks_examples"),
     ],
@@ -129,7 +127,7 @@ def test_only_iris_keeps_only_iris_dashboards():
         "penguins_island_season",
         "ampliseq_multiqc",
         "advanced_viz_volcano",
-        "viralrecon_variants",
+        "advanced_viz_upset",
     ]
     only = {"iris"}
     kept = [n for n in names if _dataset_of_dashboard(n) in only]
@@ -142,3 +140,19 @@ def test_extra_widens_the_allowlist_without_replacing_it():
     only, extra = {"iris"}, {"catalog_conformance"}
     kept = [n for n in names if _dataset_of_dashboard(n) in only | extra]
     assert kept == ["iris", "catalog_conformance_overview"]
+
+
+def test_default_seed_set_only_holds_projects_that_ship_data():
+    """viralrecon's data left the repo: seeding it would register an empty project."""
+    from pathlib import Path
+
+    from depictio.api.v1.db_init_reference_datasets import (
+        DEFAULT_DATASETS,
+        ReferenceDatasetRegistry,
+    )
+
+    assert "viralrecon" not in DEFAULT_DATASETS
+    projects = Path(__file__).resolve().parents[4] / "depictio" / "projects"
+    for name in DEFAULT_DATASETS:
+        rel = ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
+        assert (projects / rel / ".db_seeds").is_dir(), f"{name} is seeded but ships no .db_seeds"

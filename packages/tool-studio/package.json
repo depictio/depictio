@@ -25,7 +25,6 @@
     "@mantine/dates": "^7.14.0",
     "@mantine/hooks": "^7.14.0",
     "@mantine/notifications": "^7.14.0",
-    "@monaco-editor/react": "^4.6.0",
     "ag-grid-community": "^32.3.0",
     "ag-grid-react": "^32.3.0",
     "dayjs": "^1.11.10",

@@ -100,7 +100,7 @@ Not covered:
 
 `/check-deployment trec-demo` - check trec-demo only
 
-`/check-deployment localhost:5080` - check a local stack (add `--scheme http`)
+`/check-deployment localhost:8058` - check a local stack (add `--scheme http`)
 
 ## Notes
 

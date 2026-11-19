@@ -23,10 +23,10 @@ export const DEMO_DASHBOARD_IDS: readonly string[] = [
   '6824cb3b89d2b72169309737', // Iris Species Comparison
 ];
 
-/** Canonical display order of the nf-core dashboards seeded at boot (ampliseq,
- *  viralrecon). Their dashboard_id values are reserved in
- *  `db_init_reference_datasets.STATIC_IDS`; viralrecon's seed JSONs are
- *  generated locally — see `depictio/projects/nf-core/viralrecon/3.0.0/CLAUDE.md`.
+/** Canonical display order of the nf-core dashboards (ampliseq is seeded at boot;
+ *  viralrecon is not seeded any more but an instance that imported it keeps the
+ *  reserved id). Their dashboard_id values are reserved in
+ *  `db_init_reference_datasets.STATIC_IDS`.
  *  Membership of the section is NOT decided here (see `isNfcoreDashboard`);
  *  this list only puts these two first. */
 export const NFCORE_DASHBOARD_IDS: readonly string[] = [

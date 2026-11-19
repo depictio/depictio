@@ -19,13 +19,7 @@ repos:
     -   id: end-of-file-fixer
         exclude: ^dev/
     -   id: check-yaml
-        exclude: ^(dev/|helm-charts/|kubernetes/)
-    -   id: check-added-large-files
-        # bundled gene annotations (hg38/mm10, ~0.9 MB) and the cnv_profile showcase fixture
-        args: ['--maxkb=1100']
-        # ampliseq's reference seed TSVs (one row per sample x taxon x rank, and
-        # per rarefaction depth) outgrow it; every version bump re-adds them.
-        exclude: ^dev/|^depictio/projects/nf-core/ampliseq/[^/]+/(stacked_taxonomy|rarefaction)_canonical\.tsv$
+        exclude: ^(dev/|helm-charts/)
 
 # Ruff lint & format (includes import sorting)
 -   repo: https://github.com/astral-sh/ruff-pre-commit
@@ -71,13 +65,13 @@ repos:
 # Guard the shipped default dashboard thumbnails against drive-by regeneration
 -   repo: local
     hooks:
-      - id: check-screenshot-churn
-        name: Guard default dashboard thumbnails
-        description: 'Block accidental commits of regenerated default screenshots (opt in with DEPICTIO_ALLOW_SCREENSHOT_UPDATE=1)'
-        entry: scripts/check-screenshot-churn.sh
+      - id: check-large-files
+        name: Keep large files out of git
+        description: 'Reject added or modified files over 500 KB unless .large-files-allowlist covers them (large data goes behind fixtures.lock)'
+        entry: scripts/check-large-files.sh
         language: system
-        files: ^depictio/api/static/screenshots/.*\.png$
         pass_filenames: false
+        always_run: true
 
 # A template whose content changed must bump `template.version`: the lock holds the
 # version and content hash of every template (~0.3 s, runs only when a template file,

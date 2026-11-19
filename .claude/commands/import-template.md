@@ -133,8 +133,7 @@ $ARGUMENTS
 5. **Run the data + project sync** (unless `--dashboards-only`):
 
    ```bash
-   source depictio/cli/.venv/bin/activate
-   depictio-cli ingest "<data-root>" \
+   uv run depictio-cli ingest "<data-root>" \
      --server "<cli-config>" \
      --template "<template-id>" \
      [--skip dashboards]    # ONLY for single-dashboard format
@@ -248,7 +247,7 @@ the worktree's admin token without standing up a full Beanie/Pydantic
 import.
 
 A naive port-only override is **not enough** for a worktree. Each worktree
-runs its own MongoDB + MinIO with its own auth token, so three things have
+runs its own MongoDB + S3 with its own auth token, so three things have
 to be overridden in the cloned config:
 
 1. `api_base_url` → `http://localhost:<FASTAPI_PORT>`

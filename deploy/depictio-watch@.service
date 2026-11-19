@@ -52,7 +52,7 @@
 
 [Unit]
 Description=Depictio ingestion watcher (%i)
-Documentation=https://github.com/depictio/depictio/blob/main/docs/automated-ingestion.md
+Documentation=https://depictio.github.io/depictio-docs/depictio-cli/tasks/
 After=network-online.target
 Wants=network-online.target
 

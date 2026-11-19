@@ -2,7 +2,7 @@
 # Viewer build output
 # -----------------------------
 # Produced inside the image by the viewer-builder stage in
-# Dockerfile_depictio_uv.dockerfile. Excluding it from the docker context
+# docker-images/Dockerfile.api. Excluding it from the docker context
 # prevents a stale host bundle from clobbering the freshly-built one.
 depictio/viewer/dist/
 # Same for the single-file catalog-preview bundle: Dockerfile.api builds it in
@@ -33,12 +33,11 @@ keys/
 venv/
 wf_data/
 
-# Exclude generated screenshots, but keep the committed reference-dashboard
-# thumbnails so the backend image ships them — the helm `copy-screenshot-files`
-# init container copies /app/depictio/api/static/screenshots/*.png into the
-# shared volume on startup.
+# Exclude generated screenshots. The reference-dashboard thumbnails are not in git: the
+# `fixtures` stage of the api and allinone Dockerfiles downloads them (fixtures.lock), and
+# the helm `copy-screenshot-files` init container copies
+# /app/depictio/api/static/screenshots/*.png into the shared volume on startup.
 screenshots/
-!depictio/api/static/screenshots/
 
 # -----------------------------
 # Exclude Tests (not needed in production image)

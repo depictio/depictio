@@ -20,7 +20,6 @@ export const COLLECTIONS = [
   'octicon',
   'mingcute',
   'ic',
-  'carbon',
   'formkit',
 ];
 

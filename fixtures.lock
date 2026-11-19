@@ -1,0 +1,20 @@
+[
+  {
+    "name": "ampliseq-3.1.0-data",
+    "url": "https://github.com/depictio/depictio/releases/download/fixtures-v1/ampliseq-3.1.0-data.tar.gz",
+    "sha256": "2ea0e25c6d3bd7baacf7ec7dc25c7b20780594be9ea88eb067b91c6b10560eca",
+    "size": 1538672,
+    "to": "depictio/projects/nf-core/ampliseq/3.1.0",
+    "extract": true,
+    "merge": true
+  },
+  {
+    "name": "seed-thumbnails",
+    "url": "https://github.com/depictio/depictio/releases/download/fixtures-v1/seed-thumbnails.tar.gz",
+    "sha256": "ea77224d9be243131a3d11098ad9c693de3a47bb8751287e2d4ee75e5ee533e7",
+    "size": 9161107,
+    "to": "depictio/api/static/screenshots",
+    "extract": true,
+    "merge": true
+  }
+]

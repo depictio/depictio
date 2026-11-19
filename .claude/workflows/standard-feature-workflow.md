@@ -196,37 +196,24 @@ YOU: "Now create the CRUD endpoints for templates."
 YOU: "Now let's create the template browser component for the frontend."
 ```
 
-Claude engages the **Dash Agent**:
-
-```bash
-# Or use skill:
-/dash-component template-browser
-```
+Claude builds the frontend in the React viewer (`depictio/viewer/`, Mantine 7):
 
 **What happens:**
-- Creates component with DMC 2.0+ (mandatory)
-- Ensures theme compatibility (light/dark)
-- Uses CSS variables, not hardcoded colors
-- Sets up callbacks
+- Creates the component with Mantine 7 (the Dash frontend is removed)
+- Ensures theme compatibility (light/dark) through Mantine theming
+- Never hardcodes colors
 
 ```
 YOU: "Add the 'Save as Template' button to the dashboard editor."
 ```
 
-**Theme Check (Automatic via Dash Agent):**
-```python
-# ✅ CORRECT - Theme-aware
-dmc.Button(
-    "Save as Template",
-    leftSection=DashIconify(icon="mdi:content-save"),
-    style={"backgroundColor": "var(--app-primary-color)"}
-)
+**Theme check:**
+```tsx
+// ✅ CORRECT - theme-aware
+<Button leftSection={<Icon icon="mdi:content-save" />}>Save as Template</Button>
 
-# ❌ WRONG - Hardcoded colors
-dmc.Button(
-    "Save as Template",
-    style={"backgroundColor": "#228be6"}  # NO!
-)
+// ❌ WRONG - hardcoded colors
+<Button style={{ backgroundColor: '#228be6' }}>Save as Template</Button>
 ```
 
 ### 3.4 Iterative Development Loop
@@ -249,7 +236,7 @@ dmc.Button(
 
 After each edit, you'll see:
 ```
-[Hook] Format issues detected in depictio/dash/modules/template_browser/frontend.py
+[Hook] Format issues detected in depictio/api/v1/endpoints/template_endpoints/routes.py
        Run 'ruff format' to fix
 ```
 
@@ -351,7 +338,7 @@ def process_template(
 # Specific areas
 /test api
 /test models
-/test dash
+npx playwright test   # in depictio/tests/e2e-playwright
 ```
 
 ### 4.5 Security Review (Security Agent)
@@ -509,7 +496,6 @@ git checkout -b feat/dashboard-templates
 /test api
 
 # === FRONTEND IMPLEMENTATION ===
-/dash-component template-browser
 "Add save-as-template button to dashboard editor"
 "Make sure it works in dark mode"
 /test dash
@@ -553,7 +539,6 @@ git checkout -b feat/dashboard-templates
 │  ─────────────────                                               │
 │  /model             Create Pydantic model                        │
 │  /api-endpoint      Create API endpoints                         │
-│  /dash-component    Create Dash component                        │
 │  /test              Run tests frequently                         │
 │                                                                  │
 │  PHASE 4: REFINE                                                 │

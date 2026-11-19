@@ -147,8 +147,9 @@ file.
 
 ## 9. Templates are not seeded at boot
 
-Only the latest ampliseq and viralrecon ship `.db_seeds`, `STATIC_IDS` and a `db_init`
-registration: they are the nf-core reference projects of a fresh deployment. Every other
+Only the latest ampliseq ships `.db_seeds` and a `db_init` registration: it is the nf-core
+reference project of a fresh deployment (viralrecon was seeded too until its data left the
+repo; its `STATIC_IDS` entry stays so instances that imported it keep their ids). Every other
 template reaches an instance through a CLI import of a run, by design. Export-derived seeds
 churn component indices on every re-import, so each seeded template is an ongoing upkeep.
 

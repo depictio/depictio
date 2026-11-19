@@ -134,7 +134,6 @@ Skills are shortcuts that trigger specific behaviors. Type `/` followed by the s
 
 # DEVELOPMENT
 /api-endpoint         # Create new FastAPI endpoint
-/dash-component       # Create new Dash component
 /model                # Create Pydantic model
 
 # OPERATIONS
@@ -418,11 +417,11 @@ Agents are specialized AI personas with deep expertise in specific areas. They'r
 │                      SPECIALIZED AGENTS                          │
 ├─────────────┬─────────────┬─────────────┬───────────────────────┤
 │             │             │             │                       │
-│  API Agent  │ Dash Agent  │ Test Agent  │     Data Agent        │
+│  API Agent  │ DevOps Agt  │ Test Agent  │     Data Agent        │
 │             │             │             │                       │
-│  FastAPI    │  DMC 2.0+   │   pytest    │      Polars           │
-│  Beanie     │  Callbacks  │   async     │    Delta Lake         │
-│  REST       │  Themes     │  fixtures   │      S3/MinIO         │
+│  FastAPI    │  Docker     │   pytest    │      Polars           │
+│  Beanie     │  Helm       │   async     │    Delta Lake         │
+│  REST       │  CI         │  fixtures   │      S3               │
 │             │             │             │                       │
 ├─────────────┼─────────────┴─────────────┴───────────────────────┤
 │             │                                                    │
@@ -479,7 +478,7 @@ Workflows are step-by-step guides for complex tasks. They're documented in `.cla
 
 ### Your Available Workflows
 
-#### 1. New Feature Workflow (`workflows/new-feature.md`)
+#### 1. Feature Workflow (`workflows/standard-feature-workflow.md`)
 
 ```
 Phase 1: PLANNING
@@ -532,24 +531,13 @@ Phase 4: COMMIT
 6. DOCUMENT  → Update API docs
 ```
 
-#### 4. Dash Component Development (`workflows/dash-component-development.md`)
-
-```
-1. DESIGN    → Plan component structure
-2. FRONTEND  → Create UI with DMC 2.0+
-3. CALLBACKS → Implement interactivity
-4. THEME     → Ensure light/dark compatibility
-5. STATE     → Manage component state
-6. TEST      → Visual and callback testing
-```
-
 ### Using Workflows
 
 Reference workflows when starting a task:
 
 ```
 "I need to add a feature for exporting dashboards.
- Let's follow the new-feature workflow."
+ Let's follow the standard-feature workflow."
 
 "There's a bug in the authentication.
  Walk me through the bug-fix workflow."
@@ -684,7 +672,7 @@ git status          # Any uncommitted work?
 "What's the pattern for adding new components?"
 
 # Use workflows for complex tasks
-"Let's follow the new-feature workflow"
+"Let's follow the standard-feature workflow"
 "Walk me through the bug-fix process"
 
 # Leverage code review
@@ -714,7 +702,7 @@ git status          # Any uncommitted work?
 1. **Start sessions with context**
    ```
    "I'm working on the dashboard export feature today.
-    The relevant files are in depictio/dash/layouts/"
+    The relevant files are in depictio/viewer/src/dashboards/"
    ```
 
 2. **Use natural language**
@@ -747,7 +735,7 @@ git status          # Any uncommitted work?
 │  QUALITY        /quality, /quality fix, /test                   │
 │  GIT            /commit, /commit-push-pr, /code-review          │
 │  EXPLORE        /arch, /logs, /db                               │
-│  CREATE         /api-endpoint, /dash-component, /model          │
+│  CREATE         /api-endpoint, /model          │
 │  PLUGINS        /plugin, /plugin list, /plugin install          │
 │  HOOKS          /hookify, /hookify:list                         │
 │  FEATURE        /feature-dev                                    │
@@ -778,7 +766,7 @@ git status          # Any uncommitted work?
 
 1. **Try the basics**: Start with `/quality`, `/test`, `/arch`
 2. **Use code review**: Run `/code-review` on your next PR
-3. **Explore workflows**: Follow `new-feature` workflow for your next task
+3. **Explore workflows**: Follow the `standard-feature-workflow` for your next task
 4. **Customize**: Add your own skills in `.claude/commands/`
 5. **Enable GitHub**: Set `GITHUB_TOKEN` for full PR integration
 

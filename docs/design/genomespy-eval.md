@@ -76,7 +76,7 @@ TEMPLATE_BOTTLENECKS draws it:
   FASTA and Parquet, loading by range as the user zooms. That would cover the file-backed case
   from inside the same component family, with no JBrowse server. What it needs from Depictio
   is what row #8 of the design doc already asked for: `uri` resolved to a signed S3 URL
-  server-side, and a MinIO / S3 CORS policy that allows range requests from the viewer origin.
+  server-side, and an S3 CORS policy that allows range requests from the viewer origin.
   Not attempted in the spike.
 - For **tabular** tracks (the aggregate tables `advanced_viz` owns) GenomeSpy is a genuine
   capability gain over Plotly: locus zoom, chromosome grid, interval marks and picking are
@@ -208,6 +208,6 @@ something JBrowse does not draw in one view.
   redraw what a `coverage_track` with `mark: rect` already follows, and the GenomeSpy
   toggle of a Plotly tile in a template that has a `jbrowse`.
 - The navigator and the browser now talk: the browser follows the brush of its tab
-  (`docs/design/jbrowse-genome-tracks.md`, "The browser follows the navigator").
+  (https://depictio.github.io/depictio-docs/features/genome-browser/navigator/).
 - The roles and the lints that hold them are in `depictio/projects/nf-core/RULES.md`
   section 16.

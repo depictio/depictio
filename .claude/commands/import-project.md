@@ -33,8 +33,7 @@ $ARGUMENTS
 4. **Activate the venv and run the project**:
 
    ```bash
-   source depictio/cli/.venv/bin/activate
-   depictio-cli ingest \
+   uv run depictio-cli ingest \
      --server "<cli-config>" \
      --project-config-path "<project-folder>/project.yaml"
    ```

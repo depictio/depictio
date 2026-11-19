@@ -452,6 +452,19 @@ class TestCatalog:
 
         assert lock.module_hash(catalog_tree / "tool") == before
 
+    def test_the_fixture_pointer_does_not_count_in_a_module_hash(
+        self, lock: ModuleType, catalog_tree: Path
+    ) -> None:
+        output = catalog_tree / "tool" / "summary.yaml"
+        output.write_text("id: summary\nfixture: summary.tsv\n")
+        before = lock.module_hash(catalog_tree / "tool")
+
+        output.write_text("id: summary\nfixture: ../../elsewhere/report.parquet\n")
+        assert lock.module_hash(catalog_tree / "tool") == before
+
+        output.write_text("id: summary\nname: renamed\nfixture: summary.tsv\n")
+        assert lock.module_hash(catalog_tree / "tool") != before
+
     def test_a_module_edited_without_a_bump_fails_until_bumped_and_its_templates_too(
         self,
         lock: ModuleType,

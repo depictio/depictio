@@ -1,5 +1,5 @@
 // A finished nf-core run published through the depictio/publish subworkflow
-// (the depictio/ingest module in artifact mode), as docs/nextflow-module.md
+// (the depictio/ingest module in artifact mode), as the Nextflow subworkflow page of the docs (https://depictio.github.io/depictio-docs/workflows/nextflow/subworkflow/)
 // shows for a pipeline: the results directory and the run's samplesheet, the
 // template detected from pipeline_info/ and its routes from params.json. For
 // the nf-core jobs of .github/workflows/build-images.yaml:

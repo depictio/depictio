@@ -21,10 +21,12 @@ cases:
       - alpha_diversity_multi_canonical
       - taxonomy_rel_abundance
   viralrecon-seqruns:
-    # sequencing-runs structure: the data root holds run_* folders.
+    # sequencing-runs structure: the data root holds run_* folders. The test run is
+    # not vendored: bash depictio/projects/nf-core/viralrecon/3.0.0/download_test_data.sh \
+    #   ~/Data/viralrecon-testdata
     template: nf-core/viralrecon/3.0.0
     runs:
-      - depictio/projects/nf-core/viralrecon/3.0.0
+      - ~/Data/viralrecon-testdata
   rnaseq:
     template: nf-core/rnaseq/3.26.0
     runs:

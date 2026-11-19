@@ -4,8 +4,8 @@ Single run, current build. 1,434 of 1,482 renders succeeded. The 48 failures are
 all figure offloads hitting the 30 s Celery ceiling; they are a result, not noise,
 and are described under *Where the failures are*.
 
-`PERF_REPORT.md` (v1) is kept as it stands. It describes a different dataset and a
-different dashboard, see *Why the numbers moved*.
+The v1 report (`PERF_REPORT.md`, removed from the tree, still in git history) described a
+different dataset and a different dashboard, see *Why the numbers moved*.
 
 ## Setup
 

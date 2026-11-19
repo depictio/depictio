@@ -22,12 +22,12 @@ packages/depictio-components/
 
 ## Build
 
-Node.js >= 20 and npm >= 10 required.
+Node.js >= 20 and pnpm >= 9 required.
 
 ```bash
 cd packages/depictio-components
-npm install
-npm run build     # produces depictio_components/depictio_components.min.js
+pnpm install
+pnpm run build     # produces depictio_components/depictio_components.min.js
 ```
 
 The Python package is installed by the root `uv sync` via the `[tool.uv.sources]` entry in the top-level `pyproject.toml`.
