@@ -72,7 +72,8 @@ spec:
           containers:
             - name: rclone
               image: {{ $off.image | default "rclone/rclone:1.68.2" | quote }}
-              imagePullPolicy: IfNotPresent
+              # EMBL Capsule admits only Always.
+              imagePullPolicy: {{ $off.imagePullPolicy | default "Always" }}
               securityContext:
                 {{- toYaml .Values.backend.securityContext | nindent 16 }}
               command: ["/bin/sh", "-c"]
@@ -161,7 +162,7 @@ spec:
                 - name: tmp
                   mountPath: /tmp
               resources:
-                {{- toYaml ($off.resources | default (dict "requests" (dict "cpu" "100m" "memory" "128Mi") "limits" (dict "memory" "512Mi"))) | nindent 16 }}
+                {{- toYaml ($off.resources | default (dict "requests" (dict "cpu" "100m" "memory" "128Mi") "limits" (dict "cpu" "500m" "memory" "512Mi"))) | nindent 16 }}
           volumes:
             - name: backups
               persistentVolumeClaim:

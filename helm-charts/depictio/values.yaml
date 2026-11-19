@@ -91,6 +91,16 @@ backups:
     prefix: ""             # defaults to the release name
     existingSecret: ""
     image: rclone/rclone:1.68.2
+    # Always: namespaces under EMBL Capsule refuse any other policy.
+    imagePullPolicy: Always
+    # A CPU limit is required by quota-enforced namespaces (EMBL Capsule).
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     mongo:
       retentionDays: 365   # in the bucket, independent of the volume's retention
     data:
