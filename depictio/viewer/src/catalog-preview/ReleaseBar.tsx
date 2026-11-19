@@ -18,7 +18,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { Sparkles } from 'lucide-react';
+import { GitCompareArrows, Tag } from 'lucide-react';
 import { useCatalogPaper } from './shared';
 import type { CatalogGlobal } from './shared';
 import { fetchReleases, fetchVersions } from './siteData';
@@ -34,6 +34,13 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
     {children}
   </Stack>
 );
+
+/** Whether a release lists any catalog change: an empty "What's new" is noise. */
+function hasChanges(release: ReleaseEntry): boolean {
+  return Object.values(release.changes ?? {}).some((v) =>
+    Array.isArray(v) ? v.length > 0 : v && typeof v === 'object' ? Object.keys(v).length > 0 : Boolean(v),
+  );
+}
 
 const WhatsNew: React.FC<{
   g: CatalogGlobal;
@@ -162,8 +169,10 @@ const ReleaseBar: React.FC = () => {
       {versions ? (
         <Tooltip label="Catalog release" withArrow>
           <Select
-            size="xs"
-            w={paper ? 96 : 112}
+            size="sm"
+            w={136}
+            leftSection={<Tag size={14} strokeWidth={1.8} aria-hidden />}
+            styles={{ input: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }}
             aria-label="Catalog release"
             allowDeselect={false}
             value={slot}
@@ -173,7 +182,7 @@ const ReleaseBar: React.FC = () => {
           />
         </Tooltip>
       ) : null}
-      {release && slot ? (
+      {release && slot && hasChanges(release) ? (
         <>
           {paper ? (
             // Paper's bar is a row of icon keys; a labelled button there pushed the
@@ -186,7 +195,7 @@ const ReleaseBar: React.FC = () => {
                 aria-label="What’s new"
                 onClick={() => setOpen(true)}
               >
-                <Sparkles size={19} strokeWidth={1.6} aria-hidden />
+                <GitCompareArrows size={19} strokeWidth={1.6} aria-hidden />
               </ActionIcon>
             </Tooltip>
           ) : (

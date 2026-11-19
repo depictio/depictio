@@ -5,7 +5,7 @@
  * light `data/index.json` first, installs it as `window.__CATALOG_PREVIEW__`
  * (with `lazyOutputs` set so each output's data is fetched when first shown) and
  * mounts the same `CatalogApp`, in the same chrome (`chrome.ts`, Paper by default).
- * Theme: `?theme=light|dark`, else the OS setting.
+ * Theme: `?theme=light|dark`, else the reader's last choice, else the OS setting.
  */
 // REQUIRED FIRST: registers the bundled Iconify icons (see src/icons.ts).
 import '../icons';
@@ -28,18 +28,10 @@ import { depictioTheme } from '../theme';
 import CatalogApp from './App';
 import { applyCatalogChrome } from './chrome';
 import type { CatalogGlobal } from './shared';
+import { resolveCatalogTheme } from './siteTheme';
 
 const DATA_BASE = 'data/';
 
-function resolveTheme(): 'light' | 'dark' {
-  try {
-    const q = new URLSearchParams(window.location.search).get('theme');
-    if (q === 'light' || q === 'dark') return q;
-  } catch {
-    /* fall through */
-  }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
 
 const Shell: React.FC<{ scheme: 'light' | 'dark'; children: React.ReactNode }> = ({
   scheme,
@@ -100,7 +92,7 @@ const Boot: React.FC<{ scheme: 'light' | 'dark' }> = ({ scheme }) => {
   return <CatalogApp g={g} />;
 };
 
-const scheme = resolveTheme();
+const scheme = resolveCatalogTheme();
 // The same chrome as the single-file bundle (Paper unless `#chrome=base`),
 // applied before the first render so no frame paints in another style.
 applyCatalogChrome();
