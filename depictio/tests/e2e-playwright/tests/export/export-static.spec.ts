@@ -298,7 +298,7 @@ test.describe("Static export (owner flows)", () => {
     const result = status.result!;
     expect(result.s3_key).toMatch(
       new RegExp(
-        `^serverless-exports/${IRIS_DASHBOARD_ID}/\\d{8}T\\d{6}Z\\.html$`,
+        `^serverless-exports/${IRIS_DASHBOARD_ID}/\\d{8}T\\d{6}Z-${job_id}\\.html$`,
       ),
     );
     expect(result.bucket).toBeTruthy();

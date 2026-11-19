@@ -18,13 +18,19 @@ degrades performance, and must not stop the API from booting. It mirrors
 from __future__ import annotations
 
 from pymongo import ASCENDING, DESCENDING
+from pymongo.errors import OperationFailure
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
     dashboards_collection,
     files_collection,
     runs_collection,
+    static_exports_collection,
 )
+
+#: The TTL index on ``static_exports.created_at`` (static-bundle export jobs).
+STATIC_EXPORTS_TTL_INDEX = "static_exports_ttl"
 
 
 def ensure_core_indexes() -> None:
@@ -59,3 +65,36 @@ def ensure_core_indexes() -> None:
         )
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(f"core_indexes: failed to ensure dashboards indexes: {exc}")
+
+    ensure_static_exports_ttl()
+
+
+def ensure_static_exports_ttl(collection=None, retention_days: int | None = None) -> None:
+    """Expire static-export job documents after the configured retention.
+
+    ``performance.static_export_retention_days`` (0 = keep forever, which drops
+    the index). A changed retention is applied to the existing index with
+    ``collMod``: ``create_index`` refuses to change ``expireAfterSeconds`` on an
+    index that already exists. Never raises.
+    """
+    collection = static_exports_collection if collection is None else collection
+    days = settings.performance.static_export_retention_days if retention_days is None else retention_days
+    try:
+        if days <= 0:
+            if STATIC_EXPORTS_TTL_INDEX in collection.index_information():
+                collection.drop_index(STATIC_EXPORTS_TTL_INDEX)
+            return
+        seconds = int(days) * 86_400
+        try:
+            collection.create_index(
+                "created_at", expireAfterSeconds=seconds, name=STATIC_EXPORTS_TTL_INDEX
+            )
+        except OperationFailure:
+            # Same key, other expireAfterSeconds: retune the index in place.
+            collection.database.command(
+                "collMod",
+                collection.name,
+                index={"keyPattern": {"created_at": 1}, "expireAfterSeconds": seconds},
+            )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"core_indexes: failed to ensure the static_exports TTL: {exc}")

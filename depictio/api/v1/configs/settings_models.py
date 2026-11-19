@@ -2364,6 +2364,18 @@ class PerformanceConfig(BaseSettings):
         ),
     )
 
+    static_export_retention_days: int = Field(
+        default=7,
+        ge=0,
+        description=(
+            "Days a static-bundle export is kept. The bundle under "
+            "`serverless-exports/` in S3 is pruned by the next export after it "
+            "turns this old, and its `static_exports` job document expires through "
+            "a TTL index on `created_at`. A bundle is bulk data, so it should not "
+            "outlive the download it was built for. 0 keeps both forever."
+        ),
+    )
+
     # Playwright/browser timeouts (in milliseconds)
     browser_navigation_timeout: int = Field(default=60000)  # 60s default
     browser_page_load_timeout: int = Field(default=90000)  # 90s default

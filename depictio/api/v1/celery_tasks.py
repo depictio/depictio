@@ -3352,6 +3352,52 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     return _close_step(ok, message)
 
 
+#: Where finished static bundles are parked in S3, one prefix per dashboard.
+STATIC_EXPORT_PREFIX = "serverless-exports/"
+
+
+def static_export_key(dashboard_id: str, built_at: Any, job_id: str) -> str:
+    """The S3 key of one export's bundle.
+
+    The job id is part of it: two exports of one dashboard in the same second
+    (a double click, or two owners with different options) must not overwrite
+    each other's bundle.
+    """
+    return f"{STATIC_EXPORT_PREFIX}{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}-{job_id}.html"
+
+
+def prune_static_exports(
+    client: Any,
+    bucket: str,
+    retention_days: int,
+    now: Any = None,
+) -> int:
+    """Delete the bundles under ``serverless-exports/`` older than the retention.
+
+    Run by every export before it builds, so the prefix stays bounded without a
+    scheduler; the job documents expire on their own (the ``static_exports``
+    TTL index, :func:`core_indexes.ensure_static_exports_ttl`). ``0`` keeps
+    everything. Returns how many objects were deleted.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    if retention_days <= 0:
+        return 0
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=retention_days)
+    stale: list[dict[str, str]] = []
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=STATIC_EXPORT_PREFIX):
+        for obj in page.get("Contents") or []:
+            modified = obj.get("LastModified")
+            if modified is not None and modified < cutoff:
+                stale.append({"Key": obj["Key"]})
+    for start in range(0, len(stale), 1000):  # DeleteObjects takes 1000 keys
+        client.delete_objects(
+            Bucket=bucket, Delete={"Objects": stale[start : start + 1000], "Quiet": True}
+        )
+    return len(stale)
+
+
 @celery_app.task(
     name="depictio.serverless.export_static",
     soft_time_limit=600,
@@ -3376,7 +3422,8 @@ def export_static_bundle(payload: dict) -> dict:
 
     Args:
         payload: ``{"job_id", "dashboard_id", "user": {"id", "email", "is_admin",
-            "is_anonymous"}, "single_tab"?}`` — JSON-serializable throughout.
+            "is_anonymous"}, "single_tab"?, "python_runtime"?}`` —
+            JSON-serializable throughout. The job id is part of the S3 key.
 
     Returns:
         ``{"s3_key", "bucket", "size_bytes", "built_at", "tab_count"}``.
@@ -3390,10 +3437,24 @@ def export_static_bundle(payload: dict) -> dict:
     from depictio.api.v1.s3 import s3_client
     from depictio.serverless import producer_a
 
+    from uuid import uuid4
+
     dashboard_id = str(payload["dashboard_id"])
     export_user = producer_a.ExportUser(**payload["user"])
     built_at = datetime.now(timezone.utc)
-    key = f"serverless-exports/{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}.html"
+    key = static_export_key(dashboard_id, built_at, str(payload.get("job_id") or uuid4().hex))
+
+    # Retention: the bundles past their age go before a new one is added.
+    try:
+        pruned = prune_static_exports(
+            s3_client, settings.s3.bucket, settings.performance.static_export_retention_days
+        )
+        if pruned:
+            logger.info("static export retention: pruned %d expired bundle(s)", pruned)
+    except SoftTimeLimitExceeded:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a failed prune must not fail the export
+        logger.warning(f"static export retention: prune failed: {exc}")
 
     started = time.monotonic()
     with tempfile.TemporaryDirectory() as tmpdir:

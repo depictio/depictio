@@ -124,6 +124,9 @@ class _FakeS3:
         self.payload = payload
         self.get_calls: list[tuple[str, str]] = []
         self.put_calls: list[dict[str, Any]] = []
+        # The retention prune: list the export prefix, delete what is too old.
+        self.objects: list[dict[str, Any]] = []
+        self.delete_calls: list[dict[str, Any]] = []
 
     def get_object(self, Bucket: str, Key: str):
         self.get_calls.append((Bucket, Key))
@@ -131,6 +134,20 @@ class _FakeS3:
 
     def put_object(self, **kwargs):
         self.put_calls.append(kwargs)
+        return {}
+
+    def get_paginator(self, name: str):
+        assert name == "list_objects_v2"
+        fake = self
+
+        class _Paginator:
+            def paginate(self, Bucket: str, Prefix: str):
+                yield {"Contents": [o for o in fake.objects if o["Key"].startswith(Prefix)]}
+
+        return _Paginator()
+
+    def delete_objects(self, Bucket: str, Delete: dict[str, Any]):
+        self.delete_calls.append(Delete)
         return {}
 
 
@@ -766,7 +783,8 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
     assert result["size_bytes"] == len("<html>hi</html>")
     assert result["tab_count"] == 2
     assert result["s3_key"].startswith(f"serverless-exports/{DASHBOARD_OID}/")
-    assert result["s3_key"].endswith(".html")
+    # The job id keeps two exports in the same second from sharing a key.
+    assert result["s3_key"].endswith("Z-job-1.html")
     datetime.fromisoformat(result["built_at"])
 
     (put,) = fake_s3.put_calls
@@ -774,6 +792,65 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
     assert put["Bucket"] == settings.minio.bucket
     assert put["ContentType"] == "text/html; charset=utf-8"
     assert put["Body"] == b"<html>hi</html>"
+
+
+def test_export_task_prunes_expired_bundles_first(monkeypatch: pytest.MonkeyPatch):
+    """Retention: bundles older than static_export_retention_days are deleted by
+    the next export; younger ones and other prefixes are left alone."""
+    from datetime import timedelta, timezone
+
+    from depictio.api.v1 import s3 as s3_mod
+    from depictio.api.v1.celery_tasks import export_static_bundle
+    from depictio.api.v1.configs.config import settings
+    from depictio.serverless import producer_a as producer_a_mod
+
+    def fake_export_static(dashboard_id, out_path=None, **kwargs):
+        Path(out_path).write_text("<html>hi</html>", encoding="utf-8")
+        return _fake_export_result()
+
+    now = datetime.now(timezone.utc)
+    fake_s3 = _FakeS3()
+    fake_s3.objects = [
+        {"Key": "serverless-exports/d/old.html", "LastModified": now - timedelta(days=8)},
+        {"Key": "serverless-exports/d/new.html", "LastModified": now - timedelta(days=1)},
+        {"Key": "notebook_reports/x.html", "LastModified": now - timedelta(days=80)},
+    ]
+    monkeypatch.setattr(producer_a_mod, "export_static", fake_export_static)
+    monkeypatch.setattr(s3_mod, "s3_client", fake_s3)
+    monkeypatch.setattr(settings.performance, "static_export_retention_days", 7)
+
+    export_static_bundle(
+        {
+            "job_id": "job-2",
+            "dashboard_id": str(DASHBOARD_OID),
+            "user": {"id": str(OWNER_OID), "email": "o@example.com"},
+        }
+    )
+    (deleted,) = fake_s3.delete_calls
+    assert deleted["Objects"] == [{"Key": "serverless-exports/d/old.html"}]
+
+    # 0 keeps everything.
+    fake_s3.delete_calls = []
+    monkeypatch.setattr(settings.performance, "static_export_retention_days", 0)
+    export_static_bundle(
+        {"job_id": "job-3", "dashboard_id": str(DASHBOARD_OID), "user": {"id": str(OWNER_OID)}}
+    )
+    assert fake_s3.delete_calls == []
+
+
+def test_static_exports_ttl_index_follows_the_retention():
+    import mongomock
+
+    from depictio.api.v1.core_indexes import STATIC_EXPORTS_TTL_INDEX, ensure_static_exports_ttl
+
+    coll = mongomock.MongoClient().db.static_exports
+    ensure_static_exports_ttl(coll, retention_days=7)
+    info = coll.index_information()[STATIC_EXPORTS_TTL_INDEX]
+    assert info["key"] == [("created_at", 1)]
+    assert info["expireAfterSeconds"] == 7 * 86_400
+
+    ensure_static_exports_ttl(coll, retention_days=0)
+    assert STATIC_EXPORTS_TTL_INDEX not in coll.index_information()
 
 
 def test_export_task_propagates_missing_template(monkeypatch: pytest.MonkeyPatch):
