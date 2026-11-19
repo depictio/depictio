@@ -37,7 +37,7 @@
 template:
   template_id: "nf-core/proteinfamilies/2.6.0"
   description: "nf-core/proteinfamilies protein family template: how the input sequences clustered, the families built or extended with their seed, model and alignment statistics, each family's alignment, residue conservation and predicted structure, and the members with their identity to the representative."
-  version: "1.2.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "proteinfamilies output directory (qc/, mmseqs/, family_reps/, full_msa/, hmm/, update_families/, pipeline_info/)."
@@ -313,9 +313,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of an aligned FASTA file"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the sample and the family are derived from its path"
 
       - data_collection_tag: "hmmer_hmm_raw"
@@ -337,9 +340,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of a HMMER3 profile"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the family is derived from its name"
 
       - data_collection_tag: "hmmer_hmmalign_raw"
@@ -361,9 +367,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of a Stockholm alignment"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the sample and the family are derived from its path"
 
       # ----------------------------------------------------------------

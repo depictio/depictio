@@ -221,8 +221,8 @@
       }
     },
     "nf-core/atacseq/2.1.2": {
-      "version": "4.0.0",
-      "content_hash": "843af8483a27e1d24fe5d48916908315b9d32c46630040636fe3a68ae1e49627",
+      "version": "5.0.0",
+      "content_hash": "62f46e94f3d21a7bcf4ae126de6b0fbfb9f3e286f41a43cdb6233436615b102e",
       "catalog": {
         "ataqv": "1.1.0",
         "deeptools": "1.0.0",
@@ -247,8 +247,8 @@
       }
     },
     "nf-core/chipseq/2.1.0": {
-      "version": "4.2.0",
-      "content_hash": "119d9e0b7fc99ee5fd7d644fd6d8f59adad2a14325b20ee06551b16f78b20553",
+      "version": "5.0.0",
+      "content_hash": "0c8da54e8048a475d492d0661965718be19358cf5896e1a4262dd638fe149d28",
       "catalog": {
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
@@ -267,8 +267,8 @@
       }
     },
     "nf-core/cutandrun/3.1": {
-      "version": "2.1.0",
-      "content_hash": "4fabc4a5549032fa8a3b31b3294a61ab759a5e6132bbb7a109a55a11324feaf4",
+      "version": "3.0.0",
+      "content_hash": "701c767dce8c44c799dd1f0cda2664e433389bb3c019883928d6829851b4c866",
       "catalog": {
         "bowtie2": "1.0.0",
         "cutandrun": "1.0.0",
@@ -280,8 +280,8 @@
       }
     },
     "nf-core/cutandrun/3.2.2": {
-      "version": "2.1.0",
-      "content_hash": "04d6e8315349081727de9da7592dd656d0077104cd5260ab1da1b1257004a1a0",
+      "version": "3.0.0",
+      "content_hash": "ea33d8a83bac197be7df13ad3772dce56e68da672a0155ee89b7cb5d783900fd",
       "catalog": {
         "bowtie2": "1.0.0",
         "cutandrun": "1.0.0",
@@ -293,8 +293,8 @@
       }
     },
     "nf-core/demultiplex/1.8.0": {
-      "version": "1.2.0",
-      "content_hash": "7bf1a9dcfc7a3625bc94d4088147db9a3c0d25096d83c53b0c3a73af2f94a417",
+      "version": "2.0.0",
+      "content_hash": "3403ec85aada24cb8119a730a938a5ee26ac844a80c8748d7314b39bbee79e18",
       "catalog": {
         "bcl2fastq": "1.0.0",
         "bclconvert": "1.0.0",
@@ -315,8 +315,8 @@
       "content_hash": "5e684d5eea58107bf73ecf44c21563de512c342f4690bfff7a0fa17bc8d682d7"
     },
     "nf-core/eager/2.4.5": {
-      "version": "1.3.2",
-      "content_hash": "ef56b6f94388f17ff8266deee1896c25b41c60ed9abc208f254ddbbedf904070",
+      "version": "2.0.0",
+      "content_hash": "26c538064c69e24981500b3f59cfaaddb17691cd3d6e0fd504737889ca5c8aef",
       "catalog": {
         "adapterremoval": "1.0.0",
         "bcftools": "1.0.0",
@@ -330,8 +330,8 @@
       }
     },
     "nf-core/eager/2.5.3": {
-      "version": "1.5.0",
-      "content_hash": "4d967b28e94ea91917327986eca3391dcf8b614290c76f0ac9bfa059a1b6ba6b",
+      "version": "2.0.0",
+      "content_hash": "f0828bf63d8f9146825a157f9912513ba7be290820e7d0f15bf38e2c1c8df4e5",
       "catalog": {
         "adapterremoval": "1.0.0",
         "bcftools": "1.0.0",
@@ -364,8 +364,8 @@
       }
     },
     "nf-core/genomeassembler/2.0.0": {
-      "version": "1.3.0",
-      "content_hash": "8e73ad37ee54f6c700d280a8b8d3ee362875081f13a4adb1060f92d55d3b9d3b",
+      "version": "2.0.0",
+      "content_hash": "df190e3bc5cd1d049592a2617d9f30000407e7fb1a9776a5f4960221443d4544",
       "catalog": {
         "busco": "2.0.0",
         "genomescope": "1.0.0",
@@ -450,8 +450,8 @@
       }
     },
     "nf-core/methylseq/2.3.0": {
-      "version": "1.3.1",
-      "content_hash": "bc9e81cb38eccad6751708beac3a5318bd94d18eaa961051ec52754e25ea640b",
+      "version": "2.0.0",
+      "content_hash": "1c0ee8353bff8c9ba438ccdaddd3d25ad99421292916247b2f47b65be3d9267b",
       "catalog": {
         "bismark": "1.0.0",
         "multiqc": "1.0.0",
@@ -535,8 +535,8 @@
       }
     },
     "nf-core/proteinfamilies/2.5.0": {
-      "version": "1.2.0",
-      "content_hash": "0865297f9945e9b6e7707f7b36c73973c52426a73179b9e9b34a2f05a2d9405f",
+      "version": "2.0.0",
+      "content_hash": "fb1dd972bbc9b8ef402f961d16e3300211e969cab7e1bf6d6dd420a71356e36e",
       "catalog": {
         "famsa": "1.0.0",
         "hmmer": "1.1.0",
@@ -545,8 +545,8 @@
       }
     },
     "nf-core/proteinfamilies/2.6.0": {
-      "version": "1.2.0",
-      "content_hash": "d1bedafe17d34bbf4062559134694c1a245f246eff96e3f8d720d533f4d7a132",
+      "version": "2.0.0",
+      "content_hash": "4ec6bd3f9f726431097d9c3b551a0ef55d51c69ffc7897f4282cc5ff2e650b54",
       "catalog": {
         "famsa": "1.0.0",
         "hmmer": "1.1.0",
@@ -647,8 +647,8 @@
       }
     },
     "nf-core/rnavar/1.3.0": {
-      "version": "1.1.2",
-      "content_hash": "ca40f232caf5be7630610df8a854a67630961791c1379839dea401a24d29b2bd",
+      "version": "2.0.0",
+      "content_hash": "2f5caf6702673581d8add861872a53b3141b8a405afb2f8816f35b6748d0ba1e",
       "catalog": {
         "multiqc": "1.0.0",
         "picard": "1.1.0",
@@ -695,8 +695,8 @@
       }
     },
     "nf-core/scrnaseq/4.2.0": {
-      "version": "2.0.0",
-      "content_hash": "a8256a70e2d2a5c994e967e1b285387ffb5663e803324649d48ee6d5d163b06a",
+      "version": "3.0.0",
+      "content_hash": "32e22a646c9017b78ba63e8e9e4df11b11322d2f8211c6da19a49dc7219905e4",
       "catalog": {
         "cellbender": "1.0.0",
         "cellranger": "1.1.0",
@@ -707,8 +707,8 @@
       }
     },
     "nf-core/smrnaseq/2.4.1": {
-      "version": "1.2.0",
-      "content_hash": "868f0de56b4b175784b277148da6c43a227a3a93f45f0c4f80c12d40ab840fc9",
+      "version": "2.0.0",
+      "content_hash": "2f9da28ad36b276342cd6a4c3f138e461df7fbf981ff15578a085bf30ebef4a1",
       "catalog": {
         "mirdeep2": "1.0.0",
         "mirtop": "1.0.0",

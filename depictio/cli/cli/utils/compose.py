@@ -56,6 +56,7 @@ from depictio.models.components.advanced_viz.catalog import (
     Render,
     load_catalog_entries,
 )
+from depictio.recipes import SOURCE_LINE_COLUMN
 
 DASHBOARD_FILE = "dashboards/composed.yaml"
 GENERAL_STATS_FILE = "general_stats.tsv"
@@ -416,6 +417,10 @@ def _lines_config(files: Sequence[str], column: str, with_path: bool) -> dict[st
     }
     if with_path:
         kwargs["include_file_paths"] = "source_path"
+        # Each line's place in its file: a Delta table does not promise to
+        # keep row order, the recipes read the lines back in this one.
+        kwargs["row_index_name"] = SOURCE_LINE_COLUMN
+        kwargs["row_index_offset"] = 1
     config: dict[str, Any] = {
         "type": "Table",
         "scan": _scan(files),

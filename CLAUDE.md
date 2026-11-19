@@ -285,6 +285,11 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
+- A one-line-per-row raw scan (`separator: "\x1f"`) numbers its lines: `row_index_name:
+  source_line`, `row_index_offset: 1` next to `include_file_paths: source_path`. A Delta table
+  does not promise row order, so the recipe engine puts each file's lines back in that order
+  (`recipes.in_file_order`) and drops the column before a recipe reads the source. A new raw
+  scan without it fails `test_every_raw_scan_numbers_its_lines`
 
 ### Multi-run templates (#1399)
 - `depictio ingest <dir> --attach-run` adds a run to an existing project. A single-run
