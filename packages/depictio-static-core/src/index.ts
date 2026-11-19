@@ -8,6 +8,7 @@ export * from './refill';
 export * from './trendline';
 export * from './prologue';
 export * from './advancedViz';
+export * from './referenceStats';
 export * from './links';
 export * from './filterBinding';
 export * from './valueOrder';
