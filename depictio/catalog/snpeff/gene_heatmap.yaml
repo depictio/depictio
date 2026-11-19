@@ -10,6 +10,28 @@ find:
 recipe: snpeff/gene_heatmap.py
 fixture: gene_heatmap.tsv
 renders_as:
-  - { id: burden_matrix, component: advanced_viz, kind: complex_heatmap,
-      roles: {index: gene_name} }
-  - { component: table }
+  # C6 N/A: value columns are the callsets (sample and caller), known only at ingest
+  - id: burden_matrix
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Gene burden by callset
+    roles: {index: gene_name}
+    description: >-
+      Each cell is the number of coding variants SnpEff assigned to a gene (row) in a
+      callset (column), a sample called by one caller. It answers which genes carry
+      the most variants and whether the callsets agree on them.
+
+      How to read: columns that cluster together call similar variants, so if the
+      callers separate more than the sequencing depths do, the caller matters more
+      than the data. A row that is dark in every column is a robust high-burden
+      gene, and a row dark in one column only is a call to inspect.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/outputsummary/
+  - component: table
+    title: Gene burden table
+    description: >-
+      Each row is a gene with its variant count in every callset. It answers the exact
+      numbers behind the heatmap cells.
+
+      How to read: sort a callset column to rank the genes, and compare across columns
+      to spot a caller that misses a gene.

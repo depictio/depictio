@@ -10,22 +10,179 @@ description: >-
 find:
   path_glob: "**/*_plddt.tsv"
 recipe: proteinfold/models.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several engines.
 fixture: models.tsv
 renders_as:
-  - { id: plddt_vs_ptm, component: advanced_viz, kind: scatter_xy,
-      roles: {x: mean_plddt, y: ptm, label: model_id, color: engine, size: n_residues} }
-  - { id: model_plddt, component: card, column: mean_plddt, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: model_confident_share, component: card, column: confident_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: model_ptm, component: card, column: ptm, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: model_iptm, component: card, column: iptm, aggregation: max,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: model_count, component: card, column: model_id, aggregation: count,
-      secondary_layout: top_n, breakdown_col: engine, top_n_count: 3 }
-  - { component: figure, visu_type: box, dict_kwargs: {x: engine, y: mean_plddt, color: engine} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: model_rank, y: mean_plddt, color: structure} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: engine }
-  - { component: interactive, interactive_type: RangeSlider, column_name: model_rank }
-  - { component: table, row_selection_enabled: true, row_selection_column: model_id }
+  # pLDDT 70 and pTM 0.5 are the published floors for a confident local
+  # placement and a likely correct fold (AlphaFold DB paper, EMBL-EBI
+  # AlphaFold course). Quadrants draw both as reference lines.
+  - id: plddt_vs_ptm
+    component: advanced_viz
+    kind: scatter_xy
+    title: Local against global confidence
+    roles: {x: mean_plddt, y: ptm, label: model_id, color: engine, size: n_residues}
+    config:
+      x_title: Mean pLDDT
+      y_title: pTM
+      top_n_labels: 5
+      legend_pos: bottom
+      quadrants:
+        x: 70
+        y: 0.5
+        labels:
+          - Weak locally, fold likely
+          - Confident
+          - Likely wrong
+          - Placed well, fold doubtful
+    description: >-
+      Each point is a predicted model: its mean pLDDT on the horizontal axis and its predicted TM score on the vertical axis, coloured by engine and sized by the number of residues. It answers whether a model is trustworthy locally and as a whole.
+
+      How to read: models in the upper right are confident on both counts. A high pLDDT with a low pTM means well folded pieces that are badly arranged, and the lower left holds models that are probably wrong. Engines that write no pTM are not drawn.
+
+      Lines and annotations: the vertical line is a mean pLDDT of 70, the AlphaFold DB threshold for a confident residue. The horizontal line is a pTM of 0.5, above which the overall fold of the model might be similar to the true structure.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/ and https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/confidence-scores-in-alphafold-multimer/
+  - id: model_plddt
+    component: card
+    column: mean_plddt
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 70
+    threshold_direction: min
+    threshold_warn: 50
+    headline: true
+    title: Model confidence
+    caption: models by mean pLDDT band
+    description: >-
+      The hero number is the median over models of the mean pLDDT, and the strip counts models by band. It answers how confident the predictions are overall.
+
+      How to read: models at or above 70 are confident on average, those between 50 and 70 are low and those below 50 are very low. The minimum and maximum show the range across models.
+
+      Lines and annotations: the cut-offs are 70 and 50, the AlphaFold DB confidence bands for pLDDT.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: model_confident_share
+    component: card
+    column: confident_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Confidently placed residues
+    caption: median share, with its spread
+    description: >-
+      The hero number is the median percentage of a model's residues at pLDDT 70 or more, and the box shows its spread. It answers how much of a typical model is placed confidently.
+
+      How to read: a high share with a tight box means whole models are reliable. A low or wide box means disordered proteins or hard targets, so check which engine and target sit low.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: model_ptm
+    component: card
+    column: ptm
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: min
+    title: Predicted TM score
+    caption: models by pTM at the 0.5 floor
+    description: >-
+      The hero number is the median pTM over models that report one, and the strip counts models above and below 0.5. It answers how many predicted folds are likely to match the real one.
+
+      How to read: a pTM above 0.5 means the overall predicted fold might be similar to the true structure, and below 0.5 the model is likely wrong. Engines that write no pTM are left out.
+
+      Lines and annotations: the cut-off is 0.5, from the EMBL-EBI AlphaFold course.
+
+      Source: https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/confidence-scores-in-alphafold-multimer/
+  - id: model_iptm
+    component: card
+    column: iptm
+    aggregation: median
+    aggregations: [max]
+    secondary_layout: threshold
+    threshold_value: 0.8
+    threshold_direction: min
+    threshold_warn: 0.6
+    title: Interface confidence
+    caption: complexes by ipTM band
+    description: >-
+      The hero number is the median ipTM over complexes, and the strip counts models by band. It answers how well the subunits of a complex are placed against each other.
+
+      How to read: values above 0.8 are confident high-quality predictions, values between 0.6 and 0.8 are uncertain and values below 0.6 suggest a failed prediction. Single chains have no ipTM and are not counted.
+
+      Lines and annotations: the cut-offs are 0.8 and 0.6, from the EMBL-EBI AlphaFold course.
+
+      Source: https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/confidence-scores-in-alphafold-multimer/
+  - id: model_count
+    component: card
+    column: model_rank
+    aggregation: count
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: engine
+    top_n_count: 3
+    title: Predicted models
+    caption: models, by engine
+    description: >-
+      The hero number is the number of predicted models in view, the bars rank the engines by how many they wrote, and the line below gives the highest rank. It answers how many models each engine produced.
+
+      How to read: engines write a different number of models per target. A short bar usually means an engine that returns a single model.
+  - id: engine_box
+    component: figure
+    visu_type: box
+    title: Model confidence per engine
+    dict_kwargs:
+      x: engine
+      y: mean_plddt
+      color: engine
+      labels:
+        engine: Engine
+        mean_plddt: Mean pLDDT
+    reference_lines:
+      - {axis: y, stat: median, column: mean_plddt}
+    description: >-
+      Each box is the spread of the mean pLDDT of an engine's models. It answers which engine gives the most confident predictions on these targets.
+
+      How to read: a higher box means more confident models, but confidence is not accuracy, so a high box from an engine that disagrees with the others deserves a second look. Compare the same targets across engines before preferring one.
+
+      Lines and annotations: the dashed line is the median mean pLDDT of a model of
+      this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of proteinfold.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - id: rank_line
+    component: figure
+    visu_type: line
+    title: Confidence by model rank
+    dict_kwargs:
+      x: model_rank
+      y: mean_plddt
+      color: structure
+      labels:
+        model_rank: Model rank
+        mean_plddt: Mean pLDDT
+        structure: Engine and target
+    description: >-
+      Each line follows the mean pLDDT of the models of one engine and target from the top-ranked one downwards. It answers how much worse the lower-ranked models are.
+
+      How to read: a flat line means the models agree and the ranking hardly matters. A steep fall means only the top models are worth using.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: engine
+    title: Engine
+    description: >-
+      Keep the models of one or more engines.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: model_rank
+    title: Model rank
+    description: >-
+      Restrict the tiles to a range of model ranks, where rank 1 is the top-ranked model.
+  - component: table
+    title: Model confidence scores
+    description: >-
+      One row per predicted model with its rank, mean pLDDT, confident and very low shares and the pTM, ipTM and ipSAE scores. Selecting rows filters the tab to them.
+
+      How to read: sort by pTM or ipTM to list the models most and least likely to be correct.
+    row_selection_enabled: true
+    row_selection_column: model_id

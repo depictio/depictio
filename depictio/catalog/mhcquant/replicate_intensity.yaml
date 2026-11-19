@@ -9,6 +9,49 @@ find: { path_glob: "*.tsv" }
 recipe: mhcquant/replicate_intensity.py
 fixture: replicate_intensity.tsv
 renders_as:
-  - { component: figure, visu_type: box, dict_kwargs: { x: replicate_label, y: log10_intensity, color: sample } }
-  - { component: card, column: detected, aggregation: sum, secondary_layout: top_n, breakdown_col: replicate_label, top_n_count: 3 }
-  - { component: table }
+  - component: figure
+    visu_type: box
+    title: Peptide intensity per replicate
+    dict_kwargs:
+      x: replicate_label
+      y: log10_intensity
+      color: sample
+      labels: {replicate_label: Replicate, log10_intensity: Log10 intensity, sample: Sample}
+    reference_lines:
+      - {axis: y, stat: median, column: log10_intensity}
+    description: >-
+      Each box is the distribution of peptide intensities in one replicate of a
+      sample, on a log10 scale, coloured by sample. It answers whether the replicates
+      of a sample were measured at comparable intensity.
+
+      How to read: boxes at similar heights mean a consistent injection amount and
+      sensitivity. A replicate shifted down or up has a loading or sensitivity
+      difference, so treat its intensities with care.
+
+      Lines and annotations: the dashed line is the median log10 peptide intensity
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of mhcquant.
+  - component: card
+    column: detected
+    aggregation: sum
+    aggregations: [average]
+    secondary_layout: composition
+    breakdown_col: replicate_label
+    caption: detections, split by replicate
+    title: Peptide detections
+    description: >-
+      The hero number is the count of peptide detections over all replicates in view,
+      and the bar splits it by replicate. The average beside it is the share of
+      peptide and replicate pairs in which the peptide was detected. It answers how
+      evenly the replicates contribute detections.
+
+      How to read: equal segments mean replicates detect about as many peptides. A
+      small segment is a replicate that detected fewer.
+  - component: table
+    title: Peptide intensity per replicate
+    description: >-
+      Each row is a peptide in one replicate of a sample, with whether it was
+      detected and its log10 intensity. It answers the exact values behind the
+      boxes.
+
+      How to read: filter to a peptide to compare its intensity across replicates.

@@ -10,8 +10,60 @@ description: >-
 find:
   path_glob: "**/purple/*.purple.cnv.somatic.tsv"
 recipe: purple/cnv_segments.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: cnv_segments.tsv
 renders_as:
-  - { id: purple_cn_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
-  - { id: segment_cn_spread, component: card, column: copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, columns: [sample, chrom, start, end, copy_number, major_copy_number, minor_copy_number, baf, label] }
+  # Segments are coloured by gain, neutral or loss from their log2 against a diploid
+  # baseline. PURPLE publishes no log2 cut-off (it fits absolute copy numbers), so the
+  # two dotted lines are set where the rounded copy number leaves two, which is how the
+  # recipe defines `copy_number`: 2.5 copies is log2(1.25) and 1.5 copies log2(0.75).
+  - id: purple_cn_profile
+    component: advanced_viz
+    kind: cnv_profile
+    title: Copy-number profile
+    roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label}
+    config:
+      gain_threshold: 0.322
+      loss_threshold: -0.415
+    description: >-
+      Each line is a fitted copy-number segment: its purity-adjusted copy number as a log2
+      ratio against two copies on the upper panel, and its fitted B-allele frequency on the
+      lower one. It answers where the tumor genome gains, loses or keeps its copy number,
+      and where one allele is lost.
+
+      How to read: segments above the upper dotted line are gains and those below the lower
+      one are losses. A BAF that rises towards 1 at an unchanged copy number is loss of
+      heterozygosity, where one allele is gone and the other duplicated. Zoom on a
+      chromosome to see the allele-specific copy numbers.
+
+      Lines and annotations: the dotted lines at log2 0.322 and -0.415 are the copy numbers
+      of 2.5 and 1.5, where the rounded copy number leaves two. They are a reference defined
+      by the recipe, not a PURPLE cut-off. The dotted line at BAF 0.5 is the balanced state,
+      since the BAF of a segment varies between 0.5 and 1.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: segment_cn_spread
+    component: card
+    column: copy_number
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Segment copy number
+    caption: median, with its spread
+    description: >-
+      The hero number is the median rounded copy number of the segments in view, and the
+      box shows their quartiles. It answers the typical copy number of the tumor genome.
+
+      How to read: a median of two with a tight box is a near diploid genome. A median
+      above two with a wide box points to a genome with many gains. Filter to a chromosome
+      to see where they sit.
+  - component: table
+    columns: [sample, chrom, start, end, copy_number, major_copy_number, minor_copy_number, baf, label]
+    title: Copy-number segments
+    description: >-
+      Each row is a fitted segment with its position, rounded copy number, the copy numbers
+      of the major and minor alleles and its BAF. It answers the exact fit behind each line
+      of the profile.
+
+      How to read: a minor allele copy number near zero marks loss of heterozygosity, and
+      the label spells the total as the sum of the two alleles.

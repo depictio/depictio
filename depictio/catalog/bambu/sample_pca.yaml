@@ -10,12 +10,153 @@ find: { path_glob: "**/bambu/counts_gene.txt" }
 recipe: bambu/sample_pca.py
 fixture: sample_pca.tsv
 renders_as:
-  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3, color: condition} }
-  - { id: depth_vs_complexity, component: advanced_viz, kind: scatter_xy, roles: {x: total_counts, y: n_genes_detected, label: sample_id, color: condition, size: top50_share_pct} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample_id, y: total_counts, color: condition, title: Reads assigned per library} }
-  - { component: card, column: total_counts, aggregation: sum, secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
-  - { component: card, column: n_genes_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_protein_coding, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: top50_share_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: condition }
-  - { component: table }
+  - id: pca
+    component: advanced_viz
+    kind: embedding
+    title: Sample structure
+    roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3, color: condition}
+    config:
+      axis_prefix: PC
+    description: >-
+      Each point is a sample placed by the first principal components of its log2(CPM + 1)
+      gene expression, coloured by condition. It answers whether the samples group by
+      condition.
+
+      How to read: replicates of a condition should sit together and conditions should
+      separate along the first component. A sample that sits with the wrong group or far
+      from its replicates is an outlier or a swapped label, so check the correlation heatmap.
+
+      Lines and annotations: the components use the 500 genes with the highest variance of
+      log2(CPM + 1), the default number of genes of DESeq2 plotPCA.
+
+      Source: https://raw.githubusercontent.com/thelovelab/DESeq2/devel/man/plotPCA.Rd
+  - id: depth_vs_complexity
+    component: advanced_viz
+    kind: scatter_xy
+    title: Depth against genes detected
+    roles: {x: total_counts, y: n_genes_detected, label: sample_id, color: condition, size: top50_share_pct}
+    config:
+      x_title: Reads assigned
+      y_title: Genes detected
+      top_n_labels: 6
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a library: the reads Bambu assigned on the horizontal axis and the
+      number of genes detected on the vertical axis, sized by the share of reads the 50 top
+      genes take and coloured by condition. It answers whether depth explains how many
+      genes were seen.
+
+      How to read: genes detected rises with depth and then flattens. A library below its
+      replicates at the same depth is less complex, and a large point means a few genes
+      take much of the library. Both point to quality problems to check before comparing
+      conditions.
+
+      Lines and annotations: The dashed line is the median number of genes detected of
+      this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of Bambu.
+  - id: reads_per_library
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample_id
+      y: total_counts
+      color: condition
+      labels: {sample_id: Library, total_counts: Reads assigned, condition: Condition}
+    reference_lines:
+      - {axis: y, stat: median, column: total_counts}
+    title: Reads assigned per library
+    description: >-
+      Each bar is the number of reads Bambu assigned to genes in a library, coloured by
+      condition. It answers how even the depth is across the run.
+
+      How to read: bars of similar height mean comparable depth. A short bar is a library
+      with little information, and counts per million correct for the difference only in
+      part.
+
+      Lines and annotations: The dashed line is the median reads assigned of this
+      table, a reference computed from the rows on show (it follows the filters), not a
+      cut-off of Bambu.
+  - id: reads_by_condition
+    component: card
+    column: total_counts
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: condition
+    top_n_count: 3
+    caption: reads, by condition
+    title: Reads assigned
+    description: >-
+      The hero number is the sum of reads assigned over the libraries in view, and the bars
+      rank the conditions by their share. It answers how much data the run holds and how it
+      splits.
+
+      How to read: a condition with far fewer reads is less well measured. The compact line
+      gives the median and the largest library.
+  - id: genes_detected_spread
+    component: card
+    column: n_genes_detected
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median genes detected, with its spread
+    title: Genes detected
+    description: >-
+      The hero number is the median count of genes with reads per library, and the box
+      shows the quartiles. It answers how complex the libraries are.
+
+      How to read: a tight box means similar complexity. A library far below it has
+      lost genes to low depth or degradation.
+  - id: protein_coding_spread
+    component: card
+    column: pct_protein_coding
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median share, with its spread
+    title: Protein-coding share
+    description: >-
+      The hero number is the median percentage of reads falling on protein-coding genes per
+      library, and the box shows the quartiles. It answers how clean the mRNA signal is.
+
+      How to read: a library far below its replicates carries more ribosomal, mitochondrial
+      or other RNA, which points to depletion or enrichment differences in the prep.
+  - id: top50_share_spread
+    component: card
+    column: top50_share_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median share, with its spread
+    title: Share taken by the top genes
+    description: >-
+      The hero number is the median percentage of a library taken by its 50 most counted
+      genes, and the box shows the quartiles. It answers how concentrated expression is.
+
+      How to read: a high share means a few genes use up the reads and leave less depth for
+      the rest. A library above its replicates is more concentrated and less complex.
+  - id: samples_by_condition
+    component: card
+    column: condition
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: condition
+    caption: samples, by condition
+    title: Conditions and samples
+    description: >-
+      The hero number is the count of conditions, the compact line gives the number of
+      samples, and the ring splits the samples by condition. It answers how the run is
+      balanced.
+
+      How to read: unequal slices mean an unbalanced design, which weakens comparisons of
+      the smaller group.
+  - component: table
+    title: Library readings
+    description: >-
+      Each row is a sample with its condition, the first three components, reads assigned,
+      genes detected, protein-coding share and the share of the top 50 genes. It answers
+      the exact values behind the plots.
+
+      How to read: sort by reads assigned or genes detected to find the weakest libraries.

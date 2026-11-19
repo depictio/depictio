@@ -11,6 +11,46 @@ find:
 recipe: bismark/mbias_curve.py
 fixture: mbias_curve.tsv
 renders_as:
-  - { id: mbias_cpg_profile, component: advanced_viz, kind: profile, roles: {series: series, x: position, y: pct_methylation} }
-  - { component: card, column: pct_methylation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: mbias_cpg_profile
+    component: advanced_viz
+    kind: profile
+    roles: {series: series, x: position, y: pct_methylation}
+    config:
+      x_title: Position in read (bp)
+      y_title: CpG methylation (%)
+      legend_pos: bottom
+    title: CpG M-bias curve
+    description: >-
+      Each line is one read of one library: the percentage of methylated CpG calls
+      at each position along the read. It answers whether the first or last bases
+      of a read carry a methylation bias.
+
+      How to read: a flat line means methylation does not depend on the position.
+      A line that rises or falls at the ends, typically at the start of read 2 or
+      after end repair, marks bases that bias the calls. Ignore those positions
+      during methylation extraction when the bias is clear.
+
+      Source: https://felixkrueger.github.io/Bismark/usage/methylation-extraction/
+  - component: card
+    column: pct_methylation
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Methylation along the read, with its spread
+    title: CpG methylation along reads
+    description: >-
+      The hero number is the mean CpG methylation over all read positions, and the
+      box shows how much the positions differ. It answers how stable methylation is
+      along the read.
+
+      How to read: a narrow box means little positional bias. A wide box or long
+      whiskers point to the end positions seen in the curve.
+  - component: table
+    title: M-bias table
+    description: >-
+      Each row is a read position of one read of one library, with its CpG
+      methylation percentage and the number of calls behind it. It answers the exact
+      value and the depth at each position.
+
+      How to read: a position with low coverage gives a noisy percentage, so check
+      the coverage column before reading a spike.

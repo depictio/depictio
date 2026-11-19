@@ -37,6 +37,22 @@ function readHashOutputId(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+/** Read the tool id from the URL hash (#tool=...). */
+function readHashToolId(): string | null {
+  const m = window.location.hash.match(/[#&]tool=([^&]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Set/clear one key of the hash, keeping every other param (render_id, tile_h…). */
+function hashWith(key: string, value: string | null, drop: string[] = []): string {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  for (const k of drop) params.delete(k);
+  if (value) params.set(key, value);
+  else params.delete(key);
+  const h = params.toString();
+  return `${window.location.pathname}${window.location.search}${h ? `#${h}` : ''}`;
+}
+
 /** Forward a Tier-2 control change to whoever embedded this preview.
  *
  * The preview runs in its own document inside an iframe, so the builder's
@@ -61,8 +77,15 @@ function postConfigDraft(renderId: string | null) {
 const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
   const tools = g.tools || [];
   const totalOutputs = useMemo(() => tools.reduce((n, t) => n + t.outputs.length, 0), [tools]);
+  // `#tool=<id>` selects a tool: its first output opens and the gallery filters to it.
+  const initialTool = useMemo(() => {
+    const id = readHashToolId();
+    return id && tools.some((t) => t.id === id) ? id : null;
+  }, [tools]);
+  const toolFirstOutput = (id: string | null): string | null =>
+    (id && tools.find((t) => t.id === id)?.outputs[0]?.output.id) || null;
   const [selected, setSelected] = useState<string | null>(
-    readHashOutputId() ?? g.initialOutputId ?? null,
+    readHashOutputId() ?? g.initialOutputId ?? toolFirstOutput(initialTool),
   );
 
   // Hash takes priority over injected value (works without backend restart).
@@ -92,13 +115,16 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
     window.history.pushState(
       { outputId: id },
       '',
-      id ? `#output=${encodeURIComponent(id)}` : window.location.pathname,
+      hashWith('output', id ? id : null, ['tool']),
     );
   }, []);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const id = (e.state?.outputId as string | null | undefined) ?? readHashOutputId();
+      const id =
+        (e.state?.outputId as string | null | undefined) ??
+        readHashOutputId() ??
+        toolFirstOutput(readHashToolId());
       setSelected(id ?? null);
     };
     window.addEventListener('popstate', onPop);
@@ -134,7 +160,13 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
         tileHeight={tileHeight}
       />
     ) : (
-      <Gallery tools={tools} selected={selected} onOpen={navigate} theme={g.theme} />
+      <Gallery
+        tools={tools}
+        selected={selected}
+        onOpen={navigate}
+        theme={g.theme}
+        initialToolFilter={initialTool ? [initialTool] : undefined}
+      />
     );
 
   return (

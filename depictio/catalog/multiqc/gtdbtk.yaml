@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: gtdbtk }
+  - component: multiqc
+    section: gtdbtk
+    title: MAG taxonomy (GTDB-Tk)
+    description: >-
+      GTDB-Tk's taxonomic placement of each metagenome-assembled genome against the
+      Genome Taxonomy Database, with the identity to the closest reference. It
+      answers which organism each bin represents.
+
+      How to read: A bin placed to species with a high identity to its reference is
+      well characterised. A placement only to a high rank means the genome is novel
+      or the bin is incomplete or mixed.
+
+      Source: https://docs.seqera.io/multiqc/modules/gtdbtk

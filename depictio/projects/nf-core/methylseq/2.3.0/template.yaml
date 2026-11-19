@@ -57,7 +57,7 @@
 template:
   template_id: "nf-core/methylseq/2.3.0"
   description: "nf-core/methylseq template: Bismark bisulfite alignment, deduplication and per-context methylation extraction (with M-bias curves), on top of the reprocessed MultiQC report and Qualimap coverage."
-  version: "1.3.1"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing methylseq Bismark-route output (bismark/, fastqc/, trimgalore/, qualimap/, pipeline_info/, input/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
@@ -683,9 +683,12 @@ workflows:
               has_header: false
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the genome_results.txt report"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the library id is derived from its parent directory"
 
       - data_collection_tag: "qualimap_bamqc_genome_results"
@@ -727,9 +730,12 @@ workflows:
               new_columns: ["raw"]
               comment_prefix: "#"
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the coverage_across_reference table"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the library id is derived from its directory"
 
       - data_collection_tag: "qualimap_coverage_across_reference"
@@ -768,9 +774,12 @@ workflows:
               new_columns: ["raw"]
               comment_prefix: "#"
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the coverage_histogram table"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the library id is derived from its directory"
 
       - data_collection_tag: "qualimap_coverage_histogram"
@@ -807,9 +816,12 @@ workflows:
               new_columns: ["raw"]
               comment_prefix: "#"
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One line of the genome_fraction_coverage table"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the line came from; the library id is derived from its directory"
 
       - data_collection_tag: "qualimap_genome_fraction_coverage"

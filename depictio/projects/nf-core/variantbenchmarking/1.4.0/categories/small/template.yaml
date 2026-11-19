@@ -14,7 +14,7 @@
 template:
   template_id: "nf-core/variantbenchmarking/1.4.0/categories/small"
   description: "nf-core/variantbenchmarking — germline small-variant (analysis=germline, variant_type=small) benchmarking: hap.py / rtg-tools precision/recall/F1 per sample + the small-variant MultiQC report."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root containing small/ (germline benchmark tables) and multiqc/multiqc_data/multiqc.parquet."

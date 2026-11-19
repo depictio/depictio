@@ -10,7 +10,60 @@ find:
 recipe: kallisto/run_metrics.py
 fixture: run_metrics.tsv
 renders_as:
-  - { component: card, column: p_pseudoaligned, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: cells_called, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: n_barcodes, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: p_pseudoaligned
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Pseudoaligned reads
+    caption: average share, with quartiles
+    description: >-
+      The hero number is the average share of reads that kallisto pseudoaligns to the
+      transcriptome, and the box shows the quartiles over samples. It answers how much
+      of the sequencing the reference explains.
+
+      How to read: a high share means the reads match the reference. A low share points
+      to a wrong or incomplete reference, a wrong chemistry or poor-quality reads, so
+      check the index and the technology setting first.
+
+      Note: kallisto and bustools publish no pass mark for this share, so none is
+      drawn.
+  - component: card
+    column: cells_called
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Cells called
+    caption: median, with quartiles
+    description: >-
+      The hero number is the median count of cells called per sample after the bustools
+      filter, and the box shows the quartiles. It answers how many cells each sample
+      yields.
+
+      How to read: compare it with the cell count you loaded. Far fewer cells point to a
+      stringent filter or a failed capture, and far more to ambient RNA called as cells.
+  - component: card
+    column: n_barcodes
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Barcodes on the whitelist
+    caption: median, with quartiles
+    description: >-
+      The hero number is the median count of barcodes found on the technology whitelist
+      after correction, and the box shows the quartiles. It answers how many distinct
+      barcodes the reads carry, including empty droplets.
+
+      How to read: this is far larger than the called cells, because most barcodes are
+      empty droplets or ambient RNA. A sample whose count is out of line with its peers
+      deserves a look at its input reads.
+  - component: table
+    title: Run metrics
+    description: >-
+      Each row is a sample with the reads processed and pseudoaligned, the pseudoaligned
+      share, the barcodes on the whitelist and the cells called by the filter. It
+      answers the exact numbers behind the cards.
+
+      How to read: compare the pseudoaligned share across samples to find one that
+      differs, then read its barcode and cell counts.

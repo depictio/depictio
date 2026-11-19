@@ -16,4 +16,14 @@ fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/mult
 renders_as:
   # `general`, not `general_stats`: a section is the anchor's leading token
   # (`multiqc_module`), and MultiQC anchors this table `general_stats_table`.
-  - { component: multiqc, section: general }
+  - component: multiqc
+    section: general
+    title: General statistics
+    description: >-
+      The table every MultiQC report has: one row per sample and one column per
+      headline metric that each module contributed. It answers where a sample stands
+      across all tools at once.
+
+      How to read: Sort a column to find the outliers, then open the matching module
+      section for detail. A sample that stands out on several columns is the one to
+      inspect or exclude.

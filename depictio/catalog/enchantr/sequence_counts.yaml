@@ -12,9 +12,67 @@ renders_as:
   - component: card
     column: sequences
     aggregation: sum
+    aggregations: [median]
     secondary_layout: attrition
     attrition_cols: [quality_filtered, primers_masked, paired, consensus, assembled, representative, productive, collapsed]
-  - { component: card, column: sequences, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: collapsed, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: retention, aggregation: median, secondary_layout: gauge, coverage_max: 0.1 }
-  - { component: table }
+    caption: reads left after each stage
+    title: Read attrition
+    description: >-
+      The hero number is the total raw reads in view, and the strip shows how many are
+      left after each pRESTO and Change-O stage. It answers where the reads are lost on
+      the way to the final repertoire.
+
+      How to read: the consensus, representative and collapse stages merge reads into
+      UMI groups or unique sequences, so a large drop there is expected. A drop at
+      quality filtering, primer masking or pairing points to a library problem.
+  - component: card
+    column: sequences
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: raw reads per sample, with their spread
+    title: Raw reads per sample
+    description: >-
+      The hero number is the median raw read count per sample, and the box shows its
+      spread. It answers how evenly the samples were sequenced.
+
+      How to read: a sample far below the box has too little depth to compare. A
+      very wide box means uneven sequencing, so use the diversity at a matched depth.
+  - component: card
+    column: collapsed
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: final sequences per sample, with their spread
+    title: Final unique sequences
+    description: >-
+      The hero number is the total of unique sequences left after the last stage, and
+      the box shows their spread across samples. It answers how much repertoire
+      remains for the analysis.
+
+      How to read: samples with very few final sequences give wide confidence
+      intervals in the diversity tiles. Compare with the raw reads to see how much
+      each sample lost.
+  - component: card
+    column: retention
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: retention, with its spread
+    title: Read retention
+    description: >-
+      The hero number is the median fraction of raw reads still represented at the last
+      stage, and the box shows its spread. It answers how efficiently the pipeline
+      turns reads into repertoire.
+
+      How to read: retention is low by design here, since reads collapse onto UMI
+      groups and unique sequences. Compare samples with each other, and investigate a
+      sample whose retention is far below the rest.
+  - component: table
+    title: Sequence counts table
+    description: >-
+      Each row is a sample with its sequence count after every pRESTO and Change-O
+      stage and its overall retention. It answers where each sample lost its reads.
+
+      How to read: read across a row to find the stage with the biggest drop, and sort
+      by retention to find the outliers.

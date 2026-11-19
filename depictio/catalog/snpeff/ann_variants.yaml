@@ -11,19 +11,148 @@ find:
   path_glob_alt:
     - "**/annotation/*/*/*_snpEff.ann.vcf.gz"
 recipe: snpeff/ann_variants.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several impact classes.
 fixture: ann_variants.tsv
 renders_as:
-  - { id: impact_composition, component: card, column: variant_key, aggregation: count,
-      secondary_layout: donut, breakdown_col: impact }
-  - { component: card, column: vaf, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: dp, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: variant_key, aggregation: count, secondary_layout: top_n,
-      breakdown_col: consequence, top_n_count: 4 }
-  - { id: annotated_vaf_against_depth, component: advanced_viz, kind: scatter_xy,
-      roles: {x: dp, y: vaf, label: hgvs_p, color: impact} }
-  # Density of calls along the genome, coloured by allele fraction: the rainfall
+  - id: impact_composition
+    component: card
+    column: variant_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: impact
+    caption: calls, by impact class
+    title: Calls by impact class
+    description: >-
+      The hero number is the count of annotated variant calls and the ring splits
+      them by the impact class SnpEff assigned to the most severe consequence. It
+      answers how many calls could change a protein.
+
+      How to read: most calls of a typical callset are MODIFIER (non-coding or
+      downstream) and only a small share is HIGH or MODERATE. A ring with an unusually
+      large HIGH share is worth checking against the callers and the filter status.
+
+      Lines and annotations: the classes are SnpEff's own. HIGH is a disruptive effect
+      such as a stop gained or a frameshift, MODERATE a non-disruptive one such as a
+      missense, LOW a mostly harmless one and MODIFIER a mostly non-coding one.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+  - component: card
+    column: vaf
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: allele fraction, with its spread
+    title: Allele fraction of calls
+    description: >-
+      The hero number is the average variant allele fraction over the calls in view,
+      and the box shows its quartiles. It answers whether the calls look heterozygous,
+      homozygous or mixed.
+
+      How to read: a box centred near 0.5 with a tail towards 1 is the shape of a
+      diploid germline callset. A box pushed towards low values points to mosaic or
+      low-confidence calls, so check the filter status and the read depth.
+  - component: card
+    column: dp
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: read depth, with its spread
+    title: Read depth of calls
+    description: >-
+      The hero number is the median read depth at the called positions, and the box
+      shows its quartiles. It answers how much evidence stands behind a typical call.
+
+      How to read: a low median or a wide box means many calls rest on few reads, so
+      genotypes and allele fractions are less reliable. Compare the callsets before
+      trusting a difference between callers.
+  - component: card
+    column: variant_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: consequence
+    top_n_count: 4
+    caption: the most frequent consequences
+    title: Most frequent consequences
+    description: >-
+      The hero number is the count of annotated calls and the bars rank the
+      consequence terms that account for most of them. It answers what kind of effect
+      the callset mostly holds.
+
+      How to read: terms such as downstream or intron variants lead on a whole-genome
+      callset, while missense and synonymous variants lead among coding calls. A
+      missing or surprising term can point to a filtered callset or a different
+      annotation database.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+  - id: annotated_vaf_against_depth
+    component: advanced_viz
+    kind: scatter_xy
+    title: Allele fraction against read depth
+    roles: {x: dp, y: vaf, label: hgvs_p, color: impact}
+    config:
+      x_title: Read depth
+      y_title: Variant allele fraction
+      legend_pos: right
+    description: >-
+      Each point is a variant call: its read depth on the horizontal axis and its
+      variant allele fraction on the vertical axis, coloured by SnpEff impact class.
+      It answers whether the damaging calls rest on enough reads.
+
+      How to read: calls at high depth cluster near 0.5 and 1, the heterozygous and
+      homozygous alternate genotypes. Scattered values at low depth are expected
+      sampling noise, and a HIGH or MODERATE call there deserves a manual look before
+      follow-up.
+
+      Lines and annotations: no cut-off is drawn, because neither the callers nor
+      SnpEff publish a depth or allele fraction rule for these calls.
+  # Density of calls along the genome, coloured by impact class: the rainfall
   # view, drawn by the chr/pos/score kind that asks nothing of the score.
-  - { id: annotated_rainfall, component: advanced_viz, kind: manhattan,
-      roles: {chr: chrom, pos: pos, score: vaf, feature: gene} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: vaf, color: impact} }
-  - { component: table }
+  - id: annotated_rainfall
+    component: advanced_viz
+    kind: manhattan
+    title: Calls along the genome
+    roles: {chr: chrom, pos: pos, score: vaf, feature: gene}
+    config:
+      score_kind: Variant allele fraction
+      color_by_columns: [impact, caller]
+      default_color_by: impact
+      top_n_labels: 0
+      score_threshold_stat: p95
+    description: >-
+      Each point is a variant call placed at its chromosome position, with its variant
+      allele fraction on the vertical axis and its colour set by impact class. It
+      answers where the calls cluster along the genome and which regions hold the
+      damaging ones.
+
+      How to read: dense bands of points mark gene-rich or highly variable regions,
+      and gaps mark regions without calls (centromeres, low mappability). A tight
+      cluster of HIGH calls in one region is worth a look in the gene tiles.
+
+      Lines and annotations: the horizontal line is the 95th percentile of the allele
+      fractions in this table, a data-defined reference and not a published cut-off.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: vaf
+      color: impact
+      labels: {vaf: Variant allele fraction, impact: Impact class}
+    title: Distribution of allele fractions
+    description: >-
+      Each bar counts the variant calls in an allele fraction bin, split by impact
+      class. It answers how the genotypes spread and whether the damaging calls follow
+      the same pattern as the rest.
+
+      How to read: peaks near 0.5 and 1 are the heterozygous and homozygous alternate
+      genotypes of a germline callset. A different shape in the HIGH class than in
+      MODIFIER suggests artefacts concentrated in damaging calls.
+  - component: table
+    title: Annotated variant calls
+    description: >-
+      Each row is one annotated variant call with its locus, alleles, quality, filter
+      status, genotype, depth, allele fraction, gene and SnpEff consequence. It
+      answers the exact detail behind every other tile.
+
+      How to read: sort by impact class or filter by gene to review the damaging
+      calls, and check depth and filter status before relying on one.

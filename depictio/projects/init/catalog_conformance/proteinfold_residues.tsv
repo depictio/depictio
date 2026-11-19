@@ -14,3 +14,33 @@ colabfold__T1024	colabfold	T1024	A	12	Q	95.69	Very high	100.0
 colabfold__T1024	colabfold	T1024	A	13	L	95.69	Very high	100.0
 colabfold__T1024	colabfold	T1024	A	14	R	94.81	Very high	100.0
 colabfold__T1024	colabfold	T1024	A	15	L	95.38	Very high	100.0
+alphafold2__T1024	alphafold2	T1024	A	1	M	63.22	Low	0.0
+alphafold2__T1024	alphafold2	T1024	A	2	K	76.9	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	3	E	79.84	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	4	F	86.07	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	5	W	83.1	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	6	N	83.31	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	7	L	82.59	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	8	D	85.33	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	9	K	86.06	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	10	N	85.61	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	11	L	92.62	Very high	100.0
+alphafold2__T1024	alphafold2	T1024	A	12	Q	90.39	Very high	100.0
+alphafold2__T1024	alphafold2	T1024	A	13	L	85.72	Confident	100.0
+alphafold2__T1024	alphafold2	T1024	A	14	R	100.0	Very high	100.0
+alphafold2__T1024	alphafold2	T1024	A	15	L	89.48	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	1	M	54.26	Low	0.0
+esmfold__T1024	esmfold	T1024	A	2	K	69.39	Low	0.0
+esmfold__T1024	esmfold	T1024	A	3	E	73.3	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	4	F	70.06	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	5	W	70.72	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	6	N	73.09	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	7	L	81.59	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	8	D	77.49	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	9	K	76.22	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	10	N	79.33	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	11	L	84.12	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	12	Q	76.94	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	13	L	80.1	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	14	R	76.25	Confident	100.0
+esmfold__T1024	esmfold	T1024	A	15	L	88.43	Confident	100.0

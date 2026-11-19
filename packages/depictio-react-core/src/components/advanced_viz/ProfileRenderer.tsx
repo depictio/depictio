@@ -47,6 +47,12 @@ import { logLogSlope } from './logLogSlope';
 import { integerTickValues, markerSizeFor, showsMarkers } from './profileAxis';
 import { medianIqrByX, type ProfileAggregate } from './profileAggregate';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import {
+  profileReferenceRequests,
+  resolveProfileReferenceY,
+  type ReferenceStat,
+  type ReferenceStatValues,
+} from './referenceStats';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
@@ -71,6 +77,11 @@ interface ProfileConfig {
   aggregate?: ProfileAggregate | null;
   reference_x?: number | null;
   reference_label?: string | null;
+  /** A horizontal line at this y; else at `reference_y_stat` of the y column
+   *  over the rows on show, computed by the server (`reference_stats`). */
+  reference_y?: number | null;
+  reference_y_stat?: ReferenceStat | null;
+  reference_y_label?: string | null;
   shaded_bands?: ShadedBand[] | null;
   log_x?: boolean;
   log_y?: boolean;
@@ -296,6 +307,11 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   // holes; past `advanced_viz_no_sample_max_rows` it samples anyway, and this
   // is where the frame says so.
   const [estimated, setEstimated] = useState(false);
+  // A `reference_y_stat` line sits at the statistic the server computed on the
+  // filtered rows, which this kind receives whole (no sampling) but which a
+  // `median_iqr` aggregate would otherwise reduce before the browser sees it.
+  const [referenceStats, setReferenceStats] = useState<ReferenceStatValues | null>(null);
+  const statRequests = profileReferenceRequests(config);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 3) {
@@ -313,10 +329,12 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       filters: filtersForFetch,
       vizKind: PROFILE_VIZ_KIND,
       roles: { series: config.series_col, x: config.x_col, y: config.y_col },
+      referenceStats: statRequests,
     })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
+        setReferenceStats(res.reference_stats ?? null);
         setEstimated(Boolean(res.sampling?.degraded));
       })
       .catch((err: unknown) => {
@@ -334,6 +352,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     JSON.stringify(requiredCols),
     JSON.stringify(filtersForFetch),
     refreshTick,
+    JSON.stringify(statRequests ?? null),
   ]);
 
   const figure = useMemo(() => {
@@ -590,6 +609,41 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       }
     }
 
+    // The horizontal reference: an authored y, else a statistic of y named as
+    // such (RULES §17). On a log y axis Plotly places it in log10 units, and a
+    // non-positive value has no place there at all.
+    const refY = resolveProfileReferenceY(config, referenceStats);
+    const refYAxis =
+      refY.value === null || !logAxisY
+        ? refY.value
+        : refY.value > 0
+          ? Math.log10(refY.value)
+          : null;
+    if (refY.value !== null && refYAxis !== null && Number.isFinite(refYAxis)) {
+      shapes.push({
+        type: 'line',
+        xref: 'paper',
+        yref: 'y',
+        x0: 0,
+        x1: 1,
+        y0: refY.value,
+        y1: refY.value,
+        line: { color: zeroLineColor, width: 1, dash: 'dash' },
+        layer: 'below',
+      });
+      annotations.push({
+        xref: 'paper',
+        yref: 'y',
+        x: 1,
+        y: refYAxis,
+        text: refY.label || `y = ${refY.value}`,
+        showarrow: false,
+        xanchor: 'right',
+        yanchor: 'bottom',
+        font: { size: 10, color: textColor },
+      });
+    }
+
     const legend =
       legendPos === 'bottom'
         ? { orientation: 'h', x: 0, y: -0.22, font: { size: 10, color: textColor }, bgcolor: 'rgba(0,0,0,0)' }
@@ -667,6 +721,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   }, [
     rows,
     config,
+    referenceStats,
     bandCols,
     isDark,
     theme,

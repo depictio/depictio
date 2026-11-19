@@ -14,4 +14,17 @@ find:
 # plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: rseqc }
+  - component: multiqc
+    section: rseqc
+    title: RNA-seq read QC
+    description: >-
+      RSeQC's MultiQC plots: read distribution over the transcriptome, inner
+      distance, junction annotation and saturation, and strand inference, per
+      sample. They answer how the reads map onto the gene models and whether the
+      library is stranded.
+
+      How to read: A high coding share, a clear strandedness call and junction
+      saturation that levels off are good. A mixed strand call suggests an
+      unstranded library or the wrong strandedness setting.
+
+      Source: https://docs.seqera.io/multiqc/modules/rseqc

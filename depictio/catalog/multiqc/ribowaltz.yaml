@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: ribowaltz }
+  - component: multiqc
+    section: ribowaltz
+    title: Ribo-seq periodicity
+    description: >-
+      riboWaltz's plots: the P-site distribution across transcript regions, the
+      reading-frame distribution and the metagene profiles at the start and stop
+      codons. They answer whether the footprints show three-nucleotide periodicity.
+
+      How to read: Footprints should lie mostly in the coding region, favour one
+      frame and peak at the start codon. Missing periodicity means the library or
+      the P-site offsets are unreliable.
+
+      Source: https://docs.seqera.io/multiqc/modules/ribowaltz

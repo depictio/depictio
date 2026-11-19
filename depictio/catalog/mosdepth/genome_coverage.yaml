@@ -6,5 +6,49 @@ find: { path_glob: "**/mosdepth/genome/all_samples.mosdepth.coverage.tsv" }
 recipe: mosdepth/coverage_track_canonical.py
 fixture: genome_coverage.tsv
 renders_as:
-  - { id: coverage_track_genome, component: advanced_viz, kind: coverage_track, roles: {chromosome: chromosome, position: position, value: value} }
-  - { component: card, column: value, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true } # depth distribution
+  - id: coverage_track_genome
+    component: advanced_viz
+    kind: coverage_track
+    title: Depth along the genome
+    # C1 N/A: `sample` and `end` are optional recipe outputs (absent when the
+    # input carries no per-sample column), so the track binds only the columns
+    # every run has and draws one series.
+    roles: {chromosome: chromosome, position: position, value: value}
+    description: >-
+      Each point on the line is a window of the genome at its position, with its
+      mean read depth on the vertical axis. It answers where along the genome
+      coverage dips.
+
+      How to read: lines should stay well above zero across the genome. A dip shared
+      in every run is a region that is hard to sequence or to map, or a failing
+      amplicon. Zoom into a dip and compare it with the amplicon tile, which splits
+      depth by sample.
+
+      Lines and annotations: no line is drawn. nf-core/viralrecon and iVar call
+      consensus bases from a depth of 10 reads by default.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+      and https://raw.githubusercontent.com/nf-core/viralrecon/master/conf/modules_illumina.config
+  - component: card
+    column: value
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with its spread
+    title: Window depth
+    description: >-
+      The hero number is the median mean depth of a genome window over all samples,
+      and the box shows the quartiles and outliers. It answers how deeply the genome
+      is covered overall.
+
+      How to read: a median far above 10 reads with a tight box means even, deep
+      coverage. A long lower tail holds the windows that leave gaps in a consensus.
+
+      Lines and annotations: no mark is drawn. nf-core/viralrecon and iVar call
+      consensus bases from a depth of 10 reads by default.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+      and https://raw.githubusercontent.com/nf-core/viralrecon/master/conf/modules_illumina.config

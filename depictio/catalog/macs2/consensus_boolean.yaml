@@ -11,10 +11,92 @@ recipe: macs2/consensus_boolean.py
 fixture: consensus_boolean.tsv
 renders_as:
   # The renderer enumerates the binary sample columns itself, so the upset
-  # render binds no role.
-  - { id: consensus_upset, component: advanced_viz, kind: upset_plot }
-  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: consensus_set, top_n_count: 3 }
-  - { component: card, column: num_samples, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: histogram }
-  - { component: card, column: consensus_set, aggregation: count, secondary_layout: donut, breakdown_col: consensus_set }
-  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }
+  # render binds no role. C6 N/A: the set columns are the run's samples.
+  - id: consensus_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Consensus peaks shared between samples
+    config:
+      color_intersections_by: degree
+    description: >-
+      Each bar is a combination of samples and its height is the number of consensus
+      intervals called in exactly those samples. It answers how reproducible the peak
+      set is between replicates and conditions.
+
+      How to read: tall bars over all replicates of one condition are reproducible
+      peaks. Tall bars over a single sample are private peaks that no other sample supports.
+      Bars over samples of different conditions are shared binding sites.
+
+      Lines and annotations: bars are coloured by the number of samples in the
+      combination, so private and widely shared intervals separate at a glance.
+  - component: card
+    column: consensus_set
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: consensus_set
+    top_n_count: 3
+    caption: intervals, by consensus set
+    title: Consensus intervals
+    description: >-
+      The hero number is the count of consensus sets in view with the intervals they
+      hold, and the bars rank the sets by how many intervals they contain. It answers
+      how large each consensus peak set is.
+
+      How to read: a set with few intervals has little reproducible signal. Compare
+      sets of the same assay.
+  - component: card
+    column: num_samples
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: samples per interval, with their spread
+    title: Samples per interval
+    description: >-
+      The hero number is the mean number of samples that call a peak on an interval,
+      and the box shows its spread. It answers how reproducible the intervals are.
+
+      How to read: a mean near one means most intervals are called in one sample only.
+      A mean near the number of replicates means a reproducible peak set.
+  - component: card
+    column: num_peaks
+    aggregation: sum
+    aggregations: [average, max]
+    secondary_layout: histogram
+    caption: peaks merged per interval, distribution
+    title: Peaks merged into intervals
+    description: >-
+      The hero number is the total of peak calls merged into the consensus intervals,
+      with the mean and the largest per interval, and the histogram shows how many
+      peaks each interval merges. It answers how much the merging collapses.
+
+      How to read: an interval that merges many peaks is either a wide enriched region
+      or several nearby peaks joined, so open the interval before treating it as one
+      site.
+  - component: card
+    column: consensus_set
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: consensus_set
+    caption: intervals, by consensus set
+    title: Intervals by consensus set
+    description: >-
+      Each unit is one consensus interval, with the number of sets as the secondary
+      number, and the ring splits the intervals by set. It answers how the intervals
+      divide between the sets.
+
+      How to read: a set that takes most of the ring contributes most of the peaks to
+      the consensus.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: peak_id
+    title: Consensus interval table
+    description: >-
+      Each row is a consensus interval with its set, position, the number of peaks
+      merged into it, the number of samples that call it and a 0/1 flag per sample. It
+      answers which intervals are shared and by whom, and lets a row selection filter
+      the rest of the dashboard.
+
+      How to read: sort by the number of samples to list the most reproducible
+      intervals.

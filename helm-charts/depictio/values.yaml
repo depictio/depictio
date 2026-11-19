@@ -55,6 +55,61 @@ persistence:
     size: 5Gi
     accessMode: ReadWriteMany
 
+# MongoDB backups (Admin > Backups). Both halves are off by default: a
+# snapshot is the size of the whole database, so a deployment must size a
+# volume before the schedule starts filling it.
+backups:
+  # Volume for the backup files, mounted on the backend at
+  # /app/depictio/backups. Without it, backups are written inside the
+  # container and lost on the next restart.
+  persistence:
+    enabled: false
+    size: 5Gi
+    accessMode: ReadWriteMany
+  # Default schedule. An admin's change in Admin > Backups overrides it.
+  schedule:
+    enabled: false
+    intervalHours: 24
+    # "HH:MM" UTC anchors the runs on a fixed grid; empty = rolling interval.
+    timeOfDay: ""
+    # Delete backups older than N days (0 keeps everything).
+    retentionDays: 30
+    # Smart retention (grandfather-father-son): retentionDays daily, then
+    # one per ISO week for weeklyWeeks, then one per month for monthlyMonths.
+    weeklyWeeks: 0
+    monthlyMonths: 0
+  # Nightly off-cluster copy with rclone (CronJob): the MongoDB backup files
+  # and, with data.enabled, the instance's S3 data, which MongoDB backups do
+  # not contain. Needs backups.persistence. Credentials: existingSecret (keys
+  # ACCESS_KEY_ID, SECRET_ACCESS_KEY) or secrets.backupS3AccessKey/SecretKey.
+  offsite:
+    enabled: false
+    schedule: "0 4 * * *"  # UTC, after the MongoDB backup
+    endpoint: ""           # e.g. https://buckets.embl.de
+    bucket: ""
+    region: us-east-1
+    prefix: ""             # defaults to the release name
+    existingSecret: ""
+    image: rclone/rclone:1.68.2
+    # Always: namespaces under EMBL Capsule refuse any other policy.
+    imagePullPolicy: Always
+    # A CPU limit is required by quota-enforced namespaces (EMBL Capsule).
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    mongo:
+      retentionDays: 365   # in the bucket, independent of the volume's retention
+    data:
+      enabled: true
+      # Defaults to DEPICTIO_S3_PUBLIC_URL; set for a bundled S3 store.
+      sourceEndpoint: ""
+      # Files overwritten or deleted since the last run, kept this long.
+      archiveDays: 90
+
 # Secrets
 secrets:
   # Optionally override the generated S3 access key (bundled SeaweedFS).
@@ -74,6 +129,9 @@ secrets:
   # `helm install --set-file secrets.bootstrapAdminPassword=./admin.pw`.
   bootstrapAdminEmail: ""
   bootstrapAdminPassword: ""
+  # Off-site backup bucket keys (backups.offsite), when no existingSecret.
+  backupS3AccessKey: ""
+  backupS3SecretKey: ""
   # Optional CI / Cypress fixture user. Leave seedTestUser=false in any
   # public-facing deployment so a known-credentials account never ships.
   seedTestUser: false
@@ -303,7 +361,7 @@ s3:
 backend:
   image:
     repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
-    tag: "1.21.0"
+    tag: "1.22.2"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Extra labels on the backend pods (pod template only, never the selector).
@@ -562,7 +620,7 @@ celery:
   image:
     # Distinct worker image (Celery + Playwright/chromium for screenshots).
     repository: ghcr.io/depictio/depictio-worker
-    tag: "1.21.0"
+    tag: "1.22.2"
     pullPolicy: Always
   replicas: 1
   # Same as backend.podLabels: server-side ingestion can read remote data.
@@ -602,7 +660,7 @@ celery:
 viewer:
   image:
     repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
-    tag: "1.21.0"
+    tag: "1.22.2"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Deployment update strategy. Default "Recreate" matches the other

@@ -8,21 +8,301 @@ find: { path_glob: "**/*_deseq2.annotated.tsv" }
 recipe: deseq2/results_annotated.py
 fixture: results_annotated.tsv
 renders_as:
-  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chromosome, pos: start, score: neg_log10_padj} }
-  - { id: annotated_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_name, effect_size: log2fc, significance: padj} }
-  - { id: annotated_da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_name, contrast: contrast, lfc: log2fc} }
-  - { id: chromosome_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: chromosome, position: start, category: direction} }
-  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
-  - { component: card, column: chromosome, aggregation: nunique, secondary_layout: composition, breakdown_col: chromosome }
-  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: gene_biotype, y: neg_log10_padj, color: direction} }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+  - id: manhattan
+    component: advanced_viz
+    kind: manhattan
+    title: Significance along the genome
+    roles: {chr: chromosome, pos: start, score: neg_log10_padj, feature: gene_name, effect: log2fc}
+    config:
+      score_threshold: 1.301
+      score_kind: -log10 adjusted p-value
+      color_by_columns: [direction, gene_biotype]
+      default_color_by: direction
+      top_n_labels: 8
+    description: >-
+      Each point is a gene placed at its start coordinate, with minus log10 of its
+      adjusted p-value on the vertical axis. It answers where on the genome the
+      differentially expressed genes cluster.
+
+      How to read: isolated tall points are single genes, while a tower of points
+      over one region suggests a shared locus effect such as a copy number change or
+      a cluster of related genes. Colour by direction to see whether a region moves
+      one way. Several contrasts overlap here, so filter to one.
+
+      Lines and annotations: the horizontal line is an adjusted p-value of 0.05, shown
+      as 1.301 on the minus log10 axis. It is the nf-core/differentialabundance
+      default cut-off. The score is capped at 300 where DESeq2 reports an adjusted
+      p-value of 0.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - id: annotated_volcano
+    component: advanced_viz
+    kind: volcano
+    title: Volcano with gene symbols
+    roles: {feature_id: gene_name, effect_size: log2fc, significance: padj, category: contrast}
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      top_n_labels: 10
+      effect_label: Log2 fold change
+      significance_label: -log10 adjusted p-value
+    description: >-
+      Each point is a gene in one contrast, labelled by its symbol: log2 fold change
+      on the horizontal axis and adjusted p-value on the vertical axis. It answers
+      which named genes change most and how confidently.
+
+      How to read: genes in the upper left and upper right corners are strongly down-
+      and up-regulated with high confidence. Few points past the lines means little
+      differential signal. Open the table tile to inspect the labelled genes.
+
+      Lines and annotations: the horizontal line is the adjusted p-value cut-off of
+      0.05 and the vertical lines mark an absolute log2 fold change of 1 (a fold
+      change of 2). Both are the nf-core/differentialabundance defaults.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - id: annotated_da_barplot
+    component: advanced_viz
+    kind: da_barplot
+    title: Top changed genes with symbols
+    roles: {feature_id: gene_name, contrast: contrast, lfc: log2fc, significance: padj}
+    config:
+      significance_threshold: 0.05
+      effect_label: Log2 fold change
+    description: >-
+      Each bar is a gene, named by its symbol, with its log2 fold change in a
+      contrast, for the genes with the largest absolute change. It answers which
+      named genes drive each contrast and in which direction.
+
+      How to read: long bars to the right are up-regulated and to the left
+      down-regulated; bars are marked when their adjusted p-value passes the cut-off.
+      A strong fold change without significance usually means low counts, so check
+      the volcano and the table.
+
+      Lines and annotations: significance is marked at an adjusted p-value below 0.05,
+      the nf-core/differentialabundance default.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - id: chromosome_lollipop
+    component: advanced_viz
+    kind: lollipop
+    title: Calls along each chromosome
+    roles: {feature_id: chromosome, position: start, category: direction, effect: log2fc, label: gene_name}
+    config:
+      top_n_labels: 5
+    description: >-
+      Each lollipop is a gene placed at its start coordinate on its chromosome, sized
+      by the size of its log2 fold change and coloured by call (up, down or not
+      significant). It answers how the differential calls spread along each
+      chromosome.
+
+      How to read: a run of same-coloured lollipops close together suggests a
+      regional effect, such as a copy number gain or a gene cluster. Calls spread
+      evenly with no pattern are the usual case. Open the Manhattan view to see the
+      same genes by significance.
+
+      Lines and annotations: the calls are an adjusted p-value below 0.05 and an
+      absolute log2 fold change of at least 1, the nf-core/differentialabundance
+      defaults. The labels name the most extreme genes.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - component: card
+    column: gene_name
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    caption: genes, by biotype
+    breakdown_col: gene_biotype
+    top_n_count: 3
+    title: Genes by biotype
+    description: >-
+      The hero number is the count of distinct annotated genes, and the bars rank the
+      biotypes that hold most of them. It answers what kind of genes the table covers.
+
+      How to read: protein coding genes dominate most annotations. A table rich in
+      non-coding biotypes points to a different assay or to an annotation that
+      includes them.
+  - component: card
+    column: chromosome
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: composition
+    caption: rows, by chromosome
+    breakdown_col: chromosome
+    title: Chromosome coverage
+    description: >-
+      The hero number is the count of chromosomes with at least one gene, and the bar
+      splits the rows by chromosome. It answers whether the table spans the genome or
+      only part of it.
+
+      How to read: a bar dominated by one chromosome means the table was restricted
+      or a region is over-represented.
+  # The median of a fold change over both directions cancels to about zero, so the
+  # hero is the range; the box still shows the quartiles.
+  - component: card
+    column: log2fc
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: quartiles of the fold changes
+    title: Fold change spread
+    description: >-
+      The hero number is the range of log2 fold changes over every gene in view, and
+      the box shows their quartiles. It answers how large the differences are.
+
+      How to read: a box tight around zero with a long range means most genes are
+      unchanged and a few change a lot. A box shifted off zero points to a
+      normalisation issue.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: gene_biotype
+      color: direction
+      labels: {gene_biotype: Gene biotype, direction: Call}
+    title: Calls by gene biotype
+    description: >-
+      Each bar counts genes of one biotype, split by call (up, down or not
+      significant). It answers which kinds of genes respond.
+
+      How to read: compare the coloured share of each biotype. A biotype with a
+      larger share of up or down calls than its neighbours is enriched for change.
+
+      Lines and annotations: the calls are an adjusted p-value below 0.05 and an
+      absolute log2 fold change of at least 1, the nf-core/differentialabundance
+      defaults.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Annotated results table
+    description: >-
+      Each row is a gene in one contrast with its DESeq2 statistics and its symbol,
+      chromosome, coordinates and biotype. It answers which genes to follow up and
+      lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by adjusted p-value or fold change, and filter by chromosome
+      or biotype to focus on a region or gene class.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: concentration, breakdown_col: gene_biotype }
-  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
-  - { component: card, column: base_mean, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: neg_log10_padj, aggregation: average, secondary_layout: coverage, coverage_max: 1.301 }
-  - { component: card, column: chromosome, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
-  - { component: card, column: neg_log10_padj, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: padj, aggregation: min, secondary_layout: threshold, threshold_value: 0.05, threshold_direction: max, threshold_warn: 0.1 }
+  - component: card
+    column: gene_biotype
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: concentration
+    caption: rows, by biotype share
+    breakdown_col: gene_biotype
+    title: Biotype concentration
+    description: >-
+      The hero number is the count of distinct biotypes, and the bar shows how
+      concentrated the rows are in the top ones. It answers whether one gene class
+      dominates the table.
+
+      How to read: a high concentration is normal for protein coding genes. A flat
+      split means a mixed annotation.
+  # Counting rows (genes per contrast) split by call: a nunique broken down by
+  # another column would draw ranked bars, not a ring.
+  - component: card
+    column: gene_name
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    caption: calls, by direction
+    breakdown_col: direction
+    title: Calls by direction
+    description: >-
+      Each unit is one gene in one contrast, and the ring splits them into up, down
+      and not significant. It answers how many genes pass the cut-offs.
+
+      How to read: a ring that is mostly not significant means a weak contrast. Open
+      the volcano to see the borderline genes.
+
+      Lines and annotations: the call is an adjusted p-value below 0.05 and an
+      absolute log2 fold change of at least 1, the nf-core/differentialabundance
+      defaults.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  # Base mean spans orders of magnitude, so a box would draw a flat line: rank the
+  # biotypes by their median instead.
+  - component: card
+    column: base_mean
+    aggregation: median
+    aggregations: [q1, q3]
+    secondary_layout: top_n
+    caption: median, with its quartiles, by biotype
+    breakdown_col: gene_biotype
+    top_n_count: 3
+    title: Expression level by biotype
+    description: >-
+      The hero number is the median base mean, the average normalised count, over all
+      genes, and the bars rank biotypes by their median. It answers how strongly the
+      genes are expressed and which classes are highest.
+
+      How to read: low medians mean the data is shallow and the fold changes are
+      noisy, so lean on adjusted p-values. Base mean spans orders of magnitude,
+      which is why it is ranked and not drawn as a box.
+  - component: card
+    column: neg_log10_padj
+    aggregation: median
+    aggregations: [q3, max]
+    secondary_layout: histogram
+    caption: distribution, with its upper quartile and maximum
+    title: Significance distribution
+    description: >-
+      The hero number is the median minus log10 adjusted p-value over all genes, and
+      the histogram shows the distribution. It answers how much of the table carries
+      any evidence.
+
+      How to read: a pile at zero with a long right tail is the usual shape. DESeq2
+      reports an adjusted p-value of exactly 0 for its strongest calls, which the
+      score caps at 300.
+  - component: card
+    column: chromosome
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    caption: genes, by chromosome
+    breakdown_col: chromosome
+    top_n_count: 3
+    title: Chromosomes with most genes
+    description: >-
+      The hero number is the count of chromosomes, and the bars rank the ones with
+      the most rows. It answers where the tested genes sit.
+
+      How to read: large chromosomes lead in an unrestricted table. An unexpected
+      leader points to a regional effect or a filtered table.
+  - component: card
+    column: neg_log10_padj
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Significance spread
+    description: >-
+      The hero number is the median minus log10 adjusted p-value, and the box shows
+      its quartiles. It answers how the evidence is spread across genes.
+
+      How to read: a median near zero with a thin upper box is the normal case. A high
+      median means a strong perturbation.
+  - component: card
+    column: padj
+    aggregation: min
+    aggregations: [median]
+    secondary_layout: threshold
+    caption: smallest, with its median
+    threshold_value: 0.05
+    threshold_direction: max
+    threshold_warn: 0.1
+    title: Smallest adjusted p-value
+    description: >-
+      The hero number is the smallest adjusted p-value in view, compared with a
+      cut-off. It answers whether any gene reaches significance.
+
+      How to read: a value above the cut-off means nothing is called; check replication
+      and the design before tuning thresholds.
+
+      Lines and annotations: the cut-off is an adjusted p-value of 0.05, the
+      nf-core/differentialabundance default, and the warning level is 0.1, the
+      default alpha of DESeq2 results().
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+      and https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html

@@ -12,4 +12,19 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: preseq }
+  - component: multiqc
+    section: preseq
+    title: Library complexity
+    description: >-
+      Preseq's complexity curve: how many distinct molecules a library is predicted
+      to yield for a given number of sequenced reads, one line per sample. It
+      answers how many additional unique molecules each extra million reads buys.
+
+      How to read: A steep curve means the library is far from saturation and deeper
+      sequencing pays off. A curve that flattens early means a low-complexity
+      library, where more reads mostly repeat what was seen.
+
+      Lines and annotations: The dashed line shows a perfectly complex library in
+      which each read is unique. It is drawn by the MultiQC Preseq module.
+
+      Source: https://docs.seqera.io/multiqc/modules/preseq

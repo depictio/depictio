@@ -13,4 +13,17 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: bowtie2 }
+  - component: multiqc
+    section: bowtie2
+    title: Alignment summary
+    description: >-
+      Bowtie 2's alignment summary: the share of read pairs aligned zero, one or
+      several times, one bar per sample. It answers how well the reads map to the
+      reference.
+
+      How to read: A high concordant unique share is good. Many unaligned pairs
+      point to contamination, the wrong reference or poor reads, and many
+      multi-mapped pairs to repeats. Compare the samples and investigate the
+      outliers.
+
+      Source: https://docs.seqera.io/multiqc/modules/bowtie2

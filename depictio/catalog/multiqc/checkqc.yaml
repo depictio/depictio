@@ -13,4 +13,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: checkqc }
+  - component: multiqc
+    section: checkqc
+    title: Run QC verdicts
+    description: >-
+      CheckQC's pass or fail verdicts on reads per sample, undetermined share and
+      overrepresented unknown indexes. It answers whether the sequencing run met its
+      own quality handbook.
+
+      How to read: Passing checks mean the run is fit to analyse. A failed check
+      names the lane or sample that missed its limit, so look at the run quality
+      before using that data.
+
+      Source: https://docs.seqera.io/multiqc/modules/checkqc

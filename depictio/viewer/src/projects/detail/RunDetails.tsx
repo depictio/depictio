@@ -292,7 +292,7 @@ export const RunDetails: React.FC<{
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    fetchProjectRunFiles(projectId, run.run_tag)
+    fetchProjectRunFiles(projectId, run.run_tag, run.workflow_id)
       .then((r) => {
         if (!cancelled) setData(r);
       })
@@ -302,7 +302,7 @@ export const RunDetails: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [projectId, run.run_tag, run.scans.length]);
+  }, [projectId, run.run_tag, run.workflow_id, run.scans.length]);
 
   const scans = data?.scans ?? [];
   const selected = scan ?? (scans.length > 0 ? scans.length - 1 : null);

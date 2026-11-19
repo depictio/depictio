@@ -12,15 +12,88 @@ find:
   path_glob_alt:
     - "**/*summary.txt"
 recipe: genomescope/summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several read sets.
 fixture: summary.tsv
 renders_as:
-  - { component: card, column: haploid_length_max, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: heterozygosity_max, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: repeat_fraction, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: model_fit_max, aggregation: min,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: read_set, y: haploid_length_max, title: Estimated haploid genome length per read set} }
-  - { component: table }
+  - component: card
+    column: haploid_length_max
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Haploid genome length
+    caption: upper estimate per read set, with its spread
+    headline: true
+    description: >-
+      The hero number is the median over read sets of GenomeScope's upper estimate of the haploid genome
+      length, and the box shows its quartiles. It answers how large the genome is expected to be before any
+      assembly.
+
+      How to read: an assembly total close to this length is complete in size. A total well above it suggests
+      duplicated haplotypes, and one well below suggests missing sequence. Read sets that disagree point to
+      different genomes or to poor fits.
+  - component: card
+    column: heterozygosity_max
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Heterozygosity
+    caption: upper estimate per read set, with its spread
+    description: >-
+      The hero number is the median over read sets of GenomeScope's upper estimate of heterozygosity, as a
+      percentage of the genome, and the box shows its quartiles. It answers how much the two haplotypes
+      differ.
+
+      How to read: a high value warns that a collapsed assembly will carry duplicated haplotigs and may need
+      purging. A value near zero means the haplotypes are almost identical.
+  - component: card
+    column: repeat_fraction
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Repeat content
+    caption: share of the genome, with its spread
+    description: >-
+      The hero number is the median over read sets of the share of the genome that GenomeScope places in
+      repeats, in percent, and the box shows its quartiles. It answers how repetitive the genome is.
+
+      How to read: a high share makes short-read assembly harder and favours long reads. Treat it as an
+      estimate of the k-mer model, not a count of annotated repeats.
+  - component: card
+    column: model_fit_max
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Model fit
+    caption: best fit per read set, with its spread
+    description: >-
+      The hero number is the lowest model fit over read sets, in percent, and the box shows the spread of the
+      upper fit estimates. It answers whether the numbers of this tab can be trusted.
+
+      How to read: a high fit means the model follows the observed k-mer spectrum. A poor fit usually means
+      too little coverage or too much sequencing error, and then the other estimates are unreliable.
+      GenomeScope recommends at least 15x coverage of the haploid genome.
+
+      Source: https://raw.githubusercontent.com/tbenavi1/genomescope2.0/master/README.md
+  - component: figure
+    visu_type: bar
+    title: Estimated haploid genome length per read set
+    dict_kwargs: { x: read_set, y: haploid_length_max, color: heterozygosity_max, labels: { read_set: Read set, haploid_length_max: Haploid genome length (bp), heterozygosity_max: Heterozygosity (%) } }
+    reference_lines:
+      - {axis: y, stat: median, column: haploid_length_max}
+    description: >-
+      Each bar is a read set: GenomeScope's upper estimate of its haploid genome length, coloured by its
+      estimated heterozygosity. It answers whether the read sets agree on the genome size.
+
+      How to read: similar bars mean the reads sample the same genome. A bar that stands out, especially with
+      a different heterozygosity, may come from a different organism, a contaminated library or a poor fit, so
+      compare it with the model fit card.
+
+      Lines and annotations: The dashed line is the median haploid genome length of this table, a reference computed from the rows on show (it follows the filters), not a cut-off of GenomeScope.
+  - component: table
+    title: GenomeScope estimates
+    description: >-
+      Each row is a read set, with GenomeScope's lower and upper estimates of genome length, repeat length,
+      heterozygosity, read error rate and model fit. It answers what range each number was fitted to.
+
+      How to read: the gap between the minimum and maximum columns is the uncertainty of the fit, so a wide
+      gap means the estimate is loose.

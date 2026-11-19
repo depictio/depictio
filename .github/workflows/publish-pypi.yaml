@@ -26,6 +26,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR or branch supersedes its runs still queued or in progress.
+# Tag, schedule, dispatch and workflow_run events are grouped by commit and never
+# cancelled, so a release build cannot stop halfway through.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) }}
+
 jobs:
   build:
     runs-on: ubuntu-24.04

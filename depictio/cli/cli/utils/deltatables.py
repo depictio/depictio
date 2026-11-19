@@ -26,6 +26,7 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.delta_versioning import (
     MAX_RUN_TAGS_IN_METADATA,
+    DeltaWriteResult,
     ScopedWritePlan,
     build_commit_metadata,
     commit_write_options,
@@ -38,10 +39,12 @@ from depictio.cli.cli.utils.delta_versioning import (
     scoped_frame_conflicts,
     table_run_tags,
     table_written_by_aggregate,
+    write_delta_frames_versioned,
     write_delta_table_versioned,
 )
 from depictio.cli.cli.utils.ingest_timing import record, timed
 from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
+from depictio.cli.cli.utils.record_sheets import is_record_sheet, read_record_sheet
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.telemetry import cli_version
 from depictio.cli.cli_logging import logger
@@ -240,6 +243,17 @@ def _delimited_kwargs(file_path: str, file_format: str, polars_kwargs: dict) -> 
     return effective_kwargs
 
 
+def _reads_as_records(location: str, polars_kwargs: dict) -> bool:
+    """Whether a CSV/TSV-declared ``location`` is a YAML/JSON samplesheet to read as records.
+
+    The extension says so, unless the collection tells the CSV reader how to
+    split the file: the raw-JSON collections (bcl2fastq ``Stats.json``,
+    simpleaf ``map_info.json``...) read their report one line per row with a
+    ``separator`` it cannot contain, and keep that read.
+    """
+    return is_record_sheet(location) and "separator" not in polars_kwargs
+
+
 def _lazy_scan_path(
     file_path: str, file_format: str, polars_kwargs: dict, *, confine: bool = True
 ) -> pl.LazyFrame:
@@ -259,6 +273,9 @@ def _lazy_scan_path(
                 "local_path_outside",
             )
     if file_format in ["csv", "tsv", "txt"]:
+        if _reads_as_records(file_path, polars_kwargs):
+            with open(file_path, "rb") as handle:
+                return read_record_sheet(handle.read(), str(file_path)).lazy()
         return pl.scan_csv(file_path, **_delimited_kwargs(file_path, file_format, polars_kwargs))
     elif file_format == "parquet":
         return pl.scan_parquet(file_path, **polars_kwargs)
@@ -336,6 +353,15 @@ def _read_remote_file_lazy(
         # object-store wants the scheme in lower case; the key stays verbatim.
         url = "s3://" + url[5:]
         target = s3_read_target_in_region(url, CLI_config)
+        if file_format != "parquet" and _reads_as_records(url, polars_kwargs):
+            # A YAML/JSON samplesheet has no scanner: one GetObject, parsed whole.
+            try:
+                body = target.client().get_object(Bucket=target.bucket, Key=target.key)
+                data = body["Body"].read()
+            except Exception as exc:
+                logger.debug(f"S3 read of {url} failed: {exc}")
+                raise S3AccessFailed.from_exception(exc, target) from exc
+            return read_record_sheet(data, url).lazy()
         storage_options = target.polars_options()
         if file_format == "parquet":
             lf = pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
@@ -852,7 +878,44 @@ def write_delta_table(
         replace_run_tags=replace_run_tags,
         scoped=scoped,
     )
+    return _write_result(outcome, destination_file, storage_options, scoped)
 
+
+def write_delta_frames(
+    frames: Iterable[pl.DataFrame],
+    schema: pl.Schema,
+    destination_file: str,
+    storage_options: PolarsStorageOptions,
+    *,
+    write_mode: str = "overwrite",
+    commit_metadata: dict[str, str] | None = None,
+    partition: bool = False,
+    replace_run_tags: list[str] | None = None,
+    scoped: bool = False,
+) -> dict:
+    """``write_delta_table`` for a table that comes in frames (a recipe's
+    ``transform_batches``, #1418): written as they come, one commit."""
+    outcome = write_delta_frames_versioned(
+        frames,
+        schema,
+        destination_file,
+        storage_options,
+        write_mode=write_mode,  # type: ignore[arg-type]
+        commit_metadata=commit_metadata,
+        partition=partition,
+        replace_run_tags=replace_run_tags,
+        scoped=scoped,
+    )
+    return _write_result(outcome, destination_file, storage_options, scoped)
+
+
+def _write_result(
+    outcome: DeltaWriteResult,
+    destination_file: str,
+    storage_options: PolarsStorageOptions,
+    scoped: bool,
+) -> dict:
+    """The historical dict shape of a write, with the commit facts it observed."""
     # A scoped write only ever saw part of the table: its frame's height is
     # the rows it added, and the total is read back from the table's log
     # (None when unreadable) rather than published as the subset's.
@@ -2103,7 +2166,13 @@ def process_recipe_data_collection(
     """
     command_parameters = command_parameters or {}
     try:
-        from depictio.recipes import RecipeError, RecipeSourceMissing, execute_recipe
+        from depictio.recipes import (
+            RecipeError,
+            RecipeSourceMissing,
+            execute_recipe,
+            execute_recipe_batches,
+            streams_batches,
+        )
         from depictio.recipes import load_recipe as _load_recipe
         from depictio.recipes import resolve_sources as _resolve_sources
         from depictio.recipes import validate_schema as _validate_schema
@@ -2122,6 +2191,8 @@ def process_recipe_data_collection(
         RecipeError = _mod.RecipeError
         RecipeSourceMissing = _mod.RecipeSourceMissing
         execute_recipe = _mod.execute_recipe
+        execute_recipe_batches = _mod.execute_recipe_batches
+        streams_batches = _mod.streams_batches
         _load_recipe = _mod.load_recipe
         _resolve_sources = _mod.resolve_sources
         _validate_schema = _mod.validate_schema
@@ -2157,10 +2228,13 @@ def process_recipe_data_collection(
     from depictio.cli.cli.utils.data_root import DataRoot
     from depictio.cli.cli.utils.recipe_runs import (
         PerRunResult,
+        RecipeStream,
         RefFrame,
+        StreamFallback,
         execute_aggregate,
         execute_per_run,
         ref_frames_for_run,
+        stream_recipe,
         unreachable_runs,
     )
     from depictio.cli.cli.utils.recipe_scopes import RecipeScope, recipe_scope
@@ -2261,13 +2335,16 @@ def process_recipe_data_collection(
             recipe_module = _load_recipe(recipe_name, pipeline_version)
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             first_run = runs[0] if runs else None
+            from depictio.recipes import RecipeContext, call_transform, in_file_order
+
             if refs:
-                sources.update(
+                frames = (
                     ref_frames_for_run(refs, first_run.tag, run_tags)
                     if first_run is not None
                     else {ref: value.frame for ref, value in refs.items()}
                 )
-            from depictio.recipes import RecipeContext, call_transform
+                # As execute_recipe does: a raw text scan in its files' line order.
+                sources.update({ref: in_file_order(frame) for ref, frame in frames.items()})
 
             _validate_sources(recipe_module, sources, recipe_name)
             result_df = call_transform(
@@ -2339,6 +2416,34 @@ def process_recipe_data_collection(
         return refused
 
     computed_from: list[str] = []
+    # A recipe that hands its table over in batches is written as they come
+    # (#1418): the table never exists whole. Not for an aggregate over runs
+    # (its runs are combined whole) nor a track manifest (its rows are read
+    # back to upload the files they name). ``recipe_streaming: False`` is the
+    # way back to the whole table when a stream cannot go through.
+    stream: RecipeStream | None = None
+    result_df: pl.DataFrame | None = None
+    try:
+        streaming = (
+            not aggregate
+            and command_parameters.get("recipe_streaming", True)
+            and data_collection.config.type.lower() != "genomic_tracks"
+            and streams_batches(_load_recipe(recipe_name, pipeline_version))
+        )
+    except RecipeError:
+        streaming = False
+
+    def computed_whole(reason: str) -> dict[str, str]:
+        logger.info(f"Recipe '{recipe_name}' computed whole instead of streamed: {reason}")
+        return process_recipe_data_collection(
+            data_collection,
+            CLI_config,
+            overwrite=overwrite,
+            workflow=workflow,
+            preview=preview,
+            command_parameters={**command_parameters, "recipe_streaming": False},
+        )
+
     try:
         if aggregate:
             module = _load_recipe(recipe_name, pipeline_version)
@@ -2384,9 +2489,27 @@ def process_recipe_data_collection(
                     properties=_recipe_properties,
                 )
 
+            def stream_on(selected: list[RunRoot]) -> RecipeStream:
+                return stream_recipe(
+                    execute_recipe_batches,
+                    recipe_name,
+                    selected,
+                    refs,
+                    lambda run: run_params_for(transform_config, run.location),
+                    RecipeSourceMissing,
+                    run_tags=run_tags,
+                    overrides=overrides,
+                    pipeline_version=pipeline_version,
+                    properties=_recipe_properties,
+                )
+
+            per_run: PerRunResult | None = None
             targets = [r for r in runs if r.tag in plan.run_tags] if plan.scoped else runs
             try:
-                per_run = per_run_on(targets)
+                if streaming:
+                    stream = stream_on(targets)
+                else:
+                    per_run = per_run_on(targets)
             except RecipeSourceMissing:
                 if not plan.scoped:
                     raise
@@ -2396,8 +2519,9 @@ def process_recipe_data_collection(
                     "info",
                 )
                 return {"result": "success", "message": f"Left unchanged: {message}."}
+            frame_schema = stream.schema if stream is not None else per_run.frame.schema  # type: ignore[union-attr]
             conflicts = (
-                scoped_frame_conflicts(dict(per_run.frame.schema), probe.schema)
+                scoped_frame_conflicts(dict(frame_schema), probe.schema)
                 if plan.scoped and probe is not None and probe.schema
                 else []
             )
@@ -2412,8 +2536,11 @@ def process_recipe_data_collection(
                 plan = ScopedWritePlan(scoped=False, declined="; ".join(conflicts))
                 if refused := refuse_unreachable():
                     return refused
-                per_run = per_run_on(runs)
-            for run_tag, reason in per_run.skipped.items():
+                if stream is not None:
+                    stream = stream_on(runs)
+                else:
+                    per_run = per_run_on(runs)
+            for run_tag, reason in (per_run.skipped if per_run is not None else {}).items():
                 rich_print_checked_statement(
                     f"Recipe '{escape(recipe_name)}': run {escape(run_tag)} has none of its "
                     f"inputs, it adds no rows ({escape(reason)})",
@@ -2425,8 +2552,22 @@ def process_recipe_data_collection(
                     "over each run: it stays per run",
                     "info",
                 )
-            result_df = per_run.frame
-            computed_from = per_run.ran
+            if stream is not None:
+                computed_from = stream.ran
+            else:
+                result_df = per_run.frame  # type: ignore[union-attr]
+                computed_from = per_run.ran  # type: ignore[union-attr]
+        elif streaming:
+            batches = execute_recipe_batches(
+                recipe_name,
+                data_dir,
+                overrides,
+                extra_sources={ref: value.frame for ref, value in refs.items()} or None,
+                pipeline_version=pipeline_version,
+                params=transform_config.params,
+                properties=_recipe_properties,
+            )
+            stream = RecipeStream(first=next(batches), rest=batches)
         else:
             result_df = execute_recipe(
                 recipe_name,
@@ -2437,12 +2578,19 @@ def process_recipe_data_collection(
                 params=transform_config.params,
                 properties=_recipe_properties,
             )
+    except StreamFallback as exc:
+        return computed_whole(str(exc))
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}
 
-    # Write to Delta Lake (same path as standard aggregation)
+    # Write to Delta Lake (same path as standard aggregation). A streamed table
+    # has no frame to measure: its size is read back from the commit.
     deltatable_size_bytes = (
-        probe.size_bytes if plan.scoped and probe else calculate_dataframe_size_bytes(result_df)
+        probe.size_bytes
+        if plan.scoped and probe
+        else None
+        if stream is not None
+        else calculate_dataframe_size_bytes(result_df)  # type: ignore[arg-type]
     )
 
     # Recipe collections are written like any other: a full overwrite, but with
@@ -2450,31 +2598,51 @@ def process_recipe_data_collection(
     # and their aggregations land with delta_version=None, which drops them out
     # of the joined view in /history and leaves a recipe-derived table looking
     # like it was never ingested by anyone.
-    written_runs = plan.run_tags if plan.scoped else frame_run_tags(result_df)
+    # A stream's runs are fixed before its first batch is written (a run that
+    # lacks its inputs falls back to the whole table): the commit can name them.
+    written_runs = (
+        plan.run_tags
+        if plan.scoped
+        else stream.ran
+        if stream is not None
+        else frame_run_tags(result_df)  # type: ignore[arg-type]
+    )
     write_mode = "replace-runs" if plan.scoped else "overwrite"
     lineage = {
         "run_scope": scope.scope,
         "computed_from_runs": computed_from,
         "inputs": inputs,
     }
-    write_result = write_delta_table(
-        aggregated_df=result_df,
-        destination_file=destination_prefix,
-        storage_options=storage_options,
-        write_mode=write_mode,
-        partition=bool(plan.scoped and probe and probe.partitioned_by_run),
-        replace_run_tags=plan.run_tags if plan.scoped else None,
-        scoped=plan.scoped,
-        commit_metadata=_ingest_commit_metadata(
+    write_options: dict[str, Any] = {
+        "destination_file": destination_prefix,
+        "storage_options": storage_options,
+        "write_mode": write_mode,
+        "partition": bool(plan.scoped and probe and probe.partitioned_by_run),
+        "replace_run_tags": plan.run_tags if plan.scoped else None,
+        "scoped": plan.scoped,
+        "commit_metadata": _ingest_commit_metadata(
             data_collection,
             CLI_config,
             command_parameters,
             write_mode=write_mode,
             run_tags=written_runs,
-            row_count=None if plan.scoped else result_df.height,
+            # A stream's rows are only counted as they are written.
+            row_count=None if plan.scoped or result_df is None else result_df.height,
             **lineage,
         ),
-    )
+    }
+    if stream is not None:
+        try:
+            write_result = write_delta_frames(stream.frames(), stream.schema, **write_options)
+        except StreamFallback as exc:
+            # Nothing was committed: the table is computed whole instead.
+            return computed_whole(str(exc))
+        except RecipeError as e:
+            return {"result": "error", "message": f"Recipe failed: {e}"}
+        if deltatable_size_bytes is None:
+            deltatable_size_bytes = delta_table_stats(destination_prefix, storage_options)[0]
+    else:
+        write_result = write_delta_table(aggregated_df=result_df, **write_options)  # type: ignore[arg-type]
 
     if write_result.get("result") == "error":
         return write_result
@@ -2497,7 +2665,7 @@ def process_recipe_data_collection(
                 data_collection,
                 CLI_config,
                 overwrite,
-                manifests=manifests_from_frame(result_df, local_dir, local_run_dirs),
+                manifests=manifests_from_frame(result_df, local_dir, local_run_dirs),  # type: ignore[arg-type]
                 missing_ok=True,
             )
             if upload_result.get("result") != "success":
@@ -2530,8 +2698,14 @@ def process_recipe_data_collection(
     if api_result.get("result") == "error":
         return api_result
 
+    produced = (
+        result_df.height
+        if result_df is not None
+        else write_result.get("rows_added") or write_result.get("rows_total")
+    )
     rich_print_checked_statement(
-        f"Recipe '{escape(recipe_name)}' produced {result_df.height} rows, written to Delta Lake",
+        f"Recipe '{escape(recipe_name)}' produced {produced} rows, written to Delta Lake"
+        + (" (streamed)" if stream is not None else ""),
         "success",
     )
 

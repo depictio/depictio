@@ -13,6 +13,39 @@ renders_as:
   - id: outcome_bars
     component: advanced_viz
     kind: stacked_taxonomy
+    title: Edit outcomes per library
     roles: { sample_id: sample, taxon: outcome, rank: level, abundance: pct }
-  - { component: interactive, interactive_type: MultiSelect, column_name: outcome }
-  - { component: table }
+    config:
+      top_n: 8
+      value_title: Classified reads (%)
+      x_title: Library
+      legend_pos: bottom
+    description: >-
+      Each bar is a library, split into the outcome classes of its classified reads: wild
+      type, template-based repair, deletion-insertion, and in-frame or out-of-frame
+      insertions and deletions. It answers what the editing produced and how the libraries
+      compare.
+
+      How to read: a library with a large wild type part was edited little, and one
+      dominated by out-of-frame deletions is a good knockout candidate. Replicates of one
+      guide should show the same mix. Switch to counts to see depth differences.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/crisprseq/2.3.0/docs/output/targeted.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: outcome
+    title: Outcome class
+    description: >-
+      Keeps the rows of the chosen outcome classes and filters the tiles with them.
+
+      How to read: pick one class, such as out-of-frame deletions, to compare how much of
+      it each library holds.
+  - component: table
+    title: Edit outcome table
+    description: >-
+      Each row is a library and an outcome class, with its read count and its share of the
+      library's classified reads. It answers the exact numbers behind the bars.
+
+      How to read: sort by share to see the dominant class of each library, and filter on
+      a library to compare its classes.

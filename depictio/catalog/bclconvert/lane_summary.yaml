@@ -7,13 +7,132 @@ description: >-
 find:
   path_glob: "**/Reports/Demultiplex_Stats.csv"
 recipe: bclconvert/lane_summary.py
+# The fixture is enriched synthetically from 4 real lanes (copies with seeded noise), so the preview shows several flowcells.
 fixture: lane_summary.tsv
 renders_as:
-  - { id: lane_health, component: advanced_viz, kind: scatter_xy,
-      roles: {x: pct_undetermined, y: pct_q30, label: lane_label, size: yield_gb} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: lane_label, y: yield_gb, title: Yield per lane} }
-  - { component: card, column: yield_gb, aggregation: sum, secondary_layout: top_n, breakdown_col: lane_label, top_n_count: 4 }
-  - { component: card, column: clusters_pf, aggregation: sum, secondary_layout: top_n, breakdown_col: lane_label, top_n_count: 4 }
-  - { component: card, column: pct_q30, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_undetermined, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: lane_health
+    component: advanced_viz
+    kind: scatter_xy
+    title: Lane quality against Undetermined share
+    roles: {x: pct_undetermined, y: pct_q30, label: lane_label, size: yield_gb, color: flowcell}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      x_title: Undetermined reads (% of the lane)
+      y_title: Bases at Q30 or above (%)
+      legend_pos: bottom
+    description: >-
+      Each point is a lane: the share of its reads that no index claimed on the
+      horizontal axis, the share of its bases at Q30 or above on the vertical axis,
+      sized by yield and coloured by flowcell. It answers which lanes underperform
+      and whether the cause is quality or demultiplexing.
+
+      How to read: healthy lanes sit at the left (little Undetermined) and high on
+      the plot (high quality). A lane pushed to the right lost reads to indexes
+      that matched no library, and a lane pushed down has weak base quality. Compare
+      each lane with the others of the same flowcell.
+
+      Note: BCL Convert publishes no pass or fail cut-off for either measure, since
+      expected values depend on the instrument and the kit, so no line is drawn.
+
+      Lines and annotations: the dashed line is the median share of bases at Q30 or above
+      of this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of BCL Convert.
+  - component: figure
+    visu_type: bar
+    title: Yield per lane
+    dict_kwargs:
+      x: lane_label
+      y: yield_gb
+      color: flowcell
+      barmode: group
+      labels: {lane_label: Lane, yield_gb: Yield (Gb), flowcell: Flowcell}
+    reference_lines:
+      - {axis: y, stat: median, column: yield_gb}
+    description: >-
+      Each bar is a lane: its total yield in gigabases, coloured by flowcell. It
+      answers whether the lanes produced a similar amount of data.
+
+      How to read: lanes of a flowcell should be close in height. A short bar is a
+      lane that lost clusters or was loaded lightly, so look at its pass-filter
+      clusters and Undetermined share.
+
+      Lines and annotations: the dashed line is the median yield per lane of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      BCL Convert.
+  - component: card
+    column: yield_gb
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 5
+    caption: yield, by lane
+    title: Total yield
+    description: >-
+      The hero number is the total yield of the run in gigabases and the bars rank
+      the lanes by their yield. It answers how much data the run produced and which
+      lanes carry it.
+
+      How to read: lanes of similar size mean even loading. The median and maximum
+      per lane show how far apart the lanes are.
+  - component: card
+    column: clusters_pf
+    aggregation: sum
+    aggregations: [median, min]
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 5
+    caption: passing-filter clusters, by lane
+    title: Clusters passing filter
+    description: >-
+      The hero number is the total count of clusters that passed the instrument's
+      chastity filter, and the bars rank the lanes. It answers how many reads the
+      run could produce.
+
+      How to read: lanes with far fewer clusters than the median were under-clustered
+      or lost clusters to the filter.
+  - component: card
+    column: pct_q30
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: lowest lane, with the spread
+    title: Lowest Q30 across lanes
+    description: >-
+      The hero number is the lowest share of bases at Q30 or above of any lane, and
+      the box shows the spread across lanes. It answers whether every lane reached
+      good quality.
+
+      How to read: a box that is tight and near the top means uniform quality. The
+      hero value points at the weakest lane, which is where to look first.
+
+      Note: BCL Convert publishes no Q30 cut-off, since the expected value depends
+      on the instrument and read length, so none is drawn.
+  - component: card
+    column: pct_undetermined
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: highest lane, with the spread
+    title: Highest Undetermined share
+    description: >-
+      The hero number is the highest share of reads no index claimed in any lane, and
+      the box shows the spread across lanes. It answers whether a lane lost an
+      unusual part of its reads to demultiplexing.
+
+      How to read: a high hero value with a tight box means every lane shares the
+      problem, usually a sample sheet or index issue. A single high lane points at
+      that lane. Open the unknown barcodes tile to see which indexes are involved.
+  - component: table
+    title: Lane summary
+    description: >-
+      One row is one lane, with its clusters, yield, base quality, Undetermined
+      share and the evenness of its libraries. It answers which lane is weak or
+      unbalanced.
+
+      How to read: Sort by the Undetermined share or the Q30 share to find the
+      lanes that stand apart, and by the spread of library reads to find uneven
+      pooling. Look for a lane that differs from the others on any of these. It
+      complements the per-library demultiplexing table, which shows the
+      libraries inside a lane.

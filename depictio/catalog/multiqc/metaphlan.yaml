@@ -13,4 +13,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: metaphlan }
+  - component: multiqc
+    section: metaphlan
+    title: Marker-gene profile
+    description: >-
+      MetaPhlAn's MultiQC plot: the top taxa from clade-specific marker genes, as a
+      stacked bar per sample. It answers the composition of the microbial community.
+
+      How to read: Profiles of similar samples should look alike. A taxon absent
+      from most samples but dominant in one is worth checking for contamination or a
+      real difference.
+
+      Source: https://docs.seqera.io/multiqc/modules/metaphlan

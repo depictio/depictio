@@ -12,5 +12,29 @@ find:
 recipe: linx/fusion_structure.py
 fixture: fusion_structure.tsv
 renders_as:
-  - { id: fusion_exon_layout, component: advanced_viz, kind: fusion_structure, roles: {fusion_id: fusion, partner: partner, feature: feature, start: start, end: end, breakpoint: breakpoint, retained: retained} }
-  - { component: table }
+  - id: fusion_exon_layout
+    component: advanced_viz
+    kind: fusion_structure
+    title: Exons kept in each fusion
+    roles: {fusion_id: fusion, partner: partner, feature: feature, start: start, end: end, breakpoint: breakpoint, retained: retained, colour_by: phased}
+    description: >-
+      Each fusion is drawn as two partner lanes in exon units: the exons the fused
+      transcript keeps and the exons it loses are drawn as separate blocks, and the
+      breakpoint sits between the two partners. The colour is the phasing of the fusion. It answers
+      which exons each partner contributes to a fusion.
+
+      How to read: a fusion keeps the 5' partner's exons up to its last fused exon and the 3'
+      partner's exons from its first fused exon on, the FusedExonUp and FusedExonDown LINX reports. Many lost exons on the 3' partner mean a large part of its
+      protein is missing.
+
+      Note: LINX publishes no residue coordinates per fusion, so the axis is the exon
+      rank and not the amino-acid position.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/linx/README.md
+  - component: table
+    title: Fusion exons table
+    description: >-
+      Each row is a block of exons of one partner of a fusion, kept or lost, with its
+      start and end in exon units. It answers exactly which exons are retained.
+
+      How to read: filter on a fusion to read its two partners side by side.

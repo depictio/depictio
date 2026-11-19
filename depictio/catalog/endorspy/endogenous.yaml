@@ -10,14 +10,140 @@ find:
   path_glob_alt:
     - "**/*_endogenous_dna.json"
 recipe: endorspy/endogenous.py
+# The fixture is enriched synthetically from 2 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: endogenous.tsv
 renders_as:
-  - { id: endogenous_pre_post, component: advanced_viz, kind: scatter_xy,
-      roles: {x: endogenous_dna, y: endogenous_dna_post, label: sample, color: sample} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: endogenous_dna, color: sample, title: Endogenous DNA per library} }
-  - { component: card, column: endogenous_dna, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: endogenous_dna_post, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: endogenous_dna, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: off_target_pct, aggregation: average, secondary_layout: donut, breakdown_col: sample }
-  - { component: card, column: endogenous_dna_loss, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # Few points per run, so the reading is carried by the identity diagonal: it
+  # is the data-defined "nothing lost" reference, not a tool cut-off.
+  # C1: one colour per library, the only grouping column the table has.
+  - id: endogenous_pre_post
+    component: advanced_viz
+    kind: scatter_xy
+    title: Endogenous DNA before and after filtering
+    roles: {x: endogenous_dna, y: endogenous_dna_post, label: sample, color: sample}
+    config:
+      x_title: Endogenous DNA, raw alignment (%)
+      y_title: Endogenous DNA, filtered and deduplicated (%)
+      reference_line: diagonal
+      reference_label: No loss to filtering
+      legend_pos: bottom
+    description: >-
+      Each point is a library: the percentage of its reads that map to the target
+      reference on the raw alignment (horizontal) and after the quality filter and
+      deduplication (vertical). It answers how much of the on-target signal survives
+      cleaning.
+
+      How to read: a point near the diagonal loses little to filtering and
+      deduplication. A point far below it is a library whose on-target reads were
+      mostly duplicates or low quality, so its usable depth is smaller than the raw
+      percentage suggests. endorS.py defines no cut-off for a good library.
+
+      Lines and annotations: the diagonal is y = x, the points where the percentage
+      is unchanged by filtering. It is a reference defined by the plot itself, not a
+      threshold taken from the tool.
+
+      Source: https://raw.githubusercontent.com/aidaanva/endorS.py/master/README.md
+  - component: figure
+    visu_type: bar
+    title: Endogenous DNA per library
+    dict_kwargs:
+      x: sample
+      y: endogenous_dna
+      color: sample
+      title: Endogenous DNA per library
+      labels: {sample: Library, endogenous_dna: Endogenous DNA (%)}
+    reference_lines:
+      - {axis: y, stat: median, column: endogenous_dna}
+    description: >-
+      Each bar is a library: the percentage of its raw reads that map to the target
+      reference. It answers which extracts are rich enough to sequence deeper.
+
+      How to read: a tall bar is an extract dominated by the organism of interest and
+      worth deeper sequencing. A short bar means most reads come from other sources
+      and the library will need far more sequencing for the same coverage. The
+      filtered percentage is on the tile that compares both.
+
+      Lines and annotations: The dashed line is the median endogenous DNA percentage of this table, a reference computed from the rows on show (it follows the filters), not a cut-off of endorS.py.
+
+      Source: https://raw.githubusercontent.com/aidaanva/endorS.py/master/README.md
+  - component: card
+    column: endogenous_dna
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with the spread
+    title: Endogenous DNA, raw
+    description: >-
+      The hero number is the mean percentage of reads on target in the raw alignment
+      and the box shows how it spreads across libraries. It answers how rich the
+      extracts are overall.
+
+      How to read: a box that is wide means libraries differ a lot in quality, so
+      compare the bars before pooling them. endorS.py defines no cut-off for a good
+      library.
+  - component: card
+    column: endogenous_dna_post
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean, with the spread
+    title: Endogenous DNA, filtered
+    description: >-
+      The hero number is the mean percentage of reads on target after the quality
+      filter and deduplication, with the spread across libraries in the box. It
+      answers what share of the data is usable once cleaned.
+
+      How to read: compare it with the raw percentage. A large drop means many of the
+      on-target reads were duplicates or failed the filter.
+  - component: card
+    column: endogenous_dna
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: compact
+    caption: best library, with the median and the lowest
+    title: Richest library
+    description: >-
+      The hero number is the highest raw endogenous percentage of any library, with
+      the median and the lowest next to it. It answers how far apart the best and
+      worst extracts are.
+
+      How to read: a best value far above the median points to one standout extract.
+      Open the bar chart to see which library it is.
+  - component: card
+    column: off_target_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: median, with the range
+    title: Off-target reads
+    description: >-
+      The hero number is the median percentage of raw reads that do not map to the
+      target reference, with the lowest and highest next to it. It answers how much
+      sequencing goes to other sources.
+
+      How to read: a high median is the usual picture of an ancient-DNA extract, and
+      it is the fraction a metagenomic screen would work on.
+  - component: card
+    column: endogenous_dna_loss
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean drop, with the spread
+    title: Loss to filtering
+    description: >-
+      The hero number is the mean drop, in percentage points, between the raw and the
+      filtered endogenous percentage, with the spread across libraries in the box. It
+      answers how much on-target signal the cleaning removes.
+
+      How to read: a small drop means the library is clean. A large drop in a few
+      libraries points to high duplication or short, low-quality reads, so check the
+      duplication metrics.
+  - component: table
+    title: Endogenous DNA per library
+    description: >-
+      Each row is a library: its endogenous DNA percentage on the raw alignment and
+      after filtering and deduplication, the drop between them and the off-target
+      share. It answers which libraries to sequence further.
+
+      How to read: sort by the filtered percentage to rank the extracts by usable
+      on-target signal.

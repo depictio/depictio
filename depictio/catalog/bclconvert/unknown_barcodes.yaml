@@ -8,8 +8,53 @@ description: >-
 find:
   path_glob: "**/Reports/Top_Unknown_Barcodes.csv"
 recipe: bclconvert/unknown_barcodes.py
+# The fixture is enriched synthetically from 16 real rows, with index status reassigned on some (copies with seeded noise), so the preview shows several index statuses.
 fixture: unknown_barcodes.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: barcode, y: pct_of_lane, color: swap_class, title: Most frequent unknown barcodes} }
-  - { component: card, column: reads, aggregation: sum, secondary_layout: donut, breakdown_col: swap_class }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    title: Most frequent unknown barcodes
+    dict_kwargs:
+      x: barcode
+      y: pct_of_lane
+      color: swap_class
+      facet_col: lane_label
+      facet_col_wrap: 2
+      labels: {barcode: Index pair, pct_of_lane: Share of the lane (%), swap_class: Index status, lane_label: Lane}
+    description: >-
+      Each bar is an index pair BCL Convert saw among reads it could not assign: its
+      share of the lane's reads, coloured by whether the i7 and i5 indexes belong to
+      libraries of the lane, one panel per lane. It answers why reads were left undetermined.
+
+      How to read: a tall bar whose two indexes are both in use is an index hop or a
+      sample sheet swap between those libraries. One index in use points to a
+      mistyped index, and neither in use means a library missing from the sample
+      sheet or a contaminant.
+  - component: card
+    column: reads
+    aggregation: sum
+    aggregations: [count, max]
+    secondary_layout: donut
+    breakdown_col: swap_class
+    caption: reads, by index status
+    title: Reads of the top unknown barcodes
+    description: >-
+      The hero number is the total reads of the listed unknown barcodes and the ring
+      splits them by whether their indexes belong to libraries of the lane. It
+      answers what kind of problem the unassigned reads come from.
+
+      How to read: a large share where both indexes are in use points to index
+      hopping or a sample sheet swap. A large share where neither is in use points to
+      missing libraries or contamination.
+  - component: table
+    title: Top unknown barcodes
+    description: >-
+      One row is one unknown index pair in one lane, ranked by reads, with its
+      in-use status. It answers which indexes are in the Undetermined reads and
+      why.
+
+      How to read: Sort by reads to start with the most frequent pairs. Look for
+      an index pair with a swapped or in-use half, which points to a sample
+      sheet error, and for a high-count pair that is in no sheet, which points
+      to a missing library. It complements the lane summary, which gives the
+      Undetermined share of each lane.

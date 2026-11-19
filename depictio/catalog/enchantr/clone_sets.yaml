@@ -9,8 +9,45 @@ find: { path_glob: "**/repertoire_analysis_report/tables/clone_sizes_table.tsv" 
 recipe: enchantr/clone_sets.py
 fixture: clone_sets.tsv
 renders_as:
+  # C6 N/A: the set columns are the run's samples, known only at ingest.
   - id: shared_clones_upset
     component: advanced_viz
     kind: upset_plot
-  - { component: card, column: n_samples, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+    title: Clones shared between samples
+    config:
+      color_intersections_by: degree
+    description: >-
+      Each bar is a combination of samples and its height is the number of clones
+      found in exactly those samples. It answers which samples share clones and how
+      many clones are private to one.
+
+      How to read: a tall bar over a single dot is a private clone set. Bars over
+      several dots are clones shared by those samples, which points to the same
+      lineage seen in several tissues or time points. The side bars give the total
+      clones per sample.
+
+      Lines and annotations: bars are coloured by the number of samples in the
+      combination, so private and widely shared clones separate at a glance.
+  - component: card
+    column: n_samples
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: samples per clone, with its spread
+    title: Samples sharing a clone
+    description: >-
+      The hero number is the largest number of samples any single clone appears in, and
+      the box shows the quartiles over all clones. It answers how widely clones are
+      shared.
+
+      How to read: a maximum of one means no clone is shared. A box that sits at one
+      with a long tail means sharing is the exception.
+  - component: table
+    title: Shared clones table
+    description: >-
+      Each row is a clone of one subject, with the number of samples it appears in, its
+      total sequences and a 0/1 flag per sample. It answers which clones are shared
+      and where.
+
+      How to read: sort by the number of samples or by total sequences to find the
+      widest and the largest clones.

@@ -13,16 +13,92 @@ renders_as:
   - id: event_volcano
     component: advanced_viz
     kind: volcano
+    title: Splicing change against significance
     roles: { feature_id: event_id, effect_size: dpsi, significance: fdr, label: gene_name, category: event_type }
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 0.0
+      top_n_labels: 10
+      effect_label: Change in inclusion (delta PSI)
+      significance_label: -log10 FDR
+    description: >-
+      Each point is a splicing event in one contrast: its change in exon inclusion (delta PSI) on the
+      horizontal axis and its FDR on the vertical axis, coloured by event type. It answers which events
+      change most, in which direction, and how confidently.
+
+      How to read: events in the upper left and upper right corners lose or gain inclusion in the treatment
+      with strong support. A cloud with nothing above the line means little differential splicing, so check
+      the replicate coverage before trusting the contrast. Open the table tile for the labelled genes.
+
+      Lines and annotations: the horizontal line is an FDR of 0.05, the level at which rMATS counts an event
+      as significant in its summary. No delta PSI line is drawn: the rnasplice template passes its MIN_DPSI
+      variable to this recipe's min_dpsi parameter with a default of 0, so the call adds no floor on the
+      change. A value above 0 is the user's own working value, not an rMATS default.
+
+      Source: https://raw.githubusercontent.com/Xinglab/rmats-turbo/master/README.md
   - id: event_record
     component: advanced_viz
     kind: record_card
+    title: Splicing event record
     roles: { id: event_id, title: gene_name }
+    description: >-
+      The card shows every field of one splicing event: its gene, type, coordinates, inclusion per condition,
+      change in inclusion, FDR and read support. It answers what exactly is known about the event picked in
+      the table or the volcano.
+
+      How to read: select a row in the table to fill the card. Compare the inclusion in both conditions with
+      the read counts, since a large change on few reads is weak evidence.
   - id: event_types
     component: figure
     visu_type: histogram
-    dict_kwargs: { x: event_type, color: direction, barmode: stack }
-  - { component: card, column: event_id, aggregation: nunique, secondary_layout: donut, breakdown_col: event_type }
-  - { component: card, column: abs_dpsi, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: event_type }
-  - { component: table, row_selection_enabled: true, row_selection_column: event_id }
+    title: Events by type and direction
+    dict_kwargs: { x: event_type, color: direction, barmode: stack, labels: { event_type: Event type, direction: Direction of change } }
+    description: >-
+      Each bar is an event type, split by whether its events gain inclusion, lose it or do not change
+      significantly. It answers which kinds of splicing carry the differences between the conditions.
+
+      How to read: a type whose bar is mostly significant is where the treatment acts. Bars that are almost
+      entirely not significant point to little signal for that type.
+  - component: card
+    column: event_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: event_type
+    title: Events tested
+    caption: events, by type
+    description: >-
+      The hero number is the count of distinct events with enough reads to be tested, and the ring splits them
+      by event type. It answers how much splicing the run covered and of what kind.
+
+      How to read: a type that is missing may have had too few reads to pass the coverage filter, so
+      check the sequencing depth.
+  - component: card
+    column: abs_dpsi
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Size of the inclusion change
+    caption: quartiles of the absolute change
+    description: >-
+      The hero number is the median absolute change in exon inclusion across events, and the box shows its
+      quartiles. It answers how large the splicing differences are overall.
+
+      How to read: a box close to zero means most events are unchanged and the signal sits in a few. Filter to
+      one event type or contrast to see where the larger changes are.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: event_type
+    title: Event type
+    description: >-
+      Restricts every tile to the chosen event types, such as skipped exons or retained introns.
+      It answers whether a pattern holds within one kind of splicing.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: event_id
+    title: Splicing events
+    description: >-
+      Each row is a splicing event in one contrast, with its gene, coordinates, inclusion in both conditions,
+      change in inclusion, FDR and significance call. It answers which events to follow up.
+
+      How to read: sort by FDR or by the absolute change and select a row to fill the event record.

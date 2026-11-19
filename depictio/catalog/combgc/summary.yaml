@@ -9,10 +9,95 @@ find: { path_glob: "**/combgc/combgc_complete_summary.tsv" }
 recipe: combgc/summary.py
 fixture: summary.tsv
 renders_as:
-  - { id: bgc_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [tool, product_class], abundance: regions} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: regions, color: product_class, title: BGC regions per sample} }
-  - { component: card, column: regions, aggregation: sum, secondary_layout: top_n, breakdown_col: product_class, top_n_count: 4, headline: true }
-  - { component: card, column: contig, aggregation: nunique, secondary_layout: composition, breakdown_col: complete }
-  - { component: card, column: length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: cds_count, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: contig }
+  - id: bgc_hierarchy
+    component: advanced_viz
+    kind: sunburst
+    title: Callers and product classes
+    roles: {ranks: [tool, product_class], abundance: regions}
+    config:
+      colour_by_rank: tool
+    description: >-
+      Each arc is a group of predicted clusters: the inner ring is the prediction tool and the outer ring the product class, sized by the number of clusters and coloured by tool. It answers which caller contributes which kinds of cluster.
+
+      How to read: a wide arc under one caller only means that caller alone detects the class. Class names are not shared between callers, so the same kind of cluster can appear under different names. Click an arc to zoom in on it.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - id: regions_per_sample
+    component: figure
+    visu_type: bar
+    title: Clusters per sample
+    dict_kwargs:
+      x: sample
+      y: regions
+      color: product_class
+      labels:
+        sample: Sample
+        regions: Predicted clusters
+        product_class: Product class
+    description: >-
+      Each bar is the number of predicted clusters in one sample, split by product class. It answers how rich each sample is in biosynthetic gene clusters and of which kinds.
+
+      How to read: a tall bar with several classes means a sample with diverse potential. Differences between samples may follow assembly size and caller sensitivity as much as biology, so compare with care.
+  - id: cluster_count
+    component: card
+    column: product_class
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: product_class
+    top_n_count: 4
+    headline: true
+    title: Predicted clusters
+    caption: clusters, by product class
+    description: >-
+      The hero number is the number of predicted clusters, the bars rank the product classes by how many clusters each has, and the line below gives the number of distinct classes. It answers how many clusters were found and which kinds lead.
+
+      How to read: a leading class is the main biosynthetic potential. Many distinct classes with a few clusters each mean a diverse but shallow profile.
+  - id: contigs_with_clusters
+    component: card
+    column: contig
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: tool
+    top_n_count: 3
+    title: Contigs with clusters
+    caption: contigs, by prediction tool
+    description: >-
+      The hero number is the number of distinct contigs holding at least one predicted cluster, the bars rank the callers by how many contigs each reports, and the line below gives the cluster count. It answers how widely clusters are spread over the assembly.
+
+      How to read: more clusters than contigs means several clusters share a contig. A caller reporting far fewer contigs than the others is more conservative.
+  - id: cluster_length
+    component: card
+    column: length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: tool
+    top_n_count: 3
+    title: Typical cluster length
+    caption: median length (bp), by prediction tool
+    description: >-
+      The hero number is the median cluster length in base pairs, and the bars rank the callers by their own median. It answers how long the predicted regions are and whether callers draw them alike.
+
+      How to read: callers disagree on region boundaries by design, so a systematically longer median for one tool reflects how it sets edges. Lengths span orders of magnitude, so read the minimum and maximum beside the median.
+  - id: cds_per_cluster
+    component: card
+    column: cds_count
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    title: Genes per cluster
+    caption: distribution of gene counts
+    description: >-
+      The hero number is the average number of coding sequences in a predicted cluster, and the histogram shows how the counts are distributed. It answers how large clusters are in genes.
+
+      How to read: a pile of single-gene clusters means short or truncated regions. A long tail marks large, multi-gene biosynthetic clusters.
+  - component: table
+    title: Predicted clusters
+    description: >-
+      One row per predicted cluster with its caller, product class, coordinates, gene count and domain richness. Selecting rows filters the tab to that contig.
+
+      How to read: sort by gene count or domain richness to find the most complex clusters.
+    row_selection_enabled: true
+    row_selection_column: contig

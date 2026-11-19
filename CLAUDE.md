@@ -285,6 +285,11 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
+- A one-line-per-row raw scan (`separator: "\x1f"`) numbers its lines: `row_index_name:
+  source_line`, `row_index_offset: 1` next to `include_file_paths: source_path`. A Delta table
+  does not promise row order, so the recipe engine puts each file's lines back in that order
+  (`recipes.in_file_order`) and drops the column before a recipe reads the source. A new raw
+  scan without it fails `test_every_raw_scan_numbers_its_lines`
 
 ### Multi-run templates (#1399)
 - `depictio ingest <dir> --attach-run` adds a run to an existing project. A single-run
@@ -312,6 +317,11 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 - **Opaque blobs** — `geojson` (fixed S3 key), `phylogeny` (bare filesystem path, never uploaded)
 
 `metatype` is a free-form unvalidated string — never key behaviour on it.
+- Delta writes keep row order **within one Arrow batch only**: deltalake 1.6.2 writes a stream's
+  batches concurrently. `write_delta_table_versioned` hands a whole frame over as one batch
+  (one-line-per-row scans are only readable in order, #1418); a recipe's `transform_batches`
+  frames each keep their rows in order but may land in any order. Never feed deltalake a
+  multi-batch stream of a table whose order is data
 
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
@@ -327,3 +337,17 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   `DEPICTIO_S3_*` (`settings.s3`); legacy `DEPICTIO_MINIO_*` / `settings.minio` still accepted.
   Helm values key `s3:` (legacy `minio:` merged in); k8s object names keep `-minio`
 - API endpoints at `/depictio/api/v1/`
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `depictio/depictio`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` and `docs/adr/`, both created on demand. See `docs/agents/domain.md`.

@@ -8,7 +8,67 @@ find: { path_glob: "**/bambu/counts_gene.txt" }
 recipe: bambu/counts_gene.py
 fixture: counts_gene.tsv
 renders_as:
-  - { id: top_expressed_genes_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_id} }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
-  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: donut, breakdown_col: gene_biotype }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples
+  - id: top_expressed_genes_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Most expressed genes by sample
+    roles: {index: gene_id, row_annotation_cols: [gene_biotype]}
+    config:
+      normalize: row_z
+    description: >-
+      Each cell is the Bambu read count of one of the most highly counted genes (rows)
+      in one sample (columns), scaled per gene, with the gene biotype as a row
+      annotation. It answers whether the highest-count genes behave the same in every
+      library.
+
+      How to read: columns of the same condition should share a pattern. A sample that
+      looks unlike its replicates, or a block of genes high in one condition only, shows
+      the main expression differences before any statistics. Colour is a per-gene
+      z-score, so it shows the pattern across samples and not the absolute level.
+
+      Lines and annotations: the genes are the 50 with the highest total count across
+      samples, a fixed display size of this catalog's recipe and not a significance cut-off. Counts are Bambu's
+      estimated gene counts.
+
+      Source: https://raw.githubusercontent.com/GoekeLab/bambu/master/README.md
+  - id: top_biotypes
+    component: card
+    column: gene_biotype
+    aggregation: mode
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: gene_biotype
+    top_n_count: 3
+    caption: genes, by biotype
+    title: Dominant gene biotype
+    description: >-
+      The hero number is the most frequent biotype among the displayed genes, the compact
+      line gives how many biotypes occur, and the bars rank them by gene count. It
+      answers what kind of genes take the most reads.
+
+      How to read: protein-coding genes usually dominate. A large share of mitochondrial
+      or ribosomal RNA among the top genes points to a library with little mRNA
+      enrichment.
+  - id: biotype_count
+    component: card
+    column: gene_biotype
+    aggregation: nunique
+    aggregations: [mode]
+    secondary_layout: donut
+    breakdown_col: gene_biotype
+    caption: genes, by biotype
+    title: Gene biotypes
+    description: >-
+      The hero number is the count of distinct gene biotypes among the displayed genes
+      and the ring splits the genes by biotype. It answers how varied the top genes are.
+
+      How to read: a ring made of one large slice means the top genes are of one kind.
+      Small slices are rare classes worth a look in the table.
+  - component: table
+    title: Top gene counts
+    description: >-
+      Each row is one of the highest-count genes with its biotype and the Bambu count in
+      every sample. It answers the exact counts behind the heatmap.
+
+      How to read: sort a sample column to see its top genes and compare across columns.

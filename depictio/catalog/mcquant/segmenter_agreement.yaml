@@ -16,8 +16,60 @@ renders_as:
   - id: agreement_bar
     component: figure
     visu_type: bar
-    dict_kwargs: { x: sample, y: matched_share, color: pair, barmode: group }
-  - { id: agreement_card, component: card, column: matched_share, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }
-  - { component: card, column: count_ratio, aggregation: max, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }
-  - { component: interactive, interactive_type: MultiSelect, column_name: pair }
-  - { component: table, row_selection_enabled: true, row_selection_column: pair_key }
+    title: Share of cells matched by the other method
+    dict_kwargs:
+      x: sample
+      y: matched_share
+      color: pair
+      barmode: group
+      labels:
+        sample: Image
+        matched_share: Share of cells holding a cell of the other method
+        pair: Comparison
+    description: >-
+      Each bar is the share of one method's cells that hold the centroid of a cell of the other method, for one image and direction. It answers how far two segmentation methods agree on where the cells are.
+
+      How to read: values near 1 mean every cell of that method has a counterpart in the other. The two directions of a pair are asymmetric by design, so a nuclear method against a whole-cell one reads high one way and low the other. Low values in both directions mean the methods find different cells.
+
+      Note: a cell counts as holding another when its area, taken as a disc, contains the other's centroid. This catalog module defines the rule, and no published threshold grades agreement, so none is drawn.
+  - id: agreement_card
+    component: card
+    column: matched_share
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: segmenter
+    top_n_count: 3
+    title: Typical agreement
+    caption: median matched share, by segmentation method
+    description: >-
+      The hero number is the median share of cells that hold a cell of the other method, and the bars rank the methods by their own median. It answers which method is best covered by the other.
+
+      How to read: a method with a low share has cells the other does not see, so its mask is finer or covers different structures.
+  - component: card
+    column: count_ratio
+    aggregation: max
+    aggregations: [min]
+    secondary_layout: top_n
+    breakdown_col: segmenter
+    top_n_count: 3
+    title: Largest count imbalance
+    caption: largest ratio, by segmentation method
+    description: >-
+      The hero number is the largest ratio between the cell count of a method and that of the other method, and the bars rank the methods. It answers how much more one method cuts the tissue than the other.
+
+      How to read: a ratio of 1 means equal counts. Large ratios mean one method splits or merges cells compared with the other, and the smallest ratio shows the opposite direction.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: pair
+    title: Comparison
+    description: >-
+      Keep one or more directions of comparison, for example cells of one method holding a cell of the other.
+  - component: table
+    title: Segmenter agreement
+    description: >-
+      One row per image, method and other method with the cell counts, their ratio and the matched share. Selecting rows filters the tab to them.
+
+      How to read: sort by matched share to find images where the methods disagree most.
+    row_selection_enabled: true
+    row_selection_column: pair_key

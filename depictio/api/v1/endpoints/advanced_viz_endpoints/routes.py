@@ -384,6 +384,44 @@ def _resolve_tail(
     return column, direction, float(threshold)
 
 
+def _tail_with_stat_threshold(
+    frame: Any,
+    tail: dict | None,
+    reference_requests: dict[str, tuple[str, str]] | None = None,
+    reference_out: dict[str, float | None] | None = None,
+) -> dict | None:
+    """Settle a ``tail`` whose cut is a statistic (``threshold_stat``).
+
+    A Manhattan or genome view whose line sits at the p95 of its score sends
+    the statistic, not a number, because the number depends on the filters.
+    The cut is computed here on the filtered, unreduced frame (reusing the
+    value already computed for the line when it is the same column and
+    statistic), so the tail kept whole is the side of the line the plot marks.
+    A ``tail`` with an explicit ``threshold`` is returned as is; one whose
+    statistic cannot be computed loses its threshold and falls back to the
+    role table in ``_resolve_tail``.
+    """
+    if not tail or tail.get("threshold") is not None or not tail.get("threshold_stat"):
+        return tail
+    column, stat = tail.get("column"), tail.get("threshold_stat")
+    value: float | None = None
+    for field, (req_column, req_stat) in (reference_requests or {}).items():
+        if req_column == column and req_stat == stat and reference_out is not None:
+            value = reference_out.get(field)
+            break
+    if value is None and isinstance(column, str):
+        from depictio.api.v1.services.advanced_viz.reference_stats import compute_requests
+
+        try:
+            value = compute_requests(frame, {"t": (column, str(stat))}).get("t")
+        except ValueError:
+            value = None
+    resolved = {k: v for k, v in tail.items() if k != "threshold_stat"}
+    if value is not None:
+        resolved["threshold"] = value
+    return resolved
+
+
 def _tail_sample(
     scan: Any, projection: list[str], total: int, cap: int, spec: tuple[str, str, float]
 ) -> Any | None:
@@ -544,6 +582,8 @@ def _load_reduced(
     roles: dict[str, str] | None = None,
     tail: dict | None = None,
     delta_version: int | None = None,
+    reference_requests: dict[str, tuple[str, str]] | None = None,
+    reference_out: dict[str, float | None] | None = None,
 ) -> tuple[Any | None, int | None, dict | None]:
     """Read the filtered frame, reduced the way ``policy`` allows.
 
@@ -556,6 +596,13 @@ def _load_reduced(
     ``total_rows`` is always the count *before* reduction: it is the "of M" half
     of the renderer's badge, and measuring it after would make the badge agree
     with itself while disagreeing with the table.
+
+    ``reference_requests`` (``{field: (column, stat)}``) are computed on the
+    filtered scan *before* any reduction and written into ``reference_out``: a
+    median of a sample, or of a frame that kept one tail whole, is not the
+    median of the table. A ``tail`` naming ``threshold_stat`` instead of a
+    ``threshold`` has its cut resolved the same way, so the rows kept whole are
+    the ones the line computed from the full table marks.
     """
     import polars as pl
 
@@ -587,6 +634,12 @@ def _load_reduced(
             return None, None, None
 
         total = int(scan.select(pl.len()).collect().item())
+
+        if reference_requests and reference_out is not None:
+            from depictio.api.v1.services.advanced_viz.reference_stats import compute_requests
+
+            reference_out.update(compute_requests(scan, reference_requests))
+        tail = _tail_with_stat_threshold(scan, tail, reference_requests, reference_out)
 
         if policy == "none":
             ceiling = settings.performance.advanced_viz_no_sample_max_rows
@@ -674,7 +727,11 @@ def fetch_advanced_viz_data(
           "viz_kind": str | None,    # optional; selects the reduction policy
           "roles": {role: column},   # optional; role -> bound column name
           "tail": {                  # optional; the rows a tail kind must keep
-            "column": str, "direction": "low"|"high"|"both", "threshold": float
+            "column": str, "direction": "low"|"high"|"both", "threshold": float,
+            "threshold_stat": str,   # instead of threshold: median|mean|p75..p99
+          },
+          "reference_stats": {       # optional; references computed on the data
+            field: {"column": str, "stat": "median"|"mean"|"p75"|"p90"|"p95"|"p99"}
           },
         }
 
@@ -691,7 +748,8 @@ def fetch_advanced_viz_data(
             "degraded": bool,
           },
           "filter_applied": bool,
-        }
+          "reference_stats": {field: float | None},  # only when requested;
+        }                            # computed on the filtered rows before sampling
 
     How much of the frame a caller gets back depends on its ``viz_kind``: a
     marker cloud can be sampled uniformly, a renderer that sums or ranks the
@@ -713,6 +771,15 @@ def fetch_advanced_viz_data(
     roles = payload.get("roles") or {}
     tail = payload.get("tail") or None
     aggregate = payload.get("aggregate") or None
+    # References computed from the data on show (median, p95, ...), as
+    # ``{config field: {"column", "stat"}}``; answered in ``reference_stats``.
+    from depictio.api.v1.services.advanced_viz.reference_stats import (
+        compute_requests,
+        parse_requests,
+    )
+
+    reference_requests = parse_requests(payload.get("reference_stats"))
+    reference_values: dict[str, float | None] = {}
     # A past commit of the collection, for a before/after comparison (#1397).
     # Read through the same pinned path as every other render: the frame cache
     # is salted with it and the local mirror is skipped.
@@ -905,6 +972,8 @@ def fetch_advanced_viz_data(
             roles=roles,
             tail=tail,
             delta_version=delta_version,
+            reference_requests=reference_requests,
+            reference_out=reference_values,
         )
     if df is None:
         try:
@@ -957,6 +1026,12 @@ def fetch_advanced_viz_data(
     # decides what to do with missing optional columns.
     # After the counts above, so ``total_rows`` still says how many rows the
     # table held, and before the column build, so it measures what is shipped.
+    # The row-loader path read the filtered frame unreduced (or to an explicit
+    # cap the caller asked for), so its references are taken on it here.
+    # Before ``aggregate``, which sums rows away.
+    if reference_requests and not reference_values:
+        reference_values = compute_requests(df, reference_requests)
+
     if aggregate:
         df = _aggregate_frame(df, aggregate)
 
@@ -988,6 +1063,13 @@ def fetch_advanced_viz_data(
         },
         "filter_applied": bool(filter_metadata),
     }
+    if reference_requests:
+        # Six significant digits, like the rows: a line drawn at 12.300000000001
+        # reads the same and labels worse.
+        result["reference_stats"] = {
+            field: (float(f"{value:.6g}") if value is not None else None)
+            for field, value in reference_values.items()
+        }
     # Additive telemetry for the benchmark harness (clients ignore unknown
     # headers). load = Delta read; build = column materialisation.
     response.headers["X-Load-Ms"] = str(_load_ms)

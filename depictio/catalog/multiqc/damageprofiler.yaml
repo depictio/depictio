@@ -12,4 +12,17 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: damageprofiler }
+  - component: multiqc
+    section: damageprofiler
+    title: Ancient-DNA damage (MultiQC)
+    description: >-
+      DamageProfiler's own MultiQC plots: 5' and 3' misincorporation curves and
+      read-length distributions, one line per sample. They answer whether the reads
+      carry the cytosine deamination signature of ancient DNA.
+
+      How to read: Authentic ancient DNA shows C to T substitutions rising toward
+      the 5' end and G to A toward the 3' end of double-stranded libraries, with
+      short reads. A flat profile suggests modern contamination or a library
+      repaired by enzymatic treatment.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/damageprofiler/damageprofiler.py

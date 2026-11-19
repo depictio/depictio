@@ -13,4 +13,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: centrifuge }
+  - component: multiqc
+    section: centrifuge
+    title: Read classification (Centrifuge)
+    description: >-
+      Centrifuge's MultiQC plot: the top taxa of each library, classified against a
+      compressed index, as a stacked bar per sample. It answers which organisms the
+      reads come from.
+
+      How to read: The expected organisms should dominate. A large unclassified
+      share means the index lacks the organisms present. Unexpected taxa seen in
+      every sample suggest a contaminant.
+
+      Source: https://ccb.jhu.edu/software/centrifuge/

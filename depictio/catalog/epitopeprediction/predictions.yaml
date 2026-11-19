@@ -19,19 +19,196 @@ renders_as:
   - id: affinity_rank_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: IC50 against percentile rank
     roles: { x: ic50_nm, y: percentile_rank, label: sequence, color: predictor }
+    config:
+      x_title: Predicted IC50 (nM)
+      y_title: Percentile rank
+      log_x: true
+      log_y: true
+      reference_line: vertical
+      reference_value: 500
+      reference_label: 500 nM, usual binder limit
+      top_n_labels: 5
+    description: >-
+      Each point is one prediction of a peptide against an allele: its predicted IC50
+      on the horizontal axis and its percentile rank on the vertical axis, coloured by
+      the tool. It answers whether a tool's affinity and rank agree and where its binder
+      call falls.
+
+      How to read: a lower IC50 and a lower rank both mean stronger binding, so
+      confident binders sit at the lower left. A tool whose points form a clear edge has
+      a rank cut-off that decides its binder call. A tool with no IC50 does not appear
+      here.
+
+      Lines and annotations: the vertical line is 500 nM, an IC50 below which peptides
+      are usually considered binders. The binder call of each tool uses its own rank
+      rule, a rank of 2 or less for MHCflurry, NetMHCpan and MixMHCpred, 5 or less for
+      NetMHCIIpan.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
   # Mutant against wild-type affinity: below the diagonal, the mutation
   # strengthens binding (agretopicity under 1).
   - id: mutant_wildtype_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: Mutant against wild-type IC50
     roles: { x: wt_ic50_nm, y: ic50_nm, label: sequence, color: allele }
-  - { component: figure, visu_type: histogram, dict_kwargs: { x: log10_ic50, color: predictor, barmode: overlay } }
-  - { id: prediction_count, component: card, column: row_id, aggregation: count, secondary_layout: donut, breakdown_col: predictor, headline: true }
-  - { id: binder_calls, component: card, column: row_id, aggregation: count, filter_expr: "col('binder') == 1", secondary_layout: composition, breakdown_col: hla_locus }
-  - { id: allele_count, component: card, column: allele, aggregation: nunique, secondary_layout: top_n, breakdown_col: hla_locus, top_n_count: 4, headline: true }
-  - { id: median_ic50, component: card, column: ic50_nm, aggregation: median, secondary_layout: threshold, threshold_value: 500, threshold_direction: max }
-  - { component: interactive, interactive_type: MultiSelect, column_name: allele }
-  - { component: interactive, interactive_type: MultiSelect, column_name: predictor }
-  - { component: interactive, interactive_type: RangeSlider, column_name: log10_ic50 }
-  - { component: table, row_selection_enabled: true, row_selection_column: row_id }
+    config:
+      x_title: Wild-type IC50 (nM)
+      y_title: Mutant IC50 (nM)
+      log_x: true
+      log_y: true
+      reference_line: diagonal
+      reference_label: Mutant equals wild type
+      top_n_labels: 5
+    description: >-
+      Each point is a mutant peptide predicted against an allele: the IC50 of its wild
+      type on the horizontal axis and its own IC50 on the vertical axis, coloured by
+      allele. It answers whether the mutation changes binding.
+
+      How to read: points below the diagonal bind more strongly than their wild type
+      and are the neoepitope candidates, especially when the wild type is above the
+      binder limit. Points on the diagonal are unchanged. Only missense peptides with a
+      predicted wild type appear.
+
+      Lines and annotations: the diagonal is where the mutant and wild-type IC50 are
+      equal, an identity line and not a cut-off. A mutant IC50 below 500 nM is usually
+      considered a binder.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: log10_ic50
+      color: predictor
+      barmode: overlay
+      labels: { log10_ic50: Log10 IC50 (nM), predictor: Tool }
+    title: Distribution of predicted IC50
+    reference_lines:
+      - {axis: x, stat: median, column: log10_ic50}
+    description: >-
+      Each bar counts predictions in a log10 IC50 bin, overlaid by tool. It answers how
+      the tools spread their affinities and where most peptides fall.
+
+      How to read: most peptides are weak or non-binders, so the mass sits above 3 (1000
+      nM). A value of 2.7 is 500 nM, the usual binder limit, and 1.7 is 50 nM, a strong
+      binder. A tool with a very different shape scores on another scale, so compare
+      calls rather than raw values.
+
+      Lines and annotations: the dashed line is the median log10 IC50 of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/epitopeprediction.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: prediction_count
+    component: card
+    column: sequence
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: predictor
+    headline: true
+    caption: predictions, by tool
+    title: Predictions made
+    description: >-
+      The hero number is the count of predictions, one per peptide, allele and tool, the
+      compact line gives the distinct peptides, and the ring splits them by tool. It
+      answers how much scoring was done and how it is shared between tools.
+
+      How to read: a tool with a small share scored fewer peptides because of the
+      alleles or lengths it supports. The same peptide scored by several tools counts
+      once per tool.
+  - id: binder_calls
+    component: card
+    column: sequence
+    aggregation: count
+    aggregations: [nunique]
+    filter_expr: "col('binder') == 1"
+    secondary_layout: composition
+    breakdown_col: hla_locus
+    caption: binder calls, by HLA locus
+    title: Binder calls
+    description: >-
+      The hero number is the count of predictions that a tool calls a binder, the
+      compact line gives the distinct peptides, and the bar splits them by HLA locus. It
+      answers how many predictions pass and through which locus.
+
+      How to read: a peptide called a binder by several tools or alleles counts several
+      times here, so the distinct count is the number of candidates. Binder calls are the
+      pipeline's own, a percentile rank of 2 or less for most tools.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - id: allele_count
+    component: card
+    column: allele
+    aggregation: nunique
+    aggregations: [mode]
+    secondary_layout: top_n
+    breakdown_col: hla_locus
+    top_n_count: 4
+    headline: true
+    caption: alleles, by HLA locus
+    title: Alleles scored
+    description: >-
+      The hero number is the count of distinct alleles scored, the compact line gives
+      the most frequent one, and the bars rank the HLA loci by how many alleles they
+      have. It answers how wide the typing is.
+
+      How to read: a lower count than expected means a homozygous or partial typing.
+      A locus missing here was not scored at all.
+  - id: median_ic50
+    component: card
+    column: ic50_nm
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 500
+    threshold_direction: max
+    caption: median IC50 against the 500 nM binder limit
+    title: Median predicted IC50
+    description: >-
+      The hero number is the median predicted IC50 in nM over every prediction in view,
+      compared with a cut-off. It answers whether the typical peptide is a binder.
+
+      How to read: most peptides do not bind, so a median above the limit is the normal
+      case. A median below it means a peptide set already enriched for binders. The
+      compact line gives the best and worst IC50.
+
+      Lines and annotations: the cut-off is 500 nM, an IC50 below which peptides are
+      usually considered binders.
+
+      Source: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/output.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: allele
+    title: Allele
+    description: >-
+      Pick one or more alleles to restrict the plots, the cards and the table to them. It
+      answers how a single allele scores.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: predictor
+    title: Prediction tool
+    description: >-
+      Pick one or more tools to restrict the tiles to them. It answers how one tool
+      scores on its own.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: log10_ic50
+    title: Log10 IC50
+    description: >-
+      Drag the range to keep predictions within a log10 IC50 window. It answers which
+      peptides fall in a chosen affinity band, for example 1.7 to 2.7 for binders between
+      50 and 500 nM.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: row_id
+    title: Binding prediction table
+    description: >-
+      Each row is one prediction of a peptide against an allele by a tool, with its
+      affinity score, IC50, percentile rank, binder call and class. It answers the exact
+      values behind every tile and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by IC50 or percentile rank and filter to one allele or tool to
+      follow up the strongest candidates.

@@ -7,19 +7,113 @@ description: >-
 find:
   path_glob: "**/*_balanced_insulation.tsv"
 recipe: cooltools/insulation.py
+# The fixture is enriched synthetically from 15 real bins (copies with seeded noise), so the preview shows several samples.
 fixture: insulation.tsv
 renders_as:
   - id: insulation_track
     component: advanced_viz
     kind: coverage_track
-    roles: {chromosome: chrom, position: start, value: log2_insulation_score}
+    title: Insulation score track
+    roles: {chromosome: chrom, position: start, value: log2_insulation_score, sample: sample}
+    config:
+      color_by: sample
+    description: >-
+      Each point is a bin of a chromosome with its log2 insulation score, one line
+      per sample. It answers where the local contact structure is broken into
+      domains.
+
+      How to read: dips of the score mark TAD boundaries, where contacts across the
+      bin are depleted. Sharp, deep dips are strong boundaries and shallow ones are
+      weak.
+
+      Lines and annotations: boundaries are called by cooltools on the boundary
+      strength, with the Li threshold by default. They are listed in the table and in
+      the boundary card.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/insulation.py
   # The same score on a chromosome-aware locus axis, so it stacks under the
   # contact map on the same x as the compartment and domain tracks.
   - id: insulation_locus_track
     component: advanced_viz
     kind: genome_view
+    title: Insulation on the genome axis
     roles: {chr: chrom, pos: start, score: log2_insulation_score, end: end, sample: sample}
-  - { component: card, column: log2_insulation_score, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: boundary_strength, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: is_boundary, aggregation: count, secondary_layout: donut, breakdown_col: is_boundary }
-  - { component: table }
+    config:
+      score_title: Log2 insulation score
+    description: >-
+      Each mark is a bin with its log2 insulation score on a chromosome-aware axis.
+      It answers the same question as the track with a view that stacks under the
+      contact map.
+
+      How to read: zoom into a dip and compare it with the compartment and domain
+      tracks. A boundary shared between tracks is a robust one.
+
+      Lines and annotations: no score line is drawn, as boundaries are called on
+      the boundary strength and not on this score.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/insulation.py
+  # The log2 score is centred on zero, so a median would hide the two signs: the hero is its range.
+  - component: card
+    column: log2_insulation_score
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Insulation score
+    caption: range of the log2 insulation score, with its spread
+    description: >-
+      The hero number is the range of the log2 insulation score over all bins, and
+      the box shows how it spreads. It answers how deep the dips are compared with
+      the rest of the genome.
+
+      How to read: a wide range with a box close to zero is a track with clear
+      boundaries. A narrow range means weak insulation or a window that is too wide
+      for the resolution.
+  # Boundary strength spans orders of magnitude, so a stat strip replaces the box.
+  - component: card
+    column: boundary_strength
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: vertical
+    title: Boundary strength
+    caption: median strength of the called boundaries, with the weakest and strongest
+    description: >-
+      The hero number is the median strength of the boundaries cooltools called, and
+      the strip shows the weakest and the strongest. It answers how well defined the
+      boundaries are.
+
+      How to read: a few very strong boundaries over many weak ones is the usual
+      shape. Compare the strongest ones between samples to see changes of domain
+      organisation.
+
+      Lines and annotations: cooltools keeps the boundaries above a threshold on
+      their strength, Li by default or Otsu or a fixed value on request.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/insulation.py
+  - component: card
+    column: log2_insulation_score
+    aggregation: count
+    aggregations: [min, max]
+    secondary_layout: donut
+    breakdown_col: is_boundary
+    title: Boundary bins
+    caption: bins with a score, split by boundary call
+    description: >-
+      Each unit is a bin with an insulation score and the ring splits them into
+      called boundaries and the rest. It answers what share of the genome sits on a
+      boundary.
+
+      How to read: boundaries should be a small share of the bins. A large share
+      means a permissive threshold or a window too small for the resolution.
+
+      Lines and annotations: a bin is a boundary when its strength passes the
+      threshold cooltools applies, Li by default.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/insulation.py
+  - component: table
+    title: Insulation per bin
+    description: >-
+      Each row is a bin at one window size with its insulation score, boundary
+      strength and boundary call. It answers the exact values behind the tracks.
+
+      How to read: filter to called boundaries and sort by strength to list the best
+      defined ones.

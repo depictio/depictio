@@ -17,10 +17,82 @@ renders_as:
   - id: marker_box
     component: figure
     visu_type: box
-    dict_kwargs: { x: marker, y: asinh_intensity, color: segmenter }
-  - { id: marker_violin, component: figure, visu_type: violin, dict_kwargs: { x: marker, y: asinh_intensity, color: segmenter } }
-  - { id: measurement_count, component: card, column: cell_key, aggregation: count, secondary_layout: donut, breakdown_col: marker_role }
-  - { component: card, column: asinh_intensity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: marker }
-  - { component: interactive, interactive_type: MultiSelect, column_name: marker_role }
-  - { component: table, row_selection_enabled: true, row_selection_column: cell_key }
+    title: Marker intensity per cell
+    dict_kwargs:
+      x: marker
+      y: asinh_intensity
+      color: segmenter
+      labels:
+        marker: Marker
+        asinh_intensity: "Intensity, asinh(x / 150)"
+        segmenter: Segmentation method
+    description: >-
+      Each box is the spread of the cells' mean intensity in one marker channel, one box per marker and segmentation method. It answers which markers carry signal and how bright they are against the rest of the panel.
+
+      How to read: a marker whose box sits near zero has little signal or a failed stain, and a very wide box points to a marker expressed in only a subset of cells. Compare the segmentation methods within a marker: a shift between them means the masks capture different amounts of cytoplasm or neighbours. Open the table tile to inspect single cells.
+
+      Note: intensities are shown on the asinh(x / 150) scale, a fixed cofactor of this catalog module and not read from the run. It keeps markers of very different brightness on one axis.
+
+      Source: https://raw.githubusercontent.com/labsyspharm/quantification/master/README.md
+  - id: marker_violin
+    component: figure
+    visu_type: violin
+    title: Marker intensity shape
+    dict_kwargs:
+      x: marker
+      y: asinh_intensity
+      color: segmenter
+      labels:
+        marker: Marker
+        asinh_intensity: "Intensity, asinh(x / 150)"
+        segmenter: Segmentation method
+    description: >-
+      Each violin is the full distribution of the cells' mean intensity in one marker channel, one per marker and segmentation method. It answers whether a marker is unimodal or splits cells into positive and negative populations.
+
+      How to read: two bulges mean a marker separates two populations, which is what a good lineage marker looks like. A single bulge close to the floor means a marker that stained little. Use it next to the box view, which hides modality.
+
+      Note: intensities are shown on the asinh(x / 150) scale, a fixed cofactor of this catalog module and not read from the run.
+  - id: measurement_count
+    component: card
+    column: cell_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: marker_role
+    title: Intensity measurements
+    caption: measurements, by marker role
+    description: >-
+      The hero number is the count of cell by marker measurements, and the ring splits them between nuclear stains and markers. It answers how large the quantification is and how the panel is composed.
+
+      How to read: the figure below the ring counts distinct cells, so the ratio between the two is the panel size. A ring with a single role means the marker sheet does not flag the nuclear stain.
+  - component: card
+    column: asinh_intensity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Typical marker intensity
+    caption: median, with its spread
+    description: >-
+      The hero number is the median asinh intensity over every cell and marker in view, and the box shows its quartiles. It answers how bright the panel is overall.
+
+      How to read: filter to one marker with the selector to read its own level. A median near zero means the channel is mostly empty.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: marker
+    title: Marker
+    description: >-
+      Pick one or more markers of the panel to restrict the tiles of this tab to them.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: marker_role
+    title: Marker role
+    description: >-
+      Keep nuclear stains, markers or both, which is how to read the panel without its counterstain.
+  - component: table
+    title: Cell by marker measurements
+    description: >-
+      One row per cell and marker with the raw mean intensity and its asinh transform. Selecting rows filters the tab to those cells.
+
+      How to read: sort by intensity to find the brightest cells of a marker, then open them in the spatial tile.
+    row_selection_enabled: true
+    row_selection_column: cell_key

@@ -14,4 +14,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: happy }
+  - component: multiqc
+    section: happy
+    title: Germline benchmark (hap.py)
+    description: >-
+      hap.py's accuracy summary per callset: precision, recall and F1 for SNPs and
+      indels against a truth set. It answers how accurate a germline variant caller
+      is.
+
+      How to read: Values close to one are better. Low recall means missed true
+      variants and low precision means false calls, and indels are usually harder
+      than SNPs.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/happy/happy.py

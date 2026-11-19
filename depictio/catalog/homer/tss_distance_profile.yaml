@@ -14,9 +14,95 @@ renders_as:
   # The `profile` kind rather than a histogram figure: it owns the marker at the
   # start site, the shaded promoter window and the log axis in the tile's own
   # Settings, which is what the code-mode TSS histograms were written to get.
-  - { id: tss_distance, component: advanced_viz, kind: profile, roles: {series: sample, x: distance_to_tss, y: fraction} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: distance_to_tss, y: fraction, color: sample, title: Peak distribution around the nearest TSS} }
-  - { component: card, column: peak_count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: fraction, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: peak_count, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
-  - { component: table }
+  - id: tss_distance
+    component: advanced_viz
+    kind: profile
+    title: Peak distribution around the TSS
+    roles: {series: sample, x: distance_to_tss, y: fraction}
+    config:
+      reference_x: 0
+      reference_label: TSS
+      shaded_bands:
+        - [-1000, 100, Promoter-TSS window]
+      x_title: Distance to nearest TSS (bp)
+      y_title: Fraction of peaks
+    description: >-
+      Each curve is a sample: the fraction of its peaks that fall in each bin of distance to the nearest transcription start
+      site, 250 bp wide as set by this catalog's recipe. It answers whether the
+      peaks concentrate at promoters.
+
+      How to read: a sharp spike at zero means promoter-bound signal, as for an active
+      mark or a promoter-binding factor. A flat curve means the peaks sit across gene
+      bodies and intergenic space. Curves that differ between replicates point to a
+      quality problem.
+
+      Lines and annotations: the vertical marker is the start site at zero. The shaded
+      band runs from 1 kb upstream to 100 bp downstream of it, the window HOMER uses to
+      call a peak promoter-TSS by default.
+
+      Source: http://homer.ucsd.edu/homer/ngs/annotation.html
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: distance_to_tss
+      y: fraction
+      color: sample
+      labels: {distance_to_tss: Distance to nearest TSS (bp), fraction: Fraction of peaks, sample: Sample}
+    title: Peak distribution around the nearest TSS
+    description: >-
+      Each line is a sample: the fraction of its peaks in each 250 bp bin around the
+      nearest transcription start site. It answers how the peak positions of the
+      samples compare on the same axis.
+
+      How to read: lines that overlay each other mean consistent peak positions. A
+      sample with a lower central peak has more distal signal than the others.
+  - component: card
+    column: peak_count
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: total, with the busiest bin
+    title: Peaks in the window
+    description: >-
+      The hero number is the total of peaks counted in the 20 kb window around the
+      start sites, and the histogram shows how many peaks each bin holds. It answers how
+      many peaks fall near a gene.
+
+      How to read: a distribution with one huge bin and many near-empty ones is the
+      signature of promoter signal. An even spread means peaks are not tied to start
+      sites.
+  - component: card
+    column: fraction
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: histogram
+    caption: top bin, with the typical bin
+    title: Share of peaks per bin
+    description: >-
+      The hero number is the largest share of a sample's peaks in a single bin, and the
+      histogram shows how the shares are spread over bins. It answers how concentrated
+      the peaks are.
+
+      How to read: a large maximum with a median near zero means the peaks pile up at
+      one distance, usually the start site. A small maximum means they are spread out.
+  - component: card
+    column: peak_count
+    aggregation: sum
+    aggregations: [min, max]
+    secondary_layout: composition
+    breakdown_col: sample
+    caption: peaks, by sample
+    title: Peaks per sample
+    description: >-
+      The hero number is the total of peaks in the window and the bar shows each
+      sample's share of it. It answers whether the samples contribute evenly.
+
+      How to read: a sample with a very small share has fewer peaks and its profile is
+      less reliable.
+  - component: table
+    title: Distance profile table
+    description: >-
+      Each row is a sample and a distance bin with its peak count and the fraction of
+      that sample's peaks. It answers exactly how many peaks sit at each distance.
+
+      How to read: sort by peak count to find the dominant bin of each sample.

@@ -12,4 +12,14 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: nsc }
+  - component: multiqc
+    section: nsc
+    title: NSC coefficient
+    description: >-
+      The normalised strand cross-correlation (NSC) of each sample: the ratio of the
+      fragment-length correlation peak to the background. It answers whether a ChIP
+      or ATAC library carries any fragment-length enrichment.
+
+      How to read: A value near one means no enrichment at all, and higher values
+      mean stronger enrichment. Read it together with the RSC coefficient to tell
+      real signal from a phantom peak.

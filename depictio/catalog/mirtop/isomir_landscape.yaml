@@ -11,6 +11,33 @@ find:
 recipe: mirtop/isomir_landscape.py
 fixture: isomir_landscape.tsv
 renders_as:
-  - { id: isomir_dot_plot, component: advanced_viz, kind: dot_plot,
-      roles: {cluster: variant_class, gene: mirna, mean_expression: mean_share_pct, frac_expressing: samples_fraction} }
-  - { component: table }
+  - id: isomir_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    title: isomiR classes of the top miRNAs
+    roles: {cluster: variant_class, gene: mirna, mean_expression: mean_share_pct, frac_expressing: samples_fraction}
+    description: >-
+      Each dot is a miRNA in one isomiR class: its colour is the mean share of the miRNA's
+      reads in that class and its size is the fraction of samples where the class is a real
+      part of the reads. It answers which isomiR forms each abundant miRNA carries and whether
+      they are the same across samples.
+
+      How to read: a large dark dot is a class that holds many reads in most samples, such
+      as a miRNA that is mostly 3' trimmed everywhere. A small dot with a dark colour is a
+      class that is common in only part of the cohort, so look at the samples behind it. The
+      classes are not exclusive, since one read can be 3' trimmed and carry an addition.
+
+      Lines and annotations: a class counts as present in a sample when it holds at least 5
+      percent of that miRNA's reads there, and only samples with at least 10 reads of the miRNA
+      are counted. Both are settings of the recipe, not published cut-offs.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/31504201/
+  - component: table
+    title: isomiR landscape table
+    description: >-
+      Each row is a miRNA in one isomiR class, with the mean share of its reads, the
+      fraction of samples where the class is present, the reads in the class and the
+      miRNA's expression rank. It answers how common each class is for each miRNA.
+
+      How to read: sort by mean share to find the dominant forms, and filter on a
+      miRNA to read all its classes.

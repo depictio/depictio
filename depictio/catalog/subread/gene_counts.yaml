@@ -12,8 +12,77 @@ find:
 recipe: subread/gene_counts.py
 fixture: gene_counts.tsv
 renders_as:
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
-  - { component: card, column: counts, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
-  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: log2_cpm, title: log2 counts per million per library} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: gene_id }
-  - { component: table }
+  - component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    caption: chromosomes with the most features
+    title: Features counted
+    description: >-
+      The hero number is the count of distinct features with at least one read in
+      some library, and the bars rank the chromosomes by how many they hold. It
+      answers how many features the count matrix covers and where they sit.
+
+      How to read: the count is the size of the quantified annotation after features
+      with no read anywhere are dropped. A chromosome that leads is gene rich.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/24227677/
+  - component: card
+    column: counts
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: sample
+    caption: counted reads, by library
+    title: Reads counted over features
+    description: >-
+      The hero number is the reads assigned to features over every library, and the
+      bar splits them by library, with the median and maximum count of one feature
+      in one library beside it. It answers how much of the total each library
+      contributes.
+
+      How to read: a thin share is a shallow library, whose counts are noisier.
+      Libraries are compared in counts per million below, so depth differences do
+      not distort the comparison.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/24227677/
+  - component: figure
+    visu_type: box
+    title: Counts per million per library
+    dict_kwargs:
+      x: sample
+      y: log2_cpm
+      color: sample
+      labels: {sample: Library, log2_cpm: log2 counts per million + 1}
+    reference_lines: [{axis: y, stat: median, column: log2_cpm}]
+    description: >-
+      Each box is a library, with the distribution of log2 counts per million plus
+      one over its features. It answers whether libraries are on a comparable scale
+      after depth is accounted for.
+
+      How to read: boxes at similar heights mean libraries are comparable. A library
+      shifted up or down, or with a very different spread, needs a closer look
+      before any differential analysis.
+
+      Lines and annotations: The dashed line is the median log2 counts per million
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of Subread.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: gene_id
+    title: Feature
+    description: >-
+      Filters the dashboard to the features picked here. It answers how a gene or
+      feature behaves across libraries.
+  - component: table
+    title: Gene counts
+    description: >-
+      Each row is a feature in one library, with its position, strand and length,
+      the reads counted, the counts per million and their log2. It answers the exact
+      value behind every other tile.
+
+      How to read: filter by feature to see its counts across libraries, or sort by
+      counts to find the most expressed features.

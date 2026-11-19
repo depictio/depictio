@@ -15,11 +15,71 @@ renders_as:
   - id: ambiguous_by_step
     component: advanced_viz
     kind: profile
-    roles: { series: genome_id, x: step_order, y: n_pct }
+    title: Ambiguous bases across refinement
+    roles: {series: genome_id, x: step_order, y: n_pct}
+    config:
+      x_title: Refinement step (0 is the scaffold)
+      y_title: Ambiguous bases (%)
+    description: >-
+      Each line is a de novo consensus genome: its share of ambiguous bases at every
+      step, from the scaffold built from contigs through each mapping iteration to
+      the final variant-calling round. It answers whether refinement fills or
+      creates gaps.
+
+      How to read: a flat low line means refinement left the genome unambiguous. A
+      line that rises means positions were masked as the reads were mapped, which
+      happens where depth is too low to call a base.
+
+      Lines and annotations: none are drawn. Positions covered by fewer than 5 reads
+      are masked in the consensus by default (min_consensus_depth).
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/nextflow_schema.json
   - id: identity_by_step
     component: advanced_viz
     kind: profile
-    roles: { series: genome_id, x: step_order, y: annotation_identity_pct }
-  - { component: card, column: annotation_mismatches, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }
+    title: Identity to the closest reference across refinement
+    roles: {series: genome_id, x: step_order, y: annotation_identity_pct}
+    config:
+      x_title: Refinement step (0 is the scaffold)
+      y_title: Identity to the closest reference (%)
+    description: >-
+      Each line is a de novo consensus genome: its identity to the closest sequence
+      of the annotation database at every refinement step. It answers how far
+      refinement moved the consensus away from the scaffold and from that reference.
+
+      How to read: a flat line means refinement changed little. Identity falling
+      across steps is expected when the sample differs from the reference, since the
+      consensus follows the reads. A line low from the start is a divergent virus or
+      a poor assembly.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  - component: card
+    column: annotation_mismatches
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('step') == 'itvariant-calling'"
+    title: Mismatches to the closest reference
+    caption: mismatches, with their spread
+    description: >-
+      The hero number is the median count of mismatches between the final consensus
+      and its closest annotated reference, and the box shows their quartiles. It
+      answers how far the finished genomes sit from known sequence.
+
+      How to read: few mismatches mean a genome close to a known virus. Many
+      mismatches point to a divergent virus or an unreliable consensus, so check
+      the ambiguous bases and the depth.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: genome_id
+    title: Refinement steps table
+    description: >-
+      Each row is a consensus genome at one refinement step, with its length,
+      ambiguous bases, identity and mismatches to the closest reference, depth and
+      CheckV call. It answers how each metric changed between steps and lets a row
+      selection filter the other tiles.
+
+      How to read: sort by genome and step to follow one genome through the
+      refinement.

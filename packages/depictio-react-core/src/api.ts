@@ -25,6 +25,10 @@ import type {
   AnnotationStyle,
   Geometry,
 } from './annotations/types';
+import type {
+  ReferenceStat,
+  ReferenceStatRequests,
+} from './components/advanced_viz/referenceStats';
 import type { VariantLegendPayload } from './components/jbrowse/trackLegend';
 import type {
   BuilderDcDraft,
@@ -1972,6 +1976,13 @@ export interface AdvancedVizDataResponse {
    *  estimate rather than a total. */
   sampling?: { policy: string; exact: boolean; degraded: boolean };
   filter_applied: boolean;
+  /** The statistics the request's `referenceStats` asked for, keyed by the
+   *  config field each stands in for (`reference_value`, `reference_y`,
+   *  `score_threshold`). Computed server-side on the filtered rows *before*
+   *  sampling, so a line at "the median of this table" is the table's median
+   *  and not the sample's. Null when no finite value was left; absent when
+   *  nothing was asked. */
+  reference_stats?: Record<string, number | null>;
 }
 
 /** The rows a tail-preserving reduction must keep whole — the significant end
@@ -1979,11 +1990,20 @@ export interface AdvancedVizDataResponse {
  *  keeps exactly the rows the plot would mark as hits instead of guessing a
  *  cutoff. `direction` is `low` for a raw p-value, `high` for a -log10 score,
  *  `both` for a signed effect size. */
-export interface AdvancedVizTailSpec {
-  column: string;
-  direction: 'low' | 'high' | 'both';
-  threshold: number;
-}
+export type AdvancedVizTailSpec =
+  | {
+      column: string;
+      direction: 'low' | 'high' | 'both';
+      threshold: number;
+    }
+  | {
+      column: string;
+      direction: 'low' | 'high' | 'both';
+      /** The cut as a statistic of `column` (a line at "the 95th percentile of
+       *  this table"): the server settles it on the unreduced rows, so the
+       *  tail kept whole is the side of the line the plot marks. */
+      threshold_stat: ReferenceStat;
+    };
 
 export interface AdvancedVizDataRequest {
   wfId: string;
@@ -2007,6 +2027,9 @@ export interface AdvancedVizDataRequest {
    *  needs (e.g. which column carries significance). */
   roles?: Record<string, string>;
   tail?: AdvancedVizTailSpec;
+  /** References computed from the data on show, `{config field: {column,
+   *  stat}}`; answered in the response's `reference_stats`. */
+  referenceStats?: ReferenceStatRequests;
   /** Sum `sum` per distinct `group_by` combination on the server, for a renderer
    *  that only adds the rows up (the sunburst). One row per lineage instead of
    *  one per lineage and sample. */
@@ -2038,6 +2061,7 @@ export async function fetchAdvancedVizData(
         roles: req.roles,
         tail: req.tail,
         aggregate: req.aggregate,
+        reference_stats: req.referenceStats,
       }),
       signal,
     });
@@ -5130,6 +5154,9 @@ export interface RunScan {
 export interface ProjectRun {
   run_tag: string;
   workflow: string | null;
+  /** Tells apart two workflows' runs that share a tag; pass it to
+   *  `fetchProjectRunFiles`. */
+  workflow_id?: string | null;
   run_location: string | null;
   folder_created: string | null;
   folder_modified: string | null;
@@ -5203,11 +5230,17 @@ export interface RunFiles {
 }
 
 /** The files of one run of a project, with what each scan did to them.
- *  Backend: GET /projects/project-runs/{id}/files?run_tag=. */
-export async function fetchProjectRunFiles(projectId: string, runTag: string): Promise<RunFiles> {
-  const res = await authFetch(
-    `${API_BASE}/projects/project-runs/${projectId}/files?run_tag=${encodeURIComponent(runTag)}`,
-  );
+ *  `workflowId` (`ProjectRun.workflow_id`) picks the workflow's run when two
+ *  workflows hold a run with that tag; without it their files are mixed.
+ *  Backend: GET /projects/project-runs/{id}/files?run_tag=&workflow_id=. */
+export async function fetchProjectRunFiles(
+  projectId: string,
+  runTag: string,
+  workflowId?: string | null,
+): Promise<RunFiles> {
+  const params = new URLSearchParams({ run_tag: runTag });
+  if (workflowId) params.set('workflow_id', workflowId);
+  const res = await authFetch(`${API_BASE}/projects/project-runs/${projectId}/files?${params}`);
   if (!res.ok) await throwHttpError(res, `Failed to fetch the files of run ${runTag}`);
   return (await res.json()) as RunFiles;
 }
@@ -5458,6 +5491,17 @@ export interface FromRunRequest {
   runs?: string[] | null;
 }
 
+/** A MultiQC collection of one run whose reports the shared-samples check
+ *  did not all read (#1400): it reads the first few a collection matched, and
+ *  none when one cannot be read (`checked` 0). No shared sample then means
+ *  none among the reports read. */
+export interface SamplesCheckGap {
+  data_collection_tag: string;
+  run: string;
+  checked: number;
+  reports: number;
+}
+
 /** Samples one MultiQC collection finds in more than one run
  *  (`FromRunReport.shared_samples`). */
 export interface SharedRunSamples {
@@ -5531,6 +5575,8 @@ export interface FromRunReport {
    *  merge them, so a creation is refused (`runs_share_samples`). Empty for
    *  one run; older backends omit it. */
   shared_samples?: SharedRunSamples[];
+  /** The runs' collections that check read only some reports of. */
+  samples_check_gaps?: SamplesCheckGap[];
   resolved_variables: Record<string, string>;
   data_collections: FromRunDCPreview[];
   /** Empty on a dry run. */
@@ -8178,6 +8224,8 @@ export interface AttachRunReport {
   /** Per MultiQC collection, the samples of the new run a report already in
    *  the project names; a real call refuses them (`runs_share_samples`). */
   shared_samples?: SharedRunSamples[];
+  /** The new run's collections that check read only some reports of. */
+  samples_check_gaps?: SamplesCheckGap[];
   /** Ingestion to poll with `getManifestRefreshRun`; null on a dry run. */
   run_id: string | null;
   dry_run: boolean;
@@ -9996,15 +10044,35 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
 // Catalog compose — matches ingested DCs against catalog entries
 // =============================================================================
 
+/** A guide line on a UI figure: a fixed `value`, or a `stat` of `column` over
+ *  the rows on show, computed by the server figure builder and named as such
+ *  ("median of this table"). Mirrors `ReferenceLine` in
+ *  depictio/models/components/lite.py: exactly one of `value` / `stat`. */
+export interface FigureReferenceLine {
+  axis: 'x' | 'y';
+  value?: number | null;
+  stat?: ReferenceStat | null;
+  column?: string | null;
+  label?: string | null;
+}
+
 export interface CatalogRender {
   component: string;
   /** Tool-unique render handle, when declared in the catalog. Combined with the
    *  tool id it forms the `use: <tool>/<id>` snippet (advanced_viz renders). */
   id?: string;
+  /** Any component: the tile title and its info popover text ("About this
+   *  component"), when the catalog declares them. */
+  title?: string;
+  description?: string;
   kind?: string;
   roles?: Record<string, string>;
   visu_type?: string;
-  dict_kwargs?: Record<string, string>;
+  /** Column-valued kwargs are strings; `labels` maps column -> axis title. */
+  dict_kwargs?: Record<string, unknown>;
+  /** figure (UI mode): guide lines, fixed or at a statistic of the rows on
+   *  show. Mirrors `ReferenceLine` in depictio/models/components/lite.py. */
+  reference_lines?: FigureReferenceLine[];
   column?: string;
   aggregation?: string;
   /** card only: the secondary-metric strip. `aggregations` drives the stats
@@ -10021,6 +10089,8 @@ export interface CatalogRender {
   attrition_cols?: string[];
   trend_col?: string | null;
   filter_expr?: string | null;
+  /** card: what the secondary strip shows ("median, with its spread"). */
+  caption?: string;
   /** multiqc only: the report module this render surfaces. */
   section?: string;
   code?: string;

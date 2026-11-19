@@ -11,10 +11,106 @@ fixture: caller_evidence.tsv
 renders_as:
   # Callers on one axis, fusions on the other: colour is how much read support the
   # caller found, size is that caller's share of the fusion's total support.
-  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: caller, gene: fusion, mean_expression: log_support, frac_expressing: evidence_fraction} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion, y: supporting_reads, color: caller} }
-  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }
-  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: caller }
-  - { component: card, column: evidence_fraction, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
+  # Callers count evidence differently (split reads, spanning pairs, junction reads),
+  # so supporting_reads is the recipe's normalised count; no cut-off is drawn (C3 N/A).
+  - id: evidence_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    roles: {cluster: caller, gene: fusion, mean_expression: log_support, frac_expressing: evidence_fraction}
+    title: Evidence per caller and fusion
+    description: >-
+      Each dot is a fusion reported by one caller: its colour is the read support on a log
+      scale and its size is the share of the fusion's total support that this caller holds. It
+      answers which callers back each fusion and how strongly.
+
+      How to read: a fusion with dots in several columns is found by several callers, which is
+      the main reason to trust it. A fusion with a single dot rests on one caller. Compare
+      colours within a caller, since callers count evidence differently.
+
+      Lines and annotations: the colour scale is log10 of supporting reads plus 1, where the
+      read count is normalised from each caller's own evidence fields by the recipe.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: fusion
+      y: supporting_reads
+      color: caller
+      labels: {fusion: Fusion, supporting_reads: Supporting reads, caller: Caller}
+    title: Supporting reads per fusion
+    description: >-
+      Each bar stacks the callers of one fusion, with height their supporting reads and colour
+      the caller. It answers which fusions have the most read evidence and which callers
+      provide it.
+
+      How to read: a tall bar made of several colours is a fusion with strong, shared
+      support. A bar of one colour rests on one caller. Read counts are normalised from each
+      caller's evidence fields, so compare callers with care.
+  - component: card
+    column: supporting_reads
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: vertical
+    caption: median, lowest and highest
+    title: Supporting reads
+    description: >-
+      The hero number is the median read support of a fusion as one caller reports it, with the
+      lowest and highest beside it. It answers how strong the evidence is for a typical
+      report.
+
+      How to read: a very low median means thin evidence. The range is wide and callers count
+      differently, so a box would draw a flat line.
+  - component: card
+    column: fusion
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: fusions, by caller
+    title: Fusions per caller
+    description: >-
+      The hero number is the count of distinct fusions, and the bars rank the callers by how
+      many fusions each reports. It answers which caller finds the most.
+
+      How to read: a caller far ahead of the others finds many fusions alone, which can mean
+      sensitivity or noise. Compare with the agreement view.
+  - component: card
+    column: supporting_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: supporting reads, by caller
+    title: Supporting reads by caller
+    description: >-
+      The hero number is the total read support over all reports, and the bars rank the
+      callers by the support they contribute. It answers which caller carries the evidence.
+
+      How to read: callers count evidence differently, so a larger total does not make a caller
+      more accurate.
+  - component: card
+    column: evidence_fraction
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: histogram
+    caption: distribution across reports
+    title: Largest share held by one caller
+    description: >-
+      The hero number is the largest share of a fusion's support held by one caller, between 0
+      and 1, and the histogram shows how shares are distributed over the reports. It answers
+      whether support is spread across callers or concentrated in one.
+
+      How to read: many shares near 1 mean fusions rest on one caller. A fusion reported by
+      one caller always holds all of its support.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: Caller evidence table
+    description: >-
+      Each row is a fusion reported by one caller, with the breakpoints that caller gave, its
+      supporting reads, its share of the fusion's support, the index and the caller's raw
+      evidence string. It answers what each caller actually saw.
+
+      How to read: filter on one fusion to compare its callers, and read the detail column
+      for the caller's own fields.

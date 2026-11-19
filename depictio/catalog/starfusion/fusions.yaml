@@ -10,10 +10,92 @@ find: { filename: "*.starfusion.abridged.tsv" }
 recipe: starfusion/fusions.py
 fixture: fusions.tsv
 renders_as:
-  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: splice_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: splice_type, y: supporting_reads, color: large_anchor_support} }
-  - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: splice_type, top_n_count: 3, headline: true }
-  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: large_anchor_support }
-  - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
+  - id: evidence_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    title: Fusion evidence by splice pattern
+    roles: {cluster: splice_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction}
+    description: >-
+      Each dot is a fusion call placed under its splice pattern, coloured by its abundance (log10 of FFPM plus
+      one) and sized by the share of its evidence that crosses the junction itself. It answers which fusions
+      have the strongest and most direct support.
+
+      How to read: large, dark dots are abundant fusions backed mostly by junction reads, the most convincing
+      kind. Small, pale dots rest on spanning fragments alone and deserve a second look.
+  - component: figure
+    visu_type: bar
+    title: Supporting reads per fusion
+    dict_kwargs: { x: fusion, y: supporting_reads, color: splice_type, labels: { fusion: Fusion, supporting_reads: Supporting reads (junction reads plus spanning fragments), splice_type: Splice pattern } }
+    description: >-
+      Each bar is a fusion call: the sum of its junction reads and spanning fragments, coloured by splice
+      pattern. It answers which fusions have the most evidence.
+
+      How to read: tall bars are well supported. STAR-Fusion's defaults keep only calls with at least two
+      supporting fragments, so the shortest bars are near the filter.
+
+      Source: https://raw.githubusercontent.com/STAR-Fusion/STAR-Fusion/master/STAR-Fusion
+  - component: card
+    column: log_ffpm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Fusion abundance
+    caption: log10 FFPM plus one, with its spread
+    description: >-
+      The hero number is the median abundance of the calls on a log10 scale of fusion fragments per million
+      (plus one), and the box shows its quartiles. It answers how strongly fusions are expressed.
+
+      How to read: higher values mean more fusion fragments per million RNA-seq fragments. STAR-Fusion's
+      defaults keep only calls with at least 0.1 FFPM, so every call here passed that floor.
+
+      Source: https://raw.githubusercontent.com/STAR-Fusion/STAR-Fusion/master/STAR-Fusion
+  - component: card
+    column: fusion
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: splice_type
+    top_n_count: 3
+    headline: true
+    title: Fusions called
+    caption: fusions, by splice pattern
+    description: >-
+      The hero number is the count of distinct fusions called, and the bars rank the splice patterns that
+      account for most of them. It answers how many fusion candidates there are and how they splice.
+
+      How to read: review the less common patterns against the evidence plot before reporting them.
+  - component: card
+    column: supporting_reads
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: donut
+    breakdown_col: splice_type
+    title: Supporting reads
+    caption: reads, by splice pattern
+    description: >-
+      The hero number is the total of junction reads and spanning fragments over all calls, and the ring
+      splits it by splice pattern. It answers where the evidence comes from.
+
+      How to read: a ring dominated by one pattern means most evidence sits on that kind of splice.
+  - component: card
+    column: junction_fraction
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Junction evidence share
+    caption: share of evidence at the junction
+    description: >-
+      The hero number is the mean share of each call's evidence that crosses the junction itself rather than
+      spanning it, and the histogram shows the distribution. It answers how direct the evidence is.
+
+      How to read: values near one mean the call is backed by reads over the breakpoint. Calls near zero rest
+      on spanning fragments only.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: STAR-Fusion calls
+    description: >-
+      Each row is a fusion call with its partner genes, breakpoints, splice pattern, read evidence, FFPM and
+      annotations. It answers which fusions to validate.
+
+      How to read: sort by supporting reads or FFPM and check the annotations for known cancer fusions.

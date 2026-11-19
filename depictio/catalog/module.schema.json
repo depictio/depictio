@@ -1,4 +1,44 @@
 {
+  "$defs": {
+    "ChangelogEntry": {
+      "additionalProperties": false,
+      "description": "One revision of a module: its version and what changed in it.",
+      "properties": {
+        "version": {
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "changes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Changes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "version",
+        "changes"
+      ],
+      "title": "ChangelogEntry",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "description": "A tool. Identity is stored as directly-clickable URLs.",
   "properties": {
@@ -15,6 +55,13 @@
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
       "title": "Version",
       "type": "string"
+    },
+    "changelog": {
+      "items": {
+        "$ref": "#/$defs/ChangelogEntry"
+      },
+      "title": "Changelog",
+      "type": "array"
     },
     "description": {
       "default": "",

@@ -9,14 +9,146 @@ find:
 recipe: bclconvert/demux_stats.py
 fixture: demux_stats.tsv
 renders_as:
-  - { id: lane_composition, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: lane_label, taxon: sample, rank: level, abundance: pct_of_lane} }
-  - { id: lane_sunburst, component: advanced_viz, kind: sunburst,
-      roles: {abundance: reads, ranks: [lane_label, sample]} }
-  - { id: library_index_purity, component: advanced_viz, kind: scatter_xy,
-      roles: {x: reads, y: pct_perfect_index, label: sample, color: lane_label} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_of_lane, color: lane_label, title: Share of the lane per library} }
-  - { component: card, column: reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: pct_of_lane, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_q30, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: lane_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Lane share per library
+    roles: {sample_id: lane_label, taxon: sample, rank: level, abundance: pct_of_lane}
+    config:
+      value_title: Share of the lane (%)
+      x_title: Lane
+      legend_pos: bottom
+    description: >-
+      Each bar is a lane and each segment a library of the sample sheet, or the
+      Undetermined reads, sized by its share of the lane's reads. It answers how
+      evenly the lane was split between libraries and how much no index claimed.
+
+      How to read: segments of similar size mean a balanced pool. A large
+      Undetermined segment means indexes were misread, missing from the sample
+      sheet or swapped, so open the unknown barcodes tile next. A library far
+      smaller than its neighbours was under-pooled.
+
+      Note: BCL Convert publishes no pass or fail cut-off for these shares, so none
+      is drawn.
+  - id: lane_sunburst
+    component: advanced_viz
+    kind: sunburst
+    title: Lane and library hierarchy
+    roles: {abundance: reads, ranks: [lane_label, sample]}
+    description: >-
+      Each arc is a share of the reads of the run: the inner ring is the lane and the
+      outer ring its libraries, sized by reads and coloured by lane. It answers how
+      the run's reads divide between lanes and, within a lane, between libraries.
+
+      How to read: lanes of similar width mean even loading. A library arc that is
+      wide in one lane and thin in another points to uneven pooling or a lane
+      problem. Use the lane composition tile to compare shares lane by lane.
+  - id: library_index_purity
+    component: advanced_viz
+    kind: scatter_xy
+    title: Reads against index purity
+    roles: {x: reads, y: pct_perfect_index, label: sample, color: lane_label}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      log_x: true
+      x_title: Reads
+      y_title: Reads with a perfect index match (%)
+      top_n_labels: 3
+      legend_pos: bottom
+    description: >-
+      Each point is a library in one lane: its number of reads on the horizontal axis
+      and the share of those reads whose index matched exactly on the vertical axis,
+      coloured by lane. It answers whether low-yield libraries are also the ones with
+      poorly read indexes.
+
+      How to read: points should sit near the top of the plot whatever their size. A
+      library low on the axis, or a whole lane shifted down, has many reads that
+      only matched with a mismatch, which can signal index quality problems or
+      index sets that are too close. Compare the lanes of the same library.
+
+      Note: BCL Convert publishes no pass or fail cut-off for index purity, so no
+      line is drawn.
+
+      Lines and annotations: the dashed line is the median share of reads with a perfect
+      index match of this table, a reference computed from the rows on show (it follows
+      the filters), not a cut-off of BCL Convert.
+  - component: figure
+    visu_type: bar
+    title: Share of the lane per library
+    dict_kwargs:
+      x: sample
+      y: pct_of_lane
+      color: lane_label
+      barmode: group
+      labels: {sample: Library, pct_of_lane: Share of the lane (%), lane_label: Lane}
+    description: >-
+      Each bar is a library in one lane: the percentage of that lane's reads it
+      received, coloured by lane. It answers which libraries are over- or
+      under-represented.
+
+      How to read: in an evenly pooled run the bars are close in height. Very short
+      bars are under-pooled libraries and very tall ones dominate the lane. Check the
+      same library across lanes to tell a pooling issue from a lane issue.
+  - component: card
+    column: reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 5
+    filter_expr: "col('sample') != 'Undetermined'"
+    caption: reads, by lane
+    title: Reads assigned to libraries
+    description: >-
+      The hero number is the total reads assigned to a library, leaving out the
+      Undetermined reads, and the bars rank the lanes by their share of it. It
+      answers how much of the run produced usable data.
+
+      How to read: lanes of similar size mean even loading, and the median and
+      maximum per library row show how skewed the pooling is.
+  - component: card
+    column: pct_of_lane
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('sample') != 'Undetermined'"
+    caption: median, with its spread
+    title: Library share of its lane
+    description: >-
+      The hero number is the median percentage of a lane's reads taken by a library,
+      and the box shows the quartiles and outliers. It answers how even the pooling
+      is.
+
+      How to read: a tight box means libraries were pooled evenly. A long tail of
+      high or low values marks libraries to re-pool or re-sequence.
+  - component: card
+    column: pct_q30
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('sample') != 'Undetermined'"
+    caption: median, with its spread
+    title: Bases at Q30 or above per library
+    description: >-
+      The hero number is the median percentage of a library's bases with a quality
+      score of 30 or higher, and the box shows the spread between libraries. It
+      answers whether base quality is consistent across the pool.
+
+      How to read: a tight box near the top means uniform quality. A library far
+      below the others deserves a look at its lane and read in the base quality tile.
+
+      Note: BCL Convert publishes no Q30 cut-off, since the expected value depends on
+      the instrument and read length, so none is drawn.
+  - component: table
+    title: Demultiplexing statistics
+    description: >-
+      One row is one library in one lane, plus the Undetermined reads, with its
+      reads, lane share, yield, base quality and index purity. It answers which
+      libraries sit behind an outlier on the tiles above.
+
+      How to read: Sort by reads or by the lane share to find the over- and
+      under-represented libraries, and by the Q30 share or the perfect-index
+      share to find weak ones. Look for libraries far from their lane peers and
+      for a large Undetermined row. It complements the lane summary and the
+      unknown barcodes tiles of the same output.

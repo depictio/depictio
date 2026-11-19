@@ -401,7 +401,7 @@ def check(
     from depictio.cli.cli.utils.template_check import fetch_schema as fetch
     from depictio.cli.cli.utils.templates import (
         _introspect_pipeline_params,
-        _pick_input_file,
+        _pick_input_samplesheet,
         _projects_roots,
         _read_run_params,
         detect_template_from_run_dir,
@@ -426,9 +426,7 @@ def check(
         # What `depictio ingest` finds in the outputs, never over an explicit --var.
         auto = {"DATA_ROOT": str(run), **explicit}
         _introspect_pipeline_params(run, auto, _read_run_params(run))
-        samplesheet = _pick_input_file(
-            as_data_root(run), "samplesheet", (".csv", ".tsv", ".tab", ".txt")
-        )
+        samplesheet = _pick_input_samplesheet(as_data_root(run))
         if samplesheet:
             auto.setdefault("SAMPLESHEET_FILE", samplesheet)
         explicit = auto

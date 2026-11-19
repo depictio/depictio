@@ -7,4 +7,26 @@ find: { path_glob: "**/qiime2/alpha-rarefaction/*.csv" }
 recipe: qiime2/alpha_rarefaction.py
 fixture: alpha_rarefaction.tsv
 renders_as:
-  - { id: rarefaction_alpha, component: advanced_viz, kind: rarefaction, roles: {sample_id: sample, depth: depth, metric: faith_pd} }
+  # C1 N/A: the raw rarefaction table carries no metadata column (sample, depth,
+  # iter, faith_pd), so there is nothing to group by; the curves take one colour
+  # per sample. The iteration column is bound so the tile draws its spread band.
+  - id: rarefaction_alpha
+    component: advanced_viz
+    kind: rarefaction
+    title: Rarefaction curves
+    roles: {sample_id: sample, depth: depth, metric: faith_pd, iter: iter}
+    config:
+      show_ci: true
+    description: >-
+      Each line is a sample: its Faith's phylogenetic diversity as the reads are
+      subsampled to a growing depth, averaged over the iterations, with the spread of
+      the iterations as a band. It answers whether the sequencing depth was enough to
+      capture the diversity.
+
+      How to read: a curve that levels out (approaches a slope of zero) means more reads
+      would not reveal new diversity. A curve still climbing at the deepest depth means
+      the diversity was not fully observed, or that sequencing error remains in the data.
+      Choose the sampling depth for diversity analyses where most curves have levelled
+      out, without dropping too many samples.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/

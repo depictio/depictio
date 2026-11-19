@@ -571,3 +571,32 @@ def test_a_single_run_is_not_checked_for_shared_samples(mock_db, two_runs):
     _multiqc_samples(two_runs / "run_a", ["S1", "S1"])
     report = _call(data_root=str(two_runs / "run_a"), dry_run=True, **_local())
     assert report.shared_samples == []
+
+
+def test_a_check_that_read_some_of_a_runs_reports_says_how_many(monkeypatch):
+    """The preview keeps the first 5 reports a collection matched (#1400): the
+    answer says which run's collection was checked on only some of them, and
+    on none when a report could not be read."""
+    from types import SimpleNamespace
+
+    names = {"run_a": {"S1"}, "run_b": {"S2"}, "run_c": None}
+    monkeypatch.setattr(from_run, "_report_sample_names", lambda root, _row: names[root])
+
+    def preview(matched):
+        row = SimpleNamespace(
+            tag="multiqc_data", matched=matched, samples=[f"r{i}" for i in range(min(matched, 5))]
+        )
+        return SimpleNamespace(data_collections=[row])
+
+    gaps: list = []
+    shared = from_run._samples_shared_across_runs(
+        {"multiqc_data"},
+        [
+            ("run_a", "run_a", preview(2)),
+            ("run_b", "run_b", preview(8)),
+            ("run_c", "run_c", preview(1)),
+        ],
+        gaps,
+    )
+    assert shared == []
+    assert [(g.run, g.checked, g.reports) for g in gaps] == [("run_b", 5, 8), ("run_c", 0, 1)]

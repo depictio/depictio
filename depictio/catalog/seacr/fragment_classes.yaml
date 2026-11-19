@@ -3,9 +3,9 @@ name: Nucleosome fragment classes
 mode: qc/fragments
 description: >-
   The fragment-length histogram binned into the four nucleosome classes:
-  sub-nucleosomal below 120 bp, mononucleosomal to 250 bp, dinucleosomal to
-  450 bp and multi-nucleosomal above it, with the share of each per sample and
-  the mononucleosome to sub-nucleosome ratio behind it.
+  sub-nucleosomal below 120 bp, mononucleosomal to 250 bp, dinucleosomal to 450 bp and
+  multi-nucleosomal above it, with the share of each per sample and the mononucleosome
+  to sub-nucleosome ratio behind it.
 # The raw ladder answers "does this look like chromatin"; the classes answer
 # "how much of this library is nucleosome-free", which is what separates a
 # sharp mark from a broad one. Every sample keeps all four classes even when a
@@ -15,9 +15,105 @@ find:
 recipe: seacr/fragment_classes.py
 fixture: fragment_classes.tsv
 renders_as:
-  - { id: seacr_fragment_class_stack, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: fragment_class, title: Fragment classes per sample} }
-  - { component: card, column: n_fragments, aggregation: sum, secondary_layout: donut, breakdown_col: fragment_class }
-  - { component: card, column: sample_median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mono_to_sub, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # Kept a figure: cutandrun dashboards reference this id as a `figure` tile.
+  # Four classes stack legibly in a plain bar (RULES.md section 8 allows a
+  # stacked figure for at most four parts).
+  - id: seacr_fragment_class_stack
+    component: figure
+    visu_type: bar
+    title: Nucleosome classes per sample
+    dict_kwargs:
+      x: sample
+      y: fraction
+      color: fragment_class
+      barmode: stack
+      labels: {sample: Sample, fraction: Share of fragments, fragment_class: Fragment class}
+    description: >-
+      Each bar is a sample, split into the share of its fragments in each length class:
+      sub-nucleosomal, mono-, di- and multi-nucleosomal. It answers how much of the
+      library is nucleosome-free against nucleosome-bound.
+
+      How to read: a sharp mark gives a sub-nucleosomal heavy library, and a broad mark a
+      mononucleosomal heavy one, so replicates of one target should look alike. A library
+      dominated by multi-nucleosomal fragments was digested too little.
+
+      Lines and annotations: the classes are cut at 120, 250 and 450 bp. The 120 bp
+      boundary follows the transcription factor sized fragments of the CUT&RUN paper,
+      while 250 and 450 bp are this table's own bins and not a published cut-off.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28079019/
+  - component: card
+    column: n_fragments
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    caption: fragments, by target
+    title: Fragments counted
+    description: >-
+      The hero number is the total of fragments in view and the bars rank the targets by
+      how many they hold. It answers how much data each target contributes.
+
+      How to read: targets with far fewer fragments have less depth, so their class shares
+      are noisier. The extra figures are the median and largest class count.
+  - component: card
+    column: sample_median_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Median fragment length per sample
+    description: >-
+      The hero number is the median over samples of each sample's median fragment length,
+      and the box shows the quartiles. It answers where the typical fragment sits.
+
+      How to read: histone marks sit near a nucleosome, about 180 bp, and a median far
+      above it points to little digestion. Transcription factors push the median down with
+      short fragments.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: median_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('fragment_class') == 'Mononucleosomal'"
+    caption: median, with its spread
+    title: Mononucleosomal median length
+    description: >-
+      The hero number is the median over samples of the median length of the
+      mononucleosomal fragments, between 120 and 250 bp (this table's own class), and the
+      box shows the quartiles. It answers whether the nucleosome peak sits where it should.
+
+      How to read: a value near 180 bp, the nucleosomal fragment length the nf-core/cutandrun
+      docs give for histone marks, is a clean nucleosome peak. A value pushed to the edge
+      of the class suggests the digestion is uneven.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: mono_to_sub
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Mononucleosome to sub-nucleosome ratio
+    description: >-
+      The hero number is the median over samples of the ratio of mononucleosomal to
+      sub-nucleosomal fragments, and the box shows the quartiles. It answers whether the
+      libraries are nucleosome-bound or nucleosome-free.
+
+      How to read: a high ratio belongs to broad histone marks and a low one to sharp
+      marks and transcription factors. Replicates of one target should have similar
+      ratios, and a stray one is worth a look.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28079019/
+  - component: table
+    title: Fragment class table
+    description: >-
+      Each row is a sample and a length class, with the fragments in it, their share, the
+      median length inside the class and the sample-level ratio. It answers the exact
+      numbers behind the bars.
+
+      How to read: sort by share to find the dominant class of each sample, and filter on
+      a class to compare samples.

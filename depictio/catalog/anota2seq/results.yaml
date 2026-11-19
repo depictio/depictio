@@ -13,8 +13,79 @@ renders_as:
   - id: analysis_volcano
     component: advanced_viz
     kind: volcano
+    title: Analysis volcano
     roles: { feature_id: gene_name, effect_size: effect, significance: padj, category: direction }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
-  - { component: card, column: effect, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: Select, column_name: analysis }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    config:
+      significance_threshold: 0.15
+      effect_threshold: 0.263
+      top_n_labels: 10
+      effect_label: Effect (log2)
+      significance_label: -log10 adjusted p-value
+    description: >-
+      Each point is a gene in one anota2seq analysis (ribosome-bound mRNA, total mRNA,
+      translation or buffering): its log2 effect against its adjusted p-value, coloured by
+      direction. Use the analysis selector to read one analysis at a time. It answers
+      which genes change in that analysis and how confidently.
+
+      How to read: upper corners are significant up or down changes. Mixing analyses on
+      one plot hides their different meanings, so filter to one first.
+
+      Lines and annotations: the horizontal line is an adjusted p-value of 0.15, the
+      anota2seq default maxPAdj, applied to every analysis. The vertical lines mark an
+      absolute effect of log2(1.2), about 0.263, the default for translation and buffering
+      only; ribosome-bound and total mRNA have no minimum effect.
+
+      Source: https://www.bioconductor.org/packages/release/bioc/manuals/anota2seq/man/anota2seq.pdf
+  - component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: direction
+    headline: true
+    title: Calls by direction
+    caption: gene calls, by direction
+    description: >-
+      The hero number is the count of distinct genes, the second figure the count of
+      gene, contrast and analysis rows, and the ring splits the rows into up, down and
+      not significant. It answers how many results pass the selection.
+
+      How to read: a ring mostly not significant means a weak response in the analyses in
+      view. Filter to one analysis to read it.
+
+      Lines and annotations: the call is an adjusted p-value below 0.15, plus an
+      absolute effect of at least log2(1.2) for translation and buffering.
+
+      Source: https://www.bioconductor.org/packages/release/bioc/manuals/anota2seq/man/anota2seq.pdf
+  - component: card
+    column: effect
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Effect spread
+    caption: effect, quartiles over results
+    description: >-
+      The hero number is the range of log2 effects over the analyses in view and the
+      box shows their quartiles. It answers how large the changes are.
+
+      How to read: effects of different analyses mean different things, so filter to one
+      analysis before comparing. A median would cancel up and down, hence the range.
+  - component: interactive
+    interactive_type: Select
+    column_name: analysis
+    title: Analysis
+    description: >-
+      Selects one of the four anota2seq analyses: ribosome-bound mRNA, total mRNA,
+      translation or buffering.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Analysis results table
+    description: >-
+      Each row is a gene in one analysis and contrast with its effect, slope, p-value,
+      adjusted p-value and direction. It answers the exact statistics behind the volcano
+      and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by adjusted p-value and filter by analysis. The slope is the
+      anota2seq analysis of partial variance slope used to filter translation and
+      buffering calls.

@@ -9,8 +9,56 @@ description: >-
 find:
   path_glob: "**/*.sig.allocation.tsv"
 recipe: sigs/allocation.py
+# The fixture is enriched synthetically from 13 real rows (copies with seeded noise), so the preview shows several tumors.
 fixture: allocation.tsv
 renders_as:
-  - { id: signature_share_bar, component: figure, visu_type: bar, dict_kwargs: {x: signature, y: percent, color: sample} }
-  - { id: signature_snv_total, component: card, column: allocation, aggregation: sum, secondary_layout: top_n, breakdown_col: signature, top_n_count: 3, headline: true }
-  - { component: table }
+  # C1: the bars are coloured by tumor, so two tumors can be compared per signature.
+  - id: signature_share_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: signature
+      y: percent
+      color: sample
+      labels: {signature: COSMIC signature, percent: Share of SNVs (%), sample: Tumor}
+    title: Share of SNVs per signature
+    description: >-
+      Each bar is the percent of a tumor's SNVs that SIGS allocates to one COSMIC
+      mutational signature. It answers which mutational processes shaped the tumor.
+
+      How to read: tall bars are the dominant processes, for instance clock-like,
+      APOBEC, homologous recombination deficiency or mismatch repair signatures, so
+      read each signature's aetiology in COSMIC. The MISALLOC bar is the share the
+      fitted signatures do not explain.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/sigs/README.md
+  - id: signature_snv_total
+    component: card
+    column: allocation
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: signature
+    top_n_count: 3
+    headline: true
+    title: SNVs allocated to signatures
+    caption: SNVs, by signature
+    description: >-
+      The hero number is the total count of SNVs allocated to signatures, with the
+      median and the largest allocation beside it, and the bars rank the signatures by
+      SNVs. It answers how many mutations the fit explains and which signatures carry
+      most of them.
+
+      How to read: a high total with a few dominant signatures is a clear mutational
+      process. A large MISALLOC share means the signature set explains the tumor poorly.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/sigs/README.md
+  - component: table
+    title: Signature allocation
+    description: >-
+      Each row is a tumor and a signature with the SNVs allocated to it, the fraction
+      and the percent of the tumor's SNVs. It answers the exact allocation behind the
+      bars.
+
+      How to read: sort by percent to list the main signatures, and compare tumors by
+      filtering on the signature.

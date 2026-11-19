@@ -10,10 +10,33 @@ find: { path_glob: "**/taxpasta/*.tsv" }
 recipe: taxpasta/matrix.py
 fixture: matrix.tsv
 renders_as:
-  - {
-      id: concordance_heatmap,
-      component: advanced_viz,
-      kind: complex_heatmap,
-      roles: { index: taxon },
-    }
-  - { component: table }
+  # C6 N/A: value columns are the run's profiling runs, known only at ingest.
+  - id: concordance_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Taxon by run abundance heatmap
+    roles: {index: taxon}
+    config:
+      row_annotation_cols: [rank]
+    description: >-
+      Each cell is the relative abundance of one taxon (row) in one profiling run
+      (column), with the taxonomic rank as a row strip and the profiler and platform
+      as column strips. It answers which taxa the profilers agree on and which runs
+      group together.
+
+      How to read: columns that cluster together report similar communities, and a
+      profiler that falls on its own branch differs from the rest. A taxon bright in
+      some columns and blank in others is detected by only some profilers, so check
+      the detection overlap tile. Rows are the most abundant taxa, so rare taxa are
+      not shown.
+
+      Lines and annotations: the dendrograms come from hierarchical clustering of
+      the rows and columns, and the strips label rank, profiler and platform.
+  - component: table
+    title: Taxon by run table
+    description: >-
+      Each row is a taxon with its relative abundance in every profiling run, one
+      column per run. It answers the exact value behind a heatmap cell.
+
+      How to read: sort a run column to see its leading taxa, or filter by rank. A
+      zero means that profiler did not report the taxon in that run.

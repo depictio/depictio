@@ -29,6 +29,7 @@ from depictio.cli.cli.utils.delta_versioning import (
     plan_scoped_write,
     probe_delta_table,
     read_delta_commit_info,
+    scoped_frame_conflicts,
     table_run_tags,
     write_delta_table_versioned,
 )
@@ -666,6 +667,252 @@ def test_content_digest_ignores_the_write_time_and_float_noise():
     )
     assert content_digest(df) == content_digest(again)
     assert content_digest(df) != content_digest(df.with_columns(pl.col("a") * 1.001))
+
+
+class TestWholeFrameWrite:
+    """A frame is written as ``DataFrame.write_delta`` wrote it, in its row order."""
+
+    def _mixed(self, n: int = 2500) -> pl.DataFrame:
+        return pl.DataFrame(
+            {
+                RUN_ID_COLUMN: [f"run_{i % 3}" for i in range(n)],
+                "s": [None if i % 5 == 0 else f"v{i % 7}" for i in range(n)],
+                "v": list(range(n)),
+                "f": [i / 7 for i in range(n)],
+                "when": [datetime(2026, 1, 1, i % 24) for i in range(n)],
+                "items": [[i, i + 1] for i in range(n)],
+                "rec": [{"a": i, "b": str(i)} for i in range(n)],
+            }
+        )
+
+    def test_it_writes_the_table_write_delta_wrote(self, tmp_path, storage):
+        df = self._mixed()
+        reference = str(tmp_path / "reference")
+        df.write_delta(reference, mode="overwrite")
+        written = str(tmp_path / "written")
+        result = write_delta_table_versioned(df, written, storage)
+
+        assert result.rows_written == df.height
+        assert DeltaTable(written).schema().to_json() == DeltaTable(reference).schema().to_json()
+        assert pl.read_delta(written).equals(pl.read_delta(reference))
+        assert [h["version"] for h in DeltaTable(written).history()] == [0]
+
+    def test_rows_keep_their_order_whatever_the_frame_chunks(self, destination, storage):
+        # A scan of many files is one chunk per file. deltalake writes the
+        # batches of a stream concurrently, in no set order: handed over
+        # chunk by chunk, the table came back shuffled, the lines of a file
+        # with it (#1418). Shuffling is not deterministic, hence the size.
+        df = pl.concat(
+            [
+                pl.DataFrame({"line": list(range(k * 500, (k + 1) * 500)), "path": f"f{k}"})
+                for k in range(400)
+            ],
+            rechunk=False,
+        )
+        assert df.n_chunks() == 400
+        write_delta_table_versioned(df, destination, storage)
+        assert pl.read_delta(destination).equals(df)
+
+    def test_a_line_scan_of_many_files_reads_back_as_the_files(self, tmp_path, storage):
+        from depictio.recipes.lib.protein_families import iter_texts_by_file
+
+        root = tmp_path / "alignments"
+        root.mkdir()
+        files = {}
+        for k in range(300):
+            path = root / f"family_{k:03d}.aln"
+            files[str(path)] = "\n".join(f">seq{k}_{j}\n{'ACDEFGHIKL' * 10}" for j in range(400))
+            path.write_text(files[str(path)] + "\n")
+        # The template's scan: one text line per row, the file on every row.
+        scan = pl.concat(
+            [
+                pl.scan_csv(
+                    path,
+                    separator="\x1f",
+                    has_header=False,
+                    new_columns=["raw"],
+                    include_file_paths="source_path",
+                    quote_char=None,
+                )
+                for path in files
+            ]
+        ).collect()
+        # Chunks that end mid-file, as an aggregated scan's do: a file split
+        # over two batches came back rotated (#1418).
+        scan = pl.concat(
+            [scan.slice(start, 777) for start in range(0, scan.height, 777)], rechunk=False
+        )
+        assert scan.n_chunks() > 100
+        destination = str(tmp_path / "raw")
+        write_delta_table_versioned(scan, destination, storage)
+        assert dict(iter_texts_by_file(pl.read_delta(destination))) == files
+
+    def test_it_writes_a_partitioned_and_a_scoped_table(self, tmp_path, storage):
+        df = self._mixed()
+        destination = str(tmp_path / "table")
+        write_delta_table_versioned(df, destination, storage, partition=True)
+        assert DeltaTable(destination).metadata().partition_columns == [RUN_ID_COLUMN]
+        update = df.filter(pl.col(RUN_ID_COLUMN) == "run_1").with_columns(pl.col("f") * 2)
+        write_delta_table_versioned(
+            update,
+            destination,
+            storage,
+            write_mode="replace-runs",
+            replace_run_tags=["run_1"],
+            scoped=True,
+            partition=True,
+        )
+        back = pl.read_delta(destination)
+        assert back.height == df.height
+        assert (
+            back.filter(pl.col(RUN_ID_COLUMN) == "run_1")
+            .sort("v")["f"]
+            .equals(update.sort("v")["f"])
+        )
+
+    def test_an_empty_frame_writes_its_schema(self, destination, storage):
+        empty = self._mixed().head(0)
+        write_delta_table_versioned(empty, destination, storage)
+        assert pl.read_delta(destination).schema == empty.schema
+
+    @pytest.mark.parametrize(
+        "column", [pl.Series("n", [None, None]), pl.Series("t", [[None], [None]])]
+    )
+    def test_a_null_column_is_refused_as_write_delta_refused_it(self, column, destination, storage):
+        df = pl.DataFrame({"v": [1, 2]}).with_columns(column)
+        with pytest.raises(TypeError, match="unsupported data types"):
+            write_delta_table_versioned(df, destination, storage)
+
+    def test_the_digest_does_not_depend_on_the_slices(self, monkeypatch):
+        import hashlib
+
+        from depictio.cli.cli.utils import delta_versioning
+
+        df = self._mixed().drop("rec")
+        # The digest the whole frame got before the slicing: a table's digest
+        # must not change with this write, or every table reads as changed.
+        cols = sorted(df.columns)
+        hashed = (
+            df.select(
+                pl.col(c).round_sig_figs(10) if df.schema[c].is_float() else pl.col(c) for c in cols
+            )
+            .hash_rows()
+            .sort()
+            .to_numpy()
+        )
+        schema = "|".join(f"{c}:{df.schema[c]}" for c in cols)
+        before = hashlib.sha256(schema.encode() + hashed.tobytes()).hexdigest()
+        assert content_digest(df) == before
+        monkeypatch.setattr(delta_versioning, "WRITE_SLICE_ROWS", 333)
+        assert content_digest(df) == before
+
+
+class TestFramesWrite:
+    """A table that comes in frames (a recipe's batches) is written as they come (#1418)."""
+
+    def test_each_frame_keeps_its_row_order(self, destination, storage):
+        from depictio.cli.cli.utils.delta_versioning import write_delta_frames_versioned
+
+        # A frame of many chunks is still one batch: its rows stay together
+        # and in order. The frames themselves may land in any order.
+        parts = [
+            pl.concat(
+                [
+                    pl.DataFrame({"f": k, "v": list(range(j * 100, (j + 1) * 100))})
+                    for j in range(20)
+                ],
+                rechunk=False,
+            )
+            for k in range(12)
+        ]
+        write_delta_frames_versioned(iter(parts), parts[0].schema, destination, storage)
+        back = pl.read_delta(destination)
+        assert back["f"].rle_id().n_unique() == 12
+        for k, part in enumerate(parts):
+            assert back.filter(pl.col("f") == k).equals(part)
+
+    def test_frames_write_the_table_their_concatenation_writes(self, tmp_path, storage):
+        from depictio.cli.cli.utils.delta_versioning import write_delta_frames_versioned
+
+        parts = [frame(["A", "A"], [1, 2]), frame(["B"], [3]), frame(["A"], [4])]
+        whole = pl.concat(parts)
+        streamed = write_delta_frames_versioned(
+            iter(parts), whole.schema, str(tmp_path / "streamed"), storage
+        )
+        reference = write_delta_table_versioned(whole, str(tmp_path / "whole"), storage)
+
+        assert (streamed.rows_written, streamed.run_tags) == (4, ["A", "B"])
+        assert streamed.content_digest == reference.content_digest == content_digest(whole)
+        assert rows(str(tmp_path / "streamed")) == rows(str(tmp_path / "whole"))
+
+    def test_a_frame_source_that_raises_commits_nothing_and_surfaces_as_itself(
+        self, destination, storage
+    ):
+        from depictio.cli.cli.utils.delta_versioning import write_delta_frames_versioned
+
+        write_delta_table_versioned(frame(["A"]), destination, storage)
+
+        class Boom(Exception):
+            pass
+
+        def parts():
+            yield frame(["B"], [5])
+            raise Boom("run B has none of its inputs")
+
+        with pytest.raises(Boom, match="none of its inputs"):
+            write_delta_frames_versioned(parts(), frame(["A"]).schema, destination, storage)
+        assert [h["version"] for h in DeltaTable(destination).history()] == [0]
+        assert rows(destination) == [("A", 0)]
+
+
+class TestStringHeldAsCategorical:
+    """A frame may hold a String column as Categorical to save memory (#1418):
+    the table, its digest and the scoped-write checks see a String column."""
+
+    def _frames(self):
+        plain = pl.DataFrame(
+            {
+                RUN_ID_COLUMN: [f"run_{i % 3}" for i in range(300)],
+                "family": [f"fam{i % 7}" for i in range(300)],
+                "v": list(range(300)),
+            }
+        )
+        return plain, plain.with_columns(pl.col("family").cast(pl.Categorical))
+
+    def test_it_is_stored_as_a_plain_string(self, destination, storage):
+        plain, held = self._frames()
+        write_delta_table_versioned(held, destination, storage)
+        (field,) = [f for f in DeltaTable(destination).schema().fields if f.name == "family"]
+        assert (str(field.type), field.metadata) == ('PrimitiveType("string")', {})
+        back = pl.read_delta(destination)
+        assert back.schema == plain.schema
+        assert back.sort("v").equals(plain)
+
+    def test_its_digest_is_the_string_columns(self):
+        plain, held = self._frames()
+        assert content_digest(held) == content_digest(plain)
+
+    def test_it_is_no_conflict_with_a_string_table_column(self, destination, storage):
+        plain, held = self._frames()
+        write_delta_table_versioned(plain, destination, storage, partition=True)
+        table = dict(pl.read_delta(destination).schema)
+        assert scoped_frame_conflicts(dict(held.schema), table) == []
+        write_delta_table_versioned(
+            held.filter(pl.col(RUN_ID_COLUMN) == "run_1"),
+            destination,
+            storage,
+            write_mode="replace-runs",
+            replace_run_tags=["run_1"],
+            scoped=True,
+            partition=True,
+        )
+        # A partitioned table reads back with its partition column last.
+        back = pl.read_delta(destination).select(plain.columns)
+        assert back.sort("v").equals(plain)
+        # A real type change still is.
+        assert scoped_frame_conflicts({"v": pl.Float64}, table) == [
+            "v is Float64 here but Int64 in the table"
+        ]
 
 
 class TestPlanAttachWrite:

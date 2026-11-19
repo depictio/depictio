@@ -13,12 +13,157 @@ fixture: metrics.tsv
 renders_as:
   # Signal (TSS enrichment) against specificity (reads inside peaks): the two
   # axes an ATAC library is placed on.
-  - { component: figure, visu_type: scatter, dict_kwargs: {x: tss_enrichment, y: hqaa_overlapping_peaks_percent, color: sample, size: total_peaks, title: TSS enrichment against reads in peaks} }
+  - component: advanced_viz
+    kind: scatter_xy
+    title: TSS enrichment against reads in peaks
+    roles: {x: tss_enrichment, y: hqaa_overlapping_peaks_percent, color: sample, size: total_peaks}
+    config:
+      x_title: TSS enrichment
+      y_title: High-quality alignments in peaks (%)
+      reference_line: horizontal
+      reference_value: 30
+      reference_label: ENCODE fraction of reads in peaks, 0.3
+    description: >-
+      Each point is a library: its TSS enrichment on the horizontal axis and the
+      percentage of its high-quality autosomal alignments that fall inside peaks on
+      the vertical axis, with the marker sized by the number of peaks. It answers
+      whether a library has both signal and specificity.
+
+      How to read: good libraries sit to the right and above the line. A library
+      high on one axis and low on the other has a good enrichment but poor
+      specificity, or the reverse, and the two cards below give the cut-offs for
+      each.
+
+      Lines and annotations: the horizontal line is 30 percent, the ENCODE
+      ATAC-seq standard of 0.3 for the fraction of reads in peaks (0.2 is
+      acceptable). ataqv computes the percentage on high-quality autosomal
+      alignments, so the two are close but not identical.
+
+      Source: https://www.encodeproject.org/atac-seq/
   # Signal, then yield, then the two ways an ATAC library wastes reads.
-  - { component: card, column: tss_enrichment, aggregation: average, secondary_layout: gauge, coverage_max: 10.0, headline: true }
-  - { component: card, column: total_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: mitochondrial_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: hqaa_overlapping_peaks_percent, aggregation: average, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: min, threshold_warn: 10.0 }
-  - { component: card, column: duplicate_fraction, aggregation: average, secondary_layout: histogram }
-  - { component: card, column: median_fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+  - component: card
+    column: tss_enrichment
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 7.0
+    threshold_direction: min
+    threshold_warn: 5.0
+    headline: true
+    title: TSS enrichment
+    caption: average enrichment, with the lowest and highest library
+    description: >-
+      The hero number is the average TSS enrichment, the signal at transcription
+      start sites over the flanks of the same window. It answers whether the
+      libraries show the open chromatin expected of good ATAC-seq.
+
+      How to read: higher is better. A library under the lower line has too little
+      signal to trust its peaks, so check the fragment ladder and the TSS profile.
+
+      Lines and annotations: the cut-offs are the ENCODE values for the GRCh38 RefSeq
+      TSS annotation, 7 and above is ideal, 5 to 7 acceptable and under 5
+      concerning. The values depend on the annotation, so other references use
+      other cut-offs (hg19 6 and 10, mm10 10 and 15).
+
+      Source: https://www.encodeproject.org/atac-seq/
+  - component: card
+    column: total_peaks
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: Peaks called
+    caption: total peaks, with the libraries calling most ranked
+    description: >-
+      The hero number is the total of peaks ataqv saw in the peak files, and the
+      bars rank the libraries with the most. It answers how much accessible
+      chromatin each library resolves.
+
+      How to read: a library with far fewer peaks than its peers has less usable
+      signal. The count depends on depth and on the peak caller, so compare libraries
+      of one run only.
+  - component: card
+    column: mitochondrial_fraction
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Mitochondrial reads
+    caption: median fraction of reads on the mitochondrial genome, with its spread
+    description: >-
+      The hero number is the median fraction of reads that map to the mitochondrial
+      genome, and the box shows the spread between libraries. It answers how much
+      sequencing was wasted on mitochondrial DNA.
+
+      How to read: lower is better, since mitochondrial reads carry no nuclear
+      signal. A library far above the box is a candidate for a cleaner preparation.
+      ataqv sets no cut-off for it, so none is drawn.
+
+      Source: https://github.com/ParkerLab/ataqv
+  - component: card
+    column: hqaa_overlapping_peaks_percent
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 30.0
+    threshold_direction: min
+    threshold_warn: 20.0
+    title: Reads in peaks
+    caption: average percent of alignments in peaks, with the lowest and highest library
+    description: >-
+      The hero number is the average percentage of high-quality autosomal
+      alignments that overlap a peak. It answers how specific the signal is to
+      accessible regions.
+
+      How to read: higher is better. A low value means most reads lie in the
+      background, so the library needs more depth or a cleaner preparation.
+
+      Lines and annotations: the cut-offs are the ENCODE ATAC-seq standard for the
+      fraction of reads in peaks, above 30 percent is good and above 20 percent
+      acceptable. ataqv computes the percentage on high-quality autosomal alignments,
+      a close but not identical quantity.
+
+      Source: https://www.encodeproject.org/atac-seq/
+  - component: card
+    column: duplicate_fraction
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    title: Duplicate reads
+    caption: average duplicate fraction, with the median and the highest library
+    description: >-
+      The hero number is the average fraction of reads that are duplicates, and the
+      histogram shows how the libraries spread. It answers how much complexity was
+      lost to PCR duplication.
+
+      How to read: lower is better. A library at the right of the histogram has
+      few distinct fragments and will add little at greater depth. ataqv defines no
+      duplicate cut-off, so none is drawn.
+
+      Source: https://github.com/ParkerLab/ataqv
+  - component: card
+    column: median_fragment_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Median fragment length
+    caption: median of the library medians, with their spread
+    description: >-
+      The hero number is the median of the per-library median fragment length, and
+      the box shows the spread. It answers whether the libraries were tagmented to
+      a similar size.
+
+      How to read: libraries should be close together. A library far from the box
+      has a different fragment size profile, so open the fragment ladder.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: ATAC quality metrics per library
+    description: >-
+      Each row is a library with its TSS enrichment, read yield, fractions of
+      mitochondrial and duplicate reads, share of alignments in peaks and peak
+      statistics. It answers the exact numbers an ATAC library is judged on and lets
+      a row selection filter the rest of the dashboard.
+
+      How to read: sort by TSS enrichment or by reads in peaks to find the libraries
+      to inspect first.

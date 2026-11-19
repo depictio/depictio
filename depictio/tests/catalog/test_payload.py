@@ -14,9 +14,13 @@ from pydantic import TypeAdapter, ValidationError
 from depictio.catalog.payload import (
     CatalogPayloadError,
     _aggregate,
+    _inject,
     _table_payload,
     advanced_viz_persist_config,
     build_payload,
+    export_site_data,
+    inline_logos,
+    json_safe,
 )
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 from depictio.models.components.advanced_viz.configs import VizConfig
@@ -272,3 +276,194 @@ def test_a_kind_without_a_column_menu_stays_on_its_roles() -> None:
     assert dc_id not in payload["data"]["schemas"]
     bound = {v for k, v in render["config"].items() if k.endswith("_col")}
     assert set(payload["data"]["advancedVizData"][dc_id]["rows"]) == bound
+
+
+def test_the_payload_is_injected_once(tmp_path, monkeypatch) -> None:
+    """A second copy of the sentinel (a comment quoting it) must not get the payload:
+    the template once named it in a comment, and every gallery shipped it twice."""
+    template = tmp_path / "catalog-preview.html"
+    template.write_text(
+        "<!-- replaces __CATALOG_PAYLOAD__ -->"
+        '<script id="catalog-payload" type="application/json">__CATALOG_PAYLOAD__</script>'
+    )
+    monkeypatch.setattr("depictio.catalog.payload.TEMPLATE_PATH", template)
+
+    html = _inject({"marker": "only-once"})
+
+    assert html.count("only-once") == 1
+
+
+def _flagship_entry():
+    return next(e for e in load_catalog_entries() if any(o.id == FLAGSHIP for o in e.outputs))
+
+
+def test_the_site_index_lists_every_output_without_its_data(tmp_path) -> None:
+    import json
+
+    entry = _flagship_entry()
+    stats = export_site_data([entry], tmp_path, "9.9.9")
+
+    index = json.loads((tmp_path / "index.json").read_text())
+    assert index["version"] == "9.9.9"
+    assert index["initialOutputId"] is None
+    [tool] = index["tools"]
+    assert tool["id"] == entry.id
+    assert [o["output"]["id"] for o in tool["outputs"]] == [o.id for o in entry.outputs]
+    assert all(o["fixturePreview"] is None for o in tool["outputs"])
+    assert not index["data"]["figures"] and not index["data"]["tables"]
+    assert stats["tools"] == 1
+    assert stats["outputs"] == len(entry.outputs)
+
+
+def test_the_site_index_carries_the_module_version(tmp_path) -> None:
+    import json
+
+    entry = _flagship_entry()
+    export_site_data([entry], tmp_path, "9.9.9")
+
+    [tool] = json.loads((tmp_path / "index.json").read_text())["tools"]
+    assert tool["version"] == entry.version
+
+
+def test_each_site_output_file_holds_what_the_gallery_embeds(tmp_path) -> None:
+    """Same fixture and data as the one-page gallery: only the download moves."""
+    import json
+
+    entry = _flagship_entry()
+    export_site_data([entry], tmp_path, "dev")
+
+    expected = json_safe(build_payload(_get_output(FLAGSHIP), "light", entry))
+    written = json.loads((tmp_path / "outputs" / f"{FLAGSHIP}.json").read_text())
+    roundtrip = json.loads(json.dumps(expected, default=str))
+    assert written["fixturePreview"] == roundtrip["fixturePreview"]
+    assert written["data"] == roundtrip["data"]
+    # Browser JSON.parse rejects NaN / Infinity tokens.
+    text = (tmp_path / "outputs" / f"{FLAGSHIP}.json").read_text()
+    assert "NaN" not in text and "Infinity" not in text
+
+
+def test_an_output_without_a_preview_is_listed_but_gets_no_file(tmp_path, monkeypatch) -> None:
+    import json
+
+    def broken(output, tool, theme):
+        return {
+            "output": {"id": output.id},
+            "fixturePreview": None,
+            "renders": [],
+            "ok": False,
+            "error": "boom",
+        }, {}
+
+    monkeypatch.setattr("depictio.catalog.payload._output_entry", broken)
+    entry = _flagship_entry()
+    stats = export_site_data([entry], tmp_path, "dev")
+
+    index = json.loads((tmp_path / "index.json").read_text())
+    assert all(o["ok"] is False for o in index["tools"][0]["outputs"])
+    assert stats["failed"] == len(entry.outputs)
+    assert not list((tmp_path / "outputs").iterdir())
+
+
+def test_a_reused_output_id_stops_the_site_export(tmp_path) -> None:
+    entry = _flagship_entry()
+    with pytest.raises(CatalogPayloadError, match="more than one tool"):
+        export_site_data([entry, entry], tmp_path, "dev")
+
+
+def test_multiqc_logo_paths_become_data_uris() -> None:
+    """A static page has no /dashboard/logos/ to serve them from."""
+    text = 'src="/dashboard/logos/multiqc_icon_dark.svg" b="/dashboard-beta/logos/multiqc_icon_white.svg"'
+    out = inline_logos(text)
+    assert "/dashboard" not in out
+    assert out.count("data:image/svg+xml;base64,") == 2
+
+
+def test_a_coverage_track_lists_chromosomes_and_samples_in_file_order() -> None:
+    """Hash-ordered lists change between runs, and the catalog site stores an
+    output's data once per content: every export would look like a new version."""
+    from depictio.catalog.payload import _load_fixture_df
+
+    output = _get_output("macs2_peaks")
+    [summary] = [
+        v["summary"]
+        for v in build_payload(output, "light")["data"]["compute"].values()
+        if "summary" in v
+    ]
+    df = _load_fixture_df(output)
+
+    def first_seen(values: list[str]) -> list[str]:
+        column = next(c for c in df.columns if set(df[c].cast(str).to_list()) == set(values))
+        return list(dict.fromkeys(df[column].cast(str).to_list()))
+
+    assert summary["chromosomes"] == first_seen(summary["chromosomes"])
+    assert summary["samples"] == first_seen(summary["samples"])
+
+
+def _output_of_kind(kind: str):
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            if any(r.component == "advanced_viz" and r.kind == kind for r in output.renders_as):
+                return entry, output
+    raise AssertionError(f"no catalog output renders a {kind}")
+
+
+@pytest.mark.parametrize("kind", ["sankey", "upset_plot"])
+def test_a_computed_render_is_reproducible_and_has_no_error(kind) -> None:
+    """The kernels live in the Celery module, which refuses an unconfigured server on
+    import: a failure there is swallowed into a per-render `_error` (and no data), so
+    the two payloads would compare equal while both being empty."""
+    import json
+
+    entry, output = _output_of_kind(kind)
+
+    first = build_payload(output, "light", entry)
+    second = build_payload(output, "light", entry)
+
+    wanted = [r for r in first["renders"] if r.get("viz_kind") in ("sankey", "upset_plot", "upset")]
+    assert wanted
+    assert not [r["_error"] for r in first["renders"] if "_error" in r]
+    assert not [r["_error"] for r in second["renders"] if "_error" in r]
+    computed = [first["data"]["compute"][r["dc_id"]] for r in wanted]
+    assert all(c.get("figure") for c in computed)
+    assert all(c["compute_ms"] == 0 for c in computed)
+    assert json.dumps(json_safe(first), sort_keys=False, default=str) == json.dumps(
+        json_safe(second), sort_keys=False, default=str
+    )
+
+
+def test_the_export_counts_the_renders_that_failed(tmp_path, monkeypatch) -> None:
+    def failing(output, tool, theme):
+        renders = [{"index": f"r{i}", "_error": "boom"} for i in range(3)]
+        return {
+            "output": {"id": output.id},
+            "fixturePreview": None,
+            "renders": renders,
+            "ok": True,
+        }, {}
+
+    monkeypatch.setattr("depictio.catalog.payload._output_entry", failing)
+    entry = _flagship_entry()
+    stats = export_site_data([entry], tmp_path, "dev")
+
+    assert stats["failed"] == 0
+    assert stats["render_errors"] == 3 * len(entry.outputs)
+    ids = stats["render_error_ids"]
+    assert ids[:3] == [f"{entry.outputs[0].id}:r{i}" for i in range(3)]
+    assert len(ids) == min(20, stats["render_errors"])
+
+
+def test_a_clean_export_reports_no_render_error(tmp_path) -> None:
+    stats = export_site_data([_flagship_entry()], tmp_path, "dev")
+
+    assert stats["render_errors"] == 0
+    assert stats["render_error_ids"] == []
+
+
+def test_a_tied_card_mode_is_the_smallest_value_as_on_the_server() -> None:
+    """Polars gives tied modes in hash order; pandas (the dashboard's card) sorts
+    them. A card listing `mode` beside a strip made the export differ between runs."""
+    from depictio.catalog.payload import _aggregate
+
+    df = pl.DataFrame({"g": ["novel", "known", "novel", "known", None, None, None]})
+    assert {_aggregate(df, "g", "mode") for _ in range(20)} == {"known"}
+    assert df["g"].to_pandas().mode().iloc[0] == "known"

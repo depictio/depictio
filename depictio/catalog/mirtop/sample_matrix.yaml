@@ -11,5 +11,33 @@ find:
 recipe: mirtop/sample_matrix.py
 fixture: sample_matrix.tsv
 renders_as:
-  - { id: mirna_group_compare, component: advanced_viz, kind: group_compare, roles: {index: sample} }
-  - { component: table }
+  # C6 N/A: the group column is the design column the user picks at run time,
+  # and it is not part of the recipe's output schema.
+  - id: mirna_group_compare
+    component: advanced_viz
+    kind: group_compare
+    title: Group comparison of miRNA expression
+    roles: {index: sample}
+    config:
+      top_n_labels: 10
+    description: >-
+      Each point is a miRNA in a comparison of two groups of samples that you pick, with
+      the fold change of its expression on the horizontal axis and the significance of the
+      difference on the vertical axis. It answers which miRNAs separate the two groups.
+
+      How to read: miRNAs in the upper left and upper right corners differ most between
+      the groups, higher in one or the other. Choose groups with several samples each, since a
+      single sample gives no estimate of variation, and treat a result from few samples as
+      exploratory.
+
+      Lines and annotations: the horizontal line is a false discovery rate of 0.05 and the
+      vertical lines mark an absolute log2 fold change of 1. These are the tile's own defaults,
+      and no source defines them for miRNA data.
+  - component: table
+    title: Expression matrix table
+    description: >-
+      Each row is a sample, with the counts per million of each of the most expressed
+      miRNAs and the design columns. It answers what the input of the group comparison
+      looks like.
+
+      How to read: check that the design column holds the groups you intend to compare.

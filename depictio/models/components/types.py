@@ -235,3 +235,11 @@ CardVariant = Literal["default", "headline", "compact", "minimal", "accent", "sp
 # packages/depictio-react-core/src/components/figureStyle.ts and in
 # depictio/api/v1/services/figure/style_presets.py.
 FigureStyle = Literal["default", "minimal"]
+
+
+#: A reference computed from the data on show (RULES.md §17: a data-defined
+#: reference is allowed when it is called that). Shared by the advanced-viz
+#: ``*_stat`` fields (re-exported from ``advanced_viz/configs.py``) and a UI
+#: figure's ``reference_lines``; computed by
+#: ``depictio/api/v1/services/advanced_viz/reference_stats.py``.
+ReferenceStat = Literal["median", "mean", "p75", "p90", "p95", "p99"]

@@ -46,6 +46,7 @@ import {
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { resolveScoreThreshold, type ReferenceStatValues } from './referenceStats';
 import {
   ANNOTATION_ASSEMBLIES,
   BUILTIN_ASSEMBLIES,
@@ -368,6 +369,8 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // The fetch as read: the window when the tile is narrowed to one, else the
   // whole genome. `rows` (below) is what the tile draws.
   const [fetchedRows, setRows] = useState<Record<string, unknown[]> | null>(null);
+  // `reference_stats` of that fetch: the rule of a `score_threshold_stat`.
+  const [referenceStats, setReferenceStats] = useState<ReferenceStatValues | null>(null);
   // The chromosome `fetchedRows` was narrowed to, null for a whole-genome
   // read: the merge below must use the window the rows came from, not the
   // one a newer brush asks for while its read is in flight.
@@ -496,6 +499,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         setRows(res.rows);
         setFetchedChrom(windowChrom);
         setEstimated(res.estimated);
+        setReferenceStats(res.referenceStats);
       })
       .catch((err: unknown) => {
         if (!cancelled) setFetchError(err instanceof Error ? err.message : String(err));
@@ -523,6 +527,12 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // filter set: the other chromosomes keep their marks around the region.
   // Not refetched on a brush or a chromosome change, only on the filters.
   const [genomeRows, setGenomeRows] = useState<Record<string, unknown[]> | null>(null);
+  // The statistic over the whole filtered genome, which a narrowed tile's own
+  // fetch (one chromosome) cannot give: a rule at "the p95 of this table" must
+  // not jump when the reader moves to another chromosome.
+  const [genomeReferenceStats, setGenomeReferenceStats] = useState<ReferenceStatValues | null>(
+    null,
+  );
   const needsGenome = Boolean(fetchWindow) && !holdOwnFetch && followerGateOpen;
   useEffect(() => {
     if (fileMode || !needsGenome) return undefined;
@@ -534,11 +544,16 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       selectionColumn,
     })
       .then((res) => {
-        if (!cancelled) setGenomeRows(res.rows);
+        if (cancelled) return;
+        setGenomeRows(res.rows);
+        setGenomeReferenceStats(res.referenceStats);
       })
       // The window still draws; only the context around it is missing.
       .catch(() => {
-        if (!cancelled) setGenomeRows(null);
+        if (!cancelled) {
+          setGenomeRows(null);
+          setGenomeReferenceStats(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -710,11 +725,28 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     theme.colors.gray[isDark ? 4 : 6],
     theme.colors.orange[isDark ? 5 : 9],
   ];
+  // The rule: the reader's or author's threshold, else the statistic the server
+  // computed on the filtered genome (the whole-genome fetch's while the tile
+  // is narrowed to a window), named as such.
+  const thresholdRef = resolveScoreThreshold(
+    effectiveConfig,
+    scoreThreshold,
+    fetchWindow && genomeReferenceStats ? genomeReferenceStats : referenceStats,
+  );
+  const thresholdLabel = thresholdRef.stat ? thresholdRef.label : null;
+  const specConfig = useMemo<GenomeViewConfig>(
+    () =>
+      thresholdRef.value === effectiveConfig.score_threshold
+        ? effectiveConfig
+        : { ...effectiveConfig, score_threshold: thresholdRef.value },
+    [effectiveConfig, thresholdRef.value],
+  );
   const built = useMemo(() => {
     if (!seed) return null;
     return buildGenomeSpySpec({
       rows: seed,
-      config: effectiveConfig,
+      config: specConfig,
+      thresholdLabel,
       colors: {
         textColor: themeColors.textColor,
         gridColor: themeColors.gridColor,
@@ -738,7 +770,8 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     seed,
-    effectiveConfig,
+    specConfig,
+    thresholdLabel,
     assemblyContigs,
     geneAnnotation,
     themeColors.textColor,
@@ -1600,7 +1633,11 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         {fileMode ? null : (
           <VizNumberInput
             label="Threshold rule"
-            placeholder="none"
+            placeholder={
+              thresholdLabel && thresholdRef.value != null
+                ? `${thresholdLabel}: ${thresholdRef.value}`
+                : 'none'
+            }
             value={scoreThreshold ?? ''}
             onChange={(v) => setScoreThreshold(typeof v === 'number' ? v : null)}
           />

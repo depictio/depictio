@@ -41,6 +41,8 @@ Both use the same fields; a folder just splits the outputs into files.
 |---|---|---|---|
 | `id` | **MUST** | str | e.g. `ivar`, `qiime2`. |
 | `name` | **MUST** | str | Display name. |
+| `version` | CAN (default `1.0.0`) | semver str | The module's revision, held to its content by `catalog_versions.lock.json` (see [Versions](#versions)). |
+| `changelog` | CAN | list[{`version`, `date`?, `changes`}] | What changed in each revision, newest first. When kept, its top entry is `version`. |
 | `description` | **MUST** | str | One or two sentences, shown on the catalog card. |
 | `homepage` | **MUST** | str | Tool site or source repository. |
 | `nf_core_url` | CAN | str | Full nf-core module URL (per-output for multi-module tools like QIIME 2). |
@@ -67,6 +69,7 @@ existence-checking validates against the vendored nf-core index.
 | `find` | **MUST** | Find | How to recognise the raw file. |
 | `origin_tool` | CAN | str | The tool that actually produced the numbers, when the catalog tool aggregates other tools' output. Set on MultiQC sections (`Cutadapt`, `FastQC`, …) so a picker can show "Adapter trimming (Cutadapt)"; left unset when the tool is the producer, and when the section is pipeline-generated custom content. Declared rather than derived: MultiQC persists anchors, and the report's own module names are decorated by the pipeline. |
 | `mode` | CAN | str | Running mode / subcommand. |
+| `version` | CAN | semver str | The module revision this output last changed in. Never above the module's `version`, never below one of its renders'. See [Versions](#versions). |
 | `stage` | CAN | same vocabulary as the tool's `stage` | Overrides the tool's stage for this output, e.g. a MultiQC section carrying STAR's numbers is `alignment`, not MultiQC's `qc`. |
 | `description` | CAN | str | |
 | `recipe` | CAN | str | Reshape that **owns the output columns**. Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy still resolves (`nf-core/<pipeline>/<name>.py`) for pipeline-version-specific reshapes. |
@@ -87,14 +90,18 @@ existence-checking validates against the vendored nf-core index.
 
 | Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
+| `title` | CAN | str | Any component: the tile title. Without one the tile takes a derived name (the output's label, the card's aggregation). |
+| `description` | CAN | str | Any component: the info popover ("About this component"), following `RULES.md` §14: a lead, then `How to read:`, `Lines and annotations:` (every mark the tile draws, with its value and source) and `Source:`, as paragraphs separated by blank lines. A `use:` reference inherits it. |
+| `version` | CAN | semver str | The module revision this render last changed in. Never above its output's `version` (when set) or the module's. Not copied into a dashboard tile. |
 | `component` | **MUST** | real `ComponentType` (`advanced_viz`/`figure`/`card`/`table`/`interactive`/`text`/`jbrowse`/`image`/`map`) + `multiqc` | The dashboard component. |
 | `kind` | cond. | AdvancedVizKind | **Required iff** `component=advanced_viz`; forbidden otherwise. Role names MUST be valid for the kind. |
 | `roles` | cond. | dict[role, column \| column list] | `advanced_viz` binding. One column per role, except the ordered lists a few kinds bind: `sankey.steps` (≥2, required — nothing downstream can infer them), `sunburst.ranks`, and ComplexHeatmap's `value_columns` / `row_annotation_cols`. `embedding.compute_method` names a reduction (`pca`/`umap`/…), not a column, so it is not grounded. Every role a kind declares is accepted, required and optional alike. |
+| `config` | CAN | dict | `advanced_viz`: the kind's display options and reference marks (`top_n_labels`, `legend_pos`, `effect_label`, `axis_prefix`, `score_threshold`, `reference_line` + `reference_value` + `reference_label`, `shaded_bands`, `color_mode`, `value_columns`...), merged over the role bindings. Keys are checked against the kind's config model (a retired kind such as `ma` against the one it is rewritten into); a key a role already sets is refused. A `use:` reference inherits it, and the dashboard's own `config` wins key by key. |
 | `visu_type` | cond. | `box`/`scatter`/`bar`/`histogram`/`line`/`heatmap` | `figure` **UI mode** (plotly express). |
-| `dict_kwargs` | CAN | dict[str,str] | `figure` UI mode: plotly-express kwargs (`x`,`y`,`color`,`facet_col`…); column-valued ones are grounded. |
+| `dict_kwargs` | CAN | dict | `figure` UI mode: plotly-express kwargs (`x`,`y`,`color`,`facet_col`…); column-valued ones are grounded. `labels` maps a column to its axis or legend title. `color_discrete_map` / `color_discrete_sequence` are refused (`RULES.md` §7: colours come from the dashboard's `category_colors`). |
 | `code` | cond. | str | `figure` **code mode**: inline Python that sets `fig` (depictio `code_content`). A figure needs `visu_type` **or** `code`. |
 | `column` + `aggregation` | cond. | str / `AggregationFunction` | `card`: the metric column + **hero** aggregation. |
-| `aggregations` | CAN | list[`AggregationFunction`] | `card`: **secondary** aggregations → a **multi-metric** card (e.g. `[median, min, max, std_dev]`). |
+| `aggregations` | **MUST** (card) | list[`AggregationFunction`] | `card`: **secondary** aggregations → a **multi-metric** card (e.g. `[median, min, max, std_dev]`). Every bundled card declares them. Under a stat-list layout (`vertical`/`compact`/`grid`) they are the strip; under `box_plot` the list is `[box_plot_stats]` (plus any scalars); under every other layout the scalar ones are listed in a compact line below the strip. |
 | `secondary_layout` | CAN | one of `vertical`, `compact`, `grid`, `box_plot`, `histogram`, `threshold`, `completeness`, `uniqueness`, `attrition`, `trend`, `coverage`, `gauge`, `top_n`, `concentration`, `composition`, `donut` | `card`: how the secondary strip renders. Set on **every** bundled card — a bare hero number says nothing about spread or composition. The list is taken from `CardLiteComponent`, not respelled, so the two cannot drift. `vertical`/`compact`/`grid` and `box_plot` are driven by `aggregations` (a `box_plot` card **must** declare `aggregations: [box_plot_stats]` — the server keys the computation off that list); `top_n`/`concentration`/`composition`/`donut` need `breakdown_col` (+`top_n_count`); `coverage`/`gauge` need `coverage_max`; `threshold` needs `threshold_value`; `trend` needs `trend_col`; `attrition` needs `attrition_cols`; `histogram`/`completeness`/`uniqueness` need nothing further. |
 | `breakdown_col` / `top_n_count` / `coverage_max` | CAN | str / int(1-5) / float | `card`: params for the categorical and progress layouts (see above). |
 | `threshold_value` / `threshold_direction` / `threshold_warn` | CAN | float / `min`\|`max` / float | `card`: the QC cut-off for `secondary_layout: threshold`. `min` = at-least (higher is better). |
@@ -138,6 +145,45 @@ the catalog held no interactive renders until it could express them.
 `AdvancedVizKind`: volcano, embedding, manhattan, stacked_taxonomy,
 phylogenetic, rarefaction, da_barplot, enrichment, complex_heatmap, upset_plot,
 ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
+
+---
+
+## Versions
+
+The **module** is what the locks version: `module.yaml` `version`, held to the
+module's content by `depictio/catalog/catalog_versions.lock.json`
+(`python scripts/update_template_lock.py --check`), and recorded per template in
+`depictio/projects/template_versions.lock.json`. The catalog keeps one revision
+of each module; a version says which one, it does not pin an older one.
+
+Inside a module, finer versions are optional:
+
+```yaml
+# module.yaml
+version: "1.1.0"
+changelog:                      # newest first; the top entry is `version`
+  - version: "1.1.0"
+    changes:
+      - "agat_statistics: one panel per metric, instead of summing unlike metrics in one bar"
+  - version: "1.0.0"
+    changes: ["First revision."]
+
+# statistics.yaml (an output)
+version: "1.1.0"                # this output last changed in 1.1.0
+renders_as:
+  - id: metrics_by_genome
+    version: "1.1.0"            # and so did this render
+    component: figure
+```
+
+- An unset output or render `version` means "not said": the module's revision
+  still covers it. Set it when you change that output or render, to the module
+  version you are bumping to.
+- The model refuses a version above the module's, a render newer than its
+  output, and a changelog whose top entry is not the module's version.
+- The gallery shows the module version beside each tool, and per output a
+  version chip whose popover holds the module, output and render revisions and
+  the changelog.
 
 ---
 
