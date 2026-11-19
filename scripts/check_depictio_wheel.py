@@ -22,8 +22,11 @@ import zipfile
 # 12.5 MB raw, 3.9 MB deflated) adds ~4 MB: 24 MB keeps the same ~2 MB headroom.
 # The runtime a rendered report embeds (combined-runtime.js + .css, 12.8 MB raw,
 # ~3.9 MB deflated), what `depictio local up` needs to embed a report's tiles
-# and the dashboard: 28 MB.
-MAX_MB = 28
+# and the dashboard. At 1.22.2 main alone is ~19.2 MB and the two offline runtimes
+# with their add-ons ~9.3 MB, 29.1 MB in all: 31 MB keeps ~2 MB of headroom. The
+# bundle template and combined-runtime.js are the same runtime shipped twice, the
+# first saving to make if this cap is hit again.
+MAX_MB = 31
 REQUIRED = [
     r"depictio/viewer/dist/index\.html",
     # The serverless bundle template `depictio build-static` injects into.
