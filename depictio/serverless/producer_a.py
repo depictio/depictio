@@ -120,7 +120,6 @@ from depictio.models.models.serverless import (
     Producer,
     PrologueOp,
     TabEntry,
-    TierEntry,
     TierReason,
 )
 from depictio.serverless import computes
@@ -142,6 +141,7 @@ from depictio.serverless.preflight import (
     PlannedTier,
     TabRow,
     TierRow,
+    tiers_from_rows,
 )
 from depictio.serverless.producer_b import (
     PARQUET_COMPRESSION,
@@ -3446,6 +3446,182 @@ def resolve_highlight_tiers(
         row.provisional = False
 
 
+@dataclass
+class _FreezeState:
+    """What the per-component freeze shares across one export's family."""
+
+    user: ExportUser
+    decide_only: bool
+    data_refs: dict[str, DataRef]
+    pruned_frames: dict[str, pl.DataFrame]
+    inline_blobs: dict[str, str]
+    project_doc: dict[str, Any] | None
+    budget: ComputeBudget
+    #: Each tab's opening filter state (its interactive defaults).
+    tab_defaults: dict[str, list[dict[str, Any]]]
+    frozen: dict[str, FrozenPayload] = field(default_factory=dict)
+    bindings: dict[str, BindingTable] = field(default_factory=dict)
+    prologues: dict[str, list[PrologueOp]] = field(default_factory=dict)
+    # One object budget for every file the bundle ships: structures, PAE
+    # matrices and gallery thumbnails alike.
+    object_budget: ObjectBudget = field(default_factory=lambda: ObjectBudget())
+    # Genome browser tiles whose files were shipped: the bundle then needs the
+    # `jbrowse` runtime add-on (JBrowse itself).
+    jbrowse_tiles: list[str] = field(default_factory=list)
+    computes_frozen: int = 0
+    computes_skipped: int = 0
+    # One wait for every cold MultiQC pre-render in the family (see MultiQCWait).
+    multiqc_wait: MultiQCWait = field(default_factory=lambda: MultiQCWait.from_env())
+
+
+def _freeze_component(
+    state: _FreezeState,
+    tab: FamilyTab,
+    comp: dict[str, Any],
+    component_id: str,
+    row: TierRow,
+) -> None:
+    """Settle one component's frozen side, in place: its payload into
+    ``state.frozen`` (or its binding), its verdict into ``row``.
+
+    Runs for FROZEN rows and for every MultiQC tile (a live MultiQC still ships
+    a payload: the runtime re-slices that figure under the current filters, it
+    cannot rebuild it, so the payload is its data source, not a snapshot of a
+    dead tile). A payload that fails omits the component with the error; only
+    the soft time limit propagates.
+    """
+    ctype = comp.get("component_type")
+    if row.tier is ComponentTier.OMITTED or (
+        row.tier is not ComponentTier.FROZEN and ctype != "multiqc"
+    ):
+        return
+    user, decide_only = state.user, state.decide_only
+    if decide_only and ctype == "multiqc":
+        # Not settled here (the build waits for a cold pre-render, then
+        # omits), but a cold one is something the reader should hear about
+        # before the build: one ask of the endpoint the tile calls.
+        try:
+            note = multiqc_prerender_note(ObjectId(tab.id), comp, user, state.multiqc_wait.total)
+        except Exception as exc:
+            if _is_time_limit(exc):
+                raise
+            note = None
+            logger.info("producer A: MultiQC pre-render probe failed for %s: %s", component_id, exc)
+        if note is not None:
+            row.detail = f"{row.detail}; {note}" if row.detail else note
+            row.provisional = True
+        return
+    if decide_only and ctype not in ("figure", "jbrowse"):
+        # A figure is the only tier this loop can still SETTLE cheaply, so
+        # it is the only one it runs. The rest keep their planned verdict,
+        # which the build can still move: a frozen payload that fails drops
+        # the component to omitted, and a Celery compute the budget cannot
+        # cover is omitted by policy rather than by failure
+        # (:func:`freeze_celery_compute` returning ``None``). So on a
+        # dashboard with more computes than the budget covers, this reports
+        # `frozen` where the build will ship `omitted`. Running them here to
+        # find out would cost the bulk of an export's wall clock, which is
+        # not what a preflight is for.
+        return
+    dashboard_oid = ObjectId(tab.id)
+    defaults = state.tab_defaults.get(tab.id) or []
+    frozen = state.frozen
+    try:
+        if ctype == "table":
+            frozen[component_id] = FrozenPayload(
+                kind="table",
+                payload=_freeze_table(dashboard_oid, component_id, user, filters=defaults),
+            )
+        elif ctype == "figure":
+            decision = decide_figure(comp, state.data_refs, state.pruned_frames, defaults)
+            row.tier = decision.tier
+            row.reason = decision.reason
+            row.detail = decision.detail
+            row.provisional = False  # the binder ran; this IS the verdict
+            if decision.binding is not None:
+                state.bindings[component_id] = decision.binding
+                if decision.prologue:
+                    state.prologues[component_id] = decision.prologue
+            elif decision.payload is not None and not decide_only:
+                frozen[component_id] = FrozenPayload(kind="figure", payload=decision.payload)
+        elif ctype == "advanced_viz":
+            if celery_compute_request(comp) is not None:
+                # Server-side Celery kind: run the compute here and ship the
+                # result the poll endpoint would have returned. A failure
+                # degrades this one component to omitted (with the error in
+                # its detail) and never aborts the export.
+                compute_payload, detail = freeze_celery_compute(comp, state.budget, defaults)
+                row.reason = TierReason.CELERY_COMPUTE
+                row.detail = detail
+                if compute_payload is None:
+                    row.tier = ComponentTier.OMITTED
+                    state.computes_skipped += 1
+                else:
+                    frozen[component_id] = FrozenPayload(kind="compute", payload=compute_payload)
+                    state.computes_frozen += 1
+            else:
+                frozen[component_id] = FrozenPayload(
+                    kind="advanced-viz-data",
+                    payload=_freeze_advanced_viz(comp, user, defaults),
+                )
+        elif ctype == "multiqc":
+            kind, payload = _freeze_multiqc(dashboard_oid, comp, user, state.multiqc_wait)
+            frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
+        elif ctype == "map":
+            try:
+                map_colors = _routes().effective_category_colors(tab.doc)
+            except Exception as exc:
+                if _is_time_limit(exc):
+                    raise
+                map_colors = None
+            frozen[component_id] = FrozenPayload(
+                kind="map", payload=_freeze_map(comp, user, map_colors, defaults)
+            )
+        elif ctype == "image":
+            payload, note = _freeze_image(
+                dashboard_oid,
+                comp,
+                component_id,
+                user,
+                state.object_budget,
+                state.inline_blobs,
+                defaults,
+            )
+            frozen[component_id] = FrozenPayload(kind="image", payload=payload)
+            if note:
+                row.detail = f"{row.detail}; {note}"
+        elif ctype == "jbrowse":
+            problem = jbrowse_dc_problem(comp, state.project_doc)
+            if problem is not None:
+                # Said before the session endpoint is asked: its 400 ("not
+                # a genomic_tracks collection") names the wrong cause when
+                # the collection is simply not in the project.
+                row.tier = ComponentTier.OMITTED
+                row.reason = TierReason.JBROWSE
+                row.detail = problem
+                return
+            payload, outcome = _freeze_jbrowse(
+                dashboard_oid,
+                component_id,
+                user,
+                state.object_budget,
+                state.inline_blobs,
+                dry_run=decide_only,
+                filters=defaults,
+            )
+            row.detail = outcome.detail()
+            if not decide_only:
+                frozen[component_id] = FrozenPayload(kind="jbrowse", payload=payload)
+            if outcome.renderable:
+                state.jbrowse_tiles.append(str(comp.get("title") or component_id))
+    except Exception as exc:
+        if _is_time_limit(exc):
+            raise
+        row.tier = ComponentTier.OMITTED
+        row.reason = row.reason or TierReason.UNSUPPORTED
+        row.detail = f"frozen payload could not be computed: {exc}"
+
+
 def export_manifest(
     dashboard_id: str,
     user: ExportUser,
@@ -3560,20 +3736,18 @@ def export_manifest(
     # first (RFC §7) — are filled per figure below.
     from depictio.serverless.interactive_defaults import default_filters
 
-    tab_defaults = {tab.id: default_filters(tab.components) for tab in tabs}
-    frozen: dict[str, FrozenPayload] = {}
-    bindings: dict[str, BindingTable] = {}
-    prologues: dict[str, list[PrologueOp]] = {}
-    # One object budget for every file the bundle ships: structures, PAE
-    # matrices and gallery thumbnails alike.
-    object_budget = ObjectBudget()
-    # Genome browser tiles whose files were shipped: the bundle then needs the
-    # `jbrowse` runtime add-on (JBrowse itself).
-    jbrowse_tiles: list[str] = []
-    computes_frozen = 0
-    computes_skipped = 0
-    # One wait for every cold MultiQC pre-render in the family (see MultiQCWait).
-    multiqc_wait = MultiQCWait.from_env()
+    state = _FreezeState(
+        user=user,
+        decide_only=decide_only,
+        data_refs=data_refs,
+        pruned_frames=pruned_frames,
+        inline_blobs=inline_blobs,
+        project_doc=project_doc,
+        budget=budget,
+        tab_defaults={tab.id: default_filters(tab.components) for tab in tabs},
+    )
+    frozen, bindings, prologues = state.frozen, state.bindings, state.prologues
+    object_budget = state.object_budget
 
     # Cards freeze per tab: bulk_compute_cards resolves component ids against
     # ONE dashboard document, so a family needs one call per tab. A card's tier
@@ -3592,142 +3766,20 @@ def export_manifest(
                 continue
             try:
                 for idx, payload in _freeze_cards(
-                    ObjectId(tab.id), cards, user, tab_defaults[tab.id]
+                    ObjectId(tab.id), cards, user, state.tab_defaults[tab.id]
                 ).items():
                     frozen[idx] = FrozenPayload(kind="card", payload=payload)
             except Exception as exc:
+                if _is_time_limit(exc):
+                    raise
                 # Fallback payloads only — cards stay live off the bundled data.
                 logger.warning(
                     "producer A: frozen card fallback failed for tab %s: %s", tab.id, exc
                 )
 
     for tab, comp, component_id in items:
-        row = tier_by_id[component_id]
-        ctype = comp.get("component_type")
-        # A live MultiQC still ships a payload: the runtime re-slices that figure
-        # under the current filters, it cannot rebuild it. The payload is its
-        # data source, not a snapshot of a dead tile.
-        if row.tier is ComponentTier.OMITTED or (
-            row.tier is not ComponentTier.FROZEN and ctype != "multiqc"
-        ):
-            continue
-        if decide_only and ctype == "multiqc":
-            # Not settled here (the build waits for a cold pre-render, then
-            # omits), but a cold one is something the reader should hear about
-            # before the build: one ask of the endpoint the tile calls.
-            try:
-                note = multiqc_prerender_note(ObjectId(tab.id), comp, user, multiqc_wait.total)
-            except Exception as exc:
-                note = None
-                logger.info(
-                    "producer A: MultiQC pre-render probe failed for %s: %s", component_id, exc
-                )
-            if note is not None:
-                row.detail = f"{row.detail}; {note}" if row.detail else note
-                row.provisional = True
-            continue
-        if decide_only and ctype not in ("figure", "jbrowse"):
-            # A figure is the only tier this loop can still SETTLE cheaply, so
-            # it is the only one it runs. The rest keep their planned verdict,
-            # which the build can still move: a frozen payload that fails drops
-            # the component to omitted, and a Celery compute the budget cannot
-            # cover is omitted by policy rather than by failure
-            # (:func:`freeze_celery_compute` returning ``None``). So on a
-            # dashboard with more computes than the budget covers, this reports
-            # `frozen` where the build will ship `omitted`. Running them here to
-            # find out would cost the bulk of an export's wall clock, which is
-            # not what a preflight is for.
-            continue
-        dashboard_oid = ObjectId(tab.id)
-        defaults = tab_defaults[tab.id]
-        try:
-            if ctype == "table":
-                frozen[component_id] = FrozenPayload(
-                    kind="table",
-                    payload=_freeze_table(dashboard_oid, component_id, user, filters=defaults),
-                )
-            elif ctype == "figure":
-                decision = decide_figure(comp, data_refs, pruned_frames, defaults)
-                row.tier = decision.tier
-                row.reason = decision.reason
-                row.detail = decision.detail
-                row.provisional = False  # the binder ran; this IS the verdict
-                if decision.binding is not None:
-                    bindings[component_id] = decision.binding
-                    if decision.prologue:
-                        prologues[component_id] = decision.prologue
-                elif decision.payload is not None and not decide_only:
-                    frozen[component_id] = FrozenPayload(kind="figure", payload=decision.payload)
-            elif ctype == "advanced_viz":
-                if celery_compute_request(comp) is not None:
-                    # Server-side Celery kind: run the compute here and ship the
-                    # result the poll endpoint would have returned. A failure
-                    # degrades this one component to omitted (with the error in
-                    # its detail) and never aborts the export.
-                    compute_payload, detail = freeze_celery_compute(comp, budget, defaults)
-                    row.reason = TierReason.CELERY_COMPUTE
-                    row.detail = detail
-                    if compute_payload is None:
-                        row.tier = ComponentTier.OMITTED
-                        computes_skipped += 1
-                    else:
-                        frozen[component_id] = FrozenPayload(
-                            kind="compute", payload=compute_payload
-                        )
-                        computes_frozen += 1
-                else:
-                    frozen[component_id] = FrozenPayload(
-                        kind="advanced-viz-data",
-                        payload=_freeze_advanced_viz(comp, user, defaults),
-                    )
-            elif ctype == "multiqc":
-                kind, payload = _freeze_multiqc(dashboard_oid, comp, user, multiqc_wait)
-                frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
-            elif ctype == "map":
-                try:
-                    map_colors = _routes().effective_category_colors(tab.doc)
-                except Exception:
-                    map_colors = None
-                frozen[component_id] = FrozenPayload(
-                    kind="map", payload=_freeze_map(comp, user, map_colors, defaults)
-                )
-            elif ctype == "image":
-                payload, note = _freeze_image(
-                    dashboard_oid, comp, component_id, user, object_budget, inline_blobs, defaults
-                )
-                frozen[component_id] = FrozenPayload(kind="image", payload=payload)
-                if note:
-                    row.detail = f"{row.detail}; {note}"
-            elif ctype == "jbrowse":
-                problem = jbrowse_dc_problem(comp, project_doc)
-                if problem is not None:
-                    # Said before the session endpoint is asked: its 400 ("not
-                    # a genomic_tracks collection") names the wrong cause when
-                    # the collection is simply not in the project.
-                    row.tier = ComponentTier.OMITTED
-                    row.reason = TierReason.JBROWSE
-                    row.detail = problem
-                    continue
-                payload, outcome = _freeze_jbrowse(
-                    dashboard_oid,
-                    component_id,
-                    user,
-                    object_budget,
-                    inline_blobs,
-                    dry_run=decide_only,
-                    filters=defaults,
-                )
-                row.detail = outcome.detail()
-                if not decide_only:
-                    frozen[component_id] = FrozenPayload(kind="jbrowse", payload=payload)
-                if outcome.renderable:
-                    jbrowse_tiles.append(str(comp.get("title") or component_id))
-        except Exception as exc:
-            if _is_time_limit(exc):
-                raise
-            row.tier = ComponentTier.OMITTED
-            row.reason = row.reason or TierReason.UNSUPPORTED
-            row.detail = f"frozen payload could not be computed: {exc}"
+        _freeze_component(state, tab, comp, component_id, tier_by_id[component_id])
+    jbrowse_tiles = state.jbrowse_tiles
 
     python_components, python_info = settle_python_jobs(
         items, tier_by_id, bindings, data_refs, python_candidates, python_runtime, decide_only
@@ -3839,10 +3891,7 @@ def export_manifest(
             project_doc, _public_base_url(), _fetch_last_aggregations(project_doc)
         ),
         data_refs=data_refs,
-        tiers={
-            row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)
-            for row in tier_rows
-        },
+        tiers=tiers_from_rows(tier_rows),
         frozen=frozen,
         bindings=bindings,
         prologues=prologues,
@@ -3863,8 +3912,8 @@ def export_manifest(
         len(tier_rows),
         len(data_refs),
         _mb(bundle_size.data_bytes),
-        computes_frozen,
-        computes_skipped,
+        state.computes_frozen,
+        state.computes_skipped,
         budget.spent,
         budget.total,
     )
