@@ -326,7 +326,7 @@ global:
 backups:
   persistence:
     enabled: true
-    size: 20Gi
+    size: 50Gi
   schedule:
     enabled: true
     intervalHours: 24
