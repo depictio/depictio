@@ -41,7 +41,8 @@ modules/<tool_id>.json        a module's version history
 latest/  v1.22.0/  ...        one per slot:
   index.html                  the slot's bundle entry, loading ../assets/
   data/index.json             as exported, each output with "dataRef": "<sha256>"
-  assets.json                 the asset files this slot's bundle needs
+  assets.json                 the asset files this slot's bundle needs: a JSON array of names under assets/
+  assets.previous.json        latest/ only: the assets of the latest/ it replaced (grace period)
 ```
 
 - An output whose data did not change between two releases points at the same object, and a
@@ -51,7 +52,12 @@ latest/  v1.22.0/  ...        one per slot:
   else from `data/outputs/<id>.json` (a bare export).
 - `assets/` and `objects/` only grow while a slot references them. The publisher drops what
   no slot references any more, except the assets of the `latest/` it replaces, kept for one
-  more deploy so a tab opened before it can still load its chunks.
+  more deploy so a tab opened before it can still load its chunks: the publisher records
+  the replaced `assets.json` as `latest/assets.previous.json` (a redeploy of the same bundle
+  carries the previous grace list over), and counts it as a reference.
+- The publisher normalises every slot on each run, idempotently: a slot in the earlier format
+  (`data/outputs/` and `assets/` inside the slot, no `dataRef`) is converted to the layout
+  above. An export is refused when an `ok` output has no `data/outputs/<id>.json`.
 
 ### `modules/<tool_id>.json`
 
@@ -93,7 +99,11 @@ module in a release that had it. `bump` is the semver step from the version belo
 }
 ```
 
-`latest` compares with the newest release, so it reads as "unreleased changes".
+`latest` compares with the newest release, so it reads as "unreleased changes". The oldest
+release has `previous: null` and empty `changes`. `published` is the UTC time that slot was
+last published, kept across runs for the slots not republished (a slot the publisher meets
+for the first time, e.g. a migrated one, gets the time of that run). A tool without a
+`version` in its index (an old export) counts as `1.0.0`.
 
 ## Hosting
 

@@ -376,3 +376,24 @@ def test_multiqc_logo_paths_become_data_uris() -> None:
     out = inline_logos(text)
     assert "/dashboard" not in out
     assert out.count("data:image/svg+xml;base64,") == 2
+
+
+def test_a_coverage_track_lists_chromosomes_and_samples_in_file_order() -> None:
+    """Hash-ordered lists change between runs, and the catalog site stores an
+    output's data once per content: every export would look like a new version."""
+    from depictio.catalog.payload import _load_fixture_df
+
+    output = _get_output("macs2_peaks")
+    [summary] = [
+        v["summary"]
+        for v in build_payload(output, "light")["data"]["compute"].values()
+        if "summary" in v
+    ]
+    df = _load_fixture_df(output)
+
+    def first_seen(values: list[str]) -> list[str]:
+        column = next(c for c in df.columns if set(df[c].cast(str).to_list()) == set(values))
+        return list(dict.fromkeys(df[column].cast(str).to_list()))
+
+    assert summary["chromosomes"] == first_seen(summary["chromosomes"])
+    assert summary["samples"] == first_seen(summary["samples"])

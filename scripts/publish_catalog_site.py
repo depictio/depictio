@@ -1,38 +1,61 @@
-"""Place one catalog-site export into the depictio-catalog Pages tree.
+"""Merge one catalog-site export into the depictio-catalog site tree.
 
-The Pages repository holds one directory per published slot: ``latest/`` (the
-catalog on ``main``) and ``v<version>/`` for each release. This script copies an
-export (``depictio catalog export-site``) into its slot, keeps only the newest
-``--keep`` stable releases (a beta is kept only while it is newer than every
-kept release), and rewrites the two files at the root:
+The contract is ``docs/design/catalog-site.md``. The tree holds one directory per
+published slot (``latest/`` for ``main``, ``v<version>/`` per release, every one
+kept) and what they share:
 
-- ``versions.json``: ``{"latest": "latest", "versions": ["v1.22.0", ...]}``,
-  newest first, which the documentation reads to link a release's catalog;
-- ``index.html``: a redirect to ``latest/``.
+- ``assets/``: every slot's bundle chunks, content-hashed, stored once;
+- ``objects/<sha256>.json``: every output's ``{fixturePreview, data}``, stored once
+  per content (an output that did not change between releases is one file);
+- ``modules/<tool_id>.json``: a module's version history across the slots;
+- ``releases.json``: per slot, its version, publication date and what changed;
+- ``versions.json`` and ``index.html`` (redirect to ``latest/``), as before.
+
+The export is copied into its slot, then every slot is normalised: ``data/outputs/``
+moves to ``objects/`` (each output entry gets a ``dataRef``), ``assets/`` moves to the
+shared ``assets/`` (the slot keeps ``assets.json``, its file list, and its
+``index.html`` loads ``../assets/``). Normalising is idempotent and also converts a
+slot published in the earlier format (outputs and assets inside the slot). Objects and
+assets no slot references any more are then dropped, except the assets of the
+``latest/`` this run replaced, listed in ``latest/assets.previous.json`` and kept for
+one more deploy so a tab opened before it can still load its chunks.
 
 Usage::
 
-    python scripts/publish_catalog_site.py --site DIR --export DIR --slot v1.22.0 [--keep 10]
+    python scripts/publish_catalog_site.py --site DIR --export DIR --slot v1.22.0
 """
 
 from __future__ import annotations
 
 import argparse
+import filecmp
+import hashlib
 import json
 import re
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 LATEST = "latest"
 _RELEASE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-b(\d+))?$")
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_ASSET_REF = re.compile(r"""(\b(?:src|href)=)(["'])\./assets/""")
 
 _REDIRECT = """<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
 <title>Depictio Tools Catalog</title>
 <meta http-equiv="refresh" content="0; url=latest/">
 <link rel="canonical" href="latest/">
 <a href="latest/">Depictio Tools Catalog</a>
 """
+
+
+# ---------------------------------------------------------------------------
+# Slots and versions
+# ---------------------------------------------------------------------------
 
 
 def release_key(name: str) -> tuple[int, int, int, int]:
@@ -50,54 +73,348 @@ def releases(site: Path) -> list[str]:
     return sorted(names, key=release_key, reverse=True)
 
 
-def prunable(present: list[str], keep: int) -> list[str]:
-    """Release slots to drop from ``present`` (newest first).
+def slots(site: Path) -> list[str]:
+    """Every slot present: ``latest`` first, then the releases newest first."""
+    return ([LATEST] if (site / LATEST).is_dir() else []) + releases(site)
 
-    The ``keep`` newest stable releases stay, and a beta only while it is newer
-    than all of them: betas come six to a release and would otherwise push the
-    stable releases out.
+
+def _semver(version: str) -> tuple[int, int, int]:
+    nums = [int(n) for n in re.findall(r"\d+", version)[:3]]
+    return tuple(nums + [0] * (3 - len(nums)))  # type: ignore[return-value]
+
+
+def bump_between(lower: str, higher: str) -> str:
+    """The semver step from ``lower`` to ``higher``."""
+    a, b = _semver(lower), _semver(higher)
+    if a[0] != b[0]:
+        return "major"
+    return "minor" if a[1] != b[1] else "patch"
+
+
+# ---------------------------------------------------------------------------
+# JSON and file helpers
+# ---------------------------------------------------------------------------
+
+
+def _read_json(path: Path, default: Any = None) -> Any:
+    if not path.is_file():
+        return default
+    return json.loads(path.read_text())
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, separators=(",", ":")) + "\n")
+
+
+def _move_shared(src: Path, dest: Path) -> None:
+    """Move ``src`` to ``dest``; content-named, so an existing ``dest`` is the same file."""
+    if dest.exists():
+        if not filecmp.cmp(src, dest, shallow=False):
+            raise SystemExit(f"{dest.name} exists with other content: refusing to overwrite it")
+        src.unlink()
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dest))
+
+
+def _tools(index: dict[str, Any]) -> list[dict[str, Any]]:
+    return list(index.get("tools") or [])
+
+
+def _outputs(tool: dict[str, Any]) -> list[dict[str, Any]]:
+    return list(tool.get("outputs") or [])
+
+
+def _output_id(entry: dict[str, Any]) -> str:
+    return str((entry.get("output") or {}).get("id") or "")
+
+
+# ---------------------------------------------------------------------------
+# Normalising a slot (also converts the earlier format)
+# ---------------------------------------------------------------------------
+
+
+def normalize_slot(site: Path, slot: str) -> None:
+    """Bring ``site/slot`` to the shared layout. Idempotent.
+
+    - ``data/outputs/<id>.json`` -> ``objects/<sha256>.json``, ``dataRef`` on the entry;
+    - ``assets/*`` -> the shared ``assets/``, listed in the slot's ``assets.json``;
+    - ``index.html`` loads ``../assets/`` instead of ``./assets/``.
     """
-    stable = [n for n in present if "-b" not in n]
-    kept = set(stable[:keep])
-    newest = release_key(stable[0]) if stable else None
-    return [
-        n
-        for n in present
-        if n not in kept and ("-b" not in n or (newest is not None and release_key(n) < newest))
-    ]
+    root = site / slot
+    index_path = root / "data" / "index.json"
+    index = _read_json(index_path)
+    if index is None:
+        raise SystemExit(f"{root} has no data/index.json: not a catalog slot")
+
+    outputs_dir = root / "data" / "outputs"
+    changed = False
+    for tool in _tools(index):
+        for entry in _outputs(tool):
+            if not entry.get("ok") or entry.get("dataRef"):
+                continue
+            oid = _output_id(entry)
+            file = outputs_dir / f"{oid}.json"
+            if not _SAFE_NAME.fullmatch(oid) or not file.is_file():
+                continue
+            ref = hashlib.sha256(file.read_bytes()).hexdigest()
+            _move_shared(file, site / "objects" / f"{ref}.json")
+            entry["dataRef"] = ref
+            changed = True
+    if changed:
+        _write_json(index_path, index)
+    if outputs_dir.exists():
+        shutil.rmtree(outputs_dir)
+
+    assets_dir = root / "assets"
+    if assets_dir.is_dir():
+        names = sorted(p.relative_to(assets_dir).as_posix() for p in assets_dir.rglob("*") if p.is_file())
+        for name in names:
+            _move_shared(assets_dir / name, site / "assets" / name)
+        shutil.rmtree(assets_dir)
+        _write_json(root / "assets.json", names)
+
+    html_path = root / "index.html"
+    if html_path.is_file():
+        html = html_path.read_text()
+        rewritten = _ASSET_REF.sub(r"\1\2../assets/", html)
+        if rewritten != html:
+            html_path.write_text(rewritten)
 
 
-def publish(site: Path, export: Path, slot: str, keep: int) -> list[str]:
-    """Copy ``export`` into ``site/slot``, prune old releases, rewrite the root.
+# ---------------------------------------------------------------------------
+# What the site is made of: references, history
+# ---------------------------------------------------------------------------
 
-    Returns the release slots removed by the pruning.
+
+def _referenced(site: Path, names: list[str]) -> tuple[set[str], set[str]]:
+    """(object refs, asset files) that some slot still needs."""
+    objects: set[str] = set()
+    assets: set[str] = set()
+    for slot in names:
+        index = _read_json(site / slot / "data" / "index.json", {})
+        for tool in _tools(index):
+            for entry in _outputs(tool):
+                ref = entry.get("dataRef")
+                if isinstance(ref, str) and _SHA256.fullmatch(ref):
+                    objects.add(ref)
+        for file in ("assets.json", "assets.previous.json"):
+            assets.update(_read_json(site / slot / file, []))
+    return objects, assets
+
+
+def _drop_unreferenced(directory: Path, keep: set[str], suffix: str = "") -> list[str]:
+    """Delete the files of ``directory`` not named in ``keep``; return what went."""
+    removed: list[str] = []
+    if not directory.is_dir():
+        return removed
+    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
+        name = path.relative_to(directory).as_posix()
+        if (name[: -len(suffix)] if suffix else name) not in keep:
+            path.unlink()
+            removed.append(name)
+    for sub in sorted((p for p in directory.rglob("*") if p.is_dir()), reverse=True):
+        if not any(sub.iterdir()):
+            sub.rmdir()
+    return removed
+
+
+def _reduced_render(render: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: render[k] for k in ("index", "component_type", "_yaml", "kind", "_variant") if k in render
+    }
+
+
+def build_modules(site: Path, names: list[str]) -> dict[str, dict[str, Any]]:
+    """Per tool id, its version history over ``names`` (``latest`` first, then newest release)."""
+    modules: dict[str, dict[str, Any]] = {}
+    for slot in names:
+        for tool in _tools(_read_json(site / slot / "data" / "index.json", {})):
+            tid = str(tool.get("id") or "")
+            if not _SAFE_NAME.fullmatch(tid):
+                raise SystemExit(f"tool id {tid!r} cannot name a file of the catalog site")
+            module = modules.setdefault(
+                tid, {"id": tid, "name": tool.get("name") or tid, "_versions": {}}
+            )
+            version = str(tool.get("version") or "1.0.0")
+            known = module["_versions"].get(version)
+            if known is None:
+                # The first slot seen is the most recent one shipping this version.
+                module["_versions"][version] = {
+                    "version": version,
+                    "releases": [slot],
+                    "outputs": [
+                        {
+                            "id": _output_id(e),
+                            "name": (e.get("output") or {}).get("name"),
+                            "renders": [_reduced_render(r) for r in e.get("renders") or []],
+                        }
+                        for e in _outputs(tool)
+                    ],
+                }
+            else:
+                known["releases"].append(slot)
+
+    result: dict[str, dict[str, Any]] = {}
+    for tid, module in modules.items():
+        ordered = sorted(module["_versions"].values(), key=lambda v: _semver(v["version"]), reverse=True)
+        history = []
+        for i, v in enumerate(ordered):
+            lower = ordered[i + 1]["version"] if i + 1 < len(ordered) else None
+            history.append(
+                {
+                    "version": v["version"],
+                    "bump": bump_between(lower, v["version"]) if lower else None,
+                    "releases": v["releases"],
+                    "outputs": v["outputs"],
+                }
+            )
+        result[tid] = {"id": tid, "name": module["name"], "versions": history}
+    return result
+
+
+def _snapshot(site: Path, slot: str) -> tuple[str, dict[str, str], set[str]]:
+    index = _read_json(site / slot / "data" / "index.json", {})
+    tools = {str(t.get("id")): str(t.get("version") or "1.0.0") for t in _tools(index)}
+    outputs = {_output_id(e) for t in _tools(index) for e in _outputs(t)}
+    return str(index.get("version") or ""), tools, outputs
+
+
+def build_releases(
+    site: Path,
+    names: list[str],
+    published: dict[str, str],
+) -> list[dict[str, Any]]:
+    """The ``releases.json`` entries: each slot against the release below it.
+
+    ``latest`` is compared with the newest release; with nothing to compare against
+    (the oldest release) ``previous`` is null and every list of ``changes`` is empty.
+    """
+    result = []
+    stable = [n for n in names if n != LATEST]
+    for slot in names:
+        if slot == LATEST:
+            previous = stable[0] if stable else None
+        else:
+            below = stable[stable.index(slot) + 1 :]
+            previous = below[0] if below else None
+        version, tools, outputs = _snapshot(site, slot)
+        changes: dict[str, Any] = {
+            "added": [],
+            "removed": [],
+            "bumped": [],
+            "outputs_added": [],
+            "outputs_removed": [],
+        }
+        if previous is not None:
+            _, p_tools, p_outputs = _snapshot(site, previous)
+            changes = {
+                "added": sorted(set(tools) - set(p_tools)),
+                "removed": sorted(set(p_tools) - set(tools)),
+                "bumped": [
+                    {
+                        "id": t,
+                        "from": p_tools[t],
+                        "to": tools[t],
+                        "bump": bump_between(p_tools[t], tools[t]),
+                    }
+                    for t in sorted(set(tools) & set(p_tools))
+                    if tools[t] != p_tools[t]
+                ],
+                "outputs_added": sorted(outputs - p_outputs),
+                "outputs_removed": sorted(p_outputs - outputs),
+            }
+        result.append(
+            {
+                "slot": slot,
+                "version": version,
+                "published": published[slot],
+                "previous": previous,
+                "changes": changes,
+            }
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Publish
+# ---------------------------------------------------------------------------
+
+
+def _check_export(export: Path) -> None:
+    index = _read_json(export / "data" / "index.json") if (export / "data").is_dir() else None
+    if not (export / "index.html").is_file() or index is None:
+        raise SystemExit(f"{export} is not a catalog-site export (index.html, data/index.json)")
+    for tool in _tools(index):
+        for entry in _outputs(tool):
+            oid = _output_id(entry)
+            if entry.get("ok") and not (export / "data" / "outputs" / f"{oid}.json").is_file():
+                raise SystemExit(f"{export}: output {oid!r} is ok but has no data/outputs/{oid}.json")
+
+
+def publish(site: Path, export: Path, slot: str, now: datetime | None = None) -> dict[str, list[str]]:
+    """Copy ``export`` into ``site/slot`` and rebuild everything derived from the slots.
+
+    Returns the ``objects`` and ``assets`` that no slot referenced any more and were deleted.
     """
     if slot != LATEST:
         release_key(slot)  # refuse anything that is not latest or vX.Y.Z[-bN]
-    if not (export / "index.html").is_file() or not (export / "data" / "index.json").is_file():
-        raise SystemExit(f"{export} is not a catalog-site export (index.html, data/index.json)")
-    if keep < 1:
-        raise SystemExit("--keep must be at least 1")
+    _check_export(export)
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     site.mkdir(parents=True, exist_ok=True)
     target = site / slot
+
+    # The latest/ about to be replaced: its assets stay one more deploy.
+    old_assets: list[str] = []
+    old_previous: list[str] = []
+    if slot == LATEST and (target / "data" / "index.json").is_file():
+        normalize_slot(site, LATEST)
+        old_assets = _read_json(target / "assets.json", [])
+        old_previous = _read_json(target / "assets.previous.json", [])
+
+    published: dict[str, str] = {
+        r["slot"]: r["published"]
+        for r in (_read_json(site / "releases.json", {}) or {}).get("releases", [])
+    }
+
     if target.exists():
         shutil.rmtree(target)
     shutil.copytree(export, target)
+    published[slot] = stamp
 
-    removed = prunable(releases(site), keep)
-    if slot in removed:
-        shutil.rmtree(target)
-        raise SystemExit(
-            f"{slot} is older than the {keep} newest releases the site keeps: not published"
-        )
-    for name in removed:
-        shutil.rmtree(site / name)
+    for name in slots(site):
+        normalize_slot(site, name)
+        published.setdefault(name, stamp)
 
-    kept = releases(site)
-    (site / "versions.json").write_text(
-        json.dumps({"latest": LATEST if (site / LATEST).is_dir() else None, "versions": kept})
-        + "\n"
+    if slot == LATEST:
+        new_assets = _read_json(target / "assets.json", [])
+        # Same bundle redeployed: keep the grace list of the one before it.
+        grace = old_assets if old_assets != new_assets else old_previous
+        if grace:
+            _write_json(target / "assets.previous.json", grace)
+
+    names = slots(site)
+    objects, assets = _referenced(site, names)
+    removed = {
+        "objects": _drop_unreferenced(site / "objects", objects, ".json"),
+        "assets": _drop_unreferenced(site / "assets", assets),
+    }
+
+    modules = build_modules(site, names)
+    modules_dir = site / "modules"
+    for tid, module in modules.items():
+        _write_json(modules_dir / f"{tid}.json", module)
+    if modules_dir.is_dir():
+        for stale in modules_dir.glob("*.json"):
+            if stale.stem not in modules:
+                stale.unlink()
+
+    _write_json(site / "releases.json", {"releases": build_releases(site, names, published)})
+    _write_json(
+        site / "versions.json",
+        {"latest": LATEST if (site / LATEST).is_dir() else None, "versions": releases(site)},
     )
     (site / "index.html").write_text(_REDIRECT)
     # Pages would otherwise run Jekyll and drop directories starting with "_".
@@ -110,11 +427,13 @@ def main() -> None:
     parser.add_argument("--site", type=Path, required=True, help="Checkout of the Pages tree")
     parser.add_argument("--export", type=Path, required=True, help="catalog export-site output")
     parser.add_argument("--slot", required=True, help="'latest' or a release tag, e.g. v1.22.0")
-    parser.add_argument("--keep", type=int, default=10, help="Release directories to keep")
     args = parser.parse_args()
 
-    removed = publish(args.site, args.export, args.slot, args.keep)
-    print(f"Published {args.slot}" + (f"; pruned {', '.join(removed)}" if removed else ""))
+    removed = publish(args.site, args.export, args.slot)
+    print(
+        f"Published {args.slot}; dropped {len(removed['objects'])} unreferenced objects "
+        f"and {len(removed['assets'])} assets"
+    )
 
 
 if __name__ == "__main__":

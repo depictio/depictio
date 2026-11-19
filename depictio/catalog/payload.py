@@ -383,8 +383,10 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
         },
         "summary": {
             "row_count": df.height,
-            "chromosomes": df[chrom].unique().to_list(),
-            "samples": df[sample_col].unique().to_list() if sample_col else [],
+            # First-seen order: a hash-ordered unique() reshuffles between runs,
+            # which makes every export of the same catalog look changed.
+            "chromosomes": df[chrom].unique(maintain_order=True).to_list(),
+            "samples": df[sample_col].unique(maintain_order=True).to_list() if sample_col else [],
             "n_samples": df[sample_col].n_unique() if sample_col else 0,
             "mean_value": float(df[val].mean()),
             "max_value": float(df[val].max()),
