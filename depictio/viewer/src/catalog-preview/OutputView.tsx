@@ -44,6 +44,7 @@ import {
   IdentityLink,
   InfoRow,
   TypeBadge,
+  VersionBadge,
   edamShort,
   lastSeg,
   logoFor,
@@ -52,6 +53,7 @@ import {
 } from './shared';
 import type { CatalogGlobal, FixturePreview, OutputEntry, OutputInfo } from './shared';
 import ChunkErrorBoundary from './ChunkErrorBoundary';
+import ModuleVersions from './ModuleVersions';
 import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 
 const DASHBOARD_ID = 'catalog-preview';
@@ -267,6 +269,11 @@ const OutputView: React.FC<{
   toolId?: string;
 }> = ({ entry, onBack, theme, renderId, tileHeight, variant = 'page', toolId }) => {
   const out = entry.output;
+  // The owning tool: its module version is shown (site build only; absent in old indexes).
+  const catalog = window.__CATALOG_PREVIEW__ as unknown as CatalogGlobal | undefined;
+  const ownerTool = catalog?.tools?.find((t) =>
+    toolId ? t.id === toolId : t.outputs.some((o) => o.output.id === out.id),
+  );
   const fixture = entry.fixturePreview;
   const renders = entry.renders as unknown as StoredMetadata[];
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -377,6 +384,7 @@ const OutputView: React.FC<{
           <Code fz={10} style={{ flexShrink: 0 }}>
             {out.id}
           </Code>
+          <VersionBadge version={ownerTool?.version} />
           {out.description ? (
             <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
               {out.description}
@@ -519,6 +527,14 @@ const OutputView: React.FC<{
           <Box mt="lg">
             <FixturePreviewPanel fixture={fixture} theme={theme} />
           </Box>
+        ) : null}
+        {isLazy(catalog) && ownerTool ? (
+          <ModuleVersions
+            entry={entry}
+            toolId={ownerTool.id}
+            toolVersion={ownerTool.version}
+            theme={theme}
+          />
         ) : null}
       </Box>
     </Stack>

@@ -19,6 +19,7 @@
     "check:renderkey": "node dev/run_check.mjs dev/render_key_check.mjs",
     "check:dataversionstatus": "node dev/run_check.mjs dev/data_version_status_check.mjs",
     "check:proteinkinds": "node dev/run_check.mjs dev/protein_kinds_check.mjs",
+    "check:catalog-site": "node dev/run_check.mjs dev/catalog_site_check.mjs",
     "check:changes": "node dev/run_check.mjs dev/changes_check.mjs"
   },
   "dependencies": {

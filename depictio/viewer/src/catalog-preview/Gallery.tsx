@@ -40,9 +40,18 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { CATALOG_ACCENT, IdentityLink, TypeBadge, lastSeg, logoFor, metaFor } from './shared';
+import {
+  CATALOG_ACCENT,
+  IdentityLink,
+  TypeBadge,
+  VersionBadge,
+  lastSeg,
+  logoFor,
+  metaFor,
+} from './shared';
 import type { OutputEntry, ToolEntry } from './shared';
 import OutputView from './OutputView';
+import ReleaseBar from './ReleaseBar';
 
 type ViewMode = 'split' | 'cards' | 'table';
 type SortCol = 'tool' | 'output' | 'fixture';
@@ -277,6 +286,7 @@ const ToolSection: React.FC<{
         <Title order={4} style={{ lineHeight: 1.1 }}>
           {tool.name}
         </Title>
+        <VersionBadge version={tool.version} />
         <Badge size="sm" variant="light" color="gray" radius="sm">
           {entries.length}
         </Badge>
@@ -557,6 +567,7 @@ const Rail: React.FC<{
                 <Text size="sm" fw={700} lineClamp={1} style={{ flex: 1, textAlign: 'left' }}>
                   {g.tool.name}
                 </Text>
+                <VersionBadge version={g.tool.version} />
                 <Badge size="xs" variant="light" color="gray" circle>
                   {g.entries.length}
                 </Badge>
@@ -955,6 +966,7 @@ const Gallery: React.FC<{
         </Text>
       </Group>
       <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+        <ReleaseBar />
         {viewControl}
         {/* Tool Studio — the no-backend web app to author a new tool entry.
             Hosted on GitHub Pages from the depictio-tool-studio showcase repo. */}

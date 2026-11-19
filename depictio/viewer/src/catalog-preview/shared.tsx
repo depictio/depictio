@@ -153,6 +153,8 @@ export interface OutputInfo {
   fixture?: string | null;
   nf_core_url?: string | null;
   biotools_url?: string | null;
+  /** Content hash of the payload in the site's `objects/` (published slots). */
+  dataRef?: string | null;
   edam?: string[];
   n_rows?: number;
   n_cols?: number;
@@ -168,6 +170,8 @@ export interface FixturePreview {
 export interface OutputEntry {
   output: OutputInfo;
   fixturePreview?: FixturePreview | null;
+  /** Content hash of the payload in the site's `objects/` (published slots). */
+  dataRef?: string | null;
   renders: Record<string, unknown>[];
   ok: boolean;
   error?: string;
@@ -177,6 +181,8 @@ export interface ToolEntry {
   id: string;
   name: string;
   description?: string;
+  /** The module's version (`module.yaml`). Absent in older indexes. */
+  version?: string;
   homepage?: string | null;
   nf_core_url?: string | null;
   biotools_url?: string | null;
@@ -186,6 +192,8 @@ export interface ToolEntry {
 
 export interface CatalogGlobal {
   theme?: 'light' | 'dark';
+  /** The release's version, from the exporter. */
+  version?: string;
   initialOutputId?: string | null;
   /** When set, the viewer skips all catalog chrome and renders only this render. */
   initialRenderId?: string | null;
@@ -204,3 +212,24 @@ export const allRendersYaml = (renders: Record<string, unknown>[]): string =>
     .map((r) => r._yaml as string | undefined)
     .filter(Boolean)
     .join('\n');
+
+/** Discreet `v1.1.0` badge for a module's version. Site build only (the
+ *  single-file bundle shows none), and nothing when the index has no version. */
+export const VersionBadge: React.FC<{ version?: string | null }> = ({ version }) => {
+  const g = (window as unknown as { __CATALOG_PREVIEW__?: { lazyOutputs?: boolean } })
+    .__CATALOG_PREVIEW__;
+  if (!version || !g?.lazyOutputs) return null;
+  return (
+    <Badge
+      size="xs"
+      variant="outline"
+      color="gray"
+      radius="sm"
+      tt="none"
+      title={`Module version ${version}`}
+      style={{ flexShrink: 0 }}
+    >
+      v{version}
+    </Badge>
+  );
+};
