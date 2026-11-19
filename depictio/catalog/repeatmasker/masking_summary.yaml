@@ -11,12 +11,72 @@ description: >-
 find:
   path_glob: "**/*.tbl"
 recipe: repeatmasker/masking_summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several genomes.
 fixture: masking_summary.tsv
 renders_as:
-  - { id: masked_share, component: card, column: masked_pct, aggregation: median,
-      secondary_layout: gauge, coverage_max: 100 }
-  - { id: interspersed_share, component: card, column: interspersed_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: masked_vs_length, component: advanced_viz, kind: scatter_xy,
-      roles: {x: total_length, y: masked_pct, label: genome, size: masked_bp} }
-  - { component: table }
+  - id: masked_share
+    component: card
+    column: masked_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100
+    caption: median share of the assembly, with the range
+    title: Masked share
+    description: >-
+      The hero number is the median percentage of the assembly masked as repeat, with the
+      lowest and the highest assembly next to it. It answers how repeat-rich the
+      assemblies are.
+
+      How to read: compare an assembly with its close relatives. A share far below them
+      suggests a library that missed repeats, and a share far above a de novo library
+      that over-called. RepeatMasker publishes no expected share.
+
+      Source: https://www.repeatmasker.org/
+  - id: interspersed_share
+    component: card
+    column: interspersed_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: Interspersed repeat share
+    description: >-
+      The hero number is the median percentage of the assembly covered by interspersed
+      repeats (transposable elements), with the spread across assemblies in the box. It
+      answers how much of the masking is mobile elements rather than simple sequence.
+
+      How to read: the gap between this and the masked share is simple repeats and low
+      complexity sequence. A wide box means assemblies of very different repeat content.
+  # C1: colour by GC content, the continuous column that varies with repeat load.
+  - id: masked_vs_length
+    component: advanced_viz
+    kind: scatter_xy
+    title: Masked share against assembly length
+    roles: {x: total_length, y: masked_pct, label: genome, size: masked_bp}
+    config:
+      color_col: gc_pct
+      x_title: Assembly length (bp)
+      y_title: Masked share of the assembly (%)
+      log_x: true
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is an assembly: its total length (horizontal) against the percentage of
+      it that is masked (vertical), sized by the number of masked bases and coloured by
+      its GC content. It answers whether repeat load grows with genome size.
+
+      How to read: assemblies far above the trend are repeat-rich for their size, and
+      assemblies far below it may have a library that missed repeats. RepeatMasker
+      defines no cut-off here, so judge each point against related genomes.
+
+      Lines and annotations: The dashed line is the median masked share of this table, a reference computed from the rows on show (it follows the filters), not a cut-off of RepeatMasker.
+  - component: table
+    title: Masking summary per assembly
+    description: >-
+      Each row is an assembly: its sequences, length, GC, masked bases and the share
+      masked by each repeat type. It answers how the repeat content breaks down per
+      assembly.
+
+      How to read: sort by the unclassified share to find assemblies whose library could
+      not name the repeats.

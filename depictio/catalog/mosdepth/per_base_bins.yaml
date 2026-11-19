@@ -12,8 +12,60 @@ find:
 recipe: mosdepth/per_base_bins.py
 fixture: per_base_bins.tsv
 renders_as:
-  - { id: depth_track, component: advanced_viz, kind: coverage_track,
-      roles: {chromosome: chrom, position: position, value: mean_depth, end: end, sample: genome_id} }
-  - { component: card, column: min_depth, aggregation: min,
-      secondary_layout: top_n, breakdown_col: genome_id, top_n_count: 3 }
-  - { component: table }
+  - id: depth_track
+    component: advanced_viz
+    kind: coverage_track
+    title: Binned depth along the reference
+    roles: {chromosome: chrom, position: position, value: mean_depth, end: end, sample: genome_id}
+    config:
+      color_by: sample
+    description: >-
+      Each point on a line is a bin of the reference at its position, with its
+      length-weighted mean read depth on the vertical axis, one line per mapping. It
+      answers where the depth drops, as dropouts or amplicon gaps, along the genome.
+
+      How to read: lines should stay well above zero along the genome. A dip to zero
+      is a gap that will become Ns in the consensus, and repeated dips at regular
+      spacing are failing amplicons. Compare mappings to see whether a gap is shared.
+
+      Lines and annotations: no line is drawn. nf-core/viralrecon and iVar call
+      consensus bases from a depth of 10 reads by default, so bins below it are
+      likely to be masked.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+      and https://raw.githubusercontent.com/nf-core/viralrecon/master/conf/modules_illumina.config
+  - component: card
+    column: min_depth
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: genome_id
+    top_n_count: 3
+    caption: lowest bin depth, by mapping
+    title: Lowest depth in any bin
+    description: >-
+      The hero number is the lowest depth found in any bin and the bars rank the
+      mappings by their lowest bin. It answers whether any part of the genome is left
+      uncovered.
+
+      How to read: a value of zero means a gap in at least one mapping, which becomes
+      Ns in a consensus. The median and maximum beside it show the typical and best
+      cases.
+
+      Lines and annotations: no mark is drawn. nf-core/viralrecon and iVar call
+      consensus bases from a depth of 10 reads by default.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+      and https://raw.githubusercontent.com/nf-core/viralrecon/master/conf/modules_illumina.config
+  - component: table
+    title: Binned depth
+    description: >-
+      One row is one bin of one mapping, with its coordinates, mean depth and
+      lowest depth. It answers where along the genome the depth drops.
+
+      How to read: Sort by mean depth, lowest first, to find the weak bins, and
+      by the lowest depth to find bins with a gap inside. Look for bins that are
+      weak in several mappings. It complements the coverage track tile of the
+      same output, which draws these bins along the genome.

@@ -9,12 +9,107 @@ find: { path_glob: "**/salmon.merged.gene_tpm.tsv" }
 recipe: salmon/gene_expression_long.py
 fixture: gene_expression.tsv
 renders_as:
-  - { component: figure, visu_type: box, dict_kwargs: {x: group, y: log2_tpm, color: group} }
-  - { component: card, column: tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
-  - { component: interactive, interactive_type: MultiSelect, column_name: gene_name }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_name }
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: group
+      y: log2_tpm
+      color: group
+      labels: {group: Group, log2_tpm: Expression (log2 TPM + 1)}
+    title: Expression by group
+    reference_lines:
+      - {axis: y, stat: median, column: log2_tpm}
+    description: >-
+      Each box is a group of samples: the distribution of log2(TPM + 1) over the genes
+      expressed in at least one sample. It answers whether groups share the same
+      overall expression level.
+
+      How to read: boxes at similar heights mean comparable libraries. A box shifted
+      up or down points to a global difference in expression or in library
+      composition, so check the sample overview before a differential analysis.
+      Pick genes in the filter to see one gene across groups.
+
+      Lines and annotations: genes are kept when at least one sample reaches 1 TPM,
+      a fixed filter of this view and not a Salmon cut-off.
+      The dashed line is the median log2(TPM + 1) of this table, a reference computed from the rows on show (it follows the filters), not a cut-off of Salmon.
+  - component: card
+    column: log2_tpm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Expression level
+    description: >-
+      The hero number is the median log2(TPM + 1) over every gene and sample in view,
+      and the box shows its quartiles. It answers how strongly the typical gene is
+      expressed.
+
+      How to read: raw TPM spans orders of magnitude, so the log scale is used here.
+      Filter to one gene or group to compare levels.
+  - component: card
+    column: gene_name
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: group
+    top_n_count: 4
+    caption: genes, by group
+    title: Genes in view
+    description: >-
+      The hero number is the count of distinct genes in view, and the bars rank the
+      groups by how many genes they carry rows for. It answers how many genes the
+      explorer holds.
+
+      How to read: the table holds genes expressed in at least one sample, so the count
+      is the same across groups unless a filter is applied.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: gene_name
+    title: Gene picker
+    description: >-
+      Pick one or more genes to restrict every tile of this tab to them. It answers how
+      a gene of interest behaves across samples and groups.
+
+      How to read: select a few symbols, then read the box plot and the table for their
+      expression in each group.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_name
+    title: Gene expression table
+    description: >-
+      Each row is a gene in one sample with its TPM, its log2(TPM + 1) and the sample's
+      group. It answers what a gene's expression is in a given sample and lets a row
+      selection filter the rest of the dashboard.
+
+      How to read: sort by TPM to find the most abundant genes of a sample.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }
-  - { component: card, column: log2_tpm, aggregation: average, secondary_layout: histogram }
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: group
+    top_n_count: 4
+    caption: samples, by group
+    title: Samples
+    description: >-
+      The hero number is the count of distinct samples, and the bars rank the groups
+      by how many samples they hold. It answers how the design is balanced.
+
+      How to read: groups with one sample cannot be tested, and unequal groups weaken
+      comparisons.
+  - component: card
+    column: log2_tpm
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: distribution of expression
+    title: Mean expression
+    description: >-
+      The hero number is the mean log2(TPM + 1) over every gene and sample in view,
+      and the histogram shows how the values are distributed. It answers how the
+      expression is spread between low and high.
+
+      How to read: a peak near zero with a long right tail is typical, since many genes
+      are barely expressed in any one sample. Filter to a group to compare shapes.

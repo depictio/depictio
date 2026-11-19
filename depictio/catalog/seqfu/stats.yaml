@@ -14,11 +14,93 @@ find:
 recipe: seqfu/stats.py
 fixture: stats.tsv
 renders_as:
-  - { id: sequences_total, component: card, column: sequences, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }
-  - { id: mean_length, component: card, column: mean_length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: n50_length, component: card, column: n50, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: sequences, color: stage, barmode: group} }
-  - { component: table }
+  # Every card reads the same rows: the files taken after filtering, or the
+  # only stage when the pipeline does not name one. Summing both stages would
+  # count each sequence twice.
+  - id: sequences_total
+    component: card
+    column: sequences
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('stage') != 'before'"
+    headline: true
+    title: Sequences kept
+    caption: sequences per file, with quartiles
+    description: >-
+      The hero number is the total count of sequences in the files after filtering,
+      and the box shows how many each file holds. It answers how much sequence the
+      later steps receive.
+
+      How to read: a total far below what you started with means the filter was
+      strict, so compare with the before stage in the table. A box with a long tail
+      marks a few files that hold most of the sequences.
+
+      Source: https://telatin.github.io/seqfu2/tools/stats.html
+  - id: mean_length
+    component: card
+    column: mean_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('stage') != 'before'"
+    title: Mean sequence length
+    caption: median, with quartiles
+    description: >-
+      The hero number is the median over files of their mean sequence length, and
+      the box shows the quartiles. It answers whether the files hold sequences of a
+      similar size.
+
+      How to read: a tight box means uniform files. A wide box mixes short and long
+      sequences, for instance reads with assemblies, so compare it with the N50.
+  - id: n50_length
+    component: card
+    column: n50
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('stage') != 'before'"
+    title: N50 length
+    caption: median, with quartiles
+    description: >-
+      The hero number is the median over files of their N50, the length such that
+      sequences at least that long hold half of the bases, and the box shows the
+      quartiles. It answers how contiguous the sequences are.
+
+      How to read: a high N50 means most bases sit in long sequences. An N50 far
+      above the mean length shows a few long sequences carry the file, and one near
+      it shows uniform sequences.
+
+      Source: https://telatin.github.io/seqfu2/tools/stats.html
+      and https://en.wikipedia.org/wiki/N50,_L50,_and_related_statistics
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: sequences
+      color: stage
+      barmode: group
+      labels: {sample: Sample, sequences: Sequences, stage: Stage}
+    title: Sequences per file by stage
+    description: >-
+      Each bar is the number of sequences in one file, with the stages (before and
+      after filtering) side by side. It answers how many sequences each filtering
+      step removed.
+
+      How to read: equal bars mean the filter removed nothing from that file. A
+      much shorter after bar marks a file the filter cut down, so open the table to
+      see its lengths.
+  - component: table
+    title: Sequence file statistics
+    description: >-
+      Each row is a summarised file: its sample and stage, the sequence count, the
+      total length, the mean, minimum and maximum length, N50, N75, N90 and auN. It
+      answers the exact length statistics behind every other tile.
+
+      How to read: filter by stage to compare before and after, and sort by N50 to
+      find the most fragmented files.
+
+      Note: SeqFu before version 1.22.1 calculated auN incorrectly, so compare auN
+      only between runs of one version.
+
+      Source: https://telatin.github.io/seqfu2/tools/stats.html

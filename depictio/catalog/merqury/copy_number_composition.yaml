@@ -13,9 +13,79 @@ find:
 recipe: merqury/copy_number_composition.py
 fixture: copy_number_composition.tsv
 renders_as:
-  - { id: copy_number_bars, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: assembly_id, taxon: copy_class, rank: rank, abundance: percent} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: percent, color: copy_class, barmode: stack, title: Read k-mer copy number per assembly} }
-  - { component: card, column: solid_kmers, aggregation: sum,
-      secondary_layout: donut, breakdown_col: copy_class }
-  - { component: table }
+  - id: copy_number_bars
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Read k-mer copy number per assembly
+    roles: {sample_id: assembly_id, taxon: copy_class, rank: rank, abundance: percent}
+    config:
+      value_title: Share of solid read k-mers (%)
+    description: >-
+      Each bar is an assembly, split by how many times its solid read k-mers occur in
+      it: absent, once, twice and so on. It answers how much sequence the assembly
+      lost and how much it duplicated.
+
+      How to read: on a haploid or collapsed assembly nearly all k-mers should be
+      present once. A large absent share is lost sequence and a large two-copy share
+      is duplicated sequence such as retained haplotigs.
+
+      Note: read k-mers at or below the error trough of the read spectrum are left
+      out, so sequencing errors do not count as absent sequence.
+
+      Source: https://raw.githubusercontent.com/marbl/merqury/master/README.md
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: assembly_id
+      y: percent
+      color: copy_class
+      barmode: stack
+      labels: {assembly_id: Assembly, percent: Share of solid read k-mers (%), copy_class: Copies in the assembly}
+    title: Copy number shares, stacked
+    description: >-
+      Each stacked bar is an assembly and each segment the share of its solid read
+      k-mers at one copy number. It answers the same question as the advanced tile
+      above in a fixed, printable form.
+
+      How to read: compare the single-copy segment across assemblies; the larger it
+      is, the more faithful the assembly is to the reads.
+  - component: card
+    column: percent
+    aggregation: median
+    aggregations: [min, max]
+    filter_expr: "col('copy_class') == '1 copy'"
+    secondary_layout: histogram
+    title: Single-copy k-mer share
+    caption: single-copy share, distribution over assemblies
+    headline: true
+    description: >-
+      The hero number is the median share of solid read k-mers present exactly once
+      in an assembly, the signature of a clean haploid or collapsed assembly. The
+      histogram shows how the assemblies spread.
+
+      How to read: values near 100 are expected for a haploid assembly. A low value
+      means missing or duplicated sequence, so open the stacked bars to see which.
+      A diploid or polyploid assembly legitimately holds more copies.
+  - component: card
+    column: solid_kmers
+    aggregation: sum
+    aggregations: [max, median]
+    secondary_layout: donut
+    breakdown_col: copy_class
+    title: K-mers by copy number
+    caption: solid read k-mers, by copy number
+    description: >-
+      Each unit is a solid read k-mer and the ring splits them by how often the
+      assembly holds them. It answers how the k-mers of all assemblies in view are
+      distributed over the copy classes.
+
+      How to read: one dominant single-copy slice is healthy. Large absent or
+      multi-copy slices mean lost or duplicated sequence.
+  - component: table
+    title: Copy number table
+    description: >-
+      Each row is an assembly and a copy class with its solid k-mer count and share.
+      It answers the exact numbers behind the stacked bars.
+
+      How to read: sort by share to find the assemblies with the largest absent or
+      two-copy class.

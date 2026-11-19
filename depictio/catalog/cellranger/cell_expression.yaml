@@ -13,8 +13,67 @@ find:
 recipe: cellranger/cell_expression.py
 fixture: cell_expression.tsv
 renders_as:
-  - { id: gene_umap, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster_label, color: cluster_label} }
-  - { id: selection_compare, component: advanced_viz, kind: group_compare, roles: {index: barcode, group: cluster_label} }
-  - { id: cell_cluster_picker, component: interactive, interactive_type: MultiSelect, column_name: cluster_label }
-  - { id: cell_qc_status_picker, component: interactive, interactive_type: SegmentedControl, column_name: qc_status }
-  - { component: card, column: barcode, aggregation: count, secondary_layout: donut, breakdown_col: cluster_label, top_n_count: 5 }
+  - id: gene_umap
+    component: advanced_viz
+    kind: embedding
+    title: Cells on the UMAP
+    roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster_label, color: cluster_label}
+    config:
+      axis_prefix: UMAP
+    description: >-
+      Each point is a cell placed by UMAP and coloured by its graph-based cluster. It answers
+      how the cells group by expression and lets a marker gene be painted on the map.
+
+      How to read: separate islands are distinct cell populations, and touching islands
+      are related states. Pick a gene to colour by to see which cluster expresses it, and
+      select cells to compare them in the group comparison tile.
+  - id: selection_compare
+    component: advanced_viz
+    kind: group_compare
+    title: Compare two groups of cells
+    roles: {index: barcode, group: cluster_label}
+    description: >-
+      Each row of the result is a gene tested between two chosen cell groups, with its fold
+      change and adjusted p-value. It answers which genes separate one cluster from another.
+
+      How to read: pick two groups and run the test. Genes with a large fold change and a
+      small adjusted p-value mark the difference, and a group with few cells gives little
+      power, so read small groups with care.
+
+      Lines and annotations: the fold-change and false discovery rate cut-offs drawn are the
+      defaults of this tile, not values read from Cell Ranger.
+  - id: cell_cluster_picker
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: cluster_label
+    title: Cluster
+    description: >-
+      Keeps only the cells of the chosen clusters. It answers how a few clusters look on
+      their own.
+
+      How to read: clear the selection to show every cluster again.
+  - id: cell_qc_status_picker
+    component: interactive
+    interactive_type: SegmentedControl
+    column_name: qc_status
+    title: Cell QC status
+    description: >-
+      Keeps the cells that pass the quality filter or the ones it flagged. It answers whether
+      flagged cells cluster together.
+
+      How to read: show flagged cells to see whether they form a cluster of their own.
+  - component: card
+    column: barcode
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: cluster_label
+    top_n_count: 5
+    caption: cells, by cluster
+    title: Cells per cluster
+    description: >-
+      The hero number is the count of cells shown and the ring splits them by cluster. It
+      answers how the cells divide between clusters.
+
+      How to read: a cluster holding most cells dominates the map. A very small cluster may be
+      a rare population or a quality artefact.

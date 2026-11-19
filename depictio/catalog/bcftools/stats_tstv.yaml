@@ -3,14 +3,59 @@ name: Per-caller Ts/Tv ratio
 mode: stats-tstv
 description: >-
   Per-sample, per-caller transition/transversion ratio from `bcftools stats`.
-  A germline WES/WGS SNP call set typically lands close to 2.0-2.1; a caller
-  with too few SNPs to score (e.g. a structural-variant caller) reads 0.0
-  rather than being absent.
+  The ratio varies with genome region and gene function, so it is read against
+  the other callers on the same sample; a caller with too few SNPs to score
+  (e.g. a structural-variant caller) reads 0.0 rather than being absent.
 find:
   path_glob: "**/*.bcftools_stats.txt"
 recipe: bcftools/stats_tstv.py
 fixture: stats_tstv.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: ts_tv, color: sample, barmode: group} }
-  - { component: card, column: ts_tv, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    title: Ts/Tv ratio per caller
+    dict_kwargs:
+      x: caller
+      y: ts_tv
+      color: sample
+      barmode: group
+      labels: {caller: Caller, ts_tv: Transition/transversion ratio, sample: Sample}
+    description: >-
+      Each bar is the ratio of transitions to transversions among the SNPs of one
+      caller on one sample, coloured by sample. It answers whether callers agree on
+      the substitution balance of the SNPs they report.
+
+      How to read: the cited study uses the ratio as a quality indicator for SNP
+      calls, so callers run on the same sample are expected to land close together.
+      A caller far from its peers is adding or losing SNPs of one kind, a sign of
+      noise or bias. A bar of 0 is a caller with too few SNPs to score.
+
+      Note: the ratio varies with genome region, gene function and GC content, so
+      no single cut-off applies and no reference line is drawn.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/25297068/
+  - component: card
+    column: ts_tv
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('ts_tv') > 0"
+    caption: median, with its spread
+    title: Typical Ts/Tv ratio
+    description: >-
+      The hero number is the median transition/transversion ratio over the callers
+      and samples that have a ratio, and the box shows the spread. It answers how
+      the SNP call sets balance transitions and transversions.
+
+      How to read: a wide box means callers disagree. Callers scored 0 for lack of
+      SNPs are left out so they do not pull the median down.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/25297068/
+  - component: table
+    title: Ts/Tv per caller
+    description: >-
+      Each row is one caller on one sample, with its transition and transversion
+      counts and the ratio, over all alternates and over the first alternate only.
+      It answers the exact numbers behind the other tiles.
+
+      How to read: sort by ratio to find the callers that depart from the others.

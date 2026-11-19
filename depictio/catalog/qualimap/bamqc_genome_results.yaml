@@ -6,10 +6,99 @@ description: >-
 find:
   path_glob: "**/genome_results.txt"
 recipe: qualimap/bamqc_genome_results.py
+# The fixture is enriched synthetically from 2 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: bamqc_genome_results.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mean_coverage, color: sample, title: Mean genome coverage per library} }
-  - { component: card, column: mean_coverage, aggregation: average, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: duplication_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: gc_percentage, aggregation: average, secondary_layout: donut, breakdown_col: sample }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: mean_coverage
+      color: sample
+      labels: {sample: Library, mean_coverage: Mean depth (X)}
+    title: Mean genome coverage per library
+    reference_lines:
+      - {axis: y, stat: median, column: mean_coverage}
+    description: >-
+      Each bar is a library: its mean read depth over the reference, as reported by
+      Qualimap BamQC. It answers how deeply each library covers the genome and
+      whether the libraries are comparable.
+
+      How to read: bars of similar height mean an even sequencing effort. A very
+      short bar is a library that will give few usable calls, so compare it with
+      the percentage of reads mapped and the duplication rate in the table before
+      deciding to resequence it.
+
+      Lines and annotations: the dashed line is the median mean depth of a library
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of Qualimap, which draws no
+      pass level.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: mean_coverage
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    headline: true
+    title: Mean depth
+    caption: average over libraries, with the deepest ones ranked
+    description: >-
+      The hero number is the average of the per-library mean depth, and the bars
+      rank the deepest libraries. It answers how much sequencing the run holds per
+      base of the reference.
+
+      How to read: a large gap between the highest and the lowest library means an
+      unbalanced run. Open the coverage histogram to see whether a low mean hides
+      a covered fraction that is still adequate.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: duplication_rate
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Duplication rate
+    caption: average percent duplicated, with its spread
+    description: >-
+      The hero number is the average percent of reads Qualimap estimates as
+      duplicated, and the box shows how libraries spread around it. It answers
+      whether the libraries lost much of their depth to duplicates.
+
+      How to read: a library far above the box is over-amplified or low in input
+      DNA, so its effective depth is lower than the mean depth suggests. The
+      estimate is Qualimap's own and is not a pass or fail verdict.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: gc_percentage
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: GC content
+    caption: average percent GC, with the highest libraries ranked
+    description: >-
+      The hero number is the average GC percentage of the mapped reads, and the
+      bars rank the libraries with the highest value. It answers whether the
+      libraries share a base composition.
+
+      How to read: libraries of the same species and protocol should sit close
+      together. An outlier suggests contamination, a different library
+      preparation or a GC bias in amplification.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: table
+    title: BamQC summary per library
+    description: >-
+      Each row is a library with its read counts, share of reads mapped, mean
+      depth, mean mapping quality, error rate, GC content and duplication rate.
+      It answers the exact value behind every other tile of this output.
+
+      How to read: sort by mean depth or by duplication rate to find the libraries
+      that need attention, then compare them with the coverage tiles.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html

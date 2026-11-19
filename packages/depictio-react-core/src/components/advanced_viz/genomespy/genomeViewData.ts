@@ -7,7 +7,17 @@
  * testing-library in this workspace) can cover it with a mocked fetcher.
  */
 
-import type { AdvancedVizKind, InteractiveFilter, StoredMetadata } from '../../../api';
+import type {
+  AdvancedVizKind,
+  AdvancedVizTailSpec,
+  InteractiveFilter,
+  StoredMetadata,
+} from '../../../api';
+import {
+  scoreThresholdRequests,
+  scoreThresholdTail,
+  type ReferenceStatRequests,
+} from '../referenceStats';
 import {
   filtersExcludingOwn,
   genomePosFilterIndex,
@@ -27,8 +37,13 @@ export interface GenomeViewFetcher {
     filters: InteractiveFilter[];
     vizKind: AdvancedVizKind;
     roles?: Record<string, string>;
-    tail?: { column: string; direction: 'low' | 'high' | 'both'; threshold: number };
-  }): Promise<{ rows: Record<string, unknown[]>; sampling?: { degraded?: boolean } }>;
+    tail?: AdvancedVizTailSpec;
+    referenceStats?: ReferenceStatRequests;
+  }): Promise<{
+    rows: Record<string, unknown[]>;
+    sampling?: { degraded?: boolean };
+    reference_stats?: Record<string, number | null>;
+  }>;
 }
 
 /**
@@ -116,6 +131,9 @@ export interface GenomeViewLoadResult {
   rows: Record<string, unknown[]>;
   /** True when the server had to sample, so the tile can say so. */
   estimated: boolean;
+  /** The statistics asked for (`score_threshold` for a `score_threshold_stat`),
+   *  computed by the server on the filtered rows before sampling. */
+  referenceStats: Record<string, number | null> | null;
 }
 
 /**
@@ -123,7 +141,9 @@ export interface GenomeViewLoadResult {
  *
  * `tail` mirrors the Manhattan's rule: the threshold is the cut the server
  * must not sample across, so every row above it arrives whole even when the
- * collection is far larger than the row budget.
+ * collection is far larger than the row budget. A `score_threshold_stat`
+ * travels as the statistic (`threshold_stat`) and is also asked for in
+ * `referenceStats`, so the rule and the tail come from the same unreduced rows.
  *
  * Throws `Error('genome_view: missing data binding')` rather than fetching
  * with a half-built request, so an unbound tile reports the reason instead of
@@ -145,7 +165,6 @@ export async function loadGenomeViewRows(
   if (!metadata.wf_id || !metadata.dc_id || columns.length < 3) {
     throw new Error('genome_view: missing data binding');
   }
-  const threshold = config.score_threshold;
   const res = await fetcher({
     wfId: metadata.wf_id,
     dcId: metadata.dc_id,
@@ -153,12 +172,14 @@ export async function loadGenomeViewRows(
     filters: [...filtersForGenomeViewFetch(filters, metadata.index), ...(windowFilters ?? [])],
     vizKind: 'genome_view',
     roles: { chr: config.chr_col, pos: config.pos_col, score: config.score_col },
-    tail:
-      threshold !== null && threshold !== undefined && Number.isFinite(threshold)
-        ? { column: config.score_col, direction: 'high', threshold }
-        : undefined,
+    tail: scoreThresholdTail(config, config.score_threshold, 'high'),
+    referenceStats: scoreThresholdRequests(config, config.score_threshold),
   });
-  return { rows: res.rows, estimated: Boolean(res.sampling?.degraded) };
+  return {
+    rows: res.rows,
+    estimated: Boolean(res.sampling?.degraded),
+    referenceStats: res.reference_stats ?? null,
+  };
 }
 
 /**

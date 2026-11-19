@@ -12,11 +12,70 @@ find:
 recipe: last/train_params.py
 fixture: train_params.tsv
 renders_as:
-  - { id: gap_cost_vs_identity, component: advanced_viz, kind: scatter_xy,
-      roles: {x: training_percent_identity, y: deletion_open_cost, label: query} }
-  - { id: training_identity, component: card, column: training_percent_identity, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # Colour is the score scale last-train fitted, the third parameter of the pair.
+  - id: gap_cost_vs_identity
+    component: advanced_viz
+    kind: scatter_xy
+    title: Gap cost against training identity
+    roles: {x: training_percent_identity, y: deletion_open_cost, label: query}
+    config:
+      color_col: score_scale
+      x_title: Identity of the training sample (%)
+      y_title: Cost of opening a deletion
+    description: >-
+      Each point is a query genome: the identity last-train measured on its training
+      sample on the horizontal axis and the fitted cost of opening a deletion on the
+      vertical axis, coloured by the score scale. It answers whether the fitted
+      parameters follow the divergence of each pair.
+
+      How to read: the costs track divergence, so pairs of similar identity sit at
+      similar costs. A pair whose cost stands apart from genomes of similar identity
+      is worth checking, since the parameters drive every alignment.
+
+      Source: https://gitlab.com/mcfrith/last/-/raw/main/doc/last-train.rst
+  - id: training_identity
+    component: card
+    column: training_percent_identity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: identity, with its spread
+    title: Training identity
+    description: >-
+      The hero number is the median substitution identity of the training samples and
+      the box shows its quartiles. It answers how similar the queries are to the target
+      in the sample last-train used.
+
+      How to read: the training sample is a pseudo-random subset of the query, so it
+      tracks the whole-genome identity. A wide box means the run mixes close and
+      distant genomes.
+
+      Source: https://gitlab.com/mcfrith/last/-/raw/main/doc/last-train.rst
   # The costs are whole numbers that step with divergence, which a histogram shows.
-  - { id: gap_open_cost, component: card, column: deletion_open_cost, aggregation: median,
-      secondary_layout: histogram, headline: true }
-  - { component: table }
+  - id: gap_open_cost
+    component: card
+    column: deletion_open_cost
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    headline: true
+    caption: costs across genomes
+    title: Deletion opening cost
+    description: >-
+      The hero number is the median cost of opening a deletion fitted by last-train,
+      and the histogram shows the distribution. It answers how expensive gaps are for
+      a typical pair.
+
+      How to read: last-train derives the costs from the rates of deletions and
+      insertions it sees, so a closer genome gets a higher cost. A pair far from the
+      others has unusual gap rates in its training sample.
+
+      Source: https://gitlab.com/mcfrith/last/-/raw/main/doc/last-train.rst
+  - component: table
+    title: Fitted parameters table
+    description: >-
+      Each row is a genome pair with the training identity, score scale, gap opening
+      and extension costs for deletions and insertions, and the strand setting. It
+      answers the exact parameters used to align each pair.
+
+      How to read: compare the costs of pairs with similar identity to spot an outlier.

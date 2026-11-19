@@ -10,7 +10,63 @@ find:
 recipe: macs2/consensus_fc.py
 fixture: consensus_fc.tsv
 renders_as:
-  - { id: consensus_signal_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: region} }
-  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: consensus_set, top_n_count: 3 }
-  - { component: card, column: support, aggregation: count, secondary_layout: donut, breakdown_col: support }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples, known only at ingest.
+  - id: consensus_signal_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Fold enrichment of consensus peaks
+    roles: {index: region, row_annotation_cols: [consensus_set, support]}
+    description: >-
+      Each cell is a consensus interval in a sample: the MACS2 fold enrichment of the
+      peak called there, or 0 where the sample called none. Rows and columns are
+      clustered. It answers which intervals are bound in which samples and how strongly.
+
+      How to read: columns that cluster together are samples with a similar binding
+      profile, such as replicates or one condition. Blocks of colour in one group of
+      samples only are condition-specific sites. A sample with pale rows against its
+      replicates has weaker enrichment.
+
+      Lines and annotations: the strips beside the rows name the consensus set and the
+      number of samples that call the interval. Only the intervals with the largest
+      summed enrichment per set are drawn.
+  - component: card
+    column: consensus_set
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: consensus_set
+    top_n_count: 3
+    caption: strongest intervals, by consensus set
+    title: Strongest consensus intervals
+    description: >-
+      The hero number is the count of consensus sets in view with the strongest
+      intervals they contribute, and the bars rank the sets. It answers which sets
+      supply the most strongly bound intervals.
+
+      How to read: a set that dominates the ranking has the strongest enrichment. Only
+      the top intervals per set are kept, so the counts are not the full peak sets.
+  - component: card
+    column: support
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: support
+    caption: intervals, by number of supporting samples
+    title: Support per interval
+    description: >-
+      Each unit is a strongly bound interval, with the number of distinct support
+      levels as the secondary number, and the ring splits the intervals by how many
+      samples call them. It answers how widely the strongest intervals are supported.
+
+      How to read: a ring dominated by the highest support means the strongest peaks
+      are reproducible across samples. A large share with support of one means strong
+      peaks private to a sample.
+  - component: table
+    title: Consensus enrichment table
+    description: >-
+      Each row is a consensus interval with its set, region, the number of supporting
+      samples and its fold enrichment in every sample. It answers the exact values
+      behind the heatmap.
+
+      How to read: sort by a sample column to list the intervals it binds most
+      strongly.

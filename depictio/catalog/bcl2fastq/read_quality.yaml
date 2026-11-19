@@ -7,10 +7,64 @@ description: >-
 find:
   path_glob: "**/Stats/Stats.json"
 recipe: bcl2fastq/read_quality.py
+# The fixture is enriched synthetically from 2 real rows (copies with seeded noise), so the preview shows several lanes.
 fixture: read_quality.tsv
 renders_as:
-  - { id: lane_read_dots, component: advanced_viz, kind: dot_plot,
-      roles: {cluster: lane_label, gene: read_label, mean_expression: mean_quality, frac_expressing: frac_q30} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: lane_label, y: pct_q30, color: read_label, barmode: group, title: Bases at Q30 or above per lane and read} }
-  - { component: card, column: pct_q30, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: lane_read_dots
+    component: advanced_viz
+    kind: dot_plot
+    title: Base quality per lane and read
+    roles: {cluster: lane_label, gene: read_label, mean_expression: mean_quality, frac_expressing: frac_q30}
+    description: >-
+      Each dot is a read of a lane: its colour is the mean base quality and its size is the
+      fraction of bases at Q30 or above. It answers which reads of which lanes have the best and
+      worst quality.
+
+      How to read: large dark dots are good. Read 2 is often lower than read 1 because
+      quality falls along the cycles of paired-end runs, and a read much worse than its
+      neighbours points to a chemistry or flowcell problem. Compare the lanes of a flowcell.
+
+      Note: the Undetermined reads are pooled with the libraries here, so a lane with many
+      Undetermined reads is averaged over both.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: lane_label
+      y: pct_q30
+      color: read_label
+      barmode: group
+      labels: {lane_label: Lane, pct_q30: Bases at Q30 or above (%), read_label: Read}
+    title: Bases at Q30 or above per lane and read
+    reference_lines:
+      - {axis: y, stat: median, column: pct_q30}
+    description: >-
+      Each bar is a read of a lane, sized by its share of bases at Q30 or above and coloured by
+      read. It answers how the quality compares between the reads and lanes.
+
+      How to read: higher is better. A bar clearly shorter than the others marks a read or lane
+      to investigate, and a gap between read 1 and read 2 is common in paired-end data. No
+      cut-off is drawn, because the expected value depends on the instrument and read length.
+
+      Lines and annotations: the dashed line is the median share of bases at Q30 or above
+      of this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of bcl2fastq.
+  - component: card
+    column: pct_q30
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Lowest Q30 share
+    caption: the worst read, with the spread over reads
+    description: >-
+      The hero number is the lowest percentage of bases at Q30 or above among the reads and
+      lanes in view, and the box shows the quartiles. It answers how good the worst read is.
+
+      How to read: a minimum far below the box marks the read to check first. No cut-off is
+      drawn, because the expected value depends on the instrument and read length.
+  - component: table
+    title: Read quality table
+    description: >-
+      Each row is a read of a lane, with its yield, its Q30 share, the fraction at Q30 and its
+      mean quality. It answers the quality read by read.
+
+      How to read: sort by Q30 share to find the worst reads.

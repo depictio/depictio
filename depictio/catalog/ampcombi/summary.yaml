@@ -11,18 +11,36 @@ fixture: summary.tsv
 renders_as:
   # The same property plane as a first-class kind rather than hand-drawn code.
   # AMPcombi computes no net charge at pH 7, so the isoelectric point is the
-  # charge axis it actually reports: above about 7 the peptide is cationic at
-  # physiological pH, which with a high hydrophobicity is the classic
-  # membrane-active shape. Colour is the binned charge class so the three
-  # families stay separable, size the peptide length.
+  # charge axis it actually reports. The charge class colour is the recipe's own
+  # bin of that isoelectric point (8 or above, 6 or below); size is the peptide
+  # length.
   - id: amp_property_scatter
     component: advanced_viz
     kind: scatter_xy
+    title: Hydrophobicity against isoelectric point
     roles: {x: hydrophobicity, y: isoelectric_point, label: cds_id, color: charge_class, size: aa_length}
+    config:
+      x_title: Hydrophobicity
+      y_title: Isoelectric point (pI)
+      top_n_labels: 5
+    description: >-
+      Each point is an antimicrobial-peptide candidate: its hydrophobicity on the horizontal
+      axis and its isoelectric point on the vertical axis. The colour is the charge class and
+      the size is the peptide length. It answers which candidates combine hydrophobicity with a
+      positive charge.
+
+      How to read: candidates in the upper right are hydrophobic and have a high isoelectric
+      point, which means a positive net charge at neutral pH. Candidates in the lower part
+      are acidic. Follow up the labelled points in the table.
+
+      Lines and annotations: no cut-off is drawn. The charge class is a bin of the isoelectric
+      point made by this catalog, basic at 8 or above and acidic at 6 or below, and not a call
+      made by AMPcombi.
   # Charge against hydrophobicity is the classic AMP property plane: cationic
   # and hydrophobic peptides cluster in the upper right. Colour = best tool
   # probability, size = peptide length.
   - component: figure
+    title: Candidates by best prediction probability
     code: |
       # keep the physicochemistry complete so no point is silently dropped
       df_modified = df.drop_nulls(["hydrophobicity", "isoelectric_point", "prob_max"])
@@ -45,8 +63,95 @@ renders_as:
           coloraxis_colorbar_title="Best probability",
           margin={"t": 24, "l": 56, "r": 16, "b": 48},
       )
-  - { component: card, column: cds_id, aggregation: count, secondary_layout: donut, breakdown_col: charge_class, headline: true }
-  - { component: card, column: prob_ampir, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: aa_length, aggregation: average, secondary_layout: histogram }
-  - { component: card, column: prob_max, aggregation: average, secondary_layout: threshold, threshold_value: 0.6, threshold_direction: min }
-  - { component: table, row_selection_enabled: true, row_selection_column: cds_id }
+    description: >-
+      Each point is a candidate placed by hydrophobicity and isoelectric point, coloured by
+      the best probability any prediction tool gave it and sized by peptide length. It
+      answers whether the candidates the tools trust most share a property profile.
+
+      How to read: a cluster of bright points in one region means the tools agree on a
+      property signature. Bright points far from the rest are confident candidates with
+      unusual properties and worth checking in the table.
+
+      Lines and annotations: no cut-off is drawn. AMPcombi sets a prediction score under its cut-off to zero, so the colour
+      only grades candidates that passed at least one tool.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/nextflow_schema.json
+  - component: card
+    column: sample
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: charge_class
+    headline: true
+    caption: candidates, by charge class
+    title: AMP candidates
+    description: >-
+      The hero number is the count of candidates, and the ring splits them by charge class.
+      The secondary number counts the samples that contributed one. It answers how many
+      peptides the run predicts and what kind of charge they carry.
+
+      How to read: the charge class is a bin of the isoelectric point made by this catalog,
+      basic at 8 or above and acidic at 6 or below.
+  - component: card
+    column: prob_ampir
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: ampir probability
+    description: >-
+      The hero number is the median probability the ampir tool gave its candidates, and the
+      box shows the quartiles. It answers how confident that tool is about what it found.
+
+      How to read: a median near one means a strong signal. AMPcombi sets a probability under
+      its cut-off to zero, so a zero means the tool did not call that candidate.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/nextflow_schema.json
+  - component: card
+    column: aa_length
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: average, with its range
+    title: Peptide length
+    description: >-
+      The hero number is the average length of the candidates in amino acids, and the
+      histogram shows how lengths are spread. It answers what size of peptide the run
+      predicts.
+
+      How to read: a tail of long sequences deserves a second look. The pipeline
+      has a minimum length parameter for AMPcombi, so the shortest candidates reflect the
+      run's settings.
+  - component: card
+    column: prob_max
+    aggregation: average
+    aggregations: [min, median]
+    secondary_layout: threshold
+    threshold_value: 0.6
+    threshold_direction: min
+    caption: against the 0.6 probability cut-off
+    title: Best prediction probability
+    description: >-
+      The hero number is the average of the best probability any tool gave each candidate,
+      shown against the prediction cut-off. It answers how confident the predictions are.
+
+      How to read: an average above the cut-off means the typical candidate is a confident
+      call. A low average with a high maximum means a few strong candidates among many weak
+      ones.
+
+      Lines and annotations: the cut-off is a probability of 0.6, the default of the
+      nf-core/funcscan parameter that sets AMPcombi's amp cut-off. The run may set another
+      value.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/nextflow_schema.json
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: cds_id
+    title: AMP candidates table
+    description: >-
+      Each row is an antimicrobial-peptide candidate with its tool probabilities, its
+      physicochemical properties and its reference-database hit. It answers which
+      candidates to follow up and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by best probability, then filter by charge class. A database hit with
+      a high identity means the peptide is a known one.

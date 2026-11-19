@@ -20,10 +20,134 @@ renders_as:
   # A library sequenced deeper for the same chromatin carries more spike-in, so
   # the factor is the first thing to read, and the target-against-spike-in
   # scatter says whether the two depths moved together at all.
-  - { id: spikein_factor_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: scale_factor, color: sample, title: Spike-in scale factor per sample} }
-  - { id: spikein_depth_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: spikein_aligned, y: target_aligned, color: sample, title: Target depth against spike-in depth} }
-  - { component: card, column: scale_factor, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: spikein_aligned, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: spikein_fraction, aggregation: max, secondary_layout: threshold, threshold_value: 0.05 }
-  - { component: card, column: target_align_rate, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: table }
+  - id: spikein_factor_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: scale_factor
+      color: sample
+      labels: {sample: Library, scale_factor: Scale factor}
+    title: Spike-in scale factor per sample
+    reference_lines: [{axis: y, stat: median, column: scale_factor}]
+    description: >-
+      Each bar is a library: the factor its coverage is multiplied by, the
+      normalisation constant divided by the pairs aligned to the spike-in genome. It
+      answers how much each library is scaled before samples are compared.
+
+      How to read: a larger factor means fewer spike-in pairs, so the library is
+      scaled up. Factors that differ widely between replicates of one condition
+      point to uneven spike-in addition, so consider another normalisation.
+
+      Lines and annotations: the constant is 10000, the default normalisation_c of
+      nf-core/cutandrun, and no cut-off is drawn.
+       The dashed line is the median scale factor of this table, a reference
+      computed from the rows on show (it follows the filters), not a cut-off of
+      Bowtie 2.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/nextflow_schema.json
+  - id: spikein_depth_scatter
+    component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: spikein_aligned
+      y: target_aligned
+      color: sample
+      labels: {spikein_aligned: Pairs aligned to the spike-in genome, target_aligned: Pairs aligned to the target genome, sample: Library}
+    title: Target depth against spike-in depth
+    description: >-
+      Each point is a library: the pairs aligned to the spike-in genome on the
+      horizontal axis and to the target genome on the vertical axis. It answers
+      whether the two depths move together, as they do when the spike-in amount is
+      constant.
+
+      How to read: libraries of one antibody should lie along a rising band. A point
+      off the band has an unusual amount of spike-in for its depth. With few
+      libraries the pattern is weak, so read it with the scale factor bars.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: scale_factor
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Scale factor
+    caption: median scale factor, with its spread
+    description: >-
+      The hero number is the median spike-in scale factor, and the box shows how the
+      libraries spread. It answers how large the normalisation adjustment is.
+
+      How to read: a tight box means the libraries hold similar spike-in amounts. A
+      long whisker marks a library that will be scaled far more than the others.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/nextflow_schema.json
+  - component: card
+    column: spikein_aligned
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    title: Spike-in pairs
+    caption: total pairs aligned to the spike-in, with the richest libraries ranked
+    description: >-
+      The hero number is the total of pairs aligned to the spike-in genome, and the
+      bars rank the libraries with most. It answers how much spike-in material the
+      run holds.
+
+      How to read: a library with far fewer pairs than the others will get a large
+      scale factor. The nf-core/cutandrun documentation asks for more than 1000
+      spike-in reads per sample to rise above noise, so use the next card to check.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  # nf-core/cutandrun: target samples usually carry under 1% spike-in alignment but
+  # still more than 1000 reads, IgG more (2 to 5%). The old fixed 0.05 fraction line
+  # mixed both, so the card checks the sourced read floor instead.
+  - component: card
+    column: spikein_aligned
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: threshold
+    threshold_value: 1000
+    threshold_direction: min
+    title: Lowest spike-in depth
+    caption: lowest spike-in pair count, with the median and highest
+    description: >-
+      The hero number is the lowest number of pairs aligned to the spike-in genome
+      in any library. It answers whether every library holds enough spike-in to be
+      normalised.
+
+      How to read: higher is better. A library under the line has spike-in too low
+      to separate from noise, so another normalisation, such as the read count, is
+      safer.
+
+      Lines and annotations: the line is 1000 spike-in reads, the level the
+      nf-core/cutandrun documentation gives for a spike-in signal above noise. The
+      table counts pairs, so it is a close approximation.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: target_align_rate
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100.0
+    title: Target alignment rate
+    caption: average percent aligned to the target genome, with the lowest and highest
+    description: >-
+      The hero number is the average of Bowtie 2's overall alignment rate against the target genome,
+      in percent and shown against 100. It answers how much of each library maps to
+      the genome of interest.
+
+      How to read: a low rate points to contamination, a wrong reference or poor
+      reads. Bowtie 2 reports the rate but defines no pass level, so none is drawn.
+
+      Source: https://bowtie-bio.sourceforge.net/bowtie2/manual.shtml
+  - component: table
+    title: Spike-in factors per library
+    description: >-
+      Each row is a library with its read pairs, pairs aligned to the target and
+      spike-in genomes with their rates, the spike-in fraction and the scale factor.
+      It answers the exact numbers behind the normalisation.
+
+      How to read: sort by scale factor to find the libraries scaled most.

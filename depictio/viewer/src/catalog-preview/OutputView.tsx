@@ -48,8 +48,11 @@ import {
   logoFor,
   metaFor,
   nfCoreLabel,
+  useCatalogPaper,
 } from './shared';
 import type { FixturePreview, OutputEntry, OutputInfo } from './shared';
+import CatalogHeader from './CatalogHeader';
+import VersionChip from './VersionChip';
 
 const DASHBOARD_ID = 'catalog-preview';
 
@@ -75,7 +78,7 @@ class CellBoundary extends React.Component<
 }
 
 const OutputInfoPanel: React.FC<{ out: OutputInfo }> = ({ out }) => (
-  <Paper withBorder radius="md" p="md" bg="var(--mantine-color-default-hover)">
+  <Paper withBorder radius="md" p="md" bg="var(--mantine-color-default-hover)" className="cp-info">
     <Stack gap={6}>
       {out.fixture ? (
         <InfoRow label="Fixture">
@@ -131,13 +134,13 @@ const OutputInfoPanel: React.FC<{ out: OutputInfo }> = ({ out }) => (
 const FixturePreviewPanel: React.FC<{ fixture: FixturePreview; theme?: string }> = ({
   fixture,
   theme,
-}) => (
-  <Accordion variant="separated" chevronPosition="left" radius="md">
+}) => {
+  const { accentVar } = useCatalogPaper();
+  return (
+  <Accordion variant="separated" chevronPosition="left" radius="md" className="cp-fixture">
     <Accordion.Item value="fixture">
       <Accordion.Control
-        icon={
-          <Icon icon="mdi:table-large" width={18} color={`var(--mantine-color-${CATALOG_ACCENT}-5)`} />
-        }
+        icon={<Icon icon="mdi:table-large" width={18} color={accentVar} />}
       >
         <Text size="sm" fw={600}>
           Fixture data — first {fixture.rows.length} of {fixture.total} rows
@@ -164,7 +167,8 @@ const FixturePreviewPanel: React.FC<{ fixture: FixturePreview; theme?: string }>
       </Accordion.Panel>
     </Accordion.Item>
   </Accordion>
-);
+  );
+};
 
 const CollapsibleBar: React.FC<{
   icon: string;
@@ -270,6 +274,7 @@ const OutputView: React.FC<{
   const out = entry.output;
   const fixture = entry.fixturePreview;
   const renders = entry.renders as unknown as StoredMetadata[];
+  const { paper, tone } = useCatalogPaper();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
@@ -314,6 +319,23 @@ const OutputView: React.FC<{
     );
   }
 
+  // Paper: a page of its own is one more Depictio page, the app's floating top
+  // bar with a trail back to the catalogue, and the output in a paper pane.
+  if (paper && variant === 'page') {
+    return (
+      <div className="gp-shell cp-shell" data-view="output">
+        <CatalogHeader context={out.name || out.id} onHome={onBack} />
+        <main className="gp-main cp-main">
+          <div className="gp-page">
+            <div className="cp-pane cp-page-pane">
+              <OutputView entry={entry} theme={theme} variant="pane" toolId={toolId} />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const cards = renders.filter((m) => m.component_type === 'card');
   const rest = renders.filter((m) => m.component_type !== 'card');
 
@@ -345,7 +367,13 @@ const OutputView: React.FC<{
   const snippet = active && activeRender ? buildTileSnippet(snippetCtx, activeRender) : '';
 
   return (
-    <Stack gap={0} h={pane ? '100%' : undefined} style={{ minHeight: 0 }}>
+    <Stack
+      gap={0}
+      h={pane ? '100%' : undefined}
+      className="cp-out"
+      data-variant={variant}
+      style={{ minHeight: 0 }}
+    >
       {/* Header — identity left, references right. Add / Edit are the builder's
           alone: there is no dashboard here to add to. */}
       <Group
@@ -354,6 +382,7 @@ const OutputView: React.FC<{
         gap="sm"
         justify="space-between"
         wrap="nowrap"
+        className="cp-out-head"
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
         <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -370,12 +399,23 @@ const OutputView: React.FC<{
           ) : (
             <Image src={logoFor(theme)} h={24} w="auto" fit="contain" />
           )}
-          <Text size="sm" fw={600} style={{ flexShrink: 0 }}>
+          <Text size="sm" fw={600} className="cp-out-title" style={{ flexShrink: 0 }}>
             {out.name || out.id}
           </Text>
-          <Code fz={10} style={{ flexShrink: 0 }}>
+          <Code fz={10} className="cp-out-id" style={{ flexShrink: 0 }}>
             {out.id}
           </Code>
+          <VersionChip
+            out={out}
+            renderVersion={(active as Record<string, unknown> | undefined)?._version as
+              | string
+              | undefined}
+            renderLabel={
+              (active as Record<string, unknown> | undefined)?.title
+                ? `“${String((active as Record<string, unknown>).title)}”`
+                : undefined
+            }
+          />
           {out.description ? (
             <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
               {out.description}
@@ -420,7 +460,7 @@ const OutputView: React.FC<{
                 <Tooltip label="YAML reference" withArrow>
                   <ActionIcon
                     variant="subtle"
-                    color={CATALOG_ACCENT}
+                    color={paper ? 'gray' : CATALOG_ACCENT}
                     size="md"
                     aria-label="Show use snippet"
                   >
@@ -448,7 +488,13 @@ const OutputView: React.FC<{
             </Popover>
           ) : null}
 
-          <Badge variant="light" size="sm" color={CATALOG_ACCENT} radius="sm">
+          <Badge
+            variant="light"
+            size="sm"
+            color={paper ? 'gray' : CATALOG_ACCENT}
+            radius="sm"
+            className="gp-tag-plain cp-count"
+          >
             {renders.length} component{renders.length === 1 ? '' : 's'}
           </Badge>
         </Group>
@@ -460,6 +506,7 @@ const OutputView: React.FC<{
         py={6}
         gap={4}
         wrap="wrap"
+        className="cp-switch"
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
         {renders.map((m, i) => {
@@ -472,8 +519,18 @@ const OutputView: React.FC<{
               key={m.index}
               size="xs"
               variant={isActive ? 'light' : 'subtle'}
-              color={meta.color}
-              leftSection={<Icon icon={meta.icon} width={13} />}
+              // Paper: one neutral row of pills, the open render lit with the
+              // accent; the type keeps its hue on its icon only.
+              color={paper ? (isActive ? tone : 'gray') : meta.color}
+              radius={paper ? 'xl' : undefined}
+              data-active={isActive || undefined}
+              leftSection={
+                <Icon
+                  icon={meta.icon}
+                  width={13}
+                  color={paper ? `var(--mantine-color-${meta.color}-6)` : undefined}
+                />
+              }
               onClick={() => setSelectedIdx(i)}
               styles={{
                 root: { fontWeight: isActive ? 600 : 400, flexShrink: 0 },
@@ -489,6 +546,7 @@ const OutputView: React.FC<{
       {/* Preview */}
       <Box
         p={pane ? 'md' : 'lg'}
+        className="cp-stage"
         style={pane ? { flex: 1, minHeight: 0, overflowY: 'auto' } : undefined}
       >
         {active ? (
@@ -500,11 +558,12 @@ const OutputView: React.FC<{
               h={activeHeight}
               maw={PREVIEW_MAX_WIDTH[active.component_type]}
               mx={PREVIEW_MAX_WIDTH[active.component_type] ? 'auto' : undefined}
+              className="cp-frame"
             >
               {renderOne(active)}
             </Box>
-            <Group gap={6} mt="xs" wrap="nowrap">
-              <Code fz={10} c="dimmed">
+            <Group gap={6} mt="xs" wrap="nowrap" className="cp-frame-foot">
+              <Code fz={10} c="dimmed" className="cp-out-id">
                 {active.index}
               </Code>
               <CopyYaml

@@ -1,5 +1,6 @@
 id: agat_statistics
 name: Annotation statistics
+version: "1.1.0"
 mode: sp-statistics/long
 description: >-
   Every number of AGAT's sp_statistics report, one row per assembly, feature
@@ -13,7 +14,73 @@ find:
 recipe: agat/statistics.py
 fixture: statistics.tsv
 renders_as:
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: genome, y: value, color: isoforms, barmode: group, title: One AGAT metric per annotation} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: feature_type }
-  - { component: table }
+  # Metrics of different scales never share an axis: one small panel per metric,
+  # independent value axes, so a count of genes is never stacked on a mean length.
+  - component: figure
+    version: "1.1.0"
+    title: AGAT metrics per annotation
+    code: |
+      # one isoform view, so a bar is one number: the longest-isoform view when present
+      view = "longest" if (df["isoforms"] == "longest").any() else "all"
+      d = df.filter(pl.col("isoforms") == view).drop_nulls(["value"])
+      # the first metrics in AGAT's order, unless the metric filter picked others
+      keep = d.sort("metric_order")["metric"].unique(maintain_order=True).head(9).to_list()
+      d = d.filter(pl.col("metric").is_in(keep)).sort(["metric_order", "genome"])
+      fig = px.bar(
+          d.to_pandas(),
+          x="genome",
+          y="value",
+          color="genome",
+          facet_col="metric",
+          facet_col_wrap=3,
+          facet_row_spacing=0.12,
+          category_orders={"metric": keep},
+          labels={"genome": "Annotation", "value": "Value", "metric": "Metric"},
+      )
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split("=", 1)[-1]))
+      fig.update_yaxes(matches=None, showticklabels=True, title_text="")
+      fig.update_xaxes(showticklabels=False, title_text="")
+      fig.update_layout(
+          legend_title_text=f"Annotation ({view} isoforms)",
+          margin={"t": 32, "l": 48, "r": 16, "b": 24},
+      )
+    description: >-
+      Each panel is one sp_statistics metric, and each bar in it the value for one
+      annotation in the longest-isoform view, which keeps one transcript per gene. It
+      answers how annotations compare metric by metric.
+
+      How to read: every panel has its own value axis, so compare bars within a panel,
+      not across panels. Without a metric filter the first nine metrics in AGAT's order
+      are shown; pick metrics and a feature type with the filters to see others.
+
+      Lines and annotations: no reference line is drawn, because each panel holds a
+      different quantity and a cohort median of a handful of annotations says little.
+
+      Source: https://agat.readthedocs.io/en/latest/tools/agat_sp_statistics.html
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: feature_type
+    title: Feature type
+    description: >-
+      Filters the dashboard to the feature types picked here, such as mRNA or
+      lncRNA. It answers how one kind of feature compares between annotations.
+  - component: interactive
+    version: "1.1.0"
+    interactive_type: Select
+    column_name: metric
+    title: Metric
+    description: >-
+      Picks one sp_statistics metric so that the chart shows a single panel and
+      compares that quantity between annotations. It answers how annotations differ on that
+      metric.
+  - component: table
+    title: Annotation statistics
+    description: >-
+      Each row is one number of the AGAT sp_statistics report, for an annotation, a
+      feature type and an isoform view, in the order AGAT prints them. It answers the
+      exact value behind the bar chart.
+
+      How to read: filter by metric to compare one quantity, or by isoform view to
+      separate all isoforms from the longest one.
+
+      Source: https://agat.readthedocs.io/en/latest/tools/agat_sp_statistics.html

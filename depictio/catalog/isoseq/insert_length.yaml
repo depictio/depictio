@@ -8,9 +8,50 @@ description: >-
 find:
   path_glob: "**/*.report.csv"
 recipe: isoseq/insert_length.py
+# The fixture is enriched synthetically from 20 real length bins (copies with seeded noise), so the preview shows several samples.
 fixture: insert_length.tsv
 renders_as:
-  - { id: insert_length_profile, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: length_bp, y: pct} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: length_bp, y: pct, color: sample} }
-  - { component: table }
+  - id: insert_length_profile
+    component: advanced_viz
+    kind: profile
+    title: Insert length distribution
+    roles: {series: sample, x: length_bp, y: pct}
+    config:
+      x_title: Insert length (bp)
+      y_title: Share of FLNC reads per 100 bp (%)
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample: the share of its full-length non-chimeric reads in each
+      100 bp bin of insert length. It answers what transcript sizes the library
+      captured.
+
+      How to read: a broad curve with a main peak at the expected transcript size is
+      a healthy library. A curve piled at short lengths points to degraded RNA or
+      fragmentation, and a hard cut on the right to a size selection. Compare the
+      samples: curves that differ in shape were not prepared the same way.
+
+      Note: isoseq refine publishes no cut-off for the insert length.
+  - component: figure
+    visu_type: line
+    title: Insert length by sample
+    dict_kwargs:
+      x: length_bp
+      y: pct
+      color: sample
+      labels: {length_bp: Insert length (bp), pct: Share of FLNC reads (%), sample: Sample}
+    description: >-
+      Each line is a sample: the share of its full-length non-chimeric reads per
+      length bin. It answers whether the samples share the same size profile.
+
+      How to read: overlapping lines mean consistent library preparation. A line
+      shifted to the left holds shorter inserts, which is the first thing to check
+      when a sample has few long isoforms.
+  - component: table
+    title: Insert length bins
+    description: >-
+      Each row is a length bin of one sample: the read count, its share of the sample
+      and the cumulative share up to that length. It answers where a given fraction of
+      the reads falls.
+
+      How to read: the cumulative column gives the length below which a given share of
+      the reads lies, for instance the median insert.

@@ -9,6 +9,42 @@ find: { path_glob: "*.tsv" }
 recipe: mhcquant/replicate_detection.py
 fixture: replicate_detection.tsv
 renders_as:
-  - { id: replicate_upset, component: advanced_viz, kind: upset_plot }
-  - { component: card, column: replicates_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # The replicate columns (rep_1, rep_2, ...) depend on the run's samplesheet, so
+  # the sets are detected from the 0/1 columns.
+  - id: replicate_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Peptides shared between replicates
+    config:
+      color_intersections_by: degree
+      show_values: true
+    description: >-
+      Each bar counts the peptidoforms seen in one exact combination of replicates
+      of a sample, and the dots below show which replicates are in it. It answers how
+      much of a sample is seen in every injection.
+
+      How to read: a tall bar for all replicates together means a reproducible
+      sample. Tall bars for single replicates mean peptides seen only once, which
+      are the least certain.
+  - component: card
+    column: replicates_detected
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: peptides, by replicates seen
+    title: Replicates a peptide is seen in
+    description: >-
+      The hero number is the average count of replicates in which a peptidoform is
+      detected, and the histogram shows how many peptidoforms are seen in each
+      count. It answers how consistently peptides are re-detected.
+
+      How to read: a histogram piled at the highest count means most peptides are
+      found in every replicate. A pile at 1 means many are seen once.
+  - component: table
+    title: Replicate detection per peptide
+    description: >-
+      Each row is a peptidoform in one sample, with a 0 or 1 for each replicate and
+      the number of replicates it was detected in. It answers which peptides are
+      missing from which replicate.
+
+      How to read: filter to a count of 1 to list the peptides seen only once.

@@ -49,7 +49,8 @@ import type {
 import { fixtureToColumnSpecs } from '../builder/columnSpecs';
 import { buildPreview, isUnavailable } from '../viz/figureBuilder';
 import { applyPlotlyTheme } from '../viz/plotlyTheme';
-import type { RenderSpec } from '../types';
+import type { ReferenceLineSpec, RenderSpec } from '../types';
+import { computeReferenceStats } from 'depictio-react-core/components/advanced_viz/referenceStats';
 import { aggregate } from './aggregations';
 import { computeBreakdown, numericLayoutPayload } from './cardMetrics';
 import type { FrameValue, StudioFrame } from './frame';
@@ -283,6 +284,9 @@ function figureSpecFrom(metadata: Record<string, unknown>): RenderSpec {
     component: 'figure',
     visu_type: (metadata.visu_type as RenderSpec extends { visu_type: infer T } ? T : never) ?? 'scatter',
     dict_kwargs: (metadata.dict_kwargs as Record<string, string>) ?? {},
+    ...(Array.isArray(metadata.reference_lines)
+      ? { reference_lines: metadata.reference_lines as ReferenceLineSpec[] }
+      : {}),
   } as RenderSpec;
 }
 
@@ -434,6 +438,16 @@ export function fetchAdvancedVizData(
       sampled: false,
       sampling: { policy: 'none', exact: true, degraded: false },
       filter_applied: false,
+      // The whole fixture is here, so the statistic a `*_stat` line asks the
+      // server for is exact when taken in the browser.
+      ...(req.referenceStats
+        ? {
+            reference_stats: computeReferenceStats(
+              req.referenceStats,
+              (name) => frame.byName.get(name)?.values,
+            ),
+          }
+        : {}),
     };
   }, signal);
 }

@@ -13,10 +13,115 @@ find:
 recipe: purple/drivers.py
 fixture: drivers.tsv
 renders_as:
-  - { id: driver_count, component: card, column: driver_id, aggregation: count, secondary_layout: top_n, breakdown_col: driver, top_n_count: 3, headline: true }
-  - { id: driver_likelihood_spread, component: card, column: driver_likelihood, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: driver_oncoplot, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: gene, mutation_type: driver} }
-  - { id: driver_type_bar, component: figure, visu_type: bar, dict_kwargs: {x: driver, color: category} }
-  - { id: driver_record, component: advanced_viz, kind: record_card, roles: {id: driver_id, title: gene} }
-  - { id: driver_type_filter, component: interactive, interactive_type: MultiSelect, column_name: driver }
-  - { id: driver_table, component: table, row_selection_enabled: true, row_selection_column: driver_id }
+  - id: driver_count
+    component: card
+    column: gene
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: driver
+    top_n_count: 3
+    headline: true
+    title: Drivers by type
+    caption: drivers, by type
+    description: >-
+      The hero number is the count of driver calls in the catalog, and the bars rank the
+      driver types (mutation, deletion, amplification, disruption, germline) by how many
+      they hold. The count beside it is the number of distinct genes. It answers how many
+      driver events the tumor carries and of which kind.
+
+      How to read: a deletion or amplification leading the ranking points to a genome
+      driven by copy-number change, and a mutation leading it to point mutations. Open the
+      oncoplot to see which genes recur.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/DriverCatalog.md
+  - id: driver_likelihood_spread
+    component: card
+    column: driver_likelihood
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Driver likelihood
+    caption: lowest, with the spread
+    description: >-
+      The hero number is the lowest driver likelihood in view, and the box shows the
+      quartiles of all of them. It answers how certain the catalog is that its calls are
+      drivers and not passengers.
+
+      How to read: high-level amplifications, homozygous deletions, homozygous
+      disruptions and hotspot mutations score 1, while heterozygous deletions, LOH and
+      non-homozygous disruptions are listed with a likelihood of 0. A lowest value of 0 is therefore often such a
+      context event, and the point mutations in between are the uncertain calls to check
+      before reporting them.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/DriverCatalog.md
+  - id: driver_oncoplot
+    component: advanced_viz
+    kind: oncoplot
+    title: Driver oncoplot
+    roles: {sample_id: sample, gene: gene, mutation_type: driver}
+    config:
+      top_genes: 25
+    description: >-
+      Each cell is a gene in a tumor, coloured by its driver type. It answers which genes
+      carry drivers and which kinds of event hit them.
+
+      How to read: a gene with several coloured cells is hit in several tumors, and a row
+      with more than one type is hit in more than one way, for instance a deletion with a
+      mutation. The side bars count the events per gene and per tumor.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/DriverCatalog.md
+  - id: driver_type_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: driver
+      color: category
+      labels: {driver: Driver type, category: Gene role, count: Number of drivers}
+    title: Drivers by type and gene role
+    description: >-
+      Each bar is a driver type, stacked by the role of the gene: oncogene (ONCO) or tumor
+      suppressor (TSG). It answers whether the drivers act by activating oncogenes or by
+      silencing tumor suppressors.
+
+      How to read: deletions and loss-of-function mutations fall on tumor suppressors, and
+      amplifications and hotspot mutations on oncogenes. A bar that breaks this pattern is
+      worth a look in the table.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/DriverCatalog.md
+  - id: driver_record
+    component: advanced_viz
+    kind: record_card
+    title: Driver record
+    roles: {id: driver_id, title: gene}
+    config:
+      labels: {driver: Driver type, category: Gene role, driver_likelihood: Driver likelihood, likelihood_method: Likelihood method, biallelic: Biallelic, min_copy_number: Minimum copy number, max_copy_number: Maximum copy number, chromosome_band: Chromosome band}
+    description: >-
+      The card shows every field of one driver call. It answers the details behind a row
+      you pick in the table or the oncoplot.
+
+      How to read: pick a driver to read its type, likelihood, the method behind it and its
+      copy-number range. A biallelic mutation has lost both copies of the gene.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/DriverCatalog.md
+  - id: driver_type_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: driver
+    title: Driver type
+    description: >-
+      Choose the driver types to keep. It answers which events the other tiles show.
+
+      How to read: select deletions only to list the lost tumor suppressors, or mutations
+      only to focus on point mutations.
+  - id: driver_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: driver_id
+    title: Driver catalog
+    description: >-
+      Each row is a driver call with its gene, type, likelihood, whether it is reported and
+      the copy-number range of the gene. It answers the exact content of the catalog.
+
+      How to read: sort by likelihood to list the most certain drivers first. Select a row to
+      open its record.

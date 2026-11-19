@@ -7,16 +7,139 @@ description: >-
   in and how many uniquely and multi mapped reads support it.
 find: { path_glob: "**/ctatsplicing/*.introns" }
 recipe: ctatsplicing/introns.py
+# The fixture is enriched synthetically from 50 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: introns.tsv
 renders_as:
   # The junctions as arcs over the locus, arc width scaled by the reads that
   # support each one. This is the shape the file is: a junction is a span with
   # a read count, not a point, and a manhattan plot draws only where it starts.
-  - { id: junction_arcs, component: advanced_viz, kind: sashimi, roles: {chr: chrom, start: start, end: end, count: uniq_mapped} }
-  - { id: intron_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chrom, pos: start, score: score} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: gene, y: uniq_mapped, color: strand} }
-  - { component: card, column: uniq_mapped, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: intron, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 5 }
-  - { component: card, column: total_mapped, aggregation: sum, secondary_layout: donut, breakdown_col: chrom }
-  - { component: card, column: intron_length, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene }
+  - id: junction_arcs
+    component: advanced_viz
+    kind: sashimi
+    title: Splice junctions as arcs
+    roles: {chr: chrom, start: start, end: end, count: uniq_mapped, sample: sample}
+    config:
+      color_by: sample
+    description: >-
+      Each arc is one splice junction, from its donor to its acceptor, with the
+      number of uniquely mapped reads printed at its apex, and one lane per
+      sample. It answers which introns the reads of a locus use and how strongly.
+
+      How to read: a strong arc is a well supported intron, and a weak arc beside
+      it is an alternative junction worth a look when it skips or extends an exon.
+      Compare lanes to see whether a junction is shared between samples.
+
+      Note: the exon support drawn under the arcs is inferred from the junction
+      ends and the reads that touch them, it is not a coverage measurement.
+
+      Source: https://raw.githubusercontent.com/wiki/TrinityCTAT/CTAT-SPLICING/Home.md
+  - id: intron_manhattan
+    component: advanced_viz
+    kind: manhattan
+    title: Junction support along the genome
+    roles: {chr: chrom, pos: start, score: score, feature: gene}
+    config:
+      score_kind: Uniquely mapped reads
+      top_n_labels: 6
+      score_threshold_stat: p95
+    description: >-
+      Each point is a splice junction, placed at its start, with the number of
+      uniquely mapped reads that support it, coloured by chromosome. It answers
+      where along the genome the best supported junctions lie.
+
+      How to read: tall points are junctions seen in many reads, usually canonical
+      introns of highly expressed genes. A tall point in an unexpected gene is a
+      junction to check in the arc view.
+
+      Lines and annotations: the horizontal line is the 95th percentile of the
+      support values of this table, a reference the data defines itself and not a
+      cut-off published by CTAT-SPLICING. The labelled points are the strongest
+      junctions.
+  - component: figure
+    visu_type: bar
+    title: Junction reads per gene
+    dict_kwargs:
+      x: gene
+      y: uniq_mapped
+      color: strand
+      labels: {gene: Gene, uniq_mapped: Uniquely mapped reads, strand: Strand}
+    description: >-
+      Each bar is a gene, with the uniquely mapped reads of its splice junctions
+      added up and coloured by strand. It answers which genes carry the most
+      junction reads.
+
+      How to read: a tall bar is a highly expressed gene or one with many
+      junctions. Bars are split by strand, so a gene read on both strands stands
+      out.
+  - component: card
+    column: uniq_mapped
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: reads per junction, distribution
+    title: Reads per junction
+    description: >-
+      The hero number is the median count of uniquely mapped reads supporting a
+      junction, and the histogram shows how the counts are distributed. It answers
+      how well supported a typical junction is.
+
+      How to read: read support is heavily skewed, with many weakly supported
+      junctions and a few very strong ones. A median near the floor means most
+      junctions rest on very few reads and are fragile calls.
+  - component: card
+    column: intron
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: gene
+    top_n_count: 5
+    caption: genes with the most distinct junctions
+    title: Distinct junctions
+    description: >-
+      The hero number is the count of distinct introns seen, and the bars rank the
+      genes by how many distinct junctions each carries. It answers how many
+      junctions the run found and where they cluster.
+
+      How to read: a gene with many junctions is long or has many isoforms. Count
+      and distinct count differ when the same intron appears in several samples.
+  - component: card
+    column: total_mapped
+    aggregation: sum
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: chrom
+    caption: junction reads, by chromosome
+    title: Junction reads
+    description: >-
+      The hero number is every read supporting a junction, unique and multi
+      mapped, and the ring splits it by chromosome. It answers how the junction
+      reads divide between chromosomes.
+
+      How to read: a chromosome with a large share is gene dense or holds a very
+      expressed gene. Multi mapped reads are included, so repeated loci weigh in.
+  - component: card
+    column: intron_length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: intron length, distribution
+    title: Intron length
+    description: >-
+      The hero number is the median length of an intron in bases, and the histogram
+      shows how lengths are distributed. It answers how long the spliced introns
+      are.
+
+      How to read: lengths span orders of magnitude, so the median is more telling
+      than the mean. Very short introns can be spurious alignments, and a long tail
+      holds the introns of large genes.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene
+    title: Splice junctions
+    description: >-
+      Each row is a splice junction, with its position, length, strand, gene and the
+      unique, multi mapped and total reads that support it. It answers the exact
+      detail behind every other tile and lets a row selection filter the dashboard.
+
+      How to read: sort by reads to find the best supported junctions, or filter by
+      gene to list its introns.

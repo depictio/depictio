@@ -18,25 +18,228 @@ recipe: checkm2/quality_report.py
 fixture: quality_report.tsv
 renders_as:
   # The canonical MAG plot. Size by genome_size so a complete-looking 300 kb bin
-  # cannot pass for a complete-looking 3 Mb one.
-  - { id: completeness_contamination, component: advanced_viz, kind: scatter_xy,
-      roles: {x: completeness, y: contamination, label: bin_id, color: binner, size: genome_size} }
+  # cannot pass for a complete-looking 3 Mb one. The quadrant lines are the MIMAG
+  # completeness (50%) and contamination (10%) limits of a medium-quality draft
+  # (Bowers et al. 2017, checked in the full text on Europe PMC).
+  - id: completeness_contamination
+    component: advanced_viz
+    kind: scatter_xy
+    title: Completeness against contamination
+    roles: {x: completeness, y: contamination, label: bin_id, color: binner, size: genome_size}
+    config:
+      x_title: Completeness (%)
+      y_title: Contamination (%)
+      top_n_labels: 5
+      quadrants:
+        x: 50
+        y: 10
+        labels: [Incomplete and contaminated, Contaminated, Low quality, Medium quality or better]
+    description: >-
+      Each point is a bin: its predicted completeness on the horizontal axis and its
+      predicted contamination on the vertical axis, coloured by binner and sized by
+      genome size. It answers which bins are worth keeping and which binner delivers
+      them.
+
+      How to read: the bottom right corner holds the bins worth naming, and the top
+      half holds chimeric bins with sequences from more than one organism. Compare the
+      colours to see which binner produces more bins in the good corner for this
+      assembly. A large point is a bin with a genome-sized sequence, so a small
+      complete-looking point deserves a second look.
+
+      Lines and annotations: the vertical line is a completeness of 50% and the
+      horizontal line a contamination of 10%, the limits of a medium-quality draft in
+      the MIMAG standard. A high-quality draft needs over 90% completeness and under 5%
+      contamination plus rRNA and tRNA genes that CheckM2 does not count. CheckM2
+      predicts both values with machine-learning models, so they are estimates.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/ and
+      https://raw.githubusercontent.com/chklovski/CheckM2/main/README.md
   # Assembly statistics behind the verdict: a bin with a good score and a tiny
   # N50 is a collection of fragments that happen to carry the right genes.
-  - { id: n50_completeness, component: advanced_viz, kind: scatter_xy,
-      roles: {x: contig_n50, y: completeness, label: bin_id, color: assembler, size: genome_size} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: completeness, color: binner, title: Completeness distribution per binner} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: binner, y: quality_score, color: assembler, title: Bin quality score by binner and assembler} }
-  - { id: tier_donut, component: card, column: bin_id, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: quality_tier }
-  - { component: card, column: completeness, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: contamination, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: quality_score, aggregation: max,
-      secondary_layout: top_n, breakdown_col: binner, top_n_count: 5 }
-  - { component: card, column: genome_size, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: coding_density, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: table }
+  - id: n50_completeness
+    component: advanced_viz
+    kind: scatter_xy
+    title: Contiguity against completeness
+    roles: {x: contig_n50, y: completeness, label: bin_id, color: assembler, size: genome_size}
+    config:
+      x_title: Contig N50 (bp)
+      y_title: Completeness (%)
+      log_x: true
+      reference_line: horizontal
+      reference_value: 50
+      reference_label: 50% complete (MIMAG medium)
+      top_n_labels: 5
+    description: >-
+      Each point is a bin: the N50 of its contigs on a logarithmic horizontal axis and
+      its predicted completeness on the vertical axis, coloured by assembler and sized
+      by genome size. It answers whether a bin that looks complete is also contiguous.
+
+      How to read: points at the top right are complete and made of long contigs. A
+      complete bin with a small N50 is a collection of fragments that happen to carry
+      the right genes, so it is a weaker genome. Compare the colours to see which
+      assembler gives longer contigs.
+
+      Lines and annotations: the horizontal line is a completeness of 50%, the lower
+      limit of a medium-quality draft in the MIMAG standard. No N50 cut-off is drawn,
+      because the standard sets none.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: completeness
+      color: binner
+      labels: {completeness: Completeness (%), binner: Binner}
+    title: Completeness distribution per binner
+    reference_lines: [{axis: x, stat: median, column: completeness}]
+    description: >-
+      Each bar counts bins in a completeness band, split by binner. It answers whether
+      a binner returns mostly complete bins or mostly fragments.
+
+      How to read: a binner with its bars at the right produces more complete bins. A
+      pile at low completeness is many partial bins. The MIMAG limit of 50% for a
+      medium-quality draft is drawn on the scatter tile, not here.
+
+      Lines and annotations: The dashed line is the median completeness of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of CheckM2.
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: binner
+      y: quality_score
+      color: assembler
+      labels: {binner: Binner, quality_score: Bin quality score, assembler: Assembler}
+    title: Bin quality score by binner and assembler
+    reference_lines: [{axis: y, stat: median, column: quality_score}]
+    description: >-
+      Each box is the spread of bin quality scores for one binner and assembler. The
+      score is completeness minus five times contamination, defined by this catalog
+      module. It answers which binner and assembler combination yields the best bins.
+
+      How to read: a higher box means better bins, and a box reaching below zero holds
+      bins whose contamination outweighs their completeness. With few bins per group
+      the boxes are only indicative, so open the table for the individual values.
+
+      Lines and annotations: The dashed line is the median bin quality score of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of CheckM2.
+  # One row per bin: the count is the number of bins, the ring splits them by tier.
+  - id: tier_donut
+    component: card
+    column: sample
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: quality_tier
+    caption: bins, by quality tier
+    title: Bins by quality tier
+    description: >-
+      The hero number is the count of bins, the second number counts the samples they
+      come from, and the ring splits the bins by quality tier. It answers how many
+      bins reach each tier.
+
+      How to read: a ring dominated by high and medium quality means a good binning
+      run. Contaminated is this catalog's label for bins with 10% contamination or
+      more.
+
+      Lines and annotations: the tiers use the MIMAG completeness and contamination
+      limits: high is over 90% complete and under 5% contaminated, medium at least 50%
+      and under 10%, and low under 50% and under 10%. The rRNA and tRNA requirements
+      of a full high-quality draft are not checked here.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: completeness
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Completeness
+    description: >-
+      The hero number is the median predicted completeness of the bins, and the box
+      shows the spread. It answers how much of a genome a typical bin holds.
+
+      How to read: a median near 100% means the bins are nearly whole genomes. A wide
+      box means some bins are fragments, so open the scatter to see them. The MIMAG
+      limits of 50% and 90% are drawn on the scatter tile.
+  # MIMAG allows under 10% contamination in a medium-quality draft; the pass band
+  # counts bins on each side of it.
+  - component: card
+    column: contamination
+    aggregation: median
+    aggregations: [max]
+    secondary_layout: threshold
+    threshold_value: 10
+    threshold_direction: max
+    caption: bins under and over 10% contamination
+    title: Contamination
+    description: >-
+      The hero number is the median predicted contamination of the bins, with the
+      highest bin below it, and the strip counts the bins under and over the limit. It
+      answers how many bins stay clean enough to use.
+
+      How to read: a low median with a high maximum means most bins are clean and a few
+      are chimeras, which should be removed or refined. Contamination is the share of
+      marker-like content found more than once.
+
+      Lines and annotations: the limit is a contamination of 10%, the upper bound of a
+      medium-quality draft in the MIMAG standard, which asks for under 5% for a
+      high-quality one.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28787424/
+  - component: card
+    column: quality_score
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: best bin, with the spread of all bins
+    title: Best bin score
+    description: >-
+      The hero number is the highest quality score of any bin, and the box shows the
+      spread over all bins. The score is completeness minus five times contamination,
+      defined by this catalog module. It answers how good the best bin is and how far
+      the others lag.
+
+      How to read: a best score far above the median means a few good bins among many
+      poor ones. A score below zero means contamination outweighs completeness.
+  - component: card
+    column: genome_size
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: genome size of every bin
+    title: Genome size
+    description: >-
+      The hero number is the median bin genome size in base pairs, with the smallest
+      and largest below it, and the histogram shows the distribution. It answers how
+      large the recovered genomes are.
+
+      How to read: sizes cover a wide range because bins can be fragments or whole
+      genomes. A bin far larger than its neighbours may merge several organisms, so
+      compare it with its contamination.
+  - component: card
+    column: coding_density
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: coding density of every bin
+    title: Coding density
+    description: >-
+      The hero number is the mean coding density, the fraction of the genome that
+      codes for proteins, with the lowest and highest bin below it, and the histogram
+      shows the distribution. It answers whether the bins look like typical genomes.
+
+      How to read: prokaryotic genomes are usually densely coding, so a low value
+      suggests fragmented or non-coding content. No cut-off is drawn, because
+      CheckM2 and the MIMAG standard set none for it.
+  - component: table
+    title: Bin quality table
+    description: >-
+      Each row is a bin with its predicted completeness and contamination, quality
+      score and tier, and the assembly statistics CheckM2 reports: coding density,
+      contig N50, genome size, GC content and gene count. It answers the exact values
+      behind every tile of this view.
+
+      How to read: sort by quality score to rank the bins, or filter by binner to
+      compare methods.

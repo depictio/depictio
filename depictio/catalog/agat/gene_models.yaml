@@ -1,5 +1,6 @@
 id: agat_gene_models
 name: Gene models per annotation
+version: "1.1.0"
 mode: sp-statistics/gene-models
 description: >-
   One row per assembly and transcript type from AGAT's sp_statistics: genes,
@@ -15,17 +16,116 @@ find:
 recipe: agat/gene_models.py
 fixture: gene_models.tsv
 renders_as:
-  - { id: genes_vs_exons, component: advanced_viz, kind: scatter_xy,
-      roles: {x: genes, y: exons_per_transcript, label: genome, color: feature_type, size: mean_gene_length} }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: genome, y: genes, color: feature_type, barmode: stack, title: Genes per annotation by type} }
-  - { id: gene_count, component: card, column: genes, aggregation: sum,
-      secondary_layout: composition, breakdown_col: feature_type,
-      filter_expr: "col('feature_type') == 'mrna'" }
-  - { id: exons_per_transcript, component: card, column: exons_per_transcript, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot,
-      filter_expr: "col('feature_type') == 'mrna'" }
-  - { id: single_exon_share, component: card, column: single_exon_gene_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot,
-      filter_expr: "col('feature_type') == 'mrna'" }
-  - { component: table }
+  - id: genes_vs_exons
+    component: advanced_viz
+    kind: scatter_xy
+    title: Genes against exons per transcript
+    roles: {x: genes, y: exons_per_transcript, label: genome, color: feature_type, size: mean_gene_length}
+    config:
+      x_title: Genes
+      y_title: Exons per transcript
+      log_x: true
+      top_n_labels: 6
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is an annotation and a transcript type, with the number of genes
+      on the horizontal axis (log scale) and the exons per transcript on the
+      vertical axis, sized by mean gene length and coloured by transcript type. It
+      answers how complete the gene models of each annotation look.
+
+      How to read: a fragmented annotation shows many short, few-exon models, so
+      it sits low on the vertical axis. Points of one transcript type that sit
+      apart from the others are the annotation to inspect first. AGAT publishes no
+      cut-off for these values.
+
+      Lines and annotations: The dashed line is the median exons per transcript of
+      this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of AGAT.
+
+      Source: https://agat.readthedocs.io/en/latest/tools/agat_sp_statistics.html
+  - component: figure
+    visu_type: bar
+    title: Genes per annotation by type
+    dict_kwargs:
+      x: genome
+      y: genes
+      color: feature_type
+      barmode: stack
+      labels: {genome: Annotation, genes: Genes, feature_type: Transcript type}
+    description: >-
+      Each bar is an annotation, with its genes stacked by transcript type such as
+      mRNA, lncRNA or tRNA. It answers how many genes each annotation holds and of
+      what kind.
+
+      How to read: compare annotations of related species, whose gene counts should
+      be of the same order. A bar with almost no non-coding types may reflect an
+      annotation that only kept protein-coding genes.
+
+      Source: https://agat.readthedocs.io/en/latest/tools/agat_sp_statistics.html
+  - id: gene_count
+    component: card
+    column: genes
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: genome
+    filter_expr: "col('feature_type') == 'mrna'"
+    caption: protein-coding genes, by annotation
+    title: Protein-coding genes
+    description: >-
+      The hero number is the count of mRNA genes over the annotations, and the bar
+      splits them by annotation, with the median and maximum annotation beside it.
+      It answers how many protein-coding genes the annotations hold.
+
+      How to read: a thin share is an annotation with far fewer genes than the
+      others, which may be incomplete.
+
+      Source: https://agat.readthedocs.io/en/latest/tools/agat_sp_statistics.html
+  - id: exons_per_transcript
+    component: card
+    column: exons_per_transcript
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('feature_type') == 'mrna'"
+    caption: median, with its spread
+    title: Exons per transcript
+    description: >-
+      The hero number is the median count of exons per mRNA, and the box shows the
+      spread between annotations. It answers how rich the gene structures are.
+
+      How to read: a lower value than related annotations suggests fragmented gene
+      models that lack exons. The report counts the longest isoform of each gene for
+      the per-transcript shape.
+
+      Source: https://agat.readthedocs.io/en/latest/tools/agat_sp_statistics.html
+  - id: single_exon_share
+    component: card
+    column: single_exon_gene_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('feature_type') == 'mrna'"
+    caption: median, with its spread
+    title: Single-exon genes
+    description: >-
+      The hero number is the median percent of mRNA genes made of one exon, and the
+      box shows the spread between annotations. It answers how many gene models are
+      a single exon.
+
+      How to read: an annotation with a share far above its peers holds many short,
+      possibly fragmented, models. Check it against the exons per transcript tile.
+
+      Source: https://agat.readthedocs.io/en/latest/tools/agat_sp_statistics.html
+  - component: table
+    title: Gene models per annotation
+    description: >-
+      Each row is an annotation and a transcript type, with its genes, transcripts,
+      exons, single-exon genes, overlapping genes and the mean lengths of genes,
+      transcripts, exons, introns and CDS. It answers the exact numbers behind every
+      other tile.
+
+      How to read: filter by transcript type to compare annotations on one kind of
+      model.

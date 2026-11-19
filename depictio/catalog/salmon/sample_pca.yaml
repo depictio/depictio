@@ -9,16 +9,131 @@ find: { path_glob: "**/salmon.merged.gene_tpm.tsv" }
 recipe: salmon/sample_pca.py
 fixture: sample_pca.tsv
 renders_as:
-  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: group} }
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group, headline: true }
-  - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  # A library that expresses far fewer genes than its peers is the classic
-  # under-sequenced / degraded sample; 10k is the usual floor for a bulk
-  # human RNA-seq library, and the dashboard tile can retune it per run.
-  - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000, headline: true }
-  - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }
-  - { component: table }
+  # The group column is the sample's factor (sheet column or the condition read off
+  # the sample name), the column the dashboard's category_colors key.
+  - id: pca
+    component: advanced_viz
+    kind: embedding
+    roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: group}
+    config:
+      axis_prefix: PC
+      legend_pos: bottom
+    title: Sample PCA
+    description: >-
+      Each point is a sample, placed by the first two principal components of its
+      log2(TPM + 1) over the 500 most variable genes, and coloured by group. It
+      answers whether samples of one group are alike and whether any sample is an
+      outlier.
+
+      How to read: replicates should sit next to each other and groups should separate
+      along a component. A sample far from its group is a candidate outlier or a
+      swap, so check its row in the table and its mapping rate before keeping it.
+      Groups that overlap fully mean little signal between them.
+
+      Lines and annotations: no reference line is drawn. The 500-gene selection is a
+      fixed choice of this view.
+  - component: card
+    column: group
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: group
+    headline: true
+    caption: samples, by group
+    title: Groups and samples
+    description: >-
+      The hero number is the count of groups and the ring splits the samples between
+      them, one row per sample. It answers how the design is balanced.
+
+      How to read: a very small slice is a group with few replicates, which limits the
+      comparisons that follow.
+  - component: card
+    column: median_tpm
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Median TPM of detected genes
+    description: >-
+      The hero number is the median across samples of each sample's median TPM over the
+      genes it detects, and the box shows the spread. It answers whether samples have a
+      similar expression profile overall.
+
+      How to read: a sample far from the others may carry a different library
+      composition, for instance a dominant transcript. Compare it with the PCA.
+  # The recipe counts a gene as expressed at TPM >= 1 (EXPRESSED_TPM). That is a
+  # fixed convention of this view, not a Salmon cut-off, so no pass mark is drawn
+  # (RULES section 17): the previous 10k floor had no source.
+  - component: card
+    column: genes_expressed
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: mean, with its spread
+    title: Genes expressed
+    description: >-
+      The hero number is the mean count of genes per sample with at least 1 TPM, and the
+      box shows the spread between samples. It answers how complex the transcriptome
+      of each library is.
+
+      How to read: a library that expresses far fewer genes than its peers of the same
+      type is a candidate for degradation or low depth. Salmon sets no minimum, so
+      compare within the run.
+
+      Lines and annotations: a gene counts as expressed at TPM of 1 or more, a fixed
+      convention of this view and not a Salmon cut-off.
+  - component: card
+    column: genes_detected
+    aggregation: average
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: distribution across samples
+    title: Genes detected
+    description: >-
+      The hero number is the mean count of genes per sample with any signal (TPM above
+      0), and the histogram shows how samples spread. It answers how many genes each
+      library touches at all.
+
+      How to read: detection grows with depth, so a low value can simply mean few
+      reads. Read it next to the number of genes expressed.
+  - component: table
+    title: Sample overview table
+    description: >-
+      Each row is a sample with its principal components, its group, the genes it
+      detects and expresses and the median TPM of its detected genes. It answers which
+      sample to inspect.
+
+      How to read: sort by genes expressed to find the sparsest library.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }
-  - { component: card, column: genes_detected, aggregation: average, secondary_layout: gauge, coverage_max: 30000 }
+  - component: card
+    column: genes_expressed
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: vertical
+    caption: lowest, median and highest
+    title: Fewest genes expressed
+    description: >-
+      The hero number is the lowest count of expressed genes in any sample, with the
+      median and the highest beside it. It answers how far the sparsest library is from
+      the rest.
+
+      How to read: a minimum far below the median points to an under-sequenced or
+      degraded library. The gap matters more than the absolute number.
+  - component: card
+    column: genes_detected
+    aggregation: max
+    aggregations: [min, median]
+    secondary_layout: top_n
+    breakdown_col: group
+    top_n_count: 4
+    caption: the groups with most genes detected
+    title: Genes detected, by group
+    description: >-
+      The hero number is the highest count of detected genes in any sample, and the bars
+      rank the groups by their own maximum. It answers which groups carry the richest
+      libraries.
+
+      How to read: groups that differ much in detection may differ in depth rather than
+      biology.

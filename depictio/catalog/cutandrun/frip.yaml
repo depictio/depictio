@@ -16,11 +16,94 @@ find:
 recipe: cutandrun/frip.py
 fixture: frip.tsv
 renders_as:
-  - { id: frip_composition_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: signal_class, title: Fragment coverage inside and outside peaks} }
+  - id: frip_composition_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: fraction
+      color: signal_class
+      labels: {sample: Sample, fraction: Share of fragment coverage, signal_class: Signal}
+    title: Fragment coverage inside and outside peaks
+    description: >-
+      Each bar is a sample split into the share of its fragment coverage that falls
+      inside its own called peaks and the share that falls outside them. It answers
+      how much of the signal the peaks capture.
+
+      How to read: a larger in-peaks share means a better signal-to-noise ratio. The
+      nf-core cutandrun documentation reads a FRiP above 0.3 as reasonable and above
+      0.7 as the highest quality. Low values point to background, few peaks or a
+      peak threshold set very high.
+
+      Note: SEACR reports no read counts, so coverage is the summed region signal
+      scaled by the spike-in factor. The score also depends on the peak caller
+      settings.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
   # The composition itself, then the spread of FRiP across samples and the
   # lowest FRiP in the run (on `frip`, one value per sample, not on `fraction`,
   # whose minimum is the smallest outside-peaks share).
-  - { component: card, column: coverage_bp, aggregation: sum, secondary_layout: donut, breakdown_col: signal_class }
-  - { component: card, column: frip, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: frip, aggregation: min, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: table }
+  - component: card
+    column: coverage_bp
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: signal_class
+    caption: Coverage, inside and outside peaks
+    title: Fragment coverage in and out of peaks
+    description: >-
+      The hero number is the total fragment coverage in base pairs, and the ring
+      splits it into inside and outside the called peaks. It answers how much of
+      the run falls in peaks.
+
+      How to read: a large in-peaks share is good. A ring dominated by outside
+      peaks means a noisy run or too few peaks called.
+  - component: card
+    column: frip
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: FRiP, with its spread
+    title: Average FRiP
+    description: >-
+      The hero number is the mean fraction of fragments in peaks, and the box shows
+      the spread across samples. It answers how good the signal-to-noise ratio is
+      overall.
+
+      How to read: the nf-core cutandrun documentation reads a FRiP above 0.3 as
+      reasonable and above 0.7 as the highest quality. A long lower whisker is a
+      sample to open in the bar chart.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  # The former gauge drew a 0 to 1 fraction as "x% of 1". The 0.3 floor is the
+  # "reasonable" level of the nf-core cutandrun output documentation.
+  - component: card
+    column: frip
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: threshold
+    threshold_value: 0.3
+    threshold_direction: min
+    caption: Lowest sample, against the 0.3 floor
+    title: Lowest FRiP
+    description: >-
+      The hero number is the lowest fraction of fragments in peaks of any sample,
+      shown with the median and the highest, against a floor of 0.3. It answers
+      whether every sample reaches a reasonable signal-to-noise ratio.
+
+      How to read: a sample below the floor has a lot of background or few peaks, so
+      check its peak caller settings and its IgG control before using it.
+
+      Lines and annotations: the floor of 0.3 is the level the nf-core cutandrun
+      documentation calls reasonable, after Landt et al.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: table
+    title: FRiP table
+    description: >-
+      Each row is a sample and a signal class, with the coverage in base pairs, the
+      fraction, the sample FRiP, the peak count and the spike-in scale factor. It
+      answers the exact numbers behind the figure.
+
+      How to read: the sample FRiP is repeated on both rows of a sample. Sort by it
+      to find the weakest sample.

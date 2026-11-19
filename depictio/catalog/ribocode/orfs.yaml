@@ -13,9 +13,71 @@ renders_as:
   - id: orf_record
     component: advanced_viz
     kind: record_card
+    title: ORF record
     roles: { id: orf_id, title: gene_name }
-  - { component: card, column: orf_id, aggregation: nunique, secondary_layout: donut, breakdown_col: orf_class }
-  - { component: card, column: aa_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: psites_frame0, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: orf_class }
-  - { component: table, row_selection_enabled: true, row_selection_column: orf_id }
+    description: >-
+      The card shows every field of one RiboCode ORF: its gene, transcript, location, ORF type, length,
+      P-sites in frame and adjusted periodicity p-value. It answers what is known about the ORF picked in the
+      table.
+
+      How to read: select a row in the table to fill the card. An ORF with many P-sites in frame 0 and a low
+      adjusted p-value shows strong three-nucleotide periodicity, the signature of translation.
+
+      Source: https://raw.githubusercontent.com/xryanglab/RiboCode/master/README.rst
+  - component: card
+    column: orf_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: orf_class
+    title: ORFs called
+    caption: ORFs, by class
+    description: >-
+      The hero number is the count of distinct ORFs RiboCode called as translated, and the ring splits them by
+      class (annotated coding sequence, upstream, downstream, internal or novel ORF). It answers how much
+      translation beyond annotated genes the data supports.
+
+      How to read: most calls are usually annotated coding sequences. A large share of novel or upstream ORFs
+      is the interesting part but needs follow-up, for example with a second caller.
+  - component: card
+    column: aa_length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: ORF length
+    caption: lengths, in amino acids
+    description: >-
+      The hero number is the median ORF length in amino acids and the histogram shows the distribution. It
+      answers whether the calls are full proteins or short ORFs.
+
+      How to read: annotated coding sequences are long and small ORFs are short, so a histogram with a large
+      short peak points to many upstream or novel ORFs. Filter by ORF class to separate them.
+  - component: card
+    column: psites_frame0
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: P-sites in frame
+    caption: P-sites in the ORF's own frame
+    description: >-
+      The hero number is the median count of ribosome P-sites in the ORF's own reading frame and the histogram
+      shows their distribution. It answers how much translation evidence each ORF has.
+
+      How to read: ORFs with few in-frame P-sites rest on little signal even when their p-value passes. Treat
+      low counts with caution and sort the table by this column.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: orf_class
+    title: ORF class
+    description: >-
+      Restricts every tile to the chosen ORF classes, such as upstream or novel ORFs. It answers whether a
+      pattern belongs to annotated genes or to the new calls.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: orf_id
+    title: RiboCode ORFs
+    description: >-
+      Each row is an ORF in one library, with its gene, transcript, location, class, length, in-frame P-sites
+      and adjusted periodicity p-value. It answers which ORFs to follow up.
+
+      How to read: sort by the adjusted p-value or the P-site count and select a row to fill the ORF record.

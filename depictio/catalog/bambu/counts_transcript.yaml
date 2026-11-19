@@ -8,6 +8,51 @@ find: { path_glob: "**/bambu/counts_transcript.txt" }
 recipe: bambu/counts_transcript.py
 fixture: counts_transcript.tsv
 renders_as:
-  - { id: top_expressed_transcripts_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: transcript_id} }
-  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_id, top_n_count: 3 }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples; the table has no categorical
+  # column to annotate rows with beyond the gene id.
+  - id: top_expressed_transcripts_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Most expressed transcripts by sample
+    roles: {index: transcript_id}
+    config:
+      normalize: row_z
+    description: >-
+      Each cell is the Bambu read count of one of the most highly counted transcripts
+      (rows) in one sample (columns), scaled per transcript. It answers whether the
+      highest-count isoforms behave the same in every library.
+
+      How to read: columns of the same condition should share a pattern. A sample that
+      looks unlike its replicates, or an isoform high in one condition only, is a
+      candidate for isoform switching to follow up. Colour is a per-transcript z-score, so
+      it shows the pattern across samples and not the absolute level.
+
+      Lines and annotations: the transcripts are the 50 with the highest total count
+      across samples, a fixed display size of this catalog's recipe and not a
+      significance cut-off.
+
+      Source: https://raw.githubusercontent.com/GoekeLab/bambu/master/README.md
+  - id: transcripts_per_gene
+    component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: uniqueness
+    caption: genes against transcripts
+    title: Genes behind the top transcripts
+    description: >-
+      The hero number is the count of distinct genes behind the displayed transcripts, the
+      compact line gives the transcript count, and the bar shows the share of unique
+      genes. It answers whether the top isoforms come from different genes.
+
+      How to read: a unique share near the full bar means each top transcript belongs to
+      its own gene. A lower share means several isoforms of one gene are among the most
+      counted, which is where isoform usage deserves a look.
+  - component: table
+    title: Top transcript counts
+    description: >-
+      Each row is one of the highest-count transcripts with its gene and the Bambu count
+      in every sample. It answers the exact counts behind the heatmap.
+
+      How to read: sort a sample column to see its top transcripts and compare across
+      columns.

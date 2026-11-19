@@ -17,8 +17,60 @@ columns:
   totalTelomericReads: Int64
   purity: Float64
   ploidy: Float64
+# The fixture is enriched synthetically from 2 real rows (copies with seeded noise), so the preview shows several samples and types.
 fixture: telomere_length.tsv
 renders_as:
-  - { id: telomere_length_bar, component: figure, visu_type: bar, dict_kwargs: {x: sampleId, y: finalTelomereLength, color: type} }
-  - { id: telomere_length_spread, component: card, column: finalTelomereLength, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: telomere_table, component: table }
+  # C1: the bars are coloured by the type of DNA sample, tumor or reference.
+  - id: telomere_length_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sampleId
+      y: finalTelomereLength
+      color: type
+      labels: {sampleId: Sample, finalTelomereLength: Telomere length (bp), type: Sample type}
+    title: Telomere length per sample
+    description: >-
+      Each bar is the telomere length TEAL estimates for a DNA sample, adjusted for
+      tumor purity, coloured by sample type. It answers how long the telomeres are and
+      whether the tumor differs from its normal.
+
+      How to read: a tumor far above its normal suggests telomerase or ALT activity,
+      and a tumor far below it suggests telomere attrition. Compare each tumor with its
+      own reference sample.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/teal/README.md
+  - id: telomere_length_spread
+    component: card
+    column: finalTelomereLength
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    headline: true
+    title: Telomere length
+    caption: median, with its range
+    description: >-
+      The hero number is the median final telomere length over the DNA samples, with the
+      shortest and longest beside it. It answers how long the telomeres are across the
+      run.
+
+      How to read: tumor and reference samples sit in one table, so read the range
+      together with the bar chart to see which sample is at each end. A tumor with a
+      length far from its normal is the finding.
+
+      Note: the final length is adjusted for purity and ploidy for tumor samples and
+      equals the raw length for the reference.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/teal/README.md
+  - id: telomere_table
+    component: table
+    title: Telomere length estimates
+    description: >-
+      Each row is a DNA sample with its raw and final telomere length, the telomeric
+      fragments behind it and the purity, ploidy and read depth used to normalise it.
+      It answers how reliable each estimate is.
+
+      How to read: an estimate on few telomeric reads or at low purity is less certain,
+      so check the fragment counts before comparing samples.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/teal/README.md

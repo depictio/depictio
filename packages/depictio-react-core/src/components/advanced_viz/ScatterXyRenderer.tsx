@@ -44,6 +44,12 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import {
+  resolveScatterReference,
+  scatterReferenceRequests,
+  type ReferenceStat,
+  type ReferenceStatValues,
+} from './referenceStats';
 import { extentFraction, labelPlacement } from './scatterLabels';
 import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
@@ -74,6 +80,10 @@ interface ScatterXyConfig {
   y_title?: string | null;
   reference_line?: ReferenceLine;
   reference_value?: number | null;
+  /** Place a horizontal line at this statistic of y, a vertical one of x, over
+   *  the rows on show; computed by the server (`reference_stats`). An explicit
+   *  `reference_value` wins. */
+  reference_stat?: ReferenceStat | null;
   min_size?: number;
   max_size?: number;
   marker_size?: number;
@@ -231,11 +241,18 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   );
   // The value a horizontal or vertical guide sits at. Persisted with the line
   // itself: a guide the reader cannot place is a guide they cannot use.
-  const [refValue, setRefValue] = usePersistedVizControl<number | null>(
+  const [refValueControl, setRefValue] = usePersistedVizControl<number | null>(
     metadata,
     'reference_value',
     null,
   );
+  // A `reference_stat` puts the line at a statistic of the axis it crosses,
+  // computed by the server on the filtered, unsampled rows; the value the
+  // reader or the author sets wins over it.
+  const [referenceStats, setReferenceStats] = useState<ReferenceStatValues | null>(null);
+  const resolvedRef = resolveScatterReference(config, refLine, refValueControl, referenceStats);
+  const refValue = resolvedRef.value;
+  const refLabel = resolvedRef.label;
   // The side of the guide the reader is asked to look at; the other side is
   // dimmed, as the Manhattan plot does around its score threshold.
   const [refHighlight, setRefHighlight] = usePersistedVizControl<ReferenceHighlight>(
@@ -318,6 +335,12 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   const [error, setError] = useState<string | null>(null);
   const [estimated, setEstimated] = useState(false);
 
+  // Asked of the axis the line crosses now, so a reader who flips the line
+  // from horizontal to vertical gets the statistic of x, not of y. Only the
+  // author's `reference_value` suppresses it: a reader's own value wins on the
+  // plot without costing a refetch, and clearing it falls back at once.
+  const statRequests = scatterReferenceRequests(config, refLine, config.reference_value);
+
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 2) {
       setError('Scatter: missing data binding');
@@ -334,10 +357,12 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       filters: filtersForFetch,
       vizKind: SCATTER_XY_VIZ_KIND,
       roles: { x: config.x_col, y: config.y_col },
+      referenceStats: statRequests,
     })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
+        setReferenceStats(res.reference_stats ?? null);
         setEstimated(Boolean(res.sampling?.degraded));
       })
       .catch((err: unknown) => {
@@ -355,6 +380,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     JSON.stringify(requiredCols),
     JSON.stringify(filtersForFetch),
     refreshTick,
+    JSON.stringify(statRequests ?? null),
   ]);
 
   const points = useMemo(() => {
@@ -742,7 +768,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           xref: 'paper',
           x: 1,
           y: a,
-          text: config.reference_label || `y = ${refValue}`,
+          text: refLabel || `y = ${refValue}`,
           xanchor: 'right',
           yanchor: 'bottom',
         });
@@ -757,7 +783,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           yref: 'paper',
           x: a,
           y: 1,
-          text: config.reference_label || `x = ${refValue}`,
+          text: refLabel || `x = ${refValue}`,
           xanchor: 'left',
           yanchor: 'top',
         });
@@ -845,6 +871,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     config.reference_label,
     config.y_title,
     refValue,
+    refLabel,
     config.quadrants,
     logX,
     logY,
@@ -976,8 +1003,14 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         {refLine === 'horizontal' || refLine === 'vertical' ? (
           <VizNumberInput
             label="Reference value"
-            placeholder={refLine === 'horizontal' ? 'y =' : 'x ='}
-            value={refValue ?? ''}
+            placeholder={
+              resolvedRef.stat && refValue != null
+                ? `${refLabel}: ${refValue}`
+                : refLine === 'horizontal'
+                  ? 'y ='
+                  : 'x ='
+            }
+            value={refValueControl ?? ''}
             onChange={(v) => setRefValue(v === '' || v === null ? null : Number(v))}
             decimalScale={6}
           />

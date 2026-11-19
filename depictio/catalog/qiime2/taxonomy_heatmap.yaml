@@ -12,4 +12,11 @@ fixture: taxonomy_heatmap.tsv
 # the index + annotation columns the renderer needs. Here the matrix is the
 # output, so a table is the honest render.
 renders_as:
-  - { component: table }
+  - component: table
+    title: Abundance matrix
+    description: >-
+      Each row is a taxon and each column a sample, holding the relative abundance of the
+      taxon in that sample. It answers the exact abundance behind the clustered heatmap.
+
+      How to read: read across a row to follow a taxon over the samples, and down a column
+      to see what a sample is made of.

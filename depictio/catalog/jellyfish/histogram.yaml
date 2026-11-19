@@ -12,13 +12,75 @@ find:
   path_glob_alt:
     - "**/*.histo"
 recipe: jellyfish/histogram.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several read sets.
 fixture: histogram.tsv
 renders_as:
-  - { id: kmer_spectrum, component: advanced_viz, kind: profile,
-      roles: {series: read_set, x: multiplicity, y: kmers} }
-  - { id: kmer_mass_spectrum, component: advanced_viz, kind: profile,
-      roles: {series: read_set, x: multiplicity, y: kmer_mass} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: multiplicity, y: kmers, color: read_set, title: Read k-mer spectrum} }
-  - { component: card, column: peak_multiplicity, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: kmer_spectrum
+    component: advanced_viz
+    kind: profile
+    title: Read k-mer spectrum
+    roles: {series: read_set, x: multiplicity, y: kmers}
+    config:
+      x_title: K-mer multiplicity (times seen in the reads)
+      y_title: Distinct k-mers
+      log_y: true
+    description: >-
+      Each point is a multiplicity: how many distinct k-mers occur that many times in the reads, with one curve
+      per read set on a log vertical axis. It answers what sequencing depth the reads reach and whether the
+      genome is heterozygous or repetitive.
+
+      How to read: the k-mers piled up near a multiplicity of 1 are mostly sequencing
+      errors. The main peak is the depth of the genome, a smaller peak at half of it is
+      the heterozygous share, and peaks at three and four times that half are repeats.
+
+      Note: GenomeScope needs at least 15x coverage of the haploid genome to fit well.
+
+      Source: https://raw.githubusercontent.com/tbenavi1/genomescope2.0/master/README.md
+      and https://pubmed.ncbi.nlm.nih.gov/32188846/
+  - id: kmer_mass_spectrum
+    component: advanced_viz
+    kind: profile
+    title: K-mer mass spectrum
+    roles: {series: read_set, x: multiplicity, y: kmer_mass}
+    config:
+      x_title: K-mer multiplicity (times seen in the reads)
+      y_title: Total k-mers (distinct k-mers times multiplicity)
+    description: >-
+      Each point is a multiplicity: the total number of k-mers in the reads that occur that many times, with
+      one curve per read set. It answers where most of the sequenced bases sit.
+
+      How to read: the mass is concentrated at the main peak for a clean genome. Mass far to the right
+      comes from repeats, and mass at multiplicity one is sequencing error, which inflates a poor library.
+  - component: figure
+    visu_type: line
+    title: Read k-mer spectrum
+    dict_kwargs: { x: multiplicity, y: kmers, color: read_set, labels: { multiplicity: K-mer multiplicity, kmers: Distinct k-mers, read_set: Read set } }
+    description: >-
+      Each line is a read set: the number of distinct k-mers at each multiplicity. It answers how the read sets
+      compare on the same axes.
+
+      How to read: curves with peaks at the same multiplicity were sequenced to similar depth. A shifted peak
+      means a different depth or a different genome.
+  - component: card
+    column: peak_multiplicity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Main peak depth
+    caption: peak multiplicity per read set, with its spread
+    description: >-
+      The hero number is the median multiplicity of the main peak over read sets, and the box shows its
+      quartiles. It answers the typical k-mer depth of the sequencing.
+
+      How to read: this is the depth of the genome in k-mers, so a very shallow peak predicts a poor GenomeScope
+      fit. GenomeScope recommends at least 15x coverage of the haploid genome.
+
+      Source: https://raw.githubusercontent.com/tbenavi1/genomescope2.0/master/README.md
+  - component: table
+    title: K-mer histogram
+    description: >-
+      Each row is a multiplicity of a read set with its number of distinct k-mers, the k-mer mass and the peak
+      multiplicity. It answers the raw numbers behind the spectrum.
+
+      How to read: the histogram is cut past the main peak and thinned, so it is for reading the shape, not
+      for exact counts.

@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: vcftools }
+  - component: multiqc
+    section: vcftools
+    title: Ts/Tv by quality and count
+    description: >-
+      VCFtools' transition to transversion ratio as a function of variant quality
+      and non-reference allele count. It answers whether the call quality tracks
+      real variants.
+
+      How to read: The ratio should be fairly stable across the range. A ratio that
+      drops at low quality shows where false calls enter, which helps you choose a
+      quality filter.
+
+      Source: https://docs.seqera.io/multiqc/modules/vcftools

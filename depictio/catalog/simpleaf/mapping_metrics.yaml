@@ -9,7 +9,49 @@ find:
 recipe: simpleaf/mapping_metrics.py
 fixture: mapping_metrics.tsv
 renders_as:
-  - { component: card, column: mapping_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: num_processed, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: num_cells, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: mapping_rate
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: compact
+    title: Mapping rate
+    caption: lowest and highest sample
+    headline: true
+    description: >-
+      The hero number is the mean share of reads that piscem mapped, with the lowest and highest sample beside
+      it. It answers how well the reads fit the reference index.
+
+      How to read: a sample far below the others points to a wrong reference, a poor library or contamination.
+      The tool publishes no pass mark for this rate, so compare samples with each other.
+  - component: card
+    column: num_processed
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Reads processed
+    caption: reads per sample, with their spread
+    description: >-
+      The hero number is the total number of reads processed across samples, and the box shows the spread per
+      sample. It answers how much sequencing each sample received and how even it was.
+
+      How to read: a sample with far fewer reads than the others may give fewer cells or a noisier profile.
+  - component: card
+    column: num_cells
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Cells quantified
+    caption: cells per sample, with their spread
+    description: >-
+      The hero number is the total number of barcodes alevin-fry quantified as cells across samples, and the
+      box shows the spread per sample. It answers how many cells each sample yields.
+
+      How to read: compare with the number of cells loaded. A sample with a very different count from its
+      replicates may have a calling or capture problem.
+  - component: table
+    title: Mapping summary per sample
+    description: >-
+      Each row is a sample, with its reads processed, reads mapped, mapping rate and number of cells. It
+      answers how each sample performed at mapping and cell calling.
+
+      How to read: sort by mapping rate to find the weakest sample first.

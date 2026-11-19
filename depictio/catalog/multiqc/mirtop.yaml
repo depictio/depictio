@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: mirtop }
+  - component: multiqc
+    section: mirtop
+    title: isomiR counts
+    description: >-
+      mirtop's counts of isomiRs per variant type: reference, 3p and 5p end changes,
+      non-templated additions and nucleotide changes, per sample. They answer how
+      much miRNA sequence variation the library holds.
+
+      How to read: Reference sequences and 3p variants usually dominate. A sample
+      with an unusual variant mix may reflect a trimming or mapping issue rather
+      than biology.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/mirtop/mirtop.py

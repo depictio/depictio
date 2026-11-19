@@ -11,7 +11,62 @@ find:
 recipe: bismark/top_variable_windows.py
 fixture: top_variable_windows.tsv
 renders_as:
-  - { id: variable_windows_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: window_id} }
-  - { component: card, column: window_variance, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: window_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples, known only at ingest. The
+  # variance and the chromosome ride as row annotations so they stay out of the
+  # colour scale.
+  - id: variable_windows_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: {index: window_id}
+    config:
+      row_annotation_cols: [chromosome, window_variance]
+    title: Most variable methylation windows
+    description: >-
+      Each cell is the mean CpG methylation of one of the most variable 10 kb
+      windows (rows) in one library (columns), with the chromosome and the variance
+      of each window as side annotations. It answers which regions differ most
+      between libraries.
+
+      How to read: libraries of one condition should share a colour pattern across
+      the rows. A block of windows that flips between groups is a candidate region,
+      and a library that follows the wrong group is an outlier to check.
+
+      Note: this is a ranking by variance, not a test. The group comparison tab holds
+      the statistics.
+  - component: card
+    column: window_variance
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Window variance, with its spread
+    title: Variance of the top windows
+    description: >-
+      The hero number is the largest methylation variance across libraries of any
+      listed window, and the box shows the spread among them. It answers how strongly
+      the top windows differ between libraries.
+
+      How to read: a high maximum with a low median means a few windows dominate. A
+      flat box means the ranking has no standout region.
+  - component: card
+    column: chromosome
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    caption: Chromosomes with the most variable windows
+    title: Chromosomes of the top windows
+    description: >-
+      The hero number is how many chromosomes carry a listed window, with the count
+      of windows beside it, and the bars rank the chromosomes by windows. It answers
+      whether variable windows cluster on a few chromosomes.
+
+      How to read: a chromosome far ahead of the others can mean a copy-number or
+      sex difference between libraries rather than regulated methylation.
+  - component: table
+    title: Most variable windows table
+    description: >-
+      Each row is a window with its chromosome, its variance and its methylation in
+      every library. It answers the exact values behind the heatmap.
+
+      How to read: sort by variance and compare the library columns.

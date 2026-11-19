@@ -13,4 +13,17 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: bcftools }
+  - component: multiqc
+    section: bcftools
+    title: Variant-call statistics
+    description: >-
+      bcftools stats plots: substitution types, indel lengths and variant-quality
+      counts per sample. They answer whether the call set has the profile of a
+      healthy variant caller.
+
+      How to read: Transitions should outnumber transversions. Indel lengths should
+      fall off smoothly and frameshifting lengths should be rarer in coding regions.
+      A sample whose profile departs from its peers deserves a look at its input
+      quality.
+
+      Source: https://docs.seqera.io/multiqc/modules/bcftools

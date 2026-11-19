@@ -12,9 +12,65 @@ find:
 recipe: tiara/classifications.py
 fixture: classifications.tsv
 renders_as:
-  - { id: sequence_classes, component: card, column: sequence, aggregation: count,
-      secondary_layout: composition, breakdown_col: tiara_class }
-  - { component: figure, visu_type: histogram,
-      dict_kwargs: {x: genome, color: tiara_class, title: Sequences per Tiara class} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: tiara_class }
-  - { component: table }
+  - id: sequence_classes
+    component: card
+    column: genome
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: tiara_class
+    headline: true
+    title: Sequences by Tiara class
+    caption: sequences, by class
+    description: >-
+      The hero number is the count of sequences Tiara classified, with the number of
+      assemblies beside it, and the bar splits them by class (eukarya, bacteria,
+      archaea, prokarya, mitochondrion, plastid or unknown). It answers how much of an
+      assembly is the expected organism and how much is foreign or organellar.
+
+      How to read: in a eukaryotic assembly, bacteria, archaea and prokarya are
+      candidate contaminants, and unknown marks sequences Tiara could not classify
+      precisely. Mitochondrion and plastid are expected organelle genomes, so they are not
+      contamination.
+
+      Note: Tiara classifies sequences of at least 3000 bases by default and advises
+      against classifying those under 1000, so shorter sequences are left out.
+
+      Source: https://raw.githubusercontent.com/ibe-uw/tiara/main/README.md and
+      https://pubmed.ncbi.nlm.nih.gov/34570171/
+  # C1: the bars are coloured by the Tiara class of each sequence.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: genome
+      color: tiara_class
+      labels: {genome: Assembly, tiara_class: Tiara class}
+    title: Sequences per Tiara class
+    description: >-
+      Each bar counts the sequences of one assembly, coloured by the class Tiara gives
+      them. It answers which assemblies carry sequences from other organisms.
+
+      How to read: an assembly that is almost all eukarya is clean. A visible share of
+      bacteria, archaea or prokarya sequences is a lead for decontamination, which
+      FCS-GX or a BLAST check can confirm before sequences are removed.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34570171/
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: tiara_class
+    title: Tiara class
+    description: >-
+      Pick one or more classes to filter every tile of the dashboard to the sequences
+      Tiara placed in them.
+
+      How to read: select bacteria, archaea and prokarya to list the candidate
+      contaminants of the assemblies.
+  - component: table
+    title: Sequence classes
+    description: >-
+      Each row is a classified sequence with its assembly, its merged class, the stage
+      of the run it came from, the first-stage class, the organelle call and whether
+      it is eukaryotic. It answers which sequences carry each class.
+
+      How to read: filter by class to list the candidate contaminants, and by stage to
+      compare the raw and the cleaned assembly.

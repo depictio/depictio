@@ -9,28 +9,162 @@ description: >-
   in. Read from the per-sample tables mhcquant writes at the top of its output.
 find: { path_glob: "*.tsv" }
 recipe: mhcquant/peptides.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several charge states.
 fixture: peptides.tsv
 renders_as:
-  # Observed against DeepLC-predicted retention time: identifications that sit
-  # far off the diagonal are the ones rescoring could not support.
+  # Observed against DeepLC-predicted retention time. mhcquant writes the DeepLC
+  # prediction beside the observed time, so the diagonal is the prediction itself.
   - id: rt_observed_predicted
     component: advanced_viz
     kind: scatter_xy
+    title: Observed against predicted retention time
     roles: { x: predicted_rt_min, y: rt_min, label: peptide, color: sample }
-  # Retention time follows hydrophobicity on reversed-phase chromatography, so
-  # a sample whose cloud tilts differently has a gradient problem.
+    config:
+      x_title: Predicted retention time (min)
+      y_title: Observed retention time (min)
+      reference_line: diagonal
+      reference_label: Observed equals predicted
+      top_n_labels: 5
+    description: >-
+      Each point is a peptide: its retention time predicted by DeepLC on the
+      horizontal axis and the time observed in the run on the vertical axis,
+      coloured by sample. It answers whether identifications behave as the
+      prediction expects.
+
+      How to read: points hugging the diagonal are consistent with the prediction.
+      Points far off it are less trustworthy identifications, and a whole sample off
+      the diagonal has a gradient or calibration difference.
+
+      Lines and annotations: the diagonal is where observed equals predicted. It is
+      an identity line, not a cut-off.
+
+      Source: https://github.com/nf-core/mhcquant/blob/3.2.0/docs/output.md
   - id: rt_hydropathy
     component: advanced_viz
     kind: scatter_xy
+    title: Retention time against hydropathy
     roles: { x: gravy, y: rt_min, label: peptide, color: length_class }
+    config:
+      x_title: Hydropathy (GRAVY)
+      y_title: Observed retention time (min)
+      top_n_labels: 5
+    description: >-
+      Each point is a peptide: its hydropathy score (GRAVY, the mean hydropathy of
+      its residues) on the horizontal axis and its observed retention time on the
+      vertical axis, coloured by length class. It answers how retention relates to
+      peptide hydrophobicity in each sample.
+
+      How to read: compare samples and lengths. A sample whose cloud tilts
+      differently from the others had a different gradient or column, so treat its
+      retention times with care.
   - id: mz_retention
     component: advanced_viz
     kind: scatter_xy
+    title: Precursor m/z over the gradient
     roles: { x: rt_min, y: mz, label: peptide, color: charge_state }
-  - { component: figure, visu_type: histogram, dict_kwargs: { x: score, color: sample } }
-  - { component: card, column: psms, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: sequence, aggregation: nunique, secondary_layout: composition, breakdown_col: length_class }
-  - { component: card, column: rt_error_min, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: length_class }
-  - { component: interactive, interactive_type: RangeSlider, column_name: score }
-  - { component: table, row_selection_enabled: true, row_selection_column: sequence }
+    config:
+      x_title: Observed retention time (min)
+      y_title: Precursor m/z
+      top_n_labels: 0
+    description: >-
+      Each point is a peptide: its observed retention time on the horizontal axis
+      and its precursor m/z on the vertical axis, coloured by charge state. It
+      answers how identifications spread over the gradient and the mass range.
+
+      How to read: a gradient that is evenly populated is a healthy run. Gaps point to
+      a segment of the run that identified little, and a charge state that dominates
+      shows the mass range it covers.
+  - component: figure
+    visu_type: histogram
+    title: Peptide score by sample
+    dict_kwargs:
+      x: score
+      color: sample
+      labels: {score: Search-engine score, sample: Sample, count: Peptides}
+    reference_lines:
+      - {axis: x, stat: median, column: score}
+    description: >-
+      Each bar counts the peptides whose search-engine score falls in a range,
+      coloured by sample. It answers how the identification scores are distributed.
+
+      How to read: the score is the Comet XCorr in a quantified run, where higher is
+      better. Samples whose distribution sits lower have weaker evidence, so read them
+      with the fragment-ion tiles.
+
+      Lines and annotations: the dashed line is the median search-engine score of
+      this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of mhcquant.
+
+      Source: https://github.com/nf-core/mhcquant/blob/3.2.0/docs/output.md
+  - component: card
+    column: psms
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: modification_state
+    caption: PSMs, by modification state
+    title: Peptide-spectrum matches
+    description: >-
+      The hero number is the total count of PSMs behind the peptides in view, and the
+      bar splits it by modification state. It answers how much spectral evidence there
+      is and how much of it is for modified peptides.
+
+      How to read: a sum mixes samples, so read the median and the maximum beside it
+      for a per-peptide reading.
+  - component: card
+    column: sequence
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: composition
+    breakdown_col: length_class
+    caption: distinct sequences, by length
+    title: Distinct peptide sequences
+    description: >-
+      The hero number is the count of distinct peptide sequences, and the bar splits
+      the rows by length class. The count of rows is also shown, since a sequence
+      appears once per charge, modification and sample. It answers how many different
+      peptides were found and at which lengths.
+
+      How to read: for a class I sample the 9-mer segment should be the largest.
+  - component: card
+    column: rt_error_min
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: spread of the error, with its quartiles
+    title: Retention-time error
+    description: >-
+      The hero number is the range of the retention-time error (observed minus
+      predicted) over the peptides in view, and the box shows its quartiles. It
+      answers how far observed times stray from the DeepLC prediction.
+
+      How to read: a box tight around zero with a short range means the prediction
+      fits. A box shifted off zero is a systematic offset, so check the gradient. The
+      range is shown instead of the median because errors in both directions cancel.
+
+      Source: https://github.com/nf-core/mhcquant/blob/3.2.0/docs/output.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: length_class
+    title: Peptide length
+    description: >-
+      Pick one or more peptide lengths to restrict every tile to them. It answers what
+      the plots show for a single length.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: score
+    title: Peptide score
+    description: >-
+      Drag the range to keep peptides with a score inside it. It answers how the plots
+      change when only the best scored, or the weakest, peptides are kept.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sequence
+    title: Identified peptides
+    description: >-
+      Each row is a peptide precursor in one sample, with its score, PSM count,
+      retention times, m/z, charge, anchors, source proteins and intensity. It answers
+      the exact detail behind every tile and lets a row selection filter the dashboard.
+
+      How to read: select a sequence to see it across samples, or sort by score to
+      inspect the best supported peptides.

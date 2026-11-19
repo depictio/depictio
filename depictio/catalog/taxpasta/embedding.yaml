@@ -10,13 +10,54 @@ find: { path_glob: "**/taxpasta/*.tsv" }
 recipe: taxpasta/embedding.py
 fixture: embedding.tsv
 renders_as:
-  - {
-      id: profiler_embedding,
-      component: advanced_viz,
-      kind: embedding,
-      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: profiler },
-    }
-  - { component: table }
+  - id: profiler_embedding
+    component: advanced_viz
+    kind: embedding
+    title: Profiler ordination
+    roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: profiler}
+    config:
+      axis_prefix: PCo
+    description: >-
+      Each point is one profiling run, a sample classified by one profiler and
+      database, placed by the Bray-Curtis distance between taxon abundance profiles
+      and coloured by profiler. It answers whether the profilers describe the same
+      community or disagree.
+
+      How to read: runs that sit together report similar communities, so a tight
+      cluster of profilers agrees. A profiler that lands apart from the others
+      reports a different set of taxa or names them differently, so open the
+      detection overlap and the taxon by run matrix to see which taxa drive the gap.
+      Runs of one profiler from different samples spread apart when the samples
+      differ biologically.
+
+      Lines and annotations: none are drawn. The axes are principal coordinates of
+      the Bray-Curtis matrix, so only distances between points carry meaning.
+  - component: table
+    title: Profiling run coordinates
+    description: >-
+      Each row is one profiling run, a sample classified by one profiler and
+      database, with its two ordination coordinates and the platform it was
+      sequenced on. It answers where a given run sits in the ordination.
+
+      How to read: sort by a coordinate to find the runs at either extreme, then
+      filter to a profiler to compare its runs across samples.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: platform }
+  # One row per run, so the count is the number of runs and the ring splits them by platform.
+  - component: card
+    column: profiler_db
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: platform
+    caption: runs, by sequencing platform
+    title: Profiling runs
+    description: >-
+      Each unit is one profiling run, a sample classified by one profiler and
+      database, and the ring splits the runs by sequencing platform. The second
+      number counts the distinct profiler and database pairs. It answers how much
+      of the ordination each platform contributes.
+
+      How to read: a ring dominated by one platform means the ordination mostly
+      compares runs of that platform, so profiler differences may partly be platform
+      differences.

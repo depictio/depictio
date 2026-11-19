@@ -13,9 +13,105 @@ find:
 recipe: bismark/alignment_summary.py
 fixture: alignment_summary.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mapping_efficiency_pct, color: sample, title: Mapping efficiency per sample} }
-  - { component: card, column: mapping_efficiency_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mapping_efficiency_pct, aggregation: average, secondary_layout: threshold, threshold_value: 60.0, threshold_direction: min, threshold_warn: 70.0 }
-  - { component: card, column: pairs_analysed, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: no_alignment, aggregation: sum, secondary_layout: histogram }
-  - { component: table }
+  # Bismark publishes no mapping-efficiency cut-off (its low-mapping FAQ gives
+  # no number), so no pass mark is drawn on this tab.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: mapping_efficiency_pct
+      color: sample
+      labels: {sample: Library, mapping_efficiency_pct: Mapping efficiency (%)}
+    title: Mapping efficiency per library
+    reference_lines:
+      - axis: y
+        stat: median
+        column: mapping_efficiency_pct
+    description: >-
+      Each bar is a library: the percentage of read pairs Bismark aligned to a
+      unique best position. It answers which libraries mapped poorly.
+
+      How to read: libraries of one experiment usually sit in a narrow band. A
+      library far below the others points to the wrong reference genome, untrimmed
+      adapters or a poor library, so check the trimming report and the Bismark FAQ
+      on low mapping before using it.
+
+      Note: Bismark publishes no mapping-efficiency cut-off.
+
+      Lines and annotations: The dashed line is the median mapping efficiency of
+      this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of Bismark.
+
+      Source: https://felixkrueger.github.io/Bismark/faq/low-mapping/
+  - component: card
+    column: mapping_efficiency_pct
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Mapping efficiency, with its spread
+    title: Average mapping efficiency
+    description: >-
+      The hero number is the mean percentage of read pairs aligned uniquely, and
+      the box shows the spread across libraries. It answers how well the run
+      mapped overall.
+
+      How to read: a tight box means libraries behaved alike. A long lower
+      whisker is a library to open in the bar chart.
+  # The former 60 / 70 % pass marks had no source: Bismark documents no
+  # cut-off, so the card shows the weakest library with the median and best.
+  - component: card
+    column: mapping_efficiency_pct
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: compact
+    caption: Weakest library, with the median and the best
+    title: Weakest mapping efficiency
+    description: >-
+      The hero number is the lowest mapping efficiency of any library, shown with
+      the median and the highest. It answers how far the worst library is from the
+      rest.
+
+      How to read: a minimum close to the median means no library stands out. A
+      wide gap marks a library to inspect.
+
+      Note: Bismark publishes no mapping-efficiency cut-off, so no pass mark is
+      drawn.
+
+      Source: https://felixkrueger.github.io/Bismark/faq/low-mapping/
+  - component: card
+    column: pairs_analysed
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: Read pairs per library
+    title: Read pairs analysed
+    description: >-
+      The hero number is the total of read pairs Bismark analysed, and the
+      histogram shows how they spread over libraries. It answers whether
+      sequencing depth is even.
+
+      How to read: a narrow histogram means even depth. A long tail is a library
+      with far more or fewer pairs than its peers.
+  - component: card
+    column: no_alignment
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: Unaligned pairs per library
+    title: Pairs with no alignment
+    description: >-
+      The hero number is the total of read pairs that never aligned, and the
+      histogram shows the spread over libraries. It answers how much input was lost
+      before methylation calling.
+
+      How to read: a library with a far larger count than its peers has a mapping
+      problem. Compare it with the mapping efficiency bar chart.
+  - component: table
+    title: Alignment table
+    description: >-
+      Each row is a library with the read pairs Bismark analysed, the unique best
+      hits, the mapping efficiency and the pairs that did not align or were not
+      unique. It answers the exact counts behind the bar chart.
+
+      How to read: sort by mapping efficiency to find the weakest library, then
+      compare its unaligned and non-unique counts.

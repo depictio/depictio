@@ -11,9 +11,69 @@ find:
 recipe: mirtop/mirna_summary.py
 fixture: mirna_summary.tsv
 renders_as:
-  - { id: mirna_mean_variance, component: advanced_viz, kind: scatter_xy,
-      roles: {x: mean_log2_cpm, y: sd_log2_cpm, label: mirna, color: arm, size: detection_pct} }
-  - { component: card, column: mirna, aggregation: nunique, secondary_layout: donut, breakdown_col: arm }
-  - { component: card, column: reference_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: RangeSlider, column_name: mean_log2_cpm }
-  - { component: table, row_selection_enabled: true, row_selection_column: mirna }
+  - id: mirna_mean_variance
+    component: advanced_viz
+    kind: scatter_xy
+    title: miRNA mean and variation
+    roles: {x: mean_log2_cpm, y: sd_log2_cpm, label: mirna, color: arm, size: detection_pct}
+    config:
+      x_title: Mean expression (log2 CPM)
+      y_title: Standard deviation of expression (log2 CPM)
+      top_n_labels: 10
+      legend_pos: bottom
+    description: >-
+      Each point is a miRNA: its mean expression across samples on the horizontal axis and
+      the spread of that expression on the vertical axis, coloured by the arm it comes from
+      and sized by the share of samples where it is detected. It answers which miRNAs are
+      abundant and which vary most between samples.
+
+      How to read: miRNAs high on the vertical axis vary the most, so they are the candidates
+      to separate groups, while those far to the right are abundant. Small points are detected
+      in few samples, and their spread is less reliable. The labelled points are the
+      most variable ones.
+  - component: card
+    column: mirna
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: arm
+    title: miRNAs by arm
+    caption: split into 5p and 3p arms, with the total of rows
+    description: >-
+      The hero number is the count of distinct miRNAs, and the ring splits them by the arm of
+      the hairpin they come from, 5p or 3p. It answers whether the expressed miRNAs come from
+      one arm more than the other.
+
+      How to read: both arms of a hairpin can be expressed, with one usually dominating.
+      A ring heavily tilted to one arm in this table reflects the most abundant miRNAs.
+  - component: card
+    column: reference_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Reads matching the reference
+    caption: median, with its spread across miRNAs
+    description: >-
+      The hero number is the median percentage of a miRNA's reads that match its reference
+      mature sequence exactly, and the box shows the quartiles over miRNAs. It answers how
+      far reads differ from the reference.
+
+      How to read: a low median means most reads are isomiRs, with trimmed or extended
+      ends or added nucleotides, which is typical of small RNA data. Open the isomiR tiles
+      to see the classes behind it.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: mean_log2_cpm
+    title: Mean expression range filter
+    description: Set a range of mean log2 counts per million to keep. It filters the tiles of the dashboard that read this table.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: mirna
+    title: miRNA summary table
+    description: >-
+      Each row is a miRNA, with its mean and median counts per million, the spread of its
+      expression, the samples where it is detected, its isomiR diversity and the share of
+      reads matching the reference. It answers which miRNAs to follow up, and a row
+      selection filters the other tiles.
+
+      How to read: sort by spread or by detection to find variable or rare miRNAs.

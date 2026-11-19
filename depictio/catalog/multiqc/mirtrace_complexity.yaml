@@ -12,8 +12,35 @@ find:
     - "**/multiqc/*_data/multiqc.parquet"
     - "**/multiqc/*/*_data/multiqc.parquet"
 recipe: multiqc/mirtrace_complexity.py
+# The fixture is enriched synthetically from 10 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: mirtrace_complexity.tsv
 renders_as:
-  - { id: complexity_curve, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: reads, y: distinct_mirnas} }
-  - { component: table }
+  - id: complexity_curve
+    component: advanced_viz
+    kind: profile
+    title: miRNA complexity curve
+    roles: {series: sample, x: reads, y: distinct_mirnas}
+    config:
+      x_title: Reads sampled
+      y_title: Distinct miRNAs detected
+    description: >-
+      Each line is one library: the number of distinct miRNAs miRTrace detects in a
+      subsample of the given size. It answers whether the library was sequenced deep
+      enough to see its miRNAs.
+
+      How to read: a curve that has flattened means deeper sequencing would add few
+      new miRNAs. A curve still climbing at the library's full depth means the
+      library is under-sequenced. Compare libraries of the same type: a curve that
+      stays far below its peers points to a low-complexity library.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/mirtrace/mirtrace.py
+  - component: table
+    title: Complexity values
+    description: >-
+      One row is one library at one sampled depth: the reads sampled and the distinct
+      miRNAs found. It gives the exact values behind the curve and answers how many
+      miRNAs each library reveals.
+
+      How to read: sort by distinct miRNAs at the deepest depth to rank libraries by
+      complexity, and look for those that plateau earliest, which are the least
+      diverse. It complements the complexity curve tile.

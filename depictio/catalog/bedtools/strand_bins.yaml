@@ -12,10 +12,125 @@ find:
 recipe: bedtools/strand_bins.py
 fixture: strand_bins.tsv
 renders_as:
-  - { id: strand_signal_genome_view, component: advanced_viz, kind: genome_view, roles: {chr: chromosome, pos: start, end: end, score: log2_signal, sample: sample} }
-  - { id: strand_signal_track, component: advanced_viz, kind: coverage_track, roles: {chromosome: chromosome, position: position, end: end, value: signal_rpm, sample: sample} }
-  - { component: card, column: signal_rpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: plus_share_pct, aggregation: median, secondary_layout: gauge, coverage_max: 100 }
-  - { component: card, column: signal_rpm, aggregation: count, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
-  - { component: interactive, interactive_type: MultiSelect, column_name: chromosome }
-  - { component: table }
+  # The libraries stacked on one genome axis, one lane each, coloured by library
+  # (the sample colour the rest of the dashboard uses). No cut-off is drawn:
+  # bedtools publishes none for a coverage value.
+  - id: strand_signal_genome_view
+    component: advanced_viz
+    kind: genome_view
+    title: Strand signal along the genome
+    roles: {chr: chromosome, pos: start, end: end, score: log2_signal, sample: sample}
+    config:
+      facet_by_sample: true
+      score_title: Signal (log2 of parts per million + 1)
+      score_threshold_stat: p95
+    description: >-
+      Each bar is a 250 kb window of the genome, drawn from its start to its end,
+      with the height of the combined plus and minus strand signal of one library
+      and one lane per library. It answers where along the genome a library holds
+      its reads.
+
+      How to read: lanes that follow one another peak at the same windows when
+      libraries capture the same transcription. A window that towers over its
+      neighbours in one lane only is a hotspot of that library, for instance a
+      repeat array, so compare the lanes before reading it as biology.
+
+      Note: the signal is scaled to parts per million of each library, so lanes
+      compare in shape and not in depth. bedtools genomecov defines no cut-off for
+      coverage.
+
+      Lines and annotations: the dashed line is the 95th percentile of the window signal
+      of this table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of bedtools. Windows above it are the hottest of the rows on show.
+
+      Source: https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+  - id: strand_signal_track
+    component: advanced_viz
+    kind: coverage_track
+    title: Strand signal per chromosome
+    roles: {chromosome: chromosome, position: position, end: end, value: signal_rpm, sample: sample}
+    config:
+      color_by: sample
+    description: >-
+      Each point on a line is a 250 kb window, placed at its centre, with the
+      combined plus and minus strand signal of one library in parts per million.
+      It answers how the signal varies along one chromosome and between libraries.
+
+      How to read: parallel lines mean libraries read the chromosome the same way.
+      A line that departs from the others over a region marks a library with a
+      local gain or loss of signal, worth a look in the genome view or the browser.
+
+      Note: bedtools genomecov defines no cut-off for coverage, so no line or band
+      is drawn.
+
+      Source: https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+  - component: card
+    column: log2_signal
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Typical window signal
+    description: >-
+      The hero number is the median signal of a 250 kb window, as log2 of parts per
+      million plus one, and the box shows the spread over windows. It answers how
+      much signal a typical window of the genome holds.
+
+      How to read: a wide box with a long upper whisker means a few windows hold
+      much more than the rest, which is the pattern of a hotspot or a poorly
+      depleted library. The log scale is used because window signal spans orders
+      of magnitude.
+  - component: card
+    column: plus_share_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100
+    caption: median plus-strand share, of 100
+    title: Plus-strand share of a window
+    description: >-
+      The hero number is the median percent of a window's signal that falls on the
+      plus strand, shown against 100 percent. It answers whether the two strands
+      are read evenly along the genome.
+
+      How to read: a value far from 50 means one strand dominates, which can be a
+      protocol or strandedness problem, or simply the genes of a region that all
+      lie on one strand. Check the per-library tile on the summary before drawing a
+      conclusion.
+
+      Note: bedtools genomecov reports one strand at a time with the -strand
+      option, and publishes no balance cut-off, so none is drawn.
+
+      Source: https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+  - component: card
+    column: signal_rpm
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: compact
+    caption: median and upper quartile of a window
+    title: Strongest window
+    description: >-
+      The hero number is the highest signal of any 250 kb window, in parts per
+      million of its library, and the strip gives the median and the upper
+      quartile of a window. It answers how far the hottest window sits above a
+      typical one.
+
+      How to read: a maximum many times above the upper quartile marks a hotspot,
+      such as a ribosomal array. Use the table to find which window and library
+      hold it.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: chromosome
+    title: Chromosome
+    description: >-
+      Filters every tile of the dashboard that reads these windows to the chromosomes
+      picked here. It answers how a library behaves on one chromosome at a time.
+  - component: table
+    title: Strand signal per window
+    description: >-
+      Each row is a 250 kb window of one library, with the plus and minus strand
+      signal in parts per million, their sum, its log2 and the plus-strand share.
+      It answers the exact value behind every other tile.
+
+      How to read: sort by signal to find the strongest windows, or filter by
+      chromosome and library to compare the same region across libraries.

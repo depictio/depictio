@@ -15,13 +15,73 @@ find:
 recipe: mosdepth/regions.py
 fixture: regions.tsv
 renders_as:
-  - { id: coverage_track_regions, component: advanced_viz, kind: coverage_track,
-      roles: {chromosome: chromosome, position: position, value: value, end: end, sample: sample_stage} }
+  - id: coverage_track_regions
+    component: advanced_viz
+    kind: coverage_track
+    title: Target depth along the genome
+    roles: {chromosome: chromosome, position: position, value: value, end: end, sample: sample_stage}
+    config:
+      color_by: sample
+    description: >-
+      Each point on a line is a 1 Mb window of the genome at its position, with the
+      target-length-weighted mean depth of the targets in it, one line per sample.
+      It answers whether the targeted regions are covered evenly along the genome.
+
+      How to read: lines of different samples should rise and fall together,
+      scaled by sequencing depth. A window that drops in every sample is a
+      difficult region or a target missing from the panel, and a window that drops
+      in one sample is a local failure.
+
+      Lines and annotations: no line is drawn, and mosdepth publishes no depth
+      cut-off. Judge depth against the assay's own requirement.
   # Same rows on GenomeSpy's own locus axis: the whole genome concatenated,
   # zoomable, and brushable into a region filter the rest of the tab reads.
-  - { id: genomespy_regions, component: advanced_viz, kind: genome_view,
-      roles: {chr: chromosome, pos: position, score: value, end: end, feature: sample_stage} }
+  - id: genomespy_regions
+    component: advanced_viz
+    kind: genome_view
+    title: Target depth on the genome axis
+    roles: {chr: chromosome, pos: position, score: value, end: end, feature: sample_stage, category: sample}
+    config:
+      score_title: Mean target depth (X)
+      score_threshold_stat: median
+    description: >-
+      Each bar is a 1 Mb window of the genome with its target-length-weighted mean
+      depth, on one axis that concatenates every chromosome, coloured by sample. It
+      answers where along the whole genome the targets are covered, and lets you
+      brush a region to filter the rest of the tab.
+
+      How to read: bars should be of similar height across windows of a sample. A
+      stretch of short bars is a poorly covered region, and tall bars are
+      regions with high target density or copy gain. Brush a stretch to focus the
+      other tiles on it.
+
+      Lines and annotations: the dashed line is the median window depth of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      mosdepth. mosdepth publishes no depth cut-off.
   # Depth is the one number a coverage table is read for, and a mean alone
   # hides the drop-outs: the Tukey strip shows the spread and the outliers.
-  - { component: card, column: value, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: value
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Window depth
+    description: >-
+      The hero number is the median mean target depth of a 1 Mb window, and the box
+      shows the quartiles and outliers. It answers how deeply the targets are
+      covered overall.
+
+      How to read: a tight box means even coverage along the genome. A long lower
+      tail holds windows that are under-covered and may hide variants.
+  - component: table
+    title: Window depth
+    description: >-
+      One row is one 1 Mb window of one sample, with its mean target depth and
+      number of targets. It answers which windows are under-covered.
+
+      How to read: Sort by the depth, lowest first, to find the weak windows,
+      and check the number of targets to see whether a window is simply sparse.
+      Look for windows that are weak in many samples. It complements the genome
+      coverage tiles of the same module, which draw these windows along the
+      chromosomes.

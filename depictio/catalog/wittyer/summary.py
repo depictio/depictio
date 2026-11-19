@@ -47,6 +47,11 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "precision": pl.Float64,
     "recall": pl.Float64,
     "f1": pl.Float64,
+    # Wittyer scores every callset twice, per event and per base; the pipeline's
+    # aggregated table keeps that level in `StatsType` (Event / Base) and carries no
+    # event-type or size-bin stratum. Always written, "Not reported" when the table
+    # has no such column, so the figure can colour by it.
+    "stats_type": pl.Utf8,
 }
 
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -54,10 +59,6 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "truth_set": pl.Utf8,  # read off the `<id>.<truth set>.<caller>.<ext>` File name
     "event_type": pl.Utf8,
     "size_bin": pl.Utf8,
-    # Wittyer scores every callset twice, per event and per base; the pipeline's
-    # aggregated table keeps that level in `StatsType` (Event / Base) and carries no
-    # event-type or size-bin stratum.
-    "stats_type": pl.Utf8,
 }
 
 
@@ -106,8 +107,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = df.with_columns(pl.col(sb).cast(pl.Utf8).alias("size_bin"))
 
     st = _find(df, "StatsType", "stats_type")
-    if st is not None:
-        df = df.with_columns(pl.col(st).cast(pl.Utf8).alias("stats_type"))
+    df = df.with_columns(
+        pl.col(st).cast(pl.Utf8).alias("stats_type")
+        if st is not None
+        else pl.lit("Not reported", dtype=pl.Utf8).alias("stats_type")
+    )
 
     keep = [
         "label",

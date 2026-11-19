@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: nanoq }
+  - component: multiqc
+    section: nanoq
+    title: Long-read filtering
+    description: >-
+      nanoq's MultiQC plots: the read length and read quality distributions after
+      filtering, per sample. They answer what the retained long-read library looks
+      like.
+
+      How to read: A length distribution with a long tail is typical for long reads.
+      A quality distribution centred low means the library will need stricter
+      filtering or better basecalling.
+
+      Source: https://docs.seqera.io/multiqc/modules/nanoq

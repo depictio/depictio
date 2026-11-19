@@ -16,19 +16,265 @@ find:
 recipe: deseq2/results_long.py
 fixture: results.tsv
 renders_as:
-  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_id, effect_size: log2fc, significance: padj} }
-  - { id: ma, component: advanced_viz, kind: ma, roles: {feature_id: gene_id, avg_log_intensity: log2_base_mean, log2_fold_change: log2fc} }
-  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: pvalue} }
-  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_id, contrast: contrast, lfc: log2fc} }
+  # Calls follow the nf-core/differentialabundance defaults (padj < 0.05 and
+  # |log2 fold change| >= 1), the same rule the recipe applies to `direction`.
+  - id: volcano
+    component: advanced_viz
+    kind: volcano
+    title: Differential expression volcano
+    roles: {feature_id: gene_id, effect_size: log2fc, significance: padj, category: contrast}
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      top_n_labels: 10
+      effect_label: Log2 fold change
+      significance_label: -log10 adjusted p-value
+    description: >-
+      Each point is a gene in one contrast: its log2 fold change on the horizontal
+      axis and its adjusted p-value on the vertical axis. It answers which genes
+      change most, in which direction, and how confidently.
+
+      How to read: genes in the upper left and upper right corners are strongly
+      down- and up-regulated with high confidence. A cloud with almost nothing past
+      the lines means little differential signal, so check the QQ view and the
+      sample PCA before trusting the contrast. Open the table tile to inspect the
+      labelled genes.
+
+      Lines and annotations: the horizontal line is the adjusted p-value cut-off of
+      0.05 and the vertical lines mark an absolute log2 fold change of 1 (a fold
+      change of 2). Both are the nf-core/differentialabundance defaults, which also
+      define the up, down and not significant calls on every tile of this tab.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - id: ma
+    component: advanced_viz
+    kind: ma
+    title: Fold change against mean expression
+    roles: {feature_id: gene_id, avg_log_intensity: log2_base_mean, log2_fold_change: log2fc, significance: padj}
+    config:
+      significance_threshold: 0.05
+      fold_change_threshold: 1.0
+      top_n_labels: 10
+      effect_label: Log2 fold change
+      intensity_label: Mean expression (log2)
+    description: >-
+      Each point is a gene in one contrast: its mean normalised expression on the
+      horizontal axis (log2 of base mean plus one) and its log2 fold change on the
+      vertical axis. It answers whether the fold changes are real or only come from
+      weakly expressed genes.
+
+      How to read: a healthy MA plot is a flat cloud centred on zero, with the
+      significant genes spread across expression levels. A funnel that widens at
+      low expression is normal noise of low counts. A cloud shifted away from zero
+      points to a normalisation problem, so check the sample distributions.
+
+      Lines and annotations: the horizontal lines mark an absolute log2 fold change
+      of 1 (a fold change of 2) and points are highlighted when the adjusted
+      p-value is below 0.05. Both are the nf-core/differentialabundance defaults.
+      DESeq2 itself colours its MA plot at an adjusted p-value of 0.1, its default
+      alpha.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+      and https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+  - id: qq
+    component: advanced_viz
+    kind: qq
+    title: P-value QQ plot
+    roles: {p_value: pvalue, category: contrast, feature_id: gene_id}
+    config:
+      show_ci: true
+      show_identity: true
+      top_n_labels: 5
+    description: >-
+      Each point is a gene: its observed raw p-value, as minus log10, against the
+      value expected if no gene differed between the groups. One trace is drawn per
+      contrast. It answers whether the test statistics are well calibrated.
+
+      How to read: points hugging the diagonal for most of the range and lifting off
+      at the far end mean a few real signals over a calibrated null. A curve that
+      leaves the diagonal early, or sits below it, points to inflation or deflation
+      from batch effects, a wrong design or low counts. Compare the contrasts and
+      revisit the PCA when one curve differs.
+
+      Lines and annotations: the diagonal is y = x, the expectation when p-values are
+      uniformly distributed under no effect. The shaded band is the 95% confidence
+      interval of that null, so points inside it are consistent with chance.
+  - id: da_barplot
+    component: advanced_viz
+    kind: da_barplot
+    title: Top changed genes per contrast
+    roles: {feature_id: gene_id, contrast: contrast, lfc: log2fc, significance: padj}
+    config:
+      significance_threshold: 0.05
+      effect_label: Log2 fold change
+    description: >-
+      Each bar is a gene: its log2 fold change in a contrast, for the genes with the
+      largest absolute change. It answers which genes drive each contrast and in
+      which direction.
+
+      How to read: long bars to the right are up-regulated and to the left
+      down-regulated; bars are marked when their adjusted p-value passes the cut-off.
+      A strong fold change without significance usually means low or variable
+      counts, so open the MA plot and the table to check it.
+
+      Lines and annotations: significance is marked at an adjusted p-value below 0.05,
+      the nf-core/differentialabundance default.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
   # Effect-size spread, then the up/down/not-significant split, then how many
   # features cleared the padj cut-off and how strong the top calls are.
-  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }
-  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction, headline: true }
-  - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: histogram, aggregations: [box_plot_stats] }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: log2fc, color: direction} }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+  # The hero is the range, not the median: a median over both directions of a
+  # fold change cancels to about zero (RULES section 5).
+  - component: card
+    column: log2fc
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: quartiles of the fold changes
+    title: Fold change spread
+    description: >-
+      The hero number is the range of log2 fold changes over every gene and contrast
+      in view, and the box shows their quartiles. It answers how large the
+      differences are overall.
+
+      How to read: a box tight around zero with a long range means most genes are
+      unchanged and a few change a lot. A box shifted off zero points to a
+      normalisation issue. Filter to one contrast to compare them.
+  - component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    caption: significant genes, by direction
+    breakdown_col: direction
+    top_n_count: 3
+    filter_expr: "col('direction') != 'not significant'"
+    title: Significant genes by direction
+    description: >-
+      The hero number is the count of distinct genes called significant, and the
+      bars rank them by direction, up or down. It answers whether the response is
+      mostly induction or repression.
+
+      How to read: a strong imbalance between up and down is worth checking against
+      the normalisation, the sample PCA and the biology. Calls use an adjusted
+      p-value below 0.05 and an absolute log2 fold change of at least 1.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - component: card
+    column: direction
+    aggregation: count
+    aggregations: [mode]
+    secondary_layout: donut
+    caption: calls, by direction; most frequent call
+    breakdown_col: direction
+    headline: true
+    title: Calls by direction
+    description: >-
+      Each unit is one gene in one contrast, and the ring splits them into up, down
+      and not significant. It answers how many genes pass the cut-offs overall.
+
+      How to read: a ring that is mostly not significant means a weak contrast or
+      too little replication. Open the volcano to see the borderline genes.
+
+      Lines and annotations: the call is an adjusted p-value below 0.05 and an
+      absolute log2 fold change of at least 1, the nf-core/differentialabundance
+      defaults.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - component: card
+    column: neg_log10_padj
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: histogram
+    caption: distribution, with its median and upper quartile
+    title: Strength of the strongest call
+    description: >-
+      The hero number is the largest minus log10 adjusted p-value, and the histogram
+      shows the distribution of that score over all genes. It answers how strong the
+      best evidence is and how much of the table carries any evidence.
+
+      How to read: a histogram piled at zero with a long right tail is the usual
+      shape. DESeq2 reports an adjusted p-value of exactly 0 for its strongest calls,
+      which the score caps at 300, so the maximum is a ceiling and not a measurement.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: log2fc
+      color: direction
+      labels: {log2fc: Log2 fold change, direction: Call}
+    title: Distribution of fold changes
+    reference_lines:
+      - {axis: x, stat: median, column: log2fc}
+    description: >-
+      Each bar counts genes in a log2 fold change bin, split by call. It answers how
+      the significant genes sit in the overall fold change distribution.
+
+      How to read: a distribution centred on zero with significant genes in both
+      tails is expected. A skewed or shifted distribution suggests a composition
+      effect or a normalisation problem. Open the MA plot to confirm.
+
+      Lines and annotations: the call colours use an adjusted p-value below 0.05 and
+      an absolute log2 fold change of at least 1, the nf-core/differentialabundance defaults. The dashed line is the median log2 fold
+      change of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of DESeq2.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Differential results table
+    description: >-
+      Each row is a gene in one contrast with its DESeq2 statistics: base mean, log2
+      fold change, standard error, p-value, adjusted p-value and the call. It
+      answers which genes to follow up and lets a row selection filter the rest of
+      the dashboard.
+
+      How to read: sort by adjusted p-value or by fold change, and filter by call.
+      A missing adjusted p-value means DESeq2 filtered the gene as an outlier or as
+      too low in counts.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: direction, aggregation: count, secondary_layout: composition, breakdown_col: direction }
-  - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: gauge, coverage_max: 60 }
+  - component: card
+    column: direction
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    caption: calls, as shares; number of call classes
+    breakdown_col: direction
+    title: Call composition
+    description: >-
+      Each unit is one gene in one contrast and the bar shows the share of each
+      call. It answers what fraction of the tested genes change.
+
+      How to read: compare the shares with the ring above; a very small significant
+      share means few genes pass an adjusted p-value of 0.05 and a log2 fold change
+      of 1.
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+  # Median adjusted p-value against the 0.05 rule; 0.1 is DESeq2's own default
+  # alpha, shown as the warning band.
+  - component: card
+    column: padj
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: threshold
+    caption: median, with its smallest and largest
+    threshold_value: 0.05
+    threshold_direction: max
+    threshold_warn: 0.1
+    title: Median adjusted p-value
+    description: >-
+      The hero number is the median adjusted p-value over all genes and contrasts,
+      compared with a cut-off. It answers whether most of the table carries
+      evidence of change.
+
+      How to read: a median below the cut-off means most genes are significant,
+      which is unusual outside a strong perturbation. A median near one is the
+      normal case.
+
+      Lines and annotations: the cut-off is an adjusted p-value of 0.05, the
+      nf-core/differentialabundance default, and the warning level is 0.1, the
+      default alpha of DESeq2 results().
+
+      Source: https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
+      and https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html

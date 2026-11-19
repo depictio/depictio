@@ -13,16 +13,107 @@ find:
 recipe: last/synteny_links.py
 fixture: synteny_links.tsv
 renders_as:
-  - { id: synteny_ring, component: advanced_viz, kind: genome_chord,
-      roles: {chrom_a: chrom_a, pos_a: pos_a, chrom_b: chrom_b, pos_b: pos_b,
-              label: label, weight: weight, category: category, sample: query} }
-  - { id: links_total, component: card, column: label, aggregation: count,
-      secondary_layout: composition, breakdown_col: category, headline: true }
-  - { id: links_weight, component: card, column: weight, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: chrom_a, top_n_count: 3, headline: true }
-  - { id: links_identity, component: card, column: identity_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: links_span, component: card, column: aligned_bp, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: chrom_a, top_n_count: 3 }
-  - { component: interactive, interactive_type: MultiSelect, column_name: category }
-  - { component: table, row_selection_enabled: true, row_selection_column: label }
+  - id: synteny_ring
+    component: advanced_viz
+    kind: genome_chord
+    title: Synteny between target and query
+    roles: {chrom_a: chrom_a, pos_a: pos_a, chrom_b: chrom_b, pos_b: pos_b,
+            label: label, weight: weight, category: category, sample: query}
+    config:
+      colour_by: category
+    description: >-
+      Each chord is one of the longest one-to-one alignments, linking its locus on a
+      target chromosome to its locus on a query chromosome, coloured by orientation
+      and weighted by its matching bases. It answers which chromosomes of the two
+      genomes share long collinear blocks.
+
+      How to read: bundles of chords between the same two chromosomes are conserved
+      synteny. Chords that fan out from one chromosome point to rearrangements, and
+      inverted chords mark blocks that are reversed in the query.
+
+      Note: only the longest alignments of each pair are kept, so short blocks do not
+      appear.
+  - id: links_total
+    component: card
+    column: label
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: category
+    headline: true
+    caption: links, by orientation
+    title: Synteny links
+    description: >-
+      The hero number is the count of retained alignment links and the bar splits them
+      by orientation, same strand or inverted. It answers how many long blocks are
+      conserved and how many are reversed.
+
+      How to read: most long blocks of closely related genomes keep their orientation.
+      A large inverted share points to rearranged or distant genomes.
+  - id: links_weight
+    component: card
+    column: weight
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: concentration
+    breakdown_col: chrom_a
+    top_n_count: 3
+    headline: true
+    caption: share held by the top chromosomes
+    title: Matching bases in the links
+    description: >-
+      The hero number is the total matching bases of the retained links and the strip
+      shows the share held by the three target chromosomes with the most. It answers
+      whether the conserved blocks are spread over the genome.
+
+      How to read: a high share means a few chromosomes hold most of the long blocks,
+      which is expected for the largest chromosomes.
+  - id: links_identity
+    component: card
+    column: identity_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: identity, with its spread
+    title: Identity of the links
+    description: >-
+      The hero number is the median percent identity of the retained links and the
+      box shows its quartiles. It answers how conserved the long blocks are.
+
+      How to read: identity of long blocks tracks the divergence of the pair. A wide
+      box means the run mixes close and distant genomes.
+  - id: links_span
+    component: card
+    column: aligned_bp
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: link length, with its spread
+    title: Length of the links
+    description: >-
+      The hero number is the median aligned length of the retained links and the box
+      shows its quartiles. It answers how long the conserved blocks are.
+
+      How to read: long blocks mean a well assembled and little rearranged pair. Short
+      blocks mean the genomes are fragmented or rearranged.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: category
+    title: Orientation
+    description: >-
+      Select same strand or inverted links to keep only those. It answers where the
+      reversed blocks sit.
+
+      How to read: pick inverted to see the rearranged regions in the ring and the
+      table.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: label
+    title: Synteny links table
+    description: >-
+      Each row is a retained alignment link with its locus on both genomes, aligned
+      length, identity, orientation and rank. It answers the exact coordinates behind
+      each chord and lets a row selection filter the dashboard.
+
+      How to read: sort by weight to list the longest blocks, and filter by
+      orientation to list the inverted ones.

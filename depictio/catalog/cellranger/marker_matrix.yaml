@@ -9,5 +9,29 @@ find:
 recipe: cellranger/marker_matrix.py
 fixture: marker_matrix.tsv
 renders_as:
-  - { id: marker_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene} }
-  - { component: table }
+  # C6 N/A: value columns are the run's clusters, named only at ingest.
+  # C1 N/A: a heatmap colours by the value scale, which the kind draws itself.
+  - id: marker_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Marker expression across clusters
+    roles: {index: gene}
+    config:
+      normalize: row_z
+    description: >-
+      Each row is a marker gene and each column a cluster, coloured by the mean expression of
+      the gene in that cluster. It answers which clusters express which markers and which
+      clusters resemble each other.
+
+      How to read: a row that is bright in one column is a specific marker. Columns that
+      cluster together share markers and may be related cell types or one over-split type.
+
+      Lines and annotations: no cut-off is drawn. Each row is scaled to a z-score over the
+      clusters, so colours compare clusters for one gene and not genes with each other.
+  - component: table
+    title: Marker expression matrix
+    description: >-
+      Each row is a marker gene with its mean expression in every cluster. It answers the exact
+      values behind the heatmap.
+
+      How to read: read across a row to find the clusters that express the gene most.

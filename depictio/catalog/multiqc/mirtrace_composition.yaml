@@ -15,7 +15,40 @@ find:
 recipe: multiqc/mirtrace_composition.py
 fixture: mirtrace_composition.tsv
 renders_as:
-  - { id: rna_composition, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: sample, taxon: taxon, rank: rank, abundance: abundance} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: rank }
-  - { component: table }
+  - id: rna_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Small RNA library composition
+    roles: {sample_id: sample, taxon: taxon, rank: rank, abundance: abundance}
+    config:
+      value_title: Share of library
+    description: >-
+      Each bar is one library, split into the categories of the chosen breakdown:
+      reads by RNA type, reads by miRTrace QC outcome, or detected miRNAs by organism
+      clade. It answers whether the library holds the small RNAs it should and
+      whether another organism contributes.
+
+      How to read: a good small RNA library is dominated by miRNA among the RNA
+      types and by reads passing QC. Detected miRNAs should come from the sample's
+      own clade, and a notable share from another clade suggests contamination. Use
+      the rank selector to switch between the three breakdowns.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/mirtrace/mirtrace.py
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: rank
+    title: Breakdown
+    description: >-
+      Choose which of the three miRTrace breakdowns the other tiles show: RNA type,
+      read QC outcome or clade. Selecting one keeps the stacked bars comparable,
+      because each breakdown has its own categories.
+  - component: table
+    title: Composition values
+    description: >-
+      One row is one library, breakdown and category, with its count and its share of
+      the breakdown. It gives the exact values behind the stacked bars and answers
+      what each library is made of.
+
+      How to read: sort by share to find the dominant categories, then filter to one
+      breakdown to compare libraries. Look for a category whose share differs sharply
+      between libraries. It complements the composition bars tile.

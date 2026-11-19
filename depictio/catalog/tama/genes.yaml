@@ -10,8 +10,62 @@ find:
 recipe: tama/genes.py
 fixture: genes.tsv
 renders_as:
-  - { id: gene_isoform_plane, component: advanced_viz, kind: scatter_xy,
-      roles: {x: read_support, y: isoforms, label: gene_name, color: top_category} }
-  - { component: card, column: gene_id, aggregation: count, secondary_layout: top_n, breakdown_col: gene_status, top_n_count: 2, headline: true }
-  - { component: card, column: isoforms, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: gene_isoform_plane
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: read_support, y: isoforms, label: gene_name, color: top_category}
+    title: Isoforms against read support per gene
+    config:
+      log_x: true
+      x_title: FLNC reads supporting the gene
+      y_title: Isoforms per gene
+      top_n_labels: 10
+    description: >-
+      Each point is a gene in one sample: the full-length reads behind it on the horizontal axis (log
+      scale) and the number of distinct isoforms TAMA found on the vertical axis, coloured by the most
+      common structural category among its isoforms. It answers which genes carry the most isoform diversity
+      and whether that diversity is backed by reads.
+
+      How to read: genes high on the plot have many isoforms. Isoform count rises with read depth, so a gene
+      that sits high at low read support is the more surprising one. A gene with many isoforms that are
+      mostly novel categories is a candidate for follow-up or for artefacts.
+  - component: card
+    column: gene_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: gene_status
+    top_n_count: 2
+    headline: true
+    caption: genes, by annotation status
+    title: Genes with isoforms
+    description: >-
+      The hero number counts the gene entries (one per sample and gene) with at least one isoform, and the bars split them into
+      annotated and novel genes. The second figure counts the distinct gene ids over all samples. It answers
+      how many genes the long reads reach and how many are not in the reference.
+
+      How to read: a small novel share is expected for a well annotated organism. A large one is worth
+      checking against the reference GTF used for the structural categories.
+  - component: card
+    column: isoforms
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: isoforms per gene, with their spread
+    title: Isoforms per gene
+    description: >-
+      The hero number is the median isoform count per gene and sample, and the box shows its quartiles. It
+      answers how many isoforms a typical gene carries.
+
+      How to read: most genes carry one or two isoforms, and the long upper whisker is the few genes with
+      rich splicing. A rise in the median usually follows deeper sequencing, so compare samples of similar
+      depth.
+  - component: table
+    title: Genes table
+    description: >-
+      Each row is a gene in one sample: the isoform count, the reads behind it, how many isoforms fall in
+      each structural category and the read share of its dominant isoform. It answers which genes to open in
+      the isoform structure view.
+
+      How to read: sort by isoform count, then read the dominant isoform share. A low share means the reads
+      are spread over several isoforms, a high one that one isoform dominates the gene.

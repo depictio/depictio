@@ -10,8 +10,75 @@ find:
 recipe: cellranger/metrics_summary.py
 fixture: metrics_summary.tsv
 renders_as:
-  - { component: card, column: estimated_cells, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: median_genes_per_cell, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: card, column: fraction_reads_in_cells_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: table }
+  - component: card
+    column: estimated_cells
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: estimated cells per sample
+    title: Estimated cells
+    description: >-
+      The hero number is the median of the cells Cell Ranger estimates per sample, and the
+      histogram shows the distribution. It answers how many cells each library yields.
+
+      How to read: a sample far below the others may be under-loaded or have failed cell
+      calling. Check its barcode rank plot.
+  - component: card
+    column: median_genes_per_cell
+    aggregation: median
+    aggregations: [box_plot_stats, min]
+    secondary_layout: box_plot
+    caption: median genes per cell, with its spread
+    title: Genes per cell
+    description: >-
+      The hero number is the median of the per-sample median genes detected per cell, and the
+      box shows its spread. It answers how complex the cells are.
+
+      How to read: the value depends on cell type and depth, so compare samples of one
+      experiment. A sample far below the rest is shallower or lower quality.
+  - component: card
+    column: sequencing_saturation_pct
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100.0
+    caption: saturation, of 100%
+    title: Sequencing saturation
+    description: >-
+      The hero number is the average sequencing saturation, shown out of 100 percent. It
+      answers how much more sequencing would reveal new UMIs.
+
+      How to read: a high value means extra reads mostly repeat molecules already seen, so
+      deeper sequencing gains little. A low value means the library is not yet saturated.
+
+      Note: 10x gives no expected value for saturation, since it depends on sequencing depth and
+      sample complexity, so no pass mark is drawn.
+
+      Source: https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf
+  - component: card
+    column: fraction_reads_in_cells_pct
+    aggregation: average
+    aggregations: [min]
+    secondary_layout: threshold
+    threshold_value: 70.0
+    threshold_direction: min
+    caption: reads in cells against the 70% expectation
+    title: Reads in cells
+    description: >-
+      The hero number is the average percent of reads that fall in called cells, shown against
+      the expected minimum. It answers how much of the sequencing goes to real cells.
+
+      How to read: a value below the line means many reads come from empty droplets or ambient
+      RNA. Check the barcode rank plot of that sample.
+
+      Lines and annotations: the line is 70 percent, the value 10x lists as expected for the
+      fraction of reads in cells.
+
+      Source: https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf
+  - component: table
+    title: Cell Ranger metrics per sample
+    description: >-
+      Each row is a sample with its Cell Ranger metrics: cells, reads, saturation, Q30 values,
+      mapping and detection counts. It answers the exact web summary numbers of a run.
+
+      How to read: compare a column across samples to spot an outlier.

@@ -8,12 +8,75 @@ description: >-
 find:
   path_glob: "**/*.report.json"
 recipe: pbccs/zmw_yield.py
+# The fixture is enriched synthetically from 1 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: zmw_yield.tsv
 renders_as:
   # Depth against pass rate: a library low on both lost its movie, one low on
   # the rate only lost its ZMWs to a filter (see pbccs/zmw_outcomes).
-  - { id: ccs_yield_plane, component: advanced_viz, kind: scatter_xy,
-      roles: {x: zmw_input, y: pct_passed, label: library, color: sample} }
-  - { component: card, column: zmw_passed, aggregation: sum, secondary_layout: top_n, breakdown_col: library, top_n_count: 3 }
-  - { component: card, column: pct_passed, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: table }
+  # C1: one colour per sample, the group a library belongs to.
+  - id: ccs_yield_plane
+    component: advanced_viz
+    kind: scatter_xy
+    title: ZMW depth against pass rate
+    roles: {x: zmw_input, y: pct_passed, label: library, color: sample}
+    config:
+      x_title: ZMWs read
+      y_title: ZMWs giving a CCS read (%)
+      legend_pos: bottom
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a library: the number of ZMWs read (horizontal) against the
+      percentage that produced a CCS read (vertical), coloured by sample. It answers
+      whether a library is short on depth, on pass rate, or on both.
+
+      How to read: a library low on both lost its movie or was loaded poorly. A library
+      low on the pass rate only lost its ZMWs to a filter, so open the outcome chart to
+      see which one. ccs publishes no pass rate that separates good from bad libraries.
+
+      Lines and annotations: The dashed line is the median CCS pass rate of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of pbccs.
+
+      Source: https://ccs.how/
+  - component: card
+    column: zmw_passed
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: compact
+    caption: per library, the median and the largest
+    title: ZMWs giving a CCS read
+    description: >-
+      The hero number is the total of ZMWs that produced a CCS (HiFi) read, with the
+      median and the largest library next to it. It answers how many reads the run
+      yields.
+
+      How to read: a large gap between the median and the maximum means uneven
+      libraries. A HiFi read has a predicted accuracy of at least QV 20, and CCS reads
+      below it go to the fail reads.
+
+      Source: https://ccs.how/nomenclature.html and https://ccs.how/faq/fail-reads.html
+  - component: card
+    column: pct_passed
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with the spread
+    title: CCS pass rate
+    description: >-
+      The hero number is the median percentage of ZMWs that gave a CCS read, with the
+      spread across libraries in the box. It answers how efficient the consensus step
+      is.
+
+      How to read: a tight box is a consistent run. A library far below its peers lost
+      ZMWs to a filter, so open the outcome chart to see which. ccs publishes no pass
+      rate cut-off.
+  - component: table
+    title: CCS yield per library
+    description: >-
+      Each row is a library: the ZMWs read, passed and filtered, the pass rate and the
+      main reasons for filtering. It answers how each library performed.
+
+      How to read: sort by the pass rate to find libraries to check, then compare the
+      filter columns.

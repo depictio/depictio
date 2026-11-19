@@ -14,11 +14,173 @@ find:
 recipe: bismark/window_group_compare.py
 fixture: window_group_compare.tsv
 renders_as:
-  - { id: window_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: window_id, effect_size: delta_methylation, significance: padj, label: window_id, category: direction} }
-  - { id: window_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chromosome, pos: position, score: neg_log10_padj, feature: window_id, effect: delta_methylation} }
-  - { component: card, column: delta_methylation, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }
-  - { component: card, column: window_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
-  - { component: card, column: neg_log10_padj, aggregation: max, aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: delta_methylation, color: direction} }
-  - { component: table, row_selection_enabled: true, row_selection_column: window_id }
+  # Bismark and nf-core/methylseq define no differential-methylation cut-off
+  # (the pipeline ships no caller). The lines below are this table's own call
+  # rule from the recipe (padj below 0.05 and at least 10 points), stated as
+  # such in the descriptions, not a published standard.
+  - id: window_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: {feature_id: window_id, effect_size: delta_methylation, significance: padj, label: window_id, category: direction}
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 10.0
+      top_n_labels: 8
+      effect_label: Methylation difference (points)
+      significance_label: -log10 adjusted p-value
+    title: Window methylation volcano
+    description: >-
+      Each point is a 10 kb window: the methylation difference between the two
+      groups on the horizontal axis and its adjusted p-value on the vertical axis.
+      It answers which regions differ most, in which direction and how confidently.
+
+      How to read: windows in the upper left and right corners lose or gain
+      methylation with the highest confidence. With only a handful of libraries per
+      group this is a screen, so confirm any region in the genome view before
+      acting.
+
+      Lines and annotations: the horizontal line is an adjusted p-value of 0.05
+      (Benjamini-Hochberg) and the vertical lines are a difference of 10 percentage
+      points. Both are the call rule of this table, set by the recipe, and not a
+      published standard.
+
+      Note: Bismark and nf-core/methylseq define no differential-methylation
+      cut-off.
+  - id: window_manhattan
+    component: advanced_viz
+    kind: manhattan
+    roles: {chr: chromosome, pos: position, score: neg_log10_padj, feature: window_id, effect: delta_methylation}
+    config:
+      score_threshold: 1.30103
+      color_by_columns: [direction]
+      default_color_by: direction
+      top_n_labels: 8
+    title: Window methylation Manhattan plot
+    description: >-
+      Each point is a 10 kb window along the genome, with the significance of its
+      group difference (minus log10 of the adjusted p-value) as height and the call
+      as colour. It answers where on the genome the differences concentrate.
+
+      How to read: a cluster of tall points on one chromosome marks a region that
+      loses or gains methylation as a block. Isolated points are weaker evidence,
+      so check neighbouring windows.
+
+      Lines and annotations: the horizontal line is minus log10 of 0.05, an adjusted
+      p-value of 0.05. It is the call rule of this table, set by the recipe, and not
+      a published standard.
+  - component: card
+    column: delta_methylation
+    aggregation: count
+    aggregations: [min, max]
+    secondary_layout: donut
+    breakdown_col: direction
+    caption: Windows, by call
+    title: Windows tested, by call
+    description: >-
+      The hero number is the count of windows tested, shown with the largest loss
+      and gain in percentage points, and the ring splits them by call. It answers
+      how many windows differ and in which direction.
+
+      How to read: a ring almost entirely not significant means little difference
+      between the groups. A lopsided ring shows a global shift in one direction.
+
+      Note: the calls follow the recipe rule of an adjusted p-value below 0.05 and
+      a difference of at least 10 percentage points, not a published standard.
+  # A median over both directions of the difference cancels to about zero, so
+  # each direction gets its own card.
+  - component: card
+    column: delta_methylation
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "pl.col('direction') == 'Hypermethylated'"
+    caption: Gains, with their spread
+    title: Methylation gains
+    description: >-
+      The hero number is the largest methylation gain among the hypermethylated
+      windows, and the box shows the spread of the gains. It answers how large the
+      gains are.
+
+      How to read: a box close to the 10 point rule means gains are modest. A long
+      upper whisker marks a few windows with a large change.
+
+      Note: the 10 point rule is the call rule of this table, not a published
+      standard.
+  - component: card
+    column: delta_methylation
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "pl.col('direction') == 'Hypomethylated'"
+    caption: Losses, with their spread
+    title: Methylation losses
+    description: >-
+      The hero number is the largest methylation loss among the hypomethylated
+      windows, and the box shows the spread of the losses. It answers how large the
+      losses are.
+
+      How to read: a box close to the 10 point rule means losses are modest. A long
+      lower whisker marks a few windows with a large change.
+
+      Note: the 10 point rule is the call rule of this table, not a published
+      standard.
+  - component: card
+    column: chromosome
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    filter_expr: "pl.col('direction') != 'Not significant'"
+    caption: Chromosomes with the most calls
+    title: Chromosomes carrying calls
+    description: >-
+      The hero number is how many chromosomes carry a called window, with the count
+      of called windows beside it, and the bars rank the chromosomes. It answers
+      whether the calls cluster on a few chromosomes.
+
+      How to read: a chromosome far ahead of the others can reflect a copy-number or
+      sex difference between the groups rather than regulated methylation.
+  - component: card
+    column: neg_log10_padj
+    aggregation: max
+    aggregations: [median, q3]
+    secondary_layout: histogram
+    caption: Significance, window by window
+    title: Strongest window significance
+    description: >-
+      The hero number is the largest minus log10 adjusted p-value, and the histogram
+      shows how significance spreads over windows. It answers how strong the best
+      window is and how many windows stand out.
+
+      How to read: a histogram piled near zero with a thin tail is a screen with few
+      real differences. Open the volcano to see the tail windows.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: delta_methylation
+      color: direction
+      labels: {delta_methylation: Methylation difference (percentage points), direction: Call}
+    title: Distribution of methylation differences
+    description: >-
+      Each bar counts windows in a bin of methylation difference between the two
+      groups, split by call. It answers how the called windows sit in the overall
+      distribution.
+
+      How to read: a distribution centred on zero is expected when the groups are
+      alike. A shifted centre suggests a global difference or a batch effect.
+
+      Lines and annotations: the call colours use an adjusted p-value below 0.05 and
+      a difference of at least 10 percentage points, the call rule of this table and
+      not a published standard.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: window_id
+    title: Window comparison table
+    description: >-
+      Each row is a 10 kb window with the two group means, the difference, the test
+      statistic, the adjusted p-value and the call. It answers the exact statistics
+      of any window.
+
+      How to read: sort by adjusted p-value to list the best windows, then select a
+      row to inspect it in the other tiles.

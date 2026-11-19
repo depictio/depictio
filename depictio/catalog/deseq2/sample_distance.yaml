@@ -8,4 +8,20 @@ find: { path_glob: "**/all.vst.tsv" }
 recipe: deseq2/vst_sample_distance.py
 fixture: sample_distance.tsv
 renders_as:
-  - { id: distance_matrix, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
+  # Sample columns are named at ingest, so value_columns cannot be written here:
+  # every numeric column is a sample and the default is right.
+  - id: distance_matrix
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Sample distances
+    roles: {index: sample}
+    description: >-
+      Each cell is the Euclidean distance between two samples over the most variable
+      features of the variance-stabilised matrix, with rows and columns clustered. It
+      answers which samples are most alike overall.
+
+      How to read: replicates should form blocks of small distance and conditions
+      should separate. A sample that joins the wrong block, or sits far from all
+      others, is an outlier or a mislabelled library.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html

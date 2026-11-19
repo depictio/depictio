@@ -39,6 +39,7 @@ import { sortNaturalOrDuration } from '../../../durationOrder';
 import { brushTrigger, laneCursor, specInteractionMode } from './interactionMode';
 import type { InteractionMode } from './interactionMode';
 import { renameToContigs } from './contigNames';
+import type { ReferenceStat } from '../referenceStats';
 
 
 /** Share of the score span added at both ends of a point lane's domain. */
@@ -89,6 +90,10 @@ export interface GenomeViewConfig {
   assembly?: string | null;
   score_title?: string;
   score_threshold?: number | null;
+  /** Place the rule at this statistic of the score over the rows on show; the
+   *  server computes it (`reference_stats.score_threshold`) and the renderer
+   *  resolves it into `score_threshold` before building the spec. */
+  score_threshold_stat?: ReferenceStat | null;
   point_size?: number;
   /** Extra columns the hover tooltip shows. */
   hover_cols?: string[] | null;
@@ -228,6 +233,9 @@ export interface BuildSpecInput {
   assemblyContigs?: readonly Contig[] | null;
   /** Genes for the annotation lane, or null for no lane. */
   genes?: readonly GeneRow[] | null;
+  /** Words on the threshold rule, when a statistic placed it ("95th
+   *  percentile of this table", RULES §17). Null draws the bare rule. */
+  thresholdLabel?: string | null;
 }
 
 export interface BuiltGenomeSpec {
@@ -1016,6 +1024,8 @@ function buildDataLane(
     pickParam: string;
     /** Show a pointer over the marks (a click filters). */
     clickable?: boolean;
+    /** Text drawn on the threshold rule (see `BuildSpecInput.thresholdLabel`). */
+    thresholdLabel?: string | null;
     filterExpr?: string;
     title?: string;
     /** Leave the y axis untitled (stacked lanes: the lane title names it). */
@@ -1128,6 +1138,29 @@ function buildDataLane(
       mark: { type: 'rule', color: colors.ruleColor, strokeDash: [4, 4], tooltip: null },
       encoding: { y: { datum: threshold, type: 'quantitative' } },
     });
+    if (opts.thresholdLabel) {
+      // At the right edge of the lane, just above the rule. A constant x
+      // `value` is normalised 0..1 within the lane, so it needs no locus.
+      layers.push({
+        name: `${opts.name}-threshold-label`,
+        data: { values: [{}] },
+        mark: {
+          type: 'text',
+          size: 10,
+          align: 'right',
+          baseline: 'bottom',
+          dx: -4,
+          dy: -2,
+          tooltip: null,
+        },
+        encoding: {
+          x: { value: 1 },
+          y: { datum: threshold, type: 'quantitative' },
+          text: { value: opts.thresholdLabel },
+          color: { value: colors.textColor },
+        },
+      });
+    }
   }
 
   if (opts.overlay) {
@@ -1236,6 +1269,7 @@ export function buildGenomeSpySpec({
   assemblyContigs,
   genes,
   clickable = false,
+  thresholdLabel = null,
 }: BuildSpecInput): BuiltGenomeSpec {
   const columns = requiredColumns(
     config,
@@ -1303,6 +1337,7 @@ export function buildGenomeSpySpec({
           laneSample: sample,
           pickParam: `${PICK_PARAM}_${i}`,
           clickable,
+          thresholdLabel,
           // vega-expression over the one shared dataset, so N lanes cost one
           // copy of the rows rather than N.
           filterExpr: `datum[${JSON.stringify(sampleCol)}] === ${JSON.stringify(sample)}`,
@@ -1334,6 +1369,7 @@ export function buildGenomeSpySpec({
         name: 'track',
         pickParam: PICK_PARAM,
         clickable,
+        thresholdLabel,
         // The lone lane fills the tile: unsized, it drew a sliver at the top of
         // a tall one. The gene lane (fixed) and the axis keep their own height.
         height: config.lane_height ? config.lane_height : { grow: 1, minPx: SINGLE_LANE_MIN_HEIGHT },

@@ -12,4 +12,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: nanostat }
+  - component: multiqc
+    section: nanostat
+    title: Long-read QC
+    description: >-
+      NanoStat's summary of read length, read quality and yield, per sample, as
+      MultiQC shows it. It answers whether the run produced enough usable long
+      reads.
+
+      How to read: A high N50 and a good mean quality are good. Low yield or short
+      reads point to degraded DNA or a poor library preparation.
+
+      Source: https://docs.seqera.io/multiqc/modules/nanostat

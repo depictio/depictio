@@ -11,6 +11,48 @@ find:
 recipe: hmf_bamtools/coverage_profile.py
 fixture: coverage_profile.tsv
 renders_as:
-  - { id: cumulative_coverage_curve, component: advanced_viz, kind: profile, roles: {series: sample, x: coverage, y: fraction_at_least} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: coverage, y: fraction, color: sample} }
-  - { component: table }
+  # No cut-off drawn: BamTools (hmftools) documents no coverage floor
+  # (README), so the curves stand alone (RULES section 17).
+  - id: cumulative_coverage_curve
+    component: advanced_viz
+    kind: profile
+    title: Cumulative coverage
+    roles: {series: sample, x: coverage, y: fraction_at_least}
+    config:
+      x_title: Coverage depth (x)
+      y_title: Fraction of bases at or above depth
+      legend_pos: bottom
+    description: >-
+      Each curve is a DNA sample: the fraction of bases covered at least to each depth.
+      It answers how much of the target is sequenced deeply enough to call variants.
+
+      How to read: a curve that stays high and drops late means deep, even coverage. A
+      tumour sequenced deeper than its normal sits to the right. A curve that drops early
+      marks a sample too shallow for the somatic callers you plan to use.
+
+      Lines and annotations: none are drawn. BamTools documents no coverage floor, so
+      judge the depth against the requirements of your callers.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/bam-tools/README.md
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: coverage
+      y: fraction
+      color: sample
+      labels: {coverage: Coverage depth (x), fraction: Fraction of bases at this depth, sample: Sample}
+    title: Coverage depth distribution
+    description: >-
+      Each line is a sample: the fraction of bases at each exact depth, the density
+      behind the cumulative curve. It answers where the bulk of the coverage sits.
+
+      How to read: a single narrow peak is even coverage. A wide or multi-peaked line
+      means uneven sequencing, and a spike at depth zero is unsequenced bases.
+  - component: table
+    title: Coverage table
+    description: >-
+      Each row is a sample and a depth with the bases at that depth, their fraction and
+      the cumulative fraction. It answers the exact numbers behind the curves.
+
+      How to read: filter by sample and read the cumulative fraction at the depth your
+      caller needs.

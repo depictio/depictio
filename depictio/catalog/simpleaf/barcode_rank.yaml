@@ -9,8 +9,43 @@ description: >-
 find:
   path_glob: "**/simpleaf_quant/af_quant/featureDump.txt"
 recipe: simpleaf/barcode_rank.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: barcode_rank.tsv
 renders_as:
-  - { id: simpleaf_barcode_rank_knee, component: advanced_viz, kind: knee_plot, roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell} }
-  - { component: card, column: umi_count, aggregation: max, secondary_layout: histogram }
-  - { component: table }
+  - id: simpleaf_barcode_rank_knee
+    component: advanced_viz
+    kind: knee_plot
+    title: Barcode rank plot
+    roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell}
+    description: >-
+      Each point is a barcode ranked by its UMI count, from the richest droplet down, on log axes, with one
+      curve per sample. It answers where real cells stop and empty droplets start.
+
+      How to read: a good library has a plateau of cells with high counts, a steep drop and a long flat tail of
+      ambient barcodes. A curve with no clear drop, or one where the called cells sit on the tail, points to a
+      noisy or low-quality library. Compare it with the Cell Ranger curve of the same sample.
+
+      Lines and annotations: the marked cut-off is where the called cells end. alevin-fry reports every barcode
+      it quantified and calls no cells itself, so the cells are CellBender's cell-barcode list for this sample
+      and the line is a data-defined reference, not a threshold from the tool.
+  - component: card
+    column: umi_count
+    aggregation: max
+    aggregations: [sum]
+    secondary_layout: histogram
+    title: UMI count per barcode
+    caption: UMI counts, per barcode
+    description: >-
+      The hero number is the highest UMI count of any barcode, with the total UMIs beside it, and the
+      histogram shows how counts are distributed over barcodes. It answers how deep the richest droplets are
+      and how skewed the library is.
+
+      How to read: a few barcodes with very high counts and a long tail of near-empty ones is the normal shape
+      of droplet data. Use the knee plot to see where the cells end.
+  - component: table
+    title: Barcodes by rank
+    description: >-
+      Each row is a barcode with its rank, UMI count and whether it is in the called cell list. It answers
+      which barcodes carry the library.
+
+      How to read: sort by rank to see the richest barcodes and check that the called cells are the top ones.

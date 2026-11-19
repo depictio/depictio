@@ -12,4 +12,18 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: cellranger }
+  - component: multiqc
+    section: cellranger
+    title: Cell Ranger count summary
+    description: >-
+      Cell Ranger count's own MultiQC output: a per-sample summary table, the
+      barcode-rank plot, and the median-genes-per-cell and sequencing-saturation
+      curves. They answer whether each library captured enough real cells with
+      enough depth.
+
+      How to read: A barcode-rank plot with a clear cliff separates cells from
+      background. Saturation that is still climbing means more sequencing would find
+      more genes per cell. A low fraction of reads in cells or a missing cliff
+      points to ambient RNA or a failed capture.
+
+      Source: https://docs.seqera.io/multiqc/modules/cellranger

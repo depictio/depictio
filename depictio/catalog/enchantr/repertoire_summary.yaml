@@ -9,13 +9,92 @@ find: { path_glob: "**/repertoire_analysis_report/tables/num_clones_table.tsv" }
 recipe: enchantr/repertoire_summary.py
 fixture: repertoire_summary.tsv
 renders_as:
-  - { component: card, column: number_of_clones, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: card, column: sequences_per_clone, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: shannon, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: evenness, aggregation: median, secondary_layout: threshold, threshold_value: 0.9, threshold_direction: min, threshold_warn: 0.85 }
+  - component: card
+    column: number_of_clones
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: clones per sample, with their spread
+    title: Clones
+    description: >-
+      The hero number is the total count of clones across the samples in view, and the
+      box shows the quartiles of clones per sample. It answers how many distinct
+      lineages were recovered.
+
+      How to read: compare samples in the box, since a low outlier is usually a
+      shallow library. Clones are defined within a subject.
+  - component: card
+    column: sequences_per_clone
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mean clone size, with its spread
+    title: Sequences per clone
+    description: >-
+      The hero number is the median over samples of the mean clone size, the number of
+      sequences per clone, and the box shows its spread. It answers how expanded the
+      clones are on average.
+
+      How to read: a value near one means almost every clone is a single sequence, as
+      in a polyclonal repertoire. Higher values mean larger clones, or deeper
+      sequencing of the same clones.
+  - component: card
+    column: shannon
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Shannon diversity, with its spread
+    title: Shannon diversity
+    description: >-
+      The hero number is the median over samples of the Hill number at q = 1, the
+      exponential of Shannon entropy, and the box shows its spread. It answers how
+      diverse the repertoires are while giving common clones their weight.
+
+      How to read: compare the median with the clone counts above. A diversity far
+      below the clone count means a few clones dominate.
+
+      Sources: https://alakazam.readthedocs.io/en/stable/vignettes/Diversity-Vignette/ and
+      https://alakazam.readthedocs.io/en/stable/topics/calcDiversity/
+  - component: card
+    column: evenness
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: evenness, with its spread
+    title: Evenness
+    description: >-
+      The hero number is the median over samples of the evenness of the Hill profile at
+      q = 1, and the box shows its spread. It answers whether clones are of similar
+      size or dominated by a few.
+
+      How to read: values near one mean clones of similar size. Lower values mean a few
+      large clones carry the repertoire, so check the rank abundance curve. This
+      table publishes no accepted cut-off, so compare samples with each other.
   - component: figure
     visu_type: scatter
-    dict_kwargs: { x: sequences, y: number_of_clones, color: subject_id, size: sequences_per_clone, log_x: "True", log_y: "True" }
+    dict_kwargs:
+      x: sequences
+      y: number_of_clones
+      color: subject_id
+      size: sequences_per_clone
+      log_x: "True"
+      log_y: "True"
+      labels:
+        sequences: Sequences
+        number_of_clones: Clones
+        subject_id: Subject
+        sequences_per_clone: Sequences per clone
+    title: Clones against sequencing depth
+    description: >-
+      Each point is a sample: the sequences that entered clonal assignment on the
+      horizontal axis and the clones they collapsed into on the vertical axis, sized by
+      sequences per clone and coloured by subject. It answers whether the number of
+      clones simply follows depth.
+
+      How to read: points rise together because deeper samples reveal more clones. A
+      sample sitting well below its neighbours at the same depth is more clonal, and a
+      large marker means its clones are bigger. Both axes are logarithmic.
   # Richness against evenness: the two halves of a Hill profile on one plane, so
   # a repertoire that is large but carried by a few clones separates from one
   # that is both large and flat. Size is the sequencing depth behind the point,
@@ -23,5 +102,35 @@ renders_as:
   - id: richness_evenness
     component: advanced_viz
     kind: scatter_xy
+    title: Richness against evenness
     roles: { x: richness, y: evenness, label: sample_id, color: subject_id, size: sequences }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }
+    config:
+      x_title: Richness (Hill order 0)
+      y_title: Evenness
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a sample: its richness on the horizontal axis and its evenness on
+      the vertical axis, sized by sequencing depth and coloured by subject. It answers
+      whether a rich repertoire is also flat or carried by a few clones.
+
+      How to read: points to the upper right are both rich and even. Points to the
+      lower right are rich but dominated by a few clones. Read richness against marker
+      size, because a deeper sample reveals more clones.
+
+      Lines and annotations: the dashed line is the median evenness of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      Immcantation.
+
+      Source: https://alakazam.readthedocs.io/en/stable/vignettes/Diversity-Vignette/
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Repertoire summary table
+    description: >-
+      Each row is a sample with its sequence and clone counts, clone-size spread and
+      Hill numbers with their confidence bounds. It answers which samples to inspect
+      and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by clones or diversity to find outliers, then select a row to
+      focus the other tiles on that sample.

@@ -18,15 +18,114 @@ fixture: conservation.tsv
 renders_as:
   # The representative's sequence with a conservation lane and a class lane;
   # brushing it emits the residue_selection the structure and the MSA follow.
-  - { id: conservation_track, component: advanced_viz, kind: sequence_track,
-      roles: {position: position, entity: entity, residue: residue, value: value, category: category} }
+  - id: conservation_track
+    component: advanced_viz
+    kind: sequence_track
+    title: Conservation along the sequence
+    roles: {position: position, entity: entity, residue: residue, value: value, category: category}
+    config:
+      value_label: Conservation score
+    description: >-
+      Each position is a residue of the family representative, with a lane for its
+      conservation score and a lane for its conservation class. It answers which
+      stretches of the protein are conserved across the family and which vary.
+
+      How to read: runs of high scores mark constrained regions, often a fold core or
+      an active site, and low runs mark loops or variable linkers. Brush a stretch to
+      light up the same residues on the structure and the alignment.
+
+      Lines and annotations: the score is one minus the normalised Shannon entropy of
+      the alignment column, discounted by the share of gaps, so 1 is an invariant
+      gap-free column. The classes are cut at 0.7 and 0.4 by this catalog's recipe;
+      they are not published cut-offs.
   # The representative folded on demand (resolve mode, by sequence) and
   # coloured by the same score, so conserved patches read as surfaces.
-  - { id: conservation_structure, component: advanced_viz, kind: molecule_3d,
-      roles: {position: position, entity: entity, value: value, category: category, sequence: sequence} }
-  - { id: conservation_profile, component: advanced_viz, kind: profile,
-      roles: {series: entity, x: position, y: value} }
-  - { id: residue_conservation, component: card, column: value, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: value, color: category} }
-  - { component: table }
+  - id: conservation_structure
+    component: advanced_viz
+    kind: molecule_3d
+    title: Conservation on the structure
+    roles: {position: position, entity: entity, value: value, category: category, sequence: sequence}
+    config:
+      color_mode: value
+    description: >-
+      The 3D structure of the family representative, folded on demand from its
+      sequence and coloured by the residue conservation score. It answers where the
+      conserved residues sit in space.
+
+      How to read: a conserved patch on the surface suggests a binding or catalytic
+      site, while conserved residues buried in the core usually hold the fold. Variable
+      residues on the surface are typical of regions free to change.
+
+      Lines and annotations: the colour is the conservation score, the same one drawn
+      along the sequence, from 0 for a diverse column to 1 for an invariant one.
+
+      Note: the structure is a prediction made from the sequence, not an experimental
+      one.
+  - id: conservation_profile
+    component: advanced_viz
+    kind: profile
+    title: Conservation profile
+    roles: {series: entity, x: position, y: value}
+    config:
+      x_title: Residue position
+      y_title: Conservation score
+      legend_pos: bottom
+    description: >-
+      Each curve is a protein family: the conservation score at every residue position
+      of its representative. It answers how conserved a family is along its length and
+      how families compare.
+
+      How to read: a curve that stays high is a tightly conserved family, and one that
+      stays low is a diverse one. Peaks and valleys locate the conserved and variable
+      regions.
+
+      Lines and annotations: the score is one minus the normalised Shannon entropy of
+      the alignment column, discounted by the share of gaps. Positions follow the
+      numbering of the representative, without gaps.
+  - id: residue_conservation
+    component: card
+    column: value
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Residue conservation
+    description: >-
+      The hero number is the median conservation score over every residue of the
+      families in view, and the box shows the spread. It answers how conserved the
+      families are overall.
+
+      How to read: a high median means a tight family. A box reaching to low values
+      holds many variable residues, which is normal for a divergent family.
+  # Colour is the conservation class, the same classes the sequence track draws.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: value
+      color: category
+      labels: {value: Conservation score, category: Conservation class}
+    title: Distribution of conservation scores
+    reference_lines: [{axis: x, stat: median, column: value}]
+    description: >-
+      Each bar counts residues in a conservation score bin, split by conservation
+      class. It answers how many residues are conserved, intermediate or variable.
+
+      How to read: a pile at high scores is a conserved family, and a pile at low
+      scores is a divergent one. A two-humped shape means a conserved core and variable
+      loops.
+
+      Lines and annotations: the classes are cut at 0.7 and 0.4 by this catalog's
+      recipe, a fixed binning of the score and not a published threshold.
+       The dashed line is the median conservation score of this table, a reference
+      computed from the rows on show (it follows the filters), not a cut-off of
+      FAMSA.
+  - component: table
+    title: Residue table
+    description: >-
+      Each row is a residue of a family representative, with its position, conservation
+      score and class, the most frequent residue of its column, how many members have a
+      residue there and the number of members. It answers the exact values behind the
+      conservation tiles.
+
+      How to read: filter by family and sort by score to list its most conserved
+      residues.

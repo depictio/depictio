@@ -12,16 +12,115 @@ description: >-
 find:
   path_glob: "**/optitype/*/*_result.tsv"
 recipe: optitype/summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several donors.
 fixture: summary.tsv
 renders_as:
-  - { id: typing_reads, component: card, column: reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: objective_per_read, component: card, column: objective_per_read, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: heterozygous_loci, component: card, column: heterozygous_loci, aggregation: median, secondary_layout: gauge, coverage_max: 3 }
+  - id: typing_reads
+    component: card
+    column: reads
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Reads explained by the genotype
+    caption: reads, quartiles over samples
+    description: >-
+      The hero number is the median count of reads that map to the HLA reference and
+      support the chosen genotype, and the box shows the spread. It answers how much
+      evidence each typing rests on.
+
+      How to read: a sample far below the others has little evidence and its alleles are
+      less certain. OptiType documents no minimum number of reads, so judge it against
+      the rest of the cohort.
+
+      Source: https://raw.githubusercontent.com/FRED-2/OptiType/master/README.md
+  - id: objective_per_read
+    component: card
+    column: objective_per_read
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Objective per read
+    caption: objective per read, quartiles over samples
+    description: >-
+      The hero number is the median of the solver objective divided by the reads
+      explained, and the box shows the spread. It answers how much of the read evidence
+      the solution keeps at full weight.
+
+      How to read: the ratio is lower by about the homozygosity parameter beta for each
+      heterozygous locus, so it reflects zygosity more than the quality of the fit. Do
+      not read a low value as a bad typing on its own.
+
+      Source: https://raw.githubusercontent.com/FRED-2/OptiType/master/README.md
+  - id: heterozygous_loci
+    component: card
+    column: heterozygous_loci
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 3
+    title: Heterozygous loci per sample
+    caption: median out of 3 typed loci
+    description: >-
+      The hero number is the median count of heterozygous loci among the three typed
+      (A, B, C), shown against 3. It answers how heterozygous the cohort is at class I.
+
+      How to read: three means every locus carries two different alleles. Lower values
+      mean homozygous loci, which narrow the set of alleles that can present peptides.
   # The objective sits under the diagonal by beta per heterozygous locus, so
   # the points split by zygosity.
   - id: reads_objective
     component: advanced_viz
     kind: scatter_xy
+    title: Solver objective against reads
     roles: { x: reads, y: objective, label: sample_id, color: homozygous_class }
-  - { component: figure, visu_type: bar, dict_kwargs: { x: sample_id, y: reads } }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }
+    config:
+      x_title: Reads explained
+      y_title: Solver objective
+      reference_line: diagonal
+      reference_label: objective equals reads
+      legend_pos: bottom
+    description: >-
+      Each point is a sample: the reads its genotype explains against the objective
+      value the solver reached, coloured by how many loci are homozygous. It answers
+      whether the objective follows the read support.
+
+      How to read: points lie close to the diagonal, a little below it for each
+      heterozygous locus, so the colour groups follow the zygosity. A point far below its
+      group would be unexpected and worth checking.
+
+      Lines and annotations: the diagonal is the identity, where the objective equals
+      the reads explained. It is a mathematical reference and not a cut-off; OptiType
+      sets the gap with its homozygosity parameter beta.
+
+      Source: https://raw.githubusercontent.com/FRED-2/OptiType/master/README.md
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample_id
+      y: reads
+      color: homozygous_class
+      labels: {sample_id: Sample, reads: Reads explained, homozygous_class: Homozygous loci}
+    title: Reads per sample
+    reference_lines: [{axis: y, stat: median, column: reads}]
+    description: >-
+      Each bar is a sample and its height the reads that support its genotype, coloured
+      by how many loci are homozygous. It answers which samples carry thin evidence.
+
+      How to read: short bars are samples whose typing rests on few reads. Compare them
+      with the rest of the cohort, as OptiType documents no minimum count.
+
+      Lines and annotations: The dashed line is the median number of reads explained
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of OptiType.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: HLA typing table
+    description: >-
+      Each row is a sample with its allele pairs at HLA-A, -B and -C, the distinct
+      alleles as a list, zygosity, reads, objective and the runner-up gap. It answers the
+      exact typing to copy into an epitope prediction samplesheet.
+
+      How to read: a runner-up gap near zero means two solutions are almost equally
+      good, so the typing is less certain.

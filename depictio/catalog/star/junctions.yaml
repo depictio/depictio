@@ -12,10 +12,71 @@ find:
 recipe: star/junctions.py
 fixture: junctions.tsv
 renders_as:
-  - { id: junction_motif_bars, component: figure, visu_type: bar,
-      dict_kwargs: {x: sample, y: junctions_pct, color: motif_class} }
-  - { id: junctions_by_annotation, component: card, column: junctions, aggregation: sum,
-      secondary_layout: composition, breakdown_col: annotation }
-  - { id: junction_reads_by_motif, component: card, column: unique_reads, aggregation: sum,
-      secondary_layout: donut, breakdown_col: motif_class }
-  - { component: table }
+  - id: junction_motif_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: junctions_pct
+      color: motif_class
+      labels: {sample: Sample, junctions_pct: Junctions (%), motif_class: Intron motif}
+    title: Junctions by intron motif
+    description: >-
+      Each bar is a sample and each segment is the share of its splice junctions that
+      carry one intron motif class. It answers whether the junctions look like real
+      splicing.
+
+      How to read: nearly all junctions should be the canonical GT/AG motif, with a
+      small share of GC/AG and AT/AC. A large share of non-canonical junctions points to
+      alignment noise or a damaged library, so check them against their read counts in the
+      table.
+
+      Lines and annotations: the motif classes fold the intron motif codes STAR writes in SJ.out.tab (0 non-canonical, 1
+      GT/AG and 2 CT/AC, 3 GC/AG and 4 CT/GC, 5 AT/AC and 6 GT/AT), joining each motif with its
+      reverse strand reading. The folding is done by this catalog's recipe, and no cut-off is drawn.
+
+      Source: https://raw.githubusercontent.com/alexdobin/STAR/master/doc/STARmanual.pdf
+  - id: junctions_by_annotation
+    component: card
+    column: junctions
+    aggregation: sum
+    aggregations: [min, max]
+    secondary_layout: composition
+    breakdown_col: annotation
+    caption: junctions, by annotation
+    title: Collapsed junctions
+    description: >-
+      The hero number is the total of collapsed splice junctions, and the bar shows the
+      share that is annotated or novel. It answers how much of the splicing is known.
+
+      How to read: a large annotated share is expected for a well-annotated organism.
+      A large novel share points to unannotated isoforms or to alignment noise.
+
+      Source: https://raw.githubusercontent.com/alexdobin/STAR/master/doc/STARmanual.pdf
+  - id: junction_reads_by_motif
+    component: card
+    column: unique_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: motif_class
+    caption: reads, by intron motif
+    title: Reads crossing junctions
+    description: >-
+      The hero number is the total of uniquely mapped reads that cross a splice junction,
+      and the ring splits them by intron motif. It answers where the spliced reads go.
+
+      How to read: the GT/AG motif should hold almost all reads. The STAR manual advises
+      removing non-canonical junctions supported by only a few reads as likely false
+      positives, so a read-poor non-canonical slice is noise.
+
+      Source: https://raw.githubusercontent.com/alexdobin/STAR/master/doc/STARmanual.pdf
+  - component: table
+    title: Splice junctions table
+    description: >-
+      Each row is a sample, an intron motif class and an annotation status, with the
+      junctions and the uniquely and multi-mapping reads in it. It answers exactly how
+      the junctions and reads divide up.
+
+      How to read: filter to novel junctions and compare their reads per junction with
+      the annotated ones.

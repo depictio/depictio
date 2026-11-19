@@ -815,6 +815,7 @@ export type {
   VizSuggestionMatch,
   VizSuggestionsResponse,
   CatalogRender,
+  FigureReferenceLine,
   CatalogOutputMatch,
   CatalogModule,
   CatalogComposeResponse,

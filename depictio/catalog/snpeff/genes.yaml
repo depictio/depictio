@@ -9,14 +9,84 @@ description: >-
 find:
   path_glob: "**/*_snpEff.genes.txt"
 recipe: snpeff/genes.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several callers.
 fixture: genes.tsv
 renders_as:
-  - { id: gene_burden_top, component: card, column: n_variants, aggregation: sum,
-      secondary_layout: top_n, breakdown_col: gene_name, top_n_count: 5 }
-  - { component: card, column: n_high, aggregation: sum, secondary_layout: top_n,
-      breakdown_col: caller, top_n_count: 3 }
-  - { component: card, column: n_coding, aggregation: median, aggregations: [box_plot_stats],
-      secondary_layout: box_plot }
-  - { component: figure, visu_type: bar,
-      dict_kwargs: {x: biotype, y: n_variants, color: caller, barmode: group} }
-  - { component: table }
+  - id: gene_burden_top
+    component: card
+    column: n_variants
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: concentration
+    breakdown_col: gene_name
+    top_n_count: 5
+    caption: share held by the top genes
+    title: Variants concentrated in a few genes
+    description: >-
+      The hero number is the total of variants SnpEff assigned to genes, and the strip
+      shows the share held by the five genes with the most. It answers whether the
+      burden is spread out or concentrated.
+
+      How to read: large genes and repeat-rich genes lead on any callset, so a high
+      concentration is normal. A single gene far above the rest on one caller only
+      points to a calling artefact.
+  - component: card
+    column: n_high
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: HIGH-impact variants, by caller
+    title: High-impact variants by caller
+    description: >-
+      The hero number is the total of HIGH-impact variants, such as stop gained or
+      frameshift, and the bars rank the callers by how many each reports. It answers
+      which caller finds the most disruptive variants.
+
+      How to read: a caller far ahead of the rest may call more false positives, and
+      one far behind may miss real ones. Open the gene overlap to see which genes they
+      agree on.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+  - component: card
+    column: n_coding
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: coding variants per gene, with their spread
+    title: Coding variants per gene
+    description: >-
+      The hero number is the median count of coding variants per gene and callset, and
+      the box shows its quartiles. It answers how many coding variants a typical gene
+      carries.
+
+      How to read: most genes carry few or none and a handful carry hundreds, so the
+      median sits low and the upper whisker is long. A median that differs between
+      callers means they disagree on the coding variants of a typical gene.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: biotype
+      y: n_variants
+      color: caller
+      barmode: group
+      labels: {biotype: Gene biotype, n_variants: Variants, caller: Caller}
+    title: Variants by gene biotype
+    description: >-
+      Each bar is a gene biotype with the number of variants SnpEff assigned to its
+      genes, grouped by caller. It answers which kinds of genes hold the variants.
+
+      How to read: protein coding genes lead on most callsets. A caller with a different
+      split of biotypes than the others is calling in different regions of the genome.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/outputsummary/
+  - component: table
+    title: Per-gene variant burden table
+    description: >-
+      Each row is a gene in one callset with its variants split by impact class
+      (HIGH, MODERATE, LOW, MODIFIER) and its coding total. It answers the exact
+      counts behind the other tiles.
+
+      How to read: sort by the HIGH column to list the genes with the most disruptive
+      variants.

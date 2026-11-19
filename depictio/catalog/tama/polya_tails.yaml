@@ -9,8 +9,35 @@ find:
   path_glob_alt:
     - "**/*_polya_flnc_report.txt"
 recipe: tama/polya_tails.py
+# The fixture is enriched synthetically from 20 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: polya_tails.tsv
 renders_as:
-  - { id: polya_tail_profile, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: tail_length, y: pct} }
-  - { component: table }
+  - id: polya_tail_profile
+    component: advanced_viz
+    kind: profile
+    roles: {series: sample, x: tail_length, y: pct}
+    title: Poly(A) tail length distribution
+    config:
+      x_title: Poly(A) tail length removed (nt)
+      y_title: Share of the sample's reads (%)
+    description: >-
+      Each curve is a sample: the share of its FLNC reads (vertical axis) with each poly(A) tail length
+      removed by TAMA's clean-up (horizontal axis, nucleotides). It answers how long the tails were and
+      whether the samples agree.
+
+      How to read: a pile near 0 nt means TAMA found little tail left to remove, for instance
+      because an earlier step had already clipped it. Curves that differ between
+      samples point to a library preparation difference to check before comparing the samples.
+
+      Lines and annotations: this catalog's recipe pools every tail of 100 nt or longer into the
+      last point, so it is a sum and not a
+      single length. No cut-off is drawn.
+
+      Source: https://raw.githubusercontent.com/wiki/GenomeRIK/tama/Home.md
+  - component: table
+    title: Poly(A) tail table
+    description: >-
+      Each row is a sample and a tail length with the number of reads and their share of the sample. It
+      answers the exact counts behind each curve.
+
+      How to read: sort by reads to find the modal tail length of each sample.

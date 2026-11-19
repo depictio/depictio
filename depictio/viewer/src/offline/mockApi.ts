@@ -217,8 +217,32 @@ export async function renderMultiQCGeneralStats(_dashboardId: string, componentI
 
 // ---- advanced viz (keyed by dc_id) ----------------------------------------
 
-export async function fetchAdvancedVizData(req: { dcId: string }) {
-  return need(DATA().advancedVizData, req.dcId, 'advanced-viz-data') as never;
+/** The fixture's rows, and the `reference_stats` the catalog computed on them
+ *  with the server's own helper (`payload.py::_reference_stats`). A statistic
+ *  is answered only when the renderer asks the same column and statistic it
+ *  was computed for: a reader who flips a scatter's line to vertical asks for
+ *  the statistic of x, which the payload does not hold, and gets no line
+ *  rather than y's median drawn on the x axis. */
+export async function fetchAdvancedVizData(req: {
+  dcId: string;
+  referenceStats?: Record<string, { column: string; stat: string }>;
+}) {
+  const payload = need(DATA().advancedVizData, req.dcId, 'advanced-viz-data') as {
+    reference_stats?: Record<string, number | null>;
+    reference_stat_requests?: Record<string, { column: string; stat: string }>;
+  };
+  const { reference_stats: computed, reference_stat_requests: computedFor, ...rest } = payload;
+  if (!req.referenceStats) return rest as never;
+  const answered: Record<string, number | null> = {};
+  for (const [field, asked] of Object.entries(req.referenceStats)) {
+    const held = computedFor?.[field];
+    const value = computed?.[field];
+    answered[field] =
+      held && held.column === asked.column && held.stat === asked.stat && value != null
+        ? value
+        : null;
+  }
+  return { ...rest, reference_stats: answered } as never;
 }
 
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {

@@ -9,9 +9,90 @@ find:
 recipe: qualimap/coverage_histogram.py
 fixture: coverage_histogram.tsv
 renders_as:
-  - { id: depth_histogram_profile, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: coverage, y: fraction} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: coverage, y: n_genomic_locations, color: sample, title: Bases of the reference at each depth} }
-  - { component: card, column: coverage, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: n_genomic_locations, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
-  - { component: table, page_size: 25 }
+  - id: depth_histogram_profile
+    component: advanced_viz
+    kind: profile
+    title: Share of the reference at each depth
+    roles: {series: sample, x: coverage, y: fraction}
+    config:
+      x_title: Read depth (X)
+      y_title: Share of the reference
+      log_y: true
+    description: >-
+      Each line is a library: the share of the reference sitting at each read depth.
+      It answers how the depth is distributed over the genome, not only its mean.
+
+      How to read: a curve with a tall left end means much of the reference is
+      uncovered or shallow. A narrow peak near the mean depth means an even library
+      and a long tail to the right means pile-ups on repeats. Compare libraries on
+      the same curve before choosing which to resequence.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: coverage
+      y: n_genomic_locations
+      color: sample
+      labels: {coverage: Read depth (X), n_genomic_locations: Bases of the reference, sample: Library}
+    title: Bases of the reference at each depth
+    description: >-
+      Each line is a library: the number of bases of the reference sitting at each
+      read depth. It answers the same question as the share profile in raw base
+      counts.
+
+      How to read: raw counts depend on the reference size, so use this view for
+      libraries mapped to the same reference and the share view otherwise. A large
+      count at zero depth is the uncovered part of the genome.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  # A card over this table must filter a depth: the depth column is the x axis of the
+  # histogram, and a sum of bases over every depth is just the reference length.
+  - component: card
+    column: fraction
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    filter_expr: "col('coverage') == 0"
+    title: Reference with no coverage
+    caption: median share at zero depth, with the least covered libraries ranked
+    description: >-
+      The hero number is the median share of the reference with no read at all, and
+      the bars rank the libraries with the largest uncovered share. It answers how
+      much of the genome a library misses.
+
+      How to read: a share near zero is a library that reaches the whole reference.
+      A large share at zero depth is expected for a shallow library and is the
+      first number to check before calling variants.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: n_genomic_locations
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: vertical
+    filter_expr: "col('coverage') == 0"
+    title: Bases with no coverage
+    caption: median and lowest count of uncovered bases
+    description: >-
+      The hero number is the largest number of reference bases with no read, taken
+      over the libraries. It answers how large the uncovered part is in bases rather
+      than in share.
+
+      How to read: compare the maximum with the lowest library to see how unequal
+      the libraries are. Raw counts depend on the reference size, so read the share
+      card for libraries on different references.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: table
+    page_size: 25
+    title: Depth histogram
+    description: >-
+      Each row is a read depth of a library with the number of reference bases at
+      that depth and their share of the reference. It answers the exact values
+      behind the histogram.
+
+      How to read: filter to one library and read down the depth column to find the
+      depth that holds most of the genome.
