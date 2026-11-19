@@ -13,10 +13,11 @@
  *   - `live` / `partial` tiles are recomputed in the page from the bundled
  *     data, under the report's filters — so they open on the exported state
  *     (`initial_filters`) and follow the filter panel;
- *   - a `frozen` tile is a payload computed at the dashboard's DEFAULT state.
- *     It replaces the fallback only when the report opens on that state (no
- *     initial filter); otherwise the fallback, computed at the exported state,
- *     is the honest one and stays;
+ *   - a `frozen` tile is a payload computed with no filter. It replaces the
+ *     fallback only when the report opens with none (`initial_filters` is
+ *     authoritative: empty means no filter, not the dashboard's defaults);
+ *     otherwise the fallback, computed at the exported state, is the honest
+ *     one and stays;
  *   - `omitted` tiles, and anything the manifest does not hold, keep the
  *     fallback.
  *

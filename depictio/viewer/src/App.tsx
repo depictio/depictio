@@ -229,12 +229,17 @@ const App: React.FC = () => {
   // Lazily, because `useRef`'s argument is evaluated on EVERY render and the
   // hydration reads storage and decodes the URL fragment.
   const hydrationRef = useRef<InitialFilterHydration | null>(null);
+  // The dashboard view of a combined report + dashboard file opens on the
+  // filters its report is showing (null everywhere else). That state is the
+  // exported one, authoritative: no declared default is added on top of it.
+  const sharedOpeningRef = useRef(false);
   if (hydrationRef.current === null) {
     hydrationRef.current = hydrateInitialFilters(extractDashboardId(), extractPreviewVersionId());
-    // The dashboard view of a combined report + dashboard file opens on the
-    // filters its report is showing (null everywhere else).
     const shared = combinedInitialFilters();
-    if (shared) hydrationRef.current = { ...hydrationRef.current, filters: shared };
+    if (shared) {
+      hydrationRef.current = { ...hydrationRef.current, filters: shared };
+      sharedOpeningRef.current = true;
+    }
   }
   const [filters, setFilters] = useState<InteractiveFilter[]>(hydrationRef.current.filters);
   useCombinedFilterSync(filters, setFilters);
@@ -541,7 +546,7 @@ const App: React.FC = () => {
           // The stored copy would otherwise outlive the visit it no longer serves.
           if (dashboardId) clearLocalFilterState(dashboardId);
           setFilters(withInteractiveDefaults(hydration.urlFilters, dash.stored_metadata));
-        } else {
+        } else if (!sharedOpeningRef.current) {
           setFilters((prev) => withInteractiveDefaults(prev, dash.stored_metadata));
         }
         setAllDashboards(all);

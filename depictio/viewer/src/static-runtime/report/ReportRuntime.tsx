@@ -29,7 +29,6 @@ import {
   enrichFilterWithDcId,
   hasLiveValues,
   mergeFiltersBySource,
-  withInteractiveDefaults,
 } from 'depictio-react-core';
 import type {
   CategoryColorSource,
@@ -174,12 +173,14 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
     return (doc.stored_metadata ?? []).filter((m) => m.component_type === 'interactive');
   }, [manifest]);
 
-  // The report opens on the exported state; "Reset" goes back to it, not to
-  // the dashboard's defaults — the document narrates the former.
-  const initialFilters = useMemo<InteractiveFilter[]>(() => {
-    const exported = (manifest.initial_filters ?? []) as unknown as InteractiveFilter[];
-    return exported.length > 0 ? exported : withInteractiveDefaults([], entryInteractive);
-  }, [manifest, entryInteractive]);
+  // The report opens on the exported state, and "Reset" goes back to it: the
+  // document narrates that state, and its fallbacks and frozen tiles were
+  // drawn at it. No exported filter means no filter, not the dashboard's
+  // defaults (a reader who cleared one exported it cleared).
+  const initialFilters = useMemo<InteractiveFilter[]>(
+    () => (manifest.initial_filters ?? []) as unknown as InteractiveFilter[],
+    [manifest],
+  );
   // In a combined file the dashboard view may have moved the filters already.
   const [filters, setFilters] = useState<InteractiveFilter[]>(
     () => (channel?.get() as InteractiveFilter[] | null) ?? initialFilters,

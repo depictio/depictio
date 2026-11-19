@@ -464,9 +464,10 @@ export interface BundleManifest {
   python_components?: Record<string, PythonComponent>;
   /**
    * The interactive filters the runtime opens on, in the viewer's
-   * `InteractiveFilter` wire shape. Empty = the dashboard's own defaults. A
-   * report sets it to the exported analysis state, so the tiles it mounts
-   * open on the state the document narrates. Absent in older manifests.
+   * `InteractiveFilter` wire shape. A report sets it to the exported analysis
+   * state and opens on exactly that (empty = no filter), so the tiles it
+   * mounts show the state the document narrates; a bundle leaves it empty and
+   * opens on the dashboard's own defaults. Absent in older manifests.
    */
   initial_filters?: Record<string, unknown>[];
 }
