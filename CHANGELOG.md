@@ -3,6 +3,68 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.22.2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.22.2</summary>
+
+### Changes 📜
+
+#### Chores 🧹
+
+* ci: retrigger to check that superseded runs are cancelled [bee17c06e]
+* ci: cancel superseded runs on PRs and branch pushes [a8fe1a48e]
+
+#### Documentation Updates 📚
+
+* docs: agent skills config (issue tracker, triage labels, domain docs) [5bcfeed77]
+
+#### Other Changes 📝
+
+* Bump version: 1.22.1 → 1.22.2 [b38a5b176]
+* fix(catalog-site): header polish — theme switch, live rose, readable release picker [f286341d6]
+* fix(cli): the recipe preview reads a raw text scan in file order too [d7a35a4c2]
+* Update CHANGELOG.md for v1.22.1 [ef1773d8d]
+* feat(recipes): read a raw text scan back in each file's line order [aff7d6823]
+* refactor(cli): one export per streamed frame, writes refused before any row is read [461551034]
+* fix(cli): keep a table's row order when it is written to Delta [c921d7665]
+* chore(tool-studio): refresh the catalog.json snapshot for AGAT's versions [1be24eaf8]
+* feat(catalog-preview): Paper chrome, Tool Studio header, resizable list, version chip [2a398b253]
+* feat(catalog): render-conformance audit, honest figures, finer versions [9faa86ade]
+* fix(helm): offsite backup CronJob passes EMBL Capsule admission [7f1a31d0f]
+* chore(tool-studio): refresh the catalog.json snapshot for the ancombc fixture [44496a824]
+* test(catalog-conformance): refresh the qiime2_ancombc seed to the updated fixture [62af7f4f6]
+* fix(catalog): resolve a tool folder's own recipe in `validate --path`; regenerate-free ancombc fixture fix [606adf752]
+* fix(catalog-cli): validate loads an output's recipe even when it has a fixture [2c39ef574]
+* fix(catalog): deterministic export, strict render errors, safer publisher [f8563e9bc]
+* fix(viewer): catalog versions review follow-ups [8a2c0a8f0]
+* feat(viewer): catalog module versions, history, YAML diff, release switcher [ec414bfa8]
+* feat(catalog): keep every release, dedupe the site tree, module history [f134dd56b]
+* feat(catalog): carry each module's version in the gallery and site index [04d5b5cda]
+* docs(design): catalog site tree, module history and hosting contract [cbba1444a]
+* fix(catalog): inline the MultiQC logos in the gallery and the site [3a7b49674]
+* fix(viewer): catalog site retry, chunk-error boundary, boot-path guard [b04a79efa]
+* fix(catalog): harden the catalog site deploy [1297b8fc3]
+* feat(viewer): multi-file catalog site build, outputs fetched on demand [5a94c90b8]
+* feat(catalog): static catalog site export, payload injected once [f82b2d2ed]
+* chore(dev): script listing the depictio local instances on this machine [f60424631]
+* test(auth): EMBL realm claim shape for SSO login provisioning [6fc98482c]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.22.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
