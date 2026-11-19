@@ -163,6 +163,22 @@ BINDING_CASES: dict[str, list[dict]] = {
             "filter_expr": FILTER_EXPRS[2],
         }
     ],
+    # A categorical filter on ``depictio_run_id`` also keeps the rows with no
+    # run (add_filter's ``| is_null()``): they aggregate several runs.
+    "run_id_keeps_null_runs": [
+        {
+            "value": ["run-1"],
+            "column_name": "depictio_run_id",
+            "interactive_component_type": "MultiSelect",
+        }
+    ],
+    "run_id_select_scalar": [
+        {"value": "run-2", "column_name": "depictio_run_id", "interactive_component_type": "Select"}
+    ],
+    # ...but only that column: a null category never matches a Select.
+    "select_drops_null_elsewhere": [
+        {"value": ["alpha"], "column_name": "category_str", "interactive_component_type": "Select"}
+    ],
     # An empty value drops the whole entry — its filter_expr with it.
     "empty_value_drops_its_filter_expr": [
         {
@@ -257,6 +273,11 @@ def main() -> None:
             "flag_bool": pl.Series(flag_bool, dtype=pl.Boolean),
             "event_date": pl.Series(event_date, dtype=pl.Datetime("us")),
             "sample_id": pl.Series(sample_id, dtype=pl.String),
+            # Every 7th row has no run (a recipe recomputed over every run);
+            # derived from the index so the rng stream above is unchanged.
+            "depictio_run_id": pl.Series(
+                [None if i % 7 == 0 else f"run-{i % 3}" for i in range(N)], dtype=pl.String
+            ),
         }
     )
 
