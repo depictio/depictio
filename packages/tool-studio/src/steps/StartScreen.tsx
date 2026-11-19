@@ -18,12 +18,16 @@
  * draft) brings the screen back.
  */
 import React from 'react';
-import { Button } from '@mantine/core';
+import { Badge, Button } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import ImportEntryButton from '../components/ImportEntryButton';
 import { STEP_ICONS } from '../components/StepHead';
-import { PRIVACY_LINE } from '../components/AppHeader';
+import { PRIVACY_LINE, DOCS_URL, CATALOG_URL, ISSUES_URL } from '../components/AppHeader';
+import { draftFromCatalogFiles } from '../catalog/draft';
+import { EXAMPLE_FILES, EXAMPLE_LABEL } from '../catalog/example';
+import { useStudioStore } from '../state/useStudioStore';
 import { STUDIO_TONE } from '../theme';
 
 /** One hue per step, carried by its glyph well, so the four are told apart at
@@ -55,6 +59,21 @@ const tint = (color: string) =>
   ({ ['--bgl-tint' as string]: `var(--mantine-color-${color}-6)` }) as React.CSSProperties;
 
 export default function StartScreen({ onStart, resuming }: { onStart: () => void; resuming?: boolean }) {
+  const loadDraft = useStudioStore((s) => s.loadDraft);
+  // A complete, committed entry to walk through before writing one: it lands
+  // on the Tool step so every step can be read in order.
+  const loadExample = () => {
+    const { draft } = draftFromCatalogFiles(EXAMPLE_FILES);
+    loadDraft(draft, 0);
+    notifications.show({
+      color: 'teal',
+      autoClose: 12000,
+      title: `Example loaded: ${EXAMPLE_LABEL}`,
+      message:
+        'Walk through the four steps to see a finished entry. The raw mosdepth file is not bundled, so the recipe shows its committed result. Click the logo, top left, then Start over to write your own.',
+    });
+  };
+  const sha = __BUILD_SHA__;
   return (
     <section className="bgl-choice ts-start" data-testid="start-screen">
       <div className="bgl-choice-hero">
@@ -73,6 +92,14 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
           data-testid="start"
         >
           {resuming ? 'Continue' : 'Start'}
+        </Button>
+        <Button
+          variant="default"
+          onClick={loadExample}
+          leftSection={<Icon icon="mdi:lightbulb-on-outline" width={18} />}
+          data-testid="load-example"
+        >
+          Try an example
         </Button>
         <ImportEntryButton variant="default" />
       </div>
@@ -127,6 +154,32 @@ export default function StartScreen({ onStart, resuming }: { onStart: () => void
         <ShieldCheck size={14} strokeWidth={1.8} aria-hidden />
         {PRIVACY_LINE}
       </p>
+
+      {/* Which build this is, and where to go from here: a static site has no
+          other way to say it, and on the landing it should not hide behind the
+          About key. */}
+      <footer className="ts-start-foot" data-testid="landing-footer">
+        <span className="ts-start-foot-build">
+          <Badge size="xs" variant="light" color="violet" radius="sm">
+            beta
+          </Badge>
+          <span>
+            Studio v{__STUDIO_VERSION__} · depictio v{__DEPICTIO_VERSION__}
+            {sha ? ` (${sha})` : ''}
+          </span>
+        </span>
+        <nav className="ts-start-foot-links" aria-label="Tool Studio links">
+          <a href={DOCS_URL} target="_blank" rel="noreferrer">
+            Docs
+          </a>
+          <a href={CATALOG_URL} target="_blank" rel="noreferrer">
+            Catalog
+          </a>
+          <a href={ISSUES_URL} target="_blank" rel="noreferrer">
+            Report an issue
+          </a>
+        </nav>
+      </footer>
     </section>
   );
 }

@@ -43,6 +43,33 @@ export interface Diagnostic {
   outputIndex?: number;
 }
 
+/**
+ * Errors that only say a required part is not filled in yet. They still block
+ * export (CI would reject the entry), but on a draft being written they are the
+ * remaining steps, not mistakes: the UI shows them as a neutral "to do" list
+ * and keeps red for what is actually wrong.
+ */
+const TODO_CODES = new Set([
+  'identity.description_missing',
+  'identity.homepage_missing',
+  'find.missing',
+  'fixture.missing',
+  'renders.empty',
+]);
+
+export function isTodo(d: Diagnostic): boolean {
+  return d.severity === 'error' && TODO_CODES.has(d.code);
+}
+
+/** Split for display: real errors, things left to fill in, warnings. */
+export function triage(diagnostics: Diagnostic[]): { errors: Diagnostic[]; todos: Diagnostic[]; warnings: Diagnostic[] } {
+  const errors: Diagnostic[] = [];
+  const todos: Diagnostic[] = [];
+  const warnings: Diagnostic[] = [];
+  for (const d of diagnostics) (d.severity === 'warning' ? warnings : isTodo(d) ? todos : errors).push(d);
+  return { errors, todos, warnings };
+}
+
 export interface ExistenceIndices {
   nfCoreModules?: Set<string>;
   edamTerms?: Set<string>;
@@ -163,6 +190,19 @@ function findDiagnostics(output: OutputMeta): Diagnostic[] {
     out.push({ code: 'find.missing', severity: 'error', path: 'output.find', message: 'An output needs a path glob or an exact file name to be recognised in a run.', step: 0 });
   if (output.path_glob_alt?.length && !output.path_glob?.trim())
     out.push({ code: 'find.alt_without_glob', severity: 'error', path: 'output.find.path_glob_alt', message: 'Alternative globs need a main path glob.', step: 0 });
+  // The catalog matches with Python fnmatch: no brace expansion, so `{a,b}`
+  // (or a stray brace or comma, as in macs3/callpeak's meta.yml) matches
+  // nothing in a run. A warning, as the CLI does not check it.
+  for (const g of [output.path_glob ?? '', ...(output.path_glob_alt ?? [])]) {
+    if (/[{},]/.test(g))
+      out.push({
+        code: 'find.glob_braces',
+        severity: 'warning',
+        path: 'output.find',
+        message: `"${g}" uses braces or a comma, which the catalog's fnmatch does not expand: it would match no file. Put one glob per option (path glob + alternative globs).`,
+        step: 0,
+      });
+  }
   return out;
 }
 

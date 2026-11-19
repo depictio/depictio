@@ -411,7 +411,9 @@ export function genOutputYaml(
     for (const [k, v] of cols) lines.push(`  ${flowScalar(k)}: ${flowScalar(v)}`);
   }
   lines.push(`fixture: ${flowScalar(fixtureFileName)}`);
-  lines.push('renders_as:');
+  // An empty list must be written `[]`: a bare `renders_as:` is null, which the
+  // schema rejects on top of the "add a visualization" diagnostic.
+  lines.push(renders.length ? 'renders_as:' : 'renders_as: []');
   for (const r of renders) {
     const [first, ...rest] = renderItemLines(r);
     lines.push(`  - ${first}`);

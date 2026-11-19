@@ -9,7 +9,7 @@ import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
 import { allOutputs, useStudioStore } from '../state/useStudioStore';
 import { generateEntry, genModuleYaml } from '../catalog/yamlGen';
-import type { Diagnostic } from '../catalog/diagnostics';
+import { isTodo, type Diagnostic } from '../catalog/diagnostics';
 import DiagnosticsList from './DiagnosticsList';
 import { ShieldCheck, X } from 'lucide-react';
 import { PRIVACY_LINE } from './AppHeader';
@@ -55,15 +55,22 @@ export default function EntryPanel({
   }, [tool, output, fixture, renders, siblings, activeIndex, existing, newOutputTarget]);
 
   const current = files.find((f) => f.name === selected && f.text != null) ?? files.find((f) => f.text != null);
-  const errorsByOutput = (i?: number) =>
-    diagnostics.filter((d) => d.severity === 'error' && (i === undefined ? d.path.startsWith('tool') : d.outputIndex === i || (d.outputIndex === undefined && !d.path.startsWith('tool')))).length;
+  const inFile = (d: Diagnostic, i?: number) =>
+    i === undefined ? d.path.startsWith('tool') : d.outputIndex === i || (d.outputIndex === undefined && !d.path.startsWith('tool'));
+  /** Per file: real errors (red) and items left to fill in (grey). */
+  const countsByOutput = (i?: number) => {
+    const mine = diagnostics.filter((d) => d.severity === 'error' && inFile(d, i));
+    const todos = mine.filter(isTodo).length;
+    return { errors: mine.length - todos, todos };
+  };
 
   const goTo = (step: number, d?: Diagnostic) => {
     if (d?.outputIndex !== undefined && d.outputIndex !== activeIndex) switchOutput(d.outputIndex);
     setStep(step);
   };
 
-  const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+  const errorCount = diagnostics.filter((d) => d.severity === 'error' && !isTodo(d)).length;
+  const todoCount = diagnostics.filter(isTodo).length;
 
   return (
     <div className="ts-panel-card">
@@ -71,8 +78,12 @@ export default function EntryPanel({
           title, its count, then the close key. */}
       <div className="hy-drawer-head">
         <span className="hy-drawer-title">Entry</span>
-        <Badge variant="light" color={errorCount ? 'red' : 'teal'} data-testid="entry-status">
-          {errorCount ? `${errorCount} error${errorCount > 1 ? 's' : ''}` : 'Ready'}
+        <Badge variant="light" color={errorCount ? 'red' : todoCount ? 'gray' : 'teal'} data-testid="entry-status">
+          {errorCount
+            ? `${errorCount} error${errorCount > 1 ? 's' : ''}`
+            : todoCount
+              ? `${todoCount} to do`
+              : 'Ready'}
         </Badge>
         <span className="hy-flex" />
         {onClose && (
@@ -96,7 +107,8 @@ export default function EntryPanel({
             </Text>
             <Stack gap={0}>
               {files.map((f) => {
-                const errs = f.kind === 'module' ? errorsByOutput(undefined) : f.kind === 'output' ? errorsByOutput(f.outputIndex) : 0;
+                const c = f.kind === 'module' ? countsByOutput(undefined) : f.kind === 'output' ? countsByOutput(f.outputIndex) : { errors: 0, todos: 0 };
+                const errs = c.errors + c.todos;
                 return (
                   <NavLink
                     key={`${f.kind}-${f.name}-${f.outputIndex ?? ''}`}
@@ -111,7 +123,7 @@ export default function EntryPanel({
                     }
                     rightSection={
                       errs ? (
-                        <Badge size="xs" color="red" variant="light">
+                        <Badge size="xs" color={c.errors ? 'red' : 'gray'} variant="light">
                           {errs}
                         </Badge>
                       ) : f.outputIndex === activeIndex && f.kind === 'output' && files.filter((x) => x.kind === 'output').length > 1 ? (

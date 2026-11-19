@@ -13,7 +13,7 @@ const STROKE = 1.6;
 
 export const DOCS_URL = 'https://depictio.github.io/depictio-docs/stable/catalog/';
 export const CATALOG_URL = 'https://github.com/depictio/depictio/tree/main/depictio/catalog';
-const ISSUES_URL = 'https://github.com/depictio/depictio/issues/new';
+export const ISSUES_URL = 'https://github.com/depictio/depictio/issues/new';
 
 /** The privacy promise, said once and reused wherever it is shown. */
 export const PRIVACY_LINE =
@@ -97,7 +97,7 @@ function AboutKey() {
       </Popover.Target>
       <Popover.Dropdown className="ts-about" p="md">
         <Stack gap={10}>
-          <Text fw={700} size="sm">
+          <Text component="div" fw={700} size="sm">
             Tool Studio{' '}
             <Badge size="xs" variant="light" color="violet" ml={4} style={{ verticalAlign: 'middle' }}>
               beta

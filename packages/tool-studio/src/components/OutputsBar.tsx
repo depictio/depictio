@@ -1,7 +1,7 @@
 import { ActionIcon, Button, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { allOutputs, useStudioStore } from '../state/useStudioStore';
-import type { Diagnostic } from '../catalog/diagnostics';
+import { isTodo, type Diagnostic } from '../catalog/diagnostics';
 
 /** The tool's outputs as tabs. Every step edits the highlighted one; switching
  *  keeps each output's fixture and renders. */
@@ -15,8 +15,11 @@ export default function OutputsBar({ diagnostics }: { diagnostics: Diagnostic[] 
   const switchOutput = useStudioStore((s) => s.switchOutput);
   const removeOutput = useStudioStore((s) => s.removeOutput);
   const list = allOutputs({ output, fixture, renders, siblings, activeIndex });
-  const errs = (i: number) =>
-    diagnostics.filter((d) => d.severity === 'error' && (d.outputIndex === i || (list.length === 1 && d.outputIndex === undefined && !d.path.startsWith('tool')))).length;
+  const mine = (i: number) =>
+    diagnostics.filter((d) => d.severity === 'error' && (d.outputIndex === i || (list.length === 1 && d.outputIndex === undefined && !d.path.startsWith('tool'))));
+  const errs = (i: number) => mine(i).length;
+  // Only "left to fill in" items: grey rather than red.
+  const onlyTodos = (i: number) => mine(i).every(isTodo);
 
   return (
     <Group gap={6} mb="md" wrap="wrap" data-testid="outputs-bar" role="tablist" aria-label="Outputs of this tool">
@@ -35,7 +38,7 @@ export default function OutputsBar({ diagnostics }: { diagnostics: Diagnostic[] 
             data-slug={o.output.slug}
             rightSection={
               errs(i) ? (
-                <Text span size="xs" c={i === activeIndex ? 'white' : 'red'}>
+                <Text span size="xs" c={i === activeIndex ? 'white' : onlyTodos(i) ? 'dimmed' : 'red'}>
                   {errs(i)}
                 </Text>
               ) : undefined

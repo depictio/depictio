@@ -95,6 +95,12 @@ describe('genOutputYaml', () => {
     expect(yaml).toContain('  - { component: table }');
     expect(yaml).not.toContain('columns:');
   });
+
+  it('writes an empty renders list as [] (a bare key is null and fails the schema)', () => {
+    const yaml = genOutputYaml(tool, output, 'results.csv', []);
+    expect(yaml).toContain('renders_as: []');
+    expect(yaml).not.toMatch(/renders_as:\s*$/m);
+  });
 });
 
 describe('appendRendersToYaml', () => {

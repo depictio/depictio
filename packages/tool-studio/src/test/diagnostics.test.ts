@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { validateDraft, nfCoreModuleOf, parseIndex, type DraftToValidate } from '../catalog/diagnostics';
+import { validateDraft, nfCoreModuleOf, parseIndex, triage, isTodo, type DraftToValidate } from '../catalog/diagnostics';
 import { parseFixture } from '../catalog/parseFixture';
 import { kindsMapFrom } from '../catalog/kinds';
 import type { RenderSpec } from '../types';
@@ -167,5 +167,34 @@ describe('recipe diagnostics', () => {
     const d = base();
     d.output = { ...d.output, recipe: { code: '', ref: 'nf-core/ampliseq/x.py' } };
     expect(validateDraft(d).find((x) => x.code.startsWith('recipe.'))).toMatchObject({ code: 'recipe.external', severity: 'warning' });
+  });
+});
+
+describe('triage: what is left to fill in vs what is wrong', () => {
+  it('an empty draft has only "to do" items, no schema error for renders_as', () => {
+    const d: DraftToValidate = {
+      tool: { id: 'mytool', name: 'My Tool', source: 'nf-core' },
+      output: { slug: 'results', path_glob: '' },
+      fixture: null,
+      renders: [],
+      kinds,
+    };
+    const all = validateDraft(d);
+    const t = triage(all);
+    expect(t.errors.map((x) => x.code)).toEqual([]);
+    expect(t.todos.map((x) => x.code).sort()).toEqual(
+      ['find.missing', 'fixture.missing', 'identity.description_missing', 'identity.homepage_missing', 'renders.empty'].sort(),
+    );
+    // Still errors for export and the agent API: CI would reject the entry.
+    expect(t.todos.every((x) => x.severity === 'error' && isTodo(x))).toBe(true);
+  });
+
+  it('warns on brace or comma globs, which fnmatch does not expand', () => {
+    const d = base();
+    d.output = { ...d.output, path_glob: '**/macs3/*.gappedPeak,*.narrowPeak}' };
+    const w = validateDraft(d).filter((x) => x.code === 'find.glob_braces');
+    expect(w).toHaveLength(1);
+    expect(w[0].severity).toBe('warning');
+    expect(validateDraft(base()).some((x) => x.code === 'find.glob_braces')).toBe(false);
   });
 });

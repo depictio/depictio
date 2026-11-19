@@ -1,6 +1,6 @@
 import { Alert, Anchor, Badge, Group, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import type { Diagnostic } from '../catalog/diagnostics';
+import { isTodo, triage, type Diagnostic } from '../catalog/diagnostics';
 
 const STEP_LABEL = ['Tool', 'Fixture', 'Visualizations'] as const;
 
@@ -21,26 +21,38 @@ export default function DiagnosticsList({
   onGoTo?: (step: number, d: Diagnostic) => void;
   title?: string;
 }) {
-  const errors = diagnostics.filter((d) => d.severity === 'error').length;
-  const warnings = diagnostics.length - errors;
+  const t = triage(diagnostics);
+  const errors = t.errors.length;
+  const todos = t.todos.length;
+  const warnings = t.warnings.length;
   if (!diagnostics.length) return null;
+  // Real errors first, then what is left to fill in, then warnings: the list
+  // reads as "what is wrong", then "what is next".
+  const ordered = [...t.errors, ...t.todos, ...t.warnings];
+  // Only "to do" items: a draft in progress, not a broken entry. Neutral grey.
+  const color = errors ? 'red' : warnings ? 'yellow' : 'gray';
   return (
     <Alert
-      color={errors ? 'red' : 'yellow'}
+      color={color}
       variant="light"
-      icon={<Icon icon={errors ? 'mdi:alert-circle' : 'mdi:alert-outline'} />}
+      icon={<Icon icon={errors ? 'mdi:alert-circle' : warnings ? 'mdi:alert-outline' : 'mdi:format-list-checks'} />}
       title={
         title ??
-        [errors && `${errors} error${errors > 1 ? 's' : ''} CI would reject`, warnings && `${warnings} warning${warnings > 1 ? 's' : ''}`]
+        [
+          errors && `${errors} error${errors > 1 ? 's' : ''} CI would reject`,
+          todos && `${todos} left to fill in`,
+          warnings && `${warnings} warning${warnings > 1 ? 's' : ''}`,
+        ]
           .filter(Boolean)
           .join(' · ')
       }
       data-testid={testId}
-      data-errors={errors}
+      data-errors={errors + todos}
+      data-todos={todos}
       data-warnings={warnings}
     >
       <Stack gap={6} component="ul" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {diagnostics.map((d, i) => (
+        {ordered.map((d, i) => (
           <Group
             key={`${d.code}-${d.path}-${i}`}
             component="li"
@@ -52,8 +64,13 @@ export default function DiagnosticsList({
             data-severity={d.severity}
             data-path={d.path}
           >
-            <Badge size="xs" variant="light" color={d.severity === 'error' ? 'red' : 'yellow'} style={{ flexShrink: 0, marginTop: 3 }}>
-              {d.severity}
+            <Badge
+              size="xs"
+              variant="light"
+              color={isTodo(d) ? 'gray' : d.severity === 'error' ? 'red' : 'yellow'}
+              style={{ flexShrink: 0, marginTop: 3 }}
+            >
+              {isTodo(d) ? 'to do' : d.severity}
             </Badge>
             <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
               <Text size="sm">

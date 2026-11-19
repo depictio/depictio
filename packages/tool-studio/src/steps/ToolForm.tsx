@@ -9,7 +9,7 @@ import { useStudioStore, newOutputSlugClash } from '../state/useStudioStore';
 import { fetchNfCoreMeta } from '../catalog/fromNfCore';
 import { fetchSnakemakeMeta } from '../catalog/fromSnakemake';
 import { fetchGalaxyMeta } from '../catalog/fromGalaxy';
-import { findDuplicateTool, type CatalogManifest } from '../catalog/catalog';
+import { findDuplicateTool, findSimilarTool, type CatalogManifest } from '../catalog/catalog';
 import { useMultiqcModules, multiqcModuleFor } from '../catalog/multiqc';
 import RecognizedTool from './RecognizedTool';
 import type { ExtractedMeta, OutputChannel, ToolSource } from '../types';
@@ -93,6 +93,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
   const output = useStudioStore((s) => s.output);
   const setTool = useStudioStore((s) => s.setTool);
   const setOutput = useStudioStore((s) => s.setOutput);
+  const startNewOutput = useStudioStore((s) => s.startNewOutput);
   const existing = useStudioStore((s) => s.existing);
   const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
   const setStep = useStudioStore((s) => s.setStep);
@@ -182,6 +183,9 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
       // Some sources (Snakemake) describe outputs in prose with no glob — leave
       // path_glob for the author to complete rather than emit a dangling `**/`.
       path_glob: chan.pattern ? `**/${toolId}/${chan.pattern}` : output.path_glob,
+      // `*.{bam,cram}` in meta.yml: fnmatch has no braces, so the other options
+      // become alternative globs.
+      ...(chan.altPatterns?.length ? { path_glob_alt: chan.altPatterns.map((p) => `**/${toolId}/${p}`) } : {}),
       description: chan.description || output.description,
     });
   };
@@ -605,11 +609,45 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     );
   }
 
+  // Not the same tool, but the same family (macs3 next to macs2): say so
+  // before a parallel entry is written. Never routes; adding to the existing
+  // tool is one click.
+  const similar = findSimilarTool(catalog, tool);
+  const similarHint = similar && (
+    <Alert
+      color="blue"
+      variant="light"
+      icon={<Icon icon="mdi:book-search-outline" />}
+      title={`A close tool is already in the catalog: ${similar.name} (${similar.id})`}
+      data-testid="similar-tool"
+    >
+      <Stack gap="xs">
+        <Text size="sm">
+          {similar.name} has {similar.outputs.length} output{similar.outputs.length === 1 ? '' : 's'}
+          {similar.outputs.length
+            ? ` (${similar.outputs
+                .slice(0, 6)
+                .map((o) => o.id.replace(`${similar.id}_`, ''))
+                .join(', ')}${similar.outputs.length > 6 ? ', …' : ''})`
+            : ''}
+          . If this tool writes the same files, adding to that entry, or reusing its recipes from{' '}
+          <Code>{(similar.dir ?? `depictio/catalog/${similar.id}`).replace(/\/+$/, '')}/</Code>, avoids a parallel entry.
+        </Text>
+        <Group gap="xs">
+          <Button size="xs" variant="light" onClick={() => startNewOutput(similar)} data-testid="similar-tool-add">
+            Add an output to {similar.name} instead
+          </Button>
+        </Group>
+      </Stack>
+    </Alert>
+  );
+
   // No match → author a brand-new tool (identity + its single output).
   return (
     <Stack gap="lg">
       {header}
       {multiqcWarning}
+      {similarHint}
       <Grid gutter="xl">
         <Grid.Col span={{ base: 12, md: 6 }}>{identityFields}</Grid.Col>
         <Grid.Col span={{ base: 12, md: 6 }}>{outputFields()}</Grid.Col>

@@ -270,6 +270,9 @@ export interface OutputChannel {
   name: string;
   /** Glob pattern for the file, e.g. "*.summary.txt" (may be ''). */
   pattern: string;
+  /** Further patterns when the source gives several (`*.{bam,cram}`): the
+   *  catalog's fnmatch has no brace expansion, so they become `path_glob_alt`. */
+  altPatterns?: string[];
   description: string;
   /** meta.yml `type` (kept for filtering; only "file" outputs are surfaced). */
   type: string;

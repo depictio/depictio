@@ -18,6 +18,7 @@ import StartScreen from './steps/StartScreen';
 import OutputsBar from './components/OutputsBar';
 import EntryPanel from './components/EntryPanel';
 import { useDiagnostics } from './hooks/useDiagnostics';
+import { isTodo } from './catalog/diagnostics';
 import { useMediaQuery } from '@mantine/hooks';
 import { discardDraftBackup, restoreDraftBackup, useDraftBackup } from './state/draftBackup';
 
@@ -110,6 +111,8 @@ export default function App() {
   }, [started]);
 
   const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+  // Only "left to fill in" items: a draft in progress, shown grey, not red.
+  const onlyTodos = errorCount > 0 && diagnostics.every((d) => d.severity !== 'error' || isTodo(d));
 
   // The Studio's section tone (theme.ts): the page's primary, as GlassPage
   // tones Projects and Dashboards. Previews opt back out (components/Tone.tsx).
@@ -172,7 +175,7 @@ export default function App() {
                 >
                   Entry
                   {errorCount ? (
-                    <Text span size="xs" c="red" fw={700} ml={6}>
+                    <Text span size="xs" c={onlyTodos ? 'dimmed' : 'red'} fw={700} ml={6}>
                       {errorCount}
                     </Text>
                   ) : null}
