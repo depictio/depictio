@@ -13,4 +13,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: picard }
+  - component: multiqc
+    section: picard
+    title: Library and transcript metrics
+    description: >-
+      Picard's MultiQC plots: duplication, insert-size distribution, where the bases
+      land across transcript regions and the gene-body coverage, per sample. They
+      answer how well the library covers the transcriptome.
+
+      How to read: A narrow insert-size peak, a high coding share and even gene-body
+      coverage are good. Coverage piling up at one end of genes indicates RNA
+      degradation or poly-A bias.
+
+      Source: https://docs.seqera.io/multiqc/modules/picard

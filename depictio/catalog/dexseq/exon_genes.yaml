@@ -13,9 +13,100 @@ renders_as:
   - id: exon_volcano
     component: advanced_viz
     kind: volcano
-    roles: { feature_id: gene_id, effect_size: log2fc, significance: padj, category: direction }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
-  - { component: card, column: bins_significant, aggregation: sum, secondary_layout: top_n, breakdown_col: gene_id, top_n_count: 3 }
-  - { component: card, column: abs_log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: direction }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    title: Exon usage volcano
+    roles: { feature_id: gene_id, effect_size: log2fc, significance: padj, category: direction, label: gene_id }
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 0.0
+      top_n_labels: 10
+      effect_label: Top exon usage log2 fold change
+      significance_label: -log10 gene-level q-value
+    description: >-
+      Each point is a gene in one contrast: the usage log2 fold change of its most significant exonic bin
+      on the horizontal axis and the gene-level q-value on the vertical axis. It answers which genes use
+      their exons differently between conditions.
+
+      How to read: genes high on the plot have at least one exon used differently, and the horizontal
+      position says in which direction the strongest bin moves. A gene can be significant with a small fold
+      change when many bins shift a little. Open the table tile to see how many bins were tested and called.
+
+      Lines and annotations: the horizontal line is a gene-level q-value of 0.05, the cut-off the catalog
+      recipe uses for its calls (its fdr parameter). The DEXSeq vignette illustrates a 10% false discovery
+      rate and describes the gene-level q-value as controlling the FDR per gene. No fold-change line is
+      drawn because the calls use none.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html
+  - component: card
+    column: gene_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: direction
+    caption: genes, by exon usage call
+    title: Genes by exon usage call
+    description: >-
+      Each unit is one gene in one contrast, and the ring splits them by the direction of their strongest
+      exon shift, or not significant. The second figure counts the distinct genes. It answers how many
+      genes change exon usage.
+
+      How to read: a ring that is mostly not significant means little differential exon usage. A strong
+      imbalance between up and down usually reflects which bin is the most significant, not a gene-wide
+      trend.
+
+      Lines and annotations: a gene is called when its gene-level q-value is below 0.05, the catalog recipe
+      default.
+  - component: card
+    column: bins_significant
+    aggregation: sum
+    aggregations: [max, median]
+    secondary_layout: top_n
+    breakdown_col: direction
+    top_n_count: 3
+    caption: significant bins, by call
+    title: Significant exonic bins
+    description: >-
+      The hero number is the total of exonic bins called significant across genes and contrasts, and the
+      bars split it by the direction of each gene's strongest bin. The strip gives the largest and the
+      median count per gene. It answers how widespread the exon changes are within genes.
+
+      How to read: a high maximum points to a gene with many shifted bins, often a real isoform switch. A
+      median near zero is normal, since most genes change at no bin.
+
+      Lines and annotations: a bin is called with the adjusted p-value cut-off of 0.05 used by the catalog
+      recipe.
+  - component: card
+    column: abs_log2fc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: absolute log2 fold change, with its spread
+    title: Size of the strongest exon shift
+    description: >-
+      The hero number is the median absolute usage log2 fold change of each gene's most significant bin,
+      and the box shows its quartiles. It answers how large the exon shifts are, whatever their direction.
+
+      How to read: a high median means the strongest bins move a lot. The absolute value is used so that
+      gains and losses do not cancel out.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: direction
+    title: Exon usage call
+    description: >-
+      Pick one or more calls (up, down, not significant) to restrict every tile of the tab to those genes.
+      It answers which genes remain when you only want one side.
+
+      How to read: select up and down together to hide the unchanged genes before reading the volcano and
+      the table.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Exon usage table
+    description: >-
+      Each row is a gene in one contrast: how many exonic bins were tested and called, the most
+      significant bin with its usage log2 fold change, and the gene-level q-value. It answers which genes to
+      follow up, and a row selection filters the rest of the dashboard to that gene.
+
+      How to read: sort by q-value and read the bin counts beside it. A gene with several significant bins
+      is a stronger candidate than one with a single bin.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html

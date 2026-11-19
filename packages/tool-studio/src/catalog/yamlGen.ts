@@ -61,7 +61,9 @@ export function renderToFlow(render: RenderSpec): string {
     if (render.code != null) {
       return `{ ${idp}component: figure, code: ${flowScalar(render.code)} }`;
     }
-    const kwargs = flowMap(Object.entries(render.dict_kwargs ?? {}).map(([k, v]) => [k, v]));
+    const kwargs = flowMap(
+      Object.entries(render.dict_kwargs ?? {}).map(([k, v]) => [k, v]),
+    );
     return `{ ${idp}component: figure, visu_type: ${render.visu_type}, dict_kwargs: ${kwargs} }`;
   }
   if (render.component === 'card') {
@@ -115,6 +117,7 @@ function cardFieldFragments(render: CardRender): string[] {
     bits.push(`attrition_cols: ${flowList(render.attrition_cols)}`);
   if (render.trend_col) bits.push(`trend_col: ${flowScalar(render.trend_col)}`);
   if (render.filter_expr) bits.push(`filter_expr: ${flowScalar(render.filter_expr)}`);
+  if (render.caption) bits.push(`caption: ${flowScalar(render.caption)}`);
   return bits;
 }
 
@@ -145,9 +148,22 @@ function renderToBlock(render: RenderSpec): string[] {
     if (render.visu_type) lines.push(`visu_type: ${render.visu_type}`);
     const kw = render.dict_kwargs ?? {};
     const keys = Object.keys(kw);
-    if (keys.length) {
+    const labels = Object.entries(render.labels ?? {});
+    if (keys.length || labels.length) {
       lines.push('dict_kwargs:');
       for (const k of keys) lines.push(`  ${k}: ${flowScalar(kw[k])}`);
+      if (labels.length) lines.push(`  labels: ${flowMap(labels)}`);
+    }
+    if (render.reference_lines?.length) {
+      lines.push('reference_lines:');
+      for (const ref of render.reference_lines) {
+        const bits: string[] = [`axis: ${ref.axis}`];
+        if (ref.value !== undefined) bits.push(`value: ${ref.value}`);
+        if (ref.stat) bits.push(`stat: ${ref.stat}`);
+        if (ref.column) bits.push(`column: ${flowScalar(ref.column)}`);
+        if (ref.label) bits.push(`label: ${flowScalar(ref.label)}`);
+        lines.push(`  - { ${bits.join(', ')} }`);
+      }
     }
     return lines;
   }
@@ -170,6 +186,12 @@ function renderToBlock(render: RenderSpec): string[] {
       lines.push('roles:');
       for (const [k, v] of roles) lines.push(`  ${k}: ${flowValue(v)}`);
     }
+    const config = Object.entries(render.config ?? {});
+    if (config.length) {
+      lines.push('config:');
+      // JSON is valid flow YAML for any option value (number, bool, list, map).
+      for (const [k, v] of config) lines.push(`  ${k}: ${JSON.stringify(v)}`);
+    }
     return lines;
   }
   return [renderToFlow(render)];
@@ -179,10 +201,38 @@ function renderToBlock(render: RenderSpec): string[] {
  *  code-mode figures (block scalar) or any render whose flow form exceeds
  *  MAX_FLOW_WIDTH; a single flow mapping otherwise. */
 export function renderItemLines(render: RenderSpec): string[] {
+  return [...renderBodyLines(render), ...renderTextLines(render)];
+}
+
+/** A render's own `title` and `description`, in block form. The description
+ *  is a folded scalar whose blank lines become the popover's paragraph breaks. */
+function renderTextLines(render: RenderSpec): string[] {
+  const lines: string[] = [];
+  if (render.title) lines.push(`title: ${flowScalar(render.title)}`);
+  if (render.description) {
+    lines.push('description: >-');
+    for (const l of render.description.split('\n')) lines.push(l.trim() ? `  ${l.trim()}` : '');
+  }
+  return lines;
+}
+
+/** A render carrying text or options is always written in block form: a flow
+ *  mapping cannot hold a folded description. */
+function hasBlockOnlyFields(render: RenderSpec): boolean {
+  if (render.title || render.description) return true;
+  if (render.component === 'advanced_viz') return Object.keys(render.config ?? {}).length > 0;
+  if (render.component === 'figure') {
+    return Object.keys(render.labels ?? {}).length > 0 || Boolean(render.reference_lines?.length);
+  }
+  return false;
+}
+
+function renderBodyLines(render: RenderSpec): string[] {
   if (render.component === 'figure' && render.code != null) {
     const idLine = render.id ? [`id: ${flowScalar(render.id)}`] : [];
     return [...idLine, 'component: figure', 'code: |-', ...render.code.split('\n').map((l) => `  ${l}`)];
   }
+  if (hasBlockOnlyFields(render)) return renderToBlock(render);
   const flow = renderToFlow(render);
   if (`- ${flow}`.length <= MAX_FLOW_WIDTH) return [flow];
   return renderToBlock(render);

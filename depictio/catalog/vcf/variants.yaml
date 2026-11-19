@@ -13,22 +13,143 @@ find:
     - "**/variant_calling/*/*/*.vcf.gz"
     - "**/*.filtered.vcf.gz"
 recipe: vcf/variants.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several callers and variant types.
 fixture: variants.tsv
 renders_as:
   # Depth against allele fraction is the plane a germline callset is read on:
   # a clean diploid run stacks at 0.5 and 1.0, and everything off those two
   # bands is either low coverage or a caller artefact.
-  - { id: vaf_against_depth, component: advanced_viz, kind: scatter_xy,
-      roles: {x: dp, y: vaf, label: variant_key, color: caller} }
+  - id: vaf_against_depth
+    component: advanced_viz
+    kind: scatter_xy
+    title: Allele fraction against read depth
+    roles: {x: dp, y: vaf, label: variant_key, color: caller}
+    config:
+      x_title: Read depth
+      y_title: Variant allele fraction
+      top_n_labels: 5
+      legend_pos: bottom
+    description: >-
+      Each point is a variant call: its read depth on the horizontal axis and its
+      variant allele fraction on the vertical axis, coloured by caller. It answers
+      whether the calls rest on enough reads and whether their allele balance is
+      plausible.
+
+      How to read: a heterozygous germline variant sits near an allele fraction of 0.5
+      and a homozygous-alternate one near 1.0, so calls scattered between the two
+      bands, especially at low depth, are less reliable. Allele balance in RNA is
+      often skewed by expression, so read the bands loosely there. Compare callers
+      to see whether one produces more calls off the bands, and note that no cut-off is drawn, since no source gives one for every data type.
   # Rainfall / density along the genome. The manhattan kind takes chr/pos/score
   # and asks nothing of the score's meaning, so the allele fraction reads as
   # the y axis honestly once `score_kind` says so.
-  - { id: variant_rainfall, component: advanced_viz, kind: manhattan,
-      roles: {chr: chrom, pos: pos, score: vaf, feature: variant_key} }
-  - { id: variant_genome_view, component: advanced_viz, kind: genome_view,
-      roles: {chr: chrom, pos: pos, score: vaf, feature: variant_key, sample: caller} }
-  - { component: card, column: qual, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: dp, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: vaf, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: vaf, color: caller} }
-  - { component: table }
+  - id: variant_rainfall
+    component: advanced_viz
+    kind: manhattan
+    title: Allele fraction along the genome
+    roles: {chr: chrom, pos: pos, score: vaf, feature: variant_key}
+    config:
+      score_kind: Variant allele fraction
+      highlight: none
+      score_threshold_stat: p95
+      color_by_columns: [caller, sample]
+      default_color_by: caller
+      hover_cols: [dp, qual]
+      top_n_labels: 5
+    description: >-
+      Each point is a variant call at its position along the chromosomes, with its
+      variant allele fraction as the height, coloured by caller. It answers where along
+      the genome the calls cluster and whether their allele balance changes by region.
+
+      How to read: horizontal lines of points at the same height are the usual
+      genotype bands. A stretch where calls are dense and off the bands can mark a
+      copy number change, a mapping problem or a hot spot of artefacts. Switch the
+      colour to the sample to see whether it is shared.
+
+      Lines and annotations: the dashed line is the 95th percentile of the allele
+      fraction in this table, a reference defined by the data and not a cut-off from
+      any source.
+  - id: variant_genome_view
+    component: advanced_viz
+    kind: genome_view
+    title: Variant calls along the genome
+    roles: {chr: chrom, pos: pos, score: vaf, feature: variant_key, sample: caller, category: variant_type}
+    config:
+      score_title: Variant allele fraction
+      top_stars: 0
+    description: >-
+      Each point is a variant call at its position, with its allele fraction as the
+      height, coloured by variant type, with one lane per caller. It answers where each
+      caller makes calls and whether callers agree on a region.
+
+      How to read: a region with calls in one lane and none in the others is a locus the
+      callers disagree on. Colours separate SNPs from insertions and deletions, so a
+      run of indels in one lane may be a homopolymer error. Zoom to a locus and open the
+      table for the calls.
+  - component: card
+    column: qual
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Call quality
+    caption: median, with its spread across calls
+    description: >-
+      The hero number is the median QUAL value of the calls in view, and the box shows
+      their quartiles. It answers how much confidence the caller put in its calls.
+
+      How to read: a low median or a box reaching down to small values means many weak
+      calls. The scale of QUAL depends on the caller, so compare callers only against
+      their own runs, and filter on PASS to see the kept calls.
+  - component: card
+    column: dp
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Read depth at calls
+    caption: median, with its spread across calls
+    description: >-
+      The hero number is the median read depth at the calls in view, and the box shows
+      their quartiles. It answers how well covered the called sites are.
+
+      How to read: a box reaching down to a depth of a few reads means many calls rest
+      on little evidence, and a very long upper whisker marks repeats or collapsed
+      regions. Open the depth against allele fraction plot to see how that affects the
+      allele balance.
+  - component: card
+    column: vaf
+    aggregation: average
+    aggregations: [median, box_plot_stats]
+    secondary_layout: box_plot
+    title: Variant allele fraction
+    caption: average and median, with the spread across calls
+    description: >-
+      The hero number is the mean variant allele fraction of the calls in view, and the
+      box shows their quartiles. It answers where the allele balance sits overall.
+
+      How to read: a mix of heterozygous and homozygous-alternate calls pulls the mean
+      between 0.5 and 1.0, so it moves with the genotype mix more than with quality.
+      Use the histogram below to see the two bands.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: vaf
+      color: caller
+      labels: {vaf: Variant allele fraction, caller: Caller}
+    title: Allele fraction distribution
+    description: >-
+      Each bar counts the variant calls in a bin of allele fraction, split by caller. It
+      answers whether the allele balance shows the expected genotype bands.
+
+      How to read: peaks near 0.5 and near 1.0 are the heterozygous and
+      homozygous-alternate genotypes of a diploid sample. A mass of calls at low
+      fractions suggests noise, mosaicism or contamination, and callers whose
+      histograms differ are making different calls on the same data.
+  - component: table
+    title: Variant table
+    description: >-
+      Each row is a variant call with its locus, alleles, quality, FILTER status,
+      genotype, read depth and allele fraction. It answers which calls to inspect or
+      follow up.
+
+      How to read: filter on FILTER status or sort by depth or quality to find weak calls,
+      and use the variant key to look a call up in a genome browser.

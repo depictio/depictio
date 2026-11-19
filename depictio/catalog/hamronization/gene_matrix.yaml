@@ -11,5 +11,27 @@ find:
 recipe: hamronization/gene_matrix.py
 fixture: gene_matrix.tsv
 renders_as:
-  - { id: arg_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_symbol, row_annotation_cols: [drug_class_primary]} }
-  - { component: table }
+  # Sample columns are named at ingest and drug_class is a string, so value_columns
+  # cannot be written here: every numeric column is a sample.
+  - id: arg_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Resistance gene by sample
+    roles: {index: gene_symbol, row_annotation_cols: [drug_class_primary]}
+    description: >-
+      Each cell is the number of hits of one resistance gene in one sample, with the
+      gene's most frequent drug class as a row annotation. It answers which genes each
+      sample carries and which are shared.
+
+      How to read: a dark row is a gene found across samples and a dark column a
+      sample with many resistance genes. Samples that cluster together share a
+      resistance profile, which can point to a common source.
+
+      Source: https://github.com/pha4ge/hAMRonization/
+  - component: table
+    title: Gene counts
+    description: >-
+      Each row is a resistance gene with its hit count per sample and its drug class.
+      It answers the exact counts behind the heatmap.
+
+      How to read: sort by a sample column to see its main genes.

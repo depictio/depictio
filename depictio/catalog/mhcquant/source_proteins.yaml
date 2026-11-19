@@ -9,10 +9,62 @@ find: { path_glob: "*.tsv" }
 recipe: mhcquant/source_proteins.py
 fixture: source_proteins.tsv
 renders_as:
-  - { component: card, column: protein, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: peptides, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - component: card
+    column: protein
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: compact
+    caption: distinct proteins, with the sample and protein pairs
+    title: Source proteins
+    description: >-
+      The hero number is the count of distinct source proteins, and the count beside
+      it is the rows, one per sample and protein. It answers how many proteins give
+      rise to the presented peptides and how many are shared between samples.
+
+      How to read: a row count much higher than the distinct count means the same
+      proteins are found in several samples. Shared peptides are credited to every
+      protein they map to.
+  - component: card
+    column: peptides
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median peptides per protein, with their spread
+    title: Peptides per source protein
+    description: >-
+      The hero number is the median count of distinct peptides per source protein,
+      and the box shows the spread across proteins. It answers how many peptides a
+      typical protein contributes.
+
+      How to read: a few proteins with many peptides are the dominant sources. Open
+      the scatter or the table to see which.
   - id: protein_coverage
     component: advanced_viz
     kind: scatter_xy
+    title: Source protein yield and intensity
     roles: { x: peptides, y: log10_intensity, label: protein_entry, color: sample, size: psms }
-  - { component: table, row_selection_enabled: true, row_selection_column: protein }
+    config:
+      x_title: Distinct peptides
+      y_title: Summed log10 intensity
+      top_n_labels: 8
+    description: >-
+      Each point is a source protein in one sample: its distinct peptides on the
+      horizontal axis and its summed log10 intensity on the vertical axis, coloured
+      by sample and sized by PSMs. It answers which proteins contribute the most
+      peptides and signal.
+
+      How to read: points toward the upper right are the dominant sources of the
+      immunopeptidome. Proteins that dominate every sample are abundant cellular
+      proteins, while sample-specific ones may reflect the biology under study.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: protein
+    title: Source proteins
+    description: >-
+      Each row is a source protein in one sample, with its distinct and shared
+      peptides, PSMs, best score, summed intensity and the peptides themselves. It
+      answers the exact detail behind every tile and lets a row selection filter the
+      dashboard.
+
+      How to read: select a protein to see its peptides, or sort by peptides to find
+      the dominant sources.

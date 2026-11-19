@@ -14,21 +14,158 @@ find:
 recipe: proteinannotator/domains.py
 fixture: domains.tsv
 renders_as:
-  - { id: domain_record, component: advanced_viz, kind: record_card, roles: {id: domain_id, title: label} }
+  # C1 N/A: a record card draws one record as labelled fields, no mark to colour.
+  - id: domain_record
+    component: advanced_viz
+    kind: record_card
+    title: Domain record
+    roles: {id: domain_id, title: label}
+    config:
+      labels:
+        span: Span (residues)
+        protein_length: Protein length (residues)
+        evalue: E-value
+        neg_log10_evalue: -log10 E-value
+        hmm_coverage: Fraction of the HMM covered
+        hmm_from: HMM start
+        hmm_to: HMM end
+        hmm_length: HMM length
+    description: >-
+      The card shows one domain span as labelled fields: its family, database,
+      position, length, E-value and the part of the family model it matches. It
+      answers what a single domain hit is.
+
+      How to read: select a row in the table to fill it. A small fraction of the HMM
+      covered means a partial match to the family, which deserves a second look in
+      another database.
   # Significance against span length: long confident spans are whole-protein
   # families, short confident ones are motifs, weak ones of any length are
   # borderline calls worth checking in a second database.
-  - { id: domain_significance, component: advanced_viz, kind: scatter_xy,
-      roles: {x: span, y: neg_log10_evalue, label: label, color: database} }
+  # HMMER's inclusion cut-off is an E-value of 0.01 (-log10 = 2), verified in its User Guide.
+  - id: domain_significance
+    component: advanced_viz
+    kind: scatter_xy
+    title: Domain significance against length
+    roles: {x: span, y: neg_log10_evalue, label: label, color: database}
+    config:
+      x_title: Domain span (residues)
+      y_title: -log10 E-value
+      reference_line: horizontal
+      reference_value: 2
+      reference_label: E-value 0.01
+      top_n_labels: 8
+    description: >-
+      Each point is a domain span: its length in residues on the horizontal axis and
+      the minus log10 of its independent E-value on the vertical axis, coloured by the
+      database that reports it. It answers which domains are long and confident and
+      which are weak.
+
+      How to read: points high on the plot are strong matches. Long, high spans are
+      whole-protein families and short, high ones are motifs. Weak points of any
+      length are borderline, so check them in a second database.
+
+      Lines and annotations: the horizontal line is an E-value of 0.01, the default
+      inclusion threshold of HMMER (per-target and per-domain). HMMER applies it to the
+      full-sequence and conditional E-values, so a few points can sit just below the
+      line. InterProScan matches pass the filters of their own member database, not
+      one shared E-value.
+
+      Sources: http://eddylab.org/software/hmmer/Userguide.pdf and
+      https://github.com/ebi-pf-team/interproscan-docs/blob/master/docs/FAQ.rst
   # The domains of every database on one backbone per protein. The HMM span columns are null
   # for InterProScan rows, which draw as complete matches.
-  - { id: domain_architecture, component: advanced_viz, kind: domain_architecture,
-      roles: {entity: entity, start: start, end: end, label: label, protein_length: protein_length, hmm_from: hmm_from, hmm_to: hmm_to, hmm_length: hmm_length, hmm_coverage: hmm_coverage, evalue: evalue, source: source, description: description, accession: accession} }
-  - { id: domain_count, component: card, column: domain_id, aggregation: count,
-      secondary_layout: top_n, breakdown_col: database, top_n_count: 5 }
-  - { id: domain_families, component: card, column: label, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: database }
-  - { id: domain_span, component: card, column: span, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: box, dict_kwargs: {x: database, y: span, color: database} }
-  - { component: table, row_selection_enabled: true, row_selection_column: domain_id }
+  - id: domain_architecture
+    component: advanced_viz
+    kind: domain_architecture
+    title: Domain architecture
+    roles: {entity: entity, start: start, end: end, label: label, protein_length: protein_length, hmm_from: hmm_from, hmm_to: hmm_to, hmm_length: hmm_length, hmm_coverage: hmm_coverage, evalue: evalue, source: source, description: description, accession: accession}
+    description: >-
+      Each lane is a protein drawn to scale, with one block per domain coloured by
+      family and placed at its start and end. It answers which domains a protein
+      carries and in what order.
+
+      How to read: proteins with the same block order share an architecture, so they
+      probably share a function. A block drawn partly filled matches only part of its
+      family model, and overlapping blocks from different databases describe the same
+      region. Hover a block for its database, accession and E-value.
+
+      Lines and annotations: a partly filled block shows the fraction of the family
+      HMM that the match covers, from the hmmsearch alignment. No cut-off is drawn on
+      this tile.
+  - id: domain_count
+    component: card
+    column: entity
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: database
+    top_n_count: 5
+    caption: domains, by database
+    title: Annotated proteins
+    description: >-
+      The hero number is the count of proteins with at least one domain, the second
+      number counts every domain span, and the bars rank the databases by their domain
+      spans. It answers how much annotation there is and which database provides
+      most.
+
+      How to read: a database with a long bar contributes most spans, which is not
+      the same as the best coverage, so check the coverage heatmap.
+  - id: domain_families
+    component: card
+    column: label
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: source
+    top_n_count: 5
+    caption: domains, by source
+    title: Distinct families
+    description: >-
+      The hero number is the count of distinct domain families, the second number
+      counts every domain span, and the bars rank the sources by their spans. It
+      answers how varied the annotation is and which library or member database
+      reports most.
+
+      How to read: many spans over few families means a few families repeat across
+      the proteins.
+  - id: domain_span
+    component: card
+    column: span
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Domain length
+    description: >-
+      The hero number is the median domain span in residues, and the box shows the
+      spread. It answers how long a typical domain is.
+
+      How to read: a short median with a long upper whisker means mostly motifs with a
+      few whole-protein families. Open the significance plot to see which ones are
+      confident.
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: database
+      y: span
+      color: database
+      labels: {database: Database, span: Domain span (residues)}
+    title: Domain length per database
+    description: >-
+      Each box is the spread of domain spans in residues for one database. It answers
+      whether the databases describe domains of different sizes.
+
+      How to read: a database with longer spans describes whole families, and one with
+      short spans reports motifs or fragments. Compare boxes before combining counts
+      across databases.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: domain_id
+    title: Domain table
+    description: >-
+      Each row is one domain span from one database, with its position, length, E-value
+      and the part of the family model it matches. It answers the details behind every
+      tile of this view, and a row selection fills the domain record.
+
+      How to read: sort by E-value to list the strongest matches, or filter by
+      database to compare sources.

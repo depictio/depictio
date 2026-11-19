@@ -12,7 +12,33 @@ find:
 recipe: proteinfold/plddt_ranks.py
 fixture: plddt_ranks.tsv
 renders_as:
-  - { id: plddt_model_spread, component: advanced_viz, kind: profile,
-      roles: {series: engine, x: residue_index, y: plddt, lower: plddt_min, upper: plddt_max} }
-  - { component: interactive, interactive_type: Select, column_name: target }
-  - { component: table }
+  - id: plddt_model_spread
+    component: advanced_viz
+    kind: profile
+    title: Confidence across models
+    roles: {series: engine, x: residue_index, y: plddt, lower: plddt_min, upper: plddt_max}
+    config:
+      x_title: Residue position
+      y_title: pLDDT
+      legend_pos: bottom
+      residue_axis: true
+    description: >-
+      Each curve is the per-residue pLDDT of the top-ranked model of one engine, with a band from the lowest to the highest model at that residue. It answers where an engine's models agree and where they do not.
+
+      How to read: a narrow band means every model places the residue alike. A wide band marks regions the engine is unsure about, and curves that part mark regions where engines disagree. Above 90 is very high confidence, 70 to 90 confident, 50 to 70 low and below 50 very low.
+
+      Note: the bands of pLDDT are AlphaFold DB's reading guide and are not drawn on the plot. Residues are counted from 1 over the chains in order.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/34791371/
+  - component: interactive
+    interactive_type: Select
+    column_name: target
+    title: Target
+    description: >-
+      Show one target at a time, so the curves of its engines are comparable.
+  - component: table
+    title: Confidence across models
+    description: >-
+      One row per residue and engine with the top-ranked pLDDT and the lowest and highest value across models.
+
+      How to read: sort by the gap between lowest and highest to find unstable residues.

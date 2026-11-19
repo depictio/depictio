@@ -8,7 +8,66 @@ find:
 recipe: samtools/flagstat.py
 fixture: flagstat.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mapped_reads, color: stage, title: Mapped reads before and after the mapping-quality filter} }
-  - { component: card, column: mapped_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: mapped_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: mapped_reads_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: mapped_reads
+      color: stage
+      labels: {sample: Sample, mapped_reads: Mapped reads, stage: Filter stage}
+    title: Mapped reads before and after the mapping-quality filter
+    description: >-
+      Each bar is the number of mapped reads of a sample at one stage, before or after
+      the mapping-quality filter. It answers how many reads survive the filter and
+      whether samples differ in depth.
+
+      How to read: a post-filter bar close to the pre-filter one means the filter
+      removed little. A large drop points to many low-quality or multi-mapping reads,
+      so check the reference, the trimming and the library. Very uneven bars across
+      samples call for normalisation downstream.
+
+      Source: https://www.htslib.org/doc/samtools-flagstat.html
+  - id: mapped_reads_total
+    component: card
+    column: mapped_reads
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: median, with the smallest and largest
+    title: Mapped reads
+    description: >-
+      The hero number is the median count of mapped reads over the samples and stages in
+      view, with the smallest and largest beside it. It answers how deep the alignments
+      are and how uneven.
+
+      How to read: a large gap between the smallest and the largest count means uneven
+      depth. Filter to one stage to compare samples on equal footing.
+
+      Source: https://www.htslib.org/doc/samtools-flagstat.html
+  - id: mapped_pct_card
+    component: card
+    column: mapped_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('stage') == 'pre-filter'"
+    caption: median, with its spread
+    title: Mapping rate before filtering
+    description: >-
+      The hero number is the median share of reads that map, before the mapping-quality
+      filter, and the box shows the spread across samples. It answers how well the
+      reads align to the reference.
+
+      How to read: a high median means most reads belong to the reference. A low value
+      or a long box points to contamination, the wrong reference or adapters left in
+      the reads. Open the bar chart to find the samples responsible.
+
+      Source: https://www.htslib.org/doc/samtools-flagstat.html
+  - component: table
+    title: Flagstat counts
+    description: >-
+      Each row is a sample at one filter stage with its read counts and percentages. It
+      answers the exact numbers behind the chart and cards.
+
+      How to read: sort by mapped percentage to find the weakest alignments.

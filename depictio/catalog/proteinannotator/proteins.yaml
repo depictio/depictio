@@ -11,24 +11,173 @@ find:
   path_glob_alt:
     - "**/qc/*/*.faa"
 recipe: proteinannotator/proteins.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several proteins, samples and annotation statuses.
 fixture: proteins.tsv
 renders_as:
-  - { id: protein_record, component: advanced_viz, kind: record_card, roles: {id: entity, title: top_domain} }
+  # C1 N/A: a record card draws one record as labelled fields, no mark to colour.
+  - id: protein_record
+    component: advanced_viz
+    kind: record_card
+    title: Protein record
+    roles: {id: entity, title: top_domain}
+    config:
+      labels:
+        length: Length (residues)
+        annotation_status: Annotation status
+        domain_hits: Domain hits
+        databases_hit: Databases with a hit
+        annotated_residues: Residues covered by a domain
+        annotated_pct: Residues covered by a domain (%)
+        top_domain: Best domain
+        top_domain_database: Best domain database
+        top_domain_evalue: Best domain E-value
+        helix_pct: Helix (%)
+        strand_pct: Strand (%)
+        coil_pct: Coil (%)
+    description: >-
+      The card shows one protein as labelled fields: its length, domain hits, how many
+      databases annotate it, the share of its residues covered and the predicted
+      secondary structure. It answers what is known about a single protein.
+
+      How to read: select a row in the table or a point in the scatter to fill it. A
+      protein with few databases and a low covered share is poorly described.
   # Length against annotated share: short, fully covered proteins are single
   # domain; long, poorly covered ones carry regions no database describes.
-  - { id: length_vs_cover, component: advanced_viz, kind: scatter_xy,
-      roles: {x: length, y: annotated_pct, label: entity, color: top_domain_database} }
-  - { id: protein_count, component: card, column: entity, aggregation: count,
-      secondary_layout: top_n, breakdown_col: annotation_status, top_n_count: 2 }
-  - { id: protein_length, component: card, column: length, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: annotated_cover, component: card, column: annotated_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: databases_per_protein, component: card, column: databases_hit, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: helix_share, component: card, column: helix_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: strand_share, component: card, column: strand_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: length, color: annotation_status} }
-  - { component: table, row_selection_enabled: true, row_selection_column: entity }
+  - id: length_vs_cover
+    component: advanced_viz
+    kind: scatter_xy
+    title: Length against annotated share
+    roles: {x: length, y: annotated_pct, label: entity, color: top_domain_database}
+    config:
+      x_title: Protein length (residues)
+      y_title: Residues covered by a domain (%)
+      top_n_labels: 8
+    description: >-
+      Each point is a protein: its length in residues against the percentage of its
+      residues covered by at least one domain, coloured by the database of its best
+      domain. It answers which proteins are well described and which carry long
+      unannotated regions.
+
+      How to read: short proteins at full coverage are single-domain proteins. Long
+      proteins with low coverage carry regions no searched database describes, which
+      makes them candidates for new domains or for a different database. Points
+      without a best domain have no colour.
+
+      Lines and annotations: none are drawn, because no published rule defines a
+      sufficient coverage.
+  - id: protein_count
+    component: card
+    column: domain_hits
+    aggregation: sum
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: annotation_status
+    top_n_count: 2
+    caption: proteins, by annotation status
+    title: Domain hits
+    description: >-
+      The hero number is the total count of domain hits over the proteins, with the
+      median per protein below it, and the bars rank the proteins by annotation
+      status. It answers how much annotation there is and how many proteins have
+      none.
+
+      How to read: a long unannotated bar means many proteins no database describes.
+      Open the scatter to see which ones are long.
+  - id: protein_length
+    component: card
+    column: length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Protein length
+    description: >-
+      The hero number is the median protein length in residues, and the box shows the
+      spread. It answers how long the proteins are.
+
+      How to read: a very wide spread mixes short peptides with large multidomain
+      proteins, which have different annotation rates.
+  - id: annotated_cover
+    component: card
+    column: annotated_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Residues covered by a domain
+    description: >-
+      The hero number is the median percentage of a protein's residues covered by at
+      least one domain, and the box shows the spread. It answers how completely the
+      proteins are described.
+
+      How to read: a high median means most of each protein is explained. A box
+      reaching down to zero marks proteins with no annotation.
+  - id: databases_per_protein
+    component: card
+    column: databases_hit
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Databases per protein
+    description: >-
+      The hero number is the median count of databases with a hit on a protein, and the
+      box shows the spread. It answers how many independent sources describe a typical
+      protein.
+
+      How to read: a higher count means the annotation is corroborated. A box at one
+      means most proteins rest on a single source.
+  - id: helix_share
+    component: card
+    column: helix_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Helix content
+    description: >-
+      The hero number is the median percentage of residues S4PRED predicts as helix,
+      and the box shows the spread. It answers how helical the proteins are.
+
+      How to read: a wide spread mixes helical and non-helical proteins. Compare with
+      the strand share to classify the fold.
+  - id: strand_share
+    component: card
+    column: strand_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Strand content
+    description: >-
+      The hero number is the median percentage of residues S4PRED predicts as strand,
+      and the box shows the spread. It answers how much beta structure the proteins
+      carry.
+
+      How to read: a wide spread mixes beta-rich and beta-poor proteins. Compare with
+      the helix share to classify the fold.
+  - component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: length
+      color: annotation_status
+      labels: {length: Protein length (residues), annotation_status: Annotation status}
+    title: Protein length distribution
+    description: >-
+      Each bar counts proteins in a length bin, split by annotation status. It answers
+      whether unannotated proteins differ in length from the annotated ones.
+
+      How to read: unannotated proteins piled at short lengths are often fragments or
+      small peptides with no family. Unannotated proteins spread across all lengths
+      point to missing database coverage.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: entity
+    title: Protein table
+    description: >-
+      Each row is a protein with its length, domain hits per database, annotated share,
+      best domain and predicted secondary structure shares. It answers the exact values
+      behind every tile of this view, and a row selection fills the protein record.
+
+      How to read: sort by annotated share to find the poorly described proteins, or
+      filter by status.

@@ -9,5 +9,27 @@ find: { path_glob: "**/qiime2/barplot/level-*.csv" }
 recipe: qiime2/taxonomy_composition.py
 fixture: taxonomy_composition.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Phylum} }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: count
+      color: Phylum
+      labels: {sample: Sample, count: Read count, Phylum: Phylum}
+    title: Reads per sample by phylum
+    description: >-
+      Each bar is a sample, stacked by phylum, with its height the number of reads
+      assigned to each. It answers how many reads each sample holds and which phyla they
+      belong to.
+
+      How to read: bars of very different height are samples with different sequencing
+      depth, so compare compositions on the relative abundance tab rather than here. A
+      phylum that fills a bar dominates that sample.
+  - component: table
+    title: Taxon counts table
+    description: >-
+      Each row is a taxon in one sample, with its read count, kingdom and phylum and the
+      sample metadata. It answers the exact count behind each bar segment.
+
+      How to read: sort by count to find the dominant taxa, or filter on a phylum to follow
+      it across samples.

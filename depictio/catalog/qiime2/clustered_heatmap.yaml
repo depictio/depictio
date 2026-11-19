@@ -9,4 +9,26 @@ find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
 recipe: nf-core/ampliseq/complex_heatmap_canonical.py
 fixture: clustered_heatmap.tsv
 renders_as:
-  - { id: abundance_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: Phylum} }
+  # C6 N/A: value columns are the run's samples, known only at ingest.
+  # C1 N/A: a heatmap colours by its value scale, which the kind draws itself.
+  - id: abundance_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    title: Taxon abundance by sample
+    roles: {index: Phylum, row_annotation_cols: [Kingdom]}
+    config:
+      cluster_rows: true
+      cluster_cols: true
+      normalize: row_z
+    description: >-
+      Each cell is the relative abundance of a taxon in a sample, scaled per taxon so
+      that rows are comparable. It answers which taxa rise and fall together across the
+      samples and which samples share a profile.
+
+      How to read: blocks of the same colour across neighbouring samples are taxa that
+      characterise those samples, and the dendrograms group similar taxa and samples. The
+      side strip shows the kingdom of each taxon. A sample that clusters apart has an
+      unusual community, so check it against the habitat metadata.
+
+      Note: values are z-scored per row, so a colour compares a sample with the other
+      samples for the same taxon, not one taxon with another.

@@ -16,16 +16,57 @@ renders_as:
   - id: distribution_composition
     component: advanced_viz
     kind: stacked_taxonomy
+    title: Read distribution over the annotation
     roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance }
-  # The frame carries both resolutions, so a card that SUMS tag_count would add
-  # the region-class rows to the feature rows they are made of and report twice
-  # the library. Counting distinct annotation names per class is rank-safe.
-  - {
-      component: card,
-      column: taxon,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: region_class,
-      top_n_count: 5,
-    }
-  - { component: table }
+    config:
+      default_rank: Region class
+      rank_label: Level
+      x_title: Library
+      value_title: Share of mapped tags
+    description: >-
+      Each bar is a library, split into the share of its mapped tags that fall on each
+      part of the annotation: exons, introns, promoter and downstream bands and
+      intergenic sequence. It answers where the reads of each library land.
+
+      How to read: an RNA-seq library of mature RNA is dominated by exonic reads. A high
+      intronic share points to pre-mRNA or genomic DNA contamination, and a high
+      intergenic share to DNA contamination or an incomplete annotation. Switch the
+      level to read the individual features.
+
+      Note: where features overlap, RSeQC assigns a read to CDS exons first, then UTR
+      exons, then introns, then intergenic regions.
+
+      Source: https://rseqc.sourceforge.net/ and https://pubmed.ncbi.nlm.nih.gov/22743226/
+  # The frame carries both resolutions, so a card that SUMS tag_count over all rows would
+  # add the region-class rows to the feature rows they are made of and report twice
+  # the library. The filter keeps one resolution.
+  - component: card
+    column: tag_count
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: region_class
+    filter_expr: "col('rank') == 'Region class'"
+    headline: true
+    title: Mapped tags by region class
+    caption: tags, by region class
+    description: >-
+      The hero number is the total count of mapped tags over all libraries, with the
+      median and the largest class beside it, and the bar splits them by region class.
+      It answers what share of the sequencing falls on exons, introns and intergenic
+      regions.
+
+      How to read: a mostly exonic bar is the expected shape for mature RNA. A large
+      intergenic or intronic share is the lead for contamination or an annotation that
+      misses real transcripts.
+
+      Source: https://rseqc.sourceforge.net/
+  - component: table
+    title: Read distribution table
+    description: >-
+      Each row is a library and an annotation class, at the region level or at the
+      feature level, with its tag count and its share of the library. It answers the
+      exact counts behind the composition.
+
+      How to read: filter the rank to Region class for the coarse split, or Feature for
+      the exon, UTR, promoter and downstream bands.

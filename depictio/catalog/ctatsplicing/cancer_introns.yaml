@@ -9,8 +9,97 @@ find: { path_glob: "**/ctatsplicing/*.cancer.introns" }
 recipe: ctatsplicing/cancer_introns.py
 fixture: cancer_introns.tsv
 renders_as:
-  - { id: cancer_intron_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chrom, pos: start, score: score} }
-  - { component: card, column: uniq_mapped, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: intron, aggregation: nunique, secondary_layout: top_n, breakdown_col: top_tcga_cohort, top_n_count: 3, headline: true }
-  - { component: card, column: top_tcga_pct, aggregation: max, secondary_layout: histogram }
-  - { component: table }
+  - id: cancer_intron_manhattan
+    component: advanced_viz
+    kind: manhattan
+    title: Cancer intron candidates along the genome
+    roles: {chr: chrom, pos: start, score: score, feature: gene}
+    config:
+      score_kind: Uniquely mapped reads
+      top_n_labels: 6
+      color_by_columns: [top_tcga_cohort, strand]
+      default_color_by: top_tcga_cohort
+      score_threshold_stat: p95
+    description: >-
+      Each point is a junction that matched the CTAT cancer intron reference,
+      placed at its start, with the number of uniquely mapped reads that support it,
+      coloured by the TCGA cohort where it is most prevalent. It answers which
+      candidate cancer introns the run holds and how strongly they are read.
+
+      How to read: a tall point is a cancer-associated intron seen in many reads,
+      the best candidate to follow up. Colour by chromosome or strand from the
+      controls to see where the candidates cluster.
+
+      Lines and annotations: the horizontal line is the 95th percentile of the
+      support values of this table, a reference the data defines itself. CTAT
+      requires at least 5 read alignments for an intron to enter its reference,
+      which is a rule of the reference build and not of this sample, so it is not
+      drawn here.
+
+      Source: https://raw.githubusercontent.com/wiki/TrinityCTAT/CTAT-SPLICING/Home.md
+  - component: card
+    column: uniq_mapped
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: reads per junction, distribution
+    title: Reads per cancer intron
+    description: >-
+      The hero number is the median count of uniquely mapped reads supporting a
+      candidate intron, and the histogram shows how the counts are distributed. It
+      answers how well supported the candidates are.
+
+      How to read: candidates resting on one or two reads are fragile and need
+      confirmation in the arc view. Strongly supported ones are the leads to
+      follow.
+
+      Source: https://raw.githubusercontent.com/wiki/TrinityCTAT/CTAT-SPLICING/Home.md
+  - component: card
+    column: intron
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: top_tcga_cohort
+    top_n_count: 3
+    headline: true
+    caption: TCGA cohorts holding the most candidates
+    title: Cancer intron candidates
+    description: >-
+      The hero number is the count of distinct introns that matched the CTAT cancer
+      intron reference, and the bars rank the TCGA cohorts where those introns are
+      most prevalent. It answers how many cancer-associated junctions the run holds
+      and in which tumour types they are common.
+
+      How to read: a run with no candidates gives an empty tile, which is normal.
+      A cohort leading the ranking hints at the tumour type the sample resembles,
+      but a single intron says little on its own.
+
+      Source: https://raw.githubusercontent.com/wiki/TrinityCTAT/CTAT-SPLICING/Home.md
+  - component: card
+    column: top_tcga_pct
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: histogram
+    caption: prevalence in the leading cohort, distribution
+    title: Prevalence in the leading TCGA cohort
+    description: >-
+      The hero number is the highest prevalence, in percent of the tumours of its
+      cohort, reached by a candidate intron, and the histogram shows how the
+      prevalences are distributed. It answers how common the candidates are in the
+      tumours where they were seen.
+
+      How to read: a high prevalence marks an intron frequent in a tumour type,
+      which makes it a recurrent event. Low values are rare events.
+
+      Source: https://raw.githubusercontent.com/wiki/TrinityCTAT/CTAT-SPLICING/Home.md
+  - component: table
+    title: Cancer intron candidates
+    description: >-
+      Each row is a candidate intron, with its position, gene, supporting reads and
+      its prevalence in TCGA tumour cohorts and GTEx normal tissues. It answers the
+      exact detail behind every other tile.
+
+      How to read: a high TCGA prevalence with a low GTEx prevalence marks an intron
+      specific to tumours, the pattern CTAT-SPLICING looks for.
+
+      Source: https://raw.githubusercontent.com/wiki/TrinityCTAT/CTAT-SPLICING/Home.md

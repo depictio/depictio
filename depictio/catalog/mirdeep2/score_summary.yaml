@@ -11,9 +11,73 @@ find:
 recipe: mirdeep2/score_summary.py
 fixture: score_summary.tsv
 renders_as:
-  - { id: signal_to_noise_curve, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: score_cutoff, y: signal_to_noise} }
-  - { id: known_recovery_curve, component: advanced_viz, kind: profile,
-      roles: {series: sample, x: score_cutoff, y: known_detected_pct} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: score_cutoff, y: novel_reported, color: sample} }
-  - { component: table }
+  # The survey spans score cut-offs from -10 to 10 (miRDeep2 README, survey.pl);
+  # no cut-off is marked because miRDeep2 recommends none.
+  - id: signal_to_noise_curve
+    component: advanced_viz
+    kind: profile
+    title: Signal-to-noise by score cut-off
+    roles: {series: sample, x: score_cutoff, y: signal_to_noise}
+    config:
+      x_title: miRDeep2 score cut-off
+      y_title: Signal-to-noise ratio
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample: the signal-to-noise ratio of novel predictions, against
+      permuted structures, at each integer score cut-off. It answers how stringent the
+      score cut-off must be before predictions rise above the noise.
+
+      How to read: pick a cut-off where the curve has risen and flattened, and read the
+      recovery curve beside it to see what that costs in known miRNAs. A flat curve
+      near 1 means the data hold little signal over noise.
+
+      Lines and annotations: none are drawn. The survey covers cut-offs from -10 to 10, and
+      miRDeep2's README sets a default of 0 only for which novel candidates its overview table
+      lists.
+
+      Source: https://raw.githubusercontent.com/rajewsky-lab/mirdeep2/master/README.md
+  - id: known_recovery_curve
+    component: advanced_viz
+    kind: profile
+    title: Known miRNAs recovered by score cut-off
+    roles: {series: sample, x: score_cutoff, y: known_detected_pct}
+    config:
+      x_title: miRDeep2 score cut-off
+      y_title: Known miRNAs detected (%)
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample: the share of known miRBase miRNAs present in the data
+      that miRDeep2 recovers at each integer score cut-off. It answers what a stricter
+      cut-off costs in sensitivity.
+
+      How to read: a curve that stays high up to the cut-off you choose means the
+      stricter filter loses few known miRNAs. A steep fall marks the cut-off beyond
+      which real miRNAs are discarded.
+
+      Lines and annotations: none are drawn. miRDeep2's README sets a score cut-off of 0 only for
+      which novel candidates its overview table lists.
+
+      Source: https://raw.githubusercontent.com/rajewsky-lab/mirdeep2/master/README.md
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: score_cutoff
+      y: novel_reported
+      color: sample
+      labels: {score_cutoff: miRDeep2 score cut-off, novel_reported: Novel precursors reported, sample: Sample}
+    title: Novel precursors by score cut-off
+    description: >-
+      Each line is a sample: the number of novel precursors reported at each score
+      cut-off. It answers how many candidates survive as the filter tightens.
+
+      How to read: a steep early drop means most candidates have low scores. Combine it
+      with the signal-to-noise curve to choose a cut-off that keeps a manageable list.
+  - component: table
+    title: Score cut-off survey table
+    description: >-
+      Each row is a sample and an integer score cut-off with the novel predictions,
+      estimated false and true positives, known miRNAs recovered and the
+      signal-to-noise ratio. It answers the exact numbers behind the curves.
+
+      How to read: sort by sample and cut-off to follow one curve, or by
+      signal-to-noise to find the cut-off that maximises it.

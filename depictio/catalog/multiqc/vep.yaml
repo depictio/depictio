@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: vep }
+  - component: multiqc
+    section: vep
+    title: Variant annotation
+    description: >-
+      Ensembl VEP's summary plots: consequence classes, SIFT and PolyPhen calls and
+      chromosome distribution, per sample. They answer what the variants do to genes
+      and proteins.
+
+      How to read: Most variants are expected to be non-coding or synonymous. A
+      skewed chromosome distribution or an excess of damaging calls deserves a check
+      of the input.
+
+      Source: https://docs.seqera.io/multiqc/modules/vep

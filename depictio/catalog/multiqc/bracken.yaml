@@ -13,4 +13,17 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: bracken }
+  - component: multiqc
+    section: bracken
+    title: Abundance re-estimation
+    description: >-
+      Bracken's MultiQC plot: the top taxa after re-estimating abundance from the
+      Kraken 2 report at one rank, as a stacked bar per sample. It answers which
+      taxa dominate each library.
+
+      How to read: The expected organisms should dominate and the unclassified share
+      should be modest. Unexpected taxa across all samples can come from reagent
+      contamination, so compare against negative controls where you have them.
+
+      Sources: https://docs.seqera.io/multiqc/modules/kraken and
+      https://raw.githubusercontent.com/jenniferlu717/Bracken/master/README.md

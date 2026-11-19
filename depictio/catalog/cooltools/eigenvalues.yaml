@@ -7,6 +7,45 @@ find:
 recipe: cooltools/eigenvalues.py
 fixture: eigenvalues.tsv
 renders_as:
-  - { component: card, column: eigval1, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: eigval2, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  # The second eigenvalue can be negative, so the hero is
+  # the range, not an average that would cancel the signs.
+  - component: card
+    column: eigval1
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: First eigenvalue
+    caption: average first eigenvalue, with its spread over chromosomes
+    description: >-
+      The hero number is the average first eigenvalue, the amount of the
+      intra-chromosomal structure the first eigenvector explains, and the box shows
+      how chromosomes spread. It answers how strongly each chromosome separates
+      into two compartments.
+
+      How to read: a chromosome with a much lower value than the others has a weak
+      compartment signal, so its compartment track is less reliable.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/eigdecomp.py
+  - component: card
+    column: eigval2
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Second eigenvalue
+    caption: range of the second eigenvalue, with its spread over chromosomes
+    description: >-
+      The hero number is the range of the second eigenvalue and the box shows how
+      chromosomes spread. It answers how much structure the next eigenvector
+      explains beyond the compartments.
+
+      How to read: a second eigenvalue close to the first means the compartment
+      signal is not the dominant structure of that chromosome. The sign of an
+      eigenvalue is not meaningful on its own, so the range is shown.
+  - component: table
+    title: Eigenvalues per chromosome
+    description: >-
+      Each row is a chromosome at a resolution with its first three eigenvalues. It
+      answers the exact values behind the cards.
+
+      How to read: sort by the first eigenvalue to find the chromosomes with the
+      weakest compartment signal.

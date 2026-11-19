@@ -7,4 +7,24 @@ find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
 recipe: nf-core/ampliseq/sunburst_canonical.py
 fixture: sunburst_canonical.tsv
 renders_as:
-  - { id: sunburst_taxonomy, component: advanced_viz, kind: sunburst, roles: {abundance: abundance} }
+  # C6 N/A: only Kingdom and Phylum are in the recipe's OUTPUT_SCHEMA (Class to Genus
+  # are optional), so the ranks beyond them cannot be named here; the tile reads the
+  # rank columns the run holds.
+  - id: sunburst_taxonomy
+    component: advanced_viz
+    kind: sunburst
+    title: Taxonomic hierarchy
+    roles: {abundance: abundance}
+    config:
+      colour_by_rank: Phylum
+    description: >-
+      Each arc is a taxon: rings run from kingdom outwards through the ranks the run holds, sized by relative
+      abundance summed over the samples in view and coloured by phylum. It answers which
+      lineages make up the communities and how they divide into finer groups.
+
+      How to read: a wide arc is a dominant lineage, and its outer arcs show how it splits
+      into classes, orders, families and genera. Click an arc to zoom in on it, and filter
+      by sample to compare communities.
+
+      Note: unclassified reads form their own arcs at each rank, so a large one points to a
+      database or classification limit rather than a real group.

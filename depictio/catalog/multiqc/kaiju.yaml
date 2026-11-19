@@ -13,4 +13,17 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: kaiju }
+  - component: multiqc
+    section: kaiju
+    title: Protein-level classification
+    description: >-
+      Kaiju's MultiQC plot: the top taxa from protein-level classification of reads,
+      as a stacked bar per sample. It answers which organisms the reads come from,
+      including distant ones.
+
+      How to read: The expected organisms should dominate and the unclassified share
+      should be modest. Protein-level matching reaches deeper than nucleotide
+      matching, so a high unclassified share still points to a novel community or a
+      poor database.
+
+      Source: https://docs.seqera.io/multiqc/modules/kaiju

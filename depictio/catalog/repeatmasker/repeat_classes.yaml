@@ -13,10 +13,62 @@ find:
 recipe: repeatmasker/repeat_classes.py
 fixture: repeat_classes.tsv
 renders_as:
-  - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,
-      roles: {sample_id: genome, taxon: repeat_class, rank: rank, abundance: genome_pct} }
-  - { id: repeat_elements, component: card, column: elements, aggregation: sum,
-      secondary_layout: composition, breakdown_col: repeat_class,
-      filter_expr: "col('rank') == 'Class'" }
-  - { component: interactive, interactive_type: MultiSelect, column_name: repeat_class }
-  - { component: table }
+  # The shares are percentages of the whole assembly, so they stack to the
+  # masked share and not to 100: normalise_to_one is off.
+  - id: class_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Repeat class composition
+    roles: {sample_id: genome, taxon: repeat_class, rank: rank, abundance: genome_pct}
+    config:
+      default_rank: Class
+      normalise_to_one: false
+      top_n: 12
+    description: >-
+      Each bar is an assembly and each segment a repeat class, sized by the percentage
+      of the assembly it occupies. It answers which kinds of repeat make up the masked
+      part of each genome.
+
+      How to read: the bar height is the total masked share, so tall bars are
+      repeat-rich assemblies. A large unclassified segment means the library could not
+      name those repeats. Switch the rank to open the families inside each class, and
+      compare assemblies by the segments that differ.
+
+      Source: https://www.repeatmasker.org/
+  - id: repeat_elements
+    component: card
+    column: elements
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: repeat_class
+    filter_expr: "col('rank') == 'Class'"
+    caption: elements, by class
+    title: Repeat elements masked
+    description: >-
+      The hero number is the total count of repeat elements masked across the classes,
+      and the bar splits them by class. It answers which classes contribute the most
+      copies.
+
+      How to read: classes with many short copies, such as simple repeats, dominate the
+      count even when they cover little sequence. Use the composition bar for the share
+      of the assembly instead.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: repeat_class
+    title: Repeat class
+    description: >-
+      Choose one or more repeat classes or families to restrict the tiles of this tab
+      to them. It answers how a single kind of repeat behaves across assemblies.
+
+      How to read: pick a class such as a DNA transposon family to compare its share
+      between assemblies.
+  - component: table
+    title: Repeat classes per assembly
+    description: >-
+      Each row is a class, family or summary line of one assembly: its element count,
+      the bases it occupies and its share of the assembly. It answers exactly how much
+      of an assembly each repeat type covers.
+
+      How to read: filter the rank to Class so the rows partition the masked bases
+      without double counting the families.

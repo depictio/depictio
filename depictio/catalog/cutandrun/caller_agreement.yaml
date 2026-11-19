@@ -19,13 +19,194 @@ fixture: caller_agreement.tsv
 renders_as:
   # Yield and agreement as one grid, then the two callers on two axes, then
   # what each of them saw alone.
-  - { id: caller_yield_dots, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: caller, mean_expression: log10_n_peaks, frac_expressing: frac_shared} }
-  - { id: caller_peak_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: n_peaks_other, y: n_peaks, color: target, title: Peaks called against the other caller} }
-  - { id: caller_unique_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: n_unique, color: caller, title: Calls the other caller did not make} }
-  - { id: caller_shared_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: frac_shared, color: caller, title: Share of calls the other caller reproduced} }
-  - { component: card, column: n_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 2 }
-  - { component: card, column: frac_shared, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: frac_shared, aggregation: min, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: median_width, aggregation: median, secondary_layout: histogram }
-  - { component: card, column: n_unique, aggregation: sum, secondary_layout: composition, breakdown_col: caller }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+  # C6: the dot plot has no axis-title option, so the description names the axes.
+  - id: caller_yield_dots
+    component: advanced_viz
+    kind: dot_plot
+    roles: {cluster: sample, gene: caller, mean_expression: log10_n_peaks, frac_expressing: frac_shared}
+    title: Peak yield and agreement by caller
+    description: >-
+      Each dot is a sample and peak caller: its colour is the number of peaks the
+      caller made (log10) and its size is the share of those peaks the other caller
+      reproduced. It answers how much each caller called and how much the two
+      agree.
+
+      How to read: large dots mean the other caller confirmed most of the peaks. A
+      small dot with a dark colour is a caller that made many peaks the other did
+      not. Read it with the unique peaks bars
+      before trusting either caller.
+
+      Note: neither caller is a subset of the other, so disagreement is informative
+      and not an error.
+  # A relation that is a diagonal by agreement is best read as departures, but
+  # the points here (one per sample and caller) are drawn on log axes so the
+  # orders of magnitude between SEACR and MACS2 stay visible.
+  - id: caller_peak_scatter
+    component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: n_peaks_other
+      y: n_peaks
+      color: target
+      log_x: true
+      log_y: true
+      hover_name: sample
+      labels: {n_peaks_other: Peaks from the other caller, n_peaks: Peaks from this caller, target: Target}
+    title: Peaks against the other caller
+    description: >-
+      Each point is a sample and peak caller: the peaks that caller made on the
+      vertical axis against the peaks the other caller made on the horizontal axis,
+      coloured by target. It answers which caller is more productive for each
+      target.
+
+      How to read: a point far from the equal-count diagonal means one caller
+      called many more peaks than the other, so look at its unique peaks and at
+      the target. Each sample appears twice, once per caller, with the axes swapped.
+
+      Note: the equal-count diagonal is not drawn, and a caller with no peaks has no
+      point on a log axis.
+  - id: caller_unique_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: n_unique
+      color: caller
+      barmode: group
+      labels: {sample: Sample, n_unique: Peaks the other caller did not make, caller: Caller}
+    title: Peaks the other caller did not reproduce
+    reference_lines:
+      - {axis: y, stat: median, column: n_unique}
+    description: >-
+      Each bar is a sample and peak caller: the number of its peaks that the other
+      caller did not reproduce. It answers how much each caller sees alone.
+
+      How to read: a tall bar means that caller made many peaks the other missed.
+      Compare the two bars of a sample, and check its target, since the callers
+      suit different kinds of mark.
+
+      Note: a peak counts as reproduced when it overlaps at least one peak of the
+      other caller on the same chromosome.
+
+      Lines and annotations: the dashed line is the median number of peaks the other
+      caller did not make of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of nf-core/cutandrun.
+  - id: caller_shared_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: frac_shared
+      color: caller
+      barmode: group
+      labels: {sample: Sample, frac_shared: Share of peaks reproduced, caller: Caller}
+    title: Share of peaks the other caller reproduced
+    reference_lines:
+      - {axis: y, stat: median, column: frac_shared}
+    description: >-
+      Each bar is a sample and peak caller: the fraction of its peaks that the other
+      caller also made. It answers how reproducible each caller's peaks are across
+      the two methods.
+
+      How to read: a value near 1 means the other caller confirmed nearly all of the
+      peaks. A caller that made few peaks can score high while the other scores low,
+      so read this beside the peak counts.
+
+      Lines and annotations: the dashed line is the median share of peaks reproduced by
+      the other caller of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of nf-core/cutandrun.
+  - component: card
+    column: n_peaks
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 2
+    caption: Peaks, by caller
+    title: Peaks called
+    description: >-
+      The hero number is the total of peaks called, and the bars split it by peak
+      caller. It answers how productive each caller was.
+
+      How to read: SEACR and MACS2 differ by design, so unequal totals are common. A
+      caller with almost nothing for a sample is worth checking against the signal
+      tracks.
+  # A sample a caller returned nothing for keeps a row with n_peaks 0 and a
+  # fraction of 0, which would sink the box, so the cards below leave it out.
+  - component: card
+    column: frac_shared
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "pl.col('n_peaks') > 0"
+    caption: Share reproduced, with its spread
+    title: Average peak reproduction
+    description: >-
+      The hero number is the mean share of peaks that the other caller reproduced,
+      and the box shows the spread over samples and callers. It answers how well the
+      two callers agree overall.
+
+      How to read: a narrow box near 1 means strong agreement. A wide box mixes
+      samples where the callers agree with samples where they diverge.
+  # The former gauge drew a 0 to 1 fraction as "x% of 1", so the minimum is shown
+  # with the median and the best instead.
+  - component: card
+    column: frac_shared
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: compact
+    filter_expr: "pl.col('n_peaks') > 0"
+    caption: Least reproduced, with the median and the best
+    title: Least reproduced peak set
+    description: >-
+      The hero number is the lowest share of peaks reproduced by the other caller,
+      shown with the median and the highest. It answers which peak set agrees least.
+
+      How to read: a minimum far below the median is a caller and sample to
+      inspect. Check its peak count first, since few peaks make the share unstable.
+
+      Note: the nf-core pipeline gives no pass mark for this share, so none is drawn.
+  - component: card
+    column: median_width
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    filter_expr: "pl.col('n_peaks') > 0"
+    caption: Median peak width, by sample and caller
+    title: Median peak width
+    description: >-
+      The hero number is the median of the per-sample median peak widths in base
+      pairs, and the histogram shows how they spread. It answers how broad the peaks
+      are.
+
+      How to read: widths differ between callers and between targets, so a spread is
+      expected. The pipeline advises broad peak mode for epitopes with a wide range
+      such as histone marks, and narrow mode for small binding proteins.
+
+      Source: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - component: card
+    column: n_unique
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: caller
+    caption: Peaks seen alone, by caller
+    title: Peaks seen by one caller only
+    description: >-
+      The hero number is the total of peaks that the other caller did not
+      reproduce, and the bar splits it by caller. It answers which caller sees more
+      on its own.
+
+      How to read: a lopsided bar shows one caller finds many peaks the other does
+      not. Open the unique peaks bars to see which samples drive it.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Peak caller agreement table
+    description: >-
+      Each row is a sample and peak caller, with the peak count, total and median
+      width, and how many peaks the other caller reproduced or did not. It answers
+      the exact counts behind the figures.
+
+      How to read: sort by the shared fraction to find the weakest agreement, and
+      check the peak count beside it.

@@ -12,53 +12,146 @@ description: >-
 find:
   path_glob: "**/tables/gsea/**/*.gsea_report_for_*.tsv"
 recipe: gsea/report.py
+# The fixture is enriched synthetically from 12 real rows (copies with seeded noise), so the preview shows several contrasts.
 fixture: report.tsv
 renders_as:
   # The signature panel: one dot per set, placed on its normalised enrichment
   # score, sized by how many of its genes were found and coloured by
   # significance, split by the pole the set came up at.
+  # 0.25 is the FDR cut-off the GSEA report itself highlights (user guide).
   - id: gsea_dotplot
     component: advanced_viz
     kind: enrichment
+    title: Enriched gene sets
     roles:
       { term: term, nes: nes, padj: fdr_qvalue, gene_count: size, source: phenotype }
+    config:
+      padj_threshold: 0.25
+      top_n: 20
+      default_colour_by: neg_log10_padj
+    description: >-
+      Each dot is a gene set: its normalised enrichment score (NES) on the horizontal
+      axis, its size by the number of genes in the set and its colour by the FDR
+      q-value. It answers which pathways move together at one end of the ranked gene
+      list, and in which direction.
+
+      How to read: a set far from zero with a dark colour is strongly and confidently
+      enriched. A positive NES means enrichment at the top of the ranked list and a
+      negative one at the bottom, so compare both poles before concluding. Sets with
+      few genes can reach a high score by chance, so look at the size too.
+
+      Lines and annotations: this plot keeps only sets with an FDR q-value up to 0.25,
+      the cut-off at which the GSEA report highlights sets as most likely to give
+      interesting hypotheses. The report itself still gives results for every set, and
+      the table below lists them all. The user guide advises a stricter 5% when the run
+      has few samples and permutes gene sets rather than phenotypes.
+
+      Source: https://docs.gsea-msigdb.org/#GSEA/GSEA_User_Guide/
+      and https://pubmed.ncbi.nlm.nih.gov/16199517/
   # The same scores as ranked bars, which is the view that compares two
   # contrasts rather than two poles of one.
   - id: gsea_nes_bars
     component: advanced_viz
     kind: da_barplot
+    title: Top gene sets by enrichment score
     roles:
       { feature_id: term, contrast: contrast, lfc: nes, significance: fdr_qvalue, label: phenotype }
-  - {
-      component: card,
-      column: term,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: phenotype,
-      top_n_count: 4,
-    }
+    config:
+      significance_threshold: 0.25
+      effect_label: Normalised enrichment score (NES)
+    description: >-
+      Each bar is a gene set: its normalised enrichment score in a contrast, for the
+      sets with the largest absolute score. It answers which pathways drive each
+      contrast and at which pole.
+
+      How to read: long bars to the right are enriched in the positive pole and to
+      the left in the negative one. A bar that is marked passes the FDR cut-off, while
+      an unmarked long bar is a strong score that is not significant, so check the dot
+      plot and the table.
+
+      Lines and annotations: bars are marked when the FDR q-value is below 0.25, the
+      cut-off the GSEA report highlights.
+
+      Source: https://docs.gsea-msigdb.org/#GSEA/GSEA_User_Guide/
+  - component: card
+    column: term
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: phenotype
+    top_n_count: 4
+    caption: gene sets, by pole
+    title: Gene sets reported
+    description: >-
+      The hero number is the count of distinct gene sets in the report tables, with the
+      row count next to it, and the bars split them by the pole they came up at. It
+      answers how many sets each end of the ranking holds.
+
+      How to read: a very uneven split means the contrast mostly pushes expression one
+      way. A set listed under both poles of different contrasts appears in each.
   # On |NES|: the strongest set can sit at the negative pole.
-  - {
-      component: card,
-      column: abs_nes,
-      aggregation: max,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: fdr_qvalue,
-      aggregation: median,
-      secondary_layout: threshold,
-      threshold_value: 0.05,
-      threshold_direction: max,
-      threshold_warn: 0.25,
-    }
-  - {
-      component: card,
-      column: leading_edge_percent,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - { component: table, row_selection_enabled: true, row_selection_column: term }
+  - component: card
+    column: abs_nes
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: strongest set, with the spread
+    title: Strongest enrichment
+    description: >-
+      The hero number is the largest absolute normalised enrichment score of any set,
+      with the spread of the absolute scores in the box. It answers how strong the top
+      signal is.
+
+      How to read: the sign is dropped because the strongest set can sit at either pole.
+      A box close to the maximum means many sets are strongly enriched, and a low box
+      with a few outliers means a few standout sets.
+  - component: card
+    column: fdr_qvalue
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: threshold
+    threshold_value: 0.05
+    threshold_direction: max
+    threshold_warn: 0.25
+    caption: median q-value, with the best and the worst
+    title: FDR q-value
+    description: >-
+      The hero number is the median FDR q-value over the reported sets, with the lowest
+      and the highest next to it and the bar placed against the two cut-offs. It answers
+      how confident the enrichment calls are overall.
+
+      How to read: a median in the green band is a strongly supported result. A median
+      between the two cut-offs is acceptable for exploration, and above them the
+      reported sets are mostly noise.
+
+      Lines and annotations: 0.25 is the cut-off the GSEA report highlights and 0.05
+      the stricter one the user guide advises for few samples with gene-set
+      permutation.
+
+      Source: https://docs.gsea-msigdb.org/#GSEA/GSEA_User_Guide/
+  - component: card
+    column: leading_edge_percent
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with the spread
+    title: Leading-edge share
+    description: >-
+      The hero number is the median percentage of a set's genes that form its leading
+      edge, the genes that drive the enrichment score, with the spread in the box. It
+      answers whether enrichment comes from a few genes or from most of the set.
+
+      How to read: a high share means most of the set moves together, and a low share
+      that a few genes carry the score. Read the leading-edge genes of a set in the
+      table before interpreting it.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: term
+    title: Enrichment report
+    description: >-
+      Each row is a gene set in one contrast and pole: its size, scores, p-values, FDR
+      q-value and leading edge. It answers which sets to follow up and which genes drive
+      them.
+
+      How to read: sort by FDR q-value, keep the sets below the cut-off and read their
+      leading-edge genes. Click a row to filter the other tiles to that set.

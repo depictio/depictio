@@ -8,12 +8,83 @@ find: { filename: "variants_long_table.csv" } # same raw file as the long table
 recipe: nf-core/viralrecon/oncoplot_canonical.py
 fixture: oncoplot_matrix.tsv
 renders_as:
-  - { id: mutation_matrix, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type} }
+  - id: mutation_matrix
+    component: advanced_viz
+    kind: oncoplot
+    title: Mutation matrix
+    roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type}
+    config:
+      legend_position: bottom
+    description: >-
+      Each cell is a sample and a gene, coloured by the type of mutation observed
+      there. It answers which genes are mutated in which samples and how the
+      mutation types are distributed.
+
+      How to read: a row full of cells is a gene mutated across many samples, which
+      can mark a lineage-defining change or a hotspot. A column full of cells is a
+      divergent sample. Rows are ordered by how often the gene is mutated.
   # Both breakdown columns are required by the recipe schema, so the strips
   # cannot fall back to an empty bar on a run that omits an optional column.
-  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 3 }
-  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: mutation_type, top_n_count: 3 }
-  - { component: table }
+  - component: card
+    column: sample_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: gene
+    top_n_count: 3
+    caption: mutations, by gene
+    title: Samples with mutations
+    description: >-
+      The hero number is the count of distinct samples with at least one observed
+      mutation, with the number of sample and gene combinations beside it, and the
+      bars rank the genes with the most mutations. It answers how widespread the
+      mutations are and where they concentrate.
+
+      How to read: a gene that leads the ranking is a hotspot or a lineage marker.
+      Open the mutation matrix to see which samples carry it.
+  - component: card
+    column: gene
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: mutation_type
+    top_n_count: 3
+    caption: genes, by mutation type
+    title: Genes with mutations
+    description: >-
+      The hero number is the count of distinct genes carrying a mutation, and the
+      bars rank the mutation types by the number of genes they touch. It answers
+      which kinds of change are the most widespread across the genome.
+
+      How to read: a ranking led by synonymous changes means mostly silent variation.
+      Many stop-gained or frameshift changes in a gene deserve a look
+      at the variant table.
+  - component: table
+    title: Mutation table
+    description: >-
+      One row is one sample, gene and mutation type combination, with its
+      mutation label. It answers which changes sit behind each cell of the
+      matrix.
+
+      How to read: Sort by gene to see which samples carry a change in it, or by
+      sample to list all of its changes. Look for genes that recur across
+      samples and for rare mutation types. It complements the matrix tile of the
+      same output, which shows the same cells as a grid.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: gene, aggregation: nunique, secondary_layout: composition, breakdown_col: mutation_type }
+  - component: card
+    column: gene
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: mutation_type
+    caption: mutations, by type
+    title: Mutations by type
+    description: >-
+      The hero number is the count of observed mutations, with the number of distinct
+      genes beside it, and the bar splits the mutations by type. It answers what the
+      mix of changes looks like.
+
+      How to read: a bar dominated by synonymous changes means mostly silent
+      variation. A visible share of stop-gained or frameshift changes points at
+      changes that can disable a protein.

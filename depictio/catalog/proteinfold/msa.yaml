@@ -10,13 +10,67 @@ description: >-
 find:
   path_glob: "**/*_msa.tsv"
 recipe: proteinfold/msa.py
+# The fixture is enriched synthetically from 12 real rows (copies with seeded noise), so the preview shows several engines.
 fixture: msa.tsv
 renders_as:
-  - { id: folding_msa, component: advanced_viz, kind: msa,
-      roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity} }
-  - { id: msa_depth, component: card, column: depth, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: msa_coverage, component: card, column: coverage, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: identity, color: engine} }
-  - { component: table }
+  # C1 N/A: an alignment is coloured by residue with the viewer's own colour
+  # scheme, there is no other column to bind.
+  - id: folding_msa
+    component: advanced_viz
+    kind: msa
+    title: Alignment behind the fold
+    roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity}
+    description: >-
+      Each row is a homologous sequence aligned to the query, which comes first, with residues coloured by type. It answers how much evolutionary evidence the engine had for each position.
+
+      How to read: columns that stay the same in every row are conserved, and gap-filled stretches mean few homologues cover that region. A shallow or low-identity alignment predicts a less reliable structure, so compare it with the confidence tiles. Brushing columns selects those residues on the structure.
+
+      Note: this catalog's recipe keeps at most 500 rows per alignment, a display limit and not a limit of the engine's search.
+
+      Source: https://raw.githubusercontent.com/nf-core/proteinfold/master/docs/output.md
+  - id: msa_depth
+    component: card
+    column: depth
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Alignment depth
+    caption: median depth, with its spread
+    description: >-
+      The hero number is the median number of sequences in the alignment of a target, and the box shows its spread. It answers how many homologues the engine could draw on.
+
+      How to read: deep alignments give the engine more co-evolution signal. Targets with very few sequences are hard cases whose confidence scores deserve caution.
+
+      Note: depth counts the stored rows, which are capped at 500.
+  - id: msa_coverage
+    component: card
+    column: coverage
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Query coverage
+    caption: median coverage, with its spread
+    description: >-
+      The hero number is the median share of the query covered by an aligned sequence, and the box shows its spread. It answers whether homologues span the whole query or only a part.
+
+      How to read: coverage near full length means global homologues. Low coverage means the hits match a single domain, so the rest of the protein is predicted without evidence.
+  - id: identity_histogram
+    component: figure
+    visu_type: histogram
+    title: Sequence identity to the query
+    dict_kwargs:
+      x: identity
+      color: engine
+      labels:
+        identity: Identity to the query
+        engine: Engine
+    description: >-
+      Each bar counts aligned sequences in an identity bin against the query, coloured by engine. It answers how close the homologues are to the target.
+
+      How to read: a mass of high identities means close relatives, and a spread towards low identities means distant homologues that carry the evolutionary signal. A histogram piled at the low end means the alignment adds little.
+  - component: table
+    title: Aligned sequences
+    description: >-
+      One row per aligned sequence with its identity and coverage against the query.
+
+      How to read: sort by identity to find the closest and most distant homologues.

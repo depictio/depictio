@@ -10,6 +10,30 @@ find:
 recipe: viralmetagenome/contig_classes.py
 fixture: contig_classes.tsv
 renders_as:
-  - { component: card, column: contig, aggregation: count,
-      secondary_layout: donut, breakdown_col: classification }
-  - { component: table }
+  - component: card
+    column: contig
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: classification
+    title: Contig taxonomic calls
+    caption: contigs, classified or not
+    description: >-
+      Each unit is one contig and the ring splits them into classified and
+      unclassified by the merged Kraken2 and Kaiju call. It answers how much of the
+      assembly the classifiers could place in a taxon.
+
+      How to read: a ring mostly classified means the contigs resemble known
+      viruses. A large unclassified share points to novel sequence, chimeric
+      contigs or classifier databases that lack the virus.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  - component: table
+    title: Contig classification table
+    description: >-
+      Each row is a contig, or a reference-pool sequence clustered with them, with
+      its merged classification and taxon id. It answers how each contig was called
+      before clustering.
+
+      How to read: filter to unclassified contigs to see the sequence the
+      classifiers could not place.

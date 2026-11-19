@@ -1839,20 +1839,65 @@ def viewer_outdated(workspace: Path) -> str | None:
     return None
 
 
-def build_viewer(workspace: Path, log_path: Path) -> None:
-    """Build the viewer bundle of ``workspace`` as a release does: `pnpm install`, then
-    `pnpm run build` in depictio/viewer. Their output goes to ``log_path``.
+# The pnpm of CI and docker-images/Dockerfile.viewer, which writes pnpm-lock.yaml. An
+# older one hashes patches/ another way and refuses the frozen install
+# (ERR_PNPM_LOCKFILE_CONFIG_MISMATCH on patchedDependencies).
+PNPM_MAJOR = 10
 
-    Raises LocalStackError when pnpm is missing, or a step fails or takes too long.
-    On Ctrl-C, SIGTERM or SIGHUP, pnpm and what it runs are stopped before
-    KeyboardInterrupt (Interrupted for the two signals) propagates.
+
+def _pnpm_major(pnpm: str) -> int | None:
+    """The major version of the pnpm at ``pnpm``, or None when it cannot be read."""
+    try:
+        out = subprocess.run(
+            [pnpm, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            stdin=subprocess.DEVNULL,
+        )
+        return int(out.stdout.strip().split(".")[0])
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def pnpm_command() -> list[str]:
+    """How to run pnpm 10: the pnpm on PATH when it is pnpm 10, otherwise through
+    corepack, which comes with Node.js and fetches pnpm 10 on first use.
+
+    Raises LocalStackError when neither is there.
     """
     pnpm = shutil.which("pnpm")
+    major = _pnpm_major(pnpm) if pnpm is not None else None
+    if major == PNPM_MAJOR:
+        return [pnpm]
+    corepack = shutil.which("corepack")
+    if corepack is not None:
+        logger.debug(
+            "pnpm on PATH is %s: building the viewer with corepack pnpm@%d", major, PNPM_MAJOR
+        )
+        return [corepack, f"pnpm@{PNPM_MAJOR}"]
     if pnpm is None:
         raise LocalStackError(
             "pnpm is not installed, so the viewer cannot be built. Install Node.js 20 or "
             "later, run corepack enable pnpm, then depictio local up again"
         )
+    raise LocalStackError(
+        f"The viewer is built with pnpm {PNPM_MAJOR}, and {pnpm} is pnpm {major}. "
+        f"Install pnpm {PNPM_MAJOR} (corepack enable pnpm, with Node.js 20 or later), "
+        "then depictio local up again"
+    )
+
+
+def build_viewer(workspace: Path, log_path: Path) -> None:
+    """Build the viewer bundle of ``workspace`` as a release does: `pnpm install`, then
+    `pnpm run build` in depictio/viewer. Their output goes to ``log_path``.
+
+    Raises LocalStackError when pnpm 10 is missing (see pnpm_command), or a step fails
+    or takes too long.
+    On Ctrl-C, SIGTERM or SIGHUP, pnpm and what it runs are stopped before
+    KeyboardInterrupt (Interrupted for the two signals) propagates.
+    """
+    pnpm = pnpm_command()
     # As in publish-pypi.yaml: no sourcemaps, and room for the plotly chunk.
     env = {
         **os.environ,
@@ -1862,15 +1907,16 @@ def build_viewer(workspace: Path, log_path: Path) -> None:
         ),
     }
     steps = [
-        ([pnpm, "install", "--frozen-lockfile"], workspace),
-        ([pnpm, "run", "build"], workspace / "depictio" / "viewer"),
+        (["install", "--frozen-lockfile"], workspace),
+        (["run", "build"], workspace / "depictio" / "viewer"),
     ]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # The signals of a closed terminal or a `kill` would otherwise end this process
     # and leave pnpm's session running.
     with _signals_interrupt(), open(log_path, "w", encoding="utf-8") as log:
-        for cmd, cwd in steps:
-            step = shlex.join(["pnpm", *cmd[1:]])
+        for args, cwd in steps:
+            cmd = [*pnpm, *args]
+            step = shlex.join(["pnpm", *args])
             logger.debug("Building the viewer: %s in %s, output in %s", step, cwd, log_path)
             log.write(f"$ {step}  (in {cwd})\n")
             log.flush()

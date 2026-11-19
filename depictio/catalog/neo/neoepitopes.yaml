@@ -10,10 +10,108 @@ description: >-
 find:
   path_glob: "**/*.neo.neoepitope.tsv"
 recipe: neo/neoepitopes.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several tumors.
 fixture: neoepitopes.tsv
 renders_as:
-  - { id: neoepitope_count, component: card, column: neoepitope_id, aggregation: count, secondary_layout: top_n, breakdown_col: variant_type, top_n_count: 3, headline: true }
-  - { id: neoepitope_tpm_spread, component: card, column: effective_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: neoepitope_source_bar, component: figure, visu_type: bar, dict_kwargs: {x: variant_type, color: sample} }
-  - { id: neoepitope_expression_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: variant_copy_number, y: effective_tpm, label: gene, color: variant_type} }
-  - { id: neoepitope_table, component: table, row_selection_enabled: true, row_selection_column: neoepitope_id }
+  - id: neoepitope_count
+    component: card
+    column: gene
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: variant_type
+    top_n_count: 3
+    headline: true
+    title: Candidate neoepitopes
+    caption: candidates, by event type
+    description: >-
+      The hero number is the count of candidate neoepitopes Neo scored, with the
+      number of distinct genes behind them, and the bars rank the event types that
+      create them. It answers how large the neoepitope pool is and which kind of
+      event feeds it.
+
+      How to read: compare the event types to see which of them contribute most.
+      Very few candidates point to a quiet tumor or to missing inputs, so check the
+      variant calls and the HLA typing first.
+
+      Note: Neo predicts neoepitopes from DNA events only and uses RNA to weigh
+      them, not to find them.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/neo/README.md
+  - id: neoepitope_tpm_spread
+    component: card
+    column: effective_tpm
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    title: Expression of the candidates
+    caption: median, with its range
+    description: >-
+      The hero number is the median effective expression of the candidates, with
+      the lowest and highest value beside it. It answers whether the candidates sit
+      in genes that are expressed in the tumor.
+
+      How to read: a median near zero means most candidates are silent, so few of
+      them can be presented. Effective expression is long-tailed, so the range
+      matters more than the centre when you pick candidates to follow up.
+
+      Note: effective expression is estimated by Neo from the sample's RNA
+      transcript expression and the cohort median expression, and is empty when no
+      RNA was run.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/neo/README.md
+  - id: neoepitope_source_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: variant_type
+      color: sample
+      labels: {variant_type: Event type, sample: Tumor}
+    title: Candidates by event type
+    description: >-
+      Each bar counts the candidate neoepitopes created by one kind of event
+      (missense, frameshift, in-frame indel or fusion), split by tumor. It answers
+      which events the neoepitope pool comes from.
+
+      How to read: a pool made almost entirely of one event type is expected when
+      that event dominates the tumor's mutations. Compare tumors to spot one whose
+      mix differs, then open the table to inspect its candidates.
+  - id: neoepitope_expression_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: variant_copy_number, y: effective_tpm, label: gene, color: variant_type}
+    title: Copy number against expression
+    config:
+      x_title: Copy number of the variant
+      y_title: Effective expression (TPM)
+      top_n_labels: 5
+    description: >-
+      Each point is a candidate neoepitope: the copy number of the variant behind
+      it on the horizontal axis and its effective expression on the vertical axis,
+      coloured by event type. It answers which candidates come from variants that
+      many tumor cells carry and that are also expressed.
+
+      How to read: points in the upper right are the strongest candidates to follow
+      up, since the variant is present in most copies and the gene is expressed.
+      Points on the floor are not expressed, so their peptides are unlikely to be
+      presented. Open the table to inspect the labelled genes.
+
+      Note: Neo weighs each candidate's presentation likelihood by its expression.
+      No cut-off is drawn on either axis, because none is sourced.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/neo/README.md
+  - id: neoepitope_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: neoepitope_id
+    title: Neoepitope candidates
+    description: >-
+      Each row is a candidate neoepitope: the event that creates it, its gene, the
+      novel amino acids between their flanks, the number of peptides it yields, its
+      RNA support, its expected and effective expression and the copy number behind
+      it. It answers which candidates to follow up and lets a row selection filter
+      the rest of the dashboard.
+
+      How to read: sort by effective expression, then filter by event type. A
+      candidate with RNA fragments and a high copy number is better supported than
+      one found in the DNA alone.

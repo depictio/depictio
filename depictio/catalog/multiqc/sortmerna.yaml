@@ -12,4 +12,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: sortmerna }
+  - component: multiqc
+    section: sortmerna
+    title: rRNA removal
+    description: >-
+      SortMeRNA's MultiQC plot: the share of each library's reads matched to the
+      rRNA databases and removed, per database. It answers how much ribosomal RNA
+      the library held.
+
+      How to read: A small rRNA share means the depletion worked. A high share
+      leaves few informative reads, so check the depletion step.
+
+      Source: https://docs.seqera.io/multiqc/modules/sortmerna

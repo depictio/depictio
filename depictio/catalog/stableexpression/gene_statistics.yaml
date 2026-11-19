@@ -18,12 +18,142 @@ renders_as:
   - id: expression_plane
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: mean, y: cv, label: gene_name, color: candidate }
-  - { id: gene_count, component: card, column: gene_id, aggregation: count, secondary_layout: donut, breakdown_col: candidate, headline: true }
-  - { id: gene_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }
-  - { id: level_composition, component: card, column: gene_id, aggregation: count, secondary_layout: composition, breakdown_col: expression_level }
-  - { id: cv_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: cv, color: candidate } }
-  - { component: figure, visu_type: histogram, dict_kwargs: { x: source_ids } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }
-  - { component: interactive, interactive_type: MultiSelect, column_name: platforms }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    title: Variation against mean expression
+    roles: {x: mean, y: cv, label: gene_name, color: candidate}
+    config:
+      x_title: Mean normalised expression
+      y_title: Coefficient of variation
+      top_n_labels: 10
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a gene of the merged matrix: its mean normalised expression on
+      the horizontal axis and its coefficient of variation on the vertical axis,
+      coloured by whether it was shortlisted as a candidate. It answers where the
+      stable genes sit relative to the rest.
+
+      How to read: stable reference genes sit low, with little variation at their
+      expression level. Candidates are picked from the lower edge of each
+      expression section, so a gene far above that edge is not a good reference.
+
+      Lines and annotations: The dashed line is the median coefficient of
+      variation of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of nf-core/stableexpression, which
+      defines none. Candidates are the lowest-variation genes of each section.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/README.md
+  - id: gene_count
+    component: card
+    column: gene_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: candidate
+    headline: true
+    title: Genes in the merged matrix
+    caption: genes, candidate or not
+    description: >-
+      The hero number is the count of genes in the merged matrix, and the ring
+      splits them into candidates and other genes. It answers how many genes were
+      scored out of all those measured.
+
+      How to read: candidates are a small shortlist per section, so a small share is
+      expected. A matrix with few genes means strict ID mapping or occurrence
+      filters removed many.
+  - id: gene_measured_share
+    component: card
+    column: measured_share
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Share of samples measuring a gene
+    caption: share measured, per gene
+    description: >-
+      The hero number is the median share of samples in which a gene was measured,
+      and the histogram shows how it varies between genes. It answers how complete
+      the merged matrix is.
+
+      How to read: genes measured in few samples, usually from a single platform,
+      carry weaker statistics. A histogram piled to the right is a complete matrix.
+  - id: level_composition
+    component: card
+    column: gene_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: expression_level
+    title: Genes by expression level
+    caption: genes, by expression level
+    description: >-
+      Each unit is one gene and the bar shows the share of genes in each expression
+      level, from very high to very low. It answers how the genes are spread over
+      the expression range.
+
+      How to read: the five levels are percentile bands of expression, so a heavily
+      skewed split means the dataset mix favours some levels over others.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - id: cv_by_section
+    component: figure
+    visu_type: box
+    title: Variation by expression section
+    dict_kwargs:
+      x: section
+      y: cv
+      color: candidate
+      labels: {section: Expression section, cv: Coefficient of variation, candidate: Candidate}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: cv
+    description: >-
+      Each box is the distribution of the coefficient of variation of the genes in
+      one expression section, split into candidates and other genes. It answers
+      whether candidates are really the least variable genes of their section.
+
+      How to read: the candidate box should sit below the other genes in every
+      section. A section where it does not has few stable genes to choose from.
+
+      Lines and annotations: The dashed line is the median coefficient of
+      variation of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of nf-core/stableexpression.
+  - id: source_ids_hist
+    component: figure
+    visu_type: histogram
+    title: Source IDs per gene
+    dict_kwargs:
+      x: source_ids
+      color: platforms
+      labels: {source_ids: Source IDs per gene, platforms: Platforms}
+    description: >-
+      Each bar counts genes by how many source IDs (probes or transcripts) map onto
+      them, coloured by the platforms that measured the gene. It answers how much
+      the ID collapsing merged measurements.
+
+      How to read: most genes should map from one or a few IDs. A long tail of many
+      IDs per gene is typical of microarrays with several probes per gene.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: expression_level
+    title: Expression level
+    description: >-
+      Keeps only genes in the chosen expression levels.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: platforms
+    title: Platforms
+    description: >-
+      Keeps only genes measured by the chosen platform combination: RNA-seq only,
+      microarray only or both.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Gene statistics table
+    description: >-
+      Each row is a gene of the merged matrix with its mean, median, spread,
+      coefficients of variation, measured share, expression level and per-platform
+      statistics. It answers how any gene behaves across the datasets and lets a row
+      selection filter the other tiles.
+
+      How to read: sort by coefficient of variation to find the least variable genes,
+      then check the measured share and the platforms.

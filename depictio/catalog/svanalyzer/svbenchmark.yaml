@@ -9,5 +9,40 @@ find: { path_glob: "**/summary/tables/svbenchmark/svbenchmark.summary.csv" }
 recipe: svanalyzer/svbenchmark.py
 fixture: svbenchmark.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1 by sample/caller
-  - { component: table }
+  # C1 N/A: the schema columns are the callset label and its three metrics. caller and
+  # truth_set exist only on some runs (optional), so a colour on them would break the others.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: label
+      y: f1
+      labels: {label: Callset, f1: F1 score}
+    title: F1 per callset
+    reference_lines:
+      - {axis: y, stat: median, column: f1}
+    description: >-
+      Each bar is the F1 score of one structural-variant callset against the truth set.
+      It answers which callset matches the truth best.
+
+      How to read: a taller bar means a callset that agrees with the truth. Compare it
+      with the precision and recall in the table to see whether the gap is missed
+      variants or false calls.
+
+      Note: svbenchmark reports recall as the share of true variants that are not
+      false negatives and precision as the share of test variants that are not false
+      positives. The cited page states no cut-off for F1, so none is drawn.
+
+      Lines and annotations: The dashed line is the median F1 score of this table, a reference computed from the rows on show (it follows the filters), not a cut-off of svbenchmark.
+
+      Source: https://svanalyzer.readthedocs.io/en/latest/svbenchmark.html
+  - component: table
+    title: Structural-variant benchmark
+    description: >-
+      Each row is a callset with its precision, recall and F1, and the true positives,
+      false positives and false negatives, the caller and the truth set when the run
+      records them. It answers the numbers behind the bars.
+
+      How to read: a low recall with a high precision means the caller misses truth
+      variants, and the reverse means it calls false ones.
+
+      Source: https://svanalyzer.readthedocs.io/en/latest/svbenchmark.html

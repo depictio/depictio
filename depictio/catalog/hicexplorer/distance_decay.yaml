@@ -3,15 +3,63 @@ name: Contact probability vs distance
 mode: dist-vs-counts
 description: >-
   Mean contact frequency against genomic distance, hicexplorer's
-  hicPlotDistVsCounts curve, the standard Hi-C library-quality signature.
+  hicPlotDistVsCounts curve, a basic Hi-C library-quality readout.
 find:
   path_glob: "**/*_distcount.txt"
 recipe: hicexplorer/distance_decay.py
+# The fixture is enriched synthetically from 13 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: distance_decay.tsv
 renders_as:
+  # One curve per sample: the pooled curve ("all") is the file's only series
+  # unless the run was made per chromosome, so the chromosome would put every
+  # sample on one line.
+  # C3 N/A: HiCExplorer publishes no cut-off for the decay.
   - id: decay_curve
     component: advanced_viz
     kind: profile
-    roles: {series: chromosome, x: distance, y: contacts}
-  - { component: card, column: contacts, aggregation: max, secondary_layout: box_plot, aggregations: [box_plot_stats] }
-  - { component: table }
+    title: Contact frequency against distance
+    roles: {series: sample, x: distance, y: contacts}
+    config:
+      x_title: Genomic distance (bp)
+      y_title: Mean contact frequency
+      log_x: true
+      log_y: true
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample: the mean contact frequency between pairs of bins at each
+      genomic distance, on log axes. It answers how quickly interactions fade with
+      distance in the library.
+
+      How to read: contact frequency should fall smoothly as distance grows. A plateau
+      or a bump at long range may point to an artefact. HiCExplorer
+      publishes no cut-off for the decay.
+
+      Note: the first bin, at distance zero, is not shown on a log axis.
+
+      Source: https://raw.githubusercontent.com/deeptools/HiCExplorer/master/hicexplorer/hicPlotDistVsCounts.py
+  - component: card
+    column: contacts
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: compact
+    caption: shortest-distance bin, with the median and the lowest
+    title: Contact frequency range
+    description: >-
+      The hero number is the highest mean contact frequency of any distance bin, which
+      is the shortest distance, with the median and the lowest bin next to it. It
+      answers how steeply contacts fall across the distance range.
+
+      How to read: the values span orders of magnitude, so a large gap between the
+      maximum and the median is normal. Use the curve to compare samples rather than
+      this number.
+  - component: table
+    title: Contact frequency per distance bin
+    description: >-
+      Each row is a distance bin of one sample: the mean contact frequency, the number
+      of bins behind it and the scale factor HiCExplorer wrote. It answers the exact
+      value behind each point of the curve.
+
+      How to read: read the number of bins next to each value, since a bin with few
+      bins behind it is noisier.
+
+      Source: https://raw.githubusercontent.com/deeptools/HiCExplorer/master/hicexplorer/hicPlotDistVsCounts.py

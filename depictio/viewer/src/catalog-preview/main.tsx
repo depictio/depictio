@@ -27,6 +27,7 @@ import '../styles/app.css';
 
 import { depictioTheme } from '../theme';
 import CatalogApp from './App';
+import { applyCatalogChrome } from './chrome';
 import type { CatalogGlobal } from './shared';
 
 const payloadEl = document.getElementById('catalog-payload');
@@ -34,6 +35,7 @@ window.__CATALOG_PREVIEW__ = JSON.parse(payloadEl?.textContent || '{}');
 
 const g = window.__CATALOG_PREVIEW__ as unknown as CatalogGlobal;
 const scheme = g.theme === 'dark' ? 'dark' : 'light';
+applyCatalogChrome();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

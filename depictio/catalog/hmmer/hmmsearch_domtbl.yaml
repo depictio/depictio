@@ -17,17 +17,120 @@ fixture: hmmsearch_domtbl.tsv
 renders_as:
   # Bit score against HMM coverage separates full-length family hits (right,
   # high) from fragments that only touch a few HMM states (left).
-  - { id: domain_score_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: hmm_coverage, y: dom_score, label: label, color: source} }
+  - id: domain_score_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: hmm_coverage, y: dom_score, label: label, color: source}
+    title: Domain score against model coverage
+    config:
+      x_title: Share of the HMM covered
+      y_title: Domain bit score
+      top_n_labels: 10
+    description: >-
+      Each point is a domain hit: the share of the family HMM its alignment covers on the horizontal axis and
+      its bit score on the vertical axis, coloured by the database the family comes from. It answers which
+      hits are both complete and confident.
+
+      How to read: hits in the upper right cover the whole model with a high score, the reliable family
+      assignments. Hits to the left only touch part of the model and are fragments or partial domains. A
+      high score with low coverage can still be a true short match, so check the architecture tile.
+
+      Lines and annotations: no cut-off is drawn. A score threshold is specific to each family, and Pfam
+      stores gathering bit score thresholds inside each model, which hmmsearch applies only on request with
+      its cut_ga option.
+
+      Source: http://eddylab.org/software/hmmer/Userguide.pdf
   # One backbone per protein with its domains by family; a zigzag edge marks a partial match
   # of the HMM, drawn from hmm_from / hmm_to / hmm_length.
-  - { id: domain_architecture, component: advanced_viz, kind: domain_architecture,
-      roles: {entity: entity, start: start, end: end, label: label, protein_length: protein_length, hmm_from: hmm_from, hmm_to: hmm_to, hmm_length: hmm_length, hmm_coverage: hmm_coverage, evalue: i_evalue, source: source, description: description, accession: accession} }
-  - { id: domain_hits, component: card, column: entity, aggregation: count,
-      secondary_layout: top_n, breakdown_col: source, top_n_count: 4, headline: true }
-  - { id: domain_families, component: card, column: label, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: source }
-  - { id: domain_score, component: card, column: dom_score, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: figure, visu_type: box, dict_kwargs: {x: source, y: dom_score, color: source} }
-  - { component: table }
+  - id: domain_architecture
+    component: advanced_viz
+    kind: domain_architecture
+    title: Domain architecture per protein
+    roles: {entity: entity, start: start, end: end, label: label, protein_length: protein_length, hmm_from: hmm_from, hmm_to: hmm_to, hmm_length: hmm_length, hmm_coverage: hmm_coverage, evalue: i_evalue, source: source, description: description, accession: accession}
+    config:
+      color_by: label
+    description: >-
+      Each row is a protein, drawn as a backbone with its domain hits placed along it and coloured by
+      family. It answers which domains each protein carries and in what order.
+
+      How to read: proteins with the same ordered list of families share an architecture, and the
+      architectures view counts them. A zigzag edge marks a domain that matches only part of the family
+      model. Hover a domain for its family, accession and independent E-value.
+
+      Lines and annotations: the domain bar is the envelope on the sequence, the region HMMER judges the
+      domain most probably lies in. The zigzag edge comes from the HMM start and end against the model
+      length. No E-value cut-off is applied beyond the one set in the search.
+
+      Source: http://eddylab.org/software/hmmer/Userguide.pdf
+  - id: domain_hits
+    component: card
+    column: entity
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: source
+    top_n_count: 4
+    headline: true
+    caption: domain hits, by database
+    title: Domain hits
+    description: >-
+      The hero number counts the domain hits, and the bars rank the databases they come from. The second
+      figure counts the distinct proteins with a hit. It answers how much of the input the search annotates.
+
+      How to read: a protein count far below the number of sequences searched means many sequences carry no
+      recognised domain. Several hits per protein are normal for multi-domain proteins.
+  - id: domain_families
+    component: card
+    column: label
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: source
+    top_n_count: 4
+    caption: families, by database
+    title: Distinct families
+    description: >-
+      The hero number counts the distinct families hit, and the bars rank the databases by how many of their
+      families were found. The second figure counts all hits. It answers how diverse the annotation is.
+
+      How to read: a high ratio of hits to families means a few families dominate. A flat ranking means the
+      search reached many different families.
+  - id: domain_score
+    component: card
+    column: dom_score
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: domain bit score, with its spread
+    title: Domain bit score
+    description: >-
+      The hero number is the median bit score of a domain, and the box shows its quartiles. A bit score is
+      the log-odds of the match against a null model of random sequence, so higher is stronger. It answers
+      how strong the typical hit is.
+
+      How to read: a high median means confident hits. A low median with a long lower whisker means many
+      marginal hits, which are worth checking against their E-values.
+
+      Source: http://eddylab.org/software/hmmer/Userguide.pdf
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: source
+      y: dom_score
+      color: source
+      labels: {source: Database, dom_score: Domain bit score}
+    title: Domain score by database
+    description: >-
+      Each box is a database: the spread of domain bit scores of its hits. It answers whether one database
+      gives stronger matches than another.
+
+      How to read: scores of different databases are not directly comparable, because each uses its own
+      models and thresholds. Compare the shapes, and look for a database whose box sits near the low end.
+  - component: table
+    title: Domain hits table
+    description: >-
+      Each row is a domain hit with its protein, family, database, envelope span, E-values, bit score and
+      how much of the HMM the alignment covers. It answers the exact numbers behind every tile.
+
+      How to read: sort by independent E-value to list the most confident hits, and filter on a family or a
+      database to inspect it.

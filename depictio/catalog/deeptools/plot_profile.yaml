@@ -14,9 +14,89 @@ fixture: plot_profile.tsv
 renders_as:
   # MultiQC's deeptools module has no plot for this matrix at all: nf-core
   # publishes it as a plain table beside the PDF, and this is what reads it.
-  - { id: metagene_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: bin, y: signal} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: bin, y: signal, color: sample, title: Mean signal across the plotted window} }
-  - { component: card, column: signal, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: signal, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: signal, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
-  - { component: table }
+  # C3 N/A: deepTools publishes no cut-off for a metagene signal; the anchors
+  # (start, end, centre) vary by run, so no fixed marker is drawn.
+  - id: metagene_profile
+    component: advanced_viz
+    kind: profile
+    title: Metagene signal profile
+    roles: {series: sample, x: bin, y: signal}
+    config: {x_title: Bin across the plotted window, y_title: Mean signal}
+    description: >-
+      Each line is a library: its mean signal in every bin across the plotted window.
+      It answers where along genes or around an anchor the signal accumulates.
+
+      How to read: an enriched target shows a peak at its expected position, such as
+      the promoter for a promoter mark, and an input stays flat. A library with no peak
+      did not enrich, and a peak in the wrong place points to a mislabelled library.
+
+      Note: the window is a fixed number of bins, so the anchor labels of the run, such
+      as the start and end of the scaled region, name the bins.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/tools/plotProfile.html
+  - id: signal_line
+    component: figure
+    visu_type: line
+    dict_kwargs:
+      x: bin
+      y: signal
+      color: sample
+      labels: {bin: Bin across the plotted window, signal: Mean signal, sample: Sample}
+    title: Mean signal across the plotted window
+    description: >-
+      Each line is a library: its mean signal in every bin of the window. It answers the
+      same question as the profile above with a plain line chart you can zoom.
+
+      How to read: compare the height and position of the peaks between libraries.
+      Libraries of one target should overlap, and inputs should stay low.
+
+      Source: https://deeptools.readthedocs.io/en/latest/content/tools/plotProfile.html
+  - id: signal_peak_card
+    component: card
+    column: signal
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: compact
+    caption: highest bin, with the median bin
+    title: Peak signal
+    description: >-
+      The hero number is the highest mean signal of any bin, and the second number is
+      the median bin. It answers how far the peak rises above the typical level.
+
+      How to read: a peak many times the median means a clear enrichment. A peak close
+      to the median means a flat profile, as expected for an input.
+  - id: signal_spread_card
+    component: card
+    column: signal
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Signal level
+    description: >-
+      The hero number is the median mean signal over the bins, and the box shows their
+      quartiles. It answers what level the signal sits at away from its peaks.
+
+      How to read: a long box means a strong gradient across the window. Units follow
+      the normalisation of the run, so compare libraries of the same run only.
+  - id: library_count_card
+    component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: compact
+    caption: libraries, with the rows behind them
+    title: Libraries profiled
+    description: >-
+      The hero number is the count of libraries in the profile, and the second number is
+      the count of bin rows. It answers how many libraries the window covers.
+
+      How to read: the row count divided by the library count is the number of bins of
+      the window.
+  - component: table
+    title: Metagene signal table
+    description: >-
+      Each row is one bin of one library, with the anchor label where deepTools names
+      one. It answers the exact signal behind the lines.
+
+      How to read: filter to one library and sort by bin to follow its profile.

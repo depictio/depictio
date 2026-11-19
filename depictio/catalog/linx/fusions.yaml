@@ -10,10 +10,83 @@ description: >-
 find:
   path_glob: "**/*.linx.fusion.tsv"
 recipe: linx/fusions.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several phasing outcomes and reported types.
 fixture: fusions.tsv
 renders_as:
-  - { id: fusion_count, component: card, column: fusion_id, aggregation: count, secondary_layout: top_n, breakdown_col: phased, top_n_count: 3, headline: true }
-  - { id: fusion_phase_bar, component: figure, visu_type: bar, dict_kwargs: {x: phased, color: reported_type} }
-  - { id: fusion_record, component: advanced_viz, kind: record_card, roles: {id: fusion_id, title: fusion} }
-  - { id: fusion_phase_filter, component: interactive, interactive_type: MultiSelect, column_name: phased }
-  - { id: fusion_table, component: table, row_selection_enabled: true, row_selection_column: fusion_id }
+  - id: fusion_count
+    component: card
+    column: fusion
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: phased
+    top_n_count: 3
+    headline: true
+    caption: fusions, by phasing
+    title: Predicted fusions
+    description: >-
+      The hero number is the count of distinct gene pairs LINX predicts to be fused, and
+      the bars rank the phasing outcomes. It answers how many fusions there are and
+      whether they keep the reading frame.
+
+      How to read: LINX sets phased when a fusion can be formed after allowing for
+      exon skipping, so in-frame and skipped-exon fusions can make a protein. Out-of-frame
+      fusions usually do not.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/linx/README.md
+  - id: fusion_phase_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: phased
+      color: reported_type
+      labels: {phased: Phasing, reported_type: Reported type, count: Fusions}
+    title: Fusions by phasing and reported type
+    description: >-
+      Each bar counts fusions by phasing and each segment splits them by the reported
+      type, the class of known or promiscuous pair LINX matched. It answers which kinds
+      of fusion are in frame.
+
+      How to read: a reported type of NONE means no match to the known fusion
+      knowledgebase. Known pairs that are in frame are the highest-confidence
+      calls, so open them first in the table.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/linx/README.md
+  - id: fusion_record
+    component: advanced_viz
+    kind: record_card
+    title: Fusion record
+    roles: {id: fusion_id, title: fusion}
+    # C1 N/A: a record card draws labelled fields, not marks, so no colour column applies.
+    description: >-
+      One fusion shown as labelled fields: its partners, transcripts, region types,
+      phasing, reportability and the SV chain behind it. It answers what is known about
+      the fusion picked in the table.
+
+      How to read: select a row in the table to fill the card. The reportable reasons
+      field says why LINX did or did not report the fusion.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/linx/README.md
+  - id: fusion_phase_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: phased
+    title: Phasing
+    description: >-
+      Pick one or more phasing outcomes to keep. It filters every tile of the tab to the
+      fusions with those outcomes.
+
+      How to read: keep INFRAME and SKIPPED_EXONS to see the fusions that can form a
+      protein.
+  - id: fusion_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: fusion_id
+    title: Predicted fusions table
+    description: >-
+      Each row is a candidate fusion with its partners, phasing, reportability, fused
+      exons and the protein domains kept and lost. It answers which fusions to
+      follow up and lets a row selection fill the record card.
+
+      How to read: sort by reported, then by likelihood, and read the reportable
+      reasons for the ones LINX did not report.

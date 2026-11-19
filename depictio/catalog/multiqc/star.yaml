@@ -13,4 +13,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: star }
+  - component: multiqc
+    section: star
+    title: Splice-aware alignment summary
+    description: >-
+      STAR's MultiQC plots: the uniquely mapped, multi-mapped and unmapped
+      fractions, plus per-gene count assignment, per sample. They answer how well
+      the reads align to the genome.
+
+      How to read: A high unique-mapping share is good. Many unmapped reads that are
+      too short suggest degraded RNA, and many multi-mapped ones indicate repeats.
+
+      Source: https://docs.seqera.io/multiqc/modules/star

@@ -12,4 +12,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: checkm2 }
+  - component: multiqc
+    section: checkm2
+    title: Bin quality (CheckM2)
+    description: >-
+      CheckM2's completeness and contamination estimates for each bin, shown as bars
+      per bin. It answers which metagenome-assembled genomes are complete and clean
+      enough to use.
+
+      How to read: High completeness with low contamination marks a trustworthy bin.
+      High contamination means the bin mixes organisms and should be refined, and
+      low completeness means a fragment of a genome.
+
+      Source: https://docs.seqera.io/multiqc/modules/checkm2

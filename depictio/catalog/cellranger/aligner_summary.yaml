@@ -9,11 +9,115 @@ description: >-
 find:
   path_glob: "**/metrics_summary.csv"
 recipe: cellranger/aligner_summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several aligner routes.
 fixture: aligner_summary.tsv
 renders_as:
-  - { id: aligner_agreement, component: advanced_viz, kind: scatter_xy, roles: {x: cells_called, y: cellbender_cells, label: aligner, color: aligner} }
-  - { id: aligner_cells_bar, component: figure, visu_type: bar, dict_kwargs: {x: aligner, y: cells_called, color: aligner, title: Cells called per aligner route} }
-  - { id: aligner_picker, component: interactive, interactive_type: Select, column_name: aligner }
-  - { component: card, column: cells_called, aggregation: sum, secondary_layout: top_n, breakdown_col: aligner, top_n_count: 3 }
-  - { component: card, column: mapping_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: table }
+  # Calls from different routes against each other: the diagonal is "both counted
+  # the same number of cells", a data-defined reference, not a quality cut-off.
+  - id: aligner_agreement
+    component: advanced_viz
+    kind: scatter_xy
+    title: Cells called against cells kept by CellBender
+    roles: {x: cells_called, y: cellbender_cells, label: aligner, color: aligner}
+    config:
+      x_title: Cells called by the aligner route
+      y_title: Cells kept by CellBender
+      reference_line: diagonal
+      reference_label: equal counts
+    description: >-
+      Each point is one aligner route: the cells it called on the horizontal axis and
+      the cells CellBender kept on that route on the vertical axis. It answers whether
+      the routes agree on how many cells the library holds.
+
+      How to read: points on the diagonal mean CellBender kept about as many cells as
+      the aligner called. A point far from the diagonal, or a route far from the others,
+      means that route calls cells differently, so compare its barcode overlap in the
+      cell-call UpSet before trusting its counts.
+
+      Lines and annotations: the diagonal is y = x, where both counts are equal. It is a
+      reference defined by the data, not a quality cut-off.
+
+      Source: https://raw.githubusercontent.com/nf-core/scrnaseq/master/nextflow_schema.json
+  - id: aligner_cells_bar
+    component: figure
+    visu_type: bar
+    title: Cells called per aligner route
+    dict_kwargs:
+      x: aligner
+      y: cells_called
+      color: aligner
+      labels: {aligner: Aligner route, cells_called: Cells called}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: cells_called
+    description: >-
+      Each bar is an aligner route, as nf-core/scrnaseq runs them with its
+      --aligner option, and its height is the number of cells that route called.
+      It answers which route finds more or fewer cells.
+
+      How to read: similar bar heights mean the routes agree on the library. A
+      route far below the rest may have mapped fewer reads to cells, so check its
+      mapping rate and its barcode overlap with the others.
+
+      Lines and annotations: The dashed line is the median number of cells called
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of Cell Ranger.
+
+      Source:
+      https://raw.githubusercontent.com/nf-core/scrnaseq/master/nextflow_schema.json
+  - id: aligner_picker
+    component: interactive
+    interactive_type: Select
+    column_name: aligner
+    title: Aligner route
+    description: >-
+      Picks one aligner route and filters every tile of the tab to it. It answers how a
+      single route behaves on its own.
+
+      How to read: clear the selection to compare all routes again.
+  - component: card
+    column: cells_called
+    aggregation: sum
+    aggregations: [min, max]
+    secondary_layout: top_n
+    breakdown_col: aligner
+    top_n_count: 3
+    caption: cells called, by route
+    title: Cells called
+    description: >-
+      The hero number is the total of cells called across the shown routes, and the bars
+      rank the routes that called most. It answers how large the called population is
+      and which route drives it.
+
+      How to read: the minimum and maximum give the range between routes. A wide range
+      means the routes disagree on what counts as a cell.
+  - component: card
+    column: mapping_rate
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: mapping rate, with its spread
+    title: Mapping rate
+    description: >-
+      The hero number is the average fraction of reads each route maps to the
+      transcriptome, and the box shows the spread between routes. It answers how well
+      reads land on the reference.
+
+      How to read: a route far below the others lost reads at alignment, so check the
+      reference and the library chemistry. Each tool defines its mapping rate in its own
+      way, so compare routes with care.
+
+      Note: 10x gives an expected value of more than 30 percent for the confidently
+      mapped transcriptome fraction of Cell Ranger only, so no pass mark is drawn here.
+
+      Source: https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf
+  - component: table
+    title: Aligner routes
+    description: >-
+      Each row is an aligner route with its cells called, cells kept by CellBender,
+      median UMI per cell and mapping rate. It answers the exact numbers behind the other
+      tiles.
+
+      How to read: sort a column to rank the routes. An empty cell means that route does
+      not report that metric.

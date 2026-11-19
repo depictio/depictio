@@ -1,0 +1,171 @@
+{{- /* Off-cluster copy of the backups (values: backups.offsite).
+
+       Nightly, rclone copies:
+         1. the MongoDB backup files on the backups volume to
+            <bucket>/<prefix>/mongo/ (copy, never sync: a backup pruned on the
+            volume stays in the bucket until mongo.retentionDays);
+         2. when data.enabled, the instance's S3 data bucket to
+            <bucket>/<prefix>/s3-data/current/, with every file it overwrites
+            or deletes moved to s3-data/archive/<date>/ and kept
+            data.archiveDays.
+       MongoDB backups hold the pointers, the data copy what they point at:
+       restore both from about the same night. */}}
+{{- $bk := .Values.backups | default dict }}
+{{- $off := $bk.offsite | default dict }}
+{{- if $off.enabled }}
+{{- if not ($bk.persistence | default dict).enabled }}
+{{- fail "backups.offsite.enabled needs backups.persistence.enabled: it copies the backup files from that volume" }}
+{{- end }}
+{{- if not (and $off.endpoint $off.bucket) }}
+{{- fail "backups.offsite needs endpoint and bucket" }}
+{{- end }}
+{{- $data := $off.data | default dict }}
+{{- $secretName := $off.existingSecret | default (printf "%s-depictio-backup-s3" .Release.Name) }}
+{{- if not $off.existingSecret }}
+{{- if not (and .Values.secrets.backupS3AccessKey .Values.secrets.backupS3SecretKey) }}
+{{- fail "backups.offsite needs backups.offsite.existingSecret, or secrets.backupS3AccessKey and secrets.backupS3SecretKey" }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+    component: backup-offsite
+type: Opaque
+data:
+  ACCESS_KEY_ID: {{ .Values.secrets.backupS3AccessKey | b64enc | quote }}
+  SECRET_ACCESS_KEY: {{ .Values.secrets.backupS3SecretKey | b64enc | quote }}
+---
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-depictio-backup-offsite
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+    component: backup-offsite
+spec:
+  # After the 03:00 UTC MongoDB backup by default.
+  schedule: {{ $off.schedule | default "0 4 * * *" | quote }}
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: depictio
+            component: backup-offsite
+            {{- with .Values.backend.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          restartPolicy: Never
+          securityContext:
+            {{- toYaml .Values.backend.podSecurityContext | nindent 12 }}
+          containers:
+            - name: rclone
+              image: {{ $off.image | default "rclone/rclone:1.68.2" | quote }}
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                {{- toYaml .Values.backend.securityContext | nindent 16 }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  DAY=$(date -u +%Y-%m-%d)
+                  DST="dst:${DST_BUCKET}/${DST_PREFIX}"
+                  echo "[offsite] MongoDB backups -> ${DST}/mongo"
+                  rclone copy /backups "${DST}/mongo" --include 'depictio_backup_*'
+                  rclone delete "${DST}/mongo" --min-age "${MONGO_RETENTION_DAYS}d"
+                  if [ "${DATA_ENABLED}" = "true" ]; then
+                    echo "[offsite] S3 data ${DEPICTIO_S3_BUCKET} -> ${DST}/s3-data/current"
+                    rclone sync "src:${DEPICTIO_S3_BUCKET}" "${DST}/s3-data/current" \
+                      --backup-dir "${DST}/s3-data/archive/${DAY}"
+                    rclone delete "${DST}/s3-data/archive" --min-age "${DATA_ARCHIVE_DAYS}d" --rmdirs
+                  fi
+                  echo "[offsite] done"
+              envFrom:
+                - configMapRef:
+                    name: {{ .Release.Name }}-backend-config
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: RCLONE_CONFIG
+                  value: /dev/null
+                - name: RCLONE_STATS_ONE_LINE
+                  value: "true"
+                - name: RCLONE_STATS
+                  value: "5m"
+                - name: DST_BUCKET
+                  value: {{ $off.bucket | quote }}
+                - name: DST_PREFIX
+                  value: {{ $off.prefix | default .Release.Name | quote }}
+                - name: MONGO_RETENTION_DAYS
+                  value: {{ (($off.mongo | default dict).retentionDays | default 365) | toString | quote }}
+                - name: DATA_ENABLED
+                  value: {{ (hasKey $data "enabled" | ternary $data.enabled true) | toString | quote }}
+                - name: DATA_ARCHIVE_DAYS
+                  value: {{ $data.archiveDays | default 90 | toString | quote }}
+                # Destination: the backup bucket.
+                - name: RCLONE_CONFIG_DST_TYPE
+                  value: s3
+                - name: RCLONE_CONFIG_DST_PROVIDER
+                  value: Other
+                - name: RCLONE_CONFIG_DST_ENDPOINT
+                  value: {{ $off.endpoint | quote }}
+                - name: RCLONE_CONFIG_DST_REGION
+                  value: {{ $off.region | default "us-east-1" | quote }}
+                # The key may not create buckets (EMBL): skip rclone's check.
+                - name: RCLONE_CONFIG_DST_NO_CHECK_BUCKET
+                  value: "true"
+                - name: RCLONE_CONFIG_DST_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $secretName }}
+                      key: ACCESS_KEY_ID
+                - name: RCLONE_CONFIG_DST_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $secretName }}
+                      key: SECRET_ACCESS_KEY
+                # Source: the instance's own S3 data, with the backend's credentials.
+                - name: RCLONE_CONFIG_SRC_TYPE
+                  value: s3
+                - name: RCLONE_CONFIG_SRC_PROVIDER
+                  value: Other
+                - name: RCLONE_CONFIG_SRC_ENDPOINT
+                  value: {{ $data.sourceEndpoint | default "$(DEPICTIO_S3_PUBLIC_URL)" | quote }}
+                - name: RCLONE_CONFIG_SRC_NO_CHECK_BUCKET
+                  value: "true"
+                - name: RCLONE_CONFIG_SRC_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Release.Name }}-depictio-secrets
+                      key: MINIO_ROOT_USER
+                - name: RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Release.Name }}-depictio-secrets
+                      key: MINIO_ROOT_PASSWORD
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                {{- toYaml ($off.resources | default (dict "requests" (dict "cpu" "100m" "memory" "128Mi") "limits" (dict "memory" "512Mi"))) | nindent 16 }}
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ .Release.Name }}-depictio-backups-pvc
+            - name: tmp
+              emptyDir: {}
+{{- end }}

@@ -14,16 +14,71 @@ fixture: curves.tsv
 renders_as:
   # Long series x effort x coverage -> the `profile` kind, the same three columns
   # as a preseq complexity curve or a TSS enrichment profile.
-  - {
-      id: coverage_curve,
-      component: advanced_viz,
-      kind: profile,
-      roles: { series: library, x: sequencing_effort, y: coverage },
-    }
-  - {
-      component: figure,
-      visu_type: line,
-      dict_kwargs: { x: sequencing_effort, y: coverage, color: library },
-    }
-  - { component: interactive, interactive_type: MultiSelect, column_name: library }
-  - { component: table }
+  - id: coverage_curve
+    component: advanced_viz
+    kind: profile
+    title: Coverage against sequencing effort
+    roles: {series: library, x: sequencing_effort, y: coverage}
+    config:
+      log_x: true
+      x_title: Sequencing effort (bp)
+      y_title: Estimated average coverage
+      legend_pos: bottom
+    description: >-
+      Each curve is a sequencing library: the average coverage of its metagenome that
+      the reads reach (vertical axis) as the sequencing effort grows (horizontal axis,
+      log scale). It answers how much more sequencing a library needs before it
+      describes its community.
+
+      How to read: a curve that flattens near the top has captured most of the
+      community, and extra sequencing adds little. A curve that still climbs steeply
+      is far from covered, and the projected effort in the summary tiles says how much
+      deeper to go. Compare curves of the same habitat only, since diversity sets the
+      slope.
+
+      Lines and annotations: the curves are redrawn from Nonpareil's fitted model
+      (a gamma distribution on the log of the effort) and not from the measured
+      redundancy points, which nf-core does not publish. Nonpareil projects effort for
+      95 percent coverage by default.
+
+      Source: https://raw.githubusercontent.com/lmrodriguezr/nonpareil/master/utils/Nonpareil/R/Nonpareil.R
+      and https://pubmed.ncbi.nlm.nih.gov/24123672/
+  - component: figure
+    visu_type: line
+    dict_kwargs:
+      x: sequencing_effort
+      y: coverage
+      color: library
+      log_x: true
+      labels: {sequencing_effort: Sequencing effort (bp), coverage: Estimated average coverage, library: Library}
+    title: Coverage curves, static view
+    description: >-
+      Each line is a sequencing library: the estimated average coverage against the
+      sequencing effort on a log scale. It answers the same question as the interactive
+      curve tile, in a plain figure that can be exported.
+
+      How to read: lines reaching the top at a lower effort belong to simpler
+      communities. A line that ends low means the run stopped well short of covering
+      the community.
+
+      Note: the lines are rebuilt from Nonpareil's fitted model, not from measured points.
+
+      Source: https://raw.githubusercontent.com/lmrodriguezr/nonpareil/master/utils/Nonpareil/R/Nonpareil.R
+      and https://pubmed.ncbi.nlm.nih.gov/24123672/
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: library
+    title: Library
+    description: >-
+      Filters the tiles to one or more sequencing libraries.
+  - component: table
+    title: Curve points
+    description: >-
+      Each row is one point of a library's rebuilt coverage curve, with the sequencing
+      effort, the estimated coverage, the effort actually sequenced and the effort
+      projected for 95 percent coverage. It answers the exact values behind the curves.
+
+      How to read: filter by library and compare its observed effort with its projected
+      effort to see how far the run is from the target.
+
+      Source: https://raw.githubusercontent.com/lmrodriguezr/nonpareil/master/utils/Nonpareil/R/Nonpareil.R

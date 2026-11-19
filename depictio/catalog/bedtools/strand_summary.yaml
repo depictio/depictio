@@ -9,11 +9,122 @@ description: >-
 find:
   path_glob: "**/*.plus.bedGraph"
 recipe: bedtools/strand_summary.py
+# The fixture is enriched synthetically from 2 real rows (copies with seeded noise), so the preview shows several libraries.
 fixture: strand_summary.tsv
 renders_as:
-  - { component: card, column: plus_share_pct, aggregation: median, secondary_layout: gauge, coverage_max: 100 }
-  - { component: card, column: hotspot_share_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: total_read_bases, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: plus_share_pct, title: Plus-strand share of the signal per library} }
-  - { component: figure, visu_type: scatter, dict_kwargs: {x: hotspot_share_pct, y: off_main_pct, hover_name: sample, title: Hotspot share against signal outside the chromosomes} }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+  - component: card
+    column: plus_share_pct
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: gauge
+    coverage_max: 100
+    caption: median plus-strand share, of 100
+    title: Plus-strand share per library
+    description: >-
+      The hero number is the median percent of a library's signal on the plus
+      strand, shown against 100 percent, with the lowest and highest library
+      beside it. It answers whether libraries read both strands evenly.
+
+      How to read: a library far from the others, or far from 50, has one strand
+      dominating, which can be a protocol or strandedness problem. Open the bar
+      tile below to see which library it is.
+
+      Note: bedtools genomecov reports one strand at a time with the -strand
+      option and publishes no balance cut-off, so none is drawn.
+
+      Source: https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+  - component: card
+    column: hotspot_share_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Signal held by hotspot windows
+    description: >-
+      The hero number is the median share of the chromosome signal held by the top
+      1 percent of 250 kb windows of a library, and the box shows the spread across
+      libraries. It answers how concentrated the signal is.
+
+      How to read: a high share means a few windows, such as ribosomal arrays or
+      very active loci, take most of the reads and the rest of the genome is read
+      from what is left. A library well above the others is the one to check first.
+
+      Note: the top 1 percent is a fixed definition of this recipe, not a cut-off
+      published by bedtools.
+  - component: card
+    column: total_read_bases
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: sample
+    caption: read bases, by library
+    title: Read bases per library
+    description: >-
+      The hero number is the read bases summed over every library and both strands,
+      and the bar splits them by library, with the median and maximum library beside
+      it. It answers how evenly depth is shared between libraries.
+
+      How to read: a library with a thin share has far less depth than the others,
+      so its signal is noisier. Compare libraries in parts per million, as the
+      genome tiles do, and not in raw bases.
+  - component: figure
+    visu_type: bar
+    title: Plus-strand share per library
+    dict_kwargs:
+      x: sample
+      y: plus_share_pct
+      color: sample
+      labels: {sample: Library, plus_share_pct: Plus-strand share (%)}
+    reference_lines:
+      - {axis: y, stat: median, column: plus_share_pct}
+    description: >-
+      Each bar is a library, with the percent of its signal on the plus strand. It
+      answers which library reads one strand more than the others.
+
+      How to read: bars near one another mean a consistent protocol. A bar far from
+      the rest has lost or gained a strand and deserves a check of the library
+      preparation.
+
+      Lines and annotations: the dashed line is the median plus-strand share of this
+      table, a reference computed from the rows on show (it follows the filters), not a
+      cut-off of bedtools. bedtools genomecov reports one strand at a time and publishes
+      no balance cut-off.
+
+      Source: https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+  - component: figure
+    visu_type: scatter
+    title: Hotspot share against signal outside the chromosomes
+    dict_kwargs:
+      x: hotspot_share_pct
+      y: off_main_pct
+      color: sample
+      hover_name: sample
+      labels: {hotspot_share_pct: Signal in top 1% windows (%), off_main_pct: Signal outside chromosomes (%), sample: Library}
+    reference_lines:
+      - {axis: y, stat: median, column: off_main_pct, label: Median signal outside chromosomes}
+    description: >-
+      Each point is a library, with the share of its chromosome signal held by the
+      hottest windows on the horizontal axis and the share of reads outside the
+      main chromosomes on the vertical axis. It answers which libraries are
+      dominated by a few loci or by unplaced contigs.
+
+      How to read: points toward the upper right combine a concentrated signal with
+      many reads off the chromosomes, a pattern of a poorly depleted library. Points
+      near the origin spread their reads over the chromosomes.
+
+      Lines and annotations: The dashed line is the median share of signal outside
+      the chromosomes of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of bedtools. Both shares are defined by the
+      recipe, and bedtools genomecov publishes no cut-off for either.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Strand coverage per library
+    description: >-
+      Each row is a library, with its read bases per strand, the covered megabases,
+      the deepest base and the plus-strand, mitochondrial, off-chromosome and
+      hotspot shares. It answers the exact numbers behind every other tile and lets
+      a row selection filter the dashboard.
+
+      How to read: sort by hotspot share or by mitochondrial share to find the
+      libraries that need a closer look.

@@ -9,9 +9,112 @@ find: { path_glob: "**/dexseq/*.results.txt" }
 recipe: dexseq/results.py
 fixture: results.tsv
 renders_as:
-  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: feature_id, effect_size: log2fc, significance: padj} }
-  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: pvalue} }
-  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }
-  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }
-  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table, row_selection_enabled: true, row_selection_column: feature_id }
+  - id: volcano
+    component: advanced_viz
+    kind: volcano
+    title: Transcript usage volcano
+    roles: { feature_id: feature_id, effect_size: log2fc, significance: padj, category: direction, label: gene_id }
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 0.0
+      top_n_labels: 10
+      effect_label: Usage log2 fold change
+      significance_label: -log10 gene-level adjusted q-value
+    description: >-
+      Each point is a transcript: its usage log2 fold change between the two conditions on the horizontal
+      axis and the gene-level adjusted q-value of its gene on the vertical axis. It answers which isoforms
+      change share within their gene, and how confidently.
+
+      How to read: points in the upper right gain usage and points in the upper left lose it. Every
+      transcript of a gene shares one q-value, so the points of one gene line up horizontally. Open the
+      table tile to see the gene behind a labelled transcript.
+
+      Lines and annotations: the horizontal line is a gene-level q-value of 0.05, the cut-off the catalog
+      recipe uses for the significant, up and down calls. The DEXSeq vignette illustrates a 10% false
+      discovery rate and describes the gene-level q-value as controlling the FDR per gene. No fold-change
+      line is drawn because the calls use none.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html
+  # C1 N/A: the table has one contrast and no group column; the call column is derived from the p-value itself, so splitting the QQ by it would be circular.
+  - id: qq
+    component: advanced_viz
+    kind: qq
+    title: P-value QQ plot
+    roles: { p_value: pvalue, feature_id: feature_id }
+    config:
+      show_ci: true
+      show_identity: true
+      top_n_labels: 5
+    description: >-
+      Each point is a transcript: its observed raw p-value, as minus log10, against the value expected if
+      no isoform changed usage. It answers whether the test statistics are well calibrated.
+
+      How to read: points hugging the diagonal for most of the range and lifting off at the far end mean a
+      few real signals over a calibrated null. A curve that leaves the diagonal early, or sits below it,
+      points to inflation or deflation from a wrong design, batch effects or low counts.
+
+      Lines and annotations: the diagonal is y = x, the expectation when p-values are uniformly distributed
+      under no effect. The shaded band is the 95% confidence interval of that null, so points inside it are
+      consistent with chance.
+  - component: card
+    column: feature_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: direction
+    top_n_count: 3
+    caption: transcripts, by usage call
+    title: Transcripts tested
+    description: >-
+      The hero number is the count of distinct transcripts tested, and the bars rank the usage calls
+      (up, down, not significant) by how many transcripts each holds. It answers how large the tested set
+      is and how it splits.
+
+      How to read: a leading not significant bar is the usual case. A strong imbalance between up and down
+      is worth checking against the sample design.
+
+      Lines and annotations: the call uses a gene-level adjusted q-value below 0.05, the catalog recipe
+      default.
+  - component: card
+    column: direction
+    aggregation: count
+    aggregations: [mode]
+    secondary_layout: donut
+    breakdown_col: direction
+    caption: calls, by direction
+    title: Calls by direction
+    description: >-
+      Each unit is one transcript, and the ring splits them into gain, loss and not significant. The second
+      figure is the most common call. It answers how many isoforms change usage overall.
+
+      How to read: a ring that is mostly not significant means few isoform switches, or too little
+      replication to detect them. Open the volcano to see the borderline transcripts.
+
+      Lines and annotations: the call uses a gene-level adjusted q-value below 0.05, the catalog recipe
+      default.
+  - component: card
+    column: log2fc
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: usage log2 fold change, with its spread
+    title: Usage change spread
+    description: >-
+      The hero number is the range of usage log2 fold changes over all transcripts, and the box shows their
+      quartiles. It answers how large the usage shifts are.
+
+      How to read: a box tight around zero with a long range means most isoforms keep their share and a few
+      switch strongly. The range is shown instead of a median because gains and losses cancel to about zero.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: feature_id
+    title: Transcript usage table
+    description: >-
+      Each row is a transcript with its gene, usage log2 fold change, p-value, gene-level adjusted q-value
+      and call. It answers which transcripts and genes to follow up, and a row selection filters the rest
+      of the dashboard to that transcript.
+
+      How to read: sort by q-value, then look at the fold change to see which isoform gains share. A gene
+      with several significant isoforms is a stronger candidate than a single one.
+
+      Source: https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html

@@ -13,9 +13,82 @@ renders_as:
   - id: gene_volcano
     component: advanced_viz
     kind: volcano
-    roles: { feature_id: gene_id, effect_size: log2fc, significance: fdr, category: direction }
-  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
-  - { component: card, column: exons_significant, aggregation: sum, secondary_layout: top_n, breakdown_col: gene_id, top_n_count: 3 }
-  - { component: card, column: abs_log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: direction }
-  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    title: Exon shift against significance per gene
+    roles: { feature_id: gene_id, effect_size: log2fc, significance: fdr, label: gene_id, category: direction }
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 0.0
+      top_n_labels: 10
+      effect_label: Top exon log2 fold change
+      significance_label: -log10 FDR of the gene test
+    description: >-
+      Each point is a gene in one contrast: the relative log2 fold change of its most significant exon on the
+      horizontal axis and the FDR of the gene-level F-test on the vertical axis, coloured by the direction of
+      the call. It answers which genes show differential exon usage and which way the top exon moves.
+
+      How to read: genes high on the plot have at least one exon behaving differently from the rest of the
+      gene. A large shift of one exon with a modest FDR can still be real, so open the table tile for the
+      Simes FDR and the number of exons called. An FDR of exactly zero is drawn at the top of the axis.
+
+      Lines and annotations: the horizontal line is an FDR of 0.05, the cut-off of this table's significance
+      call: the recipe parameter fdr, which the rnasplice template sets from its SPLICING_FDR variable
+      (default 0.05). It is a template default, not a value read from edgeR, and no fold-change line is drawn
+      because the call uses none.
+  - component: card
+    column: gene_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: direction
+    title: Genes tested
+    caption: genes, by direction of the top exon
+    description: >-
+      The hero number is the count of distinct genes tested for differential exon usage, and the ring splits
+      them by the direction of their most significant exon. It answers how many genes pass the call and which
+      way they move.
+
+      How to read: a large share of not significant genes is normal, since most genes use their exons
+      alike. A ring with only one direction points to a shared bias such as a library effect.
+  - component: card
+    column: exons_significant
+    aggregation: sum
+    aggregations: [box_plot_stats, max]
+    secondary_layout: box_plot
+    title: Significant exons
+    caption: exons called per gene, with its spread
+    description: >-
+      The hero number is the total of exons called significant across genes, and the box shows how many each
+      gene contributes. It answers whether usage changes sit on a single exon or spread over the gene.
+
+      How to read: a gene with many exons called suggests a gene-wide shift, which can reflect an isoform
+      switch or a coverage artefact. A gene with one or two exons called is the typical exon-skipping pattern.
+  - component: card
+    column: abs_log2fc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Size of the exon shift
+    caption: quartiles of the absolute log2 fold change
+    description: >-
+      The hero number is the median absolute relative log2 fold change of the top exon per gene, and the box
+      shows its quartiles. It answers how strong the exon-level differences are.
+
+      How to read: a box close to zero means most genes show only small shifts. Filter to significant genes
+      with the volcano to see the size of the real effects.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: direction
+    title: Direction of the top exon
+    description: >-
+      Restricts every tile to genes whose top exon goes up, goes down or does not change significantly.
+      It answers whether a pattern belongs to one direction.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Genes with differential exon usage
+    description: >-
+      Each row is a gene in one contrast, with its exon counts, top exon, fold change, F-test FDR and Simes
+      FDR. It answers which genes to inspect exon by exon.
+
+      How to read: sort by FDR, or by the Simes FDR when one exon carries the change, and select a row to
+      filter the dashboard to the gene.

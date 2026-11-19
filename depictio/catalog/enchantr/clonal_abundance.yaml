@@ -15,22 +15,66 @@ renders_as:
   - id: abundance_ribbon
     component: advanced_viz
     kind: profile
+    title: Clone rank abundance
     roles: { series: sample_id, x: rank, y: p, lower: lower, upper: upper }
+    config:
+      x_title: Clone rank
+      y_title: Relative abundance
+      legend_pos: bottom
+    description: >-
+      Each curve is a sample: the estimated share of the repertoire held by the clone
+      at each rank, with a shaded band for its uncertainty. It answers how dominant
+      the largest clones are and how well the estimate is backed.
+
+      How to read: a steep curve that starts high and falls fast is an expanded
+      repertoire dominated by a few clones. A flat, low curve is polyclonal. A wide
+      band means the estimate rests on few sequences, so compare samples only where
+      their bands do not overlap.
+
+      Lines and annotations: the shaded band is the confidence interval alakazam
+      derives by bootstrapping the clone abundances (a 95% interval from 100
+      bootstrap realizations in its vignette example). It is a property of the
+      estimate and not a cut-off.
+
+      Source: https://alakazam.readthedocs.io/en/stable/vignettes/Diversity-Vignette/
   # How much of the repertoire the single largest clone holds, per sample.
-  - {
-      component: card,
-      column: p,
-      aggregation: max,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  # How wide the interval is where it matters, i.e. how well backed the head is.
-  - {
-      component: card,
-      column: upper,
-      aggregation: average,
-      secondary_layout: top_n,
-      breakdown_col: sample_id,
-      top_n_count: 3,
-    }
-  - { component: table }
+  - component: card
+    column: p
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: largest clone share, per sample
+    title: Largest clone share
+    description: >-
+      The hero number is the highest relative abundance of any clone in view, and
+      the box shows its quartiles over the rows in view. It answers how much of a
+      repertoire the top clone can hold.
+
+      How to read: a high maximum points to one dominant clone, which is expected in
+      an immune response and unusual in a resting repertoire. Filter to one sample to
+      read its own top clone.
+  # How uncertain the estimate is across clones: the bootstrap standard deviation.
+  - component: card
+    column: p_sd
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: bootstrap spread, lowest to highest
+    title: Abundance uncertainty
+    description: >-
+      The hero number is the median bootstrap standard deviation of a clone's relative
+      abundance, with the lowest and highest values next to it. It answers how stable
+      the abundance estimates are.
+
+      How to read: a standard deviation close to the abundance itself means the clone
+      is poorly estimated, usually from a shallow sample. A low value across clones
+      means the curves above can be trusted.
+  - component: table
+    title: Clone abundance table
+    description: >-
+      Each row is a clone of a sample at one rank, with its relative abundance, its
+      bootstrap standard deviation and the lower and upper bounds of its band. It
+      answers which clones lead each sample and by how much.
+
+      How to read: sort by rank to see the head of each sample, or by abundance to
+      compare samples of one subject.

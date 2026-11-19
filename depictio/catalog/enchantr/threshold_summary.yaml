@@ -9,7 +9,62 @@ find: { path_glob: "**/find_threshold/*_dist_report/tables/*threshold-summary.ts
 recipe: enchantr/threshold_summary.py
 fixture: threshold_summary.tsv
 renders_as:
-  - { component: card, column: threshold, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: sensitivity, aggregation: median, secondary_layout: gauge, coverage_max: 1 }
-  - { component: card, column: specificity, aggregation: median, secondary_layout: threshold, threshold_value: 0.95, threshold_direction: min, threshold_warn: 0.9 }
-  - { component: table }
+  - component: card
+    column: threshold
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: threshold per subject, with its spread
+    title: Clonal distance threshold
+    description: >-
+      The hero number is the mean nearest-neighbour distance threshold over the
+      subjects in view, and the box shows its spread. It answers how close two
+      sequences must be to be called one clone.
+
+      How to read: the threshold is fitted per subject from a bimodal distance
+      distribution, so subjects differ. A subject far from the others fitted a
+      weaker separation, so check its distance histogram in the report.
+
+      Source: https://shazam.readthedocs.io/en/stable/vignettes/DistToNearest-Vignette/
+  - component: card
+    column: sensitivity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: sensitivity per subject, with its spread
+    title: Threshold sensitivity
+    description: >-
+      The hero number is the median sensitivity the chosen threshold achieves, and the
+      box shows its spread across subjects. It answers how many truly related
+      sequences the threshold keeps together.
+
+      How to read: a low value means related sequences are split into separate clones.
+      Shazam publishes no minimum, so compare subjects with each other.
+
+      Source: https://shazam.readthedocs.io/en/stable/vignettes/DistToNearest-Vignette/
+  - component: card
+    column: specificity
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: lowest and highest specificity
+    title: Threshold specificity
+    description: >-
+      The hero number is the median specificity the chosen threshold achieves, with the
+      lowest and highest across subjects. It answers how well unrelated sequences stay
+      apart.
+
+      How to read: when the run fixes the specificity as the selection rule, every
+      subject sits at that value and the card only confirms it. Otherwise a low value
+      means unrelated sequences risk being merged into one clone.
+
+      Source: https://shazam.readthedocs.io/en/stable/vignettes/DistToNearest-Vignette/
+  - component: table
+    title: Threshold table
+    description: >-
+      Each row is a subject with its fitted model, the chosen threshold, the sensitivity
+      and specificity it reaches and the mean threshold applied across subjects. It
+      answers which model and threshold each subject got.
+
+      How to read: compare the subject threshold with the mean threshold, which is the
+      single value the pipeline applies.

@@ -7,7 +7,29 @@ description: >-
 find:
   path_glob: "**/metrics_summary.csv"
 recipe: cellranger/mapping_breakdown.py
+# The fixture is enriched synthetically from 5 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: mapping_breakdown.tsv
 renders_as:
-  - { id: mapping_stacked_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: region, title: Read mapping breakdown} }
-  - { component: table }
+  - id: mapping_stacked_bar
+    component: figure
+    visu_type: bar
+    title: Where reads map
+    dict_kwargs:
+      x: sample
+      y: fraction
+      color: region
+      labels: {sample: Sample, fraction: Fraction of reads, region: Genomic region}
+    description: >-
+      Each bar is a sample and its segments are the fraction of reads that map to exons,
+      introns, intergenic regions or the antisense strand. It answers where the reads land.
+
+      How to read: a high exonic share is typical of poly-A single-cell libraries. A large
+      intronic share points to nuclei or nascent RNA, and a high antisense or intergenic share
+      to a mapping or reference problem.
+  - component: table
+    title: Read mapping fractions
+    description: >-
+      Each row is the fraction of a sample's reads in one genomic region. It answers the exact
+      values behind the bars.
+
+      How to read: compare the same region across samples.

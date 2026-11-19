@@ -7,8 +7,46 @@ description: >-
 find:
   path_glob: "**/analysis/pca/*/variance.csv"
 recipe: cellranger/pca_variance.py
+# The fixture is enriched synthetically from 10 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: pca_variance.tsv
 renders_as:
-  - { id: pca_scree, component: figure, visu_type: bar, dict_kwargs: {x: pc, y: variance_explained, color: sample, title: PCA scree} }
-  - { component: card, column: variance_explained, aggregation: max, secondary_layout: histogram }
-  - { component: table }
+  - id: pca_scree
+    component: figure
+    visu_type: bar
+    title: Variance explained per component
+    dict_kwargs:
+      x: pc
+      y: variance_explained
+      color: sample
+      labels: {pc: Principal component, variance_explained: Variance explained, sample: Sample}
+    description: >-
+      Each bar is a principal component and its height is the fraction of the variance in the
+      selected genes it explains. It answers how many components carry real signal.
+
+      How to read: a steep drop followed by a flat tail marks the number of useful components.
+      A flat profile with no elbow means little structure beyond noise, so check the
+      clustering.
+
+      Lines and annotations: no cut-off is drawn, since the number of components to keep is a
+      choice made by reading the elbow.
+  - component: card
+    column: variance_explained
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: histogram
+    caption: variance explained, over components
+    title: Largest component variance
+    description: >-
+      The hero number is the variance explained by the strongest component, and the histogram
+      shows the distribution over components. It answers how dominant the main axis of
+      variation is.
+
+      How to read: a first component far above the median means one strong axis, often cell
+      type. Many similar small values mean variance spread thinly over components.
+  - component: table
+    title: PCA variance table
+    description: >-
+      Each row is a principal component with the fraction of variance it explains. It answers
+      the exact values behind the scree bars.
+
+      How to read: add the first rows to see the variance covered by the leading components.

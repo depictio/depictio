@@ -10,20 +10,140 @@ description: >-
 find:
   path_glob: "**/variants/ivar/**/*.tsv"
 recipe: ivar/variants_tsv.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several variant types and frequency classes.
 fixture: variants_tsv.tsv
 renders_as:
-  - { id: variant_genome_view, component: advanced_viz, kind: genome_view,
-      roles: {chr: chrom, pos: pos, score: af, feature: variant_key, sample: genome_id, category: variant_type} }
+  - id: variant_genome_view
+    component: advanced_viz
+    kind: genome_view
+    title: Variants along the genome
+    roles: {chr: chrom, pos: pos, score: af, feature: variant_key, sample: genome_id, category: variant_type}
+    config:
+      score_title: Allele frequency
+      score_threshold: 0.75
+    description: >-
+      Each point is a variant call at its genome position, with its allele frequency
+      on the vertical axis, coloured by variant type (SNV, insertion or deletion). It
+      answers where in the genome calls cluster and how many are near-fixed.
+
+      How to read: points above the line are the high-frequency calls that would be
+      integrated into a consensus, and points below it are minor variants. A stretch
+      with many low-frequency calls can mean a mixed sample or a poorly covered
+      region, so check the depth track.
+
+      Lines and annotations: the horizontal line is an allele frequency of 0.75, the
+      cut-off nf-core/viralrecon documents for variants integrated into the consensus
+      genome. iVar's own default minimum frequency to report a variant is 0.03, and
+      viralrecon runs it at 0.25.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
   # Allele frequency against depth: fixed calls stack at 1, minor ones spread
   # low, and the low-depth corner is where a frequency means little.
   - id: af_vs_depth
     component: advanced_viz
     kind: scatter_xy
+    title: Allele frequency against depth
     roles: { x: total_dp, y: af, label: variant_key, color: frequency_class }
-  - { id: pass_variants, component: card, column: variant_key, aggregation: count,
-      secondary_layout: composition, breakdown_col: variant_type, headline: true }
-  - { id: frequency_classes, component: card, column: variant_key, aggregation: count,
-      secondary_layout: donut, breakdown_col: frequency_class }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: af, color: frequency_class} }
-  - { component: interactive, interactive_type: MultiSelect, column_name: filter }
-  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }
+    config:
+      log_x: true
+      x_title: Total read depth at the position
+      y_title: Allele frequency
+      reference_line: horizontal
+      reference_value: 0.75
+      reference_label: Consensus cut-off (0.75)
+      legend_pos: bottom
+    description: >-
+      Each point is a variant call: the read depth at its position on the horizontal
+      axis and its allele frequency on the vertical axis, coloured by frequency
+      class. It answers which calls rest on enough reads to be trusted.
+
+      How to read: fixed calls sit at the top at any depth. Calls at low frequency
+      and low depth, in the bottom left, are the least reliable because a handful of
+      reads decides the frequency. Minor calls at high depth are credible
+      intra-host variants.
+
+      Lines and annotations: the horizontal line is an allele frequency of 0.75, the
+      cut-off nf-core/viralrecon documents for variants integrated into the consensus
+      genome. The Fixed, Major and Minor classes (at least 0.9, 0.5 to 0.9 and under
+      0.5) are this table's own grouping, not published cut-offs. viralrecon calls
+      variants from a depth of 10 reads by default, while iVar's own default minimum
+      depth is 0.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+  - id: pass_variants
+    component: card
+    column: variant_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: variant_type
+    headline: true
+    caption: calls, by variant type
+    title: Variant calls
+    description: >-
+      The hero number is the count of variant calls, with the number of distinct
+      variants beside it, and the bar splits the calls by type. It answers how much
+      variation was called and whether it is mostly substitutions or indels.
+
+      How to read: a large gap between calls and distinct variants means the same
+      variants recur across samples. A growing share of insertions or deletions is
+      worth a look in the table, since they are more error-prone to call.
+  - id: frequency_classes
+    component: card
+    column: variant_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: frequency_class
+    caption: calls, by frequency class
+    title: Calls by frequency class
+    description: >-
+      The hero number is the count of variant calls and the ring splits them into
+      Fixed, Major and Minor by allele frequency. It answers how much of the
+      variation is consensus-level and how much is intra-host diversity.
+
+      How to read: a large Minor share means a mixed or diverse sample, or noise
+      at low depth. The classes are this table's own grouping (at least 0.9, 0.5 to
+      0.9 and under 0.5), not a published cut-off.
+  - component: figure
+    visu_type: histogram
+    title: Allele frequency distribution
+    dict_kwargs:
+      x: af
+      color: frequency_class
+      labels: {af: Allele frequency, frequency_class: Frequency class}
+    description: >-
+      Each bar counts the variant calls in a range of allele frequency, coloured by
+      frequency class. It answers how the calls divide between fixed changes and
+      minor variants.
+
+      How to read: a peak at 1 holds the consensus changes and a spread at low
+      frequencies holds minor variants. A peak near 0.5 can mean a mixed sample.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: filter
+    title: iVar filter verdict
+    description: >-
+      Filters the calls by iVar's verdict. iVar marks a call as PASS when the p-value
+      of its Fisher's exact test is 0.05 or below, so the other calls are
+      statistically weaker.
+
+      Source: https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: genome_id
+    title: iVar variant table
+    description: >-
+      One row is one variant call, with its position, alleles, allele depths and
+      frequency, p-value, iVar's verdict and the amino acid change when a GFF
+      was given. It answers which exact variants each sample carries and whether
+      iVar passed them.
+
+      How to read: Sort by the allele frequency to separate fixed from minor
+      variants, and by the p-value or the filter verdict to find doubtful calls.
+      Look for calls that fail the filter or rest on a low depth. Select a row
+      to filter the rest of the dashboard to its sample. It complements the
+      frequency and variant-type tiles of the same output, which summarise these
+      rows.

@@ -13,5 +13,34 @@ fixture: profile.tsv # co-located bundled sample (grounds the preview)
 renders_as:
   # long-format (sample_id/taxon/rank/abundance) → stacked_taxonomy fits; a
   # sunburst would need wide per-rank columns this profile doesn't carry.
-  - { id: stacked_taxonomy, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: relative_abundance} }
-  - { component: table }
+  - id: stacked_taxonomy
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Taxonomic composition per sample
+    roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: relative_abundance}
+    config:
+      top_n: 10
+      x_title: Sample
+      value_title: Relative abundance (%)
+    description: >-
+      Each bar is a sample, split into the relative abundance of its most abundant
+      clades at the chosen taxonomic rank, with the rest lumped as Other. It answers
+      which organisms make up each metagenome and how the samples compare.
+
+      How to read: samples with similar bars share a community, and a sample dominated
+      by one taxon is a low-diversity or perturbed community. Switch the rank from
+      kingdom to species to move between the overview and the detail.
+
+      Note: MetaPhlAn reports relative abundance among the clades it detects, so the
+      bars show composition and not absolute counts.
+
+      Source: https://raw.githubusercontent.com/biobakery/MetaPhlAn/master/README.md and
+      https://pubmed.ncbi.nlm.nih.gov/36823356/
+  - component: table
+    title: Taxonomic profile
+    description: >-
+      Each row is a clade in a sample with its rank, its relative abundance and its NCBI
+      taxonomy identifier. It answers the exact abundance behind the composition bars.
+
+      How to read: filter by rank, sort by relative abundance and open a taxon's
+      taxonomy identifier to look it up.

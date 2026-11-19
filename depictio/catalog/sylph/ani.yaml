@@ -9,50 +9,140 @@ description: >-
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile
 find: { filename: "*.sylph.tsv" }
 recipe: sylph/ani.py
+# The fixture is enriched synthetically from 30 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: ani.tsv
 renders_as:
-  - {
-      id: ani_dot_plot,
-      component: advanced_viz,
-      kind: dot_plot,
-      roles:
-        {
-          cluster: sample,
-          gene: genome,
-          mean_expression: adjusted_ani,
-          frac_expressing: abundance_frac,
-        },
-    }
-  - {
-      component: figure,
-      visu_type: scatter,
-      dict_kwargs:
-        { x: taxonomic_abundance, y: adjusted_ani, color: sample, size: eff_cov },
-    }
-  - {
-      component: card,
-      column: adjusted_ani,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: genome,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: sample,
-      top_n_count: 3,
-    }
-  - {
-      component: card,
-      column: eff_cov,
-      aggregation: median,
-      secondary_layout: threshold,
-      threshold_value: 1,
-      threshold_direction: min,
-    }
-  - { component: table }
+  - id: ani_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    title: Detected genomes per sample
+    roles: {cluster: sample, gene: genome, mean_expression: adjusted_ani, frac_expressing: abundance_frac}
+    description: >-
+      Each dot is a reference genome that sylph detected in a sample: its colour is the
+      adjusted containment ANI and its size is the taxonomic abundance as a fraction.
+      It answers which genomes are present in which samples and how close each match is.
+
+      How to read: large dark dots are abundant genomes with a close match. A small
+      dot with a lower ANI is a divergent relative of the reference, so the sample holds
+      a different strain or species than the database. A genome present in every
+      sample is part of the shared community.
+
+      Source: https://sylph-docs.github.io/Output-format/
+  - component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: taxonomic_abundance
+      y: adjusted_ani
+      color: sample
+      size: eff_cov
+      labels: {taxonomic_abundance: Taxonomic abundance (%), adjusted_ani: Adjusted ANI (%), sample: Sample, eff_cov: Effective coverage}
+    title: ANI against abundance
+    reference_lines:
+      - {axis: y, stat: median, column: adjusted_ani, label: Median adjusted ANI}
+    description: >-
+      Each point is a genome detected in a sample: its taxonomic abundance on the
+      horizontal axis and its adjusted ANI on the vertical axis, coloured by sample and
+      sized by effective coverage. It answers whether the abundant genomes are also the
+      confident, close matches.
+
+      How to read: points at the upper right are abundant and near identical to the
+      reference. A point with low abundance and low ANI is a weak or divergent
+      detection to treat with care. Large points have more coverage behind their ANI.
+
+      Lines and annotations: The dashed line is the median adjusted ANI of this
+      table, a reference computed from the rows on show (it follows the filters), not
+      a cut-off of sylph.
+
+      Note: sylph reports a coverage-adjusted ANI only below 3x coverage and otherwise
+      the naive ANI, so very deep genomes are not adjusted.
+
+      Source: https://sylph-docs.github.io/Output-format/
+  - component: card
+    column: adjusted_ani
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Adjusted ANI
+    description: >-
+      The hero number is the median adjusted containment ANI of the detected genomes,
+      and the box shows the spread. It answers how close the sample genomes are to the
+      reference genomes.
+
+      How to read: values near 100 percent mean the sample holds the reference strain.
+      A lower median means divergent relatives of the references, so the database may
+      lack the exact genomes.
+
+      Note: containment ANI slightly overestimates the true ANI.
+
+      Source: https://sylph-docs.github.io/Output-format/
+  - component: card
+    column: genome
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: compact
+    caption: genomes, with detections counted
+    title: Detected genomes
+    description: >-
+      The hero number is the count of distinct reference genomes detected, and the
+      strip counts detections, a genome found in two samples counting twice. It answers
+      how rich the profiled communities are.
+
+      How to read: many detections of few genomes means a shared community across
+      samples. A detection count close to the genome count means each sample has its
+      own genomes.
+
+      Source: https://sylph-docs.github.io/Output-format/
+  # Effective coverage spans orders of magnitude, so a box or a ranking would
+  # flatten it: the card shows the extremes. sylph documents a detection limit
+  # (above 0.01 to 0.05x for bacterial genomes), not a coverage pass mark, so none is drawn.
+  - component: card
+    column: eff_cov
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: grid
+    caption: median, with the lowest and highest genome
+    title: Effective coverage
+    description: >-
+      The hero number is the median effective coverage of the detected genomes, a
+      k-mer based estimate of the sequencing depth, with the lowest and highest values.
+      It answers how deeply each detected genome is covered.
+
+      How to read: a low coverage means a thin detection whose ANI is less certain.
+      High coverage detections support the ANI and the abundance.
+
+      Note: the cited sylph page gives only a minimum of more than 0.01 to 0.05x
+      coverage to detect a bacterial genome and states no coverage cut-off, so none is
+      drawn here.
+
+      Source: https://sylph-docs.github.io/sylph-can-cannot/
+  - component: table
+    title: Detected genomes table
+    description: >-
+      Each row is a reference genome detected in a sample, with its taxonomic and
+      sequence abundance, adjusted and naive ANI, effective and median coverage, and
+      containment. It answers the exact values behind every tile.
+
+      How to read: sort by adjusted ANI to find the weakest matches, or filter by
+      sample to list what it contains.
+
+      Source: https://sylph-docs.github.io/Output-format/
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: containment_frac, aggregation: average, secondary_layout: gauge, coverage_max: 1 }
+  - component: card
+    column: containment_frac
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Genome containment
+    description: >-
+      The hero number is the median share of a reference genome's k-mers that were found
+      in the sample, and the box shows the spread. It answers how much of each detected
+      genome is actually present in the reads.
+
+      How to read: a high share means most of the genome is contained in the sample. A
+      low share with a high ANI is a low coverage detection, since few k-mers were
+      sampled.
+
+      Source: https://sylph-docs.github.io/Output-format/

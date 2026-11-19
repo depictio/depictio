@@ -15,15 +15,107 @@ find:
 recipe: cutandrun/samples.py
 fixture: samples.tsv
 renders_as:
-  - { id: sample_design_bar, component: figure, visu_type: bar, dict_kwargs: {x: target, y: n_libraries, color: role, title: Libraries per target} }
+  - id: sample_design_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: target
+      y: n_libraries
+      color: role
+      labels: {target: Target, n_libraries: Libraries, role: Role}
+    title: Libraries per target
+    description: >-
+      Each bar is a target of the experiment: the number of libraries sequenced for
+      it, coloured by whether it is a profiled target or an IgG control. It answers
+      how the design is balanced.
+
+      How to read: targets should have comparable library counts, and an IgG control
+      should be present for the peak caller. A target without a control or with a
+      single library cannot be called against a background or checked for
+      reproducibility.
   # The glance strip every tab opens with: the design split by role, by target,
   # the libraries behind it and the replicate depth.
-  - { component: card, column: sample_id, aggregation: count, secondary_layout: donut, breakdown_col: role }
-  - { component: card, column: target, aggregation: count, secondary_layout: top_n, breakdown_col: target, top_n_count: 3 }
-  - { component: card, column: n_libraries, aggregation: sum, secondary_layout: composition, breakdown_col: target }
-  - { component: card, column: replicate, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - component: card
+    column: n_libraries
+    aggregation: count
+    aggregations: [sum, max]
+    secondary_layout: donut
+    breakdown_col: role
+    caption: Samples, by role
+    title: Samples, by role
+    description: >-
+      The hero number is the count of samples, shown with the libraries behind them
+      and the largest library count of a sample, and the ring splits the samples into
+      profiled targets and IgG controls. It answers how many samples the run holds.
+
+      How to read: a ring without an IgG control share means the peak caller had no
+      background to call against.
+  - component: card
+    column: target
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    caption: Samples per target
+    title: Targets
+    description: >-
+      The hero number is the count of distinct targets, shown with the count of
+      samples, and the bars rank the targets by their samples. It answers which
+      targets are best replicated.
+
+      How to read: a target with a single sample has no replicate to compare.
+  - component: card
+    column: n_libraries
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: target
+    caption: Libraries, by target
+    title: Libraries per target
+    description: >-
+      The hero number is the total of libraries, and the bar splits it by target. It
+      answers where the sequencing effort went.
+
+      How to read: an even split means a balanced design. A target with far fewer
+      libraries has less power.
+  - component: card
+    column: replicate
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: compact
+    caption: Highest replicate, with the median and lowest
+    title: Replicate depth
+    description: >-
+      The hero number is the highest replicate number in the run, shown with the
+      median and the lowest. It answers how many replicates the design has.
+
+      How to read: two or more replicates per target allow reproducibility to be
+      checked. A maximum of 1 means no replicates.
   # `replicate` is an Int64, so the categorical twin is what a MultiSelect can
   # filter on; both are declared so a template can pick either.
-  - { id: sample_replicate_filter, component: interactive, interactive_type: MultiSelect, column_name: replicate_label }
-  - { id: sample_target_filter, component: interactive, interactive_type: MultiSelect, column_name: target }
-  - { component: table }
+  - id: sample_replicate_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: replicate_label
+    title: Replicate
+    description: >-
+      Pick one or more replicates to keep only their samples in the tiles that
+      follow.
+  - id: sample_target_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: target
+    title: Target
+    description: >-
+      Pick one or more targets, including the IgG control, to keep only their
+      samples in the tiles that follow.
+  - component: table
+    title: Sample table
+    description: >-
+      Each row is a sample with its target, replicate, role, the control it was called
+      against and the libraries behind it. It answers how the samples map to the
+      files of the run.
+
+      How to read: check that every target row names a control and that replicates
+      are numbered as expected.

@@ -13,9 +13,90 @@ description: >-
 find:
   path_glob: "**/variant_calling/controlfreec/*/*_ratio.txt"
 recipe: controlfreec/cnv_ratio.py
+# The fixture is enriched synthetically from 9 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: cnv_ratio.tsv
 renders_as:
-  - { id: controlfreec_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
-  - { id: controlfreec_log2_spread, component: card, column: log2, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: controlfreec_cn_mix, component: card, column: copy_number, aggregation: median, secondary_layout: composition, breakdown_col: label }
-  - { component: table, columns: [sample, chrom, start, end, log2, baf, copy_number, segment] }
+  # Control-FREEC gives copy number as ratio x ploidy, so for a diploid sample a
+  # gain to 3 copies sits at ratio 1.5 and a loss to 1 copy at ratio 0.5. The tile
+  # marks the log2 of the midpoints between neighbouring states (2.5/2 and 1.5/2),
+  # derived for ploidy 2, in place of the tile's default of 0.3.
+  - id: controlfreec_profile
+    component: advanced_viz
+    kind: cnv_profile
+    title: Copy number profile
+    roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label}
+    config:
+      gain_threshold: 0.32
+      loss_threshold: -0.42
+    description: >-
+      Each point is a genomic window: its log2 copy ratio along the chromosomes, with the
+      called segments drawn over it and the B-allele frequency underneath. It answers
+      where the genome has gained or lost copies.
+
+      How to read: windows around zero are copy neutral, and a run of windows shifted
+      up or down forms a gain or a loss. Segments are coloured by the predicted copy
+      number. A BAF split away from 0.5 on a shifted segment supports a real alteration
+      and marks loss of heterozygosity.
+
+      Lines and annotations: the dashed lines mark log2 ratios of 0.32 and -0.42, the
+      midpoints between 2 and 3 copies and between 2 and 1 copies. They are an arithmetic
+      reference from Control-FREEC's copy number as ratio times ploidy, taken at ploidy
+      2, and not thresholds the tool uses to call.
+
+      Note: Control-FREEC calls copy number from the ratio and the ploidy of the run,
+      so for another ploidy or a subclonal sample these lines move.
+
+      Source: http://boevalab.inf.ethz.ch/FREEC/tutorial.html
+      and https://pubmed.ncbi.nlm.nih.gov/22155870/
+  # The windows only: the segment rows repeat the same ratio, and a spread over both
+  # kinds would count the genome twice. A range is the hero because the median of a
+  # log ratio over gains and losses cancels towards zero.
+  - id: controlfreec_log2_spread
+    component: card
+    column: log2
+    aggregation: range
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('segment') == 'bin'"
+    caption: range, with the spread
+    title: Log2 ratio spread
+    description: >-
+      The hero number is the range of window log2 copy ratios, and the box shows their
+      quartiles. It answers how far the genome departs from copy neutral.
+
+      How to read: a box tight around zero with a long range means a mostly neutral
+      genome with a few alterations. A box shifted off zero points to a wrong ploidy or
+      normalisation, so check the profile.
+
+      Source: http://boevalab.inf.ethz.ch/FREEC/tutorial.html
+  - id: controlfreec_cn_mix
+    component: card
+    column: copy_number
+    aggregation: count
+    aggregations: [median, max]
+    secondary_layout: composition
+    breakdown_col: copy_number
+    filter_expr: "col('segment') == 'bin'"
+    caption: windows, by predicted copy number
+    title: Windows by copy number
+    description: >-
+      The hero number is the count of windows, the bar splits them by the copy number
+      Control-FREEC predicted, and the strip gives the median and highest copy number.
+      It answers how much of the genome is neutral, gained or lost.
+
+      How to read: a bar dominated by the neutral state means a quiet genome. Large shares
+      of other copy numbers mean wide alterations or aneuploidy.
+
+      Source: http://boevalab.inf.ethz.ch/FREEC/tutorial.html
+  - component: table
+    columns: [sample, chrom, start, end, log2, baf, copy_number, segment]
+    title: Copy number windows
+    description: >-
+      Each row is a genomic window or a called segment, with its sample, chromosome,
+      start and end, log2 ratio, B-allele frequency and predicted copy number. It
+      answers the exact values behind the profile.
+
+      How to read: filter by the segment column to list the called segments, or by
+      chromosome to read one region window by window.
+
+      Source: http://boevalab.inf.ethz.ch/FREEC/tutorial.html

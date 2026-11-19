@@ -11,6 +11,61 @@ find:
 recipe: lilac/alleles.py
 fixture: alleles.tsv
 renders_as:
-  - { id: allele_count, component: card, column: allele_id, aggregation: count, secondary_layout: top_n, breakdown_col: gene, top_n_count: 3, headline: true }
-  - { id: allele_cn_bar, component: figure, visu_type: bar, dict_kwargs: {x: allele, y: tumor_copy_number, color: gene} }
-  - { id: allele_table, component: table, row_selection_enabled: true, row_selection_column: allele_id }
+  - id: allele_count
+    component: card
+    column: gene
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: gene
+    top_n_count: 3
+    headline: true
+    title: HLA alleles called
+    caption: alleles, by HLA gene
+    description: >-
+      The hero number is the count of HLA alleles LILAC called, with the number of
+      distinct HLA genes beside it, and the bars rank the genes by allele count. It
+      answers how complete the typing is.
+
+      How to read: every HLA gene carries two alleles, so a gene with fewer calls has
+      an incomplete typing. Check its supporting fragments in the table before using
+      it to predict neoantigen presentation.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/lilac/README.md
+  # C1: the points are coloured by the HLA gene each allele belongs to.
+  - id: allele_cn_bar
+    component: figure
+    visu_type: strip
+    dict_kwargs:
+      x: allele
+      y: tumor_copy_number
+      color: gene
+      labels: {allele: HLA allele, tumor_copy_number: Tumor copy number, gene: HLA gene}
+    title: Tumor copy number per allele
+    description: >-
+      Each point is a called copy of an HLA allele and its copy number in the tumor,
+      coloured by HLA gene; a homozygous allele has two points. It answers whether the
+      tumor kept both copies of each allele.
+
+      How to read: a copy number near one for each allele of a gene is the intact
+      state. An allele far below one has been lost in the tumor, so it can no longer
+      present the neoantigens that depend on it. Open the table for the lost flag.
+
+      Note: LILAC derives the copy number from the tumor to reference fragment ratio and
+      the PURPLE copy number. No cut-off is drawn, because none is sourced.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/lilac/README.md
+  - id: allele_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: allele_id
+    title: HLA alleles
+    description: >-
+      Each row is a called allele with the fragments that support it in the reference,
+      the tumor and the RNA, its tumor copy number, a flag for an allele lost in the
+      tumor and the somatic variants inside it. It answers which alleles are intact and
+      expressed, and lets a row selection filter the dashboard.
+
+      How to read: a lost or mutated allele cannot present the neoantigens it would,
+      so filter on the lost flag first. Few RNA fragments on a present allele suggest
+      it is not expressed.

@@ -13,18 +13,135 @@ recipe: bismark/summary_report.py
 fixture: summary_report.tsv
 renders_as:
   # Reads to methylome in one card: what was sequenced, what aligned, what
-  # survived deduplication, how many CpG calls came out the far end.
+  # survived deduplication. The CpG calls are not reads (one read holds several
+  # CpGs), so they are not a funnel stage and have their own card.
   - component: card
     column: total_reads
     aggregation: sum
+    aggregations: [median, min]
     secondary_layout: attrition
-    attrition_cols: [aligned_reads, unique_reads, cpgs_called]
-  # Mammalian CHH methylation is near zero, so its complement is the conversion
-  # rate. Below ~98 % the CpG calls inherit the same false-positive rate.
-  - { component: card, column: conversion_efficiency_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100 }
-  - { component: card, column: pct_aligned, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_duplicate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: pct_cpg_methylation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: cpgs_called, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: conversion_efficiency_pct, color: sample, title: Bisulfite conversion efficiency per library} }
-  - { component: table }
+    attrition_cols: [aligned_reads, unique_reads]
+    caption: Reads, from sequenced to aligned and unique
+    title: Reads through alignment
+    description: >-
+      The hero number is the total of reads sequenced, and the funnel shows how many
+      aligned and how many remained after deduplication. It answers how much of the
+      input became usable alignments.
+
+      How to read: a narrow drop at each step is healthy. A large drop at alignment
+      points to mapping problems, and a large drop at deduplication to
+      over-amplification.
+  # Bismark publishes no conversion cut-off. Its FAQ reads conversion off the
+  # lowest non-CG methylation (0.3 % means at least 99.7 % converted), which is
+  # what this column does with CHH, so the gauge shows the value on 0 to 100.
+  - component: card
+    column: conversion_efficiency_pct
+    aggregation: min
+    aggregations: [median, max]
+    secondary_layout: gauge
+    coverage_max: 100
+    caption: Weakest library, out of 100%
+    title: Lowest bisulfite conversion
+    description: >-
+      The hero number is the lowest bisulfite conversion efficiency of any library,
+      read as 100 percent minus its CHH methylation, with the median and the best.
+      It answers how complete the conversion was in the worst library.
+
+      How to read: values near 100 percent are good, since few unmethylated
+      cytosines remain unconverted. A library that stands out below the others
+      inherits false methylation calls.
+
+      Note: this reading assumes CHH methylation is near zero, as in mammals, and
+      Bismark publishes no cut-off.
+
+      Source: https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+  - component: card
+    column: pct_aligned
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Alignment yield, with its spread
+    title: Average alignment yield
+    description: >-
+      The hero number is the mean percentage of reads that aligned, and the box
+      shows the spread across libraries. It answers how well the run mapped.
+
+      How to read: a tight box means libraries mapped alike. A long lower whisker is
+      a library to check against the trimming and genome choice.
+  - component: card
+    column: pct_duplicate
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: Duplication rate, with its spread
+    title: Average PCR duplication
+    description: >-
+      The hero number is the mean percentage of aligned reads removed as
+      duplicates, and the box shows the spread. It answers how redundant the
+      libraries are.
+
+      How to read: a tight box means similar complexity. A library with a long upper
+      whisker was over-amplified.
+  - component: card
+    column: pct_cpg_methylation
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: CpG methylation, with its spread
+    title: Average CpG methylation
+    description: >-
+      The hero number is the mean CpG methylation percentage, and the box shows the
+      spread across libraries. It answers how methylated the libraries are.
+
+      How to read: a tight box means comparable libraries. A library far from the
+      others differs in biology or conversion.
+  - component: card
+    column: cpgs_called
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: CpG calls per library
+    title: CpG calls
+    description: >-
+      The hero number is the total of CpG methylation calls, and the histogram shows
+      how they spread over libraries. It answers how deep the methylation data is.
+
+      How to read: a library with far fewer calls than its peers carries less
+      evidence for window-level methylation.
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: conversion_efficiency_pct
+      color: sample
+      labels: {sample: Library, conversion_efficiency_pct: Conversion efficiency (%)}
+    title: Bisulfite conversion per library
+    reference_lines:
+      - axis: y
+        stat: median
+        column: conversion_efficiency_pct
+    description: >-
+      Each bar is a library: its bisulfite conversion efficiency, read as 100
+      percent minus its CHH methylation. It answers whether every library
+      converted completely.
+
+      How to read: bars close to 100 percent mean few unmethylated cytosines
+      remained unconverted. A shorter bar marks a library whose methylation calls
+      may include false positives.
+
+      Note: this reading assumes CHH methylation is near zero, as in mammals, and
+      Bismark publishes no cut-off.
+
+      Lines and annotations: The dashed line is the median conversion efficiency
+      of this table, a reference computed from the rows on show (it follows the
+      filters), not a cut-off of Bismark.
+
+      Source: https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+  - component: table
+    title: Run summary table
+    description: >-
+      Each row is a library with its read funnel, its cytosine counts per context and
+      the ratios derived from them. It answers the exact numbers behind every card.
+
+      How to read: sort by conversion or by alignment yield to find the weakest
+      library.

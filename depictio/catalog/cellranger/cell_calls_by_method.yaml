@@ -11,8 +11,67 @@ find:
 recipe: cellranger/cell_calls_by_method.py
 fixture: cell_calls_by_method.tsv
 renders_as:
-  - { id: cell_call_upset, component: advanced_viz, kind: upset_plot, roles: {} }
-  - { id: caller_count_filter, component: interactive, interactive_type: RangeSlider, column_name: n_callers }
-  - { component: card, column: n_callers, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: barcode_core, aggregation: count, secondary_layout: uniqueness }
-  - { component: table }
+  # C1 N/A: the set intersections are bars of counts; no data column fits a colour
+  # beyond the intersection degree, which the kind option below uses.
+  - id: cell_call_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Cells shared between aligner routes
+    roles: {}
+    config:
+      color_intersections_by: degree
+    description: >-
+      Each column is a group of barcodes called a cell by exactly the routes whose dots
+      are filled, and its bar is the number of barcodes. It answers which routes agree on
+      each cell and which call cells alone.
+
+      How to read: a tall bar on the full set means all routes agree, and the more
+      barcodes sit there, the more robust the cell calls. Tall bars on single routes mean
+      that route calls many cells the others do not, so inspect its cell QC.
+
+      Lines and annotations: bars are coloured by how many routes share the barcodes
+      (the degree of the intersection). No cut-off is drawn.
+  - id: caller_count_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: n_callers
+    title: Number of routes agreeing
+    description: >-
+      Keeps the barcodes that at least the chosen number of routes call as cells. It
+      answers how the picture changes when only well-supported cells are kept.
+
+      How to read: raise the lower handle to see the consensus cells only.
+  - component: card
+    column: n_callers
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: routes per barcode, with their spread
+    title: Routes agreeing on a barcode
+    description: >-
+      The hero number is the median count of routes that call a barcode a cell, and the
+      box shows the spread. It answers how much the routes agree overall.
+
+      How to read: a median near the number of routes means strong agreement. A low
+      median means most cells are called by one route only.
+  - component: card
+    column: barcode_core
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: uniqueness
+    caption: barcodes called by any route
+    title: Barcodes called as cells
+    description: >-
+      The hero number is the count of barcodes called a cell by at least one route, and
+      the strip shows how many of them are unique. It answers how large the union of
+      cell calls is.
+
+      How to read: a count much larger than a single route's cell count means the routes
+      call different barcodes.
+  - component: table
+    title: Cell calls per barcode
+    description: >-
+      Each row is a barcode with a true or false for every route that called it a cell and
+      the number of routes that did. It answers which routes called a given barcode.
+
+      How to read: filter on the number of routes to list the contested barcodes.
