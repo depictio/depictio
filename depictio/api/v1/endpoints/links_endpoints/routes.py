@@ -29,6 +29,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
 )
+from depictio.api.v1.permissions import get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.links import (
     DCLink,
@@ -48,6 +49,29 @@ from depictio.models.models.users import User
 
 # Define the router
 links_endpoint_router = APIRouter()
+
+
+def _has_project_role(project: dict, current_user: User, required: str) -> bool:
+    """Whether the user holds ``required`` (viewer/editor/owner) on the project.
+
+    Goes through the permissions chokepoint (``depictio.api.v1.permissions``), like
+    the other project routes: role entries are user documents matched by id, a
+    group role counts, a sysadmin passes, and ``is_public`` grants read only.
+    Comparing ``current_user.email`` with ``permissions.owners/editors/viewers``,
+    as these routes once did, never matched a stored entry, so every user who was
+    not a sysadmin was refused.
+    """
+    skip_groups = getattr(current_user, "is_admin", False) or getattr(
+        current_user, "is_anonymous", False
+    )
+    group_ids = [] if skip_groups else get_user_group_ids(current_user.id)
+    return has_permission(project, current_user, required, group_ids)
+
+
+def _require_link_edit(project: dict, current_user: User, action: str) -> None:
+    """403 unless the user may edit the project's links (editor or owner)."""
+    if not _has_project_role(project, current_user, "editor"):
+        raise HTTPException(status_code=403, detail=f"Edit permission required to {action} links")
 
 
 def _get_project_or_404(project_id: str, current_user: User) -> dict:
@@ -72,25 +96,7 @@ def _get_project_or_404(project_id: str, current_user: User) -> dict:
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
-    # Check permissions
-    permissions = project.get("permissions", {})
-    owners = permissions.get("owners", [])
-    editors = permissions.get("editors", [])
-    viewers = permissions.get("viewers", [])
-
-    user_email = current_user.email
-    is_admin = current_user.is_admin
-
-    # Check if user has access
-    has_access = (
-        is_admin
-        or user_email in owners
-        or user_email in editors
-        or user_email in viewers
-        or project.get("is_public", False)
-    )
-
-    if not has_access:
+    if not _has_project_role(project, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Access denied to project")
 
     # Links may still carry template-time ``tag:`` placeholders when the CLI
@@ -524,13 +530,7 @@ async def create_link(
     """
     project = _get_project_or_404(project_id, current_user)
 
-    # Check user has edit permissions
-    permissions = project.get("permissions", {})
-    owners = permissions.get("owners", [])
-    editors = permissions.get("editors", [])
-
-    if not current_user.is_admin and current_user.email not in owners + editors:
-        raise HTTPException(status_code=403, detail="Edit permission required to create links")
+    _require_link_edit(project, current_user, "create")
     assert_project_unlocked(project_id)
 
     # Create new link
@@ -590,13 +590,7 @@ async def update_link(
     """
     project = _get_project_or_404(project_id, current_user)
 
-    # Check edit permissions
-    permissions = project.get("permissions", {})
-    owners = permissions.get("owners", [])
-    editors = permissions.get("editors", [])
-
-    if not current_user.is_admin and current_user.email not in owners + editors:
-        raise HTTPException(status_code=403, detail="Edit permission required to update links")
+    _require_link_edit(project, current_user, "update")
     assert_project_unlocked(project_id)
 
     # Find existing link
@@ -656,13 +650,7 @@ async def delete_link(
     """
     project = _get_project_or_404(project_id, current_user)
 
-    # Check edit permissions
-    permissions = project.get("permissions", {})
-    owners = permissions.get("owners", [])
-    editors = permissions.get("editors", [])
-
-    if not current_user.is_admin and current_user.email not in owners + editors:
-        raise HTTPException(status_code=403, detail="Edit permission required to delete links")
+    _require_link_edit(project, current_user, "delete")
     assert_project_unlocked(project_id)
 
     # Find link to confirm it exists
