@@ -1,0 +1,205 @@
+name: deploy-catalog
+
+# Build the static Tools Catalog site and publish it to its own showcase
+# repository, depictio/depictio-catalog, whose GitHub Pages site serves
+# https://depictio.github.io/depictio-catalog/.
+#
+# It replaces the one-page gallery the documentation used to build and embed:
+# ~65 MB per theme, rebuilt by every docs deploy from `main`, and the same for
+# every docs version. Here the catalog opens on a small index, fetches each
+# output when it is shown, and is published per release:
+#
+#   latest/     the catalog on main, republished when it changes
+#   vX.Y.Z/     one per release tag, the newest CATALOG_KEEP kept (betas
+#               only by workflow_dispatch, and only while newer than every
+#               kept release)
+#   versions.json, index.html (redirect to latest/)
+#
+# The documentation links the directory of the version it documents.
+# Same deploy mechanism as deploy-tool-studio.yaml: this workflow only reads
+# this repository and writes to the showcase repo through a fine-grained PAT.
+on:
+  push:
+    branches: [main]
+    # Stable release tags only: betas come six to a release. A beta can still
+    # be published by hand (workflow_dispatch on its tag).
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+      - '!v*-b*'
+    # What the export reads: the catalog, the payload builders it calls, the
+    # CLI, the viewer and the locked dependencies. Not evaluated for tags.
+    paths:
+      - "depictio/catalog/**"
+      - "depictio/models/components/**"
+      - "depictio/api/v1/services/**"
+      - "depictio/api/v1/celery_tasks*"
+      - "depictio/cli/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "depictio/viewer/src/**"
+      - "depictio/viewer/catalog-site.html"
+      - "depictio/viewer/vite.catalog-site.config.ts"
+      - "depictio/viewer/package.json"
+      - "packages/depictio-react-core/**"
+      - "packages/depictio-components/**"
+      - "packages/plotly-complexheatmap/**"
+      - "packages/plotly-upset/**"
+      - "pnpm-lock.yaml"
+      - "scripts/publish_catalog_site.py"
+      - ".github/workflows/deploy-catalog.yaml"
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Directory to publish: 'latest' (run on main) or a release tag (run on that tag). Empty = from the ref."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# One queue per ref: a newer push to main supersedes a pending one, and a
+# release tag is its own group, so it is never dropped behind main. Runs of
+# different refs can overlap; the publish step serialises them on the remote
+# (--force-with-lease, retried).
+concurrency:
+  group: catalog-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CATALOG_KEEP: 10
+
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # The slot names a directory of the published site, so it is checked
+      # before anything is built: `latest` only from main, a release only from
+      # its own tag, so nothing is ever published under another's name.
+      - name: Pick the slot
+        id: slot
+        env:
+          INPUT_SLOT: ${{ github.event.inputs.slot }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_SLOT}" ]; then
+            SLOT="${INPUT_SLOT}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            SLOT="${GITHUB_REF_NAME}"
+          else
+            SLOT="latest"
+          fi
+          if [ "${SLOT}" = "latest" ]; then
+            [ "${GITHUB_REF}" = "refs/heads/main" ] || {
+              echo "::error::'latest' is published from main only (this run is on ${GITHUB_REF})"; exit 1; }
+          elif [[ "${SLOT}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-b[0-9]+)?$ ]]; then
+            [ "${GITHUB_REF}" = "refs/tags/${SLOT}" ] || {
+              echo "::error::${SLOT} is published from its tag only (this run is on ${GITHUB_REF})"; exit 1; }
+          else
+            echo "::error::not a slot: '${SLOT}' (latest, or a release tag vX.Y.Z[-bN])"; exit 1
+          fi
+          echo "slot=${SLOT}" >> "$GITHUB_OUTPUT"
+          echo "Publishing slot: ${SLOT}"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the catalog site bundle
+        run: pnpm --filter ./depictio/viewer run build:catalog-site
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      # The previews render through server-side builders (celery, multiqc,
+      # plotly-complexheatmap...), which live in the `server` extra. Python is
+      # pinned: pyarrow (pulled in by multiqc) has no wheel for the newest one.
+      # --strict: an output whose previews cannot be built (a builder missing
+      # from the env, a broken recipe) fails the deploy instead of publishing a
+      # card without renders.
+      - name: Export the catalog
+        env:
+          UV_PYTHON: "3.12"
+          SLOT: ${{ steps.slot.outputs.slot }}
+        run: |
+          set -euo pipefail
+          VERSION="$(cat VERSION)"
+          if [ "${SLOT}" = "latest" ]; then
+            VERSION="${VERSION}+${GITHUB_SHA::7}"
+          fi
+          uv run --extra server python -m depictio.cli catalog export-site --strict \
+            --out-dir "$RUNNER_TEMP/catalog-export" --version "$VERSION"
+
+      - name: Publish to depictio/depictio-catalog
+        # CATALOG_SITE_DEPLOY_TOKEN: a fine-grained PAT scoped to
+        # depictio/depictio-catalog ONLY, with Contents: Read and write. When it
+        # is absent the workflow stops here with a clear message instead of
+        # failing on an opaque git 403 (e.g. on a fork).
+        env:
+          DEPLOY_TOKEN: ${{ secrets.CATALOG_SITE_DEPLOY_TOKEN }}
+          SLOT: ${{ steps.slot.outputs.slot }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_TOKEN}" ]; then
+            echo "::warning::CATALOG_SITE_DEPLOY_TOKEN is unset, so the catalog was built but not published."
+            exit 0
+          fi
+          REMOTE="https://x-access-token:${DEPLOY_TOKEN}@github.com/depictio/depictio-catalog.git"
+          SITE="$RUNNER_TEMP/catalog-site"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # The published tree is the history: start from what is live so the
+          # other slots survive. A remote that cannot be read stops the job:
+          # starting from nothing then would publish this slot alone and wipe
+          # every other. Only a repository with no branch yet starts empty.
+          # The push is leased on the commit read, and the whole read-publish-
+          # push is retried when another run got there first.
+          for attempt in 1 2 3 4 5; do
+            HEADS="$(git ls-remote --heads "$REMOTE" main)"
+            rm -rf "$SITE"
+            if [ -n "${HEADS}" ]; then
+              LEASE="main:$(echo "${HEADS}" | cut -f1)"
+              git clone -q --depth 1 --branch main "$REMOTE" "$SITE"
+            else
+              LEASE="main:"
+              mkdir -p "$SITE"
+            fi
+            rm -rf "$SITE/.git"
+
+            python3 scripts/publish_catalog_site.py \
+              --site "$SITE" --export "$RUNNER_TEMP/catalog-export" \
+              --slot "$SLOT" --keep "$CATALOG_KEEP"
+
+            # A single-commit push: the showcase repo is a build output, so
+            # it carries no history worth keeping and stays small over time.
+            git -C "$SITE" init -q -b main
+            git -C "$SITE" add -A
+            git -C "$SITE" commit -q -m "Deploy catalog ${SLOT} from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+            if git -C "$SITE" push -q --force-with-lease="${LEASE}" "$REMOTE" HEAD:refs/heads/main; then
+              break
+            fi
+            if [ "${attempt}" = 5 ]; then
+              echo "::error::the catalog site moved under every attempt; not published"; exit 1
+            fi
+            echo "The catalog site changed while publishing; retrying (${attempt}/5)"
+            sleep $((attempt * 10))
+          done
+          echo "Published https://depictio.github.io/depictio-catalog/${SLOT}/"
+          {
+            echo "## Catalog published"
+            echo ""
+            echo "- **Slot**: ${SLOT}"
+            echo "- **URL**: https://depictio.github.io/depictio-catalog/${SLOT}/"
+          } >> "$GITHUB_STEP_SUMMARY"

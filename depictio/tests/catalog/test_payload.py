@@ -14,9 +14,13 @@ from pydantic import TypeAdapter, ValidationError
 from depictio.catalog.payload import (
     CatalogPayloadError,
     _aggregate,
+    _inject,
     _table_payload,
     advanced_viz_persist_config,
     build_payload,
+    export_site_data,
+    inline_logos,
+    json_safe,
 )
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 from depictio.models.components.advanced_viz.configs import VizConfig
@@ -272,3 +276,93 @@ def test_a_kind_without_a_column_menu_stays_on_its_roles() -> None:
     assert dc_id not in payload["data"]["schemas"]
     bound = {v for k, v in render["config"].items() if k.endswith("_col")}
     assert set(payload["data"]["advancedVizData"][dc_id]["rows"]) == bound
+
+
+def test_the_payload_is_injected_once(tmp_path, monkeypatch) -> None:
+    """A second copy of the sentinel (a comment quoting it) must not get the payload:
+    the template once named it in a comment, and every gallery shipped it twice."""
+    template = tmp_path / "catalog-preview.html"
+    template.write_text(
+        "<!-- replaces __CATALOG_PAYLOAD__ -->"
+        '<script id="catalog-payload" type="application/json">__CATALOG_PAYLOAD__</script>'
+    )
+    monkeypatch.setattr("depictio.catalog.payload.TEMPLATE_PATH", template)
+
+    html = _inject({"marker": "only-once"})
+
+    assert html.count("only-once") == 1
+
+
+def _flagship_entry():
+    return next(e for e in load_catalog_entries() if any(o.id == FLAGSHIP for o in e.outputs))
+
+
+def test_the_site_index_lists_every_output_without_its_data(tmp_path) -> None:
+    import json
+
+    entry = _flagship_entry()
+    stats = export_site_data([entry], tmp_path, "9.9.9")
+
+    index = json.loads((tmp_path / "index.json").read_text())
+    assert index["version"] == "9.9.9"
+    assert index["initialOutputId"] is None
+    [tool] = index["tools"]
+    assert tool["id"] == entry.id
+    assert [o["output"]["id"] for o in tool["outputs"]] == [o.id for o in entry.outputs]
+    assert all(o["fixturePreview"] is None for o in tool["outputs"])
+    assert not index["data"]["figures"] and not index["data"]["tables"]
+    assert stats["tools"] == 1
+    assert stats["outputs"] == len(entry.outputs)
+
+
+def test_each_site_output_file_holds_what_the_gallery_embeds(tmp_path) -> None:
+    """Same fixture and data as the one-page gallery: only the download moves."""
+    import json
+
+    entry = _flagship_entry()
+    export_site_data([entry], tmp_path, "dev")
+
+    expected = json_safe(build_payload(_get_output(FLAGSHIP), "light", entry))
+    written = json.loads((tmp_path / "outputs" / f"{FLAGSHIP}.json").read_text())
+    roundtrip = json.loads(json.dumps(expected, default=str))
+    assert written["fixturePreview"] == roundtrip["fixturePreview"]
+    assert written["data"] == roundtrip["data"]
+    # Browser JSON.parse rejects NaN / Infinity tokens.
+    text = (tmp_path / "outputs" / f"{FLAGSHIP}.json").read_text()
+    assert "NaN" not in text and "Infinity" not in text
+
+
+def test_an_output_without_a_preview_is_listed_but_gets_no_file(tmp_path, monkeypatch) -> None:
+    import json
+
+    def broken(output, tool, theme):
+        return {
+            "output": {"id": output.id},
+            "fixturePreview": None,
+            "renders": [],
+            "ok": False,
+            "error": "boom",
+        }, {}
+
+    monkeypatch.setattr("depictio.catalog.payload._output_entry", broken)
+    entry = _flagship_entry()
+    stats = export_site_data([entry], tmp_path, "dev")
+
+    index = json.loads((tmp_path / "index.json").read_text())
+    assert all(o["ok"] is False for o in index["tools"][0]["outputs"])
+    assert stats["failed"] == len(entry.outputs)
+    assert not list((tmp_path / "outputs").iterdir())
+
+
+def test_a_reused_output_id_stops_the_site_export(tmp_path) -> None:
+    entry = _flagship_entry()
+    with pytest.raises(CatalogPayloadError, match="more than one tool"):
+        export_site_data([entry, entry], tmp_path, "dev")
+
+
+def test_multiqc_logo_paths_become_data_uris() -> None:
+    """A static page has no /dashboard/logos/ to serve them from."""
+    text = 'src="/dashboard/logos/multiqc_icon_dark.svg" b="/dashboard-beta/logos/multiqc_icon_white.svg"'
+    out = inline_logos(text)
+    assert "/dashboard" not in out
+    assert out.count("data:image/svg+xml;base64,") == 2
