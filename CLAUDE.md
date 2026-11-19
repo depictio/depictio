@@ -332,3 +332,17 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   `DEPICTIO_S3_*` (`settings.s3`); legacy `DEPICTIO_MINIO_*` / `settings.minio` still accepted.
   Helm values key `s3:` (legacy `minio:` merged in); k8s object names keep `-minio`
 - API endpoints at `/depictio/api/v1/`
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `depictio/depictio`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` and `docs/adr/`, both created on demand. See `docs/agents/domain.md`.

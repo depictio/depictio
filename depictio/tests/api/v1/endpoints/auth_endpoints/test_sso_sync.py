@@ -883,3 +883,70 @@ class TestProvisionLogin:
         mock.assert_awaited_once_with(
             user.id, provider="keycloak", url="https://idp.example.org/a.png"
         )
+
+
+# ------------------------------------------------------
+# EMBL Keycloak realm: the claim shape a real login carries
+# ------------------------------------------------------
+
+
+def _embl_provider() -> OIDCProviderConfig:
+    """The mapping used for the EMBL realm (login is preferred_username, not username)."""
+    return make_provider(
+        id="embl",
+        claims={
+            "email": "email",
+            "login": "preferred_username",
+            "display_name": "name",
+            "groups": "EMBLSAPOrgUnitName",
+        },
+    )
+
+
+def _embl_claims(unit: str, **extra: Any) -> dict[str, Any]:
+    """An id_token as the realm sends it: the org unit is one plain string, not a list."""
+    return {
+        "sub": "f0e1d2c3",
+        "preferred_username": "jdoe",
+        "name": "Jane Doe",
+        "given_name": "Jane",
+        "family_name": "Doe",
+        "email": "jane.doe@example.org",
+        "email_verified": True,
+        "EMBLSAPOrgUnitName": unit,
+        **extra,
+    }
+
+
+class TestEmblRealmClaims:
+    @pytest.mark.asyncio
+    @beanie_setup(models=MODELS)
+    async def test_first_login_creates_the_account_and_one_sso_group(self):
+        user, created = await provision_sso_login(
+            _embl_provider(), _embl_claims("Example Unit Team")
+        )
+
+        assert created is True
+        assert (user.login, user.display_name) == ("jdoe", "Jane Doe")
+        group = await GroupBeanie.find_one({"name": "Example Unit Team"})
+        assert group is not None
+        assert group.sso_managed is True
+        assert _member_ids(group) == {str(user.id)}
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=MODELS)
+    async def test_a_new_org_unit_moves_the_user_but_keeps_manual_groups(self):
+        provider = _embl_provider()
+        user, _ = await provision_sso_login(provider, _embl_claims("Example Unit Team"))
+        manual = GroupBeanie(name="Hand Picked", sso_managed=False, users_ids=[user.id])
+        await manual.save()
+
+        await provision_sso_login(provider, _embl_claims("Other Unit Team"))
+
+        old = await GroupBeanie.find_one({"name": "Example Unit Team"})
+        new = await GroupBeanie.find_one({"name": "Other Unit Team"})
+        kept = await GroupBeanie.find_one({"name": "Hand Picked"})
+        assert old is not None and new is not None and kept is not None
+        assert _member_ids(old) == set()
+        assert _member_ids(new) == {str(user.id)}
+        assert _member_ids(kept) == {str(user.id)}
