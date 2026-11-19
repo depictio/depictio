@@ -38,7 +38,7 @@ from .components import (
     static_figures,
     use_document_renderer,
 )
-from .funnel import funnel_rest, funnel_stage
+from .funnel import funnel_figure, funnel_rest, funnel_stage
 from .native import use_native
 from .text import fill_text
 from .theme import use_theme
@@ -48,6 +48,7 @@ __all__ = [
     "DepictioClientError",
     "DepictioComponent",
     "fill_text",
+    "funnel_figure",
     "funnel_rest",
     "html_text",
     "funnel_stage",

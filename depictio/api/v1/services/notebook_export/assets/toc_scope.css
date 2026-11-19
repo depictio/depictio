@@ -1,0 +1,3 @@
+
+#TOC li.dpx-toc-current > a { color: var(--gl-fg, #212529); font-weight: 600; }
+@media print { #quarto-margin-sidebar, #TOC { display: none !important; } }

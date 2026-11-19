@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from depictio.notebook.qmd_safe import defuse, meta_text
+
 
 @dataclass
 class QuartoFrontMatter:
@@ -58,11 +60,13 @@ class QuartoFrontMatter:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_yaml(self) -> str:
-        doc: dict[str, Any] = {"title": self.title}
+        # Pandoc reads these as markdown, and Quarto expands what they hold
+        # (an inline expression, a shortcode): text, inert (``meta_text``).
+        doc: dict[str, Any] = {"title": meta_text(self.title)}
         if self.subtitle:
-            doc["subtitle"] = self.subtitle
+            doc["subtitle"] = meta_text(self.subtitle)
         if self.author:
-            doc["author"] = self.author
+            doc["author"] = meta_text(self.author)
         if self.date:
             doc["date"] = self.date
         doc["format"] = {
@@ -128,7 +132,10 @@ class QuartoFrontMatter:
         doc["jupyter"] = "python3"
         doc["execute"] = {"warning": False, "echo": self.echo}
         doc.update(self.extra)
-        return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).strip()
+        # The net under every value above (``cells.render_cell`` for the body).
+        return defuse(
+            yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).strip(), allow_raw=True
+        )
 
 
 # Mantine's gray 9 and 6 (the ink and the dimmed text of Paper), and Paper's

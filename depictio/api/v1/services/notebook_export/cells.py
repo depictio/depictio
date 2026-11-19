@@ -17,11 +17,17 @@ import ast
 import re
 from dataclasses import dataclass
 
+from depictio.notebook.qmd_safe import defuse, defuse_code
+
 
 @dataclass
 class Cell:
     body: str
     kind: str = "code"  # "code" | "md"
+    # A code-mode figure's own Python, written by the dashboard's author: it
+    # is the reader's to run (the downloaded document), never the server's,
+    # and it is emitted as written.
+    authored: bool = False
 
     def __post_init__(self) -> None:
         if self.kind == "code":
@@ -44,10 +50,20 @@ def _fence(body: str) -> str:
 
 
 def render_cell(cell: Cell) -> str:
+    """The cell as document text, with no Quarto construct it did not mean.
+
+    Every site that writes dynamic text escapes it (``depictio.notebook.qmd_safe``);
+    this is the net under all of them. Markdown keeps only the raw blocks the
+    generator writes (```` ```{=typst} ````); generated Python keeps its
+    meaning, with no shortcode in its source and no stray line terminator.
+    """
     if cell.kind == "md":
-        return cell.body
-    fence = _fence(cell.body)
-    return f"{fence}{{python}}\n{cell.body.rstrip()}\n{fence}"
+        return defuse(cell.body, allow_raw=True)
+    body = cell.body if cell.authored else defuse_code(cell.body)
+    if body != cell.body:
+        ast.parse(body)
+    fence = _fence(body)
+    return f"{fence}{{python}}\n{body.rstrip()}\n{fence}"
 
 
 def render_qmd(cells: list[Cell], *, front_matter: str) -> str:

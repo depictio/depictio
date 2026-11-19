@@ -174,3 +174,180 @@ def test_as_lines_produces_an_assignment():
     src = emit_predicate("MultiSelect", "s", ["a"], pl.String)
     assert src is not None
     assert src.as_lines("stage_1") == ["stage_1 = stage_1.filter(pl.col('s').is_in(['a']))"]
+
+
+# ---------------------------------------------------------------------------
+# What process_metadata_and_filter does around add_filter: the run column keeps
+# rows with no run, a genome region compares chromosome names loosely.
+# ---------------------------------------------------------------------------
+
+RUNS = pl.DataFrame(
+    {
+        "depictio_run_id": ["run-a", "run-b", None],
+        "chrom": ["1", "chr2", "MT"],
+        "v": [1, 2, 3],
+    }
+)
+
+
+def _server_entry(entry: dict, frame: pl.DataFrame) -> pl.DataFrame:
+    from depictio.api.v1.deltatables_utils import process_metadata_and_filter
+
+    exprs = process_metadata_and_filter([entry], dict(frame.schema))
+    for expr in exprs:
+        frame = frame.filter(expr)
+    return frame
+
+
+def _notebook_entry(entry: dict, frame: pl.DataFrame) -> pl.DataFrame:
+    src = emit_predicate(
+        entry["interactive_component_type"],
+        entry["column_name"],
+        entry["value"],
+        frame.schema.get(entry["column_name"]),
+        source=entry.get("source"),
+    )
+    return frame if src is None else frame.filter(_eval(src))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        # One run selected: the run's rows and the run-less (aggregated) ones.
+        {
+            "interactive_component_type": "MultiSelect",
+            "column_name": "depictio_run_id",
+            "value": ["run-a"],
+        },
+        {
+            "interactive_component_type": "Select",
+            "column_name": "depictio_run_id",
+            "value": "run-b",
+        },
+        # chr1 from an assembly, "1" in the table; M and MT are one.
+        {
+            "interactive_component_type": "MultiSelect",
+            "column_name": "chrom",
+            "value": ["chr1", "chrM"],
+            "source": "genome_selection",
+        },
+        {
+            "interactive_component_type": "Select",
+            "column_name": "chrom",
+            "value": "2",
+            "source": "genome_selection",
+        },
+        # Without the region's source the names are compared as written.
+        {"interactive_component_type": "MultiSelect", "column_name": "chrom", "value": ["chr1"]},
+    ],
+)
+def test_the_run_column_and_region_names_match_the_server(entry):
+    want = _server_entry(entry, RUNS)
+    got = _notebook_entry(entry, RUNS)
+    assert got.equals(want), f"\n got {got}\n want {want}"
+    assert got.height > 0 or entry.get("source") is None
+
+
+def test_the_chromosome_spellings_are_the_server_s():
+    from depictio.api.v1.services.jbrowse.regions import canonical_chrom, chrom_name_variants
+    from depictio.notebook import predicates as nb
+
+    for value in (["1"], ["chr1"], ["chrM", "MT"], "X", ["Chr2", None]):
+        assert nb.chrom_name_variants(value) == chrom_name_variants(value)
+    for name in ("chr1", "CHRX", "M", " MT "):
+        assert nb.canonical_chrom(name) == canonical_chrom(name)
+
+
+def test_cards_read_the_frame_without_the_region_as_the_server_scopes_them():
+    """``scope_region_filters`` keeps a region off cards and off figures that
+    draw none of its columns; tables and a figure on the position keep it."""
+    from depictio.api.v1.services.notebook_export.generator import (
+        DCPlan,
+        ExportPlan,
+        StagePlan,
+        generate_qmd,
+    )
+    from depictio.models.models.analysis_state import AnalysisState
+
+    dc_id, dashboard = "6a" * 12, "6b" * 12
+    region = [
+        {
+            "index": "region-chrom",
+            "column_name": "chrom",
+            "interactive_component_type": "MultiSelect",
+            "value": ["chr1"],
+            "source": "genome_selection",
+            "metadata": {"dc_id": dc_id, "column_name": "chrom"},
+        },
+        {
+            "index": "region-pos",
+            "column_name": "pos",
+            "interactive_component_type": "RangeSlider",
+            "value": [1, 100],
+            "source": "genome_selection",
+            "metadata": {"dc_id": dc_id, "column_name": "pos"},
+        },
+    ]
+    tab = {
+        "dashboard_id": dashboard,
+        "title": "Calls",
+        "stored_metadata": [
+            {
+                "index": "card-1",
+                "component_type": "card",
+                "title": "Calls",
+                "aggregation": "count",
+                "column_name": "pos",
+                "dc_id": dc_id,
+            },
+            {
+                "index": "card-2",
+                "component_type": "card",
+                "title": "In view",
+                "aggregation": "count",
+                "column_name": "pos",
+                "dc_id": dc_id,
+                "follow_region_filter": True,
+            },
+            {"index": "tbl-1", "component_type": "table", "title": "Rows", "dc_id": dc_id},
+        ],
+    }
+    state = AnalysisState.model_validate(
+        {"filters": region, "context": {"dashboard_id": dashboard}}
+    )
+    stages = [
+        StagePlan(
+            index=f["index"],
+            label=f["column_name"],
+            column=f["column_name"],
+            interactive_component_type=f["interactive_component_type"],
+            value=f["value"],
+            source_dc_id=dc_id,
+            per_dc={dc_id: [{k: v for k, v in f.items() if k != "metadata"}]},
+        )
+        for f in region
+    ]
+    plan = ExportPlan(
+        tabs=[tab],
+        project=None,
+        state=state,
+        dcs=[DCPlan(dc_id=dc_id, tag="calls", dtypes={"chrom": pl.String, "pos": pl.Int64})],
+        stages=stages,
+        title="x",
+    )
+    src = generate_qmd(plan)
+    assert "unregioned_calls = df_calls" in src and "region=False" in src
+    assert "card_calls = unregioned_calls.select(" in src
+    assert "card_in_view = final_calls.select(" in src
+    assert "table_rows = final_calls" in src
+
+    # And the frames agree with the server when the document runs.
+    from depictio.notebook.funnel import funnel_rest, funnel_stage
+
+    frame = pl.DataFrame({"chrom": ["1", "1", "2"], "pos": [5, 500, 5]})
+    payload = state.model_dump(mode="json", exclude_none=True)
+    full = funnel_rest(frame, payload, 0, dc_id=dc_id)
+    assert full.height == 1  # "chr1" matched "1", then the window
+    unregioned = funnel_stage(frame, payload, 1, dc_id=dc_id, region=False)
+    unregioned = funnel_stage(unregioned, payload, 2, dc_id=dc_id, region=False)
+    assert unregioned.height == 3

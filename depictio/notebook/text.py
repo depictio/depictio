@@ -16,6 +16,8 @@ import math
 import re
 from typing import Any
 
+from depictio.notebook.qmd_safe import esc
+
 # textValues.ts's PLACEHOLDER: `{{name}}` (what `values:` allows), `{{param:KEY}}`
 # and `{{legend:column}}` (a colour key, which the export resolves at export time).
 PLACEHOLDER = re.compile(
@@ -135,8 +137,13 @@ def fill_text(
         key = m.group(1)
         if key.startswith("legend:"):
             return legends.get(key, "")
-        return format_text_value(
-            values.get(key), None if key.startswith("param:") else formats.get(key)
+        # A value is data (a run parameter, a column's top category): it is
+        # printed as markdown Quarto reads again, so as text, inert.
+        return esc(
+            format_text_value(
+                values.get(key), None if key.startswith("param:") else formats.get(key)
+            ),
+            quote=False,
         )
 
     return PLACEHOLDER.sub(sub, template)

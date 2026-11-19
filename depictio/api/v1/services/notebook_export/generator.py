@@ -12,7 +12,6 @@ import pprint
 import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from html import escape as _esc
 from typing import Any
 
 import polars as pl
@@ -25,21 +24,24 @@ from depictio.models.models.analysis_state import (
     NotebookPreflightStage,
 )
 from depictio.notebook.components import readable_name
+from depictio.notebook.qmd_safe import comment as _qmd_comment
+from depictio.notebook.qmd_safe import defuse, defuse_code, one_line
+from depictio.notebook.qmd_safe import esc as _esc
+from depictio.notebook.qmd_safe import typst_str as _typst_str
 from depictio.notebook.report_runtime import (
     filters_placeholder,
     tile_close,
     tile_open,
     tile_ref,
 )
-from depictio.notebook.theme import resolve_primary, sans_stack
+from depictio.notebook.theme import palette_hex, resolve_primary, sans_stack
 
 from .aggregations import agg_expr_source
 from .cells import Cell, md_cell, render_qmd
-from .classify import Classification, classify
+from .classify import API_REASON, Classification, classify
 from .names import NameAllocator, slug
 from .pdf_typst import TYPST_TILE_DONE, typst_preamble
-from .pdf_typst import tstr as _typst_str
-from .predicates import PredicateSource, emit_filter_expr, emit_predicate
+from .predicates import PredicateSource, emit_filter_expr, emit_predicate, is_region_filter
 from .provenance import (
     EXPORT_DETAILS_ICON,
     PARAMS_ANCHOR,
@@ -78,32 +80,11 @@ from .report_chrome import (
     title_logo_css,
 )
 from .report_theme import BRAND_DEFAULTS, CHROME_CSS, CHROME_JS, brand_rules
+from .resources import script, style
 
 # What a highlight can show (``highlightTile.ts``: ``HIGHLIGHTABLE_TYPES``).
 _HIGHLIGHTABLE = frozenset({"figure", "advanced_viz"})
 
-# Shade 6 of ``@mantine/core``'s own ``DEFAULT_COLORS`` — the shade every
-# icon/accent use in the live app resolves a bare palette name to. The server
-# has no Mantine theme to ask, so a section's or tab's ``color`` (``"teal"``,
-# picked from the same palette the editor's colour picker offers) is resolved
-# against this fixed copy instead of hand-waving a different blue everywhere.
-_MANTINE_SHADE_6 = {
-    "dark": "#2e2e2e",
-    "gray": "#868e96",
-    "red": "#fa5252",
-    "pink": "#e64980",
-    "grape": "#be4bdb",
-    "violet": "#7950f2",
-    "indigo": "#4c6ef5",
-    "blue": "#228be6",
-    "cyan": "#15aabf",
-    "teal": "#12b886",
-    "green": "#40c057",
-    "lime": "#82c91e",
-    "yellow": "#fab005",
-    "orange": "#fd7e14",
-}
-_CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()")
 # SectionAccordion's TAB_LINK: a markdown link whose target is another tab.
 # A target may hold one level of parentheses: `tab:Environment (CTD)`.
 _TARGET = r"((?:[^()\n]|\([^()\n]*\))+)"
@@ -157,605 +138,13 @@ _MAX_INLINE_VALUES = 2
 _MAX_LABEL_CHARS = 28
 _RANGE_TYPES = frozenset({"RangeSlider", "DateRangePicker", "DatePicker", "Timeline"})
 
-# ``FunnelView.tsx``'s marker palette, in order, as Mantine resolves it.
-_FUNNEL_PALETTE = (
-    "#12b886",  # teal 6
-    "#228be6",  # blue 6
-    "#7950f2",  # violet 6
-    "#fd7e14",  # orange 6
-    "#e64980",  # pink 6
-    "#15aabf",  # cyan 6
-    "#be4bdb",  # grape 6
-    "#74b816",  # lime 7
-)
-
 # The chrome the three formats cannot get from Depictio's own stylesheets: the
 # section rail, and the fold the live dashboard gets from Mantine's accordion.
 # Inline rather than a linked asset, like every other asset in these exports —
 # the file has to still work months later, off the network that served it — and
 # strictly additive: without the script the headings, the colours, the icons and
 # every number are all still there, they just do not fold.
-NOTEBOOK_CHROME = """<style>
-/* The app's own type and colour, so an export reads as the same product as
-   the dashboard it came from. These are the values `buildDepictioTheme`
-   passes to Mantine (`brandTheme.ts`) and the Mantine 7 defaults it leaves
-   alone: the system sans stack, `defaultRadius: md` (8px), gray-4 borders,
-   gray-6 for dimmed text, and body text at line-height 1.55. Scoped to the
-   document body rather than `*`, so the host's own chrome keeps its look. */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
-  line-height: 1.55;
-  color: #000;
-}
-body code, body pre, body kbd, body samp {
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-}
-/* Mantine's heading scale (h1 2.125rem … h4 1.125rem), all at weight 700. */
-body h1 { font-size: 2.125rem; line-height: 1.3; font-weight: 700; }
-body h2 { font-size: 1.625rem; line-height: 1.35; font-weight: 700; }
-body h3 { font-size: 1.375rem; line-height: 1.4; font-weight: 700; }
-body h4 { font-size: 1.125rem; line-height: 1.45; font-weight: 700; }
-body h5 { font-size: 1rem; line-height: 1.5; font-weight: 700; }
-body h6 { font-size: .875rem; line-height: 1.5; font-weight: 700; }
-/* `Code`/`Table` as Mantine draws them: a tinted block on gray-0, rows split
-   by a gray-4 rule and nothing between the columns. */
-body :not(pre) > code { background: #f8f9fa; border-radius: .25rem; padding: .1em .35em; }
-body pre { background: #f8f9fa; border-radius: .5rem; }
-body table:not(.dpx-plain) { border-collapse: collapse; }
-body table:not(.dpx-plain) th { border-bottom: 1px solid #ced4da; }
-body table:not(.dpx-plain) td { border-bottom: 1px solid #f1f3f5; }
-.dpx-h { cursor: pointer; }
-.dpx-hc { color: var(--dpx-hc); }
-.dpx-chev {
-  display: inline-block; width: .8em; font-size: .65em; opacity: .45;
-  margin-inline-end: .28em; transition: transform .15s ease;
-}
-.dpx-folded > .dpx-chev, .dpx-folded > a > .dpx-chev { transform: rotate(-90deg); }
-#TOC .dpx-chev { cursor: pointer; }
-/* A branch with nothing under it keeps the slot, so titles stay aligned. */
-#TOC .dpx-gap { visibility: hidden; cursor: default; }
-/* Fold the whole report at once. It rides on the results heading rather than
-   floating over the page: that is the one heading every tab hangs off, so the
-   control sits where the thing it collapses begins. */
-.dpx-all {
-  margin-inline-start: auto; font: inherit; font-size: .6em; font-weight: 500;
-  color: #868e96; background: none; border: 1px solid currentColor;
-  border-radius: 999px; padding: .3em 1em; cursor: pointer; opacity: .7;
-  white-space: nowrap;
-}
-.dpx-all:hover { opacity: 1; }
-/* A tab's own fold control sits on its heading, smaller than the report's. */
-.dpx-tab-all { font-size: .5em; }
-/* A heading's aside ("2 active"): quiet, and not repeated in the contents. */
-.dpx-h-note {
-  font-size: .62em; font-weight: 500; color: #868e96; margin-inline-start: .6em;
-  white-space: nowrap;
-}
-#TOC .dpx-h-note, nav[role="doc-toc"] .dpx-h-note { display: none; }
-/* Icon and title on one optical line. The glyph is sized in `em`, so it
-   follows the heading's size, but an inline box hangs it off the baseline
-   and it reads as sitting too low next to large text. Laying the heading out
-   as a flex row centres the icon against the text instead; the same applies
-   to the copies Quarto puts in the table of contents. Browsers without
-   `:has()` fall back to the baseline shift the span carries itself. */
-h1:has(> span[data-dpx-accent]), h2:has(> span[data-dpx-accent]),
-h3:has(> span[data-dpx-accent]), h4:has(> span[data-dpx-accent]),
-h5:has(> span[data-dpx-accent]), h6:has(> span[data-dpx-accent]),
-a:has(> span[data-dpx-accent]) { display: flex; align-items: center; }
-[data-dpx-accent] svg { display: block; }
-/* The section accordion's accent rail (`sectionAccordion.css`): 3px of the
-   section's own colour, falling back to the default border like the app's
-   `--section-accent` does, with the body indented by one Mantine `md`. */
-.dpx-body {
-  border-inline-start: 3px solid var(--dpx-accent, #ced4da);
-  padding-inline-start: 16px; margin: .3rem 0 1.4rem 3px;
-}
-.dpx-body > .dpx-body { margin-bottom: .8rem; }
-/* A card is built to stand on its own — inline-block, with a minimum width
-   that keeps its number readable. In a row it is a grid cell instead, and
-   has to give that width up or three cards will not share one line. */
-.dpx-cards > div {
-  display: block !important; width: 100% !important;
-  min-width: 0 !important; margin: 0 !important; box-sizing: border-box;
-}
-/* The chrome the host renderer draws around the report — Quarto's contents
-   sidebar, its links, its code toggle — carrying the instance's own primary
-   colour and Mantine's proportions, so the page around the dashboard reads as
-   the same product as the dashboard. Selectors the other two renderers do not
-   have simply match nothing there. */
-body a { color: var(--dpx-primary, #228be6); }
-nav[role="doc-toc"], #quarto-margin-sidebar { font-size: .8125rem; }
-nav[role="doc-toc"] > h2, #toc-title {
-  font-size: .75rem; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .04em; color: #868e96;
-}
-nav[role="doc-toc"] a { color: #495057; }
-nav[role="doc-toc"] a:hover { color: var(--dpx-primary, #228be6); }
-nav[role="doc-toc"] a.active {
-  color: var(--dpx-primary, #228be6); font-weight: 600;
-  border-inline-start-color: var(--dpx-primary, #228be6);
-}
-/* Quarto's "Code" toggle as a Mantine `variant="default"` button. */
-#quarto-code-tools-source .btn, .code-tools-button {
-  border: 1px solid #ced4da; border-radius: .5rem; color: #495057;
-  background: #fff; font-size: .8125rem; font-weight: 500;
-}
-#quarto-code-tools-source .btn:hover, .code-tools-button:hover { background: #f8f9fa; }
-/* Plotly draws its dropdown in SVG, and the one thing it will not take from
-   the figure's own options is a corner radius — but the rects it draws take
-   one from CSS. The rest (font, padding, colours) is set on the figure, where
-   Plotly can measure the text it is sizing the box around. This is the
-   fallback the script below replaces; it shows only until then. */
-.updatemenu-item-rect { rx: 8px; ry: 8px; stroke: #ced4da; }
-.updatemenu-header-arrow { fill: #868e96; }
-.updatemenu-dropdown-button-group .updatemenu-item-rect { rx: 6px; ry: 6px; stroke: none; }
-/* The same control as an HTML select, in the document's own flow: a Plotly
-   menu is placed in paper coordinates, so on a figure with a wide label
-   gutter it can only ever float above the middle of the plot. */
-.dpx-controls {
-  display: flex; align-items: center; gap: .5rem;
-  margin: 0 0 .5rem; font-size: .8125rem;
-}
-.dpx-controls > span { color: #868e96; font-weight: 500; }
-.dpx-select-wrap { position: relative; display: inline-flex; align-items: center; }
-.dpx-select-wrap::after {
-  content: '▾'; position: absolute; right: .7em;
-  color: #868e96; font-size: .8em; pointer-events: none;
-}
-.dpx-select {
-  font: inherit; color: #495057; line-height: 1.55;
-  background-color: #fff; border: 1px solid #ced4da; border-radius: .5rem;
-  padding: .3em 2em .3em .7em; cursor: pointer; appearance: none;
-}
-.dpx-select:hover { background-color: #f8f9fa; }
-.dpx-select:focus {
-  outline: none; border-color: var(--dpx-primary, #228be6);
-}
-/* The tile's full-screen control, as the app draws it: a subtle square button
-   that only appears on hover, so a report at rest is a report and not a row of
-   affordances. */
-.dpx-zoomable { position: relative; }
-.dpx-zoom {
-  position: absolute; top: 4px; right: 4px; z-index: 3;
-  font: inherit; font-size: .8rem; line-height: 1;
-  color: #868e96; background: #fff; border: 1px solid #ced4da;
-  border-radius: .5rem; padding: .3em .5em; cursor: pointer;
-  opacity: 0; transition: opacity .15s ease;
-}
-.dpx-zoomable:hover > .dpx-zoom, .dpx-zoom:focus { opacity: 1; }
-.dpx-zoom:hover { background: #f8f9fa; color: #495057; }
-.dpx-full {
-  position: fixed !important; inset: 0 !important; z-index: 9999 !important;
-  margin: 0 !important; padding: 2.75rem 1.25rem 1.25rem !important;
-  background: #fff; overflow: auto; box-sizing: border-box;
-}
-.dpx-full > .dpx-zoom { opacity: 1; top: 10px; right: 14px; }
-/* A table full screen should scroll on its own, with its header in view. */
-.dpx-full table { width: 100%; }
-.dpx-full thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
-</style>
-<script>
-(function () {
-  var SEL = 'h1,h2,h3,h4,h5,h6';
-  function levelOf(el) { return parseInt(el.tagName.charAt(1), 10); }
-  function headingIn(el) { return el.matches(SEL) ? el : el.querySelector(SEL); }
-  // What a heading introduces. Quarto wraps each heading and its content in a
-  // <section>, so there the body is simply the rest of that wrapper; a heading
-  // that is not the first child of one (raw HTML, a heading inside a tile)
-  // walks forward to the next heading of the same or higher rank.
-  function bodyOf(h) {
-    var out = [], p = h.parentElement, n;
-    if (p && p.tagName === 'SECTION' && p.firstElementChild === h) {
-      for (n = h.nextElementSibling; n; n = n.nextElementSibling) out.push(n);
-      return out;
-    }
-    var block = h, stop = ['BODY', 'MAIN', 'ARTICLE', 'SECTION'];
-    while (block.parentElement &&
-           block.parentElement.childElementCount === 1 &&
-           block.parentElement.firstElementChild === block &&
-           stop.indexOf(block.parentElement.tagName) < 0) {
-      block = block.parentElement;
-    }
-    var lvl = levelOf(h);
-    for (n = block.nextElementSibling; n; n = n.nextElementSibling) {
-      var inner = headingIn(n);
-      if (inner && levelOf(inner) <= lvl) break;
-      out.push(n);
-    }
-    return out;
-  }
-  // Folded content is still in the page, only hidden: what it holds was drawn
-  // (or will be) at a size it could not measure. Every unfold re-fits the
-  // figures it reveals and tells anything else listening (the report runtime,
-  // Plotly's own responsive handler) that the layout changed.
-  function setFold(h, body, folded) {
-    h.classList.toggle('dpx-folded', folded);
-    body.style.display = folded ? 'none' : '';
-  }
-  function reveal(body) {
-    controls();
-    refit();
-    try {
-      window.dispatchEvent(new Event('resize'));
-      document.dispatchEvent(new CustomEvent('dpx:reveal', { detail: body }));
-    } catch (e) { /* an old browser keeps the static fit */ }
-  }
-  function fold(h, body, closed) {
-    h.classList.add('dpx-h');
-    var chev = document.createElement('span');
-    chev.className = 'dpx-chev';
-    chev.textContent = '▾';
-    h.insertBefore(chev, h.firstChild);
-    h.addEventListener('click', function (ev) {
-      if (ev.target.closest('a, button')) return;
-      var folded = !h.classList.contains('dpx-folded');
-      setFold(h, body, folded);
-      if (!folded) reveal(body);
-      syncTabButtons();
-    });
-    // The export's default for this heading: a tab after the first, a
-    // section the dashboard opens folded, the filters.
-    if (closed) setFold(h, body, true);
-  }
-  // These documents embed every figure, so the browser is still parsing the
-  // page long after the script first runs: a heading enhanced early would keep
-  // only the part of its body that existed then, and the sections parsed after
-  // it would sit outside its rail. Each pass re-checks what has since arrived.
-  var pairs = [];
-  function absorb(h, body) {
-    var lvl = levelOf(h), n = body.nextElementSibling, next;
-    while (n) {
-      var inner = headingIn(n);
-      if (inner && levelOf(inner) <= lvl) break;
-      next = n.nextElementSibling;
-      body.appendChild(n);
-      n = next;
-    }
-  }
-  function enhance() {
-    var marks = document.querySelectorAll('span[data-dpx-accent]:not([data-dpx-seen])');
-    for (var i = 0; i < marks.length; i++) {
-      var mark = marks[i];
-      mark.setAttribute('data-dpx-seen', '1');
-      var h = mark.closest(SEL);
-      if (!h) continue;
-      var nodes = bodyOf(h);
-      if (!nodes.length) continue;
-      var body = document.createElement('div');
-      body.className = 'dpx-body';
-      var accent = mark.getAttribute('data-dpx-accent');
-      var kind = mark.getAttribute('data-dpx-kind') || '';
-      if (accent) body.style.setProperty('--dpx-accent', accent);
-      body.setAttribute('data-dpx-kind', kind);
-      // The heading's own wrapper (Quarto's <section>) carries the kind and
-      // the accent too: a theme that frames a whole section, heading
-      // included, styles that element.
-      if (h.parentElement && h.parentElement.tagName === 'SECTION') {
-        h.parentElement.setAttribute('data-dpx-kind', kind);
-        if (accent) h.parentElement.style.setProperty('--dpx-accent', accent);
-      }
-      nodes[0].parentNode.insertBefore(body, nodes[0]);
-      for (var j = 0; j < nodes.length; j++) body.appendChild(nodes[j]);
-      fold(h, body, mark.getAttribute('data-dpx-fold') === 'closed');
-      pairs.push([h, body]);
-    }
-    for (var k = 0; k < pairs.length; k++) absorb(pairs[k][0], pairs[k][1]);
-    tabButtons();
-    if (!hashDone && location.hash) {
-      hashDone = true;
-      openHash(location.hash);
-    }
-    collapseAll();
-    tocFold();
-    controls();
-    zoomable();
-    refit();
-  }
-  // A figure's own dropdown, lifted out of the figure. Plotly places a menu in
-  // paper coordinates — there is no container-relative reference for one — so
-  // on a figure whose labels need a wide left gutter the menu lands above the
-  // middle of the plot, attached to nothing. As an HTML select it sits in the
-  // flow above the figure, flush with everything else on the page, and looks
-  // like the app's own controls rather than drawn text. The figure keeps its
-  // menu as the thing this replaces: until this runs, it is what works.
-  function controls() {
-    if (!window.Plotly) return;
-    var plots = document.querySelectorAll('.js-plotly-plot');
-    for (var i = 0; i < plots.length; i++) {
-      var gd = plots[i];
-      var menu = gd.layout && gd.layout.updatemenus && gd.layout.updatemenus[0];
-      if (!menu || !menu.buttons || !menu.buttons.length) continue;
-      // A folded figure has no size yet, and hiding a menu re-computes the
-      // margins around it: leave it for the pass that runs when it comes back.
-      if (gd.getAttribute('data-dpx-select') || !gd.clientWidth) continue;
-      gd.setAttribute('data-dpx-select', '1');
-      // At the top of the output cell, not next to the figure: Plotly wraps a
-      // figure in a box of exactly its height, and anything added in there
-      // pushes the figure straight back out of it.
-      var box = gd.closest(OUTPUT) || gd.parentNode;
-      box.insertBefore(selectBar(gd, menu), box.firstChild);
-      Plotly.relayout(gd, { 'updatemenus[0].visible': false });
-    }
-  }
-  function selectBar(gd, menu) {
-    var bar = document.createElement('div');
-    bar.className = 'dpx-controls';
-    if (menu.name) {
-      var label = document.createElement('span');
-      label.textContent = menu.name;
-      bar.appendChild(label);
-    }
-    var wrap = document.createElement('span');
-    wrap.className = 'dpx-select-wrap';
-    var sel = document.createElement('select');
-    sel.className = 'dpx-select';
-    if (menu.name) sel.setAttribute('aria-label', menu.name);
-    for (var i = 0; i < menu.buttons.length; i++) {
-      var opt = document.createElement('option');
-      opt.value = String(i);
-      opt.textContent = menu.buttons[i].label;
-      sel.appendChild(opt);
-    }
-    sel.value = String(menu.active || 0);
-    sel.addEventListener('change', function () {
-      var b = menu.buttons[parseInt(sel.value, 10)];
-      if (!b) return;
-      var args = b.args || [];
-      if (b.method === 'relayout') Plotly.relayout(gd, args[0] || {});
-      else if (b.method === 'restyle') Plotly.restyle(gd, args[0] || {}, args[1]);
-      else Plotly.update(gd, args[0] || {}, args[1] || {});
-    });
-    wrap.appendChild(sel);
-    bar.appendChild(wrap);
-    return bar;
-  }
-  // A Plotly figure sizes itself to its container once, when it draws. Wrapping
-  // it in a rail afterwards takes that container ~20px narrower, and the figure
-  // keeps the width it measured: every plot in the report ends up with its own
-  // horizontal scrollbar. Re-fit whatever no longer matches its box — the same
-  // pass puts a figure back together after it is opened full screen.
-  function refit() {
-    if (!window.Plotly || !Plotly.Plots) return;
-    var plots = document.querySelectorAll('.js-plotly-plot');
-    for (var i = 0; i < plots.length; i++) {
-      var p = plots[i];
-      if (!p._fullLayout || !p.clientWidth) continue;
-      if (Math.abs(p._fullLayout.width - p.clientWidth) > 1) Plotly.Plots.resize(p);
-    }
-  }
-  // The tile control the dashboard has: one button that takes a result to the
-  // whole viewport and back. A report is read on screens the export knows
-  // nothing about, and a 12-column table or a dense heatmap is the case the
-  // page column cannot win. Only computed results get it — the header's own
-  // tables are chrome, not results.
-  var OUTPUT = '.cell-output-display';
-  function zoomable() {
-    var found = document.querySelectorAll(OUTPUT + ', .js-plotly-plot');
-    for (var i = 0; i < found.length; i++) {
-      var box = found[i].closest(OUTPUT) || found[i].parentElement;
-      if (!box || box.getAttribute('data-dpx-zoom')) continue;
-      if (!box.querySelector('.js-plotly-plot, table, img')) continue;
-      box.setAttribute('data-dpx-zoom', '1');
-      box.classList.add('dpx-zoomable');
-      box.appendChild(zoomButton(box));
-    }
-  }
-  function zoomButton(box) {
-    var b = document.createElement('button');
-    b.className = 'dpx-zoom';
-    b.type = 'button';
-    b.title = 'Full screen';
-    b.textContent = '⤡';
-    b.addEventListener('click', function () {
-      var on = box.classList.toggle('dpx-full');
-      b.textContent = on ? '✕' : '⤡';
-      b.title = on ? 'Close' : 'Full screen';
-      document.documentElement.style.overflow = on ? 'hidden' : '';
-      // A figure carries the size the export chose for a page column; full
-      // screen it should use the room it just got, and get its own size back
-      // on the way out. Both dimensions are set outright rather than left to
-      // `Plots.resize`: a figure that has already been re-fitted once carries
-      // an explicit width, and resizing no longer moves it.
-      var plots = box.querySelectorAll('.js-plotly-plot'), jobs = [];
-      for (var i = 0; i < plots.length; i++) {
-        var p = plots[i], lay = p.layout || {};
-        if (on) {
-          p.setAttribute('data-dpx-size', (lay.width || '') + ',' + (lay.height || ''));
-          jobs.push(
-            Plotly.relayout(p, {
-              width: box.clientWidth - 40,
-              height: window.innerHeight - 80,
-            })
-          );
-        } else {
-          var prev = (p.getAttribute('data-dpx-size') || ',').split(',');
-          jobs.push(
-            Plotly.relayout(p, {
-              width: prev[0] ? parseFloat(prev[0]) : null,
-              height: prev[1] ? parseFloat(prev[1]) : null,
-            })
-          );
-        }
-      }
-      // Only once those have landed: `relayout` is async, and re-fitting a
-      // figure Plotly is still redrawing leaves it at the width it just left.
-      if (jobs.length && jobs[0] && jobs[0].then) Promise.all(jobs).then(refit);
-      else refit();
-    });
-    return b;
-  }
-  document.addEventListener('keydown', function (ev) {
-    if (ev.key !== 'Escape') return;
-    var open = document.querySelector('.dpx-full > .dpx-zoom');
-    if (open) open.click();
-  });
-  // Printing prints the whole report: every fold opens for the page (a folded
-  // tab would print as its title alone) and closes again after. The print
-  // stylesheet hides the fold controls and starts each tab on a new page.
-  var printFolds = null;
-  window.addEventListener('beforeprint', function () {
-    printFolds = pairs.map(function (p) { return p[0].classList.contains('dpx-folded'); });
-    for (var i = 0; i < pairs.length; i++) setFold(pairs[i][0], pairs[i][1], false);
-    refit();
-  });
-  window.addEventListener('afterprint', function () {
-    if (!printFolds) return;
-    for (var i = 0; i < pairs.length; i++) setFold(pairs[i][0], pairs[i][1], printFolds[i]);
-    printFolds = null;
-    syncTabButtons();
-  });
-  function setAll(folded) {
-    for (var i = 0; i < pairs.length; i++) setFold(pairs[i][0], pairs[i][1], folded);
-    // A figure unfolded back into view was never measured while hidden.
-    if (!folded) reveal(document.body);
-    syncTabButtons();
-  }
-  function kindOf(pair) { return pair[1].getAttribute('data-dpx-kind') || ''; }
-  // The sections of one tab: every folding heading inside its body.
-  function sectionsOf(tab) {
-    var out = [];
-    for (var i = 0; i < pairs.length; i++) {
-      if (pairs[i] !== tab && tab[1].contains(pairs[i][0])) out.push(pairs[i]);
-    }
-    return out;
-  }
-  function tabOpen(tab) {
-    if (tab[0].classList.contains('dpx-folded')) return false;
-    var secs = sectionsOf(tab);
-    for (var i = 0; i < secs.length; i++) {
-      if (!secs[i][0].classList.contains('dpx-folded')) return true;
-    }
-    return secs.length === 0;
-  }
-  // The dashboard's own "Collapse all / Expand all", one per tab: it folds the
-  // tab's sections, or opens the tab and every section in it.
-  function tabButtons() {
-    for (var i = 0; i < pairs.length; i++) {
-      var tab = pairs[i];
-      if (kindOf(tab) !== 'tab' || tab[0].querySelector('.dpx-tab-all')) continue;
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'dpx-all dpx-tab-all';
-      btn.addEventListener('click', (function (t, b) {
-        return function (ev) {
-          ev.stopPropagation();
-          var open = tabOpen(t), secs = sectionsOf(t);
-          if (open && !secs.length) {
-            setFold(t[0], t[1], true);
-          } else if (open) {
-            for (var j = 0; j < secs.length; j++) setFold(secs[j][0], secs[j][1], true);
-          } else {
-            setFold(t[0], t[1], false);
-            for (var k = 0; k < secs.length; k++) setFold(secs[k][0], secs[k][1], false);
-            reveal(t[1]);
-          }
-          syncTabButtons();
-        };
-      })(tab, btn));
-      tab[0].appendChild(btn);
-    }
-    syncTabButtons();
-  }
-  function syncTabButtons() {
-    for (var i = 0; i < pairs.length; i++) {
-      var btn = kindOf(pairs[i]) === 'tab' && pairs[i][0].querySelector('.dpx-tab-all');
-      if (btn) btn.textContent = tabOpen(pairs[i]) ? 'Collapse all' : 'Expand all';
-    }
-  }
-  // A link into folded content (the contents list, a tab link in the text,
-  // a shared #anchor) opens every fold on the way to it, then the target's
-  // own heading.
-  var hashDone = false;
-  function openTo(target) {
-    var opened = null;
-    for (var i = 0; i < pairs.length; i++) {
-      var h = pairs[i][0], b = pairs[i][1];
-      if (!h.classList.contains('dpx-folded')) continue;
-      if (b.contains(target) || h === target || h.parentElement === target) {
-        setFold(h, b, false);
-        opened = opened || b;
-      }
-    }
-    if (opened) { reveal(opened); syncTabButtons(); }
-  }
-  function openHash(hash) {
-    var id = hash.charAt(0) === '#' ? hash.slice(1) : hash;
-    try { id = decodeURIComponent(id); } catch (e) { /* keep it as written */ }
-    var el = id && document.getElementById(id);
-    if (el) openTo(el);
-  }
-  document.addEventListener('click', function (ev) {
-    var a = ev.target.closest && ev.target.closest('a[href^="#"]');
-    if (a) openHash(a.getAttribute('href'));
-  }, true);
-  window.addEventListener('hashchange', function () { openHash(location.hash); });
-  // One control for the whole report, on the heading the tabs hang off. It
-  // lives in the heading and not in its body, so it stays reachable once
-  // everything below it is folded away.
-  function collapseAll() {
-    // Off `pairs` and not the document: Quarto copies a heading's markup into
-    // the contents list, which comes first in the DOM, and that copy is not
-    // inside a heading at all. `pairs` only ever holds real ones.
-    var h = null;
-    for (var i = 0; i < pairs.length && !h; i++) {
-      if (pairs[i][0].querySelector('span[data-dpx-kind="results"]')) h = pairs[i][0];
-    }
-    if (!h || h.querySelector('.dpx-all')) return;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'dpx-all';
-    btn.textContent = 'Collapse all';
-    btn.addEventListener('click', function (ev) {
-      ev.stopPropagation();
-      var folded = btn.getAttribute('data-folded') !== '1';
-      setAll(folded);
-      btn.setAttribute('data-folded', folded ? '1' : '0');
-      btn.textContent = folded ? 'Expand all' : 'Collapse all';
-    });
-    h.appendChild(btn);
-  }
-  // The contents list mirrors the document, so it folds the same way. Quarto
-  // builds it as plain nested lists; the other two formats have no #TOC and
-  // this does nothing there.
-  function tocFold() {
-    var toc = document.getElementById('TOC');
-    if (!toc) return;
-    var items = toc.querySelectorAll('li:not([data-dpx-toc])');
-    for (var i = 0; i < items.length; i++) {
-      var li = items[i];
-      li.setAttribute('data-dpx-toc', '1');
-      var link = li.querySelector(':scope > a');
-      if (!link) continue;
-      var sub = li.querySelector(':scope > ul');
-      var chev = document.createElement('span');
-      chev.className = sub ? 'dpx-chev' : 'dpx-chev dpx-gap';
-      chev.textContent = '\\u25BE';
-      if (sub) {
-        chev.addEventListener('click', function (ev) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          var host = this.closest('li');
-          var ul = host.querySelector(':scope > ul');
-          ul.style.display = host.classList.toggle('dpx-folded') ? 'none' : '';
-        });
-      }
-      link.insertBefore(chev, link.firstChild);
-    }
-    // The list as a whole folds from its title's own button (``report_theme``).
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', enhance);
-  } else {
-    enhance();
-  }
-  // Quarto's own scripts can move content around after load (and Plotly
-  // mounts its figures late); re-running is cheap and skips what it has done.
-  window.addEventListener('load', enhance);
-  setTimeout(enhance, 500);
-  setTimeout(enhance, 2500);
-})();
-</script>"""
+NOTEBOOK_CHROME = style("notebook_chrome.css") + "\n" + script("notebook_chrome.js")
 
 
 # Paper, the live app's default chrome (`chrome/variants/glass/glass.css`),
@@ -766,134 +155,12 @@ nav[role="doc-toc"] a.active {
 # primary come from the brand (`--dpx-font`, `--dpx-primary`,
 # `--dpx-accent-fg`, set beside it). Strictly a restyle: no structure, no
 # script, so a report without it is the classic look with every result intact.
-PAPER_CHROME = """<style>
-:root {
-  --gl-fg: #212529;
-  --gl-muted: #868e96;
-  --gl-faint: #adb5bd;
-  --gl-paper: #ffffff;
-  --gl-accent: var(--dpx-primary, #228be6);
-  --gl-accent-fg: var(--dpx-accent-fg, #1c7ed6);
-  --gl-accent-soft: color-mix(in srgb, var(--gl-accent) 12%, transparent);
-  --gl-hair: color-mix(in srgb, #212529 11%, transparent);
-  --gl-well: color-mix(in srgb, #212529 6%, transparent);
-  --gl-shade-a: color-mix(in srgb, #212529 5%, transparent);
-  --gl-shade-b: color-mix(in srgb, #212529 10%, transparent);
-  --gl-tile-radius: 18px;
-  --gl-tile-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a),
-    0 14px 32px -20px var(--gl-shade-b);
-}
-/* The page: plain white, one family, the text colour Paper's ink. */
-html, body { background: var(--gl-paper); }
-body {
-  font-family: var(--dpx-font, 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
-  color: var(--gl-fg);
-}
-body h1, body h2, body h3, body h4, body h5, body h6 {
-  font-family: var(--dpx-headings-font, inherit);
-  color: var(--gl-fg); letter-spacing: -0.012em;
-}
-body h1.title { font-weight: 750; letter-spacing: -0.02em; }
-body .subtitle, body .quarto-title-meta-heading { color: var(--gl-muted); }
-body a { color: var(--gl-accent-fg); }
-body :not(pre) > code { background: var(--gl-well); color: var(--gl-fg); border-radius: 6px; }
-body pre, body div.sourceCode { background: var(--gl-well); border: 0; border-radius: 12px; }
-body hr { border-color: var(--gl-hair); opacity: 1; }
-body table:not(.dpx-plain) th {
-  border-bottom: 1px solid var(--gl-hair); color: var(--gl-muted); font-weight: 600;
-}
-body table:not(.dpx-plain) td { border-bottom: 1px solid var(--gl-hair); }
-body blockquote { border-inline-start: 3px solid var(--gl-hair); color: var(--gl-muted); }
-/* Tabs and the results heading lead the page; they are not framed. */
-.dpx-body[data-dpx-kind="tab"], .dpx-body[data-dpx-kind="results"] {
-  border-inline-start: 0; padding-inline-start: 0; margin-inline-start: 0;
-}
-/* Sections on the canvas: paper groups with a soft accent edge. */
-section[data-dpx-kind="section"] {
-  border: 1px solid var(--gl-hair); border-radius: 24px;
-  background: var(--gl-paper);
-  box-shadow: 0 0 0 1px var(--gl-hair),
-    inset 3px 0 0 color-mix(in srgb, var(--dpx-accent, #ced4da) 75%, transparent);
-  padding: 14px 18px 12px 16px; margin: 20px 0;
-}
-section[data-dpx-kind="section"] > .dpx-body {
-  border-inline-start: 0; padding-inline-start: 0; margin: 6px 0 0;
-}
-/* Tile frames: every computed result is a soft floating card, with the same
-   16px inner edge the app's tiles keep. Card rows are a row of cards, not a
-   card of cards; the text a cell prints is prose, not a tile. */
-.cell-output-display:has(.js-plotly-plot, table, img, .dpx-tile, .dpx-unavailable):not(:has(.dpx-cards, .dpx-card)) {
-  background: var(--gl-paper); border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-tile-radius); box-shadow: var(--gl-tile-shadow);
-  padding: 14px 16px 12px; margin: 0 0 16px; overflow: hidden;
-}
-.dpx-tile-head { margin: 0 0 10px; min-height: 22px; }
-.dpx-tile-title { font-size: 14px; font-weight: 650; line-height: 22px; color: var(--gl-fg); }
-.dpx-tile-sub { font-size: 12px; line-height: 16px; color: var(--gl-faint); }
-/* KPI cards: floating cards, a quiet label over a firm number. */
-.dpx-card {
-  background: var(--gl-paper) !important; border: 1px solid var(--gl-hair) !important;
-  border-radius: var(--gl-tile-radius) !important; box-shadow: var(--gl-tile-shadow) !important;
-  padding: 14px 16px !important;
-}
-.dpx-card-title {
-  font-size: 12.5px !important; font-weight: 600 !important; letter-spacing: 0 !important;
-  text-transform: none !important; opacity: .9;
-}
-.dpx-card-value {
-  font-weight: 700 !important; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
-  font-size: 30px !important; line-height: 1.05 !important; color: var(--gl-fg) !important;
-}
-.dpx-cards { gap: 12px !important; }
-/* What could not be drawn reads as an empty tile, not as an error box. */
-.dpx-unavailable { border: 0 !important; padding: 0 !important; color: var(--gl-muted) !important; }
-.dpx-snapshot img { border: 0 !important; border-radius: 12px !important; }
-/* The chrome around the report. */
-nav[role="doc-toc"] > h2, #toc-title { color: var(--gl-faint); }
-nav[role="doc-toc"] a { color: var(--gl-muted); }
-nav[role="doc-toc"] a:hover { color: var(--gl-fg); }
-nav[role="doc-toc"] a.active { color: var(--gl-accent-fg); border-inline-start-color: var(--gl-accent); }
-#quarto-code-tools-source .btn, .code-tools-button {
-  border: 1px solid var(--gl-hair); border-radius: 999px; color: var(--gl-fg);
-  background: var(--gl-paper); font-weight: 600;
-}
-#quarto-code-tools-source .btn:hover, .code-tools-button:hover { background: var(--gl-well); }
-.dpx-all { border-radius: 999px; border-color: var(--gl-hair); color: var(--gl-muted); opacity: 1; }
-.dpx-all:hover { background: var(--gl-well); color: var(--gl-fg); }
-.dpx-select { border-radius: 12px; border-color: transparent; background-color: var(--gl-well); }
-.dpx-select:focus { border-color: var(--gl-accent); background-color: var(--gl-paper); }
-.dpx-zoom { border-radius: 10px; border-color: var(--gl-hair); color: var(--gl-muted); }
-.updatemenu-item-rect { rx: 12px; ry: 12px; stroke: var(--gl-hair); }
-/* DataTables (itables): Paper's quiet wells and pills. */
-.dataTables_wrapper, .dt-container { font-size: .8125rem; }
-.dataTables_wrapper input, .dataTables_wrapper select, .dt-container input, .dt-container select {
-  border: 1px solid transparent; border-radius: 12px; background: var(--gl-well);
-  padding: .2em .6em;
-}
-.dt-paging .dt-paging-button.current, .dataTables_paginate .paginate_button.current {
-  border-radius: 999px !important; border: 0 !important;
-  background: var(--gl-accent-soft) !important; color: var(--gl-accent-fg) !important;
-}
-</style>"""
+PAPER_CHROME = style("paper_chrome.css")
 
 
 def _css_value(value: str) -> str:
     """A brand font stack as a CSS value: nothing that could close the rule."""
     return re.sub(r"[;{}<>]", "", value).strip()
-
-
-def _resolve_accent_hex(color: str | None, fallback: str) -> str:
-    """A Mantine palette name or a literal CSS colour, to a hex the export's
-    static HTML can use directly. Mirrors the live chrome's own fallback:
-    unset/unrecognised stays neutral rather than picking a colour on the
-    author's behalf.
-    """
-    if not color:
-        return fallback
-    if _CSS_COLOR_RE.match(color):
-        return color
-    return _MANTINE_SHADE_6.get(color.split(".")[0].strip().lower(), fallback)
 
 
 @dataclass
@@ -1000,6 +267,10 @@ class ExportPlan:
     dashboard_public: bool = False
     # Also a PDF: the document carries a typst format beside the HTML one.
     pdf: bool = False
+    # Code-mode figures as their author's code (the downloaded notebook, which
+    # its reader runs), or through the API (``False``: the server-rendered
+    # report, which never executes an author's Python outside the sandbox).
+    author_code: bool = True
     # The PDF's colours: ``colour`` (tab colours on headings and in the
     # contents, tinted notes) or ``mono`` (print-friendly, the text colour).
     pdf_style: str = "colour"
@@ -1066,7 +337,12 @@ def _sentence(text: str) -> str:
 
 
 def _comment(text: str) -> str:
-    return "\n".join(f"# {line}" if line else "#" for line in _sentence(text).split("\n"))
+    return _qmd_comment(_sentence(text))
+
+
+def _author_line(value: Any) -> str:
+    """An author's one-line markdown (a caption): kept, defused, on one line."""
+    return defuse(one_line(str(value or ""))).strip()
 
 
 def _fmt_value(value: Any) -> str:
@@ -1085,10 +361,15 @@ class NotebookBuilder:
         self.dc_by_id: dict[str, DCPlan] = {dc.dc_id: dc for dc in plan.dcs}
         self.df_names: dict[str, str] = {}
         self.final_names: dict[str, str] = {}
+        # The final frame without a genome region: what cards (and figures that
+        # draw no region column) read, as the server scopes them.
+        self.region_free_names: dict[str, str] = {}
         for dc in plan.dcs:
             self.df_names[dc.dc_id] = self.names.claim("df", dc.tag, fallback="table")
             self.names.reserve(f"final_{self.df_names[dc.dc_id][3:]}")
             self.final_names[dc.dc_id] = f"final_{self.df_names[dc.dc_id][3:]}"
+            self.region_free_names[dc.dc_id] = f"unregioned_{self.df_names[dc.dc_id][3:]}"
+            self.names.reserve(self.region_free_names[dc.dc_id])
         self._entries: list[tuple[MarkdownUnit | ComponentEntry, str | None]] | None = None
         self.tab_anchors, self._anchor_by_tab_name = self._tab_anchors()
         self._section_anchor_seq: list[str] = []
@@ -1227,6 +508,17 @@ class NotebookBuilder:
                     unit = replace(source, section=unit.section, persistent=unit.persistent)
             meta = unit.meta
             verdict = classify(meta)
+            if verdict.kind == "code" and not self.plan.author_code:
+                # The server never runs an author's Python itself: the report
+                # asks Depictio for the figure, which runs that code in the
+                # dashboard's own sandbox. The downloaded notebook keeps it.
+                verdict = Classification(
+                    "api",
+                    "a code-mode figure, drawn by Depictio, which runs its author's code "
+                    "in the dashboard's sandbox; " + API_REASON,
+                    kind="code",
+                    output="interactive",
+                )
             dc_id = str(meta.get("dc_id") or "")
             if verdict.status == "code" and meta.get("component_type") not in ("text", "highlight"):
                 if dc_id not in self.dc_by_id:
@@ -1448,10 +740,10 @@ class NotebookBuilder:
                 continue
             if unit.kind == "tab":
                 brand = self.plan.tab_brands.get(unit.dashboard_id or "") or self.plan.brand or {}
-                accent = _resolve_accent_hex(unit.color, brand.get("primary") or "")
+                accent = palette_hex(unit.color, brand.get("primary") or "")
                 anchor = self.tab_anchors.get(unit.dashboard_id or unit.text)
             else:
-                accent = _resolve_accent_hex(unit.color, "")
+                accent = palette_hex(unit.color, "")
                 anchor = next(seq, None)
             if not anchor:
                 continue
@@ -1551,7 +843,7 @@ class NotebookBuilder:
         return f"{self.plan.api_url.rstrip('/')}/dashboard/{self.plan.dashboard_id}"
 
     def _accent(self) -> str:
-        return _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+        return palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
 
     def _appbar(self) -> str:
         """The header bar: the dashboard's mark and "Powered by" Depictio.
@@ -1561,7 +853,7 @@ class NotebookBuilder:
         tab breadcrumb either: the first part's own heading follows."""
         plan = self.plan
         main = plan.tabs[0] if plan.tabs else {}
-        accent = _resolve_accent_hex(str(main.get("icon_color") or "") or None, self._accent())
+        accent = palette_hex(str(main.get("icon_color") or "") or None, self._accent())
         h1 = plan.title
         bar_name = None if self.hero is not None or h1.strip() == plan.title.strip() else h1
         return appbar_html(
@@ -1688,9 +980,12 @@ class NotebookBuilder:
             "import plotly.graph_objects as go\n"
             "import polars as pl\n"
             "from IPython.display import HTML\n"
+            "from depictio.notebook.qmd_safe import esc as html_text\n"
+            "from depictio.notebook.qmd_safe import inert_outputs\n"
             "from depictio.notebook import (\n"
             "    DepictioClient,\n"
             "    fill_text,\n"
+            "    funnel_figure,\n"
             "    funnel_rest,\n"
             "    funnel_stage,\n"
             "    StaticCard,\n"
@@ -1705,14 +1000,19 @@ class NotebookBuilder:
             "from polars import col, lit\n"
             "\n"
             + _comment(
+                "No output reads as Quarto markup: a title or a value that spells a "
+                "shortcode is printed as text"
+            )
+            # Assigned to a throwaway: the call returns a bool, and a bare
+            # expression at the end of a cell is that cell's output — the report
+            # would open on the word "True".
+            + "\n_ = inert_outputs()\n"
+            + _comment(
                 "One copy of plotly.js for the whole document, and no MathJax request "
                 "per figure. Executed as a notebook, every figure otherwise embeds its "
                 "own ~5 MB copy of the library, which is what a self-contained HTML "
                 "export is made of: 35 figures came to 170 MB, of which 2.5 MB was data"
             )
-            # Assigned to a throwaway: the call returns a bool, and a bare
-            # expression at the end of a cell is that cell's output — the report
-            # would open on the word "True".
             + "\n_ = use_document_renderer()\n"
             + _comment(
                 "Tables as sortable, searchable, paginated tables (itables, with DataTables "
@@ -1786,8 +1086,8 @@ class NotebookBuilder:
         f'padding:0.85rem 1.1rem;border:1px solid #e3e3e8;border-radius:12px;'
         f'font-family:inherit;background:#fafafa">'
         f'<div class="dpx-card-title" style="font-size:0.78rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:0.02em;margin-bottom:0.3rem">{title}</div>'
-        f'<div class="dpx-card-value" style="font-size:1.65rem;font-weight:650;color:#111827">{text}</div>'
+        f'letter-spacing:0.02em;margin-bottom:0.3rem">{html_text(title)}</div>'
+        f'<div class="dpx-card-value" style="font-size:1.65rem;font-weight:650;color:#111827">{html_text(text)}</div>'
         f'</div>'
     )
 
@@ -1825,7 +1125,7 @@ def card_row(cards):
         # rules read. A separate block rather than a placeholder inside
         # NOTEBOOK_CHROME: that constant is full of CSS and JS braces, and
         # nothing there is worth making it a format string over.
-        accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+        accent = palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
         root = f"--dpx-primary: {accent};"
         chrome = NOTEBOOK_CHROME
         if self.paper:
@@ -2150,13 +1450,15 @@ def card_row(cards):
         """
         rows = []
         for stage in stages:
-            accent = _resolve_accent_hex(stage.color, "#228be6")
+            accent = palette_hex(stage.color, "#228be6")
             icon = self._icon_html(stage.icon, accent)
             value = self._filter_value_text(stage)
             rows.append(
                 '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;min-width:0">'
                 + (icon or "")
-                + f'<span style="font-size:0.8rem;font-weight:500">{_esc(stage.label)}</span>'
+                # The weight from the stylesheet: Quarto 1.9 turns an inline
+                # numeric `font-weight` into a typst string the PDF refuses.
+                + f'<span class="dpx-filter-name" style="font-size:0.8rem">{_esc(stage.label)}</span>'
                 + (
                     f'<span style="font-size:0.8rem;color:#868e96;overflow-wrap:anywhere">'
                     f"{_esc(value)}</span>"
@@ -2200,7 +1502,10 @@ def card_row(cards):
             value = self._filter_value_text(stage)
             short = value if len(value) <= 24 else value[:23] + "…"
             name = self._stage_title(position, stage)
-            labels.append(f"{position}. {name} = {short}" if short else f"{position}. {name}")
+            label = f"{position}. {name} = {short}" if short else f"{position}. {name}"
+            # One line, no control character: a stage is an axis label, and a
+            # vertical tab in one fails the PDF's figure export outright.
+            labels.append(one_line(label))
 
         frames = []
         for dc in self.plan.dcs:
@@ -2219,85 +1524,15 @@ def card_row(cards):
             + "\n_series = [\n"
             + "\n".join(frames)
             + "\n]"
-            + f"\n_palette = {pprint.pformat(list(_FUNNEL_PALETTE), width=88)}"
-            + """
-fig_funnel = go.Figure(
-    go.Funnel(
-        name=_series[0][0],
-        orientation="h",
-        y=_stages,
-        x=_series[0][1],
-        textinfo="value+percent initial",
-        textposition="inside",
-        hovertemplate="%{y}<br>%{x} rows<extra>%{fullData.name}</extra>",
-        marker={"color": _palette[0]},
-        connector={"line": {"color": "rgba(0,0,0,0.08)", "width": 1}},
-    )
-)
-# One collection at a time: the tables span three orders of magnitude, and on
-# one shared axis the small ones collapse into slivers with no room for their
-# numbers. The dropdown is Plotly's own, so it works in the exported HTML with
-# nothing to run — the report's own script replaces it with an HTML select,
-# which Plotly cannot place here: a menu takes paper coordinates, and this
-# figure's left third is the gutter its stage labels need. It swaps the one
-# trace's data rather than toggling the visibility of seven, because a funnel
-# with hidden traces drops its stage labels off the axis entirely.
-fig_funnel.update_layout(
-    updatemenus=[
-        {
-            "name": "Data collection",
-            "buttons": [
-                {
-                    "label": _name,
-                    "method": "restyle",
-                    "args": [
-                        {
-                            "x": [_rows],
-                            "name": [_name],
-                            "marker.color": [_palette[_i % len(_palette)]],
-                        }
-                    ],
-                }
-                for _i, (_name, _rows) in enumerate(_series)
-            ],
-            "direction": "down",
-            "showactive": True,
-            "x": 0,
-            "xanchor": "left",
-            "y": 1.18,
-            "yanchor": "top",
-            # The app's `Select`: white on a gray-4 border, gray-7 text, the
-            # system stack at Mantine's `sm`.
-            "bgcolor": "#ffffff",
-            "bordercolor": "#ced4da",
-            "borderwidth": 1,
-            "pad": {"l": 10, "r": 10, "t": 7, "b": 7},
-            "font": {
-                "family": '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                "size": 13,
-                "color": "#495057",
-            },
-        }
-    ],
-    template="plotly_white",
-    showlegend=False,
-    # No room reserved above for the menu: Plotly grows the top margin itself
-    # while it is showing, and gives it back once the select has taken over.
-    margin={"l": 260, "r": 24, "t": 28, "b": 24},
-    yaxis={"autorange": "reversed"},
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font={"color": "#495057"},
-    height=max(290, 130 + len(_stages) * 46),
-)
-fig_funnel"""
+            + "\nfig_funnel = funnel_figure(_stages, _series)"
+            + "\nfig_funnel"
         )
         return Cell(body)
 
     def _funnel_cells(self) -> list[Cell]:
         cells: list[Cell] = []
         stages = self.plan.stages
-        accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+        accent = palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
 
         def part(title: str, icon: str, level: int, kind: str, **opts: Any) -> str:
             return self._heading(
@@ -2354,6 +1589,8 @@ fig_funnel"""
             # shows now. Empty (and invisible) without the runtime.
             cells.append(md_cell(filters_placeholder(self.entry_tab_id)))
         prev = dict(self.df_names)
+        # Each stage's call per collection, for the region-free frames below.
+        stage_calls: dict[str, list[str]] = {dc.dc_id: [] for dc in self.plan.dcs}
         for k, stage in enumerate(stages, start=1):
             lines: list[str] = []
             head = f'Stage {k}, "{stage.label}"'
@@ -2416,6 +1653,7 @@ fig_funnel"""
                         f"\n    resolved_for={ {'index': stage.index, 'value': stage.value}!r},\n"
                     )
                 run.append(call + ")")
+                stage_calls[dc.dc_id].append(call)
                 prev[dc.dc_id] = name
             cells.append(Cell("\n".join(lines + run)))
         final_lines = [
@@ -2430,6 +1668,27 @@ fig_funnel"""
                 f"{len(stages)}, dc_id={dc.dc_id!r})"
             )
         cells.append(Cell("\n".join(final_lines)))
+        if self._region_stages():
+            region_lines = [
+                _comment(
+                    "The same stages without the genome region: a region is a place to look, "
+                    "not a subset to summarise, so cards (and figures that draw none of its "
+                    "columns) read this frame, as on the dashboard"
+                )
+            ]
+            for dc in self.plan.dcs:
+                name = self.region_free_names[dc.dc_id]
+                region_lines.append(f"{name} = {self.df_names[dc.dc_id]}")
+                for call in stage_calls[dc.dc_id]:
+                    # `x = funnel_stage(prev, ...` -> `name = funnel_stage(name, ..., region=False)`
+                    rest = call.split("funnel_stage(", 1)[1].split(",", 1)[1]
+                    rest = rest.rstrip().rstrip(",")
+                    region_lines.append(f"{name} = funnel_stage({name},{rest}, region=False)")
+                region_lines.append(
+                    f"{name} = funnel_rest({name}, depictio_state, {len(stages)}, "
+                    f"dc_id={dc.dc_id!r}, region=False)"
+                )
+            cells.append(Cell("\n".join(region_lines)))
         if stages:
             cells.append(
                 md_cell(
@@ -2455,7 +1714,42 @@ fig_funnel"""
             slider_mode=entry.get("slider_mode"),
             case_sensitive=entry.get("case_sensitive"),
             match_mode=entry.get("match_mode"),
+            source=entry.get("source") or (entry.get("metadata") or {}).get("source"),
         )
+
+    def _region_stages(self) -> set[str]:
+        """The stages that are half of a genome region (or residue range) pair."""
+        cached = getattr(self, "_region_stages_cache", None)
+        if cached is not None:
+            return cached
+        by_index = {str(f.get("index")): f for f in self.plan.state.filters_as_payload()}
+        self._region_stages_cache: set[str] = {
+            s.index
+            for s in self.plan.stages
+            if is_region_filter(by_index.get(s.index))
+            or any(is_region_filter(e) for entries in s.per_dc.values() for e in entries)
+        }
+        return self._region_stages_cache
+
+    def _tile_frame(self, meta: dict[str, Any], dc: DCPlan) -> str:
+        """The frame a code tile reads: the final one, or the one without the
+        region when the server keeps the region off this component
+        (``region_scope.scope_region_filters``)."""
+        final = self.final_names[dc.dc_id]
+        if not self._region_stages():
+            return final
+        from depictio.api.v1.region_scope import scope_region_filters
+
+        region = [{"source": "genome_selection", "column_name": c} for c in self._region_columns()]
+        ctype = str(meta.get("component_type") or "")
+        if scope_region_filters(region, ctype, meta):
+            return final
+        return self.region_free_names[dc.dc_id]
+
+    def _region_columns(self) -> set[str]:
+        return {
+            str(s.column) for s in self.plan.stages if s.index in self._region_stages() and s.column
+        }
 
     # ---------------------------------------------------------------- groups
     def _pick_dc(self, dc_id: str | None) -> DCPlan | None:
@@ -2766,7 +2060,7 @@ fig_funnel"""
         if ctype == "text":
             surface = str(meta.get("surface") or "")
             if surface == "card":
-                accent = _resolve_accent_hex(str(meta.get("accent") or "") or None, "")
+                accent = palette_hex(str(meta.get("accent") or "") or None, "")
                 if not in_row:
                     out.append(md_cell(SURFACE_OPEN))
                 out.append(md_cell(cell_open("dpx-surface-card", accent or None)))
@@ -2793,7 +2087,7 @@ fig_funnel"""
             if title:
                 caption_bits.append(f"**{_esc(title)}**.")
             if entry.highlight is None and str(meta.get("caption") or "").strip():
-                caption_bits.append(self._rewrite_links(str(meta["caption"]).strip()))
+                caption_bits.append(self._rewrite_links(_author_line(meta["caption"])))
             badge = self._data_badge(meta)
             if badge and self.plan.pdf:
                 # The PDF's badge is typst: it stays silent under a tile that
@@ -2957,7 +2251,7 @@ fig_funnel"""
 
     def _results_header_html(self) -> str:
         """The one heading every tab hangs off: the dashboard itself."""
-        accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "")
+        accent = palette_hex((self.plan.brand or {}).get("primary"), "")
         return "\n\n".join(
             [
                 self._heading(
@@ -3000,7 +2294,7 @@ fig_funnel"""
         for m in controls:
             stage = by_index.get(str(m.get("index") or ""))
             value = self._filter_value_text(stage) if stage else "All"
-            color = _resolve_accent_hex(
+            color = palette_hex(
                 str(m.get("custom_color") or m.get("icon_color") or m.get("color") or "") or None,
                 "",
             )
@@ -3021,7 +2315,7 @@ fig_funnel"""
         # icon and title in the section's colour, over a body the reader can
         # fold, behind that colour's rail. Unset stays neutral rather than
         # picking a hue on the author's behalf, exactly as the app does.
-        accent = _resolve_accent_hex(unit.color, "")
+        accent = palette_hex(unit.color, "")
         parts = [
             self._heading(
                 level=SECTION_LEVEL,
@@ -3071,7 +2365,7 @@ fig_funnel"""
         # resolved identity too, not just the document's.
         brand = self.plan.tab_brands.get(unit.dashboard_id or "") if unit.dashboard_id else None
         fallback = (brand or self.plan.brand or {}).get("primary") or ""
-        accent = _resolve_accent_hex(unit.color, fallback)
+        accent = palette_hex(unit.color, fallback)
         anchor = self.tab_anchors.get(unit.dashboard_id or unit.text)
         parts = [
             self._heading(
@@ -3122,12 +2416,14 @@ fig_funnel"""
         if ctype == "highlight":
             return self._highlight_cell(meta, title)
         if entry.verdict.status == "omitted":
-            return md_cell(f"> **{title}** is not in this notebook: {entry.verdict.reason}.")
+            return md_cell(
+                f"> **{_esc(title)}** is not in this notebook: {_esc(entry.verdict.reason)}."
+            )
         if entry.verdict.status == "api":
             cell = self._api_cell(entry, title, show=show)
             return cell if show else (cell, entry.name or self.names.claim("viz", title))
         dc = self.dc_by_id[str(meta.get("dc_id") or "")]
-        final = self.final_names[dc.dc_id]
+        final = self._tile_frame(meta, dc)
         name = entry.name or self.names.claim("tile", title)
         fexpr = meta.get("filter_expr")
         source = final
@@ -3169,7 +2465,7 @@ fig_funnel"""
             return Cell("\n".join(body))
         if ctype == "figure":
             return self._figure_cell(meta, name, source, prelude, title)
-        return md_cell(f"> **{title}** ({ctype}) has no code path yet.")
+        return md_cell(f"> **{_esc(title)}** ({_esc(ctype)}) has no code path yet.")
 
     def _highlight_note(self, entry: ComponentEntry) -> Cell:
         """A highlight drawn in place: where its figure lives, then its caption.
@@ -3187,7 +2483,7 @@ fig_funnel"""
         where = f"[{name}](#{anchor})" if anchor else f"**{name}**"
         # The highlight's own caption: the figure, drawn from its own tab's
         # definition, carries the source's.
-        caption = self._rewrite_tab_links(str((entry.highlight or {}).get("caption") or "").strip())
+        caption = self._rewrite_tab_links(_author_line((entry.highlight or {}).get("caption")))
         line = f"*From the {where} tab.*"
         return md_cell(line + (f" {caption}" if caption else ""))
 
@@ -3196,14 +2492,17 @@ fig_funnel"""
         tab = str(meta.get("source_tab") or "").strip()
         where = f"the **{_esc(tab)}** tab" if tab else "another tab"
         line = f"> **{_esc(title)}** shows *{_esc(source)}* from {where}, drawn in that tab's part."
-        caption = self._rewrite_tab_links(str(meta.get("caption") or "").strip())
+        caption = self._rewrite_tab_links(_author_line(meta.get("caption")))
         return md_cell(line + (f"\n>\n> {caption}" if caption else ""))
 
     def _text_cell(
         self, meta: dict[str, Any], section: str | None = None, *, tab_id: str = ""
     ) -> Cell:
-        title = str(meta.get("title") or "").strip()
-        body = str(meta.get("body") or "").strip()
+        # The author's markdown, kept as markdown but with no Quarto construct
+        # left in it (``qmd_safe.defuse``): a fence or a shortcode in a text
+        # tile is shown as the text it is, never run.
+        title = defuse(one_line(str(meta.get("title") or ""))).strip()
+        body = defuse(str(meta.get("body") or "")).strip()
         # On the dashboard a section's narration tile sits *under* the section
         # header, so repeating the name there reads as a caption. Stacked in a
         # document the two headings land on consecutive lines and read as a
@@ -3242,7 +2541,7 @@ fig_funnel"""
         text = "\n\n".join(parts) or "*(empty text tile)*"
         if self.plan.pdf:
             # The PDF draws the stepper and the fact lists itself.
-            accent = _resolve_accent_hex(str(meta.get("accent") or "") or None, self._accent())
+            accent = palette_hex(str(meta.get("accent") or "") or None, self._accent())
             text = pdf_structures(
                 text,
                 lambda icon: self.plan.icons.get(icon),
@@ -3394,16 +2693,20 @@ fig_funnel"""
                 f"    depictio_group_kwargs={pprint.pformat(kwargs, width=80, sort_dicts=False)},\n"
                 f"    depictio_group_by={by!r},\n)"
             )
-        lines += [
+        # The cell is the author's (``Cell.authored``: emitted as written), so
+        # what the generator adds around their code is defused here instead.
+        head = defuse_code("\n".join(lines))
+        lines = [
+            head,
             f"def _make_{name}(df, depictio_group_kwargs=depictio_group_kwargs, "
             "depictio_group_by=depictio_group_by):",
             *code_lines,
             "    return fig",
             "",
-            call,
+            defuse_code(call),
             name,
         ]
-        return Cell("\n".join(lines))
+        return Cell("\n".join(lines), authored=True)
 
 
 def generate_qmd(plan: ExportPlan) -> str:

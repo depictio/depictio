@@ -883,56 +883,71 @@ def _require_render_enabled() -> None:
         )
 
 
-def _require_owner_for_authored_code(
-    dashboard_id: PyObjectId, current_user: User, builder: NotebookBuilder
-) -> None:
-    """Only an owner may render a dashboard that carries its author's own code.
+def _require_owner_for_authored_code(plan: ExportPlan, current_user: User) -> None:
+    """Only a project owner may render a dashboard that carries authored code.
 
-    A code-mode figure is Python somebody wrote in the chart builder, and this
-    is the one path that runs it: on a worker, with a token minted for whoever
-    asked for the report. Rendering someone else's dashboard would therefore
-    run their code with the reader's rights. An owner can already change that
-    code, so for them the render adds nothing they could not do; for everyone
-    else the report is refused rather than quietly downgraded — a report
-    missing its figures is not the report they asked for.
+    The render never runs a code-mode figure's Python itself (``author_code``
+    is off for it: the figure is drawn through the API's sandbox, as the
+    dashboard draws it). The gate stays as a second line: it rests on the
+    *project*'s owners, since anyone with viewer access can own a dashboard
+    document (by creating or duplicating one) and so write its code.
     """
     authored = [
-        c for c in builder.preflight().components if c.status == "code" and c.kind == "code"
+        m
+        for tab in plan.tabs
+        for m in tab.get("stored_metadata") or []
+        if isinstance(m, dict) and m.get("component_type") == "figure" and m.get("mode") == "code"
     ]
     if not authored or settings.auth.is_single_user_mode:
         return
-    from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission_sync
-
-    if check_dashboard_owner_permission_sync(str(dashboard_id), str(current_user.id)):
+    project_id = (plan.tabs[0] if plan.tabs else {}).get("project_id")
+    if project_id and routes.check_project_permission(project_id, current_user, "owner"):
         return
-    titles = ", ".join(sorted({c.title or c.index for c in authored})[:3])
+    titles = ", ".join(sorted({str(m.get("title") or m.get("index")) for m in authored})[:3])
     raise HTTPException(
         status_code=403,
         detail=(
-            f"This dashboard has {len(authored)} code-mode figure(s) ({titles}) whose Python "
-            "would run on the server. Rendering a report is limited to the dashboard's owners; "
-            "download the notebook and run it yourself instead."
+            f"This dashboard has {len(authored)} code-mode figure(s) ({titles}). Rendering it "
+            "as a report is limited to the project's owners; download the notebook and run it "
+            "yourself instead."
         ),
     )
 
 
-def _render_job(job_id: str, current_user: User) -> tuple[Any, dict[str, Any]]:
-    """The job's Celery result, plus its payload once it has one.
+def _render_job(job_id: str, current_user: User) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    """The job's Celery result and payload, and its record, for its owner only.
 
-    A job is addressed by an id the server minted, and its artefacts live under
-    the prefix of the user who asked for it: a result that names another user
-    is not this caller's job to read.
+    A job is bound to the user who started it when it is queued
+    (``jobs.record``), so ownership holds in every state: queued, running,
+    failed or done. Anyone else is told there is no such job.
     """
     from celery.result import AsyncResult
 
     from depictio.api.celery_app import celery_app
+    from depictio.api.v1.services.notebook_export import jobs
 
+    record = jobs.owned(job_id, str(current_user.id), jobs.RENDER)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"No render job '{job_id}'.")
     result = AsyncResult(job_id, app=celery_app)
     payload = result.result if isinstance(result.result, dict) else {}
-    owner = str(payload.get("user_id") or "")
-    if owner and owner != str(current_user.id):
+    if str(payload.get("user_id") or record["user_id"]) != str(current_user.id):
         raise HTTPException(status_code=404, detail=f"No render job '{job_id}'.")
-    return result, payload
+    return result, payload, record
+
+
+def _require_signed_in(current_user: User) -> None:
+    """A report is bound to who asked for it: an anonymous visitor is everyone."""
+    if not current_user or not getattr(current_user, "id", None):
+        raise HTTPException(status_code=401, detail="Rendering a report needs a signed-in user.")
+    if getattr(current_user, "is_anonymous", False) and not settings.auth.is_single_user_mode:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Rendering a report needs a signed-in user: anonymous visitors share one "
+                "identity. Sign in, or download the notebook and run it yourself."
+            ),
+        )
 
 
 @dashboards_endpoint_router.post(
@@ -940,21 +955,22 @@ def _render_job(job_id: str, current_user: User) -> tuple[Any, dict[str, Any]]:
     response_model=NotebookRenderStatus,
     status_code=202,
 )
-async def notebook_export_render(
+def notebook_export_render(
     dashboard_id: PyObjectId,
     request: NotebookExportRequest,
     current_user: User = Depends(get_user_or_anonymous),
     access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ) -> NotebookRenderStatus:
-    """Start rendering the dashboard's notebook into an HTML report."""
+    """Start rendering the dashboard's notebook into an HTML report.
+
+    A plain (threadpool) route: building the plan reads Delta tables, Mongo
+    and S3, none of which may run on the event loop.
+    """
     _require_render_enabled()
-    if not current_user or not getattr(current_user, "id", None):
-        raise HTTPException(status_code=401, detail="Rendering a report needs a signed-in user.")
+    _require_signed_in(current_user)
 
     from depictio.api.celery_app import render_notebook_report
-    from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
-    from depictio.api.v1.services.notebook_export import store
-    from depictio.models.models.users import TokenData
+    from depictio.api.v1.services.notebook_export import jobs, store
     from depictio.serverless.combined import combined_filename
     from depictio.serverless.report import user_payload
 
@@ -970,6 +986,15 @@ async def notebook_export_render(
         embed_runtime = True
     else:
         embed_runtime = _embed_runtime(request, dashboard_id, current_user, default=True)
+    user_id = str(current_user.id)
+    limits = settings.notebook_export
+    jobs.admit(
+        user_id,
+        jobs.RENDER,
+        max_active=limits.render_max_active_per_user,
+        max_per_hour=limits.render_max_per_hour,
+        window_s=2 * limits.render_timeout_s + 120 + 3600,
+    )
     plan = build_export_plan(
         dashboard_id,
         request.state,
@@ -980,26 +1005,22 @@ async def notebook_export_render(
         pdf=request.pdf,
         pdf_style=request.pdf_style,
     )
+    _require_owner_for_authored_code(plan, current_user)
+    # The server never executes an author's Python itself: code-mode figures
+    # come from the API, which runs them in the dashboard's own sandbox.
+    plan.author_code = False
     builder = NotebookBuilder(plan)
-    _require_owner_for_authored_code(dashboard_id, current_user, builder)
     qmd = builder.build().encode("utf-8")
 
     job_id = uuid4().hex
-    user_id = str(current_user.id)
     filename = combined_filename(plan.stem) if combined else f"{plan.stem}.html"
     notebook_key = store.job_key(user_id, job_id, f"{plan.stem}.qmd")
     store.put(notebook_key, qmd, store.QMD_MEDIA_TYPE)
+    jobs.record(job_id, user_id, jobs.RENDER, dashboard_id=str(dashboard_id))
 
     # The notebook runs as the user who asked for it, so the report holds what
-    # they can see and nothing more. A token of its own, so the render can be
-    # revoked on its own: the caller's session is not handed to a worker.
-    token = await _add_token(
-        TokenData(
-            sub=current_user.id,
-            name=f"notebook-report-{job_id}",
-            token_lifetime="short-lived",
-        )
-    )
+    # they can see and nothing more: the worker mints a token of theirs when
+    # the render starts, and revokes it when it ends.
     render_notebook_report.apply_async(
         kwargs={
             "job_id": job_id,
@@ -1007,7 +1028,6 @@ async def notebook_export_render(
             "notebook_key": notebook_key,
             "stem": plan.stem,
             "api_url": settings.fastapi.internal_url,
-            "token_id": str(token.id),
             # The worker builds the manifest in-process (producer A, as the
             # static export does) and embeds it with the runtime after the
             # render.
@@ -1038,6 +1058,9 @@ async def notebook_export_render(
     return NotebookRenderStatus(job_id=job_id, status="queued", filename=filename, phase="queued")
 
 
+_RENDER_FAILED = "The report could not be rendered (the server log has the details)."
+
+
 @dashboards_endpoint_router.get(
     "/notebook_export/render/{job_id}", response_model=NotebookRenderStatus
 )
@@ -1047,7 +1070,7 @@ def notebook_export_render_status(
 ) -> NotebookRenderStatus:
     """Where a render job is: queued, running, ready to download, or failed."""
     _require_render_enabled()
-    result, payload = _render_job(job_id, current_user)
+    result, payload, record = _render_job(job_id, current_user)
     if result.successful():
         return NotebookRenderStatus(
             job_id=job_id,
@@ -1057,8 +1080,10 @@ def notebook_export_render_status(
             pdf_filename=payload.get("pdf_filename"),
             pdf_error=payload.get("pdf_error"),
         )
-    if result.failed():
-        return NotebookRenderStatus(job_id=job_id, status="error", reason=str(result.result))
+    if result.failed() or record.get("status") == "failed":
+        # The worker's own sentence, never the exception's text.
+        reason = str(record.get("reason") or _RENDER_FAILED)
+        return NotebookRenderStatus(job_id=job_id, status="error", reason=reason)
     return NotebookRenderStatus(
         job_id=job_id,
         status="running" if result.state == "PROGRESS" else "queued",
@@ -1076,7 +1101,7 @@ def notebook_export_render_download(
     _require_render_enabled()
     from depictio.api.v1.services.notebook_export import store
 
-    result, payload = _render_job(job_id, current_user)
+    result, payload, _record = _render_job(job_id, current_user)
     if not result.successful():
         raise HTTPException(status_code=409, detail=f"Render job '{job_id}' is not ready.")
     if format == "pdf":

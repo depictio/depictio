@@ -21,6 +21,8 @@ from typing import Any
 
 import polars as pl
 
+from depictio.notebook.qmd_safe import typst_str
+
 #: Rows and columns a table keeps on a page; the HTML report has them all.
 TABLE_ROWS = 30
 TABLE_COLS = 8
@@ -30,9 +32,8 @@ _LONG_TOKEN = 18
 
 
 def tstr(text: Any) -> str:
-    """A typst string literal."""
-    s = str(text)
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
+    """A typst string literal (``qmd_safe.typst_str``)."""
+    return typst_str(text)
 
 
 def raw(code: str) -> str:

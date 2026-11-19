@@ -344,6 +344,15 @@ def _run_task(monkeypatch: pytest.MonkeyPatch, **kw: Any) -> tuple[dict, dict, d
     monkeypatch.setattr("pymongo.AsyncMongoClient", _Mongo)
     monkeypatch.setattr("beanie.init_beanie", _noop)
     monkeypatch.setattr("depictio.models.models.users.TokenBeanie.get", _token)
+    # The task mints its own token and takes a report slot; neither is under test.
+    monkeypatch.setattr("depictio.api.v1.services.task_tokens.mint_task_token", _token)
+    monkeypatch.setattr("depictio.api.v1.services.task_tokens.revoke", _noop)
+    from depictio.api.v1.services.notebook_export import jobs
+
+    monkeypatch.setattr(jobs, "acquire_slot", lambda *a, **k: True)
+    monkeypatch.setattr(jobs, "release_slot", lambda *a, **k: None)
+    monkeypatch.setattr(jobs, "finish", lambda *a, **k: None)
+    monkeypatch.setattr(jobs, "prune_reports", lambda *a, **k: None)
     monkeypatch.setattr(store, "get", lambda key: b"---\ntitle: x\n---\n")
     monkeypatch.setattr(store, "put", lambda key, body, ct: stored.__setitem__(key, body))
     monkeypatch.setattr(store, "delete", lambda key: None)
@@ -355,7 +364,6 @@ def _run_task(monkeypatch: pytest.MonkeyPatch, **kw: Any) -> tuple[dict, dict, d
         notebook_key="k.qmd",
         stem="report",
         api_url="http://api",
-        token_id=str(ObjectId()),
         **kw,
     )
     return result, stored, seen

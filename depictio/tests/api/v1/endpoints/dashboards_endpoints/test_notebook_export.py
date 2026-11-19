@@ -9,7 +9,6 @@ stage. Reordering stages changes the intermediate counts, never the last.
 
 from __future__ import annotations
 
-import asyncio
 import re
 import sys
 import types
@@ -206,7 +205,10 @@ def patched_env():
         }
     )
     routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+    jobs_mod = "depictio.api.v1.services.notebook_export.jobs"
     with (
+        patch(f"{jobs_mod}.jobs_collection", db.notebook_export_jobs),
+        patch(f"{jobs_mod}.slots_collection", db.notebook_export_slots),
         patch(f"{routes_mod}.dashboards_collection", db.dashboards),
         patch(f"{routes_mod}.projects_collection", db.projects),
         patch(f"{routes_mod}.check_project_permission", lambda *a, **k: True),
@@ -524,16 +526,39 @@ def test_a_version_that_no_longer_exists_is_a_400(patched_env):
 class _RenderUser:
     email = "t.weber@example.org"
     id = ObjectId()
+    is_anonymous = False
 
 
-def _render(state):
-    return asyncio.run(
-        nbx.notebook_export_render(
-            dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
-            request=NotebookExportRequest(state=state, format="quarto"),
-            current_user=_RenderUser(),  # type: ignore[arg-type]
-            access_token=None,
-        )
+class _Someone(_RenderUser):
+    id = ObjectId()
+
+
+class _Anonymous:
+    email = "anonymous@depictio.io"
+    id = ObjectId()
+    is_anonymous = True
+
+
+def _render(state, user=None):
+    return nbx.notebook_export_render(
+        dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+        request=NotebookExportRequest(state=state, format="quarto"),
+        current_user=user or _RenderUser(),  # type: ignore[arg-type]
+        access_token=None,
+    )
+
+
+def _staging(staged: dict, queued: dict):
+    return (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch(
+            "depictio.api.v1.services.notebook_export.store.put",
+            lambda key, body, content_type: staged.__setitem__(key, body),
+        ),
+        patch(
+            "depictio.api.celery_app.render_notebook_report.apply_async",
+            lambda **kw: queued.update(kw),
+        ),
     )
 
 
@@ -551,32 +576,8 @@ def test_render_stages_the_notebook_and_queues_the_job(patched_env):
     """The notebook goes to S3 under the caller's prefix; the broker gets its key."""
     staged: dict[str, bytes] = {}
     queued: dict[str, object] = {}
-
-    class _Token:
-        id = ObjectId()
-
-    async def _fake_add_token(token_data):
-        assert token_data.token_lifetime == "short-lived"
-        return _Token()
-
-    with (
-        patch.object(nbx.settings.notebook_export, "render_enabled", True),
-        patch(
-            "depictio.api.v1.services.screenshot_service.check_dashboard_owner_permission_sync",
-            lambda *a: True,
-        ),
-        patch(
-            "depictio.api.v1.services.notebook_export.store.put",
-            lambda key, body, content_type: staged.__setitem__(key, body),
-        ),
-        patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions._add_token", _fake_add_token
-        ),
-        patch(
-            "depictio.api.celery_app.render_notebook_report.apply_async",
-            lambda **kw: queued.update(kw),
-        ),
-    ):
+    a, b, c = _staging(staged, queued)
+    with a, b, c:
         status = _render(_state(FILTERS))
 
     assert status.status == "queued" and status.filename.endswith(".html")
@@ -585,53 +586,103 @@ def test_render_stages_the_notebook_and_queues_the_job(patched_env):
     assert key.endswith(".qmd")
     # What was staged is the Quarto document the download hands out, front matter and all.
     assert staged[key].startswith(b"---\ntitle: Wells & Rivers\n")
-    # The job is addressed by the id the caller was handed, and carries the
-    # token by id rather than the token itself.
+    # The job is addressed by the id the caller was handed, and carries no
+    # token at all: the worker mints one when the render starts.
     assert queued["task_id"] == status.job_id
     assert queued["kwargs"]["notebook_key"] == key
-    assert queued["kwargs"]["token_id"] == str(_Token.id)
-    assert "access_token" not in queued["kwargs"]
+    assert "token_id" not in queued["kwargs"] and "access_token" not in queued["kwargs"]
+    # Bound to who asked, from the moment it is queued.
+    from depictio.api.v1.services.notebook_export import jobs
+
+    assert jobs.owned(status.job_id, str(_RenderUser.id), jobs.RENDER) is not None
+    assert jobs.owned(status.job_id, str(ObjectId()), jobs.RENDER) is None
+
+
+def test_the_server_render_never_carries_the_author_s_code(patched_env):
+    """The downloaded notebook keeps the code-mode figure's Python for its reader
+    to run; the document the worker executes asks the API for that figure,
+    which runs the code in the dashboard's sandbox."""
+    staged: dict[str, bytes] = {}
+    a, b, c = _staging(staged, {})
+    with a, b, c:
+        _render(_state(FILTERS))
+    rendered = next(iter(staged.values())).decode()
+    assert "fig = px.scatter(df.to_pandas()" not in rendered
+    assert "'fig-2'" in rendered and "client.component(" in rendered
+    assert "fig = px.scatter(df.to_pandas()" in _export(_state(FILTERS)).body.decode()
+
+
+def test_an_anonymous_visitor_cannot_render(patched_env):
+    """Every anonymous visitor is the same user: a job of theirs would be everyone's."""
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
+        pytest.raises(HTTPException) as exc,
+    ):
+        _render(_state(FILTERS), user=_Anonymous())
+    assert exc.value.status_code == 401
+
+
+def test_renders_are_limited_per_user(patched_env):
+    staged: dict[str, bytes] = {}
+    a, b, c = _staging(staged, {})
+    with (
+        a,
+        b,
+        c,
+        patch.object(nbx.settings.notebook_export, "render_max_active_per_user", 2),
+    ):
+        user = _RenderUser()
+        _render(_state([]), user=user)
+        _render(_state([]), user=user)
+        with pytest.raises(HTTPException) as exc:
+            _render(_state([]), user=user)
+    assert exc.value.status_code == 429
+
+
+def test_a_failed_render_says_a_sentence_and_only_to_its_owner(patched_env):
+    """A failure's own text (Quarto's log, worker paths) is the server's."""
+    from depictio.api.v1.services.notebook_export import jobs
+
+    owner = _RenderUser()
+    jobs.record("failed-job", str(owner.id), jobs.RENDER)
+    jobs.finish("failed-job", "failed", reason="the report ran past its time limit")
+
+    class _Failed:
+        state = "FAILURE"
+        result = RuntimeError("/srv/worker/tmp/depictio-report-x: cell 4 printed SECRET")
+
+        def successful(self):
+            return False
+
+        def failed(self):
+            return True
+
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch("celery.result.AsyncResult", lambda *a, **k: _Failed()),
+    ):
+        status = nbx.notebook_export_render_status(job_id="failed-job", current_user=owner)  # type: ignore[arg-type]
+        assert status.status == "error"
+        assert status.reason == "the report ran past its time limit"
+        with pytest.raises(HTTPException) as exc:
+            nbx.notebook_export_render_status(job_id="failed-job", current_user=_Someone())  # type: ignore[arg-type]
+    assert exc.value.status_code == 404
 
 
 def test_a_combined_render_queues_the_combined_job(patched_env):
     """The default export: the report AND the dashboard, one file, its own name."""
     staged: dict[str, bytes] = {}
     queued: dict[str, object] = {}
-
-    class _Token:
-        id = ObjectId()
-
-    async def _fake_add_token(token_data):
-        return _Token()
-
-    with (
-        patch.object(nbx.settings.notebook_export, "render_enabled", True),
-        patch.object(nbx, "_combined_refusal", lambda *a: None),
-        patch(
-            "depictio.api.v1.services.screenshot_service.check_dashboard_owner_permission_sync",
-            lambda *a: True,
-        ),
-        patch(
-            "depictio.api.v1.services.notebook_export.store.put",
-            lambda key, body, content_type: staged.__setitem__(key, body),
-        ),
-        patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions._add_token", _fake_add_token
-        ),
-        patch(
-            "depictio.api.celery_app.render_notebook_report.apply_async",
-            lambda **kw: queued.update(kw),
-        ),
-    ):
-        status = asyncio.run(
-            nbx.notebook_export_render(
-                dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
-                request=NotebookExportRequest(
-                    state=_state(FILTERS), output="combined", default_view="dashboard"
-                ),
-                current_user=_RenderUser(),  # type: ignore[arg-type]
-                access_token=None,
-            )
+    a, b, c = _staging(staged, queued)
+    with a, b, c, patch.object(nbx, "_combined_refusal", lambda *a: None):
+        status = nbx.notebook_export_render(
+            dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+            request=NotebookExportRequest(
+                state=_state(FILTERS), output="combined", default_view="dashboard"
+            ),
+            current_user=_RenderUser(),  # type: ignore[arg-type]
+            access_token=None,
         )
     assert status.filename.endswith("-report-dashboard.html")
     kwargs = queued["kwargs"]
@@ -667,13 +718,15 @@ def test_a_render_job_of_another_user_is_not_found(patched_env):
 
 
 def test_a_non_owner_cannot_render_author_written_code(patched_env):
-    """A code-mode figure is the author's Python, and the render is what runs it."""
+    """A code-mode figure is the author's Python: rendering it is the project
+    owners' call, not a dashboard owner's (a viewer can own a dashboard)."""
+    routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
     with (
         patch.object(nbx.settings.notebook_export, "render_enabled", True),
         patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
         patch(
-            "depictio.api.v1.services.screenshot_service.check_dashboard_owner_permission_sync",
-            lambda *a: False,
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": required != "owner",
         ),
     ):
         with pytest.raises(HTTPException) as exc:

@@ -226,6 +226,8 @@ exclude = [
   # What an exported report embeds so it needs no network: Inter (OFL) for
   # the Paper look, 3Dmol.js (BSD-3) for structures.
   "notebook/assets/**/*",
+  # The report's stylesheets, scripts and typst (notebook_export/resources.py).
+  "api/v1/services/notebook_export/assets/*",
 ]
 
 # Exclude patterns are fnmatch-based: `*` also crosses `/`, so each pattern matches

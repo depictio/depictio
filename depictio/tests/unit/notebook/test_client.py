@@ -242,6 +242,20 @@ def test_data_offline_mode_reads_local_parquet(tmp_path, api):
     assert not [call for call in api.calls if "/deltatables/data/" in call[1]]
 
 
+def test_an_offline_pinned_read_is_that_commit_or_an_error(tmp_path, api):
+    """Never the current table under a version's label (CLAUDE.md: a pinned read
+    must not fall back to current data)."""
+    TABLE.write_parquet(tmp_path / f"{DC}.parquet")
+    c = DepictioClient(
+        "https://depictio.test", "tok", transport=httpx.MockTransport(api), data_dir=str(tmp_path)
+    )
+    with pytest.raises(FileNotFoundError, match="as of commit 3"):
+        c.data(DC, version=3)
+    pinned = TABLE.head(1)
+    pinned.write_parquet(tmp_path / f"{DC}@v3.parquet")
+    assert c.data(DC, version=3).equals(pinned)
+
+
 def test_components_listing_and_lookup(client):
     listing = client.components(DASH)
     assert listing.height == len(DASHBOARD["stored_metadata"])

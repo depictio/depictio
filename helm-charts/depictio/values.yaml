@@ -633,17 +633,24 @@ celery:
       memory: "512Mi"
       cpu: "250m"
     limits:
-      memory: "2Gi"
+      memory: "3Gi"
       cpu: "1"
   env:
-    DEPICTIO_CELERY_WORKERS: "2"
+    # 4 slots: one rendered report at a time (the API's
+    # DEPICTIO_NOTEBOOK_EXPORT_REPORT_CONCURRENCY, default 1) holds one while
+    # the browser pass it waits on holds a second, and the compute task that
+    # pass can wait on a third. With 2, two reports (or one report and a
+    # pass) took every slot and their tiles timed out waiting. Each prefork
+    # slot holds its own DataFrames: size `resources` to match.
+    DEPICTIO_CELERY_WORKERS: "4"
     DEPICTIO_CELERY_ENABLED: "false"  # Controls dashboard view mode callbacks
     # The default queue, plus the notebook export's own two: headless browser
     # passes ("export") and rendered reports ("report"), routed apart in
     # celery_app.task_routes because a pass waits on the tile's compute task
-    # and a report on its passes. With rendered reports on
-    # (DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED), run a second release of this
-    # worker with "export,report" and >= 3 workers, and set this one to "celery".
+    # and a report on its passes. For more reports at once, raise the report
+    # concurrency on the API and run a second release of this worker with
+    # "export,report" and more workers than that concurrency + 2, and set this
+    # one to "celery".
     # Rendered reports (on by default, as the combined report + dashboard export
     # is) need Quarto in the worker image, which it carries by default
     # (WITH_QUARTO=true in docker-images/Dockerfile.worker). A worker built with

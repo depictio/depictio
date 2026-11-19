@@ -19,6 +19,7 @@ import html
 import json
 import time
 from typing import Annotated, Any
+from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Response
 
@@ -61,8 +62,12 @@ def expected_output(meta: dict[str, Any]) -> str:
 
 
 _RESULT_TTL_S = 600.0
+# Results by cache key, for this process. Only ever served to a caller who
+# passed the component's permission check for the same state.
 _results: dict[str, tuple[float, dict[str, Any]]] = {}
-_jobs: dict[str, str] = {}  # job_id -> cache key
+# An extraction job is bound to its requester in ``notebook_export.jobs``
+# (with its cache key), so only they can poll it, and its record expires.
+_EXTRACT_KEEP_S = 3600
 
 
 def _require_enabled() -> None:
@@ -145,6 +150,10 @@ def _server_figure(
         return None
     if ((state.get("color_by") or {}).get("kind") or "none") != "none":
         return None
+    # The builders read current data: a pinned state is the renderer's, which
+    # honours the pins (the browser pass hands it the whole state).
+    if any((state.get("pins") or {}).values()):
+        return None
     import asyncio
 
     from depictio.api.v1.services.export.plotly_export import build_plotly_export
@@ -206,18 +215,39 @@ def component_figure(
         _remember(key, served.model_dump(mode="json"))
         return served
     from depictio.api.v1.celery_tasks import extract_component_figure_task
+    from depictio.api.v1.services.notebook_export import jobs
 
-    job = extract_component_figure_task.delay(
-        {
-            "dashboard_id": str(dashboard_id),
-            "component_id": str(component_id),
-            "state": state,
-            "theme": request.theme,
-            "expect": expect,
-        }
+    # Each pass is a browser for up to three minutes: bounded per user, and
+    # run as that user (the worker mints them a token for it), never as the
+    # admin.
+    user_id = str(getattr(current_user, "id", "") or "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Extracting a figure needs a user.")
+    limits = settings.notebook_export
+    jobs.admit(
+        user_id,
+        jobs.EXTRACT,
+        max_active=limits.extract_max_active_per_user,
+        max_per_hour=limits.extract_max_per_hour,
+        window_s=600,
     )
-    _jobs[job.id] = key
-    return ComponentFigureResponse(status="pending", job_id=job.id)
+    job_id = uuid4().hex
+    jobs.record(job_id, user_id, jobs.EXTRACT, cache_key=key, keep_s=_EXTRACT_KEEP_S)
+    extract_component_figure_task.apply_async(
+        args=[
+            {
+                "dashboard_id": str(dashboard_id),
+                "component_id": str(component_id),
+                "state": state,
+                "theme": request.theme,
+                "expect": expect,
+                "user_id": user_id,
+                "job_id": job_id,
+            }
+        ],
+        task_id=job_id,
+    )
+    return ComponentFigureResponse(status="pending", job_id=job_id)
 
 
 @dashboards_endpoint_router.get(
@@ -230,7 +260,12 @@ def component_figure_job(
     _require_enabled()
     from celery.result import AsyncResult
 
-    key = _jobs.get(job_id)
+    from depictio.api.v1.services.notebook_export import jobs
+
+    record = jobs.owned(job_id, str(getattr(current_user, "id", "") or ""), jobs.EXTRACT)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"No extraction job '{job_id}'.")
+    key = str(record.get("cache_key") or "")
     if key:
         hit = _cached(key)
         if hit is not None:
@@ -239,7 +274,10 @@ def component_figure_job(
     if result.state in ("PENDING", "STARTED", "RETRY", "RECEIVED"):
         return ComponentFigureResponse(status="pending", job_id=job_id)
     if result.state == "FAILURE":
-        return ComponentFigureResponse(status="error", job_id=job_id, reason=str(result.result))
+        # The exception's text is the worker's (paths, a browser's log).
+        return ComponentFigureResponse(
+            status="error", job_id=job_id, reason="the extraction failed on the server"
+        )
     payload = result.result if isinstance(result.result, dict) else {}
     response = ComponentFigureResponse(
         status=payload.get("status") or "error",

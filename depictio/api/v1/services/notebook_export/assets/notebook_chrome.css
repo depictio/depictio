@@ -1,0 +1,160 @@
+
+/* The app's own type and colour, so an export reads as the same product as
+   the dashboard it came from. These are the values `buildDepictioTheme`
+   passes to Mantine (`brandTheme.ts`) and the Mantine 7 defaults it leaves
+   alone: the system sans stack, `defaultRadius: md` (8px), gray-4 borders,
+   gray-6 for dimmed text, and body text at line-height 1.55. Scoped to the
+   document body rather than `*`, so the host's own chrome keeps its look. */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  line-height: 1.55;
+  color: #000;
+}
+body code, body pre, body kbd, body samp {
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+.dpx-filter-name { font-weight: 500; }
+/* Mantine's heading scale (h1 2.125rem … h4 1.125rem), all at weight 700. */
+body h1 { font-size: 2.125rem; line-height: 1.3; font-weight: 700; }
+body h2 { font-size: 1.625rem; line-height: 1.35; font-weight: 700; }
+body h3 { font-size: 1.375rem; line-height: 1.4; font-weight: 700; }
+body h4 { font-size: 1.125rem; line-height: 1.45; font-weight: 700; }
+body h5 { font-size: 1rem; line-height: 1.5; font-weight: 700; }
+body h6 { font-size: .875rem; line-height: 1.5; font-weight: 700; }
+/* `Code`/`Table` as Mantine draws them: a tinted block on gray-0, rows split
+   by a gray-4 rule and nothing between the columns. */
+body :not(pre) > code { background: #f8f9fa; border-radius: .25rem; padding: .1em .35em; }
+body pre { background: #f8f9fa; border-radius: .5rem; }
+body table:not(.dpx-plain) { border-collapse: collapse; }
+body table:not(.dpx-plain) th { border-bottom: 1px solid #ced4da; }
+body table:not(.dpx-plain) td { border-bottom: 1px solid #f1f3f5; }
+.dpx-h { cursor: pointer; }
+.dpx-hc { color: var(--dpx-hc); }
+.dpx-chev {
+  display: inline-block; width: .8em; font-size: .65em; opacity: .45;
+  margin-inline-end: .28em; transition: transform .15s ease;
+}
+.dpx-folded > .dpx-chev, .dpx-folded > a > .dpx-chev { transform: rotate(-90deg); }
+#TOC .dpx-chev { cursor: pointer; }
+/* A branch with nothing under it keeps the slot, so titles stay aligned. */
+#TOC .dpx-gap { visibility: hidden; cursor: default; }
+/* Fold the whole report at once. It rides on the results heading rather than
+   floating over the page: that is the one heading every tab hangs off, so the
+   control sits where the thing it collapses begins. */
+.dpx-all {
+  margin-inline-start: auto; font: inherit; font-size: .6em; font-weight: 500;
+  color: #868e96; background: none; border: 1px solid currentColor;
+  border-radius: 999px; padding: .3em 1em; cursor: pointer; opacity: .7;
+  white-space: nowrap;
+}
+.dpx-all:hover { opacity: 1; }
+/* A tab's own fold control sits on its heading, smaller than the report's. */
+.dpx-tab-all { font-size: .5em; }
+/* A heading's aside ("2 active"): quiet, and not repeated in the contents. */
+.dpx-h-note {
+  font-size: .62em; font-weight: 500; color: #868e96; margin-inline-start: .6em;
+  white-space: nowrap;
+}
+#TOC .dpx-h-note, nav[role="doc-toc"] .dpx-h-note { display: none; }
+/* Icon and title on one optical line. The glyph is sized in `em`, so it
+   follows the heading's size, but an inline box hangs it off the baseline
+   and it reads as sitting too low next to large text. Laying the heading out
+   as a flex row centres the icon against the text instead; the same applies
+   to the copies Quarto puts in the table of contents. Browsers without
+   `:has()` fall back to the baseline shift the span carries itself. */
+h1:has(> span[data-dpx-accent]), h2:has(> span[data-dpx-accent]),
+h3:has(> span[data-dpx-accent]), h4:has(> span[data-dpx-accent]),
+h5:has(> span[data-dpx-accent]), h6:has(> span[data-dpx-accent]),
+a:has(> span[data-dpx-accent]) { display: flex; align-items: center; }
+[data-dpx-accent] svg { display: block; }
+/* The section accordion's accent rail (`sectionAccordion.css`): 3px of the
+   section's own colour, falling back to the default border like the app's
+   `--section-accent` does, with the body indented by one Mantine `md`. */
+.dpx-body {
+  border-inline-start: 3px solid var(--dpx-accent, #ced4da);
+  padding-inline-start: 16px; margin: .3rem 0 1.4rem 3px;
+}
+.dpx-body > .dpx-body { margin-bottom: .8rem; }
+/* A card is built to stand on its own — inline-block, with a minimum width
+   that keeps its number readable. In a row it is a grid cell instead, and
+   has to give that width up or three cards will not share one line. */
+.dpx-cards > div {
+  display: block !important; width: 100% !important;
+  min-width: 0 !important; margin: 0 !important; box-sizing: border-box;
+}
+/* The chrome the host renderer draws around the report — Quarto's contents
+   sidebar, its links, its code toggle — carrying the instance's own primary
+   colour and Mantine's proportions, so the page around the dashboard reads as
+   the same product as the dashboard. Selectors the other two renderers do not
+   have simply match nothing there. */
+body a { color: var(--dpx-primary, #228be6); }
+nav[role="doc-toc"], #quarto-margin-sidebar { font-size: .8125rem; }
+nav[role="doc-toc"] > h2, #toc-title {
+  font-size: .75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: #868e96;
+}
+nav[role="doc-toc"] a { color: #495057; }
+nav[role="doc-toc"] a:hover { color: var(--dpx-primary, #228be6); }
+nav[role="doc-toc"] a.active {
+  color: var(--dpx-primary, #228be6); font-weight: 600;
+  border-inline-start-color: var(--dpx-primary, #228be6);
+}
+/* Quarto's "Code" toggle as a Mantine `variant="default"` button. */
+#quarto-code-tools-source .btn, .code-tools-button {
+  border: 1px solid #ced4da; border-radius: .5rem; color: #495057;
+  background: #fff; font-size: .8125rem; font-weight: 500;
+}
+#quarto-code-tools-source .btn:hover, .code-tools-button:hover { background: #f8f9fa; }
+/* Plotly draws its dropdown in SVG, and the one thing it will not take from
+   the figure's own options is a corner radius — but the rects it draws take
+   one from CSS. The rest (font, padding, colours) is set on the figure, where
+   Plotly can measure the text it is sizing the box around. This is the
+   fallback the script below replaces; it shows only until then. */
+.updatemenu-item-rect { rx: 8px; ry: 8px; stroke: #ced4da; }
+.updatemenu-header-arrow { fill: #868e96; }
+.updatemenu-dropdown-button-group .updatemenu-item-rect { rx: 6px; ry: 6px; stroke: none; }
+/* The same control as an HTML select, in the document's own flow: a Plotly
+   menu is placed in paper coordinates, so on a figure with a wide label
+   gutter it can only ever float above the middle of the plot. */
+.dpx-controls {
+  display: flex; align-items: center; gap: .5rem;
+  margin: 0 0 .5rem; font-size: .8125rem;
+}
+.dpx-controls > span { color: #868e96; font-weight: 500; }
+.dpx-select-wrap { position: relative; display: inline-flex; align-items: center; }
+.dpx-select-wrap::after {
+  content: '▾'; position: absolute; right: .7em;
+  color: #868e96; font-size: .8em; pointer-events: none;
+}
+.dpx-select {
+  font: inherit; color: #495057; line-height: 1.55;
+  background-color: #fff; border: 1px solid #ced4da; border-radius: .5rem;
+  padding: .3em 2em .3em .7em; cursor: pointer; appearance: none;
+}
+.dpx-select:hover { background-color: #f8f9fa; }
+.dpx-select:focus {
+  outline: none; border-color: var(--dpx-primary, #228be6);
+}
+/* The tile's full-screen control, as the app draws it: a subtle square button
+   that only appears on hover, so a report at rest is a report and not a row of
+   affordances. */
+.dpx-zoomable { position: relative; }
+.dpx-zoom {
+  position: absolute; top: 4px; right: 4px; z-index: 3;
+  font: inherit; font-size: .8rem; line-height: 1;
+  color: #868e96; background: #fff; border: 1px solid #ced4da;
+  border-radius: .5rem; padding: .3em .5em; cursor: pointer;
+  opacity: 0; transition: opacity .15s ease;
+}
+.dpx-zoomable:hover > .dpx-zoom, .dpx-zoom:focus { opacity: 1; }
+.dpx-zoom:hover { background: #f8f9fa; color: #495057; }
+.dpx-full {
+  position: fixed !important; inset: 0 !important; z-index: 9999 !important;
+  margin: 0 !important; padding: 2.75rem 1.25rem 1.25rem !important;
+  background: #fff; overflow: auto; box-sizing: border-box;
+}
+.dpx-full > .dpx-zoom { opacity: 1; top: 10px; right: 14px; }
+/* A table full screen should scroll on its own, with its header in view. */
+.dpx-full table { width: 100%; }
+.dpx-full thead th { position: sticky; top: 0; background: #fff; z-index: 1; }

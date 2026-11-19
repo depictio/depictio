@@ -1,9 +1,10 @@
 """Extract a component's Plotly figure from the real React renderer.
 
 Same machinery as the dashboard screenshots (``screenshot_service``): the
-worker's Playwright drives the viewer with the admin token, but instead of
-capturing pixels it reads ``gd.data`` / ``gd.layout`` off the Plotly graph
-div. Same renderer, same numbers, no reimplementation.
+worker's Playwright drives the viewer, with a token of the requester's own
+rather than the admin's, but instead of capturing pixels it reads
+``gd.data`` / ``gd.layout`` off the Plotly graph div. Same renderer, same
+numbers, no reimplementation.
 
 A renderer that is not Plotly (SVG, canvas, WebGL, plain HTML) has no figure
 to read, so for those the same pass takes a PNG of the tile once the
@@ -17,36 +18,12 @@ from __future__ import annotations
 
 import base64
 import json
-import re
 from typing import Any, Literal
 from urllib.parse import quote
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-
-# A trace read straight off a live Plotly.js graph div can carry 8-digit hex
-# colours (``#RRGGBBAA``, an alpha channel) — valid Plotly.js, not valid
-# Python plotly (used below to round-trip the figure through go.Figure).
-# Same fix as depictio.notebook.components._normalize_colors; duplicated
-# rather than imported so this server module and the standalone notebook
-# client keep their separate dependency footprints.
-_HEX8_RE = re.compile(r"^#([0-9a-fA-F]{2}){4}$")
-
-
-def _hex8_to_rgba(color: str) -> str:
-    r, g, b, a = (int(color[i : i + 2], 16) for i in (1, 3, 5, 7))
-    return f"rgba({r}, {g}, {b}, {a / 255:.3f})"
-
-
-def _normalize_colors(obj: Any) -> Any:
-    if isinstance(obj, dict):
-        return {k: _normalize_colors(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_normalize_colors(v) for v in obj]
-    if isinstance(obj, str) and _HEX8_RE.match(obj):
-        return _hex8_to_rgba(obj)
-    return obj
-
+from depictio.notebook.theme import normalize_colors
 
 # JS evaluated in the embed page once the component reports ready. Typed
 # arrays (plotly.js keeps large columns as Float64Array) are not JSON, so the
@@ -136,7 +113,7 @@ def parse_extracted(raw: str) -> dict[str, Any]:
         try:
             import plotly.graph_objects as go
 
-            normalized = _normalize_colors(json.loads(json.dumps(figure)))
+            normalized = normalize_colors(json.loads(json.dumps(figure)))
             figure = json.loads(go.Figure(normalized, skip_invalid=True).to_json())
         except Exception as exc:  # keep the original raw dict rather than fail the whole job
             logger.debug(f"embed extract: plotly normalisation skipped: {exc}")
@@ -187,19 +164,25 @@ async def extract_component_figure(
     theme: str = "light",
     timeout_s: int | None = None,
     expect: Expect = "plotly",
+    *,
+    token_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Load the embed page headlessly and read its Plotly figure, or snapshot it."""
+    """Load the embed page headlessly and read its Plotly figure, or snapshot it.
+
+    ``token_payload`` is the session the page runs with: the requester's own,
+    minted for this pass (``task_tokens.browser_token_payload``), so the page
+    shows what they may see and runs with no more rights than theirs.
+    """
     from playwright.async_api import async_playwright
 
     from depictio.api.v1.services.screenshot_helpers import (
         HOST_UNREACHABLE_MARKERS,
         apply_init_script,
     )
-    from depictio.api.v1.services.screenshot_service import get_admin_auth_token
 
     timeout_s = timeout_s or settings.notebook_export.extract_timeout_s
     url = embed_url(settings.viewer.url, dashboard_id, component_id, state, theme)
-    token_data = await get_admin_auth_token()
+    token_data = token_payload
     logger.info(f"embed extract: {dashboard_id}/{component_id} via {url.split('#')[0]}")
 
     async with async_playwright() as p:

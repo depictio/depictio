@@ -188,14 +188,22 @@ class DepictioClient:
         ``version`` reads that Delta commit instead of the current table (what
         an export taken under a dashboard version pins). Reads
         ``DEPICTIO_DATA_DIR/<dc_id>.parquet`` when that variable is set
-        (offline mode; ``<dc_id>@v<version>.parquet`` first for a pinned read),
-        otherwise the API's Parquet endpoint.
+        (offline mode; ``<dc_id>@v<version>.parquet`` for a pinned read, which
+        never falls back to the current table), otherwise the API's Parquet
+        endpoint.
         """
         if self.data_dir:
             folder = Path(self.data_dir)
             path = folder / f"{dc_id}.parquet"
-            if version is not None and (folder / f"{dc_id}@v{version}.parquet").exists():
+            if version is not None:
                 path = folder / f"{dc_id}@v{version}.parquet"
+                if not path.exists():
+                    # A pinned read is that commit or nothing: the current table
+                    # would be labelled with a version it is not.
+                    raise FileNotFoundError(
+                        f"{path} is missing: this document reads {dc_id} as of commit "
+                        f"{version}, and offline that is the only file it may read"
+                    )
             df = pl.read_parquet(path)
             return df.select(columns) if columns else df
         params: dict[str, Any] = {"columns": ",".join(columns)} if columns else {}

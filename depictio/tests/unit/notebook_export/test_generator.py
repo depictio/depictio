@@ -322,9 +322,11 @@ def test_card_row_reads_the_real_display_not_the_iframe_tile():
     body = NotebookBuilder._metric_card_cell(None).body
     ns: dict = {}
     from depictio.notebook import StaticCard, static_card_row, static_figures
+    from depictio.notebook.qmd_safe import esc
 
     glb = {
         "HTML": HTML,
+        "html_text": esc,
         "static_figures": static_figures,
         "StaticCard": StaticCard,
         "static_card_row": static_card_row,

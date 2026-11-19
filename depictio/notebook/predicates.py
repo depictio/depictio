@@ -36,6 +36,10 @@ from depictio.models.components.filter_expr import validate_filter_expr
 # --- Mirrors of deltatables_utils (pinned by test_funnel.py) ----------------
 
 LINK_NO_MATCH = "__link_no_match__"
+# deltatables_utils.RUN_ID_COLUMN: a row with no run belongs to every run.
+RUN_ID_COLUMN = "depictio_run_id"
+# A genome region's chromosome half matches names with and without ``chr``.
+GENOME_SELECTION_SOURCE = "genome_selection"
 SLIDER_MODES: dict[str, str] = {
     "gte": ">=",
     "gt": ">",
@@ -91,6 +95,31 @@ def text_filter_pattern(
     if not _is_valid_regex(pattern):
         return None
     return pattern, False
+
+
+def canonical_chrom(name: Any) -> str:
+    """``jbrowse.regions.canonical_chrom``: no ``chr`` prefix; ``M`` and ``MT`` are one."""
+    s = str(name).strip()
+    if s[:3].lower() == "chr":
+        s = s[3:]
+    return "MT" if s in ("M", "MT") else s
+
+
+def chrom_name_variants(values: Any) -> list[str]:
+    """``jbrowse.regions.chrom_name_variants``: each name in every spelling."""
+    items = values if isinstance(values, list | tuple) else [values]
+    out: dict[str, None] = {}
+    for v in items:
+        if v is None:
+            continue
+        out[str(v)] = None
+        canon = canonical_chrom(v)
+        spellings = [canon, f"chr{canon}"]
+        if canon == "MT":
+            spellings += ["M", "chrM", "MT", "chrMT"]
+        for spelling in spellings:
+            out[spelling] = None
+    return list(out)
 
 
 def parse_iso_datetime(raw: object) -> object:
@@ -237,8 +266,15 @@ def emit_predicate(
     slider_mode: str | None = None,
     case_sensitive: object = None,
     match_mode: object = None,
+    source: object = None,
 ) -> PredicateSource | None:
     """Source for what ``add_filter`` would append, or ``None`` when it appends nothing.
+
+    ``source`` is the filter's own (``genome_selection`` for a region's
+    chromosome half): ``apply_filters`` widens such a Select/MultiSelect to
+    every spelling of its chromosomes before ``add_filter`` sees it, and so
+    does this. A categorical filter on ``depictio_run_id`` also keeps the rows
+    with no run, as ``add_filter`` does.
 
     ``slider_mode``, ``case_sensitive`` and ``match_mode`` are ``add_filter``'s
     own options, read off the same filter entry, and resolved by the same
@@ -254,8 +290,16 @@ def emit_predicate(
     if itype in CATEGORICAL_TYPES:
         if not value:
             return None
+        if source == GENOME_SELECTION_SOURCE and itype in ("Select", "MultiSelect"):
+            value = chrom_name_variants(value)
         values = value if isinstance(value, list) else [value]
-        return _categorical(column, values, dtype)
+        src = _categorical(column, values, dtype)
+        if column == RUN_ID_COLUMN:
+            # A row with no run aggregates several runs' samples: it belongs to each.
+            src = PredicateSource(
+                expr=f"({src.expr}) | {_column(column)}.is_null()", prelude=src.prelude
+            )
+        return src
     if itype == "TextInput":
         compiled = text_filter_pattern(value, case_sensitive, match_mode)
         if compiled is None:

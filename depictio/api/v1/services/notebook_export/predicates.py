@@ -6,6 +6,7 @@ computed from ``depictio_state`` at run time). This module is the server's
 name for it.
 """
 
+from depictio.notebook.funnel import is_region_filter
 from depictio.notebook.predicates import (
     CATEGORICAL_TYPES,
     DATE_RANGE_TYPES,
@@ -24,6 +25,7 @@ __all__ = [
     "dtype_source",
     "emit_filter_expr",
     "emit_predicate",
+    "is_region_filter",
     "literal",
     "literal_list",
 ]
