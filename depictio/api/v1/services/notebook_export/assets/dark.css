@@ -1,0 +1,21 @@
+
+/* The scheme's tokens (--gl-*) and the page colour come from the dark brand's
+   SCSS rules layer (report_theme.brand_rules), compiled into Quarto's dark
+   stylesheet: what is left here is what no stylesheet of Quarto's reaches. */
+body.quarto-dark :not(pre) > code, body.quarto-dark pre { background: var(--gl-well); color: var(--gl-fg); }
+body.quarto-dark table:not(.dpx-plain) th, body.quarto-dark table:not(.dpx-plain) td {
+  border-color: var(--gl-hair);
+}
+body.quarto-dark .dpx-select, body.quarto-dark .dpx-zoom, body.quarto-dark .dpx-full,
+body.quarto-dark .dpx-full thead th { background-color: var(--gl-paper); color: var(--gl-fg); }
+body.quarto-dark .dpx-card-title { color: var(--gl-muted) !important; }
+body.quarto-dark .js-plotly-plot .main-svg .xtick text, body.quarto-dark .js-plotly-plot .main-svg .ytick text,
+body.quarto-dark .js-plotly-plot .main-svg .g-xtitle text, body.quarto-dark .js-plotly-plot .main-svg .g-ytitle text,
+body.quarto-dark .js-plotly-plot .main-svg .gtitle, body.quarto-dark .js-plotly-plot .main-svg .legendtext,
+body.quarto-dark .js-plotly-plot .main-svg .legendtitletext, body.quarto-dark .js-plotly-plot .main-svg .annotation-text {
+  fill: var(--gl-fg) !important;
+}
+body.quarto-dark .js-plotly-plot .main-svg .gridlayer path,
+body.quarto-dark .js-plotly-plot .main-svg .zerolinelayer path { stroke: rgba(255, 255, 255, 0.08) !important; }
+body.quarto-dark .dataTables_wrapper, body.quarto-dark .dt-container { color: var(--gl-fg); }
+body.quarto-dark .callout.dpx-about { background: none; }
