@@ -775,6 +775,11 @@ def _is_live_embedding(render) -> bool:
     return bool((render.roles or {}).get("compute_method"))
 
 
+def _without_timing(result: dict[str, Any]) -> dict[str, Any]:
+    """Zero the measured duration: a catalog export must be reproducible byte for byte."""
+    return {**result, "compute_ms": 0}
+
+
 def _upset_payload(df, render) -> dict[str, Any]:
     """Pre-compute the UpSet figure from the fixture.
 
@@ -791,7 +796,7 @@ def _upset_payload(df, render) -> dict[str, Any]:
     # actually carry the setting.
     roles = render.roles or {}
     set_columns = roles.get("sets")
-    return _upset_result_from_frame(
+    result = _upset_result_from_frame(
         df,
         set_columns=list(set_columns) if isinstance(set_columns, list) else None,
         sort_by="cardinality",
@@ -804,6 +809,7 @@ def _upset_payload(df, render) -> dict[str, Any]:
         set_colors=None,
         annotation_cols=[],
     )
+    return _without_timing(result)
 
 
 def _sankey_payload(df, render) -> dict[str, Any]:
@@ -819,13 +825,15 @@ def _sankey_payload(df, render) -> dict[str, Any]:
         raise CatalogPayloadError(
             f"sankey: step column(s) {missing} absent from fixture {list(df.columns)}"
         )
-    return _sankey_result_from_frame(
-        df,
-        value_col=roles.get("value"),
-        step_cols=step_cols,
-        sort_mode="total_flow",
-        min_link_value=0.0,
-        step_filters={},
+    return _without_timing(
+        _sankey_result_from_frame(
+            df,
+            value_col=roles.get("value"),
+            step_cols=step_cols,
+            sort_mode="total_flow",
+            min_link_value=0.0,
+            step_filters={},
+        )
     )
 
 
@@ -844,12 +852,14 @@ def _embedding_payload(df, render) -> dict[str, Any]:
         raise CatalogPayloadError(
             f"embedding: sample id column {feature_id_col!r} absent from fixture {list(df.columns)}"
         )
-    return _embedding_result_from_frame(
-        df,
-        feature_id_col=feature_id_col,
-        method=str(roles.get("compute_method") or "pca"),
-        params={},
-        extra_cols=[],
+    return _without_timing(
+        _embedding_result_from_frame(
+            df,
+            feature_id_col=feature_id_col,
+            method=str(roles.get("compute_method") or "pca"),
+            params={},
+            extra_cols=[],
+        )
     )
 
 
@@ -1387,7 +1397,11 @@ def _write_json(path: Path, payload: Any) -> int:
     return len(body.encode("utf-8"))
 
 
-def export_site_data(entries: Any, out_dir: Path, version: str) -> dict[str, int]:
+# How many ``output_id:index`` of failed renders the export stats name.
+RENDER_ERROR_LIST_LIMIT = 20
+
+
+def export_site_data(entries: Any, out_dir: Path, version: str) -> dict[str, Any]:
     """Write the catalog as an index plus one JSON file per output.
 
     The gallery puts every output's payload in one page, ~26 MB of JSON before
@@ -1403,8 +1417,13 @@ def export_site_data(entries: Any, out_dir: Path, version: str) -> dict[str, int
     An output whose payload cannot be built is still listed, with ``ok: false``
     and its error, as in the gallery; it gets no file.
 
-    Returns counts and sizes: ``tools``, ``outputs``, ``failed``,
-    ``index_bytes``, ``outputs_bytes``.
+    A render that failed inside an output that is otherwise fine carries ``_error``
+    and shows as an error card; it does not fail the output, so ``failed`` misses it.
+    ``render_errors`` counts them and ``render_error_ids`` names the first
+    ``RENDER_ERROR_LIST_LIMIT`` as ``output_id:index``.
+
+    Returns counts and sizes: ``tools``, ``outputs``, ``failed``, ``render_errors``,
+    ``render_error_ids``, ``index_bytes``, ``outputs_bytes``.
     """
     out_dir = Path(out_dir)
     outputs_dir = out_dir / "outputs"
@@ -1412,7 +1431,16 @@ def export_site_data(entries: Any, out_dir: Path, version: str) -> dict[str, int
 
     tools: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    stats = {"tools": 0, "outputs": 0, "failed": 0, "index_bytes": 0, "outputs_bytes": 0}
+    render_error_ids: list[str] = []
+    stats: dict[str, Any] = {
+        "tools": 0,
+        "outputs": 0,
+        "failed": 0,
+        "render_errors": 0,
+        "render_error_ids": render_error_ids,
+        "index_bytes": 0,
+        "outputs_bytes": 0,
+    }
     for entry in entries:
         listed = []
         for output in entry.outputs:
@@ -1429,6 +1457,11 @@ def export_site_data(entries: Any, out_dir: Path, version: str) -> dict[str, int
                 )
             else:
                 stats["failed"] += 1
+            for render in out_entry["renders"]:
+                if render.get("_error"):
+                    stats["render_errors"] += 1
+                    if len(render_error_ids) < RENDER_ERROR_LIST_LIMIT:
+                        render_error_ids.append(f"{output.id}:{render.get('index')}")
             listed.append({**out_entry, "fixturePreview": None})
             stats["outputs"] += 1
         tools.append(_tool_dict(entry, listed))

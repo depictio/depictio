@@ -2654,7 +2654,7 @@ def _sankey_result_from_frame(
     link_frames: list[pl.DataFrame] = []
     for src_col, tgt_col in zip(step_cols[:-1], step_cols[1:]):
         link_frames.append(
-            df.group_by([src_col, tgt_col])
+            df.group_by([src_col, tgt_col], maintain_order=True)
             .agg(pl.col("__sk_weight").sum().alias("value"))
             .rename({src_col: "source_value", tgt_col: "target_value"})
             .with_columns(
@@ -2687,21 +2687,21 @@ def _sankey_result_from_frame(
         if sort_mode == "total_flow" and links_df.height > 0:
             outgoing = (
                 links_df.filter(pl.col("source_col") == step_col)
-                .group_by("source_value")
+                .group_by("source_value", maintain_order=True)
                 .agg(pl.col("value").sum().alias("total"))
                 .rename({"source_value": "label"})
             )
             incoming = (
                 links_df.filter(pl.col("target_col") == step_col)
-                .group_by("target_value")
+                .group_by("target_value", maintain_order=True)
                 .agg(pl.col("value").sum().alias("total"))
                 .rename({"target_value": "label"})
             )
             totals = (
                 pl.concat([outgoing, incoming], how="vertical_relaxed")
-                .group_by("label")
+                .group_by("label", maintain_order=True)
                 .agg(pl.col("total").sum())
-                .sort("total", descending=True)
+                .sort(["total", "label"], descending=[True, False])
             )
             return totals.get_column("label").to_list()
         return sorted(df.get_column(step_col).unique().to_list())

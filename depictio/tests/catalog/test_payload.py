@@ -397,3 +397,63 @@ def test_a_coverage_track_lists_chromosomes_and_samples_in_file_order() -> None:
 
     assert summary["chromosomes"] == first_seen(summary["chromosomes"])
     assert summary["samples"] == first_seen(summary["samples"])
+
+
+def _output_of_kind(kind: str):
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            if any(r.component == "advanced_viz" and r.kind == kind for r in output.renders_as):
+                return entry, output
+    raise AssertionError(f"no catalog output renders a {kind}")
+
+
+@pytest.mark.parametrize("kind", ["sankey", "upset_plot"])
+def test_a_computed_render_is_reproducible_and_has_no_error(kind) -> None:
+    """The kernels live in the Celery module, which refuses an unconfigured server on
+    import: a failure there is swallowed into a per-render `_error` (and no data), so
+    the two payloads would compare equal while both being empty."""
+    import json
+
+    entry, output = _output_of_kind(kind)
+
+    first = build_payload(output, "light", entry)
+    second = build_payload(output, "light", entry)
+
+    wanted = [r for r in first["renders"] if r.get("viz_kind") in ("sankey", "upset_plot", "upset")]
+    assert wanted
+    assert not [r["_error"] for r in first["renders"] if "_error" in r]
+    assert not [r["_error"] for r in second["renders"] if "_error" in r]
+    computed = [first["data"]["compute"][r["dc_id"]] for r in wanted]
+    assert all(c.get("figure") for c in computed)
+    assert all(c["compute_ms"] == 0 for c in computed)
+    assert json.dumps(json_safe(first), sort_keys=False, default=str) == json.dumps(
+        json_safe(second), sort_keys=False, default=str
+    )
+
+
+def test_the_export_counts_the_renders_that_failed(tmp_path, monkeypatch) -> None:
+    def failing(output, tool, theme):
+        renders = [{"index": f"r{i}", "_error": "boom"} for i in range(3)]
+        return {
+            "output": {"id": output.id},
+            "fixturePreview": None,
+            "renders": renders,
+            "ok": True,
+        }, {}
+
+    monkeypatch.setattr("depictio.catalog.payload._output_entry", failing)
+    entry = _flagship_entry()
+    stats = export_site_data([entry], tmp_path, "dev")
+
+    assert stats["failed"] == 0
+    assert stats["render_errors"] == 3 * len(entry.outputs)
+    ids = stats["render_error_ids"]
+    assert ids[:3] == [f"{entry.outputs[0].id}:r{i}" for i in range(3)]
+    assert len(ids) == min(20, stats["render_errors"])
+
+
+def test_a_clean_export_reports_no_render_error(tmp_path) -> None:
+    stats = export_site_data([_flagship_entry()], tmp_path, "dev")
+
+    assert stats["render_errors"] == 0
+    assert stats["render_error_ids"] == []

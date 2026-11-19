@@ -18,8 +18,9 @@ name: deploy-catalog
 #   modules/, releases.json, versions.json, index.html (redirect to latest/)
 #
 # The tree layout and its contract are in docs/design/catalog-site.md. The
-# whole tree is also uploaded as the `catalog-site` workflow artifact, which is
-# what another host (a cluster, a bucket) can take instead of GitHub Pages.
+# tree is also uploaded as the `catalog-site` workflow artifact, which is what
+# another host (a cluster, a bucket) can take instead of GitHub Pages: the tree
+# that was pushed when the deploy token is set, else the one assembled here.
 #
 # The documentation links the directory of the version it documents.
 # Same deploy mechanism as deploy-tool-studio.yaml: this workflow only reads
@@ -145,10 +146,11 @@ jobs:
             --out-dir "$RUNNER_TEMP/catalog-export" --version "$VERSION"
 
       # Builds the site tree and stops there: nothing is pushed. With the deploy
-      # token the tree starts from what is live (the other slots survive); a
-      # remote that cannot be read stops the job, since starting from nothing
-      # would publish this slot alone. Without the token (a fork) it starts
-      # from an empty site plus this slot, so the artifact below still exists.
+      # token the tree starts from what is live (the other slots survive), which
+      # also checks the publish before the push step begins; a remote that
+      # cannot be read stops the job, since starting from nothing would publish
+      # this slot alone. Without the token (a fork) it starts from an empty
+      # site plus this slot, and this is the tree the artifact carries.
       - name: Assemble the site tree
         id: assemble
         env:
@@ -156,7 +158,16 @@ jobs:
           SLOT: ${{ steps.slot.outputs.slot }}
         run: |
           set -euo pipefail
+          # One retry for a transient failure, then give up: never carry on.
+          retry() {
+            local label="$1"; shift
+            "$@" && return 0
+            echo "::warning::${label} failed; retrying once in 5s" >&2
+            sleep 5
+            "$@"
+          }
           SITE="$RUNNER_TEMP/catalog-site"
+          clone_live() { rm -rf "$SITE"; git clone -q --depth 1 --branch main "$REMOTE" "$SITE"; }
           rm -rf "$SITE"
           if [ -z "${DEPLOY_TOKEN}" ]; then
             echo "::warning::CATALOG_SITE_DEPLOY_TOKEN is unset: the site tree is built and uploaded as an artifact, not pushed."
@@ -165,9 +176,11 @@ jobs:
           else
             echo "has_token=true" >> "$GITHUB_OUTPUT"
             REMOTE="https://x-access-token:${DEPLOY_TOKEN}@github.com/depictio/depictio-catalog.git"
-            HEADS="$(git ls-remote --heads "$REMOTE" main)"
+            HEADS="$(retry ls-remote git ls-remote --heads "$REMOTE" main)" || {
+              echo "::error::cannot read the live catalog site; not publishing from an empty tree"; exit 1; }
             if [ -n "${HEADS}" ]; then
-              git clone -q --depth 1 --branch main "$REMOTE" "$SITE"
+              retry clone clone_live || {
+                echo "::error::cannot clone the live catalog site; not publishing from an empty tree"; exit 1; }
               rm -rf "$SITE/.git"
             else
               mkdir -p "$SITE"
@@ -176,18 +189,10 @@ jobs:
           python3 scripts/publish_catalog_site.py \
             --site "$SITE" --export "$RUNNER_TEMP/catalog-export" --slot "$SLOT"
           du -sh "$SITE"
-
-      # Hidden files are included: .nojekyll belongs to the tree.
-      - name: Upload the site tree
-        uses: actions/upload-artifact@v4
-        with:
-          name: catalog-site
-          path: ${{ runner.temp }}/catalog-site
-          retention-days: 30
-          include-hidden-files: true
-          if-no-files-found: error
+          echo "tree=$SITE" >> "$GITHUB_OUTPUT"
 
       - name: Push to GitHub Pages
+        id: push
         # CATALOG_SITE_DEPLOY_TOKEN: a fine-grained PAT scoped to
         # depictio/depictio-catalog ONLY, with Contents: Read and write. Without
         # it the job ends after the artifact upload, instead of failing on an
@@ -203,19 +208,33 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # One retry for a transient failure, then give up: a remote that cannot
+          # be read stops the job, it never publishes from an empty tree.
+          retry() {
+            local label="$1"; shift
+            "$@" && return 0
+            echo "::warning::${label} failed; retrying once in 5s" >&2
+            sleep 5
+            "$@"
+          }
+          clone_live() { rm -rf "$SITE"; git clone -q --depth 1 --branch main "$REMOTE" "$SITE"; }
+
           # The published tree is the history: start from what is live so the
           # other slots survive. The push is leased on the commit read, and the
-          # whole read-publish-push is retried when another run got there first.
-          # The tree assembled above would be stale then, so every attempt
-          # rebuilds its own from the live site (publishing is deterministic and
-          # cheap: the loop is the same work as the assemble step, repeated on
-          # purpose rather than reused).
+          # whole read-publish-push is retried when another run got there first
+          # (only then: any other push error stops the job at once). The tree
+          # assembled above would be stale then, so every attempt rebuilds its
+          # own from the live site (publishing is deterministic and cheap: the
+          # loop is the same work as the assemble step, repeated on purpose
+          # rather than reused).
           for attempt in 1 2 3 4 5; do
-            HEADS="$(git ls-remote --heads "$REMOTE" main)"
+            HEADS="$(retry ls-remote git ls-remote --heads "$REMOTE" main)" || {
+              echo "::error::cannot read the live catalog site; not publishing from an empty tree"; exit 1; }
             rm -rf "$SITE"
             if [ -n "${HEADS}" ]; then
               LEASE="main:$(echo "${HEADS}" | cut -f1)"
-              git clone -q --depth 1 --branch main "$REMOTE" "$SITE"
+              retry clone clone_live || {
+                echo "::error::cannot clone the live catalog site; not publishing from an empty tree"; exit 1; }
             else
               LEASE="main:"
               mkdir -p "$SITE"
@@ -230,8 +249,15 @@ jobs:
             git -C "$SITE" init -q -b main
             git -C "$SITE" add -A
             git -C "$SITE" commit -q -m "Deploy catalog ${SLOT} from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-            if git -C "$SITE" push -q --force-with-lease="${LEASE}" "$REMOTE" HEAD:refs/heads/main; then
+            if PUSH_OUT="$(git -C "$SITE" push -q --force-with-lease="${LEASE}" "$REMOTE" HEAD:refs/heads/main 2>&1)"; then
               break
+            fi
+            # A lease rejection says the site moved: read it again. "[remote
+            # rejected]" (a hook, a protected branch) is not one.
+            if ! printf '%s\n' "${PUSH_OUT}" | grep -Eq 'stale info|fetch first|\[rejected\]'; then
+              echo "${PUSH_OUT}"
+              echo "::error::the push failed for a reason other than a concurrent publish; not retrying"
+              exit 1
             fi
             if [ "${attempt}" = 5 ]; then
               echo "::error::the catalog site moved under every attempt; not published"; exit 1
@@ -239,6 +265,9 @@ jobs:
             echo "The catalog site changed while publishing; retrying (${attempt}/5)"
             sleep $((attempt * 10))
           done
+          # What is uploaded is the tree that was pushed, without its git dir.
+          rm -rf "$SITE/.git"
+          echo "tree=$SITE" >> "$GITHUB_OUTPUT"
           echo "Published https://depictio.github.io/depictio-catalog/${SLOT}/"
           {
             echo "## Catalog published"
@@ -246,3 +275,15 @@ jobs:
             echo "- **Slot**: ${SLOT}"
             echo "- **URL**: https://depictio.github.io/depictio-catalog/${SLOT}/"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The tree that was pushed when there was a token, else the assembled one
+      # (a fork, which cannot push). Hidden files are included: .nojekyll
+      # belongs to the tree.
+      - name: Upload the site tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-site
+          path: ${{ steps.push.outputs.tree || steps.assemble.outputs.tree }}
+          retention-days: 30
+          include-hidden-files: true
+          if-no-files-found: error

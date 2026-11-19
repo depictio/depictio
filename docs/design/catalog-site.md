@@ -29,6 +29,14 @@ data/outputs/<output_id>.json each output's {fixturePreview, data}, fetched when
 `data/index.json` has `version`, `tools[]` (each with the module `version` from its
 `module.yaml`) and, per output, `ok` (and `error` when its previews could not be built).
 
+The export is **reproducible**: the same catalog gives the same bytes, in any process. The
+measured `compute_ms` of the computed renders (upset, sankey, embedding) is written as `0`,
+and the Sankey kernel keeps its groups in input order and breaks ties on the label. An export
+whose computed renders fail is not complete: the stats of `export_site_data` carry
+`render_errors` (renders holding `_error`, inside outputs that are otherwise `ok`) and
+`render_error_ids` (the first 20, as `output_id:index`), and `export-site --strict` fails on
+those as it does on a failed output.
+
 ## The site tree
 
 ```
@@ -41,9 +49,17 @@ modules/<tool_id>.json        a module's version history
 latest/  v1.22.0/  ...        one per slot:
   index.html                  the slot's bundle entry, loading ../assets/
   data/index.json             as exported, each output with "dataRef": "<sha256>"
-  assets.json                 the asset files this slot's bundle needs: a JSON array of names under assets/
+  assets.json                 the shared asset files this slot's bundle needs: a JSON array of names under assets/
   assets.previous.json        latest/ only: the assets of the latest/ it replaced (grace period)
+  objects.previous.json       latest/ only: the dataRefs of the latest/ it replaced (grace period)
+  assets/<file>               files whose name carries no content hash (e.g. genomes/hg38.genes.json)
 ```
+
+Only a file named like a Vite chunk (`<name>-<hash>.<ext>`, a hash of 8 or more characters
+from `[A-Za-z0-9_-]`) is moved to the shared `assets/`: the same name then means the same
+content, and a hashed name that arrives with other content is refused. Any other file stays
+in its slot's own `assets/`, where the code finds it by a URL relative to the document; it is
+not listed in `assets.json`, and the slot's `index.html` keeps pointing at it as `./assets/`.
 
 - An output whose data did not change between two releases points at the same object, and a
   bundle that did not change at the same chunks. A release that changes nothing costs its
@@ -52,12 +68,24 @@ latest/  v1.22.0/  ...        one per slot:
   else from `data/outputs/<id>.json` (a bare export).
 - `assets/` and `objects/` only grow while a slot references them. The publisher drops what
   no slot references any more, except the assets of the `latest/` it replaces, kept for one
-  more deploy so a tab opened before it can still load its chunks: the publisher records
-  the replaced `assets.json` as `latest/assets.previous.json` (a redeploy of the same bundle
-  carries the previous grace list over), and counts it as a reference.
+  more deploy so a tab opened before it can still load its chunks and data: the publisher
+  records the replaced `assets.json` as `latest/assets.previous.json` and the `dataRef`s of
+  the replaced index as `latest/objects.previous.json` (a redeploy of the same bundle, or of the
+  same data, carries the previous grace list over), and counts both as references.
+- Republishing a **release** gives no grace period: the slot is replaced and what no slot
+  references any more is dropped at once. Only `latest/` is expected to change under a reader.
 - The publisher normalises every slot on each run, idempotently: a slot in the earlier format
   (`data/outputs/` and `assets/` inside the slot, no `dataRef`) is converted to the layout
-  above. An export is refused when an `ok` output has no `data/outputs/<id>.json`.
+  above. An export is refused when an `ok` output has no `data/outputs/<id>.json`, or when
+  an output id (ok or not), a tool id or a slot name could not name a file.
+- Before deleting anything the publisher checks that every `dataRef` of every slot exists in
+  `objects/` and every name in every `assets.json` exists in `assets/` (and stays inside it);
+  otherwise it stops with nothing deleted. It also computes `modules/` and `releases.json`
+  before the first deletion, so an error there does not leave the tree half-cleaned.
+- **The publisher is not atomic.** It edits the tree in place (the slot is replaced, shared
+  files move, then files are dropped and the derived files written), so a crash in the middle
+  can leave a mixed tree. A host that publishes in place (rather than from a fresh checkout it
+  can discard) should run the publisher on a copy of the tree and switch to the copy.
 
 ### `modules/<tool_id>.json`
 
@@ -77,9 +105,17 @@ latest/  v1.22.0/  ...        one per slot:
 }
 ```
 
-Newest first. `releases` lists the slots that ship that version, so the viewer can open the
-module in a release that had it. `bump` is the semver step from the version below it
+Newest first by semver. `releases` lists the slots that ship that version, so the viewer can
+open the module in a release that had it. `bump` is the semver step from the version below it
 (`major`: an output column changed, `minor`: a reader, recipe or render, `patch`: text).
+
+A version that went back (say `latest` ships `1.0.0` while `v1.23.0` shipped `1.1.0`) stays in
+the history at its semver place and `releases` stays exact: `1.0.0` lists `latest`. The step
+from a higher version to a lower one, which only `releases.json` computes, is `"downgrade"`.
+
+A tool whose index entry has **no `version`** (an index exported before module versions, such
+as the v1.22.0 export) has an *unknown* version, not `1.0.0`: that slot adds no entry to the
+module's history, and a module no slot knows a version of gets no `modules/<id>.json`.
 
 ### `releases.json`
 
@@ -102,8 +138,10 @@ module in a release that had it. `bump` is the semver step from the version belo
 `latest` compares with the newest release, so it reads as "unreleased changes". The oldest
 release has `previous: null` and empty `changes`. `published` is the UTC time that slot was
 last published, kept across runs for the slots not republished (a slot the publisher meets
-for the first time, e.g. a migrated one, gets the time of that run). A tool without a
-`version` in its index (an old export) counts as `1.0.0`.
+for the first time, e.g. a migrated one, gets the time of that run). `bumped[].bump` is
+`major`, `minor`, `patch` or `downgrade` (the version went down). A tool whose version is
+unknown on either side (no `version` in its index) is never in `bumped`: nothing is computed
+against an unknown version; it still appears in `added` / `removed` and in the output lists.
 
 ## Hosting
 

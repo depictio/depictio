@@ -23,9 +23,9 @@ T1 = datetime(2026, 11, 21, 10, 0, tzinfo=timezone.utc)
 T2 = datetime(2026, 11, 22, 10, 0, tzinfo=timezone.utc)
 
 HTML = (
-    '<!doctype html><script type="module" crossorigin src="./assets/{entry}.js"></script>'
-    '<link rel="modulepreload" href="./assets/vendor.js">'
-    '<link rel="stylesheet" href="./assets/{entry}.css">'
+    '<!doctype html><script type="module" crossorigin src="./assets/{entry}-HASH0001.js"></script>'
+    '<link rel="modulepreload" href="./assets/vendor-HASH0001.js">'
+    '<link rel="stylesheet" href="./assets/{entry}-HASH0001.css">'
 )
 
 
@@ -63,10 +63,10 @@ def _export(
     (export / "assets").mkdir(parents=True)
     (export / "data" / "outputs").mkdir(parents=True)
     (export / "index.html").write_text(HTML.format(entry=entry))
-    for asset in (f"{entry}.js", f"{entry}.css", "vendor.js"):
-        # vendor.js is the same file in every build, the entry chunk is not.
+    for asset in (f"{entry}-HASH0001.js", f"{entry}-HASH0001.css", "vendor-HASH0001.js"):
+        # vendor-HASH0001.js is the same file in every build, the entry chunk is not.
         (export / "assets" / asset).write_text(
-            f"// {asset}" + ("" if asset == "vendor.js" else f" of {entry}")
+            f"// {asset}" + ("" if asset == "vendor-HASH0001.js" else f" of {entry}")
         )
     (export / "data" / "index.json").write_text(
         json.dumps({"version": version, "tools": tools, "data": {}})
@@ -161,7 +161,7 @@ def test_republishing_a_slot_replaces_it(tmp_path) -> None:
     pcs.publish(site, _simple(tmp_path, "new", "1.0.0", entry="new"), "latest", now=T1)
 
     assert not (site / "latest" / "data" / "stale.json").exists()
-    assert "new.js" in (site / "latest" / "index.html").read_text()
+    assert "new-HASH0001.js" in (site / "latest" / "index.html").read_text()
 
 
 # --- layout: assets, objects, dataRef -------------------------------------
@@ -172,12 +172,19 @@ def test_a_slot_loads_the_shared_assets_and_lists_them(tmp_path) -> None:
     pcs.publish(site, _simple(tmp_path, "r", "1.22.0"), "v1.22.0", now=T0)
 
     html = (site / "v1.22.0" / "index.html").read_text()
-    assert 'src="../assets/main.js"' in html
-    assert 'href="../assets/vendor.js"' in html and 'href="../assets/main.css"' in html
+    assert 'src="../assets/main-HASH0001.js"' in html
+    assert (
+        'href="../assets/vendor-HASH0001.js"' in html
+        and 'href="../assets/main-HASH0001.css"' in html
+    )
     assert "./assets/" not in html.replace("../assets/", "")
     assert not (site / "v1.22.0" / "assets").exists()
-    assert _json(site, "v1.22.0/assets.json") == ["main.css", "main.js", "vendor.js"]
-    assert _assets(site) == {"main.css", "main.js", "vendor.js"}
+    assert _json(site, "v1.22.0/assets.json") == [
+        "main-HASH0001.css",
+        "main-HASH0001.js",
+        "vendor-HASH0001.js",
+    ]
+    assert _assets(site) == {"main-HASH0001.css", "main-HASH0001.js", "vendor-HASH0001.js"}
 
 
 def test_each_ok_output_gets_a_dataref_to_its_content_hash(tmp_path) -> None:
@@ -210,7 +217,7 @@ def test_two_identical_releases_share_their_objects_and_assets(tmp_path) -> None
     pcs.publish(site, _simple(tmp_path, "2", "1.22.0"), "v1.22.0", now=T1)
 
     assert len(_objects(site)) == 2  # a and b, once each
-    assert _assets(site) == {"main.css", "main.js", "vendor.js"}
+    assert _assets(site) == {"main-HASH0001.css", "main-HASH0001.js", "vendor-HASH0001.js"}
     refs = lambda s: [e["dataRef"] for e in _index(site, s)["tools"][0]["outputs"]]  # noqa: E731
     assert refs("v1.21.0") == refs("v1.22.0")
 
@@ -231,7 +238,7 @@ def test_assets_no_slot_references_are_dropped(tmp_path) -> None:
     pcs.publish(site, _simple(tmp_path, "1", "1.21.0", entry="old"), "v1.21.0", now=T0)
     pcs.publish(site, _simple(tmp_path, "2", "1.21.0", entry="new"), "v1.21.0", now=T1)
 
-    assert _assets(site) == {"new.css", "new.js", "vendor.js"}
+    assert _assets(site) == {"new-HASH0001.css", "new-HASH0001.js", "vendor-HASH0001.js"}
 
 
 def test_the_assets_of_a_replaced_latest_are_kept_one_more_deploy(tmp_path) -> None:
@@ -239,19 +246,26 @@ def test_the_assets_of_a_replaced_latest_are_kept_one_more_deploy(tmp_path) -> N
     pcs.publish(site, _simple(tmp_path, "a", "1.0.0+a", entry="aaa"), "latest", now=T0)
     pcs.publish(site, _simple(tmp_path, "b", "1.0.0+b", entry="bbb"), "latest", now=T1)
     # aaa's chunks survive for tabs opened on the previous deploy...
-    assert {"aaa.js", "bbb.js"} <= _assets(site)
-    assert _json(site, "latest/assets.previous.json") == ["aaa.css", "aaa.js", "vendor.js"]
+    assert {"aaa-HASH0001.js", "bbb-HASH0001.js"} <= _assets(site)
+    assert _json(site, "latest/assets.previous.json") == [
+        "aaa-HASH0001.css",
+        "aaa-HASH0001.js",
+        "vendor-HASH0001.js",
+    ]
 
     # ...and go at the deploy after.
     pcs.publish(site, _simple(tmp_path, "c", "1.0.0+c", entry="ccc"), "latest", now=T2)
-    assert "aaa.js" not in _assets(site) and {"bbb.js", "ccc.js"} <= _assets(site)
+    assert "aaa-HASH0001.js" not in _assets(site) and {
+        "bbb-HASH0001.js",
+        "ccc-HASH0001.js",
+    } <= _assets(site)
 
 
 def test_republishing_a_release_gives_no_grace(tmp_path) -> None:
     site = tmp_path / "site"
     pcs.publish(site, _simple(tmp_path, "a", "1.22.0", entry="aaa"), "v1.22.0", now=T0)
     pcs.publish(site, _simple(tmp_path, "b", "1.22.0", entry="bbb"), "v1.22.0", now=T1)
-    assert "aaa.js" not in _assets(site)
+    assert "aaa-HASH0001.js" not in _assets(site)
     assert not (site / "v1.22.0" / "assets.previous.json").exists()
 
 
@@ -393,12 +407,16 @@ def test_a_slot_in_the_earlier_format_is_converted_on_the_next_publish(tmp_path)
     for slot in ("v1.21.0", "latest"):
         assert not (site / slot / "assets").exists()
         assert not (site / slot / "data" / "outputs").exists()
-        assert 'src="../assets/legacy.js"' in (site / slot / "index.html").read_text()
-        assert _json(site, f"{slot}/assets.json") == ["legacy.css", "legacy.js", "vendor.js"]
+        assert 'src="../assets/legacy-HASH0001.js"' in (site / slot / "index.html").read_text()
+        assert _json(site, f"{slot}/assets.json") == [
+            "legacy-HASH0001.css",
+            "legacy-HASH0001.js",
+            "vendor-HASH0001.js",
+        ]
         assert all("dataRef" in e for e in _index(site, slot)["tools"][0]["outputs"])
     # The legacy slots share their objects with the new one (same payloads).
     assert len(_objects(site)) == 2
-    assert {"legacy.js", "fresh.js"} <= _assets(site)
+    assert {"legacy-HASH0001.js", "fresh-HASH0001.js"} <= _assets(site)
     assert [r["slot"] for r in _json(site, "releases.json")["releases"]] == [
         "latest",
         "v1.22.0",
@@ -413,8 +431,12 @@ def test_a_replaced_legacy_latest_still_gets_its_grace_period(tmp_path) -> None:
 
     pcs.publish(site, _simple(tmp_path, "new", "1.22.0+y", entry="fresh"), "latest", now=T1)
 
-    assert _json(site, "latest/assets.previous.json") == ["legacy.css", "legacy.js", "vendor.js"]
-    assert "legacy.js" in _assets(site)
+    assert _json(site, "latest/assets.previous.json") == [
+        "legacy-HASH0001.css",
+        "legacy-HASH0001.js",
+        "vendor-HASH0001.js",
+    ]
+    assert "legacy-HASH0001.js" in _assets(site)
 
 
 def test_normalising_twice_changes_nothing(tmp_path) -> None:
@@ -447,3 +469,294 @@ def test_republishing_only_moves_the_published_stamp_of_that_slot(tmp_path) -> N
 
     second = _tree(site)
     assert {k for k in first if first[k] != second[k]} == {"releases.json"}
+
+
+# --- grace period of the objects of a replaced latest ------------------------
+
+
+def _refs(site: Path, slot: str) -> list[str]:
+    return sorted(e["dataRef"] for t in _index(site, slot)["tools"] for e in t["outputs"])
+
+
+def test_the_objects_of_a_replaced_latest_are_kept_one_more_deploy(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "a", "1.0.0+a", rows=1), "latest", now=T0)
+    first = _refs(site, "latest")
+    pcs.publish(site, _simple(tmp_path, "b", "1.0.0+b", rows=2), "latest", now=T1)
+
+    # The output that changed keeps its old object for tabs opened before the deploy.
+    assert _json(site, "latest/objects.previous.json") == first
+    assert set(first) <= _objects(site) and set(_refs(site, "latest")) <= _objects(site)
+    assert len(_objects(site)) == 3
+
+    pcs.publish(site, _simple(tmp_path, "c", "1.0.0+c", rows=2), "latest", now=T2)
+    # Same objects as the deploy before: the grace list of the one before it carries over.
+    assert _json(site, "latest/objects.previous.json") == first
+    pcs.publish(site, _simple(tmp_path, "d", "1.0.0+d", rows=3), "latest", now=T2)
+    assert len(_objects(site)) == 3  # a, b@3 rows, and b@2 rows from the deploy just replaced
+
+
+def test_a_redeploy_of_the_same_content_keeps_the_earlier_object_grace(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "a", "1.0.0", rows=1), "latest", now=T0)
+    old = _refs(site, "latest")
+    pcs.publish(site, _simple(tmp_path, "b", "1.0.0", rows=2), "latest", now=T1)
+    pcs.publish(site, _simple(tmp_path, "b", "1.0.0", rows=2), "latest", now=T2)
+
+    assert _json(site, "latest/objects.previous.json") == old
+    assert set(old) <= _objects(site)
+
+
+def test_a_release_gets_no_object_grace(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "a", "1.22.0", rows=1), "v1.22.0", now=T0)
+    old = _refs(site, "v1.22.0")
+    pcs.publish(site, _simple(tmp_path, "b", "1.22.0", rows=2), "v1.22.0", now=T1)
+
+    assert not (site / "v1.22.0" / "objects.previous.json").exists()
+    assert not set(old) <= _objects(site)  # the replaced b object is gone
+
+
+# --- files without a content hash -------------------------------------------
+
+
+def _with_genome(export: Path) -> Path:
+    genomes = export / "assets" / "genomes"
+    genomes.mkdir(parents=True)
+    (genomes / "hg38.genes.json").write_text('{"genes": []}')
+    return export
+
+
+@pytest.mark.parametrize(
+    ("name", "shared"),
+    [
+        ("catalog-site-092RBWW1.js", True),
+        ("vendor-jbrowse-5tjmzue-.js", True),
+        ("Lato-Regular-BEY4SZ9T.png", True),
+        ("genomes/x-AbCdEf12.json", True),
+        ("hg38.genes.json", False),
+        ("genomes/hg38.genes.json", False),
+        ("main.js", False),
+        ("a-short.js", False),
+    ],
+)
+def test_only_a_file_with_a_vite_hash_in_its_name_is_shared(name, shared) -> None:
+    assert pcs._is_hashed(name) is shared
+
+
+def test_the_bundle_of_this_tree_is_told_apart_correctly() -> None:
+    """Every chunk of the real build is shared; the genomes are not."""
+    assets = Path(__file__).resolve().parents[2] / "viewer" / "dist-catalog-site" / "assets"
+    if not assets.is_dir():
+        pytest.skip("catalog site bundle not built")
+    files = [p for p in assets.rglob("*") if p.is_file()]
+    unshared = {p.relative_to(assets).as_posix() for p in files if not pcs._is_hashed(p.name)}
+    assert unshared <= {f"genomes/{g}.genes.json" for g in ("hg19", "hg38", "mm10")}
+    assert len(files) > len(unshared)
+
+
+def test_a_file_without_a_hash_stays_in_its_slot_and_out_of_assets_json(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _with_genome(_simple(tmp_path, "r", "1.22.0")), "v1.22.0", now=T0)
+
+    assert (site / "v1.22.0" / "assets" / "genomes" / "hg38.genes.json").is_file()
+    assert _json(site, "v1.22.0/assets.json") == [
+        "main-HASH0001.css",
+        "main-HASH0001.js",
+        "vendor-HASH0001.js",
+    ]
+    assert not (site / "assets" / "genomes").exists()
+    assert (site / "v1.22.0" / "assets").is_dir()
+
+
+def test_two_slots_may_hold_different_files_of_the_same_unhashed_name(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _with_genome(_simple(tmp_path, "1", "1.21.0")), "v1.21.0", now=T0)
+    other = _with_genome(_simple(tmp_path, "2", "1.22.0"))
+    (other / "assets" / "genomes" / "hg38.genes.json").write_text('{"genes": [1]}')
+    pcs.publish(site, other, "v1.22.0", now=T1)
+
+    read = lambda s: (site / s / "assets" / "genomes" / "hg38.genes.json").read_text()  # noqa: E731
+    assert read("v1.21.0") != read("v1.22.0")
+
+
+def test_a_hashed_file_with_other_content_is_still_refused(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "1", "1.21.0"), "v1.21.0", now=T0)
+    other = _simple(tmp_path, "2", "1.22.0")
+    (other / "assets" / "vendor-HASH0001.js").write_text("// not the same vendor")
+
+    with pytest.raises(SystemExit, match="other content"):
+        pcs.publish(site, other, "v1.22.0", now=T1)
+
+
+def test_normalising_a_slot_with_unshared_files_twice_changes_nothing(tmp_path) -> None:
+    site = tmp_path / "site"
+    site.mkdir()
+    _legacy_slot(site, "v1.21.0", _with_genome(_simple(tmp_path, "old", "1.21.0")))
+    pcs.normalize_slot(site, "v1.21.0")
+    before = _tree(site)
+    pcs.normalize_slot(site, "v1.21.0")
+
+    assert _tree(site) == before
+    assert _json(site, "v1.21.0/assets.json") == [
+        "main-HASH0001.css",
+        "main-HASH0001.js",
+        "vendor-HASH0001.js",
+    ]
+
+
+def test_the_html_keeps_pointing_at_the_slot_for_a_file_without_a_hash(tmp_path) -> None:
+    export = _simple(tmp_path, "r", "1.22.0")
+    html = export / "index.html"
+    html.write_text(html.read_text() + '<link rel="x" href="./assets/fonts.css">')
+    (export / "assets" / "fonts.css").write_text("/* no hash */")
+    site = tmp_path / "site"
+    pcs.publish(site, export, "v1.22.0", now=T0)
+
+    text = (site / "v1.22.0" / "index.html").read_text()
+    assert 'href="./assets/fonts.css"' in text
+    assert 'src="../assets/main-HASH0001.js"' in text
+    assert (site / "v1.22.0" / "assets" / "fonts.css").is_file()
+
+
+# --- a version the index does not carry --------------------------------------
+
+
+def _unversioned(tmp_path: Path, name: str, version: str) -> Path:
+    export = _simple(tmp_path, name, version)
+    path = export / "data" / "index.json"
+    index = json.loads(path.read_text())
+    for tool in index["tools"]:
+        del tool["version"]
+    path.write_text(json.dumps(index))
+    return export
+
+
+def test_a_slot_without_module_versions_adds_nothing_to_the_history(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _unversioned(tmp_path, "1", "1.22.0"), "v1.22.0", now=T0)
+    pcs.publish(site, _simple(tmp_path, "2", "1.23.0", "1.0.0"), "v1.23.0", now=T1)
+
+    versions = _json(site, "modules/t.json")["versions"]
+    assert [(v["version"], v["releases"]) for v in versions] == [("1.0.0", ["v1.23.0"])]
+
+
+def test_a_module_no_slot_knows_a_version_of_has_no_file(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _unversioned(tmp_path, "1", "1.22.0"), "v1.22.0", now=T0)
+
+    assert not (site / "modules").exists() or not list((site / "modules").iterdir())
+
+
+def test_no_bump_is_computed_against_an_unknown_version(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _unversioned(tmp_path, "1", "1.22.0"), "v1.22.0", now=T0)
+    pcs.publish(site, _simple(tmp_path, "2", "1.23.0", "1.1.0"), "v1.23.0", now=T1)
+    pcs.publish(site, _unversioned(tmp_path, "3", "1.24.0+x"), "latest", now=T2)
+
+    rel = {r["slot"]: r for r in _json(site, "releases.json")["releases"]}
+    assert rel["v1.23.0"]["changes"]["bumped"] == []
+    assert rel["latest"]["changes"]["bumped"] == []
+    # What can still be said without a version is said.
+    assert rel["v1.23.0"]["changes"]["added"] == [] and rel["v1.23.0"]["previous"] == "v1.22.0"
+
+
+# --- downgrade ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("lower", "higher", "bump"),
+    [
+        ("1.0.0", "2.0.0", "major"),
+        ("1.0.0", "1.1.0", "minor"),
+        ("1.0.0", "1.0.1", "patch"),
+        ("1.1.0", "1.0.0", "downgrade"),
+        ("2.0.0", "1.9.9", "downgrade"),
+        ("1.0.2", "1.0.1", "downgrade"),
+    ],
+)
+def test_bump_between(lower, higher, bump) -> None:
+    assert pcs.bump_between(lower, higher) == bump
+
+
+def test_a_version_that_went_back_keeps_its_semver_place_and_exact_releases(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "1", "1.22.0", "1.0.0"), "v1.22.0", now=T0)
+    pcs.publish(site, _simple(tmp_path, "2", "1.23.0", "1.1.0"), "v1.23.0", now=T1)
+    pcs.publish(site, _simple(tmp_path, "m", "1.24.0+x", "1.0.0"), "latest", now=T2)
+
+    module = _json(site, "modules/t.json")
+    assert [(v["version"], v["bump"], v["releases"]) for v in module["versions"]] == [
+        ("1.1.0", "minor", ["v1.23.0"]),
+        ("1.0.0", None, ["latest", "v1.22.0"]),
+    ]
+    latest = next(r for r in _json(site, "releases.json")["releases"] if r["slot"] == "latest")
+    assert latest["changes"]["bumped"] == [
+        {"id": "t", "from": "1.1.0", "to": "1.0.0", "bump": "downgrade"}
+    ]
+
+
+# --- the tree is checked before anything is deleted ---------------------------
+
+
+def _published_pair(tmp_path: Path) -> Path:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "1", "1.21.0", rows=1), "v1.21.0", now=T0)
+    pcs.publish(site, _simple(tmp_path, "2", "1.22.0", rows=2), "v1.22.0", now=T1)
+    return site
+
+
+def test_a_missing_object_stops_the_publish_before_any_deletion(tmp_path) -> None:
+    site = _published_pair(tmp_path)
+    (site / "objects" / ("0" * 64 + ".json")).write_text("{}")  # would be dropped
+    victim = _refs(site, "v1.21.0")[0]
+    (site / "objects" / f"{victim}.json").unlink()
+    before = _tree(site)
+
+    with pytest.raises(SystemExit, match="missing files"):
+        pcs.publish(site, _simple(tmp_path, "3", "1.23.0", rows=3), "v1.23.0", now=T2)
+
+    assert (site / "objects" / ("0" * 64 + ".json")).exists()
+    # The new slot is in; nothing was deleted and releases.json was not touched.
+    after = _tree(site)
+    assert {k for k in before if k not in after} == set()
+    assert after["releases.json"] == before["releases.json"]
+
+
+def test_a_missing_asset_stops_the_publish_before_any_deletion(tmp_path) -> None:
+    site = _published_pair(tmp_path)
+    (site / "assets" / "stray-HASH0002.js").write_text("// would be dropped")
+    (site / "assets" / "main-HASH0001.js").unlink()  # the new export does not bring it back
+
+    with pytest.raises(SystemExit, match="assets/main-HASH0001.js"):
+        pcs.publish(site, _simple(tmp_path, "3", "1.23.0", rows=3, entry="new"), "v1.23.0", now=T2)
+
+    assert (site / "assets" / "stray-HASH0002.js").exists()
+
+
+def test_an_assets_json_cannot_name_a_file_outside_assets(tmp_path) -> None:
+    site = _published_pair(tmp_path)
+    (site / "v1.22.0" / "assets.json").write_text('["../versions.json"]')
+
+    with pytest.raises(SystemExit, match="outside assets"):
+        pcs.publish(site, _simple(tmp_path, "3", "1.23.0", rows=3), "v1.23.0", now=T2)
+
+
+def test_a_failure_computing_the_history_deletes_nothing(tmp_path) -> None:
+    site = _published_pair(tmp_path)
+    (site / "objects" / ("0" * 64 + ".json")).write_text("{}")  # would be dropped
+    bad = _export(
+        tmp_path, "bad", "1.23.0", [_tool("../x", "1.0.0", {"a": {"d": 1}})], {"a": {"d": 1}}
+    )
+
+    with pytest.raises(SystemExit, match="cannot name a file"):
+        pcs.publish(site, bad, "v1.23.0", now=T2)
+
+    assert (site / "objects" / ("0" * 64 + ".json")).exists()
+
+
+def test_an_unsafe_output_id_is_refused_even_when_its_output_failed(tmp_path) -> None:
+    export = _export(tmp_path, "x", "1.22.0", [_tool("t", "1.0.0", {"../a": None})], {})
+    with pytest.raises(SystemExit, match="output id"):
+        pcs.publish(tmp_path / "site", export, "v1.22.0", now=T0)

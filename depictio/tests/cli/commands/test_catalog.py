@@ -101,6 +101,39 @@ def test_export_site_strict_fails_on_an_output_without_preview(tmp_path):
     assert "could not be previewed" in strict.output
 
 
+def test_export_site_strict_fails_on_a_render_in_error(tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "index.html").write_text("<html></html>")
+
+    def fake_export(entries, out_dir, version):
+        out_dir.mkdir(parents=True)
+        return {
+            "tools": 1,
+            "outputs": 2,
+            "failed": 0,
+            "render_errors": 25,
+            "render_error_ids": [f"out_{i}:r{i}" for i in range(20)],
+            "index_bytes": 1,
+            "outputs_bytes": 2,
+        }
+
+    with (
+        patch("depictio.catalog.payload.SITE_BUNDLE_DIR", bundle),
+        patch("depictio.catalog.payload.export_site_data", side_effect=fake_export),
+    ):
+        lenient = runner.invoke(app, ["export-site", "--out-dir", str(tmp_path / "a")])
+        strict = runner.invoke(app, ["export-site", "--out-dir", str(tmp_path / "b"), "--strict"])
+
+    assert lenient.exit_code == 0
+    assert "25 render(s) in error" in lenient.output
+    assert strict.exit_code == 1
+    assert "25 render(s) failed" in strict.output
+    assert "first 20" in strict.output
+    assert "out_0:r0" in strict.output
+    assert "out_19:r19" in strict.output
+
+
 @pytest.fixture
 def levels():
     """The CLI and MultiQC loggers' levels, put back after the test."""
