@@ -272,6 +272,22 @@ def test_combined_needs_rendering_a_built_runtime_and_the_runtime_rules(built):
         assert "not built" in (ep._combined_refusal("d1", _state(), user) or "")  # type: ignore[arg-type]
 
 
+def test_without_the_static_export_no_report_embeds_the_runtime(built):
+    """The runtime is the static export's: switched off, neither the combined
+    file nor a report's live tiles are offered, however the rest stands."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as ep
+
+    user = type("U", (), {"id": ObjectId()})()
+    with (
+        patch.object(ep.settings.static_export, "enabled", False),
+        patch.object(ep.settings.notebook_export, "render_enabled", True),
+        patch.object(ep, "_owner_refusal", lambda *a: None),
+    ):
+        reason = ep._combined_refusal("d1", _state(), user)  # type: ignore[arg-type]
+        assert reason and "static dashboard export is not enabled" in reason
+        assert ep._runtime_refusal("d1", _state(), user) == reason  # type: ignore[arg-type]
+
+
 def test_a_refused_combined_render_is_an_error_not_a_downgrade():
     from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as ep
 

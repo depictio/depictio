@@ -324,13 +324,16 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   multi-batch stream of a table whose order is data
 
 ### Notebook export & Python import
+- **Off by default** while it is finalised: `DEPICTIO_NOTEBOOK_EXPORT_ENABLED` (`features.notebook_export`
+  in `/utils/server-info`) gates the export, the render, `/embed` extraction and the Parquet endpoint
+  (404), and the viewer hides the Export section without it. The suite's conftest turns it on
 - Dashboard → one Quarto document (`.qmd`), nothing else: `depictio/api/v1/services/notebook_export/` (generator),
   `dashboards_endpoints/notebook_export.py` (endpoints), `AnalysisState` contract in
   `depictio/models/models/analysis_state.py` (+ committed `analysis_state.schema.json`)
 - Any component in a notebook: `depictio/notebook/` (`DepictioClient`), headless figure
   extraction via the viewer's `/embed/{dashboard}/{component}` route (`services/embed/`)
 - The rendered HTML report is that same `.qmd` run by `quarto render` on a worker, behind
-  `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (on). The server render never runs an author's Python:
+  `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (on, once the export is). The server render never runs an author's Python:
   code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`), and a dashboard
   carrying them renders for project owners only; anonymous visitors cannot render
 - **Nothing dynamic reaches the `.qmd` raw**: Quarto runs inline `` `{python}` ``, chunk fences and
@@ -347,6 +350,10 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 - Design: `docs/design/rfc-notebook-export.md`
 
 ### Offline outputs: one manifest, one runtime, two hosts
+- **Off by default** while it is finalised: `DEPICTIO_STATIC_EXPORT_ENABLED` (`features.static_export`)
+  is one router-wide dependency on every `/serverless` route (404), and `_runtime_refusal` refuses
+  the runtime to reports without it, so the combined file needs both switches. The viewer hides
+  what is off. The offline CLI commands (`export-static`, `combine-report`) do not read it
 - The serverless bundle (`/serverless/export-static`, `static.html`) and the rendered notebook report
   embed the same `BundleManifest` from producer A (`depictio/serverless/producer_a.py`) and the same
   static runtime. Module swaps live once in `viewer/vite-plugins/static-runtime.ts`;

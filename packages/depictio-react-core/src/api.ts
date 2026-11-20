@@ -3499,7 +3499,12 @@ export interface ServerInfo {
   docs_url: string;
   version_check: VersionCheckBlock | null;
   /** UI switches from the server's settings; absent on older servers. */
-  features?: { migration?: boolean; changes_since?: boolean };
+  features?: {
+    migration?: boolean;
+    changes_since?: boolean;
+    static_export?: boolean;
+    notebook_export?: boolean;
+  };
 }
 
 /** Optional-auth: the bearer goes along when there is one (it is what makes

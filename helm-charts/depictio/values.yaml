@@ -439,6 +439,13 @@ backend:
     # sending off.
     DEPICTIO_MIGRATION_DESTINATION_DOMAINS: '["*"]'
 
+    # Offline exports: the static (serverless) dashboard file and the Quarto
+    # notebook / rendered report. Both off while they are finalised; the API
+    # answers 404 and the viewer hides the Export section. The combined
+    # report + dashboard file needs both.
+    DEPICTIO_STATIC_EXPORT_ENABLED: "false"
+    DEPICTIO_NOTEBOOK_EXPORT_ENABLED: "false"
+
     # "Changed since your last visit" (#1397): a per-reader mark per dashboard
     # and project, the changes pill, updated dots, figure before/after and the
     # ingestion bell. Off by default. MARK_MODE is the default for readers who
@@ -651,8 +658,8 @@ celery:
     # concurrency on the API and run a second release of this worker with
     # "export,report" and more workers than that concurrency + 2, and set this
     # one to "celery".
-    # Rendered reports (on by default, as the combined report + dashboard export
-    # is) need Quarto in the worker image, which it carries by default
+    # Rendered reports (on once DEPICTIO_NOTEBOOK_EXPORT_ENABLED is, on the
+    # backend) need Quarto in the worker image, which it carries by default
     # (WITH_QUARTO=true in docker-images/Dockerfile.worker). A worker built with
     # WITH_QUARTO=false needs DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED=false.
     DEPICTIO_CELERY_QUEUES: "celery,export,report"

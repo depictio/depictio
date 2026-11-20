@@ -169,6 +169,8 @@ async def server_info(
         "features": {
             "migration": settings.migration.ui_enabled,
             "changes_since": settings.dashboard_versions.changes_since_enabled,
+            "static_export": settings.static_export.enabled,
+            "notebook_export": settings.notebook_export.enabled,
         },
     }
 

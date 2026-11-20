@@ -82,6 +82,14 @@ class TestServerInfo:
         body = world.client_as().get("/utils/server-info").json()
         assert body["features"]["changes_since"] is enabled
 
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_features_report_the_export_switches(self, world, monkeypatch, enabled):
+        monkeypatch.setattr(settings.static_export, "enabled", enabled)
+        monkeypatch.setattr(settings.notebook_export, "enabled", not enabled)
+        features = world.client_as().get("/utils/server-info").json()["features"]
+        assert features["static_export"] is enabled
+        assert features["notebook_export"] is (not enabled)
+
     def test_migration_ui_is_off_by_default(self):
         from depictio.api.v1.configs.settings_models import MigrationConfig
 

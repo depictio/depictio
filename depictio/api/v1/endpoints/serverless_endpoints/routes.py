@@ -64,7 +64,20 @@ from depictio.serverless.producer_a import (
     export_static,
 )
 
-serverless_endpoint_router = APIRouter()
+
+def _require_static_export_enabled() -> None:
+    """404 on every route here while the static export is switched off.
+
+    One router-wide gate rather than one per route, so a route added later
+    cannot escape it. The report runtime and manifest are behind it too: they
+    are what a rendered report embeds, and a deployment without the static
+    export offers no live tiles and no combined file.
+    """
+    if not settings.static_export.enabled:
+        raise HTTPException(status_code=404, detail="Static export is disabled.")
+
+
+serverless_endpoint_router = APIRouter(dependencies=[Depends(_require_static_export_enabled)])
 
 _PRESIGN_EXPIRY_SECONDS = 24 * 3600
 _TIER_COUNT_KEYS = ("live", "partial", "frozen", "omitted")
