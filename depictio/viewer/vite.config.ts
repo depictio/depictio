@@ -21,6 +21,7 @@ const SPA_ROUTE_PREFIXES = [
   'profile',
   'groups',
   'cli-agents',
+  'embed',
 ];
 const SPA_ROUTE_RE = new RegExp(
   `^/(?:${SPA_ROUTE_PREFIXES.join('|')})(/|$|\\?)`,

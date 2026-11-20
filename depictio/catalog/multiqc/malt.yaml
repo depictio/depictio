@@ -13,4 +13,16 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: malt }
+  - component: multiqc
+    section: malt
+    title: Metagenomic alignment
+    description: >-
+      MALT's MultiQC plot: how many queries aligned at all and how many of those
+      received a taxonomic assignment, per sample. It answers how much of the
+      library the reference database explains.
+
+      How to read: A high assigned share means the database fits the sample. A low
+      share means a divergent or poorly represented community, and low specificity
+      of the hits to the taxon.
+
+      Source: https://docs.seqera.io/multiqc/modules/malt

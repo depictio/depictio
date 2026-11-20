@@ -1,4 +1,6 @@
 sample_id	input_sequences	kept_sequences	removed_sequences	kept_residues	mean_length	n50	min_length	max_length	annotated_proteins	annotated_protein_pct	domain_hits	median_annotated_pct
 T1024	1	1	0	408	408.0	408	408	408	1	100.0	51	100.0
 T1026	1	1	0	172	172.0	172	172	172	1	100.0	6	99.4186046511628
-l_arginase	1	1	0	350	350.0	350	350	350	1	100.0	23	99.42857142857143
+T1027	3	2	1	395	197.5	254	141	254	1	50.0	7	47.24409448818898
+T1028	1	1	0	96	96.0	96	96	96	0	0.0	0	0.0
+l_arginase	3	3	0	790	263.3333333333333	322	118	350	2	66.66666666666667	36	98.75776397515529

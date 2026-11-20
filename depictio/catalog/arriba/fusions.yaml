@@ -11,17 +11,179 @@ find: { filename: "*.arriba.fusions.tsv" }
 recipe: arriba/fusions.py
 fixture: fusions.tsv
 renders_as:
-  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: confidence, gene: fusion, mean_expression: log_support, frac_expressing: support_fraction} }
+  # Confidence classes (low, medium, high) are Arriba's own; the paper recommends
+  # treating low-confidence calls with skepticism (PMID 33441414). No reference line
+  # is drawn on any tile, since Arriba defines no numeric cut-off on read support.
+  - id: evidence_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    roles: {cluster: confidence, gene: fusion, mean_expression: log_support, frac_expressing: support_fraction}
+    title: Evidence for each fusion
+    description: >-
+      Each dot is a fusion in one confidence class: its colour is the read support on a
+      log scale and its size is the share of local reads that support it. It answers
+      which calls rest on strong evidence and how confident Arriba is in them.
+
+      How to read: a large, dark dot in the high-confidence column is a well supported
+      call. A call with few supporting reads in the low-confidence column is weak and
+      Arriba's authors advise treating such calls with skepticism unless other
+      evidence corroborates them. Check the table for the breakpoints and domains of
+      the calls you keep.
+
+      Lines and annotations: the colour scale is log10 of supporting reads plus 1, a transform of this catalog's recipe,
+      where supporting reads are the split reads plus the discordant mates Arriba reports. The
+      confidence classes low, medium and high are assigned by Arriba.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/33441414/
   # Partner chromosomes as a flow: how a fusion circos reads without an assembly
   # to lay a ring out on. Source contig on the left, partner contig on the right.
-  - { id: partner_chrom_sankey, component: advanced_viz, kind: sankey, roles: {steps: [chrom_5p, chrom_3p]} }
+  - id: partner_chrom_sankey
+    component: advanced_viz
+    kind: sankey
+    roles: {steps: [chrom_5p, chrom_3p]}
+    config:
+      value_label: Fusions
+    title: Partner chromosomes
+    description: >-
+      Each flow joins the chromosome of the 5' partner on the left to the chromosome of
+      the 3' partner on the right, with its width the number of fusions. It answers
+      whether the fusions are within one chromosome or between chromosomes.
+
+      How to read: a flow that returns to the same chromosome is a local rearrangement
+      such as a deletion, an inversion or a duplication. A flow to another chromosome
+      is a translocation. Many flows from one chromosome may point to a hot region or
+      to a recurrent artefact worth checking.
   # The two composition bars Arriba's own report leads with: what kind of event
   # each call is, and which transcript feature each breakpoint fell in.
-  - { id: type_bars, component: figure, visu_type: bar, dict_kwargs: {x: fusion_type, y: supporting_reads, color: confidence} }
-  - { id: site_bars, component: figure, visu_type: bar, dict_kwargs: {x: site_5p, y: supporting_reads, color: site_3p} }
-  - { id: type_frame_bars, component: figure, visu_type: bar, dict_kwargs: {x: fusion_type, y: supporting_reads, color: reading_frame} }
-  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: confidence, top_n_count: 3, headline: true }
-  - { component: card, column: split_reads, aggregation: sum, secondary_layout: donut, breakdown_col: fusion_type }
-  - { component: card, column: support_fraction, aggregation: average, secondary_layout: histogram }
-  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
+  - id: type_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: fusion_type
+      y: supporting_reads
+      color: confidence
+      labels: {fusion_type: Event type, supporting_reads: Supporting reads, confidence: Confidence}
+    title: Support by event type
+    description: >-
+      Each bar stacks the calls of one event type, such as a deletion, a duplication or
+      a translocation, with height the supporting reads and colour the confidence
+      class. It answers which kinds of event carry the evidence.
+
+      How to read: tall bars in the high-confidence colour are well supported events.
+      An event type made only of low-confidence calls is mostly noise, so filter it
+      out before interpreting the run.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/33441414/
+  - id: site_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: site_5p
+      y: supporting_reads
+      color: site_3p
+      labels: {site_5p: Transcript feature at the 5' breakpoint, supporting_reads: Supporting reads, site_3p: Transcript feature at the 3' breakpoint}
+    title: Support by breakpoint location
+    description: >-
+      Each bar groups calls by the transcript feature the 5' breakpoint falls in, such
+      as coding sequence, splice site or intron, with colour the feature of the 3'
+      breakpoint and height the supporting reads. It answers whether breakpoints land
+      where a spliced fusion transcript is expected.
+
+      How to read: breakpoints at splice sites or in coding sequence on both sides are
+      the usual shape of a real fusion. Calls with a breakpoint deep in an intron or in
+      an untranslated region are less likely to produce a protein, so look at them
+      with the reading frame tile.
+  - id: type_frame_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: fusion_type
+      y: supporting_reads
+      color: reading_frame
+      labels: {fusion_type: Event type, supporting_reads: Supporting reads, reading_frame: Reading frame}
+    title: Reading frame by event type
+    description: >-
+      Each bar stacks the calls of one event type, with height the supporting reads and
+      colour whether the fusion keeps the reading frame. It answers which events are
+      predicted to encode a protein.
+
+      How to read: an in-frame fusion can produce a chimeric protein and is the first
+      to follow up. An out-of-frame call is less likely to be functional, although the
+      reading frame is one of several features used to judge a driver.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/33441414/
+  - component: card
+    column: supporting_reads
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: vertical
+    caption: median, lowest and highest
+    title: Supporting reads
+    description: >-
+      The hero number is the median count of supporting reads per call, the split reads
+      plus the discordant mates, with the lowest and highest beside it. It answers how
+      strong the evidence is for a typical call.
+
+      How to read: a very low median means the calls rest on a handful of reads. The
+      range is wide, so a box would draw a flat line.
+  - component: card
+    column: fusion
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: confidence
+    top_n_count: 3
+    headline: true
+    caption: fusions, by confidence
+    title: Fusions called
+    description: >-
+      The hero number is the count of distinct fusions, and the bars rank the
+      confidence classes by how many they hold. It answers how many fusions Arriba
+      calls and how many it trusts.
+
+      How to read: a run dominated by high and medium confidence is cleaner than one made
+      of low-confidence calls, which Arriba's authors advise treating with skepticism.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/33441414/
+  - component: card
+    column: split_reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: fusion_type
+    top_n_count: 3
+    caption: split reads, by event type
+    title: Split reads
+    description: >-
+      The hero number is the total of split reads, reads that span the breakpoint, and
+      the bars rank the event types by how many they carry. It answers where the direct
+      junction evidence comes from.
+
+      How to read: split reads show the exact breakpoint, whereas discordant mates only
+      show the two partners are joined. A call with discordant mates only has an
+      uncertain breakpoint.
+  - component: card
+    column: support_fraction
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    caption: distribution across calls
+    title: Share of local reads that support the fusion
+    description: >-
+      The hero number is the median share of the reads around a breakpoint that support
+      the fusion, between 0 and 1, and the histogram shows its distribution over the
+      calls. It answers how dominant the fusion is over the normal transcript.
+
+      How to read: a high share means most local reads carry the fusion, as in a clonal
+      driver. A tiny share means a minor or artefactual signal.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: Fusion calls table
+    description: >-
+      Each row is a fusion call with its partners, breakpoints, event type, confidence,
+      reading frame, read support and retained protein domains. It answers which fusions
+      to validate and lets a row selection filter the rest of the dashboard.
+
+      How to read: sort by confidence and supporting reads, then check the reading frame
+      and the retained domains of the kinase or other drivers of interest.

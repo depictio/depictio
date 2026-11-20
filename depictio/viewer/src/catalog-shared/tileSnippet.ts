@@ -97,6 +97,7 @@ function configLines(render: CatalogRender, indent: string): string[] {
       push('threshold_direction', render.threshold_direction);
       push('threshold_warn', render.threshold_warn);
       push('trend_col', render.trend_col);
+      push('caption', render.caption);
       if (render.attrition_cols?.length) {
         out.push(`${indent}attrition_cols: [${render.attrition_cols.map(scalar).join(', ')}]`);
       }
@@ -116,7 +117,30 @@ function configLines(render: CatalogRender, indent: string): string[] {
         const keys = Object.keys(kwargs);
         if (keys.length) {
           out.push(`${indent}dict_kwargs:`);
-          for (const k of keys) out.push(line(k, kwargs[k], `${indent}  `));
+          for (const k of keys) {
+            const v = kwargs[k];
+            if (v && typeof v === 'object' && !Array.isArray(v)) {
+              // `labels`: column -> axis or legend title.
+              out.push(`${indent}  ${k}:`);
+              for (const [col, label] of Object.entries(v as Record<string, unknown>)) {
+                out.push(line(col, label, `${indent}    `));
+              }
+            } else {
+              out.push(line(k, v, `${indent}  `));
+            }
+          }
+        }
+        // Guide lines, in the YAML order a reader writes them by hand.
+        if (render.reference_lines?.length) {
+          out.push(`${indent}reference_lines:`);
+          for (const ref of render.reference_lines) {
+            const fields = (['axis', 'value', 'stat', 'column', 'label'] as const).filter(
+              (f) => ref[f] !== undefined && ref[f] !== null,
+            );
+            fields.forEach((f, i) =>
+              out.push(line(f, ref[f], i === 0 ? `${indent}  - ` : `${indent}    `)),
+            );
+          }
         }
       }
       break;
@@ -151,7 +175,22 @@ export function buildTileSnippet(ctx: TileSnippetContext, render: CatalogRender)
     line('use', catalogUseRef(ctx.toolId, ctx.outputId, render), indent),
   ];
   lines.push(...configLines(render, indent));
-  if (ctx.title) lines.push(line('title', ctx.title, indent));
+  // An advanced_viz `use:` brings the render's own title and About text with
+  // it; every other type spells them out, like the rest of its config.
+  if (render.component !== 'advanced_viz' || !render.title) {
+    const title = render.title || ctx.title;
+    if (title) lines.push(line('title', title, indent));
+  }
+  if (render.component !== 'advanced_viz' && render.description) {
+    lines.push(`${indent}description: >-`);
+    // A folded scalar turns each blank line into one newline: the popover's
+    // paragraph break.
+    for (const para of render.description.split(/\n\s*\n/)) {
+      lines.push(`${indent}  ${para.replace(/\s*\n\s*/g, ' ').trim()}`);
+      lines.push('');
+    }
+    lines.pop();
+  }
   return lines
     .join('\n')
     .replace('${tool}', ctx.toolId);

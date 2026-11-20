@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from depictio.models.models.dashboards import DashboardDataLite
-from depictio.models.models.serverless import ComponentTier, TierReason
+from depictio.models.models.serverless import ComponentTier, TierEntry, TierReason
 from depictio.serverless.companions import filter_expr_companionable
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.pruning import (
@@ -98,6 +98,17 @@ def tier_counts(rows: list[TierRow]) -> dict[str, int]:
     for row in rows:
         counts[row.tier.value] = counts.get(row.tier.value, 0) + 1
     return counts
+
+
+def tiers_from_rows(rows: list[TierRow]) -> dict[str, TierEntry]:
+    """The manifest's ``tiers`` section: one entry per row, by component id.
+
+    Both producers write it from their settled tier table.
+    """
+    return {
+        row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)
+        for row in rows
+    }
 
 
 def rows_for_tab(rows: list[TierRow], tab_id: str) -> list[TierRow]:

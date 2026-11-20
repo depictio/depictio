@@ -11,5 +11,29 @@ find:
 recipe: snpeff/gene_upset.py
 fixture: gene_upset.tsv
 renders_as:
-  - { id: caller_gene_overlap, component: advanced_viz, kind: upset_plot, roles: {} }
-  - { component: table }
+  # C6 N/A: the set columns are the callers of the run, known only at ingest
+  - id: caller_gene_overlap
+    component: advanced_viz
+    kind: upset_plot
+    title: Gene overlap between callers
+    roles: {}
+    config:
+      color_intersections_by: degree
+    description: >-
+      Each bar is a combination of callers and counts the genes that exactly those
+      callers report with at least one HIGH or MODERATE variant, coloured by how many
+      callers are in the combination. It answers which callers agree that a gene is
+      hit.
+
+      How to read: a tall bar for all callers means a consensus gene list, and tall
+      bars for a single caller point to calls only that caller makes. The overlap is
+      by gene, so it is robust to different representations of the same variant.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+  - component: table
+    title: Gene membership by caller
+    description: >-
+      Each row is a gene with a 1 or 0 per caller for a HIGH or MODERATE variant. It
+      answers which callers report a given gene.
+
+      How to read: filter on one caller column to list the genes only it reports.

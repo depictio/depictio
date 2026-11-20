@@ -6,14 +6,156 @@ find: { filename: "variants_long_table.csv" } # raw nf-core file
 recipe: ivar/variants_long.py # owns the output columns
 fixture: variants_long.tsv # co-located bindable sample
 renders_as:
-  - { id: lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: GENE, position: POS, category: EFFECT} }
-  - { id: oncoplot, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT} }
-  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: AF, color: EFFECT} } # allele-frequency distribution
+  - id: lollipop
+    component: advanced_viz
+    kind: lollipop
+    title: Variants along each gene
+    roles: {feature_id: GENE, position: POS, category: EFFECT, effect: AF, label: mutation_label}
+    config:
+      top_n_labels: 5
+    description: >-
+      Each lollipop is a variant placed at its genome position within a gene, coloured
+      by its predicted effect and sized by its allele frequency. It answers where
+      the variants fall in each gene and which of them change the protein.
+
+      How to read: clusters of non-synonymous or stop-gained changes in one gene
+      suggest a region under selection or a problem region. Large heads are variants
+      present in most reads, small heads are minor variants. Hover a head or open the
+      table tile to read the change.
+  - id: oncoplot
+    component: advanced_viz
+    kind: oncoplot
+    title: Mutation matrix
+    roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT}
+    config:
+      legend_position: bottom
+    description: >-
+      Each cell is a sample and a gene, coloured by the predicted effect of the
+      variant there. It answers which genes are mutated in which samples.
+
+      How to read: a row full of cells is a gene mutated across many samples, such as
+      a lineage marker. A column full of cells is a divergent sample. Rows are
+      ordered by how often the gene is mutated.
+  - id: manhattan
+    component: advanced_viz
+    kind: manhattan
+    title: Allele frequency along the genome
+    roles: {chr: CHROM, pos: POS, score: AF, feature: GENE}
+    config:
+      score_threshold: 0.75
+      score_kind: Allele frequency
+      color_by_columns: [EFFECT, sample]
+      default_color_by: EFFECT
+      top_n_labels: 5
+    description: >-
+      Each point is a variant at its genome position, with its allele frequency on the
+      vertical axis, coloured by its predicted effect. It answers where along the
+      genome variants sit and how many are fixed rather than minor.
+
+      How to read: points at the top are present in most reads and form the consensus
+      changes, while points near the bottom are minor variants. A band of points at
+      intermediate frequency can mean a mixed infection or a contaminated sample.
+
+      Lines and annotations: the horizontal line is an allele frequency of 0.75, the
+      cut-off nf-core/viralrecon documents for variants integrated into the consensus
+      genome of its long variant table.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+  - component: figure
+    visu_type: histogram
+    title: Allele frequency distribution
+    dict_kwargs:
+      x: AF
+      color: EFFECT
+      labels: {AF: Allele frequency, EFFECT: Predicted effect}
+    description: >-
+      Each bar counts the variants in a range of allele frequency, coloured by
+      predicted effect. It answers how the variants split between minor and
+      near-fixed.
+
+      How to read: a peak at 1 holds the changes present in all reads, and a spread
+      at lower frequencies holds minor variants. A peak near 0.5 can mean a mixed
+      sample.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: POS, aggregation: count, secondary_layout: top_n, breakdown_col: GENE, top_n_count: 3, headline: true }
-  - { component: card, column: POS, aggregation: nunique, secondary_layout: concentration, breakdown_col: GENE, top_n_count: 3 }
-  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample }
-  - { component: card, column: AA, aggregation: nunique, secondary_layout: composition, breakdown_col: EFFECT, top_n_count: 3 }
-  - { component: table, row_selection_enabled: true, row_selection_column: sample }
+  - component: card
+    column: POS
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: GENE
+    top_n_count: 3
+    headline: true
+    caption: variant calls, by gene
+    title: Variant calls
+    description: >-
+      The hero number is the count of variant calls across all samples, with the
+      number of distinct genome positions beside it, and the bars rank the genes
+      carrying most of them. It answers how much variation there is and where.
+
+      How to read: a large gap between calls and positions means the same positions
+      are shared by many samples, as expected for a lineage. A gene leading the
+      ranking is a hotspot or a long gene.
+  - component: card
+    column: POS
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: concentration
+    breakdown_col: GENE
+    top_n_count: 3
+    caption: share of positions in the top genes
+    title: Distinct variant positions
+    description: >-
+      The hero number is the count of distinct genome positions with a variant, and the
+      bar shows how much of it the top genes hold. It answers whether variation is
+      spread out or concentrated in a few genes.
+
+      How to read: a large share in one or two genes marks a hotspot, or simply the
+      longest genes. Compare with the lollipop tile.
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: vertical
+    caption: samples and their variant calls
+    title: Samples with variants
+    description: >-
+      The hero number is the count of samples with at least one variant call, with the
+      total number of calls beside it. It answers how many samples are in view and
+      how many calls they carry.
+
+      How to read: filter the dashboard to a group to compare how many samples and
+      calls it holds.
+  - component: card
+    column: AA
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: composition
+    breakdown_col: EFFECT
+    top_n_count: 3
+    filter_expr: "col('AA') != '.'"
+    caption: protein changes, by effect
+    title: Protein changes
+    description: >-
+      The hero number is the count of distinct amino acid changes, leaving out
+      variants with no protein change, with the number of calls beside it, and the bar
+      splits the calls by predicted effect. It answers how much of the variation
+      alters proteins.
+
+      How to read: a bar dominated by synonymous changes means mostly silent
+      variation. Missense and stop-gained shares mark the changes that could alter
+      protein function.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Variant table
+    description: >-
+      One row is one variant call, with its position, alleles, depth, allele
+      frequency, gene, protein change and predicted effect. It answers which
+      exact variants a sample carries.
+
+      How to read: Sort by allele frequency to separate fixed variants from
+      minor ones, and by depth to spot calls with weak support. Look for high-
+      impact effects at a high frequency. Select a row to filter the rest of the
+      dashboard to its sample. It complements the frequency and effect tiles of
+      the same output, which summarise these rows.

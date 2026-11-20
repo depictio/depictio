@@ -17,7 +17,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getIcons } from '@iconify/utils';
+import { getIconData, getIcons } from '@iconify/utils';
 import {
   COLLECTIONS,
   DATA_ICON_LITERAL,
@@ -50,7 +50,14 @@ const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 // to follow it or every kind in the picker loses its icon in a built bundle.
 const SCAN_FILES = [
   join(REPO, 'depictio/models/components/advanced_viz/schemas.py'),
+  // The notebook export's own headings (Results, Filters, Funnel, the
+  // provenance blocks): drawn from the JSON copy below, in Python.
+  join(REPO, 'depictio/api/v1/services/notebook_export/generator.py'),
+  join(REPO, 'depictio/api/v1/services/notebook_export/provenance.py'),
 ];
+
+// An icon a text tile draws inline, `![](icon:mdi:flask-outline)`.
+const MARKDOWN_ICON = /\]\(icon:([a-z][a-z0-9]*(?:-[a-z0-9]+)*:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\)/g;
 
 // Shipped dashboard data. Seeded dashboards name their icons in YAML and in the
 // exported `.db_seeds` JSON, so no TS source mentions them and they used to
@@ -61,6 +68,13 @@ const SCAN_FILES = [
 const SCAN_DATA_DIRS = [join(REPO, 'depictio/projects')];
 
 const OUT_FILE = join(VIEWER, 'src/generated/iconSubset.ts');
+
+// The same icons as plain JSON for the server, which has no npm icon set: the
+// notebook export draws its headings, filters and text icons from it instead of
+// asking the Iconify API at request time (air-gapped instances cannot, and each
+// miss used to cost a 5 s timeout on the request path). Copied into the API
+// image next to dist-embed (Dockerfile.api); `services/icons.py` reads it.
+const SERVER_OUT_FILE = join(VIEWER, 'dist-icons/icon-subset.json');
 
 // `prefix:name`, both lowercase kebab. Matches icon literals wherever they are
 // written: a JSX prop, a lookup table, a ternary. Deliberately broad — anything
@@ -107,7 +121,7 @@ async function collectUsedNames() {
     } catch {
       return;
     }
-    for (const match of source.matchAll(DATA_ICON_LITERAL)) {
+    for (const match of [...source.matchAll(DATA_ICON_LITERAL), ...source.matchAll(MARKDOWN_ICON)]) {
       const name = match[1];
       if (!found.has(name)) found.set(name, { files: new Set(), iconContext: false });
       const entry = found.get(name);
@@ -188,6 +202,24 @@ export const iconCollections: IconCollection[] = ${JSON.stringify(subsets, null,
 `,
   'utf8',
 );
+
+// `{ "mdi:name": { body, width, height } }`, aliases resolved: the server needs
+// no Iconify logic to draw one.
+const flat = {};
+for (const subset of subsets) {
+  const names = [...Object.keys(subset.icons ?? {}), ...Object.keys(subset.aliases ?? {})];
+  for (const name of names) {
+    const data = getIconData(subset, name);
+    if (!data) continue;
+    flat[`${subset.prefix}:${name}`] = {
+      body: data.body,
+      width: data.width ?? subset.width ?? 16,
+      height: data.height ?? subset.height ?? 16,
+    };
+  }
+}
+await mkdir(dirname(SERVER_OUT_FILE), { recursive: true });
+await writeFile(SERVER_OUT_FILE, JSON.stringify(flat), 'utf8');
 
 const summary = subsets.map((s) => `${s.prefix}(${Object.keys(s.icons ?? {}).length})`).join(' ');
 console.log(`[icons] bundled ${iconCount} icons from ${subsets.length} collections: ${summary}`);

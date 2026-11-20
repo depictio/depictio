@@ -298,7 +298,7 @@ test.describe("Static export (owner flows)", () => {
     const result = status.result!;
     expect(result.s3_key).toMatch(
       new RegExp(
-        `^serverless-exports/${IRIS_DASHBOARD_ID}/\\d{8}T\\d{6}Z\\.html$`,
+        `^serverless-exports/${IRIS_DASHBOARD_ID}/\\d{8}T\\d{6}Z-${job_id}\\.html$`,
       ),
     );
     expect(result.bucket).toBeTruthy();
@@ -357,6 +357,8 @@ test.describe("Static export (owner flows)", () => {
     });
     await expect(drawer).toBeVisible({ timeout: 15_000 });
     await page.locator("[data-testid='settings-nav-export']").click();
+    // The separate outputs sit under "Advanced"; the default is report + dashboard.
+    await page.locator("[data-testid='export-advanced-toggle']").first().click();
     await expect(btn).toBeVisible();
     await expect(btn).toBeEnabled();
 
@@ -422,13 +424,15 @@ test.describe("Static export (non-owner)", () => {
       });
       await expect(drawer).toBeVisible({ timeout: 15_000 });
       await page.locator("[data-testid='settings-nav-export']").click();
+      // The separate outputs sit under "Advanced"; the default is report + dashboard.
+      await page.locator("[data-testid='export-advanced-toggle']").first().click();
 
       const btn = page.locator("[data-testid='export-static-btn']");
       // Present and readable, but inert — and the reason is on screen, not in
       // a tooltip a disabled button would never fire.
       await expect(btn).toBeVisible();
       await expect(btn).toBeDisabled();
-      await expect(drawer).toContainText(/only export dashboards you own/i);
+      await expect(drawer).toContainText(/owner rights on this dashboard's project/i);
     } finally {
       // Cascading delete — takes the fixture dashboard with it.
       await request.delete(
@@ -469,11 +473,13 @@ test.describe("Static export in public/demo mode", () => {
     });
     await expect(drawer).toBeVisible({ timeout: 15_000 });
     await page.locator("[data-testid='settings-nav-export']").click();
+    // The separate outputs sit under "Advanced"; the default is report + dashboard.
+    await page.locator("[data-testid='export-advanced-toggle']").first().click();
 
     const btn = page.locator("[data-testid='export-static-btn']");
     await expect(btn).toBeVisible();
     await expect(btn).toBeDisabled();
-    await expect(drawer).toContainText(/only export dashboards you own/i);
+    await expect(drawer).toContainText(/owner rights on this dashboard's project/i);
   });
 
   test("temporary user cannot dispatch an export (404)", async ({

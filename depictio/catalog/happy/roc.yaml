@@ -8,5 +8,34 @@ find: { path_glob: "**/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz" }
 recipe: happy/roc.py
 fixture: roc.tsv
 renders_as:
-  - { id: pr_curve, component: advanced_viz, kind: roc_pr_curve, roles: {recall: recall, precision: precision} } # threshold-sweep PR curve + AUC
-  - { component: table }
+  # C1 N/A: the sweep is one pooled curve and the recipe has no column that splits
+  # it (no sample, caller or variant type), so there is no pertinent colour.
+  - id: pr_curve
+    component: advanced_viz
+    kind: roc_pr_curve
+    title: Precision and recall across thresholds
+    roles: {recall: recall, precision: precision, threshold: quality}
+    description: >-
+      Each point is the precision and recall of the SNP calls that pass one variant
+      quality threshold, joined into a curve. It answers how much recall is given up
+      to buy precision when the callset is filtered harder.
+
+      How to read: a curve that stays near the top right across thresholds means the
+      quality score separates true from false calls well. A curve that drops fast as
+      recall falls means filtering removes true calls as readily as false ones. Pick
+      the threshold where precision stops improving.
+
+      Lines and annotations: the area under the curve is computed from the swept
+      points of this table, so it is a data-defined summary and not a published
+      cut-off. Recall is TP over TP plus FN and precision is TP over TP plus FP, as
+      hap.py defines them.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/happy.md
+  - component: table
+    title: Threshold sweep
+    description: >-
+      Each row is a quality threshold with the recall, precision and F1 of the SNP
+      calls kept at it. It answers the exact numbers behind the curve.
+
+      How to read: find the row with the highest F1 to pick a threshold that balances
+      the two, or read down the recall column to see where it starts to fall.

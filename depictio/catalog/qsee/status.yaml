@@ -9,9 +9,73 @@ description: >-
 find:
   path_glob: "**/*.qsee.status.tsv.gz"
 recipe: qsee/status.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several source tools and verdicts.
 fixture: status.tsv
 renders_as:
-  - { id: qc_check_count, component: card, column: check_id, aggregation: count, secondary_layout: top_n, breakdown_col: qc_status, top_n_count: 3, headline: true }
-  - { id: qc_status_bar, component: figure, visu_type: bar, dict_kwargs: {x: source_tool, color: qc_status} }
-  - { id: qc_status_filter, component: interactive, interactive_type: MultiSelect, column_name: qc_status }
-  - { id: qc_status_table, component: table, row_selection_enabled: true, row_selection_column: check_id }
+  - id: qc_check_count
+    component: card
+    column: sample
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: qc_status
+    top_n_count: 3
+    headline: true
+    title: QC checks run
+    caption: checks, by verdict
+    description: >-
+      The hero number is the count of QC checks QSEE ran, with the number of samples
+      beside it, and the bars rank the verdicts PASS, WARN and FAIL. It answers whether
+      the run clears its quality thresholds.
+
+      How to read: a bar of FAIL or WARN checks is the list to open in the table. An
+      overall sample status is FAIL if any check fails, WARN if any warns and PASS
+      otherwise.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/qsee/README.md
+  - id: qc_status_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: source_tool
+      color: qc_status
+      labels: {source_tool: Source tool, qc_status: Verdict}
+    title: Verdicts by source tool
+    description: >-
+      Each bar counts the QC checks of one source tool (BAM metrics, purity, deleted
+      genes, contamination, TINC and so on), split by verdict. It answers which part of
+      the pipeline raises the QC problems.
+
+      How to read: a tool whose bar is all PASS needs no action. A tool with WARN or
+      FAIL checks points to the stage to investigate, then the table names the
+      feature.
+
+      Lines and annotations: the colours are QSEE's PASS, WARN and FAIL verdicts, each
+      set by comparing the value with the feature's default threshold, which a
+      threshold overrides file can change.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/qsee/README.md
+  - id: qc_status_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: qc_status
+    title: Verdict
+    description: >-
+      Pick one or more verdicts, PASS, WARN or FAIL, to filter every tile of the
+      dashboard to those checks.
+
+      How to read: select FAIL and WARN to list only the checks that need attention.
+  - id: qc_status_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: check_id
+    title: QC verdicts per feature
+    description: >-
+      Each row is a QC check for one sample: the source tool, the feature, its value,
+      the PASS, WARN or FAIL verdict and the condition that fails it. It answers which
+      features fail and by how much, and lets a row selection filter the dashboard.
+
+      How to read: filter the verdict to FAIL or WARN, then compare the value with the
+      failing condition to see how far it is from the threshold.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/qsee/README.md

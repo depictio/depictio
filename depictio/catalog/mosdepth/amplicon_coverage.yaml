@@ -13,7 +13,63 @@ columns:
   sample: String
 fixture: amplicon_coverage.tsv
 renders_as:
-  - { id: coverage_track_amplicon, component: advanced_viz, kind: coverage_track, roles: {chromosome: chrom, position: start, value: coverage} }
+  - id: coverage_track_amplicon
+    component: advanced_viz
+    kind: coverage_track
+    title: Amplicon depth along the genome
+    roles: {chromosome: chrom, position: start, end: end, value: coverage, sample: sample}
+    config:
+      color_by: sample
+    description: >-
+      Each point on a line is an amplicon placed at its genome position, with its
+      mean read depth on the vertical axis, one line per sample. It answers which
+      amplicons are poorly covered and whether the same ones fail across samples.
+
+      How to read: lines should stay well above zero along the genome. A dip that
+      appears in every sample is a failing primer pair, and a dip in one sample is a
+      sample-specific drop-out. Open the amplicon matrix to compare samples side by
+      side.
+
+      Lines and annotations: no line is drawn. A consensus needs enough depth at each
+      base, and nf-core/viralrecon and iVar both call a consensus base from a depth
+      of 10 reads by default, so dips towards that depth are where bases turn into Ns.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+      and https://raw.githubusercontent.com/nf-core/viralrecon/master/conf/modules_illumina.config
   # Depth is the one number a coverage table is read for, and a mean alone
   # hides the drop-outs: the Tukey strip shows the spread and the outliers.
-  - { component: card, column: coverage, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
+  - component: card
+    column: coverage
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median, with its spread
+    title: Amplicon depth
+    description: >-
+      The hero number is the median read depth of an amplicon over all samples, and
+      the box shows the quartiles and outliers. It answers how deeply the amplicons
+      are covered overall.
+
+      How to read: a median far above 10 reads with a tight box means even, deep
+      coverage. A long lower tail, or amplicons near zero, are the drop-outs that
+      leave gaps in the consensus.
+
+      Lines and annotations: no mark is drawn. nf-core/viralrecon and iVar call
+      consensus bases from a depth of 10 reads by default.
+
+      Source: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/output.md
+      and https://raw.githubusercontent.com/andersen-lab/ivar/master/docs/MANUAL.md
+      and https://raw.githubusercontent.com/nf-core/viralrecon/master/conf/modules_illumina.config
+  - component: table
+    title: Amplicon coverage
+    description: >-
+      One row is one amplicon in one sample, with its genome coordinates and
+      mean depth. It answers which amplicons are poorly covered.
+
+      How to read: Sort by coverage, lowest first, to find the dropouts, and by
+      start to read them in genome order. Look for amplicons that fail in
+      several samples, which suggests a primer problem rather than a sample one.
+      It complements the amplicon heatmap of the same module, which shows the
+      same values as a grid.

@@ -63,6 +63,7 @@
  */
 
 import type { RuntimeLimits } from './manifest';
+import { computeStat, isReferenceStat } from './referenceStats';
 import {
   ADVANCED_VIZ_KINDS,
   KIND_SAMPLING_POLICY,
@@ -77,11 +78,11 @@ export type { DeclaredTailDirection, SamplingPolicy };
 /** Direction of a client-supplied tail spec (the renderer's own threshold). */
 export type TailDirection = 'low' | 'high' | 'both';
 
-export interface AdvancedVizTailSpec {
-  column: string;
-  direction: TailDirection;
-  threshold: number;
-}
+/** A tail cut given as a number, or as a statistic of `column` that is settled
+ *  on the filtered, unreduced rows (routes.py `_tail_with_stat_threshold`). */
+export type AdvancedVizTailSpec =
+  | { column: string; direction: TailDirection; threshold: number }
+  | { column: string; direction: TailDirection; threshold_stat: string };
 
 /*
  * The per-kind tables (`KIND_SAMPLING_POLICY`, `TAIL_ROLE`) are GENERATED from
@@ -330,6 +331,21 @@ function reduced(
 // tail resolution (_resolve_tail, routes.py:317–390)
 // ---------------------------------------------------------------------------
 
+/**
+ * The cut of a client tail: its `threshold`, else its `threshold_stat` over the
+ * column's unreduced values. NaN when neither yields a number, which sends the
+ * caller to the role table, as the server does when the statistic cannot be
+ * computed.
+ */
+function tailThreshold(tail: AdvancedVizTailSpec, columns: string[], cols: unknown[][]): number {
+  const explicit = (tail as { threshold?: unknown }).threshold;
+  if (explicit !== undefined && explicit !== null) return Number(explicit);
+  const stat = (tail as { threshold_stat?: unknown }).threshold_stat;
+  const at = columns.indexOf(tail.column);
+  if (!isReferenceStat(stat) || at < 0) return Number.NaN;
+  return computeStat(cols[at], stat) ?? Number.NaN;
+}
+
 interface ResolvedTail {
   column: string;
   direction: TailDirection | 'top';
@@ -353,7 +369,7 @@ function resolveTail(
   const tail = req.tail;
   if (tail) {
     const direction = tail.direction || 'both';
-    const threshold = Number(tail.threshold);
+    const threshold = tailThreshold(tail, columns, cols);
     if (
       available.has(tail.column) &&
       Number.isFinite(threshold) &&

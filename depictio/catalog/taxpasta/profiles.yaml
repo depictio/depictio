@@ -14,45 +14,139 @@ renders_as:
   # sunburst would need the wide per-rank columns this frame does not carry.
   # One bar per profiling run (profiler x database): each bar keeps one
   # classifier's naming vocabulary, and pools only the samples in scope.
-  - {
-      id: stacked_taxonomy,
-      component: advanced_viz,
-      kind: stacked_taxonomy,
-      roles: { sample_id: profiler_db, taxon: name, rank: rank, abundance: rel_abundance },
-    }
-  - {
-      component: card,
-      column: name,
-      aggregation: nunique,
-      secondary_layout: uniqueness,
-    }
-  - {
-      component: card,
-      column: count,
-      aggregation: median,
-      aggregations: [box_plot_stats],
-      secondary_layout: box_plot,
-    }
-  - {
-      component: card,
-      column: sample,
-      aggregation: nunique,
-      secondary_layout: donut,
-      breakdown_col: profiler,
-    }
-  - {
-      component: card,
-      column: rel_abundance,
-      aggregation: max,
-      secondary_layout: threshold,
-      threshold_value: 0.5,
-      threshold_direction: max,
-      threshold_warn: 0.3,
-    }
-  - { component: interactive, interactive_type: MultiSelect, column_name: profiler }
-  - { component: interactive, interactive_type: MultiSelect, column_name: sample }
-  - { component: table }
+  - id: stacked_taxonomy
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Community composition per run
+    roles: {sample_id: profiler_db, taxon: name, rank: rank, abundance: rel_abundance}
+    description: >-
+      Each bar is one profiler and database, split into the taxa it reports at the
+      chosen rank and sized by relative abundance, pooling the samples in view. It
+      answers how the community looks to each classifier.
+
+      How to read: bars with the same colours in similar proportions agree on the
+      community. A bar dominated by an unclassified segment points to a database
+      that misses much of the sample, and a bar with different taxa reflects another
+      naming vocabulary. Switch the rank, or filter to a sample, to compare like with
+      like.
+
+      Lines and annotations: none are drawn.
+
+      Source: https://raw.githubusercontent.com/taxprofiler/taxpasta/dev/README.md
+  - component: card
+    column: name
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: uniqueness
+    caption: distinct and repeated taxon names
+    title: Distinct taxon names
+    description: >-
+      The hero number is the count of distinct taxon names reported, the second
+      number counts every row, and the ring splits distinct from repeated names. It
+      answers how much of the vocabulary is shared between runs.
+
+      How to read: a high share of repeated names means the profilers and samples
+      report the same taxa. Profilers use different naming, so one organism can
+      appear under several names.
+  - component: card
+    column: count
+    aggregation: sum
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: profiler
+    top_n_count: 4
+    caption: assigned counts, by profiler
+    title: Assigned counts
+    description: >-
+      The hero number is the total count assigned to taxa, with the median per row
+      below it, and the bars rank the profilers by total. It answers how much of the
+      data each profiler assigns.
+
+      How to read: compare profilers with care, since each one counts its own
+      units. The values span orders of magnitude, so a spread is not drawn.
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: profiler
+    top_n_count: 4
+    caption: taxon rows, by profiler
+    title: Samples profiled
+    description: >-
+      The hero number is the count of distinct samples, the second number counts every
+      row, and the bars rank the profilers by how many taxon rows they report. It
+      answers how many samples the table covers and which profiler reports the
+      longest list.
+
+      How to read: a profiler with a much longer bar reports a long tail of taxa,
+      which may include false positives.
+  - component: card
+    column: rel_abundance
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: histogram
+    caption: relative abundance of every taxon
+    title: Largest taxon share
+    description: >-
+      The hero number is the largest relative abundance a taxon reaches in a run,
+      with the median below it, and the histogram shows all values. It answers
+      whether one taxon dominates a profile.
+
+      How to read: a maximum far above the median means one taxon takes a large
+      share of a run. No cut-off is drawn, because no published rule separates a
+      dominant taxon from an ordinary one.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: profiler
+    title: Profiler
+    description: >-
+      Filters every tile of this view to the chosen profilers. It answers how one
+      classifier reads the data on its own.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: sample
+    title: Sample
+    description: >-
+      Filters every tile of this view to the chosen samples. It answers how the
+      profilers behave on one sample.
+  - component: table
+    title: Abundance table
+    description: >-
+      Each row is a taxon reported by one profiler and database in one sample, with
+      its rank, raw count and relative abundance. It answers the exact value behind a
+      bar of the composition.
+
+      How to read: sort by relative abundance for the leading taxa, or filter by
+      rank. Relative abundance is a share of that run's total.
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: rank, aggregation: nunique, secondary_layout: composition, breakdown_col: rank }
-  - { component: card, column: rel_abundance, aggregation: max, secondary_layout: gauge, coverage_max: 1 }
+  - component: card
+    column: rank
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: rank
+    caption: rows, by taxonomic rank
+    title: Rows by rank
+    description: >-
+      The hero number is the count of rows, the second number counts the ranks
+      present, and the bar shows the share of rows at each rank. It answers at which
+      level the profilers report.
+
+      How to read: a bar mostly at species means the profilers resolve to species
+      level, and a large genus or domain share means some stop higher.
+  - component: card
+    column: rel_abundance
+    aggregation: q3
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: relative abundance of every taxon
+    title: Upper quartile abundance
+    description: >-
+      The hero number is the upper quartile of relative abundance, with the median and
+      the largest value below it, and the histogram shows all values. It answers how abundant the commoner taxa are
+      relative to the rarest ones.
+
+      How to read: a quartile far below the maximum means the abundance is held by
+      few taxa.

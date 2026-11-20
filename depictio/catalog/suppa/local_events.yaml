@@ -13,12 +13,80 @@ renders_as:
   - id: local_event_volcano
     component: advanced_viz
     kind: volcano
+    title: Splicing change against significance
     roles: { feature_id: event_id, effect_size: dpsi, significance: pvalue, label: gene_id, category: event_type }
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 0.0
+      top_n_labels: 10
+      effect_label: Change in inclusion (delta PSI)
+      significance_label: -log10 p-value
+    description: >-
+      Each point is a local splicing event in one contrast: its change in inclusion (delta PSI) on the
+      horizontal axis and its empirical p-value on the vertical axis, coloured by event type. It answers which
+      events change most, in which direction, and how confidently.
+
+      How to read: events in the upper left and upper right corners lose or gain inclusion in the treatment
+      with strong support. A p-value of exactly zero is drawn at the top of the axis. A cloud with nothing above
+      the line means little differential splicing, so check the transcript quantification before trusting it.
+
+      Lines and annotations: the horizontal line is a p-value of 0.05, the default alpha of SUPPA2 diffSplice.
+      No delta PSI line is drawn: the rnasplice template passes its MIN_DPSI variable to this recipe's
+      min_dpsi parameter with a default of 0, so the call adds no floor on the change. A value above 0 is the
+      user's own working value, not a SUPPA2 default.
+
+      Source: https://raw.githubusercontent.com/comprna/SUPPA/master/README.md
   - id: local_event_types
     component: figure
     visu_type: histogram
-    dict_kwargs: { x: event_type, color: direction, barmode: stack }
-  - { component: card, column: event_id, aggregation: nunique, secondary_layout: donut, breakdown_col: event_type }
-  - { component: card, column: abs_dpsi, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: event_type }
-  - { component: table, row_selection_enabled: true, row_selection_column: event_id }
+    title: Events by type and direction
+    dict_kwargs: { x: event_type, color: direction, barmode: stack, labels: { event_type: Event type, direction: Direction of change } }
+    description: >-
+      Each bar is a local event type, split by whether its events gain inclusion, lose it or do not change
+      significantly. It answers which kinds of splicing carry the differences between the conditions.
+
+      How to read: a type whose bar is mostly significant is where the treatment acts. Bars that are almost
+      entirely not significant point to little signal for that type.
+  - component: card
+    column: event_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: event_type
+    title: Events tested
+    caption: events, by type
+    description: >-
+      The hero number is the count of distinct local events SUPPA2 could quantify, and the ring splits them by
+      event type. It answers how much splicing the run covers and of what kind.
+
+      How to read: a type that is missing may have had no events in the annotation or too little expression, so
+      check the transcript quantification.
+  - component: card
+    column: abs_dpsi
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Size of the inclusion change
+    caption: quartiles of the absolute change
+    description: >-
+      The hero number is the median absolute change in inclusion across events, and the box shows its
+      quartiles. It answers how large the splicing differences are overall.
+
+      How to read: a box close to zero means most events are unchanged and the signal sits in a few. Filter to
+      one event type or contrast to see where the larger changes are.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: event_type
+    title: Event type
+    description: >-
+      Restricts every tile to the chosen event types, such as skipped exons or retained introns.
+      It answers whether a pattern holds within one kind of splicing.
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: event_id
+    title: Local splicing events
+    description: >-
+      Each row is a local splicing event in one contrast, with its gene, type, span, change in inclusion,
+      p-value and significance call. It answers which events to follow up.
+
+      How to read: sort by p-value or by the absolute change and select a row to filter the dashboard to it.

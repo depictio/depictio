@@ -164,3 +164,79 @@ export async function blockNetwork(page: Page): Promise<string[]> {
   });
   return attempts;
 }
+
+// ---------------------------------------------------------------------------
+// A report with the runtime embedded: the report alone, or the report AND the
+// dashboard in one HTML (the combined file)
+// ---------------------------------------------------------------------------
+
+const DIST_STATIC = join(REPO_ROOT, "depictio/viewer/dist-static");
+export const RUNTIME_JS = join(DIST_STATIC, "combined-runtime.js");
+/** The report skeleton: the DOM Quarto renders from the notebook generator's
+ *  placeholders, for the penguins demo manifest. Regenerate with
+ *  `depictio/serverless/examples/generate_report_fixture.py`. */
+export const PENGUINS_REPORT = join(REPO_ROOT, "depictio/viewer/demo/reports/penguins.html");
+
+export function skipUnlessRuntimeBuilt(): void {
+  test.skip(
+    !existsSync(RUNTIME_JS),
+    "static runtime not built — run `pnpm run build:static` in depictio/viewer first",
+  );
+}
+
+const jsonScript = (id: string, payload: unknown) =>
+  `<script type="application/json" id="${id}">${JSON.stringify(payload)
+    .replace(/<\//g, "<\\/")
+    .replace(/<!--/g, "<\\u0021--")}</script>`;
+
+const scriptText = (text: string) =>
+  text.replace(/<\/script/g, "<\\/script").replace(/<!--/g, "<\\!--");
+
+/** The penguins report with the runtime and the manifest inlined once at its
+ *  end — the producer's composition (depictio/serverless/combined.py) for a
+ *  report with no Plotly copy of its own — opened on `initialFilters`.
+ *  `defaultView` makes it the combined file (the switch on, opening on that
+ *  view); without it, the report alone. Returns a file:// URL. */
+function runtimeReportUrl(
+  initialFilters: unknown[],
+  defaultView: "report" | "dashboard" | null,
+  edit?: (manifest: Record<string, any>) => void,
+): string {
+  const manifest = JSON.parse(readFileSync(PENGUINS_MANIFEST, "utf-8"));
+  manifest.initial_filters = initialFilters;
+  edit?.(manifest);
+  const config: Record<string, unknown> = { brand: { primary: "#228be6" } };
+  if (defaultView) config.combined = { default_view: defaultView };
+  const block =
+    jsonScript("depictio-report-config", config) +
+    jsonScript("depictio-report-manifest", manifest) +
+    `<script type="text/plain" data-depictio-runtime="css">${scriptText(
+      readFileSync(join(DIST_STATIC, "combined-runtime.css"), "utf-8"),
+    )}</script>` +
+    `<script data-depictio-runtime="js">${scriptText(readFileSync(RUNTIME_JS, "utf-8"))}</script>`;
+  const html = readFileSync(PENGUINS_REPORT, "utf-8").replace(
+    "<!--DEPICTIO_REPORT_RUNTIME-->",
+    () => block,
+  );
+  const dir = fixtureDir(defaultView ? "depictio-combined-" : "depictio-report-");
+  const out = join(dir, defaultView ? "combined-fixture.html" : "report-fixture.html");
+  writeFileSync(out, html);
+  return `file://${out}`;
+}
+
+/** The report alone (no "Report | Dashboard" switch); `edit` changes the
+ *  manifest first. */
+export function reportUrl(
+  initialFilters: unknown[] = [],
+  edit?: (manifest: Record<string, any>) => void,
+): string {
+  return runtimeReportUrl(initialFilters, null, edit);
+}
+
+/** The combined file, opening on `defaultView` when its link names none. */
+export function combinedUrl(
+  initialFilters: unknown[] = [],
+  defaultView: "report" | "dashboard" = "report",
+): string {
+  return runtimeReportUrl(initialFilters, defaultView);
+}

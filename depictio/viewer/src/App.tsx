@@ -10,6 +10,7 @@ import {
   Title,
   Paper,
   Box,
+  useComputedColorScheme,
 } from '@mantine/core';
 import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
@@ -71,6 +72,8 @@ import {
   useCategoricalColumns,
   useColorByColumnRender,
   resolveGroupRender,
+  panelsForGrouping,
+  buildAnalysisState,
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
@@ -135,6 +138,7 @@ import type { FilterPanelOptions } from './chrome/shell/types';
 import { useChromeVariant } from './chrome/variants';
 import TabLinkProvider from './chrome/TabLinkProvider';
 import GenomeBrowserTargetProvider from './chrome/GenomeBrowserTargetProvider';
+import { combinedInitialFilters, useCombinedFilterSync } from './hooks/useCombinedFilterSync';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
@@ -225,10 +229,20 @@ const App: React.FC = () => {
   // Lazily, because `useRef`'s argument is evaluated on EVERY render and the
   // hydration reads storage and decodes the URL fragment.
   const hydrationRef = useRef<InitialFilterHydration | null>(null);
+  // The dashboard view of a combined report + dashboard file opens on the
+  // filters its report is showing (null everywhere else). That state is the
+  // exported one, authoritative: no declared default is added on top of it.
+  const sharedOpeningRef = useRef(false);
   if (hydrationRef.current === null) {
     hydrationRef.current = hydrateInitialFilters(extractDashboardId(), extractPreviewVersionId());
+    const shared = combinedInitialFilters();
+    if (shared) {
+      hydrationRef.current = { ...hydrationRef.current, filters: shared };
+      sharedOpeningRef.current = true;
+    }
   }
   const [filters, setFilters] = useState<InteractiveFilter[]>(hydrationRef.current.filters);
+  useCombinedFilterSync(filters, setFilters);
   // Indices we hydrated from the cross-tab store. Only these may be pruned by
   // the cross-tab validation pass — a selection the viewer makes on a *grid*
   // map during this page load, or a filter restored from this dashboard's own
@@ -299,6 +313,9 @@ const App: React.FC = () => {
   // before the field existed has no value and must still get the funnel.
   const [funnelEnabled, setFunnelEnabled] = useState(true);
   const [funnelViewOpen, setFunnelViewOpen] = useState(false);
+  // The funnel's stage order lives here rather than in the funnel modal so it
+  // can travel with the analysis state (notebook export). Empty = filter order.
+  const [funnelOrder, setFunnelOrder] = useState<string[]>([]);
   const funnelDefault = dashboard?.funnel_filtering !== false;
   useEffect(() => {
     setFunnelEnabled(funnelDefault);
@@ -529,7 +546,7 @@ const App: React.FC = () => {
           // The stored copy would otherwise outlive the visit it no longer serves.
           if (dashboardId) clearLocalFilterState(dashboardId);
           setFilters(withInteractiveDefaults(hydration.urlFilters, dash.stored_metadata));
-        } else {
+        } else if (!sharedOpeningRef.current) {
           setFilters((prev) => withInteractiveDefaults(prev, dash.stored_metadata));
         }
         setAllDashboards(all);
@@ -1361,6 +1378,47 @@ const App: React.FC = () => {
     ],
   );
 
+  // Everything the viewer knows about *how* the user is looking at the data,
+  // as the one object the server accepts (notebook export, component embeds).
+  // A callback, not a memo: it is read once when the export modal opens.
+  const computedColorScheme = useComputedColorScheme('light');
+  const getAnalysisState = useCallback(
+    () =>
+      buildAnalysisState({
+        filters: combinedFilters,
+        groups: groupsApi.groups,
+        colorBy: groupsApi.colorBy,
+        displayMode: groupsApi.displayMode,
+        showOther: groupsApi.showOther,
+        showOverall: groupsApi.showOverall,
+        compareInCards: groupsApi.compareInCards,
+        funnel: { enabled: funnelEnabled, order: funnelOrder },
+        splitPanels: groupRender ? panelsForGrouping(groupRender, combinedFilters) : [],
+        // A `?version=` preview exports what it shows: that version's data
+        // and definitions, not today's under its label.
+        dataVersions: previewRequest,
+        dashboardId: dashboardId ?? '',
+        familyId: groupingScopeId ?? null,
+        theme: computedColorScheme,
+      }),
+    [
+      combinedFilters,
+      groupsApi.groups,
+      groupsApi.colorBy,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+      groupsApi.showOverall,
+      groupsApi.compareInCards,
+      funnelEnabled,
+      funnelOrder,
+      groupRender,
+      previewRequest,
+      dashboardId,
+      groupingScopeId,
+      computedColorScheme,
+    ],
+  );
+
   // Persistent grid sections owned by sibling tabs — the "always in view" slot
   // a metadata table lands in on every tab. Handed to DashboardGrid as
   // `beforeSections` so a `pin: top` section renders after this tab's own
@@ -2183,6 +2241,8 @@ const App: React.FC = () => {
           dashboardId={dashboardId}
           filters={tabDeferredFilters}
           groups={groupsApi.groups}
+          order={funnelOrder}
+          onOrderChange={setFunnelOrder}
         />
       )}
       {/* The page's fixed furniture sits above the Guide's layer; hidden
@@ -2290,7 +2350,8 @@ const App: React.FC = () => {
           closeSettings();
           openExportStatic();
         }}
-        isOwner={isOwner}
+        getAnalysisState={getAnalysisState}
+        previewing={Boolean(previewVersionId)}
         filters={
           remembering
             ? {

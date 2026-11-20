@@ -120,7 +120,6 @@ from depictio.models.models.serverless import (
     Producer,
     PrologueOp,
     TabEntry,
-    TierEntry,
     TierReason,
 )
 from depictio.serverless import computes
@@ -142,6 +141,7 @@ from depictio.serverless.preflight import (
     PlannedTier,
     TabRow,
     TierRow,
+    tiers_from_rows,
 )
 from depictio.serverless.producer_b import (
     PARQUET_COMPRESSION,
@@ -979,25 +979,121 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
-    """One ``init_data`` entry for a component's DC — ``dc_config`` first, the
-    ``deltatables_collection`` lookup as fallback (the exact pattern of every
-    render endpoint)."""
+    """One ``init_data`` entry for a component's DC.
+
+    The Delta location always comes from ``deltatables_collection``, never from
+    the component's ``dc_config.delta_location``: that is a copy held in the
+    dashboard document, which its editors write, and a bundle ships the table
+    it points at whole. The collection itself is checked to belong to the
+    dashboard's project before anything reaches here (:func:`scope_to_project`).
+    """
     dc_id = comp.get("dc_id")
     if not dc_id:
         return None
-    dc_config = comp.get("dc_config") or {}
-    delta_loc = dc_config.get("delta_location")
-    if not delta_loc:
+    try:
         dt = _db().deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-        if dt:
-            delta_loc = dt.get("delta_table_location")
+    except Exception as exc:
+        if _is_time_limit(exc):
+            raise
+        return None
+    delta_loc = (dt or {}).get("delta_table_location")
     if not delta_loc:
         return None
+    dc_config = comp.get("dc_config") or {}
     return {
         "delta_location": delta_loc,
         "dc_type": dc_config.get("type") or "table",
         "size_bytes": dc_config.get("size_bytes", 0),
     }
+
+
+def collection_refs(comp: dict[str, Any]) -> list[tuple[str, str]]:
+    """Every ``(wf_id, dc_id)`` a component reads, ``wf_id`` ``""`` when unnamed.
+
+    Its own collection (``dc_id``, or MultiQC's ``data_collection_id``), every
+    ``<base>_dc_id`` an advanced_viz config binds (companion tables, the
+    phylogenetic tree, object files, the MA table) with its ``<base>_wf_id``, and
+    the collections a text tile's live values read.
+    """
+    refs: list[tuple[str, str]] = []
+    own = comp.get("dc_id") or comp.get("data_collection_id")
+    if own:
+        refs.append((str(comp.get("wf_id") or ""), str(own)))
+    config = comp.get("config")
+    if isinstance(config, dict):
+        for key, value in config.items():
+            if key.endswith("_dc_id") and isinstance(value, (str, ObjectId)) and str(value):
+                wf_id = config.get(f"{key[: -len('_dc_id')]}_wf_id")
+                refs.append((str(wf_id or ""), str(value)))
+    if comp.get("component_type") == "text" and comp.get("values"):
+        for card in text_value_cards([comp]):
+            if card.get("dc_id"):
+                refs.append((str(card.get("wf_id") or ""), str(card["dc_id"])))
+    return refs
+
+
+def foreign_collections(comp: dict[str, Any], project_dcs: dict[str, str]) -> list[str]:
+    """The collections ``comp`` reads that are not in its project, in order.
+
+    ``project_dcs`` is :func:`workflow_ids_by_dc` of the project: a collection
+    must be listed there, under the workflow the component names when it names
+    one (``routes._collection_in_project``, applied to every reference).
+    """
+    out: list[str] = []
+    for wf_id, dc_id in collection_refs(comp):
+        known = project_dcs.get(dc_id)
+        if known is None or (wf_id and known and wf_id != known):
+            if dc_id not in out:
+                out.append(dc_id)
+    return out
+
+
+def scope_to_project(
+    items: list[tuple["FamilyTab", dict[str, Any], str]],
+    tier_by_id: dict[str, TierRow],
+    project_docs: dict[str, dict[str, Any] | None],
+) -> set[str]:
+    """Omit every component that reads a collection outside its tab's project.
+
+    A dashboard document names its collections by id, and ``/save`` does not
+    check them; the server's render endpoints answer for whatever a component
+    names. A bundle turns that into whole-table Parquet in a file, so producer A
+    ships only the collections of the dashboard's own project. A component that
+    names another is omitted, with the ids in its detail, and never reaches the
+    loader or an endpoint body. ``project_docs`` maps a tab's ``project_id`` to
+    its project (``None`` when unreadable: then nothing can be shown to belong).
+    Returns the omitted component ids.
+    """
+    dcs_by_project = {pid: workflow_ids_by_dc(doc) for pid, doc in project_docs.items()}
+    omitted: set[str] = set()
+    for tab, comp, cid in items:
+        pid = str(tab.doc.get("project_id") or "")
+        foreign = foreign_collections(comp, dcs_by_project.get(pid, {}))
+        if not foreign:
+            continue
+        row = tier_by_id[cid]
+        row.tier = ComponentTier.OMITTED
+        row.reason = TierReason.UNSUPPORTED
+        row.detail = (
+            f"reads data collection(s) {', '.join(foreign)}, which are not in this "
+            "dashboard's project; a bundle only carries the project's own collections"
+        )
+        if comp.get("component_type") == "jbrowse":
+            # The usual cause has a better name: track files never ingested.
+            problem = jbrowse_dc_problem(comp, project_docs.get(pid))
+            if problem is not None:
+                row.reason = TierReason.JBROWSE
+                row.detail = problem
+        row.provisional = False
+        omitted.add(cid)
+    if omitted:
+        logger.warning(
+            "producer A: %d component(s) name collections outside their project and are "
+            "omitted: %s",
+            len(omitted),
+            ", ".join(sorted(omitted)),
+        )
+    return omitted
 
 
 def text_value_cards(stored_metadata: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1127,11 +1223,28 @@ def interactive_filter_columns(stored_metadata: list[dict[str, Any]]) -> set[str
 
 
 # ---------------------------------------------------------------------------
-# Frozen payload builders (in-process endpoint bodies, empty filter state)
+# Frozen payload builders (in-process endpoint bodies, at the tab's opening
+# filter state: its interactive defaults, ``interactive_defaults``)
 # ---------------------------------------------------------------------------
 
 
-def split_bulk_cards(bulk: dict[str, Any], card_indexes: list[str]) -> dict[str, dict[str, Any]]:
+def _filter_metadata(
+    filters: list[dict[str, Any]] | None, component_type: str, comp: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """What a render endpoint hands the loader for ``filters``: region-scoped for
+    the component, then cleaned. No access token reaches producer A, so links
+    are not resolved, exactly as for the endpoint bodies it calls."""
+    if not filters:
+        return []
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+    from depictio.api.v1.region_scope import scope_region_filters
+
+    return clean_filter_payload(scope_region_filters(list(filters), component_type, comp))
+
+
+def split_bulk_cards(
+    bulk: dict[str, Any], card_indexes: list[str], filter_count: int = 0
+) -> dict[str, dict[str, Any]]:
     """Per-component slices of a ``bulk_compute_cards`` response.
 
     The static runtime's ``bulkComputeCards`` shim merges every frozen
@@ -1146,8 +1259,8 @@ def split_bulk_cards(bulk: dict[str, Any], card_indexes: list[str]) -> dict[str,
             continue
         payload: dict[str, Any] = {
             "values": {idx: values[idx]},
-            "filter_applied": False,
-            "filter_count": 0,
+            "filter_applied": filter_count > 0,
+            "filter_count": filter_count,
         }
         if idx in secondary:
             payload["secondary_values"] = {idx: secondary[idx]}
@@ -1158,9 +1271,13 @@ def split_bulk_cards(bulk: dict[str, Any], card_indexes: list[str]) -> dict[str,
 
 
 def _freeze_cards(
-    dashboard_oid: ObjectId, cards: list[dict[str, Any]], user: ExportUser
+    dashboard_oid: ObjectId,
+    cards: list[dict[str, Any]],
+    user: ExportUser,
+    filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Fallback card payloads (bulk response shape) at the default filter state.
+    """Fallback card payloads (bulk response shape) at the default filter state
+    (``filters``: the tab's interactive defaults).
 
     Cards are live in the bundle; the frozen snapshot is the value the shim
     shows if the in-browser computation fails (live results win on merge).
@@ -1168,11 +1285,11 @@ def _freeze_cards(
     indexes = [str(c.get("index")) for c in cards]
     bulk = _routes().bulk_compute_cards(
         dashboard_oid,
-        {"filters": [], "component_ids": indexes},
+        {"filters": list(filters or []), "component_ids": indexes},
         current_user=user,
         access_token=None,
     )
-    return split_bulk_cards(bulk, indexes)
+    return split_bulk_cards(bulk, indexes, len(filters or []))
 
 
 def _freeze_table(
@@ -1180,8 +1297,10 @@ def _freeze_table(
     component_id: str,
     user: ExportUser,
     max_rows: int = TABLE_FROZEN_MAX_ROWS,
+    filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """The renderTable response shape, paged up to the shared row cap."""
+    """The renderTable response shape, paged up to the shared row cap, at the
+    default filter state (``filters``)."""
     routes = _routes()
     rows: list[dict[str, Any]] = []
     columns: list[dict[str, Any]] = []
@@ -1192,7 +1311,7 @@ def _freeze_table(
         page = routes.render_table_endpoint(
             dashboard_oid,
             component_id,
-            {"filters": [], "start": start, "limit": limit},
+            {"filters": list(filters or []), "start": start, "limit": limit},
             _response(),
             current_user=user,
             access_token=None,
@@ -1208,13 +1327,18 @@ def _freeze_table(
     return {"columns": columns, "rows": rows[:max_rows], "total": total}
 
 
-def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[str, Any], bool]:
+def _freeze_figure(
+    comp: dict[str, Any],
+    full_load: bool = False,
+    filters: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], bool]:
     """Build a figure by calling the Celery task *function* directly.
 
     ``build_figure_preview`` is the single worker code path preview and render
     share (RFC errata #4); calling the function (not ``.delay()``) runs it
     in-process. The payload mirrors ``render_figure_endpoint``'s task payload
-    with the default (empty) filter state.
+    at the default filter state: ``filters`` (the tab's interactive defaults),
+    none for a binding's scaffold, which must hold every row.
 
     ui-mode figures reach this only when ``build_binding`` refused them
     (bind-and-refill, RFC §4) — a bound figure ships a binding table and no
@@ -1235,7 +1359,11 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
         "metadata": {
             "wf_id": str(comp.get("wf_id")),
             "dc_id": str(comp.get("dc_id")),
-            "dc_config": convert_objectid_to_str(comp.get("dc_config") or {}),
+            # Without its document copy of the Delta location: the task then
+            # looks it up from the collection, as `_dc_init_entry` does.
+            "dc_config": convert_objectid_to_str(
+                {k: v for k, v in (comp.get("dc_config") or {}).items() if k != "delta_location"}
+            ),
             "visu_type": comp.get("visu_type", "scatter"),
             "dict_kwargs": render_kwargs(comp),
             "mode": comp.get("mode", "ui"),
@@ -1244,7 +1372,7 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
             "selection_column": comp.get("selection_column"),
             "max_points": comp.get("max_points"),
         },
-        "filter_metadata": [],
+        "filter_metadata": _filter_metadata(filters, "figure", comp),
         "theme": "light",
         "full_load": full_load,
     }
@@ -1261,7 +1389,9 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
     return result, bool(meta.get("was_sampled", False))
 
 
-def advanced_viz_request(comp: dict[str, Any]) -> dict[str, Any] | None:
+def advanced_viz_request(
+    comp: dict[str, Any], filters: list[dict[str, Any]] | None = None
+) -> dict[str, Any] | None:
     """The ``/advanced_viz/data`` request an advanced_viz component implies.
 
     Columns and roles are derived from the component's persisted ``config``
@@ -1280,13 +1410,15 @@ def advanced_viz_request(comp: dict[str, Any]) -> dict[str, Any] | None:
         "wf_id": str(comp["wf_id"]),
         "dc_id": str(comp["dc_id"]),
         "columns": columns,
-        "filter_metadata": [],
+        "filter_metadata": list(filters or []),
         "viz_kind": advanced_viz_kind(comp) or None,
         "roles": advanced_viz_roles(comp),
     }
 
 
-def _freeze_advanced_viz(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
+def _freeze_advanced_viz(
+    comp: dict[str, Any], user: ExportUser, filters: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Freeze a data-path advanced_viz via the real ``/advanced_viz/data`` body.
 
     The response's ``sampling`` block is kept verbatim — it is what the
@@ -1298,7 +1430,7 @@ def _freeze_advanced_viz(comp: dict[str, Any], user: ExportUser) -> dict[str, An
     only costs the colours while a missing or unreadable tree is fatal
     (:class:`ProducerAError` here, ``omitted`` with the reason in the manifest).
     """
-    request = advanced_viz_request(comp)
+    request = advanced_viz_request(comp, filters)
     if request is None:
         raise ProducerAError(
             "advanced_viz component has no derivable columns (config carries no '*_col' bindings)"
@@ -1479,12 +1611,15 @@ def _run_with_timeout(func: Any, payload: dict[str, Any], timeout: float) -> Any
     return box.get("value")
 
 
-def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+def celery_compute_request(
+    comp: dict[str, Any], filters: list[dict[str, Any]] | None = None
+) -> tuple[str, dict[str, Any]] | None:
     """``(task function name, payload)`` for a Celery-computed advanced_viz.
 
     Mirrors the payload the component's renderer POSTs on first paint: the
     persisted ``config`` with every interactive control at the default the
-    renderer seeds it with, and an empty ``filter_metadata``. ``None`` when the
+    renderer seeds it with, and ``filters`` (the tab's interactive defaults) as
+    its ``filter_metadata``, residue-scoped as the dispatch endpoints scope it. ``None`` when the
     component implies no compute at all — an ``embedding`` without
     ``compute_method`` (its renderer reads coordinates from the table instead),
     or a config missing what its task requires.
@@ -1496,7 +1631,13 @@ def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] |
     if not wf_id or not dc_id:
         return None
     config = comp.get("config") or {}
-    base: dict[str, Any] = {"wf_id": str(wf_id), "dc_id": str(dc_id), "filter_metadata": []}
+    from depictio.api.v1.region_scope import scope_residue_filters
+
+    base: dict[str, Any] = {
+        "wf_id": str(wf_id),
+        "dc_id": str(dc_id),
+        "filter_metadata": scope_residue_filters(list(filters or []), kind),
+    }
 
     if kind == "embedding":
         method = str(config.get("compute_method") or "").lower()
@@ -1621,7 +1762,9 @@ _LOCAL_TASKS: dict[str, Any] = {"group_compare_opening": _group_compare_opening}
 
 
 def freeze_celery_compute(
-    comp: dict[str, Any], budget: ComputeBudget
+    comp: dict[str, Any],
+    budget: ComputeBudget,
+    filters: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, str]:
     """Run one advanced_viz Celery compute in-process. ``(payload, detail)``.
 
@@ -1631,7 +1774,7 @@ def freeze_celery_compute(
     successful compute returns the frozen payload the runtime's shim serves.
     """
     kind = advanced_viz_kind(comp) or "?"
-    plan = celery_compute_request(comp)
+    plan = celery_compute_request(comp, filters)
     if plan is None:
         return None, f"advanced_viz '{kind}' compute request cannot be derived from its config"
     task_name, request = plan
@@ -1735,6 +1878,8 @@ def _multiqc_call(
     (General Stats or a plot, mirroring ``MultiQCDispatch``), as a call."""
     routes = _routes()
     component_id = str(comp.get("index"))
+    # No filters, not even the tab's defaults: a bundled MultiQC tile is live,
+    # and this payload is the whole figure the runtime re-slices per filter.
     request = {"filters": [], "theme": "light"}
     _, _, _, is_gs = routes._resolve_selected_keys(comp)
     if is_gs:
@@ -1967,9 +2112,12 @@ def _multiqc_payload(
 
 
 def _freeze_map(
-    comp: dict[str, Any], user: ExportUser, category_colors: dict | None = None
+    comp: dict[str, Any],
+    user: ExportUser,
+    category_colors: dict | None = None,
+    filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Freeze a map at the default filter state, keeping its own basemap.
+    """Freeze a map at the default filter state (``filters``), keeping its own basemap.
 
     Mirrors ``render_map_endpoint``'s body (which reads the component from
     Mongo, so it cannot be reused verbatim) through the shared
@@ -1984,7 +2132,7 @@ def _freeze_map(
     df = _dtu().load_deltatable_lite(
         workflow_id=ObjectId(str(comp["wf_id"])),
         data_collection_id=dc_id,
-        metadata=None,
+        metadata=_filter_metadata(filters, "map", comp) or None,
         init_data={dc_id: init_entry},
     )
     return freeze_map_payload(comp, df, category_colors)
@@ -2494,6 +2642,8 @@ def apply_dc_outcomes(
             continue
         dc_id = str(comp.get("dc_id") or "")
         row = tier_by_id[component_id]
+        if row.tier is ComponentTier.OMITTED:
+            continue  # already settled (a collection outside the project)
         if dc_id in dc_failures:
             row.tier = ComponentTier.OMITTED
             row.reason = TierReason.UNSUPPORTED
@@ -2578,6 +2728,7 @@ def decide_figure(
     comp: dict[str, Any],
     data_refs: dict[str, DataRef],
     pruned_frames: dict[str, pl.DataFrame],
+    filters: list[dict[str, Any]] | None = None,
 ) -> FigureDecision:
     """Offer a figure to the bind-and-refill builder and read off its tier.
 
@@ -2598,6 +2749,11 @@ def decide_figure(
     the payload away: the build-time ``was_sampled`` flag it returns is what
     separates ``frozen`` from ``partial``, and there is no cheaper way to learn
     it than to build the figure the server would have built.
+
+    ``filters`` is the tab's opening filter state (its interactive defaults): a
+    frozen figure is built under it, so it shows what the live tiles beside it
+    show when the bundle opens. A code figure's scaffold is built without it
+    (the binder needs every row), and rebuilt under it when it does not bind.
     """
     binding: BindingTable | None = None
     miss: BindingMiss | None = None
@@ -2671,8 +2827,8 @@ def decide_figure(
             )
         return FigureDecision(ComponentTier.LIVE, binding=binding, prologue=prologue)
 
-    if payload is None:
-        payload, sampled = _freeze_figure(comp)
+    if payload is None or filters:
+        payload, sampled = _freeze_figure(comp, filters=filters)
     if binder_error is not None:
         # Distinguishable from a real binding miss on purpose: the binder never
         # reached a verdict here, so reporting its "no unambiguous binding"
@@ -2725,14 +2881,17 @@ LINK_TABLE_MAX_PAIRS = 50_000
 def _fetch_project(project_id: Any) -> dict[str, Any] | None:
     """The dashboard's project document — where ``links`` live (projects.py:33).
 
-    Best-effort: a bundle whose project cannot be read still builds, it just
-    carries no links (and the check output shows none).
+    Best-effort: a bundle whose project cannot be read still builds, but it
+    carries no links and no data (:func:`scope_to_project` can then show no
+    collection to belong to the project).
     """
     if not project_id:
         return None
     try:
         return _db().projects_collection.find_one({"_id": ObjectId(str(project_id))})
-    except Exception:
+    except Exception as exc:
+        if _is_time_limit(exc):
+            raise
         return None
 
 
@@ -3120,13 +3279,53 @@ def _fetch_dashboard(dashboard_id: str) -> dict[str, Any]:
     return doc
 
 
-def _check_permission(dashboard_data: dict[str, Any], user: ExportUser, required: str) -> None:
+def _permission_denial(dashboard_data: dict[str, Any], user: Any, required: str) -> str | None:
+    """Why ``user`` may not export this tab, or ``None``: ``required`` on its project."""
     project_id = dashboard_data.get("project_id")
-    if not project_id or not _routes().check_project_permission(project_id, user, required):
-        raise ProducerAError(
-            f"permission denied: exporting needs '{required}' on the dashboard's project "
-            "(RFC §8 — a bundle is bulk data exfiltration)"
-        )
+    if project_id and _routes().check_project_permission(project_id, user, required):
+        return None
+    return (
+        f"permission denied: exporting needs '{required}' on the dashboard's project "
+        "(RFC §8 — a bundle is bulk data exfiltration)"
+    )
+
+
+def _check_permission(dashboard_data: dict[str, Any], user: Any, required: str) -> None:
+    denial = _permission_denial(dashboard_data, user, required)
+    if denial is not None:
+        raise ProducerAError(denial)
+
+
+def _entry_for_export(
+    dashboard_id: str, user: Any, required: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """``(dashboard document, None)`` when ``user`` may export it, else ``(None, why)``."""
+    try:
+        doc = _fetch_dashboard(dashboard_id)
+    except ProducerAError as exc:
+        return None, str(exc)
+    denial = _permission_denial(doc, user, required)
+    return (None, denial) if denial is not None else (doc, None)
+
+
+def export_denial(dashboard_id: str, user: Any, required: str = "owner") -> str | None:
+    """Why ``user`` may not export ``dashboard_id``, or ``None`` when they may.
+
+    The one export rule (RFC §8): ``required`` on the dashboard's *project*,
+    ``owner`` to build a bundle, ``viewer`` to preflight one. The build, the
+    dispatch endpoint and the UI's ``can_export`` all ask this, so the button a
+    user sees enabled is the request the server accepts. An unknown or invalid
+    id is a denial like any other: callers answer all of them alike.
+    """
+    return _entry_for_export(dashboard_id, user, required)[1]
+
+
+def _require_entry(dashboard_id: str, user: Any, required: str) -> dict[str, Any]:
+    """The entry tab's document, or :class:`ProducerAError` with the denial."""
+    doc, denial = _entry_for_export(dashboard_id, user, required)
+    if doc is None:
+        raise ProducerAError(denial or "permission denied")
+    return doc
 
 
 def _public_base_url() -> str | None:
@@ -3247,6 +3446,182 @@ def resolve_highlight_tiers(
         row.provisional = False
 
 
+@dataclass
+class _FreezeState:
+    """What the per-component freeze shares across one export's family."""
+
+    user: ExportUser
+    decide_only: bool
+    data_refs: dict[str, DataRef]
+    pruned_frames: dict[str, pl.DataFrame]
+    inline_blobs: dict[str, str]
+    project_doc: dict[str, Any] | None
+    budget: ComputeBudget
+    #: Each tab's opening filter state (its interactive defaults).
+    tab_defaults: dict[str, list[dict[str, Any]]]
+    frozen: dict[str, FrozenPayload] = field(default_factory=dict)
+    bindings: dict[str, BindingTable] = field(default_factory=dict)
+    prologues: dict[str, list[PrologueOp]] = field(default_factory=dict)
+    # One object budget for every file the bundle ships: structures, PAE
+    # matrices and gallery thumbnails alike.
+    object_budget: ObjectBudget = field(default_factory=lambda: ObjectBudget())
+    # Genome browser tiles whose files were shipped: the bundle then needs the
+    # `jbrowse` runtime add-on (JBrowse itself).
+    jbrowse_tiles: list[str] = field(default_factory=list)
+    computes_frozen: int = 0
+    computes_skipped: int = 0
+    # One wait for every cold MultiQC pre-render in the family (see MultiQCWait).
+    multiqc_wait: MultiQCWait = field(default_factory=lambda: MultiQCWait.from_env())
+
+
+def _freeze_component(
+    state: _FreezeState,
+    tab: FamilyTab,
+    comp: dict[str, Any],
+    component_id: str,
+    row: TierRow,
+) -> None:
+    """Settle one component's frozen side, in place: its payload into
+    ``state.frozen`` (or its binding), its verdict into ``row``.
+
+    Runs for FROZEN rows and for every MultiQC tile (a live MultiQC still ships
+    a payload: the runtime re-slices that figure under the current filters, it
+    cannot rebuild it, so the payload is its data source, not a snapshot of a
+    dead tile). A payload that fails omits the component with the error; only
+    the soft time limit propagates.
+    """
+    ctype = comp.get("component_type")
+    if row.tier is ComponentTier.OMITTED or (
+        row.tier is not ComponentTier.FROZEN and ctype != "multiqc"
+    ):
+        return
+    user, decide_only = state.user, state.decide_only
+    if decide_only and ctype == "multiqc":
+        # Not settled here (the build waits for a cold pre-render, then
+        # omits), but a cold one is something the reader should hear about
+        # before the build: one ask of the endpoint the tile calls.
+        try:
+            note = multiqc_prerender_note(ObjectId(tab.id), comp, user, state.multiqc_wait.total)
+        except Exception as exc:
+            if _is_time_limit(exc):
+                raise
+            note = None
+            logger.info("producer A: MultiQC pre-render probe failed for %s: %s", component_id, exc)
+        if note is not None:
+            row.detail = f"{row.detail}; {note}" if row.detail else note
+            row.provisional = True
+        return
+    if decide_only and ctype not in ("figure", "jbrowse"):
+        # A figure is the only tier this loop can still SETTLE cheaply, so
+        # it is the only one it runs. The rest keep their planned verdict,
+        # which the build can still move: a frozen payload that fails drops
+        # the component to omitted, and a Celery compute the budget cannot
+        # cover is omitted by policy rather than by failure
+        # (:func:`freeze_celery_compute` returning ``None``). So on a
+        # dashboard with more computes than the budget covers, this reports
+        # `frozen` where the build will ship `omitted`. Running them here to
+        # find out would cost the bulk of an export's wall clock, which is
+        # not what a preflight is for.
+        return
+    dashboard_oid = ObjectId(tab.id)
+    defaults = state.tab_defaults.get(tab.id) or []
+    frozen = state.frozen
+    try:
+        if ctype == "table":
+            frozen[component_id] = FrozenPayload(
+                kind="table",
+                payload=_freeze_table(dashboard_oid, component_id, user, filters=defaults),
+            )
+        elif ctype == "figure":
+            decision = decide_figure(comp, state.data_refs, state.pruned_frames, defaults)
+            row.tier = decision.tier
+            row.reason = decision.reason
+            row.detail = decision.detail
+            row.provisional = False  # the binder ran; this IS the verdict
+            if decision.binding is not None:
+                state.bindings[component_id] = decision.binding
+                if decision.prologue:
+                    state.prologues[component_id] = decision.prologue
+            elif decision.payload is not None and not decide_only:
+                frozen[component_id] = FrozenPayload(kind="figure", payload=decision.payload)
+        elif ctype == "advanced_viz":
+            if celery_compute_request(comp) is not None:
+                # Server-side Celery kind: run the compute here and ship the
+                # result the poll endpoint would have returned. A failure
+                # degrades this one component to omitted (with the error in
+                # its detail) and never aborts the export.
+                compute_payload, detail = freeze_celery_compute(comp, state.budget, defaults)
+                row.reason = TierReason.CELERY_COMPUTE
+                row.detail = detail
+                if compute_payload is None:
+                    row.tier = ComponentTier.OMITTED
+                    state.computes_skipped += 1
+                else:
+                    frozen[component_id] = FrozenPayload(kind="compute", payload=compute_payload)
+                    state.computes_frozen += 1
+            else:
+                frozen[component_id] = FrozenPayload(
+                    kind="advanced-viz-data",
+                    payload=_freeze_advanced_viz(comp, user, defaults),
+                )
+        elif ctype == "multiqc":
+            kind, payload = _freeze_multiqc(dashboard_oid, comp, user, state.multiqc_wait)
+            frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
+        elif ctype == "map":
+            try:
+                map_colors = _routes().effective_category_colors(tab.doc)
+            except Exception as exc:
+                if _is_time_limit(exc):
+                    raise
+                map_colors = None
+            frozen[component_id] = FrozenPayload(
+                kind="map", payload=_freeze_map(comp, user, map_colors, defaults)
+            )
+        elif ctype == "image":
+            payload, note = _freeze_image(
+                dashboard_oid,
+                comp,
+                component_id,
+                user,
+                state.object_budget,
+                state.inline_blobs,
+                defaults,
+            )
+            frozen[component_id] = FrozenPayload(kind="image", payload=payload)
+            if note:
+                row.detail = f"{row.detail}; {note}"
+        elif ctype == "jbrowse":
+            problem = jbrowse_dc_problem(comp, state.project_doc)
+            if problem is not None:
+                # Said before the session endpoint is asked: its 400 ("not
+                # a genomic_tracks collection") names the wrong cause when
+                # the collection is simply not in the project.
+                row.tier = ComponentTier.OMITTED
+                row.reason = TierReason.JBROWSE
+                row.detail = problem
+                return
+            payload, outcome = _freeze_jbrowse(
+                dashboard_oid,
+                component_id,
+                user,
+                state.object_budget,
+                state.inline_blobs,
+                dry_run=decide_only,
+                filters=defaults,
+            )
+            row.detail = outcome.detail()
+            if not decide_only:
+                frozen[component_id] = FrozenPayload(kind="jbrowse", payload=payload)
+            if outcome.renderable:
+                state.jbrowse_tiles.append(str(comp.get("title") or component_id))
+    except Exception as exc:
+        if _is_time_limit(exc):
+            raise
+        row.tier = ComponentTier.OMITTED
+        row.reason = row.reason or TierReason.UNSUPPORTED
+        row.detail = f"frozen payload could not be computed: {exc}"
+
+
 def export_manifest(
     dashboard_id: str,
     user: ExportUser,
@@ -3290,8 +3665,7 @@ def export_manifest(
     # deciding needs *viewer*, since every row it reads is a row the normal
     # render endpoints would already hand that viewer.
     required = "viewer" if decide_only else "owner"
-    entry_doc = _fetch_dashboard(dashboard_id)
-    _check_permission(entry_doc, user, required)
+    entry_doc = _require_entry(dashboard_id, user, required)
     tabs, entry_tab = family_from_doc(entry_doc, single_tab=single_tab)
     for tab in tabs:
         _check_permission(tab.doc, user, required)
@@ -3312,12 +3686,22 @@ def export_manifest(
     for tab in tabs:
         tier_rows.extend(classify_stored_metadata(tab.components, tab_id=tab.id))
     tier_by_id = {row.component_id: row for row in tier_rows}
-    stored_metadata: list[dict[str, Any]] = [comp for _tab, comp, _cid in items]
 
     # Cross-DC links (RFC §8): read from the PROJECT, filtered to the ones that
     # can land a filter on this dashboard, and folded into the column sets
     # before anything is bundled — a join column pruned away is a dead filter.
     project_doc = _fetch_project(entry_tab.doc.get("project_id"))
+    # Only the project's own collections ship: a component naming another one
+    # is omitted here, before any loader or endpoint body sees it.
+    project_docs: dict[str, dict[str, Any] | None] = {
+        str(entry_tab.doc.get("project_id") or ""): project_doc
+    }
+    for pid in project_ids - set(project_docs):
+        project_docs[pid] = _fetch_project(pid)
+    foreign = scope_to_project(items, tier_by_id, project_docs)
+    stored_metadata: list[dict[str, Any]] = [
+        comp for _tab, comp, cid in items if cid not in foreign
+    ]
     # `{{param:KEY}}` in a text tile reads the run's recorded parameters —
     # constants, so the bundle carries them on the tile itself (the runtime
     # folds them in beside the computed values, as bulk_compute_cards does).
@@ -3332,7 +3716,9 @@ def export_manifest(
 
     # Python-runtime candidates (RFC §13.6) ship their whole table: the build
     # below decides which of them the runtime really serves.
-    python_candidates = mark_python_candidates(items, python_runtime)
+    python_candidates = mark_python_candidates(
+        [item for item in items if item[2] not in foreign], python_runtime
+    )
 
     # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
     # live advanced_viz kinds) read — keyed by dc_id, so a DC read on three tabs
@@ -3342,23 +3728,26 @@ def export_manifest(
     )
     apply_dc_outcomes(items, tier_by_id, data_refs, dc_failures)
 
-    # Frozen tier: real endpoint bodies, default (empty) filter state.
-    # Bindings (bind-and-refill, RFC §4) — and, for code-mode figures, the
-    # prologue IR the runtime replays first (RFC §7) — are filled per figure
-    # below.
-    frozen: dict[str, FrozenPayload] = {}
-    bindings: dict[str, BindingTable] = {}
-    prologues: dict[str, list[PrologueOp]] = {}
-    # One object budget for every file the bundle ships: structures, PAE
-    # matrices and gallery thumbnails alike.
-    object_budget = ObjectBudget()
-    # Genome browser tiles whose files were shipped: the bundle then needs the
-    # `jbrowse` runtime add-on (JBrowse itself).
-    jbrowse_tiles: list[str] = []
-    computes_frozen = 0
-    computes_skipped = 0
-    # One wait for every cold MultiQC pre-render in the family (see MultiQCWait).
-    multiqc_wait = MultiQCWait.from_env()
+    # Frozen tier: real endpoint bodies, at each tab's default filter state —
+    # its interactive defaults, the state the bundle's App opens the tab on
+    # (``withInteractiveDefaults``), so a frozen tile agrees with the live ones
+    # beside it until the reader changes a filter. Bindings (bind-and-refill,
+    # RFC §4) — and, for code-mode figures, the prologue IR the runtime replays
+    # first (RFC §7) — are filled per figure below.
+    from depictio.serverless.interactive_defaults import default_filters
+
+    state = _FreezeState(
+        user=user,
+        decide_only=decide_only,
+        data_refs=data_refs,
+        pruned_frames=pruned_frames,
+        inline_blobs=inline_blobs,
+        project_doc=project_doc,
+        budget=budget,
+        tab_defaults={tab.id: default_filters(tab.components) for tab in tabs},
+    )
+    frozen, bindings, prologues = state.frozen, state.bindings, state.prologues
+    object_budget = state.object_budget
 
     # Cards freeze per tab: bulk_compute_cards resolves component ids against
     # ONE dashboard document, so a family needs one call per tab. A card's tier
@@ -3376,137 +3765,21 @@ def export_manifest(
             if not cards:
                 continue
             try:
-                for idx, payload in _freeze_cards(ObjectId(tab.id), cards, user).items():
+                for idx, payload in _freeze_cards(
+                    ObjectId(tab.id), cards, user, state.tab_defaults[tab.id]
+                ).items():
                     frozen[idx] = FrozenPayload(kind="card", payload=payload)
             except Exception as exc:
+                if _is_time_limit(exc):
+                    raise
                 # Fallback payloads only — cards stay live off the bundled data.
                 logger.warning(
                     "producer A: frozen card fallback failed for tab %s: %s", tab.id, exc
                 )
 
     for tab, comp, component_id in items:
-        row = tier_by_id[component_id]
-        ctype = comp.get("component_type")
-        # A live MultiQC still ships a payload: the runtime re-slices that figure
-        # under the current filters, it cannot rebuild it. The payload is its
-        # data source, not a snapshot of a dead tile.
-        if row.tier is not ComponentTier.FROZEN and ctype != "multiqc":
-            continue
-        if decide_only and ctype == "multiqc":
-            # Not settled here (the build waits for a cold pre-render, then
-            # omits), but a cold one is something the reader should hear about
-            # before the build: one ask of the endpoint the tile calls.
-            try:
-                note = multiqc_prerender_note(ObjectId(tab.id), comp, user, multiqc_wait.total)
-            except Exception as exc:
-                note = None
-                logger.info(
-                    "producer A: MultiQC pre-render probe failed for %s: %s", component_id, exc
-                )
-            if note is not None:
-                row.detail = f"{row.detail}; {note}" if row.detail else note
-                row.provisional = True
-            continue
-        if decide_only and ctype not in ("figure", "jbrowse"):
-            # A figure is the only tier this loop can still SETTLE cheaply, so
-            # it is the only one it runs. The rest keep their planned verdict,
-            # which the build can still move: a frozen payload that fails drops
-            # the component to omitted, and a Celery compute the budget cannot
-            # cover is omitted by policy rather than by failure
-            # (:func:`freeze_celery_compute` returning ``None``). So on a
-            # dashboard with more computes than the budget covers, this reports
-            # `frozen` where the build will ship `omitted`. Running them here to
-            # find out would cost the bulk of an export's wall clock, which is
-            # not what a preflight is for.
-            continue
-        dashboard_oid = ObjectId(tab.id)
-        try:
-            if ctype == "table":
-                frozen[component_id] = FrozenPayload(
-                    kind="table",
-                    payload=_freeze_table(dashboard_oid, component_id, user),
-                )
-            elif ctype == "figure":
-                decision = decide_figure(comp, data_refs, pruned_frames)
-                row.tier = decision.tier
-                row.reason = decision.reason
-                row.detail = decision.detail
-                row.provisional = False  # the binder ran; this IS the verdict
-                if decision.binding is not None:
-                    bindings[component_id] = decision.binding
-                    if decision.prologue:
-                        prologues[component_id] = decision.prologue
-                elif decision.payload is not None and not decide_only:
-                    frozen[component_id] = FrozenPayload(kind="figure", payload=decision.payload)
-            elif ctype == "advanced_viz":
-                if celery_compute_request(comp) is not None:
-                    # Server-side Celery kind: run the compute here and ship the
-                    # result the poll endpoint would have returned. A failure
-                    # degrades this one component to omitted (with the error in
-                    # its detail) and never aborts the export.
-                    compute_payload, detail = freeze_celery_compute(comp, budget)
-                    row.reason = TierReason.CELERY_COMPUTE
-                    row.detail = detail
-                    if compute_payload is None:
-                        row.tier = ComponentTier.OMITTED
-                        computes_skipped += 1
-                    else:
-                        frozen[component_id] = FrozenPayload(
-                            kind="compute", payload=compute_payload
-                        )
-                        computes_frozen += 1
-                else:
-                    frozen[component_id] = FrozenPayload(
-                        kind="advanced-viz-data",
-                        payload=_freeze_advanced_viz(comp, user),
-                    )
-            elif ctype == "multiqc":
-                kind, payload = _freeze_multiqc(dashboard_oid, comp, user, multiqc_wait)
-                frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
-            elif ctype == "map":
-                try:
-                    map_colors = _routes().effective_category_colors(tab.doc)
-                except Exception:
-                    map_colors = None
-                frozen[component_id] = FrozenPayload(
-                    kind="map", payload=_freeze_map(comp, user, map_colors)
-                )
-            elif ctype == "image":
-                payload, note = _freeze_image(
-                    dashboard_oid, comp, component_id, user, object_budget, inline_blobs
-                )
-                frozen[component_id] = FrozenPayload(kind="image", payload=payload)
-                if note:
-                    row.detail = f"{row.detail}; {note}"
-            elif ctype == "jbrowse":
-                problem = jbrowse_dc_problem(comp, project_doc)
-                if problem is not None:
-                    # Said before the session endpoint is asked: its 400 ("not
-                    # a genomic_tracks collection") names the wrong cause when
-                    # the collection is simply not in the project.
-                    row.tier = ComponentTier.OMITTED
-                    row.reason = TierReason.JBROWSE
-                    row.detail = problem
-                    continue
-                payload, outcome = _freeze_jbrowse(
-                    dashboard_oid,
-                    component_id,
-                    user,
-                    object_budget,
-                    inline_blobs,
-                    dry_run=decide_only,
-                )
-                row.detail = outcome.detail()
-                if not decide_only:
-                    frozen[component_id] = FrozenPayload(kind="jbrowse", payload=payload)
-                if outcome.renderable:
-                    jbrowse_tiles.append(str(comp.get("title") or component_id))
-        except Exception as exc:
-            if _is_time_limit(exc):
-                raise
-            row.tier = ComponentTier.OMITTED
-            row.reason = row.reason or TierReason.UNSUPPORTED
-            row.detail = f"frozen payload could not be computed: {exc}"
+        _freeze_component(state, tab, comp, component_id, tier_by_id[component_id])
+    jbrowse_tiles = state.jbrowse_tiles
 
     python_components, python_info = settle_python_jobs(
         items, tier_by_id, bindings, data_refs, python_candidates, python_runtime, decide_only
@@ -3577,12 +3850,12 @@ def export_manifest(
     )
     # The gene tables the genome tiles draw from: the server serves them under
     # its base URL, a bundle has to carry them (``gene_assets``).
+    from depictio.serverless.dist import dist_static_dir
     from depictio.serverless.gene_assets import gene_blobs
-    from depictio.serverless.producer_b import _template_path
 
     genes, _ = gene_blobs(
         (comp for _tab, comp, cid in items if tier_by_id[cid].tier is not ComponentTier.OMITTED),
-        _template_path().parent,
+        dist_static_dir(),
     )
     inline_blobs.update(genes)
     if python_info.get("embedded"):
@@ -3618,10 +3891,7 @@ def export_manifest(
             project_doc, _public_base_url(), _fetch_last_aggregations(project_doc)
         ),
         data_refs=data_refs,
-        tiers={
-            row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)
-            for row in tier_rows
-        },
+        tiers=tiers_from_rows(tier_rows),
         frozen=frozen,
         bindings=bindings,
         prologues=prologues,
@@ -3642,8 +3912,8 @@ def export_manifest(
         len(tier_rows),
         len(data_refs),
         _mb(bundle_size.data_bytes),
-        computes_frozen,
-        computes_skipped,
+        state.computes_frozen,
+        state.computes_skipped,
         budget.spent,
         budget.total,
     )
@@ -3664,8 +3934,10 @@ def _freeze_image(
     user: ExportUser,
     budget: ObjectBudget,
     inline_blobs: dict[str, str],
+    filters: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], str | None]:
-    """A gallery's export-time snapshot: its default rows, images as thumbnails.
+    """A gallery's export-time snapshot: its default rows (under ``filters``, the
+    tab's interactive defaults), images as thumbnails.
 
     The rows come from ``render_image_paths_endpoint`` (the gallery's own
     order and cap); each image is read from the instance's bucket, downsampled
@@ -3682,7 +3954,7 @@ def _freeze_image(
     payload = routes.render_image_paths_endpoint(
         dashboard_oid,
         component_id,
-        {"filters": [], "max": cap},
+        {"filters": list(filters or []), "max": cap},
         current_user=user,
         access_token=None,
     )
@@ -3772,8 +4044,10 @@ def _freeze_jbrowse(
     budget: ObjectBudget,
     inline_blobs: dict[str, str] | None,
     dry_run: bool = False,
+    filters: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], Any]:
-    """The genome browser's session at the default filter state, with its files.
+    """The genome browser's session at the default filter state (``filters``),
+    with its files.
 
     ``render_jbrowse`` mints the session the live viewer would open; its
     assembly, track and index files are then read here, through the same
@@ -3788,7 +4062,7 @@ def _freeze_jbrowse(
     session = _routes().render_jbrowse_endpoint(
         dashboard_oid,
         component_id,
-        {"filters": []},
+        {"filters": list(filters or [])},
         current_user=user,
         access_token=None,
     )
@@ -4348,8 +4622,7 @@ def export_static(
         )
 
     if check:
-        entry_doc = _fetch_dashboard(dashboard_id)
-        _check_permission(entry_doc, export_user, "viewer")
+        entry_doc = _require_entry(dashboard_id, export_user, "viewer")
         tabs, entry_tab = family_from_doc(entry_doc, single_tab=single_tab)
         for tab in tabs:
             _check_permission(tab.doc, export_user, "viewer")

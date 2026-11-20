@@ -10,19 +10,54 @@ find: { path_glob: "**/sylph/sylph_*_combined_reports.tsv" }
 recipe: sylph/profile.py
 fixture: profile.tsv
 renders_as:
-  - {
-      id: stacked_taxonomy,
-      component: advanced_viz,
-      kind: stacked_taxonomy,
-      roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance },
-    }
-  - {
-      headline: true,
-      component: card,
-      column: taxon,
-      aggregation: nunique,
-      secondary_layout: top_n,
-      breakdown_col: rank,
-      top_n_count: 4,
-    }
-  - { component: table }
+  - id: stacked_taxonomy
+    component: advanced_viz
+    kind: stacked_taxonomy
+    title: Taxonomic composition per sample
+    roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance}
+    config:
+      top_n: 8
+      value_title: Taxonomic abundance (%)
+    description: >-
+      Each bar is a sample and each segment a taxon at the chosen rank, sized by its
+      taxonomic abundance as a percentage, with the smaller taxa merged into Other. It
+      answers which taxa make up each community and how the samples differ.
+
+      How to read: similar bars mean similar communities, and a taxon that dominates
+      one sample only marks a difference worth following up. Switch the rank to move
+      between phylum and species, and use the controls to sort the samples or hide
+      taxa.
+
+      Note: sylph abundance is coverage-normalised, like MetaPhlAn, and is not a
+      read count share.
+
+      Source: https://sylph-docs.github.io/Output-format/
+  - component: card
+    column: taxon
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: rank
+    top_n_count: 4
+    filter_expr: "col('taxon') != ''"
+    headline: true
+    caption: distinct taxa, by rank
+    title: Distinct taxa
+    description: >-
+      The hero number is the count of distinct named taxa detected, and the bars rank the
+      taxonomic ranks by how many taxa each holds. It answers how rich the profile is
+      and at which rank.
+
+      How to read: a rank with many taxa is where the communities are most diverse. The
+      count of rows beside it counts a taxon once per sample.
+  - component: table
+    title: Taxonomic profile table
+    description: >-
+      Each row is a taxon in a sample, with its full lineage, its rank and its
+      taxonomic abundance. It answers the exact abundance behind every segment of the
+      composition.
+
+      How to read: filter by rank and sort by abundance to list the dominant taxa of a
+      sample.
+
+      Source: https://sylph-docs.github.io/Output-format/

@@ -25,6 +25,10 @@ import type {
   AnnotationStyle,
   Geometry,
 } from './annotations/types';
+import type {
+  ReferenceStat,
+  ReferenceStatRequests,
+} from './components/advanced_viz/referenceStats';
 import type { VariantLegendPayload } from './components/jbrowse/trackLegend';
 import type {
   BuilderDcDraft,
@@ -1244,6 +1248,182 @@ export async function fetchFunnelValues(
   return res.json();
 }
 
+// =============================================================================
+// Notebook export (dashboard → a Quarto document, and its rendered report)
+// =============================================================================
+
+/** How a component reaches the notebook: as explicit code, re-rendered
+ *  through the API with the exported state, or not at all (with a reason). */
+export type NotebookInclusion = 'code' | 'api' | 'omitted';
+
+export interface NotebookPreflightComponent {
+  index: string;
+  title?: string | null;
+  component_type: string;
+  kind?: string | null;
+  status: NotebookInclusion;
+  /** What an `api` tile looks like in the report: a Plotly figure, static HTML,
+   *  or a PNG snapshot of a renderer that is not Plotly. */
+  output?: 'interactive' | 'static' | 'snapshot' | null;
+  reason?: string | null;
+  name?: string | null;
+  tab?: string | null;
+  section?: string | null;
+}
+
+export interface NotebookPreflight {
+  components: NotebookPreflightComponent[];
+  dcs: { dc_id: string; tag?: string | null; rows?: number | null }[];
+  stages: { index?: string | null; label?: string | null; rows_by_dc: Record<string, number | null> }[];
+  warnings: string[];
+  /** Whether this deployment offers the rendered HTML report as well. */
+  render_available?: boolean;
+  counts: Record<string, number>;
+  /** Whether this caller can have the combined report + dashboard file. */
+  combined_available?: boolean;
+  /** Why not, when it cannot (the export then defaults to the dashboard alone). */
+  combined_reason?: string | null;
+}
+
+/** What a render produces: the report alone, or the report and the dashboard
+ *  in one file behind a "Report | Dashboard" switch. */
+export type NotebookRenderOutput = 'report' | 'combined';
+/** The view a combined file opens on. */
+export type CombinedDefaultView = 'report' | 'dashboard';
+
+/** A render job: the notebook being executed on a worker, which takes minutes. */
+export interface NotebookRenderStatus {
+  job_id: string;
+  status: 'queued' | 'running' | 'ready' | 'error';
+  phase?: string | null;
+  filename?: string | null;
+  size?: number | null;
+  reason?: string | null;
+  /** The PDF beside the report, when one was asked for and rendered. */
+  pdf_filename?: string | null;
+  /** Why the PDF is missing, when it was asked for and failed. */
+  pdf_error?: string | null;
+}
+
+/** What an export will contain, before anything is generated. `state` is an
+ *  `AnalysisState` (see `analysisState.ts`). */
+export async function fetchNotebookPreflight(
+  dashboardId: string,
+  state: unknown,
+  signal?: AbortSignal,
+): Promise<NotebookPreflight> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/preflight`, {
+    method: 'POST',
+    body: JSON.stringify({ state }),
+    signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to prepare the notebook export');
+  return res.json();
+}
+
+/** The report's look: Depictio's Paper chrome (the app's default, from the
+ *  instance brand), or the classic one (Quarto's stock page, Plotly's figures). */
+export type NotebookTheme = 'paper' | 'classic';
+
+/** The PDF's colours: tab colours on headings and in the contents, or the
+ *  print-friendly neutral text colour throughout. */
+export type NotebookPdfStyle = 'colour' | 'mono';
+
+/** Download the dashboard as a Quarto document (`.qmd`). The server never
+ *  executes it: the document is generated text, run by whoever renders it. */
+export async function exportNotebook(
+  dashboardId: string,
+  state: unknown,
+  theme: NotebookTheme = 'paper',
+  pdf = false,
+  pdfStyle: NotebookPdfStyle = 'colour',
+): Promise<string> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({ state, theme, pdf, pdf_style: pdfStyle }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export the notebook');
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get('Content-Disposition'),
+    `dashboard_${dashboardId}.qmd`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
+/** Start rendering the dashboard's notebook into an HTML report.
+ *
+ *  This is the one export path that executes: the notebook runs end to end on
+ *  a worker, with the caller's own rights, and every tile the export renders
+ *  rather than computes costs a browser pass. Minutes, not seconds — hence a
+ *  job id to poll rather than a file. */
+export async function startNotebookRender(
+  dashboardId: string,
+  state: unknown,
+  theme: NotebookTheme = 'paper',
+  options: {
+    output?: NotebookRenderOutput;
+    defaultView?: CombinedDefaultView;
+    pdf?: boolean;
+    pdfStyle?: NotebookPdfStyle;
+  } = {},
+): Promise<NotebookRenderStatus> {
+  const body: Record<string, unknown> = { state, theme };
+  if (options.output) body.output = options.output;
+  if (options.defaultView) body.default_view = options.defaultView;
+  if (options.pdf) body.pdf = true;
+  if (options.pdfStyle) body.pdf_style = options.pdfStyle;
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report render');
+  return res.json();
+}
+
+/** Where a render job is: queued, running, ready to download, or failed. */
+export async function fetchNotebookRenderStatus(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/render/${jobId}`, { signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the render status');
+  return res.json();
+}
+
+/** Download a finished report: the HTML, or the PDF rendered beside it. */
+export async function downloadNotebookRender(
+  jobId: string,
+  format: 'html' | 'pdf' = 'html',
+): Promise<string> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download?format=${format}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download the report');
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get('Content-Disposition'),
+    `report_${jobId}.${format}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 /** Payload for a card's numeric / QC secondary layout (histogram, threshold,
  *  completeness, attrition), computed server-side by the same dispatcher the
  *  saved card uses.
@@ -1972,6 +2152,13 @@ export interface AdvancedVizDataResponse {
    *  estimate rather than a total. */
   sampling?: { policy: string; exact: boolean; degraded: boolean };
   filter_applied: boolean;
+  /** The statistics the request's `referenceStats` asked for, keyed by the
+   *  config field each stands in for (`reference_value`, `reference_y`,
+   *  `score_threshold`). Computed server-side on the filtered rows *before*
+   *  sampling, so a line at "the median of this table" is the table's median
+   *  and not the sample's. Null when no finite value was left; absent when
+   *  nothing was asked. */
+  reference_stats?: Record<string, number | null>;
 }
 
 /** The rows a tail-preserving reduction must keep whole — the significant end
@@ -1979,11 +2166,20 @@ export interface AdvancedVizDataResponse {
  *  keeps exactly the rows the plot would mark as hits instead of guessing a
  *  cutoff. `direction` is `low` for a raw p-value, `high` for a -log10 score,
  *  `both` for a signed effect size. */
-export interface AdvancedVizTailSpec {
-  column: string;
-  direction: 'low' | 'high' | 'both';
-  threshold: number;
-}
+export type AdvancedVizTailSpec =
+  | {
+      column: string;
+      direction: 'low' | 'high' | 'both';
+      threshold: number;
+    }
+  | {
+      column: string;
+      direction: 'low' | 'high' | 'both';
+      /** The cut as a statistic of `column` (a line at "the 95th percentile of
+       *  this table"): the server settles it on the unreduced rows, so the
+       *  tail kept whole is the side of the line the plot marks. */
+      threshold_stat: ReferenceStat;
+    };
 
 export interface AdvancedVizDataRequest {
   wfId: string;
@@ -2007,6 +2203,9 @@ export interface AdvancedVizDataRequest {
    *  needs (e.g. which column carries significance). */
   roles?: Record<string, string>;
   tail?: AdvancedVizTailSpec;
+  /** References computed from the data on show, `{config field: {column,
+   *  stat}}`; answered in the response's `reference_stats`. */
+  referenceStats?: ReferenceStatRequests;
   /** Sum `sum` per distinct `group_by` combination on the server, for a renderer
    *  that only adds the rows up (the sunburst). One row per lineage instead of
    *  one per lineage and sample. */
@@ -2038,6 +2237,7 @@ export async function fetchAdvancedVizData(
         roles: req.roles,
         tail: req.tail,
         aggregate: req.aggregate,
+        reference_stats: req.referenceStats,
       }),
       signal,
     });
@@ -5130,6 +5330,9 @@ export interface RunScan {
 export interface ProjectRun {
   run_tag: string;
   workflow: string | null;
+  /** Tells apart two workflows' runs that share a tag; pass it to
+   *  `fetchProjectRunFiles`. */
+  workflow_id?: string | null;
   run_location: string | null;
   folder_created: string | null;
   folder_modified: string | null;
@@ -5203,11 +5406,17 @@ export interface RunFiles {
 }
 
 /** The files of one run of a project, with what each scan did to them.
- *  Backend: GET /projects/project-runs/{id}/files?run_tag=. */
-export async function fetchProjectRunFiles(projectId: string, runTag: string): Promise<RunFiles> {
-  const res = await authFetch(
-    `${API_BASE}/projects/project-runs/${projectId}/files?run_tag=${encodeURIComponent(runTag)}`,
-  );
+ *  `workflowId` (`ProjectRun.workflow_id`) picks the workflow's run when two
+ *  workflows hold a run with that tag; without it their files are mixed.
+ *  Backend: GET /projects/project-runs/{id}/files?run_tag=&workflow_id=. */
+export async function fetchProjectRunFiles(
+  projectId: string,
+  runTag: string,
+  workflowId?: string | null,
+): Promise<RunFiles> {
+  const params = new URLSearchParams({ run_tag: runTag });
+  if (workflowId) params.set('workflow_id', workflowId);
+  const res = await authFetch(`${API_BASE}/projects/project-runs/${projectId}/files?${params}`);
   if (!res.ok) await throwHttpError(res, `Failed to fetch the files of run ${runTag}`);
   return (await res.json()) as RunFiles;
 }
@@ -5458,6 +5667,17 @@ export interface FromRunRequest {
   runs?: string[] | null;
 }
 
+/** A MultiQC collection of one run whose reports the shared-samples check
+ *  did not all read (#1400): it reads the first few a collection matched, and
+ *  none when one cannot be read (`checked` 0). No shared sample then means
+ *  none among the reports read. */
+export interface SamplesCheckGap {
+  data_collection_tag: string;
+  run: string;
+  checked: number;
+  reports: number;
+}
+
 /** Samples one MultiQC collection finds in more than one run
  *  (`FromRunReport.shared_samples`). */
 export interface SharedRunSamples {
@@ -5531,6 +5751,8 @@ export interface FromRunReport {
    *  merge them, so a creation is refused (`runs_share_samples`). Empty for
    *  one run; older backends omit it. */
   shared_samples?: SharedRunSamples[];
+  /** The runs' collections that check read only some reports of. */
+  samples_check_gaps?: SamplesCheckGap[];
   resolved_variables: Record<string, string>;
   data_collections: FromRunDCPreview[];
   /** Empty on a dry run. */
@@ -7561,6 +7783,39 @@ export async function fetchUserByEmail(email: string): Promise<{
   };
 }
 
+/** The filename a `Content-Disposition` header names, else `fallback`.
+ *  The RFC 5987 `filename*=UTF-8''…` form wins over the plain `filename=`
+ *  (which a server may have reduced to ASCII). */
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  const extended = header?.match(/filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/);
+  if (extended) {
+    try {
+      return decodeURIComponent(extended[1].trim());
+    } catch {
+      // A malformed escape: fall through to the plain form.
+    }
+  }
+  const m = header?.match(/filename\s*=\s*"?([^";]+)"?/);
+  return m ? m[1].trim() : fallback;
+}
+
+/** Save a successful download response to the user's disk (blob → anchor
+ *  click), under the name its `Content-Disposition` gives, else
+ *  `fallbackName`. Returns the name used. */
+async function saveResponseAs(res: Response, fallbackName: string): Promise<string> {
+  const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), fallbackName);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 /** Export a project bundle as a ZIP. Backend returns binary content; we
  *  wrap it in a Blob and trigger a browser download. Mirrors the Dash
  *  flow at projects.py:2360 (`/migrate/export-project`). */
@@ -7570,15 +7825,7 @@ export async function exportProjectZip(projectId: string): Promise<void> {
     body: JSON.stringify({ project_id: projectId, mode: 'all' }),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to export project');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `depictio_export_${projectId}.zip`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, `depictio_export_${projectId}.zip`);
 }
 
 /** POST body for /projects/{id}/export_template. `template_id` is a
@@ -8153,6 +8400,8 @@ export interface AttachRunReport {
   /** Per MultiQC collection, the samples of the new run a report already in
    *  the project names; a real call refuses them (`runs_share_samples`). */
   shared_samples?: SharedRunSamples[];
+  /** The new run's collections that check read only some reports of. */
+  samples_check_gaps?: SamplesCheckGap[];
   /** Ingestion to poll with `getManifestRefreshRun`; null on a dry run. */
   run_id: string | null;
   dry_run: boolean;
@@ -8504,6 +8753,9 @@ export type PythonRuntimeMode = 'auto' | 'on' | 'off';
 
 export interface StaticExportPreflight {
   dashboard_id: string;
+  /** True when the figures were really bound (data read: a caller who may
+   *  export); false for the data-free plan everyone else gets. */
+  bound?: boolean;
   tiers: StaticExportTierRow[];
   links: StaticExportLinkRow[];
   counts: { live: number; partial: number; frozen: number; omitted: number };
@@ -8562,23 +8814,32 @@ export async function pollStaticExport(jobId: string): Promise<StaticExportJob> 
   return res.json();
 }
 
-/** Download the built HTML artifact (409 while not ready) and save it via the
- *  blob → anchor-click flow, same as exportProjectZip(). */
+/** Download the built HTML artifact (409 while not ready) and save it under
+ *  the server's name for it (`filename` when the response names none). */
 export async function downloadStaticExport(
   jobId: string,
   filename: string,
 ): Promise<void> {
   const res = await authFetch(`${API_BASE}/serverless/export-static/download/${jobId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to download static export');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, filename);
+}
+
+/** Whether the server would accept a static export of this dashboard from the
+ *  current user: the very rule `dispatchStaticExport` is held to (project
+ *  owner), so the button is enabled exactly when the export would go through.
+ *  Any failure reads as "no". */
+export async function canExportStatic(dashboardId: string): Promise<boolean> {
+  try {
+    const res = await authFetch(
+      `${API_BASE}/serverless/export-static/${dashboardId}/can-export`,
+    );
+    if (!res.ok) return false;
+    const body = (await res.json()) as { can_export?: unknown };
+    return body.can_export === true;
+  } catch {
+    return false;
+  }
 }
 
 // ---- Admin (system-wide) helpers ----------------------------------------
@@ -8890,15 +9151,7 @@ export async function createBackup(): Promise<BackupCreateResult> {
 export async function downloadBackup(backupId: string): Promise<void> {
   const res = await authFetch(`${API_BASE}/backup/download/${backupId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to download backup');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `depictio_backup_${backupId}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, `depictio_backup_${backupId}.json`);
 }
 
 /** Upload a backup file; the server stores it as a first-class backup and
@@ -9967,15 +10220,35 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
 // Catalog compose — matches ingested DCs against catalog entries
 // =============================================================================
 
+/** A guide line on a UI figure: a fixed `value`, or a `stat` of `column` over
+ *  the rows on show, computed by the server figure builder and named as such
+ *  ("median of this table"). Mirrors `ReferenceLine` in
+ *  depictio/models/components/lite.py: exactly one of `value` / `stat`. */
+export interface FigureReferenceLine {
+  axis: 'x' | 'y';
+  value?: number | null;
+  stat?: ReferenceStat | null;
+  column?: string | null;
+  label?: string | null;
+}
+
 export interface CatalogRender {
   component: string;
   /** Tool-unique render handle, when declared in the catalog. Combined with the
    *  tool id it forms the `use: <tool>/<id>` snippet (advanced_viz renders). */
   id?: string;
+  /** Any component: the tile title and its info popover text ("About this
+   *  component"), when the catalog declares them. */
+  title?: string;
+  description?: string;
   kind?: string;
   roles?: Record<string, string>;
   visu_type?: string;
-  dict_kwargs?: Record<string, string>;
+  /** Column-valued kwargs are strings; `labels` maps column -> axis title. */
+  dict_kwargs?: Record<string, unknown>;
+  /** figure (UI mode): guide lines, fixed or at a statistic of the rows on
+   *  show. Mirrors `ReferenceLine` in depictio/models/components/lite.py. */
+  reference_lines?: FigureReferenceLine[];
   column?: string;
   aggregation?: string;
   /** card only: the secondary-metric strip. `aggregations` drives the stats
@@ -9992,6 +10265,8 @@ export interface CatalogRender {
   attrition_cols?: string[];
   trend_col?: string | null;
   filter_expr?: string | null;
+  /** card: what the secondary strip shows ("median, with its spread"). */
+  caption?: string;
   /** multiqc only: the report module this render surfaces. */
   section?: string;
   code?: string;

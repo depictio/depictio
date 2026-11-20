@@ -14,6 +14,7 @@ import type {
   Aggregation,
   FigureVisuType,
   InteractiveVariant,
+  ReferenceLineSpec,
   RenderSpec,
   SecondaryLayout,
   ThresholdDirection,
@@ -35,6 +36,31 @@ const oneOf = <T extends string>(v: unknown, allowed: readonly string[]): T | un
 // an editable spec instead of being dropped (violin, ecdf, TextInput, ...).
 const INTERACTIVE_VARIANTS = INTERACTIVE_TYPES;
 
+const REFERENCE_STATS = ['median', 'mean', 'p75', 'p90', 'p95', 'p99'] as const;
+
+/** A figure's `reference_lines`, keeping only lines the model would accept. */
+function referenceLinesFrom(raw: unknown): ReferenceLineSpec[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ReferenceLineSpec[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    const axis = r.axis === 'x' || r.axis === 'y' ? r.axis : null;
+    if (!axis) continue;
+    const value = typeof r.value === 'number' && Number.isFinite(r.value) ? r.value : undefined;
+    const stat = oneOf<(typeof REFERENCE_STATS)[number]>(r.stat, REFERENCE_STATS);
+    const column = str(r.column);
+    if ((value === undefined) === (stat === undefined) || (stat && !column)) continue;
+    out.push({
+      axis,
+      ...(value !== undefined ? { value } : {}),
+      ...(stat ? { stat, column } : {}),
+      ...(str(r.label) ? { label: str(r.label) } : {}),
+    });
+  }
+  return out;
+}
+
 export function renderSpecFromManifest(
   raw: ManifestRender,
   uid: string,
@@ -49,6 +75,8 @@ export function renderSpecFromManifest(
     ...(id ? { id } : {}),
     ...(section ? { section } : {}),
     ...(priority !== undefined && raw.component !== 'card' ? { priority } : {}),
+    ...(str(raw.title) ? { title: str(raw.title) } : {}),
+    ...(str(raw.description) ? { description: str(raw.description) } : {}),
   };
 
   switch (raw.component) {
@@ -58,17 +86,29 @@ export function renderSpecFromManifest(
       const visu_type = oneOf<FigureVisuType>(raw.visu_type, VISU_TYPES);
       if (!visu_type) return null;
       const kwargs = raw.dict_kwargs;
+      const rawLabels =
+        kwargs && typeof kwargs === 'object'
+          ? (kwargs as Record<string, unknown>).labels
+          : undefined;
+      const labels =
+        rawLabels && typeof rawLabels === 'object' && !Array.isArray(rawLabels)
+          ? Object.fromEntries(
+              Object.entries(rawLabels as Record<string, unknown>).map(([c, t]) => [c, String(t)]),
+            )
+          : undefined;
+      const referenceLines = referenceLinesFrom(raw.reference_lines);
       return {
+        ...(labels ? { labels } : {}),
+        ...(referenceLines.length ? { reference_lines: referenceLines } : {}),
         ...base,
         component: 'figure',
         visu_type,
         dict_kwargs:
           kwargs && typeof kwargs === 'object'
             ? Object.fromEntries(
-                Object.entries(kwargs as Record<string, unknown>).map(([k, v]) => [
-                  k,
-                  String(v),
-                ]),
+                Object.entries(kwargs as Record<string, unknown>)
+                  .filter(([k]) => k !== 'labels')
+                  .map(([k, v]) => [k, String(v)]),
               )
             : {},
       };
@@ -104,6 +144,7 @@ export function renderSpecFromManifest(
         ...(str(raw.filter_expr) ? { filter_expr: str(raw.filter_expr) } : {}),
         ...(raw.headline === true ? { headline: true } : {}),
         ...(typeof raw.priority === 'number' ? { priority: raw.priority } : {}),
+        ...(str(raw.caption) ? { caption: str(raw.caption) } : {}),
       };
     }
     case 'table':
@@ -150,6 +191,9 @@ export function renderSpecFromManifest(
                   .map(([k, v]) => [k, v as string | string[]]),
               )
             : {},
+        ...(raw.config && typeof raw.config === 'object' && !Array.isArray(raw.config)
+          ? { config: raw.config as Record<string, unknown> }
+          : {}),
       };
     }
     default:

@@ -13,4 +13,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: snpeff }
+  - component: multiqc
+    section: snpeff
+    title: Variant effects
+    description: >-
+      SnpEff's annotation summary: impact, class and region of the variants, per
+      sample. They answer what kinds of changes the variants make.
+
+      How to read: Most variants usually fall in non-coding or low-impact classes.
+      Many high-impact calls in one sample are worth checking against its input
+      quality.
+
+      Source: https://docs.seqera.io/multiqc/modules/snpeff

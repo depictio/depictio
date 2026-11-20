@@ -6,25 +6,160 @@ description: >-
   back onto the assembly. Length against depth is the plot a binner sees before
   it decides anything: contigs of one organism sit in a band, and a contig deep
   in one sample and flat in another belongs to something only one of them
-  carries. Contigs under 1 kbp are left out because no binner uses them.
+  carries. Contigs under 1 kbp are left out by the recipe, below the 1500 bp nf-core/mag bins from by
+  default.
 find:
   path_glob: "**/depths/contigs/*-depth.txt.gz"
   path_glob_alt:
     - "**/depths/contigs/*-depth.txt"
     - "**/*_depth.txt.gz"
 recipe: mag/contig_depths.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several read samples.
 fixture: contig_depths.tsv
 renders_as:
-  - { id: length_vs_depth, component: advanced_viz, kind: scatter_xy,
-      roles: {x: contig_length, y: depth, label: contig_id, color: read_sample, size: mean_depth} }
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: depth, color: read_sample, title: Contig depth distribution per sample} }
-  - { component: figure, visu_type: box, dict_kwargs: {x: assembly_id, y: depth, color: read_sample, title: Contig depth by assembly and sample} }
-  - { component: card, column: depth, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: contig_length, aggregation: max,
-      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
-  - { component: card, column: contig_id, aggregation: nunique,
-      secondary_layout: composition, breakdown_col: assembler }
-  - { component: card, column: mean_depth, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: histogram }
-  - { component: table }
+  - id: length_vs_depth
+    component: advanced_viz
+    kind: scatter_xy
+    title: Contig length against depth
+    roles: {x: contig_length, y: depth, label: contig_id, color: read_sample, size: mean_depth}
+    config:
+      reference_line: horizontal
+      reference_stat: median
+      log_x: true
+      x_title: Contig length (bp)
+      y_title: Depth in this sample (X)
+      top_n_labels: 0
+      density_threshold: 5000
+      legend_pos: bottom
+    description: >-
+      Each point is a contig: its length on the horizontal axis and its read depth in
+      one sample on the vertical axis, sized by its mean depth over all samples and
+      coloured by the sample whose reads were mapped. It answers how coverage varies
+      between contigs and between samples.
+
+      How to read: contigs of one organism sit in a band of similar depth, which is
+      the signal a binner uses. A contig deep in one sample and flat in another
+      belongs to an organism only the first carries. Long contigs with very low depth
+      may be poorly supported.
+
+      Lines and annotations: the dashed line is the median depth of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/mag. This catalog's recipe leaves contigs under 1 kbp out of the table,
+      below the 1500 bp nf-core/mag uses by default as its minimum contig size for
+      binning.
+
+      Source: https://raw.githubusercontent.com/nf-core/mag/master/nextflow_schema.json
+  - component: figure
+    visu_type: histogram
+    title: Contig depth distribution per sample
+    dict_kwargs:
+      x: depth
+      color: read_sample
+      barmode: overlay
+      labels: {depth: Depth (X), read_sample: Sample}
+    reference_lines:
+      - {axis: x, stat: median, column: depth}
+    description: >-
+      Each bar counts the contigs in a range of depth, drawn per sample whose reads
+      were mapped. It answers how deeply the assembly is covered in each sample.
+
+      How to read: a sample whose histogram sits further right is more deeply
+      sequenced. A large pile at zero means many contigs are absent from that sample,
+      which is the differential coverage that separates organisms.
+
+      Lines and annotations: the dashed line is the median depth of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/mag.
+  - component: figure
+    visu_type: box
+    title: Contig depth by assembly and sample
+    dict_kwargs:
+      x: assembly_id
+      y: depth
+      color: read_sample
+      labels: {assembly_id: Assembly, depth: Depth (X), read_sample: Sample}
+    reference_lines:
+      - {axis: y, stat: median, column: depth}
+    description: >-
+      Each box summarises the contig depths of one assembly in one sample whose
+      reads were mapped. It answers how coverage compares between assemblies and
+      samples.
+
+      How to read: boxes at similar heights mean comparable coverage. An assembly
+      with a much lower box in one sample is poorly represented in that sample, and
+      a wide box means a mix of abundant and rare organisms.
+
+      Lines and annotations: the dashed line is the median depth of this table, a
+      reference computed from the rows on show (it follows the filters), not a cut-off of
+      nf-core/mag.
+  - component: card
+    column: depth
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Contig depth
+    description: >-
+      The hero number is the median read depth of the contigs and the box shows the
+      quartiles. It answers how deeply a typical contig is covered.
+
+      How to read: a very low median means the reads barely cover the assembly and
+      binning will be unreliable. A long upper tail holds highly abundant organisms.
+  - component: card
+    column: contig_length
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: longest contig, by assembler
+    title: Longest contig
+    description: >-
+      The hero number is the length of the longest contig and the bars rank the
+      assemblers by their longest contig. It answers how contiguous each assembly is.
+
+      How to read: a longer contig means fewer breaks, which helps binning and
+      annotation. The median beside it shows the typical contig, which is usually
+      much shorter.
+  - component: card
+    column: contig_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: contigs, by assembler
+    title: Contigs
+    description: >-
+      The hero number is the count of distinct contigs above the length floor, with
+      the number of contig and sample rows beside it, and the bars rank the
+      assemblers by their contigs. It answers how large the assemblies are.
+
+      How to read: many more contigs from one assembler means it split the
+      assembly into more pieces, or kept more short sequences.
+  - component: card
+    column: mean_depth
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: histogram
+    caption: mean depth, with its spread
+    title: Mean depth over samples
+    description: >-
+      The hero number is the average of the contigs' mean depth over all samples,
+      and the histogram shows how contigs spread over it. It answers how abundant
+      contigs are overall, before the per-sample split.
+
+      How to read: a long tail of high values means a few very abundant organisms
+      hold most of the reads.
+  - component: table
+    title: Contig coverage
+    description: >-
+      One row is one contig in one sample whose reads were mapped, with the
+      contig length, its mean depth, its depth in that sample and the variance.
+      It answers which contigs hold the reads of which sample.
+
+      How to read: Sort by the depth in that sample to find the contigs that
+      dominate it, or by the variance to find uneven coverage. Look for long
+      contigs with a low depth and short ones with a very high depth. It
+      complements the depth tiles of the same output, which summarise these
+      rows.

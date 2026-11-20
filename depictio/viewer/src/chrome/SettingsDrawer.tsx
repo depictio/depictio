@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Accordion,
   Anchor,
@@ -19,11 +19,13 @@ import { Icon } from '@iconify/react';
 import {
   BrandThemeForm,
   BrandThemePreview,
+  canExportStatic,
   isEmptyBrandTheme,
   useBrandScopeAttributes,
   useIsStaticBundle,
   useResolvedBrandTheme,
   Z_LAYERS,
+  type AnalysisState,
   type BrandTheme,
   isControlsPlacement,
   type ControlsPlacement,
@@ -33,6 +35,7 @@ import {
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersField from './ShareFiltersField';
+import NotebookExportModal, { type ExportChoice } from './NotebookExportModal';
 import {
   SECTION_ICON_STYLE,
   SettingsNavModal,
@@ -643,51 +646,181 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
   </Stack>
 );
 
+/**
+ * "Export" section. The default is ONE file: the rendered report and the
+ * interactive dashboard together, behind a "Report | Dashboard" switch. The
+ * separate outputs (the dashboard alone, the report alone, the `.qmd` source)
+ * are tucked under "Advanced"; the modal falls back to the dashboard alone, and
+ * says why, where this server cannot build the combined file.
+ */
+const ExportBlock: React.FC<{
+  dashboard: DashboardData | null;
+  getAnalysisState: () => AnalysisState;
+  /** The dashboard-only export (gated by the server's rule); absent where it
+   *  is not offered. */
+  staticExport?: {
+    previewing: boolean;
+    allowed: boolean | null;
+    onExportStatic: () => void;
+  } | null;
+}> = ({ dashboard, getAnalysisState, staticExport }) => {
+  const [opened, setOpened] = useState<ExportChoice | null>(null);
+  const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
+  return (
+    <Stack gap="sm" data-testid="export-section">
+      <Text size="sm" c="dimmed">
+        One HTML file to send: the rendered report with its text and code, and the whole
+        interactive dashboard one click away. It opens without a server.
+      </Text>
+      <Group>
+        <Button
+          leftSection={<Icon icon="mdi:export-variant" width={16} />}
+          onClick={() => setOpened('combined')}
+          disabled={!dashboardId}
+          data-testid="export-combined"
+        >
+          Export report + dashboard
+        </Button>
+      </Group>
+      <Accordion variant="contained" data-testid="export-advanced">
+        <Accordion.Item value="advanced">
+          <Accordion.Control data-testid="export-advanced-toggle">
+            <Text size="sm" fw={500}>
+              Advanced: separate outputs
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="md">
+              {staticExport && (
+                <ExportStaticBlock
+                  dashboardId={dashboardId}
+                  previewing={staticExport.previewing}
+                  allowed={staticExport.allowed}
+                  onExportStatic={staticExport.onExportStatic}
+                />
+              )}
+              <Stack gap="xs">
+                <Group>
+                  <Button
+                    variant="light"
+                    size="sm"
+                    leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
+                    onClick={() => setOpened('qmd')}
+                    disabled={!dashboardId}
+                    data-testid="export-notebook"
+                  >
+                    Report only, or its source
+                  </Button>
+                </Group>
+                <Text size="xs" c="dimmed">
+                  The report rendered here without the dashboard, or the Quarto document (
+                  <code>.qmd</code>) to render and keep working in yourself.
+                </Text>
+              </Stack>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
+      <NotebookExportModal
+        opened={opened !== null}
+        onClose={() => setOpened(null)}
+        initialOutput={opened ?? 'combined'}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title}
+        getAnalysisState={getAnalysisState}
+        onExportDashboardOnly={
+          staticExport?.allowed && !staticExport.previewing
+            ? staticExport.onExportStatic
+            : undefined
+        }
+      />
+    </Stack>
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Export static
 // ---------------------------------------------------------------------------
 
-/** Shown both as the disabled button's tooltip and, when the gate is closed,
- *  as the always-visible caption underneath it — a tooltip on a disabled
- *  Mantine button never fires, and the whole point of disabling (rather than
- *  hiding) is that the reason stays discoverable. */
+/** Why the export is off, shown both as the disabled button's tooltip and as
+ *  the always-visible caption underneath it — a tooltip on a disabled Mantine
+ *  button never fires, and the whole point of disabling (rather than hiding)
+ *  is that the reason stays discoverable. */
 const OWNER_GATE_HINT =
-  'You can only export dashboards you own. Duplicate this one to get your own copy.';
+  "Exporting needs owner rights on this dashboard's project: a bundle carries the " +
+  "project's data. Ask a project owner to export it.";
+const PREVIEW_HINT =
+  'A static export draws the live dashboard and its current data, not this past ' +
+  'version. Leave the version preview to export.';
 
 /**
- * The owner-gated "Export static" action: a rare, owner-only action that does
- * not warrant permanent header real estate. The click hands off to
+ * Whether the dashboard-only export is offered: the server's answer
+ * (`canExportStatic`, the very rule the dispatch applies). null while it is
+ * asked; false without a dashboard.
+ */
+function useCanExportStatic(dashboardId: string | null): boolean | null {
+  const [allowed, setAllowed] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (!dashboardId) {
+      setAllowed(false);
+      return;
+    }
+    let alive = true;
+    setAllowed(null);
+    void canExportStatic(dashboardId).then((ok) => {
+      if (alive) setAllowed(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [dashboardId]);
+  return allowed;
+}
+
+/**
+ * The project-owner-gated "Export static" action: a rare action that does not
+ * warrant permanent header real estate. The click hands off to
  * `ExportStaticModal` (opened by the viewer), which runs the preflight.
+ *
+ * Whether it is offered is the server's answer (`canExportStatic`, the very
+ * rule the dispatch applies), asked when the section is shown, so a dashboard
+ * a user owns in a project they only view is not offered, and a project owner
+ * is, whoever owns the dashboard document. A version preview disables it: the
+ * build has no pins and would export today's dashboard under the preview.
  */
 const ExportStaticBlock: React.FC<{
   dashboardId?: string | null;
-  isOwner: boolean;
+  previewing: boolean;
+  /** The server's answer (`useCanExportStatic`); null while it is asked. */
+  allowed: boolean | null;
   onExportStatic: () => void;
-}> = ({ dashboardId, isOwner, onExportStatic }) => (
-  <Stack gap="xs" data-testid="export-static-section">
-    {/* The button sizes to its label; only the caption spans the section, so
-        it stays readable instead of wrapping at button width. */}
-    <Group>
-      <Tooltip label={OWNER_GATE_HINT} disabled={isOwner} withArrow>
-        <Button
-          leftSection={<Icon icon="mdi:export-variant" width={16} />}
-          variant="light"
-          size="sm"
-          onClick={onExportStatic}
-          disabled={!dashboardId || !isOwner}
-          data-testid="export-static-btn"
-        >
-          Export static
-        </Button>
-      </Tooltip>
-    </Group>
-    <Text size="xs" c="dimmed">
-      {isOwner
-        ? 'Builds a single self-contained HTML file of this dashboard that opens without a server.'
-        : OWNER_GATE_HINT}
-    </Text>
-  </Stack>
-);
+}> = ({ dashboardId, previewing, allowed, onExportStatic }) => {
+  const reason = previewing ? PREVIEW_HINT : allowed === false ? OWNER_GATE_HINT : null;
+  return (
+    <Stack gap="xs" data-testid="export-static-section">
+      {/* The button sizes to its label; only the caption spans the section, so
+          it stays readable instead of wrapping at button width. */}
+      <Group>
+        <Tooltip label={reason} disabled={!reason} withArrow>
+          <Button
+            leftSection={<Icon icon="mdi:export-variant" width={16} />}
+            variant="light"
+            size="sm"
+            onClick={onExportStatic}
+            disabled={!dashboardId || previewing || allowed !== true}
+            data-testid="export-static-btn"
+          >
+            Dashboard only
+          </Button>
+        </Tooltip>
+      </Group>
+      <Text size="xs" c="dimmed">
+        {reason ??
+          'The interactive dashboard alone, as one self-contained HTML file that opens without a server.'}
+      </Text>
+    </Stack>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Sections
@@ -887,9 +1020,13 @@ interface SettingsDrawerProps {
    *  the export out. Also suppressed inside static bundles, which have no
    *  backend to build from. */
   onExportStatic?: () => void;
-  /** False renders the export action disabled (never hidden) with the
-   *  owner-gate explanation. Defaults to `true`. */
-  isOwner?: boolean;
+  /** Viewer: a snapshot of the current analysis state (filters, funnel order,
+   *  groups) for the notebook export. The Export section renders only when
+   *  this is provided. */
+  getAnalysisState?: () => AnalysisState;
+  /** A past version is shown (`?version=`): the export action is disabled
+   *  (never hidden) with the reason, since a build exports the live state. */
+  previewing?: boolean;
 }
 
 /** What the "Your filters" section needs from the viewer. */
@@ -950,12 +1087,16 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   initialSection,
   dashboardId,
   onExportStatic,
-  isOwner = true,
+  getAnalysisState,
+  previewing = false,
 }) => {
   // Static bundles are offline snapshots: there is no API to preflight or build
   // against, so the export is absent rather than disabled. Inert (false) in
   // server builds.
   const isStaticBundle = useIsStaticBundle();
+  const staticExportAllowed = useCanExportStatic(
+    onExportStatic && !isStaticBundle ? (dashboardId ?? null) : null,
+  );
   const surface: Surface =
     onChangeBrandTheme ||
     onToggleFunnelFiltering ||
@@ -1091,19 +1232,42 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       body: dataVersionPanel,
     });
   }
-  if (onExportStatic && !isStaticBundle) {
+  // One "Export" section, two outputs: the static HTML bundle (owner-gated)
+  // and the Quarto document (any reader). Both need the API, so a static
+  // bundle shows neither.
+  const showStaticExport = Boolean(onExportStatic) && !isStaticBundle;
+  const showNotebookExport = Boolean(getAnalysisState) && !isStaticBundle;
+  if (showStaticExport || showNotebookExport) {
     sections.push({
       key: 'export',
       icon: 'mdi:export-variant',
-      title: 'Export static',
+      title: 'Export',
       navLabel: 'Export',
-      subtitle: 'The whole dashboard as one HTML file that opens without Depictio',
+      subtitle: 'The report and the dashboard in one offline HTML file, or each on its own',
       body: (
-        <ExportStaticBlock
-          dashboardId={dashboardId}
-          isOwner={isOwner}
-          onExportStatic={onExportStatic}
-        />
+        <Stack gap="lg">
+          {showNotebookExport && getAnalysisState ? (
+            <ExportBlock
+              dashboard={dashboard}
+              getAnalysisState={getAnalysisState}
+              staticExport={
+                showStaticExport && onExportStatic
+                  ? { previewing, allowed: staticExportAllowed, onExportStatic }
+                  : null
+              }
+            />
+          ) : (
+            showStaticExport &&
+            onExportStatic && (
+              <ExportStaticBlock
+                dashboardId={dashboardId}
+                previewing={previewing}
+                allowed={staticExportAllowed}
+                onExportStatic={onExportStatic}
+              />
+            )
+          )}
+        </Stack>
       ),
     });
   }

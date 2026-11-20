@@ -57,7 +57,11 @@ WORKDIR /app
 # screenshot renders in Times. `fonts-roboto` matches the stack's named
 # family, `fonts-liberation` covers Arial-metric text (Plotly's default
 # `arial, sans-serif`), and `fontconfig` builds the cache so the generic
-# `sans-serif` keyword also resolves to a real sans face.
+# `sans-serif` keyword also resolves to a real sans face. `fonts-inter` and
+# `fonts-jetbrains-mono` are the report PDF's type (typst and the static
+# figures read installed fonts only, no web font): Inter for text, as in the
+# app, JetBrains Mono for code. Without them the PDF falls back to Roboto /
+# Liberation / DejaVu, never fails.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl \
         netcat-openbsd \
@@ -65,6 +69,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         fontconfig \
         fonts-roboto \
         fonts-liberation \
+        fonts-inter \
+        fonts-jetbrains-mono \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \
@@ -85,6 +91,31 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Quarto renders the exported notebook into the HTML report
+# (`render_notebook_report`). It is a binary with its own pandoc, not a
+# library, so it is installed rather than depended on: ~250 MB. It is in by
+# default, as the rendered report is: the default export is the combined report
+# + dashboard file, which the worker renders. Build with `--build-arg
+# WITH_QUARTO=false` (compose: DEPICTIO_WORKER_WITH_QUARTO=false) for a lighter
+# worker, and set DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED=false with it: the
+# notebook export, the `.qmd` download, figure extraction and the dashboard-only
+# bundle all still work; only the rendered report and the combined file are
+# refused, with a message naming this build arg. It ships
+# here and not in the API image: the render is worker work, minutes long and a
+# browser pass per rendered tile.
+ARG WITH_QUARTO=true
+ARG QUARTO_VERSION=1.9.37
+RUN if [ "${WITH_QUARTO}" = "true" ]; then \
+        arch="$(dpkg --print-architecture)" \
+        && curl -fsSL -o /tmp/quarto.deb \
+            "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${arch}.deb" \
+        && dpkg -i /tmp/quarto.deb \
+        && rm /tmp/quarto.deb \
+        && quarto --version; \
+    else \
+        echo "Quarto not installed (WITH_QUARTO=${WITH_QUARTO}): rendered notebook reports are unavailable"; \
+    fi
+
 ARG UID=1000
 ARG GID=1000
 RUN groupadd -g ${GID} depictio && \
@@ -98,6 +129,10 @@ RUN groupadd -g ${GID} depictio && \
 # `--group worker-reload` adds watchdog, whose `watchmedo` run_celery_worker.sh
 # needs when DEPICTIO_DEV_MODE=true. Every sync below passes it, since a sync
 # without it would uninstall watchdog again.
+#
+# `--extra render` adds the Jupyter kernel Quarto executes the notebook
+# through. Without it Quarto renders a report with every result missing, and
+# exits 0 while doing it.
 COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 # Only the two Python packages [tool.uv.sources] installs from the checkout.
 # The rest of packages/ is the JS workspace (depictio-react-core and co.),
@@ -107,8 +142,8 @@ COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 COPY --chown=depictio:depictio packages/plotly-complexheatmap ./packages/plotly-complexheatmap/
 COPY --chown=depictio:depictio packages/plotly-upset ./packages/plotly-upset/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev --extra server --group worker-reload \
-    || uv sync --no-install-project --no-dev --extra server --group worker-reload
+    uv sync --frozen --no-install-project --no-dev --extra server --extra render --group worker-reload \
+    || uv sync --no-install-project --no-dev --extra server --extra render --group worker-reload
 
 # Browser bundle target inside the image. We download into a BuildKit
 # cache mount and copy out — caches the chromium payload across rebuilds
@@ -135,17 +170,33 @@ RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
     chmod -R 755 ${PLAYWRIGHT_BROWSERS_PATH}
 
 # ---- Project layer (source + VERSION last) ----
+# `--extra render` again: `uv sync` makes the environment match what it is
+# given, so leaving it off here would uninstall the kernel the layer above
+# installed.
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
 COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra server --group worker-reload \
-    || uv sync --no-dev --extra server --group worker-reload
+    uv sync --frozen --no-dev --extra server --extra render --group worker-reload \
+    || uv sync --no-dev --extra server --extra render --group worker-reload
 
 # The serverless bundle template, built in the stage above.
 COPY --from=static-template-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-static/static.html \
     /app/depictio/viewer/dist-static/static.html
+# The runtime a rendered report embeds, built by the same `build:static`:
+# `render_notebook_report` embeds it after the render, beside producer A's
+# manifest, so the report's tiles are the dashboard's own renderers, and the
+# combined file also holds the dashboard (depictio/serverless/combined.py).
+# Without it the report keeps every tile's own output. Its add-ons (JBrowse,
+# 3Dmol.js) ride along when a dashboard needs one.
+COPY --from=static-template-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-static/combined-runtime.js \
+    /build/depictio/viewer/dist-static/combined-runtime.css \
+    /app/depictio/viewer/dist-static/
+COPY --from=static-template-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-static/addons/ \
+    /app/depictio/viewer/dist-static/addons/
 
 COPY --chown=depictio:depictio docker-images/run_celery_worker.sh /app/run_celery_worker.sh
 RUN chmod +x /app/run_celery_worker.sh

@@ -9,10 +9,74 @@ description: >-
 find:
   path_glob: "**/raw_feature_bc_matrix/matrix.mtx.gz"
 recipe: cellranger/barcode_rank.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several samples.
 fixture: barcode_rank.tsv
 renders_as:
-  - { id: barcode_rank_knee, component: advanced_viz, kind: knee_plot, roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell} }
-  - { id: barcode_rank_curve, component: figure, visu_type: line, dict_kwargs: {x: rank, y: umi_count, color: sample, log_x: "true", log_y: "true", title: Barcode-rank curve} }
-  - { component: card, column: umi_count, aggregation: max, secondary_layout: histogram }
-  - { id: barcode_umi_filter, component: interactive, interactive_type: RangeSlider, column_name: umi_count }
-  - { component: table }
+  # Coloured by sample (one curve each); the called cells are drawn by the knee itself.
+  - id: barcode_rank_knee
+    component: advanced_viz
+    kind: knee_plot
+    title: Barcode rank plot
+    roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell}
+    description: >-
+      Each point is a barcode ranked by its UMI count, from the richest droplet down, on
+      log axes, with one curve per sample. It answers where real cells stop and empty
+      droplets start.
+
+      How to read: a good library has a plateau of cells with high counts, a steep drop,
+      then a long tail of background. A curve with no clear drop means the cells are not
+      well separated from ambient RNA, so check the cell calls and the aligner summary.
+
+      Lines and annotations: the cut-off marks the barcodes the pipeline called as cells.
+      It is the call made by the cell-calling step of the run, not a fixed UMI value.
+  - id: barcode_rank_curve
+    component: figure
+    visu_type: line
+    title: Barcode rank curve
+    dict_kwargs:
+      x: rank
+      y: umi_count
+      color: sample
+      log_x: "true"
+      log_y: "true"
+      labels: {rank: Barcode rank, umi_count: UMI count, sample: Sample}
+    description: >-
+      Each point is a barcode: its rank by UMI count on the horizontal axis and its UMI
+      count on the vertical axis, one line per sample. It answers how deep the counts of
+      the best barcodes are and how fast they fall.
+
+      How to read: compare the plateau height and the position of the drop between
+      samples. A lower plateau or an earlier drop means fewer or poorer cells in that
+      library.
+  - component: card
+    column: umi_count
+    aggregation: max
+    aggregations: [median, min]
+    secondary_layout: histogram
+    caption: UMI counts of ranked barcodes
+    title: Deepest barcode
+    description: >-
+      The hero number is the highest UMI count of any barcode, and the histogram shows
+      the distribution of the ranked barcodes. It answers how rich the best droplet is.
+
+      How to read: a very high maximum next to a modest median points to a few
+      outlier droplets such as doublets or debris. Open the rank plot to see where they
+      sit.
+  - id: barcode_umi_filter
+    component: interactive
+    interactive_type: RangeSlider
+    column_name: umi_count
+    title: UMI count range
+    description: >-
+      Restricts the tab to barcodes whose UMI count falls inside the range. It answers
+      which barcodes lie in a chosen depth window.
+
+      How to read: drag the handles to keep only the cell plateau or only the background.
+  - component: table
+    title: Ranked barcodes
+    description: >-
+      Each row is a barcode with its rank, UMI count and whether the run called it a
+      cell. It answers the exact values behind the curve.
+
+      How to read: sort by rank to see the last barcode called as a cell and the first
+      one rejected.

@@ -12,4 +12,14 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: frip }
+  - component: multiqc
+    section: frip
+    title: FRiP score
+    description: >-
+      The fraction of reads in peaks (FRiP): the share of mapped reads that fall
+      inside called peaks, one bar per sample. It answers how well a sample's signal
+      concentrates in peaks.
+
+      How to read: Higher is better because more of the library is real signal. A
+      low value means weak enrichment or too few peaks, so check the
+      immunoprecipitation and the peak calling before interpreting the sample.

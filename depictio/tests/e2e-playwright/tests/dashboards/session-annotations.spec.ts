@@ -597,7 +597,16 @@ test.describe("Session labels", () => {
     await openPanel(page);
     const first = await keyAt(page, 0);
     await addLabelColumn(page, "cohort");
+    // The label's own autosave (800 ms after the edit) carries "early" too:
+    // let it land before listening, or it reads as the export's request.
+    const saved = page.waitForResponse(
+      (r) =>
+        pathOf(r.url()).startsWith(ANNOTATIONS_PATH) &&
+        r.request().method() === "PUT" &&
+        (r.request().postData() ?? "").includes("early"),
+    );
     await typeCell(page, "cohort", 0, "early");
+    await saved;
 
     page.on("request", (r) => sent.push(r));
     await page.locator("[data-testid='annotation-export']").click();

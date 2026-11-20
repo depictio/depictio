@@ -14,13 +14,100 @@ find:
 recipe: quast/length_ladder.py
 fixture: length_ladder.tsv
 renders_as:
-  - { id: cumulative_length, component: advanced_viz, kind: profile,
-      roles: {series: assembly_id, x: min_contig_length, y: total_length} }
-  - { id: retained_fraction, component: advanced_viz, kind: profile,
-      roles: {series: assembly_id, x: min_contig_length, y: length_fraction} }
-  - { component: figure, visu_type: line, dict_kwargs: {x: min_contig_length, y: n_contigs, color: assembly_id, title: Contigs surviving each minimum length} }
-  - { component: card, column: length_fraction, aggregation: average,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: n_contigs, aggregation: max,
-      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
-  - { component: table }
+  # C1: one curve per assembly (the series role). The ladder rungs are those QUAST
+  # reports for the run, and QUAST defines no pass mark on the retained length, so
+  # no reference line is drawn.
+  - id: cumulative_length
+    component: advanced_viz
+    kind: profile
+    title: Assembled length kept at each minimum contig length
+    roles: {series: assembly_id, x: min_contig_length, y: total_length}
+    config:
+      x_title: Minimum contig length (bp)
+      y_title: Length held by contigs of at least that size (bp)
+    description: >-
+      Each curve is one assembly: the total length held by contigs of at least a
+      given size, read at each minimum contig length QUAST reports. It answers how
+      much of the assembly sits in long contigs.
+
+      How to read: a curve that stays high toward the right keeps most of its
+      sequence in long contigs, which a binner can work with. A curve that falls
+      steeply between the first rungs holds its length in short fragments.
+
+      Source: https://github.com/ablab/quast/blob/master/README.md
+  - id: retained_fraction
+    component: advanced_viz
+    kind: profile
+    title: Share of the assembly kept at each minimum contig length
+    roles: {series: assembly_id, x: min_contig_length, y: length_fraction}
+    config:
+      x_title: Minimum contig length (bp)
+      y_title: Share of the assembled length
+    description: >-
+      Each curve is one assembly: the share of its total length held by contigs of
+      at least a given size. It answers how quickly an assembly loses sequence as
+      short contigs are set aside, independent of its size.
+
+      How to read: curves that stay near 1 are dominated by long contigs. Curves that
+      collapse early are drifts of short fragments that will bin into chimeras, so
+      compare assemblies on the same sample.
+  - component: figure
+    visu_type: line
+    title: Contigs surviving each minimum length
+    dict_kwargs:
+      x: min_contig_length
+      y: n_contigs
+      color: assembly_id
+      log_y: true
+      labels: {min_contig_length: Minimum contig length (bp), n_contigs: Contigs, assembly_id: Assembly}
+    description: >-
+      Each line is one assembly: the number of contigs of at least a given size at
+      each minimum length QUAST reports. It answers how many contigs a size filter
+      leaves.
+
+      How to read: a line that drops by orders of magnitude after the first rung is
+      mostly short contigs. A flat line is an assembly of a few long contigs. The
+      vertical axis is logarithmic.
+  - component: card
+    column: length_fraction
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('min_contig_length') == 5000"
+    caption: median share, with its spread
+    title: Length in contigs of 5 kbp or more
+    description: >-
+      The hero number is the median share of an assembly held by contigs of at least
+      5 kbp, and the box shows the spread across assemblies. It answers how much of a
+      typical assembly is in contigs long enough to bin.
+
+      How to read: a share near 1 means most of the sequence is in long contigs. A
+      low share means a fragmented assembly, so open the curves to see where it
+      falls.
+
+      Note: 5 kbp is one rung QUAST reports, chosen to read one point of the curve,
+      not a published cut-off.
+  - component: card
+    column: n_contigs
+    aggregation: max
+    aggregations: [median]
+    secondary_layout: top_n
+    breakdown_col: assembler
+    top_n_count: 4
+    caption: most contigs, by assembler
+    title: Contigs before any size filter
+    description: >-
+      The hero number is the largest contig count of any assembly in view, and the
+      bars rank the assemblers by their largest count. It answers which assembler
+      produces the most fragments.
+
+      How to read: a high count means a fragmented assembly. Read it beside the
+      retained-length curves to see how much sequence those contigs hold.
+  - component: table
+    title: Contig length ladder
+    description: >-
+      Each row is one assembly at one minimum contig length, with the contig count,
+      the total length and the share of the assembly held. It answers the exact
+      values behind the curves.
+
+      How to read: filter to one assembly to read its ladder rung by rung.

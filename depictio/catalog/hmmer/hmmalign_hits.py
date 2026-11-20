@@ -22,7 +22,8 @@ kind's hits lane reads, so the lane binds with its defaults:
 
 A member with no residue in any match state is left out; ``sample`` is the
 directory the file sits in. Deletions inside the covered stretch are not
-subtracted.
+subtracted. Alignments are read one file at a time (``iter_texts_by_file``),
+never all held as text at once (#1418).
 
 Output schema:
     entity : Utf8          member sequence id
@@ -42,7 +43,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.hmm import member_spans_from_stockholm
-from depictio.recipes.lib.protein_families import family_id, sample_from_path, texts_by_file
+from depictio.recipes.lib.protein_families import family_id, iter_texts_by_file, sample_from_path
 
 RAW_DC_TAG = "hmmer_hmmalign_raw"
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
@@ -75,7 +76,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """One row per member of every family alignment."""
     rows: list[dict] = []
     seen: set[tuple[str, str]] = set()
-    for path, text in texts_by_file(sources["alignments"]).items():
+    for path, text in iter_texts_by_file(sources["alignments"]):
         family, sample = family_id(path), sample_from_path(path)
         if (sample, family) in seen:
             continue

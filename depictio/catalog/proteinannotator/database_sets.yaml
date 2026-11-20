@@ -11,5 +11,30 @@ find:
 recipe: proteinannotator/database_sets.py
 fixture: database_sets.tsv
 renders_as:
-  - { id: database_upset, component: advanced_viz, kind: upset_plot }
-  - { component: table }
+  - id: database_upset
+    component: advanced_viz
+    kind: upset_plot
+    title: Database agreement
+    config:
+      set_columns: [pfam, funfam, nmpfams, metagroot, interproscan]
+      color_intersections_by: degree
+    description: >-
+      Each bar is an intersection: the number of proteins annotated by exactly that
+      set of databases, coloured by how many databases share them. It answers how far
+      the databases agree on which proteins carry a domain.
+
+      How to read: a tall bar with every dot joined is a well-known family that all
+      databases describe. A tall single-dot bar is a protein only one database
+      reaches, so its annotation rests on one source. Open the coverage heatmap to see
+      how much of those proteins the single database covers.
+
+      Lines and annotations: none are drawn. The side bars give the number of proteins
+      each database annotates.
+  - component: table
+    title: Database membership table
+    description: >-
+      Each row is a protein with a 1 for every database that annotates at least one
+      domain on it. It answers which databases cover a given protein.
+
+      How to read: filter to a single database column to list the proteins only that
+      source reaches.

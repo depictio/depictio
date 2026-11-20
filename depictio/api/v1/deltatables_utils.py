@@ -25,6 +25,9 @@ from depictio.models.components.predicates import (  # noqa: F401  (re-exported)
     _categorical_predicate,
     datetime_range_predicate,
 )
+from depictio.models.components.predicates import (
+    parse_datetime_boundary as parse_iso_datetime,  # noqa: F401  (the notebook export's name)
+)
 
 # FEATURE FLAGS
 ENABLE_CACHING = True  # Global toggle for caching system

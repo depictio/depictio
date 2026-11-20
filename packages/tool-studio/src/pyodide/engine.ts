@@ -206,7 +206,8 @@ function engine(): Promise<PyodideApi> {
     (p) => (enginePromise = p),
     async () => {
       const py = await core();
-      await loadPackages(py, ['numpy', 'polars']);
+      // pyyaml: depictio's record_sheets (YAML samplesheets) imports it.
+      await loadPackages(py, ['numpy', 'polars', 'pyyaml']);
       emit({ phase: 'modules', detail: 'depictio.recipes' });
       writeModules(py, { ...(await host.loadModules()), 'depictio_studio.py': studioPy });
       py.runPython(

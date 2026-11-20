@@ -26,6 +26,9 @@ import { resolve } from 'node:path';
 const VERBATIM = [
   'depictio/recipes/__init__.py',
   'depictio/models/models/data_collections_types/indexed_file.py',
+  // `recipes._read_source_file` imports it lazily to read a YAML/JSON
+  // samplesheet standing in for a CSV/TSV source (stdlib + polars + yaml only).
+  'depictio/cli/cli/utils/record_sheets.py',
 ];
 const LIB_DIR = 'depictio/recipes/lib';
 const TRANSFORMS = 'depictio/models/models/transforms.py';

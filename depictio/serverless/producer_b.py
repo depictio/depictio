@@ -41,7 +41,6 @@ import base64
 import hashlib
 import io
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,7 +63,6 @@ from depictio.models.models.serverless import (
     Producer,
     PrologueOp,
     RuntimeLimits,
-    TierEntry,
     TierReason,
 )
 from depictio.serverless.binding import (
@@ -74,6 +72,12 @@ from depictio.serverless.binding import (
     miss_tier_reason,
 )
 from depictio.serverless.companions import build_companions, filter_expr_targets
+from depictio.serverless.dist import (  # noqa: F401 - re-exported
+    TEMPLATE_PATH,
+    TEMPLATE_PATH_ENV,
+    dist_static_dir,
+    template_path,
+)
 from depictio.serverless.maps import freeze_map_payload
 from depictio.serverless.preflight import (
     LINK_TIER_A,
@@ -81,6 +85,7 @@ from depictio.serverless.preflight import (
     LinkRow,
     TierRow,
     classify_spec,
+    tiers_from_rows,
 )
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
@@ -94,23 +99,9 @@ from depictio.serverless.pruning import (
     spec_links,
 )
 
-# Prebuilt single-file static-runtime bundle (`cd depictio/viewer && pnpm run build:static`).
-TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "viewer" / "dist-static" / "static.html"
-TEMPLATE_PATH_ENV = "DEPICTIO_SERVERLESS_TEMPLATE_PATH"
+# Prebuilt single-file static-runtime bundle (`cd depictio/viewer && pnpm run
+# build:static`); where it lives is `serverless.dist`'s concern.
 BUNDLE_TOKEN = "__BUNDLE_MANIFEST__"
-
-
-def _template_path() -> Path:
-    """Where the static-runtime template lives for this process.
-
-    Defaults to the in-tree build output, which official images do not carry
-    (`dist-static/` is gitignored and needs a Node build). Containers without a
-    Node toolchain mount the template elsewhere and point
-    ``DEPICTIO_SERVERLESS_TEMPLATE_PATH`` at it. Resolved per call, not at
-    import time, so the env var can be set after the module loads.
-    """
-    override = os.environ.get(TEMPLATE_PATH_ENV)
-    return Path(override) if override else TEMPLATE_PATH
 
 
 # The static runtime is the floor under every single-file bundle: measured at
@@ -132,7 +123,7 @@ def runtime_floor_bytes() -> int:
     not the primary source.
     """
     try:
-        return _template_path().stat().st_size
+        return template_path().stat().st_size
     except OSError:
         return RUNTIME_FLOOR_FALLBACK_BYTES
 
@@ -864,6 +855,162 @@ def _collect_objects_b(
     return objects, addons
 
 
+def _freeze_component(
+    comp: dict[str, Any],
+    row: TierRow,
+    spec: Any,
+    data_path: Path,
+    pruned_frames: dict[str, pl.DataFrame],
+    frozen: dict[str, FrozenPayload],
+    bindings: dict[str, BindingTable],
+    prologues: dict[str, list[PrologueOp]],
+    opened: dict[str, dict[str, Any]],
+) -> None:
+    """Settle one FROZEN-planned component, in place: its frozen payload, or a
+    binding when the build can make it live after all, and its tier row.
+
+    ``opened`` collects the request a frozen group comparison answers (the
+    tile opens on that pair).
+    """
+    if row.tier is not ComponentTier.FROZEN:
+        return
+    if comp.get("component_type") == "map":
+        parquet_path = resolve_parquet_path(
+            data_path, comp.get("workflow_tag") or "", comp.get("data_collection_tag") or ""
+        )
+        if not parquet_path.exists():
+            row.tier = ComponentTier.OMITTED
+            row.reason = TierReason.UNSUPPORTED
+            row.detail = f"no Parquet for the map's data collection: expected {parquet_path}"
+            return
+        colors = strip_auto_category_colors(getattr(spec, "category_colors", None) or {})
+        frozen[row.component_id] = FrozenPayload(
+            kind="map",
+            payload=freeze_map_payload(
+                comp, pl.read_parquet(parquet_path), colors if colors else None
+            ),
+        )
+        return
+    key = dc_key(comp.get("workflow_tag") or "", comp.get("data_collection_tag") or "")
+    df = pruned_frames.get(key)
+    if df is None:
+        row.tier = ComponentTier.OMITTED
+        row.reason = TierReason.UNSUPPORTED
+        row.detail = "component references no resolvable data collection"
+        return
+    if comp.get("component_type") == "advanced_viz":
+        payload, detail = _freeze_group_compare_b(
+            comp,
+            resolve_parquet_path(data_path, comp["workflow_tag"], comp["data_collection_tag"]),
+        )
+        row.detail = detail
+        if payload is None:
+            row.tier = ComponentTier.OMITTED
+        else:
+            frozen[row.component_id] = FrozenPayload(kind="compute", payload=payload)
+            opened[row.component_id] = payload["request"]
+        return
+    # Tables never reach this loop: preflight classifies them LIVE (phase
+    # 3) whenever their data collection resolves. Like a bound figure, a
+    # live table ships NO frozen payload — the runtime recomputes every
+    # page (filter → sort → slice) from the bundled Parquet, so a frozen
+    # snapshot would only be a second copy of data the bundle already has.
+    ctype = comp.get("component_type")
+    if ctype == "figure" and comp.get("mode", "ui") == "code":
+        # Code mode (RFC §7, phase 6). The author's Python always runs — it
+        # is both the frozen fallback and, for a transpilable figure, the
+        # authoritative scaffold. Then: compile the data prologue to IR,
+        # read the terminal `px` call for the binder's kwargs, replay the IR
+        # to rebuild the derived frame, and bind against it. A figure that
+        # binds ships IR + binding and NO frozen payload — the runtime
+        # re-derives it at every filter state from the bundled base table.
+        from depictio.serverless.context_fold import fold_context
+
+        colors = getattr(spec, "category_colors", None) or {}
+        comp["__category_colors__"] = colors
+        code = fold_context(comp.get("code_content") or "", colors, df.columns)
+        ops, refusal = transpile_with_reason(code)
+        call = terminal_px_call(code) if ops is not None else None
+        if ops is not None and call is None:
+            refusal = "figure call not analyzable"
+        try:
+            fig = _run_code_figure(comp, df)
+        except ProducerBError as exc:
+            row.tier = ComponentTier.OMITTED
+            row.reason = TierReason.CODE_MODE
+            row.detail = f"code-mode figure not locally computable: {exc}"
+            return
+        binding = None
+        miss: BindingMiss | None = None
+        if call is not None:
+            assert ops is not None
+            try:
+                derived = execute_ops(ops, df)
+                binding, miss = build_binding_with_reason(
+                    {"visu_type": call[0], "dict_kwargs": call[1]}, derived, fig=fig
+                )
+            except Exception:
+                # any executor/builder failure freezes below
+                binding, miss = None, None
+        if binding is not None:
+            bindings[row.component_id] = binding
+            if ops:
+                # A code that needs no reshape binds to the base table, and
+                # the contract omits empty op lists from the manifest.
+                prologues[row.component_id] = ops
+            row.tier = ComponentTier.LIVE
+            row.reason = None
+            row.detail = None
+            return
+        if call is None:
+            row.reason = TierReason.CODE_MODE
+            row.detail = f"code-mode figure not transpilable: {refusal}"
+        else:
+            # The binder names which bail-out fired; that sentence is the
+            # badge tooltip, so it has to be the true one.
+            row.reason = miss_tier_reason(miss)
+            row.detail = frozen_miss_detail(miss, "prologue transpiled, but ")
+        frozen[row.component_id] = FrozenPayload(kind="figure", payload=_code_figure_payload(fig))
+    elif ctype == "figure":
+        # Bind-and-refill first (RFC §4): a bound figure re-renders live in
+        # the browser at every filter state — including the default, empty
+        # one — so it ships NO frozen payload. The scaffold already carries
+        # the authentic layout, and the runtime refills the arrays from the
+        # bundled Parquet, so a frozen snapshot would only be a second copy
+        # of data the bundle already has.
+        # The kwargs the render endpoint hands the worker: the spec's brand
+        # defaults, then its category colours as `color_discrete_map`.
+        comp = {**comp, "dict_kwargs": _spec_render_kwargs(spec, comp)}
+        comp.pop("figure_params", None)
+        binding, miss = build_binding_with_reason(comp, df)
+        if binding is not None:
+            bindings[row.component_id] = binding
+            if binding.sampled:
+                row.tier = ComponentTier.PARTIAL
+                row.reason = TierReason.MAX_POINTS
+                row.detail = (
+                    "the server samples above FIGURE_MAX_POINTS after filtering; "
+                    "the bound figure refills every selected row instead — exact, "
+                    "but heavier than the server's default view"
+                )
+            else:
+                row.tier = ComponentTier.LIVE
+                row.reason = None
+                row.detail = None
+            return
+        payload, sampled = _freeze_ui_figure(comp, df)
+        row.reason = miss_tier_reason(miss)
+        row.detail = frozen_miss_detail(miss)
+        if sampled:
+            row.tier = ComponentTier.PARTIAL
+            row.reason = TierReason.MAX_POINTS
+            row.detail = (
+                "build-time sampling before filtering (FIGURE_MAX_POINTS); "
+                "the frozen figure shows a downsampled default view"
+            )
+        frozen[row.component_id] = FrozenPayload(kind="figure", payload=payload)
+
+
 def build_manifest(
     spec: DashboardDataLite,
     data_dir: str | Path,
@@ -1042,153 +1189,24 @@ def build_manifest(
     # Frozen group comparisons, by component: the tile opens on that pair.
     opened: dict[str, dict[str, Any]] = {}
     for comp in components:
-        row = tier_by_id[comp["tag"]]
-        if row.tier is not ComponentTier.FROZEN:
-            continue
-        if comp.get("component_type") == "map":
-            parquet_path = resolve_parquet_path(
-                data_path, comp.get("workflow_tag") or "", comp.get("data_collection_tag") or ""
-            )
-            if not parquet_path.exists():
-                row.tier = ComponentTier.OMITTED
-                row.reason = TierReason.UNSUPPORTED
-                row.detail = f"no Parquet for the map's data collection: expected {parquet_path}"
-                continue
-            colors = strip_auto_category_colors(getattr(spec, "category_colors", None) or {})
-            frozen[row.component_id] = FrozenPayload(
-                kind="map",
-                payload=freeze_map_payload(
-                    comp, pl.read_parquet(parquet_path), colors if colors else None
-                ),
-            )
-            continue
-        key = dc_key(comp.get("workflow_tag") or "", comp.get("data_collection_tag") or "")
-        df = pruned_frames.get(key)
-        if df is None:
-            row.tier = ComponentTier.OMITTED
-            row.reason = TierReason.UNSUPPORTED
-            row.detail = "component references no resolvable data collection"
-            continue
-        if comp.get("component_type") == "advanced_viz":
-            payload, detail = _freeze_group_compare_b(
-                comp,
-                resolve_parquet_path(data_path, comp["workflow_tag"], comp["data_collection_tag"]),
-            )
-            row.detail = detail
-            if payload is None:
-                row.tier = ComponentTier.OMITTED
-            else:
-                frozen[row.component_id] = FrozenPayload(kind="compute", payload=payload)
-                opened[row.component_id] = payload["request"]
-            continue
-        # Tables never reach this loop: preflight classifies them LIVE (phase
-        # 3) whenever their data collection resolves. Like a bound figure, a
-        # live table ships NO frozen payload — the runtime recomputes every
-        # page (filter → sort → slice) from the bundled Parquet, so a frozen
-        # snapshot would only be a second copy of data the bundle already has.
-        ctype = comp.get("component_type")
-        if ctype == "figure" and comp.get("mode", "ui") == "code":
-            # Code mode (RFC §7, phase 6). The author's Python always runs — it
-            # is both the frozen fallback and, for a transpilable figure, the
-            # authoritative scaffold. Then: compile the data prologue to IR,
-            # read the terminal `px` call for the binder's kwargs, replay the IR
-            # to rebuild the derived frame, and bind against it. A figure that
-            # binds ships IR + binding and NO frozen payload — the runtime
-            # re-derives it at every filter state from the bundled base table.
-            from depictio.serverless.context_fold import fold_context
-
-            colors = getattr(spec, "category_colors", None) or {}
-            comp["__category_colors__"] = colors
-            code = fold_context(comp.get("code_content") or "", colors, df.columns)
-            ops, refusal = transpile_with_reason(code)
-            call = terminal_px_call(code) if ops is not None else None
-            if ops is not None and call is None:
-                refusal = "figure call not analyzable"
-            try:
-                fig = _run_code_figure(comp, df)
-            except ProducerBError as exc:
-                row.tier = ComponentTier.OMITTED
-                row.reason = TierReason.CODE_MODE
-                row.detail = f"code-mode figure not locally computable: {exc}"
-                continue
-            binding = None
-            miss: BindingMiss | None = None
-            if call is not None:
-                assert ops is not None
-                try:
-                    derived = execute_ops(ops, df)
-                    binding, miss = build_binding_with_reason(
-                        {"visu_type": call[0], "dict_kwargs": call[1]}, derived, fig=fig
-                    )
-                except Exception:
-                    # any executor/builder failure freezes below
-                    binding, miss = None, None
-            if binding is not None:
-                bindings[row.component_id] = binding
-                if ops:
-                    # A code that needs no reshape binds to the base table, and
-                    # the contract omits empty op lists from the manifest.
-                    prologues[row.component_id] = ops
-                row.tier = ComponentTier.LIVE
-                row.reason = None
-                row.detail = None
-                continue
-            if call is None:
-                row.reason = TierReason.CODE_MODE
-                row.detail = f"code-mode figure not transpilable: {refusal}"
-            else:
-                # The binder names which bail-out fired; that sentence is the
-                # badge tooltip, so it has to be the true one.
-                row.reason = miss_tier_reason(miss)
-                row.detail = frozen_miss_detail(miss, "prologue transpiled, but ")
-            frozen[row.component_id] = FrozenPayload(
-                kind="figure", payload=_code_figure_payload(fig)
-            )
-        elif ctype == "figure":
-            # Bind-and-refill first (RFC §4): a bound figure re-renders live in
-            # the browser at every filter state — including the default, empty
-            # one — so it ships NO frozen payload. The scaffold already carries
-            # the authentic layout, and the runtime refills the arrays from the
-            # bundled Parquet, so a frozen snapshot would only be a second copy
-            # of data the bundle already has.
-            # The kwargs the render endpoint hands the worker: the spec's brand
-            # defaults, then its category colours as `color_discrete_map`.
-            comp = {**comp, "dict_kwargs": _spec_render_kwargs(spec, comp)}
-            comp.pop("figure_params", None)
-            binding, miss = build_binding_with_reason(comp, df)
-            if binding is not None:
-                bindings[row.component_id] = binding
-                if binding.sampled:
-                    row.tier = ComponentTier.PARTIAL
-                    row.reason = TierReason.MAX_POINTS
-                    row.detail = (
-                        "the server samples above FIGURE_MAX_POINTS after filtering; "
-                        "the bound figure refills every selected row instead — exact, "
-                        "but heavier than the server's default view"
-                    )
-                else:
-                    row.tier = ComponentTier.LIVE
-                    row.reason = None
-                    row.detail = None
-                continue
-            payload, sampled = _freeze_ui_figure(comp, df)
-            row.reason = miss_tier_reason(miss)
-            row.detail = frozen_miss_detail(miss)
-            if sampled:
-                row.tier = ComponentTier.PARTIAL
-                row.reason = TierReason.MAX_POINTS
-                row.detail = (
-                    "build-time sampling before filtering (FIGURE_MAX_POINTS); "
-                    "the frozen figure shows a downsampled default view"
-                )
-            frozen[row.component_id] = FrozenPayload(kind="figure", payload=payload)
+        _freeze_component(
+            comp,
+            tier_by_id[comp["tag"]],
+            spec,
+            data_path,
+            pruned_frames,
+            frozen,
+            bindings,
+            prologues,
+            opened,
+        )
 
     objects, addons = _collect_objects_b(components, tier_by_id, data_path, inline_blobs)
     # Gene tables for the genome tiles (``gene_assets``): file:// cannot fetch
     # `./assets/genomes/...`, so the bundle carries the ones its tiles name.
     from depictio.serverless.gene_assets import gene_blobs
 
-    genes, _ = gene_blobs(components, _template_path().parent)
+    genes, _ = gene_blobs(components, dist_static_dir())
     inline_blobs.update(genes)
     python_components, python_addon = _settle_python_b(
         components, tier_by_id, bindings, data_refs, python_candidates, python_runtime, spec
@@ -1224,10 +1242,7 @@ def build_manifest(
         depictio_version=_depictio_version(),
         dashboard=DashboardSection(id=dashboard_id, title=spec.title, doc=dashboard_doc),
         data_refs=data_refs,
-        tiers={
-            row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)
-            for row in tier_rows
-        },
+        tiers=tiers_from_rows(tier_rows),
         frozen=frozen,
         bindings=bindings,
         prologues=prologues,
@@ -1257,7 +1272,7 @@ def render_bundle_html(manifest: BundleManifest) -> str:
     """Inject a manifest into the prebuilt static-runtime template."""
     from depictio.serverless.inject import inject
 
-    template = _template_path()
+    template = template_path()
     if not template.exists():
         raise ProducerBError(
             f"static-runtime bundle not built: {template} is missing — run "

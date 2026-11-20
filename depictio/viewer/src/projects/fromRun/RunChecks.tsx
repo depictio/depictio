@@ -56,6 +56,7 @@ import { RunFilePath, RunFileScope } from './FilePreview';
 import { FlowBadge, matchStatus } from './FlowBadge';
 import { plural } from './plural';
 import type { RunPlanState } from './runPlan';
+import { samplesCheckGapText } from '../samplesCheckGaps';
 
 /** What made a run, as far as the server could tell. */
 export interface RunInfo {
@@ -256,7 +257,16 @@ function folderCheck(
 function samplesCheck(report: FromRunReport | null): { status: CheckStatus; text: string } | null {
   if (!report || (report.runs?.length ?? 0) < 2) return null;
   const shared = report.shared_samples ?? [];
-  if (shared.length === 0) return { status: 'ok', text: 'No MultiQC sample in more than one run' };
+  const gaps = report.samples_check_gaps ?? [];
+  const unread = gaps.length > 0 ? samplesCheckGapText(gaps) : '';
+  if (shared.length === 0) {
+    return gaps.length === 0
+      ? { status: 'ok', text: 'No MultiQC sample in more than one run' }
+      : {
+          status: 'warn',
+          text: `No MultiQC sample in more than one run among the reports read. Not every report was read: ${unread}`,
+        };
+  }
   const text = shared
     .map((entry) => {
       const more = entry.count - entry.samples.length;
@@ -265,7 +275,10 @@ function samplesCheck(report: FromRunReport | null): { status: CheckStatus; text
       }`;
     })
     .join(' · ');
-  return { status: 'fail', text: `${text}. One collection would merge them` };
+  return {
+    status: 'fail',
+    text: `${text}. One collection would merge them${unread ? `. Not every report was read: ${unread}` : ''}`,
+  };
 }
 
 const baseName = (location: string) => location.replace(/\/+$/, '').split('/').pop() || location;

@@ -30,10 +30,13 @@ CELERY_WORKERS=${DEPICTIO_CELERY_WORKERS:-4}
 CELERY_MAX_TASKS_PER_CHILD=${DEPICTIO_CELERY_MAX_TASKS_PER_CHILD:-50}
 
 # Queues this worker consumes. Defaults to "celery", the queue everything has
-# always landed on, since task_default_queue is pinned to it. Overriding to
-# "ingestion" is how the dedicated ingestion worker reuses this same script and
-# image without also competing for dashboard callbacks.
-CELERY_QUEUES=${DEPICTIO_CELERY_QUEUES:-celery}
+# always landed on since task_default_queue is pinned to it, plus "export" and
+# "report", where the notebook export's browser passes and rendered reports are
+# routed (celery_app.task_routes). Overriding to "ingestion" is how the dedicated
+# ingestion worker reuses this same script and image without also competing for
+# dashboard callbacks; "export,report" is how a dedicated export worker does
+# (then set this worker to "celery" alone).
+CELERY_QUEUES=${DEPICTIO_CELERY_QUEUES:-celery,export,report}
 
 # 1 keeps a worker from reserving several 20-minute ingestion tasks up front and
 # starving its peers. Harmless for short tasks, decisive for long ones.

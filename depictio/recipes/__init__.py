@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import re
+import weakref
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -208,6 +210,7 @@ def _read_source_file(
     source: RecipeSource,
     storage_options: dict | None = None,
     rel_path: str | None = None,
+    root: DataRoot | None = None,
 ) -> pl.DataFrame:
     """Read a single source file into a DataFrame.
 
@@ -233,7 +236,18 @@ def _read_source_file(
     holding ``rel_path``, the file's path relative to the data root (the full
     location when the caller has none, e.g. an absolute override outside the
     root), so the recipe can derive a key the content lacks.
+
+    A source declared as a CSV/TSV file, repointed at a YAML or JSON
+    samplesheet (``--var SAMPLESHEET_FILE=sheet.yaml``), is read as a list of
+    records (``record_sheets``), through ``root`` when the file is under it.
     """
+    if _repointed_at_record_sheet(source, rel_path or location):
+        return _mark_record_sheet(
+            _with_source_path(
+                _read_record_source(location, source, root, rel_path), source, location, rel_path
+            )
+        )
+
     kwargs = dict(source.read_kwargs or {})
     remote = _is_remote_location(location)
     if remote and storage_options is not None:
@@ -245,6 +259,55 @@ def _read_source_file(
     else:
         df = read(location, **format_kwargs, **kwargs)
     return _with_source_path(df, source, location, rel_path)
+
+
+# Frames read from a YAML/JSON samplesheet, by id: such a sheet has keys, not
+# columns, and ``validate_sources`` says so. Weak, so a frame's entry goes with it.
+_RECORD_SHEET_FRAMES: weakref.WeakValueDictionary[int, pl.DataFrame] = weakref.WeakValueDictionary()
+
+
+def _mark_record_sheet(df: pl.DataFrame) -> pl.DataFrame:
+    _RECORD_SHEET_FRAMES[id(df)] = df
+    return df
+
+
+def _from_record_sheet(df: pl.DataFrame) -> bool:
+    return _RECORD_SHEET_FRAMES.get(id(df)) is df
+
+
+def _repointed_at_record_sheet(source: RecipeSource, location: str | Path) -> bool:
+    """Whether ``location`` is a YAML/JSON samplesheet standing in for a CSV/TSV ``source``.
+
+    Only a repointed ``path`` source qualifies. Recipes that read their own
+    ``.json`` outputs as one text column (isoseq, crisprseq, pairgenomealign)
+    declare that ``.json`` path or glob themselves, and keep that read.
+    """
+    # Lazily, for the same reason as in ``_as_data_root``.
+    from depictio.cli.cli.utils.record_sheets import is_record_sheet
+
+    return (
+        source.format in ("csv", "tsv")
+        and source.glob_pattern is None
+        and source.path is not None
+        and not is_record_sheet(source.path)
+        and is_record_sheet(location)
+    )
+
+
+def _read_record_source(
+    location: str | Path, source: RecipeSource, root: DataRoot | None, rel_path: str | None
+) -> pl.DataFrame:
+    """A YAML/JSON samplesheet ``source`` points at, read through ``root`` when under it."""
+    from depictio.cli.cli.utils.record_sheets import RecordSheetError, read_record_sheet
+
+    if root is not None and rel_path is not None:
+        data = root.read_bytes(rel_path)
+    else:
+        data = Path(location).read_bytes()
+    try:
+        return read_record_sheet(data, str(location))
+    except RecordSheetError as exc:
+        raise RecipeError(f"Source '{source.ref}': {exc}") from exc
 
 
 def _format_readers(source: RecipeSource) -> tuple[Any, Any, dict]:
@@ -297,15 +360,23 @@ def _read_source_outside_root(
     """
     if _is_remote_location(location):
         from depictio.cli.cli.utils.deltatables import _read_remote_file_lazy
+        from depictio.cli.cli.utils.record_sheets import RecordSheetError
 
         _scan, _read, format_kwargs = _format_readers(source)
         kwargs = {**format_kwargs, **(source.read_kwargs or {})}
-        if source.format == "csv":
+        if _repointed_at_record_sheet(source, location):
+            # No CSV options, so the remote reader reads it as records.
+            kwargs = {}
+        elif source.format == "csv":
             # The format the recipe declared, as on every other read of it: the
             # remote reader would otherwise pick tabs for a ``.tsv`` name.
             kwargs.setdefault("separator", ",")
-        frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
-        return _with_source_path(frame.collect(), source, location, None)
+        try:
+            frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
+        except RecordSheetError as exc:
+            raise RecipeError(f"Source '{source.ref}': {exc}") from exc
+        df = _with_source_path(frame.collect(), source, location, None)
+        return _mark_record_sheet(df) if _repointed_at_record_sheet(source, location) else df
 
     from depictio.cli.cli.utils.templates import _local_fallback_allowed
 
@@ -352,7 +423,9 @@ def _resolve_glob_source(
         # A zero-byte output has no header for polars to parse; it holds no rows.
         if root.size(rel_path) == 0:
             continue
-        df = _read_source_file(root.url(rel_path), source, storage_options, rel_path=rel_path)
+        df = _read_source_file(
+            root.url(rel_path), source, storage_options, rel_path=rel_path, root=root
+        )
         if not df.is_empty():
             frames.append(df)
 
@@ -437,7 +510,9 @@ def resolve_sources(
                     sources[source.ref] = None  # type: ignore[assignment]
                     continue
                 raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {file_location}")
-            df = _read_source_file(file_location, source, storage_options, rel_path=rel_path)
+            df = _read_source_file(
+                file_location, source, storage_options, rel_path=rel_path, root=root
+            )
 
         if df.is_empty():
             raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_location}")
@@ -492,17 +567,19 @@ def validate_sources(
         df = sources.get(source.ref)
         if not source.input_schema or df is None or df.is_empty():
             continue
+        # A YAML/JSON samplesheet names its fields keys, a table columns.
+        field = "key" if _from_record_sheet(df) else "column"
         missing = [c for c in source.input_schema if c not in df.columns]
         if missing:
             raise RecipeError(
-                f"Recipe {recipe_name}: source '{source.ref}' lacks input column(s) "
-                f"{missing}. Got columns: {df.columns}"
+                f"Recipe {recipe_name}: source '{source.ref}' lacks input {field}(s) "
+                f"{missing}. Got {field}s: {df.columns}"
             )
         for col_name, declared in source.input_schema.items():
             actual = df[col_name].dtype
             if not _dtype_compatible(actual, declared):
                 raise RecipeError(
-                    f"Recipe {recipe_name}: source '{source.ref}' input column "
+                    f"Recipe {recipe_name}: source '{source.ref}' input {field} "
                     f"'{col_name}' expected {declared}, got {actual}"
                 )
         checked.append(source.ref)
@@ -517,12 +594,19 @@ def validate_schema(
 ) -> None:
     """Validate that the result DataFrame matches the recipe's output schema.
 
+    The schemas describe the stored table: a ``pl.Utf8`` column may be held as
+    Categorical or Enum to save memory, it is written as String (#1418).
+
     Args:
         result: Output DataFrame from transform().
         output_schema: Dict of column_name → polars dtype. All must be present.
         recipe_name: Recipe name used in error messages.
         optional_output_schema: Dict of column_name → polars dtype. Validated only if present.
     """
+
+    def stored(dtype: pl.DataType) -> pl.DataType:
+        return pl.String() if isinstance(dtype, pl.Categorical | pl.Enum) else dtype
+
     for col_name, expected_type in output_schema.items():
         if col_name not in result.columns:
             raise RecipeError(
@@ -530,7 +614,7 @@ def validate_schema(
                 f"Got columns: {result.columns}"
             )
         actual_type = result[col_name].dtype
-        if actual_type != expected_type:
+        if stored(actual_type) != expected_type:
             raise RecipeError(
                 f"Recipe {recipe_name}: column '{col_name}' expected {expected_type}, "
                 f"got {actual_type}"
@@ -539,7 +623,7 @@ def validate_schema(
         for col_name, expected_type in optional_output_schema.items():
             if col_name in result.columns:
                 actual_type = result[col_name].dtype
-                if actual_type != expected_type:
+                if stored(actual_type) != expected_type:
                     raise RecipeError(
                         f"Recipe {recipe_name}: optional column '{col_name}' expected "
                         f"{expected_type}, got {actual_type}"
@@ -587,15 +671,17 @@ def call_transform(
     sources: dict,
     params: dict[str, str] | None = None,
     context: RecipeContext | None = None,
+    entry: str = "transform",
 ) -> Any:
-    """Call ``module.transform``, passing template ``params`` and the run context when it takes them.
+    """Call ``module.transform`` (or ``entry``), passing template ``params`` and the run context when it takes them.
 
     A recipe opts in to ``params`` by declaring a ``params`` keyword. Values that are
     still an unresolved ``{VAR}`` placeholder (the template variable was not set) are
     dropped, so the recipe sees the parameter as absent and uses its own fallback.
     A recipe opts in to the context with a second positional argument.
     """
-    declared = inspect.signature(module.transform).parameters
+    fn = getattr(module, entry)
+    declared = inspect.signature(fn).parameters
     args: list[Any] = [sources]
     if context is not None and len([n for n in declared if n != "params"]) >= 2:
         args.append(context)
@@ -605,8 +691,23 @@ def call_transform(
             for k, v in params.items()
             if v is not None and not _UNRESOLVED_PLACEHOLDER.match(str(v).strip())
         }
-        return module.transform(*args, params=clean)
-    return module.transform(*args)
+        return fn(*args, params=clean)
+    return fn(*args)
+
+
+def streams_batches(module: Any) -> bool:
+    """Whether a recipe can hand its output over in batches (``transform_batches``).
+
+    A recipe whose table is too large to hold next to its inputs (#1418) may
+    define ``transform_batches(sources)``, a generator of frames that together
+    make the table ``transform`` returns. Ingestion then writes each batch as
+    it comes (``execute_recipe_batches``); every other caller (preview, an
+    aggregate over runs, the tests) keeps calling ``transform``. A batch must
+    not carry ``depictio_run_id``: ingestion tags the rows with their run.
+    A batch keeps its row order in the table, the batches may land in any order
+    (``delta_versioning._arrow_stream``): no batch may need another to be read.
+    """
+    return callable(getattr(module, "transform_batches", None))
 
 
 def execute_recipe(
@@ -637,29 +738,9 @@ def execute_recipe(
     Returns:
         Validated output DataFrame.
     """
-    # Checkpoint 1: load
-    module = load_recipe(recipe_name, pipeline_version)
-
-    # Checkpoint 2: resolve
-    sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
-
-    # Inject dc_ref sources
-    if extra_sources:
-        sources.update(extra_sources)
-
-    # Check all sources are resolved; optional missing dc_ref sources are injected as None
-    for source in module.SOURCES:
-        if source.ref not in sources:
-            if source.dc_ref is not None and source.optional:
-                sources[source.ref] = None  # type: ignore[assignment]
-            else:
-                raise RecipeError(
-                    f"Source '{source.ref}' not resolved. "
-                    f"If it uses dc_ref, provide it via extra_sources."
-                )
-
-    # Checkpoint 3: input schema
-    validate_sources(module, sources, recipe_name)
+    module, sources = _prepared_sources(
+        recipe_name, data_dir, overrides, extra_sources, pipeline_version, sources
+    )
 
     # Checkpoint 4: transform. A recipe whose transform() takes a second
     # argument also receives the run folder, for recipes that describe files
@@ -683,6 +764,131 @@ def execute_recipe(
     )
 
     return result
+
+
+def execute_recipe_batches(
+    recipe_name: str,
+    data_dir: str | Path | DataRoot,
+    overrides: dict[str, str] | None = None,
+    extra_sources: dict[str, pl.DataFrame] | None = None,
+    pipeline_version: str | None = None,
+    params: dict[str, str] | None = None,
+    properties: dict | None = None,
+    sources: dict[str, pl.DataFrame] | None = None,
+) -> Iterator[pl.DataFrame]:
+    """``execute_recipe`` for a recipe that ``streams_batches``: its table, a batch at a time.
+
+    Loading, reading the sources and checking them happen at the call, so a
+    missing input raises here (``RecipeSourceMissing``) as it does for
+    ``execute_recipe``. Each batch is checked against the output schema as it
+    comes; empty ones are dropped, and a recipe that yields no row at all
+    raises once its batches are spent, as an empty table does.
+    """
+    module, sources = _prepared_sources(
+        recipe_name, data_dir, overrides, extra_sources, pipeline_version, sources
+    )
+    if not streams_batches(module):
+        raise RecipeError(f"Recipe {recipe_name} has no transform_batches()")
+    batches = call_transform(
+        module,
+        sources,
+        params,
+        RecipeContext.of(data_dir, properties),
+        entry="transform_batches",
+    )
+    optional = getattr(module, "OPTIONAL_OUTPUT_SCHEMA", None)
+
+    def checked() -> Iterator[pl.DataFrame]:
+        produced = False
+        for batch in batches:
+            if not isinstance(batch, pl.DataFrame):
+                raise RecipeError(
+                    f"Recipe {recipe_name}: transform_batches() must yield pl.DataFrame, "
+                    f"got {type(batch).__name__}"
+                )
+            if batch.is_empty():
+                continue
+            validate_schema(batch, module.OUTPUT_SCHEMA, recipe_name, optional)
+            produced = True
+            yield batch
+        if not produced:
+            raise RecipeError(f"Recipe {recipe_name}: transform_batches() produced no row")
+
+    return checked()
+
+
+#: The file a one-line-per-row scan read each row from, and the row's line in
+#: it: what a raw text collection is scanned with (``row_index_name``).
+SOURCE_PATH_COLUMN = "source_path"
+SOURCE_LINE_COLUMN = "source_line"
+_RUN_COLUMN = "depictio_run_id"
+
+
+def in_file_order(df: pl.DataFrame | None) -> pl.DataFrame | None:
+    """A one-line-per-row scan with each file's lines back in order.
+
+    A Delta table does not promise to keep the order its rows were written in,
+    and a scanned file is only readable in its own order. A scan that numbered
+    its lines (``source_line``) is put back in that order: each file's lines
+    in line order, files where their first line was. A table already in order
+    is left as it is, which is the common case and costs one pass. The column
+    is then dropped, so a recipe sees the scan it always saw. Rows a scan did
+    not number (written before it did) keep their stored order; a frame
+    without the column is returned as it is.
+    """
+    if df is None or SOURCE_LINE_COLUMN not in df.columns:
+        return df
+    if SOURCE_PATH_COLUMN in df.columns and df.get_column(SOURCE_LINE_COLUMN).null_count() == 0:
+        # One file per run and path: a file shared by every run is read once per run.
+        keys = [c for c in (_RUN_COLUMN, SOURCE_PATH_COLUMN) if c in df.columns]
+        file = pl.struct(keys)
+        ordered = df.select(
+            (file.n_unique() == file.rle_id().n_unique())
+            & (pl.col(SOURCE_LINE_COLUMN).diff().over(file.rle_id()).fill_null(1) == 1).all()
+        ).item()
+        if not ordered:
+            df = (
+                df.with_row_index("_first_row")
+                .with_columns(pl.col("_first_row").min().over(keys))
+                .sort("_first_row", SOURCE_LINE_COLUMN, maintain_order=True)
+                .drop("_first_row")
+            )
+    return df.drop(SOURCE_LINE_COLUMN)
+
+
+def _prepared_sources(
+    recipe_name: str,
+    data_dir: str | Path | DataRoot,
+    overrides: dict[str, str] | None,
+    extra_sources: dict[str, pl.DataFrame] | None,
+    pipeline_version: str | None,
+    sources: dict[str, pl.DataFrame] | None,
+) -> tuple[ModuleType, dict[str, pl.DataFrame]]:
+    """Checkpoints 1 to 3 of ``execute_recipe``: the loaded recipe and its checked sources."""
+    # Checkpoint 1: load
+    module = load_recipe(recipe_name, pipeline_version)
+
+    # Checkpoint 2: resolve
+    sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
+
+    # Inject dc_ref sources, a raw text scan with its lines in file order
+    if extra_sources:
+        sources.update({ref: in_file_order(df) for ref, df in extra_sources.items()})
+
+    # Check all sources are resolved; optional missing dc_ref sources are injected as None
+    for source in module.SOURCES:
+        if source.ref not in sources:
+            if source.dc_ref is not None and source.optional:
+                sources[source.ref] = None  # type: ignore[assignment]
+            else:
+                raise RecipeError(
+                    f"Source '{source.ref}' not resolved. "
+                    f"If it uses dc_ref, provide it via extra_sources."
+                )
+
+    # Checkpoint 3: input schema
+    validate_sources(module, sources, recipe_name)
+    return module, sources
 
 
 # ---------------------------------------------------------------------------

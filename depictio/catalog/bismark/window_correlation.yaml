@@ -14,5 +14,28 @@ fixture: window_correlation.tsv
 renders_as:
   # `index` is not optional in practice: ComplexHeatmapConfig.index_column
   # falls back to the literal "sample_id", which this matrix does not have.
-  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
-  - { component: table }
+  # C6 N/A: value columns are the run's samples, known only at ingest.
+  - id: correlation_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: {index: sample}
+    title: Library methylation correlation
+    description: >-
+      Each cell is the Pearson correlation between the window methylation of two
+      libraries, computed over their shared 10 kb windows, with rows and columns
+      clustered. It answers which libraries have the most similar methylomes.
+
+      How to read: replicates of one condition should form blocks of high
+      correlation. A library that clusters with the wrong block can be a sample swap,
+      a mislabelled sheet or a conversion failure, so check the sample sheet and the
+      conversion cards.
+
+      Note: the diagonal is 1 by construction.
+  - component: table
+    title: Library correlation table
+    description: >-
+      Each row is a library with its correlation to every other library. It answers
+      the exact value behind a cell of the heatmap.
+
+      How to read: sort a column to find the library closest to or furthest from
+      another.

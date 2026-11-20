@@ -128,18 +128,25 @@ test.describe("Public Mode", () => {
     /** Pull the temporary user's token out of the SPA's localStorage. */
     async function tempUserToken(page: import("@playwright/test").Page): Promise<string> {
       await page.goto("/dashboards");
+      // The page may still be navigating (the temporary user is minted, then
+      // the SPA moves on): an evaluate that lands mid-navigation throws
+      // "Execution context was destroyed". That is "not ready yet", so the
+      // poll keeps going instead of failing the test on the first try.
       await expect
         .poll(async () =>
-          page.evaluate(() => {
-            try {
-              const raw = window.localStorage.getItem("local-store");
-              return raw ? (JSON.parse(raw).access_token as string) ?? "" : "";
-            } catch {
-              return "";
-            }
-          }),
+          page
+            .evaluate(() => {
+              try {
+                const raw = window.localStorage.getItem("local-store");
+                return raw ? (JSON.parse(raw).access_token as string) ?? "" : "";
+              } catch {
+                return "";
+              }
+            })
+            .catch(() => ""),
         )
         .not.toBe("");
+      await page.waitForLoadState("domcontentloaded");
       return page.evaluate(
         () => JSON.parse(window.localStorage.getItem("local-store")!).access_token as string,
       );

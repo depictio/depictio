@@ -70,6 +70,7 @@ const AdminApp = React.lazy(() => import('./admin/AdminApp'));
 const ProfileApp = React.lazy(() => import('./profile/ProfileApp'));
 const ActivityApp = React.lazy(() => import('./activity/ActivityApp'));
 const GroupsApp = React.lazy(() => import('./groups/GroupsApp'));
+const ComponentFrameApp = React.lazy(() => import('./component-frame/ComponentFrameApp'));
 const CreateComponentPage = React.lazy(() => import('./builder/CreateComponentPage'));
 const EditComponentPage = React.lazy(() => import('./builder/EditComponentPage'));
 const ProjectBuilderPage = React.lazy(() => import('./projects/builder/ProjectBuilderPage'));
@@ -162,6 +163,10 @@ function resolveTree(): React.ReactElement {
       `/profile${window.location.search}#cli-agents`,
     );
     return <ProfileApp />;
+  }
+  if (window.location.pathname.startsWith('/embed/')) {
+    // One component, standalone — for headless figure extraction and notebook embeds.
+    return <ComponentFrameApp />;
   }
   const route = matchEditorRoute(window.location.pathname);
   if (!route) return <App />;

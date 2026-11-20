@@ -76,7 +76,7 @@ describe('engine loading', () => {
 
     expect(host.loadPyodide).toHaveBeenCalledTimes(1);
     expect(host.loadModules).toHaveBeenCalledTimes(1);
-    expect(py.loadPackage).toHaveBeenCalledWith(['numpy', 'polars'], expect.any(Object));
+    expect(py.loadPackage).toHaveBeenCalledWith(['numpy', 'polars', 'pyyaml'], expect.any(Object));
     expect(phases).toEqual(['runtime', 'packages', 'modules', 'ready']);
     // The depictio modules and the engine's own Python land on sys.path's root.
     expect([...fs.keys()]).toEqual(
@@ -174,7 +174,7 @@ describe('polarsSchema / runRecipe contract', () => {
       expect(fake.py.unpackArchive).toHaveBeenCalledTimes(1);
       expect(fake.py.unpackArchive).toHaveBeenCalledWith(bytes, 'wheel');
       // Code Mode never pays for polars or the depictio modules.
-      expect(fake.py.loadPackage).not.toHaveBeenCalledWith(['numpy', 'polars'], expect.anything());
+      expect(fake.py.loadPackage).not.toHaveBeenCalledWith(['numpy', 'polars', 'pyyaml'], expect.anything());
       expect(host.loadModules).not.toHaveBeenCalled();
     } finally {
       pin.extras.plotly.sha256 = original;

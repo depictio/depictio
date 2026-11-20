@@ -167,6 +167,7 @@ export class HyparquetEngine implements QueryEngine {
         return { values: [], predicate: () => false };
 
       case 'in': {
+        const keepNull = filter.keepNull === true;
         const codebook = t.ref.codebooks[filter.column];
         if (codebook !== undefined) {
           // Codebook path: translate option values -> Int32 codes via the
@@ -181,7 +182,7 @@ export class HyparquetEngine implements QueryEngine {
           }
           return {
             values: this.cachedColumn(t, companion),
-            predicate: (v) => typeof v === 'number' && codes.has(v),
+            predicate: (v) => (v == null ? keepNull : typeof v === 'number' && codes.has(v)),
           };
         }
         if (!t.columnNames.includes(filter.column)) return 'skip';
@@ -191,7 +192,10 @@ export class HyparquetEngine implements QueryEngine {
           // String column: bare string set-membership over stringified values
           // (server: is_in(str_values), _categorical_predicate:184,193).
           const set = new Set(filter.values.map((v) => String(v)));
-          return { values, predicate: (v) => typeof v === 'string' && set.has(v) };
+          return {
+            values,
+            predicate: (v) => (v == null ? keepNull : typeof v === 'string' && set.has(v)),
+          };
         }
         // Typed column without codebook: cast the *values* to the column's
         // domain; an unconvertible value is dropped and matches nothing
@@ -204,7 +208,7 @@ export class HyparquetEngine implements QueryEngine {
         return {
           values,
           predicate: (v) => {
-            if (v == null) return false;
+            if (v == null) return keepNull;
             const key = numericKey(v);
             return key !== null && set.has(key);
           },

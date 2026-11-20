@@ -37,6 +37,9 @@ import {
   reduceFrame,
   refillFigure,
   resolveUri,
+  computeReferenceRequests,
+  parseReferenceRequests,
+  roundReference,
   roundSigFigs,
   runPrologue,
   sortSlice,
@@ -724,6 +727,9 @@ export interface AdvancedVizLiveRequest {
   /** `{group_by, sum}`: sum per distinct key tuple AFTER the reduction
    *  (routes.py `_aggregate_frame`), for renderers that only add rows up. */
   aggregate?: { group_by: string[]; sum: string } | null;
+  /** `{config field: {column, stat}}`; answered in `reference_stats`, taken
+   *  on the filtered rows before any reduction (routes.py `_load_reduced`). */
+  referenceStats?: Record<string, { column: string; stat: string }>;
 }
 
 /** `_aggregate_frame`: `df.group_by(group_by, maintain_order=True)
@@ -771,6 +777,8 @@ export interface AdvancedVizLiveResponse {
   sampled: boolean;
   sampling: { policy: string; exact: boolean; degraded: boolean };
   filter_applied: boolean;
+  /** Only when the request asked for statistics, like the server. */
+  reference_stats?: Record<string, number | null>;
 }
 
 /**
@@ -894,6 +902,13 @@ export async function fetchAdvancedVizDataLive(
     sampling = reduced.sampling;
   }
 
+  // References are taken before `aggregate` sums rows away: on the explicit
+  // cap's prefix for a `limitRows` read, else on the whole filtered frame
+  // (the reduction never sees them, so a sampled plot keeps an unbiased line).
+  const referenceRequests = parseReferenceRequests(req.referenceStats);
+  const referenceSource = typeof req.limitRows === 'number' ? rows : data;
+  const referenceValues = computeReferenceRequests(referenceSource, referenceRequests);
+
   // `aggregate` runs after the counts and before the column build, so
   // `total_rows` still says how many rows the table held (routes.py).
   if (req.aggregate && Array.isArray(req.aggregate.group_by) && req.aggregate.sum) {
@@ -925,6 +940,13 @@ export async function fetchAdvancedVizDataLive(
     // The server counts filter *entries* (`bool(filter_metadata)`, :854) — the
     // two agree for every payload the viewer actually sends.
     filter_applied: bound.length > 0,
+    ...(Object.keys(referenceRequests).length > 0
+      ? {
+          reference_stats: Object.fromEntries(
+            Object.entries(referenceValues).map(([k, v]) => [k, roundReference(v)]),
+          ),
+        }
+      : {}),
   };
 }
 

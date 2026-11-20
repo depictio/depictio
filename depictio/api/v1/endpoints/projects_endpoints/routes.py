@@ -456,15 +456,21 @@ async def get_project_runs(project_id: PyObjectId, current_user=Depends(get_user
 
 @projects_endpoint_router.get("/project-runs/{project_id}/files", response_model=RunFiles)
 async def get_project_run_files(
-    project_id: PyObjectId, run_tag: str, current_user=Depends(get_user_or_anonymous)
+    project_id: PyObjectId,
+    run_tag: str,
+    workflow_id: str | None = None,
+    current_user=Depends(get_user_or_anonymous),
 ):
     """The files of one run of the project, each with the scans that brought,
     changed or failed it (``added_in``, ``changed_in``, ``failed_in``, indexes
-    into ``scans``). Read-only; read when the run is unfolded in the runs view."""
+    into ``scans``). ``workflow_id`` (``ProjectRun.workflow_id``) picks the
+    workflow's run when two workflows hold a run with that tag; without it
+    their files are read together. Read-only; read when the run is unfolded in
+    the runs view."""
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
-    return run_files(project, run_tag)
+    return run_files(project, run_tag, workflow_id)
 
 
 @projects_endpoint_router.get("/ingestion-health/{project_id}", response_model=IngestionSummary)

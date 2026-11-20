@@ -95,9 +95,12 @@ def build(
         else [_neg_log10(v) for v in sig_raw]
     )
 
-    # When the column holds raw p-values the threshold must be transformed too,
-    # so both live on the same axis.
-    sig_threshold_y = sig_threshold if is_neg_log10 else (_neg_log10(sig_threshold) or 0.0)
+    # The threshold is a p-value (VolcanoConfig's documented unit) whatever the
+    # column holds, so it always moves to the -log10 axis the points are drawn
+    # on. Taking it raw on a -log10 column drew the 0.05 line at y = 0.05 and
+    # called nearly every point significant, unlike the browser renderer
+    # (`significancePredicate` in deViews.ts).
+    sig_threshold_y = _neg_log10(sig_threshold) or 0.0
 
     tiers: list[str] = []
     for i, x in enumerate(xs):

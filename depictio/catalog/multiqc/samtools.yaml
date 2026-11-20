@@ -13,4 +13,14 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: samtools }
+  - component: multiqc
+    section: samtools
+    title: Alignment flagstats
+    description: >-
+      samtools flagstat's counts per sample: mapped and properly paired reads. They
+      answer how well the reads align.
+
+      How to read: A high mapped share and a high proper-pair share are good. Low
+      values point to contamination, the wrong reference or poor library quality.
+
+      Source: https://docs.seqera.io/multiqc/modules/samtools

@@ -71,7 +71,8 @@ import { buildPreview, isUnavailable } from '../viz/figureBuilder';
 import { applyPlotlyTheme } from '../viz/plotlyTheme';
 import { SupersededRender, exactFigure, exactFiguresReady, recordFidelity } from '../viz/exactFigures';
 import type { FigureRenderSpec } from '../pyodide/engine';
-import type { ParsedFixture, RenderSpec } from '../types';
+import type { ParsedFixture, ReferenceLineSpec, RenderSpec } from '../types';
+import { computeReferenceStats } from 'depictio-react-core/components/advanced_viz/referenceStats';
 import { aggregate } from './aggregations';
 import { computeBreakdown, numericLayoutPayload } from './cardMetrics';
 import type { StudioFrame } from './frame';
@@ -360,6 +361,9 @@ function figureSpecFrom(metadata: Record<string, unknown>): RenderSpec {
     component: 'figure',
     visu_type: (metadata.visu_type as RenderSpec extends { visu_type: infer T } ? T : never) ?? 'scatter',
     dict_kwargs: (metadata.dict_kwargs as Record<string, string>) ?? {},
+    ...(Array.isArray(metadata.reference_lines)
+      ? { reference_lines: metadata.reference_lines as ReferenceLineSpec[] }
+      : {}),
   } as RenderSpec;
 }
 
@@ -667,6 +671,16 @@ export function fetchAdvancedVizData(
         ? { policy: 'explicit', exact: total < (req.limitRows as number), degraded: false }
         : { policy: 'none', exact: true, degraded: false },
       filter_applied: bound.length > 0,
+      // The whole filtered fixture is here, so the statistic a `*_stat` line
+      // asks the server for is exact when taken in the browser.
+      ...(req.referenceStats
+        ? {
+            reference_stats: computeReferenceStats(req.referenceStats, (name) => {
+              const col = frame.byName.get(name);
+              return col ? kept.map((i) => col.values[i]) : undefined;
+            }),
+          }
+        : {}),
     };
   }, signal);
 }

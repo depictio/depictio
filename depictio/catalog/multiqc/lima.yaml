@@ -10,4 +10,16 @@ find:
     - "**/multiqc/*/*_data/multiqc.parquet"
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: lima }
+  - component: multiqc
+    section: lima
+    title: Lima primer demultiplexing
+    description: >-
+      PacBio lima's summary: how many CCS reads of each chunk carried a valid primer
+      pair and why the others were rejected. It answers how much of the yield could
+      be assigned to a barcode.
+
+      How to read: A high share of passing reads is good. Many rejected for missing
+      or mismatched primers point to a wrong primer file, or to a library with
+      chimeric or incomplete molecules.
+
+      Source: https://docs.seqera.io/multiqc/modules/lima

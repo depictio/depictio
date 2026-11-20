@@ -142,6 +142,30 @@ def test_index_format_errors_are_typed() -> None:
         gi.bam_ref_names(b"not bgzf at all")
 
 
+def test_bgzf_decompression_is_bounded() -> None:
+    """A gzip bomb is refused at the output cap, not inflated in full."""
+    import gzip
+
+    bomb = gzip.compress(b"\x00" * (4 * 1024 * 1024))  # ~4 KB on disk
+    assert len(bomb) < 16 * 1024
+    with pytest.raises(gi.IndexFormatError, match="decompresses past"):
+        gi.bgzf_decompress(bomb, max_output=1024 * 1024)
+    # The default cap applies to an index parsed from a data collection.
+    with pytest.raises(gi.IndexFormatError, match="decompresses past"):
+        gi.bgzf_decompress(bomb + bomb, max_output=5 * 1024 * 1024)
+    # Exactly at the cap is fine; a limit under it cuts the output as asked.
+    assert len(gi.bgzf_decompress(bomb, max_output=4 * 1024 * 1024)) == 4 * 1024 * 1024
+    assert gi.bgzf_decompress(bomb, limit=10, max_output=1024) == b"\x00" * 10
+
+
+def test_parse_index_refuses_a_bomb(monkeypatch: pytest.MonkeyPatch) -> None:
+    import gzip
+
+    monkeypatch.setattr(gi, "MAX_DECOMPRESSED_BYTES", 1024)
+    with pytest.raises(gi.IndexFormatError, match="decompresses past"):
+        gi.parse_index(gzip.compress(b"TBI\x01" + b"\x00" * 4096))
+
+
 def test_pages_cover_ranges_and_merge_runs() -> None:
     p = jb.PAGE_SIZE
     assert jb.pages_for([(0, 10)], 10 * p) == [(0, 1)]
@@ -503,3 +527,18 @@ def test_a_session_that_cannot_render_gives_its_budget_back(demo_dir: Path) -> N
     assert result.reason and result.reason.startswith("no track fits the bundle")
     assert inline == {shared_key: "AAAA"}
     assert objects.used == 4 and objects.seen == {shared_key}
+
+
+def test_an_addon_runs_with_amd_hidden(monkeypatch, tmp_path):
+    """A report loads RequireJS: an add-on's UMD wrapper must still set its
+    global, not register an anonymous AMD module."""
+    from depictio.serverless import addons
+
+    (tmp_path / "x.js").write_text("window.X = 1;")
+    monkeypatch.setattr(addons, "registry", lambda: {"x": {"file": "x.js"}})
+    monkeypatch.setattr(addons, "addons_dir", lambda: tmp_path)
+    html = addons.addon_script("x")
+    hide = html.index("window.define=undefined")
+    body = html.index('<script data-depictio-addon="x">window.X = 1;</script>')
+    restore = html.index("window.define=window.__dpxDefine")
+    assert hide < body < restore

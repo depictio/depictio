@@ -15,11 +15,59 @@ description: >-
 find:
   path_glob: "**/mosdepth-xy-coverage-plot.txt"
 recipe: mosdepth/xy_sex_check.py
+# The fixture is enriched synthetically from 4 real rows (copies with seeded noise), so the preview shows several samples and both inferred sexes.
 fixture: xy_sex_check.tsv
 renders_as:
-  - { id: sex_check_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: x_coverage, y: y_coverage, label: sample, color: inferred_sex} }
-  # Four lanes at most (two libraries, two stages), so the strip names them
-  # rather than ranking them: the point is which library is the outlier.
-  - { component: card, column: xy_ratio, aggregation: average, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
-  - { component: table }
+  - id: sex_check_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: X against Y chromosome depth
+    roles: {x: x_coverage, y: y_coverage, label: sample, color: inferred_sex}
+    config:
+      x_title: Mean depth on chromosome X (reads per base)
+      y_title: Mean depth on chromosome Y (reads per base)
+      top_n_labels: 4
+      legend_pos: bottom
+    description: >-
+      Each point is a library at one alignment stage: its mean depth on chromosome X
+      on the horizontal axis and on chromosome Y on the vertical axis, coloured by the
+      inferred sex. It answers whether the sequenced sex agrees with the sex
+      recorded in the sample sheet.
+
+      How to read: libraries with two X chromosomes show strong X depth and almost
+      no Y depth, and libraries with one X and one Y show both at a similar depth.
+      A point that lands in the other group, or between them, can be a sample swap,
+      a sex chromosome aneuploidy, a mixed library or a very low-depth run.
+
+      Lines and annotations: no line is drawn. The inferred sex uses a cut-off of 10
+      on the X to Y depth ratio, a heuristic of this table placed between the two
+      common karyotypes, not a published rule or a genotype call.
+  # Four lanes at most (two libraries, two stages), so the strip lists the
+  # spread rather than naming them: the point is which library is the outlier.
+  - component: card
+    column: xy_ratio
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: vertical
+    caption: X to Y depth ratio, lowest and highest
+    title: X to Y depth ratio
+    description: >-
+      The hero number is the average X to Y depth ratio over the libraries, with the
+      lowest and highest ratio beside it. It answers how separated the libraries are
+      into the two karyotype groups.
+
+      How to read: a large ratio means almost no Y signal, and a ratio near 1 means
+      one X and one Y. A wide gap between lowest and highest means the libraries
+      belong to both groups. The ratio is read against the sample sheet, not on its
+      own.
+  - component: table
+    title: Sex check
+    description: >-
+      One row is one library at one alignment stage, with its X and Y depth,
+      their ratio and the inferred sex. It answers whether the sex inferred from
+      the reads matches the sample sheet.
+
+      How to read: Sort by the X to Y ratio to see the two groups, and compare
+      the inferred sex with the sheet. Look for a ratio between the groups or a
+      stage that changes the call. It complements the X against Y depth scatter of
+      the same output, which shows these values as a plot.

@@ -94,9 +94,28 @@ export const FIGURE_COLUMN_KWARGS = [
 ] as const;
 export type FigureColumnKwarg = (typeof FIGURE_COLUMN_KWARGS)[number];
 
+/** A guide line on a UI figure: a fixed `value`, or a `stat` of `column` over
+ *  the rows on show, named "median of this table" (RULES §17). Mirrors
+ *  `ReferenceLine` in depictio/models/components/lite.py: exactly one of
+ *  `value` / `stat`. */
+export interface ReferenceLineSpec {
+  axis: 'x' | 'y';
+  value?: number;
+  stat?: 'median' | 'mean' | 'p75' | 'p90' | 'p95' | 'p99';
+  column?: string;
+  label?: string;
+}
+
+/** The tile title and the text of its info popover ("About this component").
+ *  Mirrors `Render.title` / `Render.description`; any render type carries them. */
+export interface RenderText {
+  title?: string;
+  description?: string;
+}
+
 /** Optional first-class handle: dashboards reuse a render via `use: <tool>/<id>`
  *  (unique within a tool). Present on every render type. */
-export interface FigureRender {
+export interface FigureRender extends RenderText {
   uid: string;
   component: 'figure';
   id?: string;
@@ -108,6 +127,11 @@ export interface FigureRender {
   visu_type?: FigureVisuType;
   /** UI mode: column-valued kwargs (x/y/color/…) + free kwargs (title, log_x…). */
   dict_kwargs?: Record<string, string>;
+  /** UI mode: column -> axis or legend title (written as `dict_kwargs.labels`). */
+  labels?: Record<string, string>;
+  /** UI mode: guide lines, fixed or at a statistic of the rows on show
+   *  (`Render.reference_lines`). */
+  reference_lines?: ReferenceLineSpec[];
   /** Code mode: inline python snippet that assigns `fig` (depictio code_content). */
   code?: string;
   /** Preview-only: the Plotly {data,layout} produced by executing a code-mode
@@ -120,7 +144,7 @@ export interface FigureRender {
   _untrusted?: boolean;
 }
 
-export interface CardRender {
+export interface CardRender extends RenderText {
   uid: string;
   component: 'card';
   id?: string;
@@ -150,12 +174,14 @@ export interface CardRender {
   priority?: number;
   /** e.g. the MultiQC section name. */
   section?: string;
+  /** What the secondary strip shows ("median, with its spread"). */
+  caption?: string;
 }
 
 /** Display options, mirroring `TableLiteComponent`. All optional: a bare
  *  `{component: table}` means "every column, defaults", which is what most
  *  committed entries say. */
-export interface TableRender {
+export interface TableRender extends RenderText {
   uid: string;
   component: 'table';
   id?: string;
@@ -177,7 +203,7 @@ export interface TableRender {
  *  `InteractiveLiteComponent`, so a render carrying neither could not be turned
  *  into a control at all — which is why the catalog held zero of them until the
  *  model learned to express them. */
-export interface InteractiveRender {
+export interface InteractiveRender extends RenderText {
   uid: string;
   component: 'interactive';
   id?: string;
@@ -192,7 +218,7 @@ export interface InteractiveRender {
 /** depictio's `InteractiveType` literal, generated from the catalog schema. */
 export type InteractiveVariant = InteractiveType;
 
-export interface AdvancedVizRender {
+export interface AdvancedVizRender extends RenderText {
   uid: string;
   component: 'advanced_viz';
   id?: string;
@@ -205,6 +231,8 @@ export interface AdvancedVizRender {
    *  (`sankey.steps`, `sunburst.ranks`, ComplexHeatmap's column lists) and
    *  role → setting for `embedding.compute_method`. Mirrors `Render.roles`. */
   roles: Record<string, string | string[]>;
+  /** The kind's display options and reference marks (`Render.config`). */
+  config?: Record<string, unknown>;
 }
 
 export type RenderSpec =

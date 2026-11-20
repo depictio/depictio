@@ -14,12 +14,57 @@ find:
 recipe: vcf/variant_density.py
 fixture: variant_density.tsv
 renders_as:
-  - { id: density_windows, component: card, column: value, aggregation: max,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: density_windows
+    component: card
+    column: value
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Variants per window
+    caption: the densest window, with the spread over all windows
+    description: >-
+      The hero number is the largest count of distinct PASS variants in a single window,
+      and the box shows the quartiles over all windows. It answers how dense variation is
+      and how uneven it is along the genome.
+
+      How to read: a maximum far above the box marks a hot spot, such as a region
+      of high diversity or of mapping artefacts. Open the karyotype or the track to see
+      where it sits.
   # The karyotype: every primary contig drawn to the assembly's length, one
   # heat band per window (the rows are their own bins).
-  - { id: density_karyotype, component: advanced_viz, kind: ideogram,
-      roles: {chrom: chrom, start: start, end: end, value: value, sample: sample} }
-  - { id: density_track, component: advanced_viz, kind: coverage_track,
-      roles: {chromosome: chrom, position: start, end: end, value: value, sample: sample} }
-  - { component: table }
+  - id: density_karyotype
+    component: advanced_viz
+    kind: ideogram
+    title: Variant density along chromosomes
+    roles: {chrom: chrom, start: start, end: end, value: value, sample: sample}
+    description: >-
+      Each band is a window on a chromosome, shaded on a continuous scale by the count
+      of distinct PASS variants it holds. It answers where along the genome the
+      variants of each sample concentrate.
+
+      How to read: dark bands are dense and pale bands are sparse, so a dark band
+      shared by every sample suggests a region that differs from the reference
+      assembly. A band dense in one sample only points to that sample. Open the track
+      to read the counts.
+  - id: density_track
+    component: advanced_viz
+    kind: coverage_track
+    title: Variant density track
+    roles: {chromosome: chrom, position: start, end: end, value: value, sample: sample}
+    description: >-
+      Each bar is a window along a chromosome, with the count of distinct PASS
+      variants in it as its height, one trace per sample. It answers how density
+      changes along a chromosome and whether samples agree.
+
+      How to read: traces that rise and fall together point to regions of the genome
+      that vary in every sample. A trace that departs from the others over a stretch
+      points to a sample-specific event or to a coverage difference.
+  - component: table
+    title: Density table
+    description: >-
+      Each row is a window on a chromosome with its start, its end, the count of
+      distinct PASS variants and the sample. It answers which windows hold the most
+      variants.
+
+      How to read: sort by count to find the densest windows, and filter by chromosome
+      or sample.

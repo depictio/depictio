@@ -40,7 +40,8 @@
  *   `_apply_scan_filters`:1174-1187 does the same against the schema). For the
  *   engine, "present" means the physical column it reads: the column itself,
  *   or its `__code__`/`__ts__` companion where that is the read target.
- * - Null never matches any predicate: Polars comparisons and `is_in` on null
+ * - Null never matches any predicate (except an `in` carrying `keepNull`, the
+ *   run-id rule): Polars comparisons and `is_in` on null
  *   evaluate to null, and `filter` drops null rows (verified on Polars 1.42.1:
  *   `is_in`, `==`, `>=/<=`, `str.contains` all drop the null rows).
  * - Empty values never reach the kernel: `add_filter` guards every value
@@ -51,8 +52,13 @@
  */
 
 export type BoundFilter =
-  /** Select / MultiSelect / SegmentedControl (and scatter/table selections). */
-  | { kind: 'in'; column: string; values: unknown[] }
+  /**
+   * Select / MultiSelect / SegmentedControl (and scatter/table selections).
+   * `keepNull` also keeps the rows whose cell is null — the server's
+   * `| is_null()` on `depictio_run_id` (add_filter: a row with no run
+   * aggregates several runs and belongs to each of them).
+   */
+  | { kind: 'in'; column: string; values: unknown[]; keepNull?: boolean }
   /** RangeSlider — inclusive on both ends; a missing bound is unbounded. */
   | { kind: 'range'; column: string; min?: number; max?: number }
   /**

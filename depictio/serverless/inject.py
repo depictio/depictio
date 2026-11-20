@@ -39,8 +39,16 @@ def inject(template: str, token: str, payload: Any) -> str:
 
     Every occurrence of ``token`` is replaced by the JSON-serialized payload.
     The blob is passed through :func:`json_safe` (so ``JSON.parse`` never sees
-    a bare ``NaN``/``Infinity`` token) and ``</`` is escaped to ``<\\/`` so the
-    payload can never close the ``<script>`` tag it is embedded in.
+    a bare ``NaN``/``Infinity`` token). ``</`` is escaped to ``<\\/`` so the
+    payload can never close the ``<script>`` tag it is embedded in, and ``<!--``
+    to ``<\\u0021--``: inside a script element ``<!--`` followed by
+    ``<script`` switches the HTML tokenizer into its double-escaped state, where
+    the real ``</script>`` no longer closes the element and the bundle fails to
+    load. Both escapes sit inside JSON strings, so the parsed value is unchanged.
     """
-    blob = json.dumps(json_safe(payload), default=str).replace("</", "<\\/")
+    blob = (
+        json.dumps(json_safe(payload), default=str)
+        .replace("</", "<\\/")
+        .replace("<!--", "<\\u0021--")
+    )
     return template.replace(token, blob)

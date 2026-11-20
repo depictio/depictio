@@ -11,9 +11,82 @@ find:
 recipe: cellranger/cell_funnel.py
 fixture: cell_funnel.tsv
 renders_as:
-  - { id: cell_waterfall, component: card, column: barcodes_observed, aggregation: sum, secondary_layout: attrition, attrition_cols: [cells_called, cellbender_cells, cells_qc_pass] }
-  - { component: card, column: barcodes_observed, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: cells_called, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: pct_qc_pass, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
-  - { component: card, column: pct_called, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - id: cell_waterfall
+    component: card
+    column: barcodes_observed
+    aggregation: sum
+    aggregations: [count]
+    secondary_layout: attrition
+    attrition_cols: [cells_called, cellbender_cells, cells_qc_pass]
+    caption: barcodes down to cells passing QC
+    title: From barcodes to cells
+    description: >-
+      The hero number is the count of barcodes observed, and the waterfall steps down to the
+      cells called, the cells CellBender kept and the cells that pass the quality filter. It
+      answers how many droplets end up as usable cells.
+
+      How to read: a large first step is normal, since most barcodes are empty droplets. A
+      big loss at a later step means cell calling or the quality filter removed many cells.
+  - component: card
+    column: barcodes_observed
+    aggregation: sum
+    aggregations: [box_plot_stats, count]
+    secondary_layout: box_plot
+    caption: barcodes per sample, with their spread
+    title: Barcodes observed
+    description: >-
+      The hero number is the total count of barcodes seen across samples, and the box shows
+      how that varies per sample. It answers how deeply each library was sampled.
+
+      How to read: a sample far from the others was loaded or sequenced differently, so check
+      its sequencing depth before comparing it.
+  - component: card
+    column: cells_called
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: histogram
+    caption: cells called per sample
+    title: Cells called
+    description: >-
+      The hero number is the total of cells called across samples, and the histogram shows
+      the distribution per sample. It answers how many cells each library yields.
+
+      How to read: a sample with few cells has less power in every downstream tile.
+  - component: card
+    column: pct_qc_pass
+    aggregation: average
+    aggregations: [min]
+    secondary_layout: gauge
+    coverage_max: 100.0
+    caption: cells passing QC, of 100%
+    title: Cells passing QC
+    description: >-
+      The hero number is the average share of called cells that pass the quality filter, and
+      the gauge shows it out of 100 percent. It answers how clean the called cells are.
+
+      How to read: the minimum shows the worst sample. A low value points to many cells with
+      few genes, few UMIs or a high mitochondrial share.
+
+      Note: the filter uses median absolute deviation limits computed per sample, see the
+      description of the cell QC tab for the rules.
+  - component: card
+    column: pct_called
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: share of barcodes called, with its spread
+    title: Share of barcodes called as cells
+    description: >-
+      The hero number is the median percent of observed barcodes called a cell, and the box
+      shows its spread across samples. It answers how selective cell calling is.
+
+      How to read: the value depends on loading and ambient RNA, so compare samples of one
+      experiment, not absolute levels. An outlier sample deserves a look at its barcode rank
+      plot.
+  - component: table
+    title: Cell counts per sample
+    description: >-
+      Each row is a sample with its barcodes, cells called, cells kept by CellBender, cells
+      passing QC and the two shares. It answers the exact counts behind the cards.
+
+      How to read: follow a row left to right to see where a sample loses cells.

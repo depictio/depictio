@@ -7,21 +7,228 @@ description: >-
   `label` the callset's samplesheet id and `truth_set` the truth set.
 find: { path_glob: "**/summary/tables/sompy/sompy.summary.csv" }
 recipe: sompy/summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several variant types.
 fixture: summary.tsv
 renders_as:
-  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: caller, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark
-  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: caller, tp: tp, fp: fp, fn: fn} } # TP/FP/FN matrix
-  - { id: precision_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: precision, lower: precision_lower, upper: precision_upper} } # precision ± 95% CI
-  - { id: recall_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: recall, lower: recall_lower, upper: recall_upper} } # recall ± 95% CI
-  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: f1} } # f1 by caller
-  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1
-  - { component: table }
+  - id: pr_scatter
+    component: advanced_viz
+    kind: pr_benchmark
+    roles: {label: caller, recall: recall, precision: precision, f1: f1, support: tp}
+    title: Precision against recall
+    config:
+      show_diagonal: false
+    description: >-
+      Each point is a callset: its recall on the horizontal axis, its precision on the vertical axis, with
+      the point coloured by its F1 score and sized by its true positives. It answers which caller finds
+      the most true variants without adding false ones.
+
+      How to read: the best callsets sit in the upper right. A callset far to the left misses variants, and
+      one low on the plot adds false calls. The curves join points of equal F1, so compare callsets by which curve they sit on.
+
+      Lines and annotations: the curves are iso-F1 contours at 0.2, 0.4, 0.6 and 0.8 drawn by this
+      chart, with F1 the harmonic mean of precision and recall.
+      Recall is tp / (tp + fn) and precision is tp / (tp + fp), as som.py defines them. No cut-off is drawn.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - id: confusion
+    component: advanced_viz
+    kind: confusion_matrix
+    roles: {label: caller, tp: tp, fp: fp, fn: fn}
+    title: True and false calls per caller
+    description: >-
+      Each row is a callset and each cell a count of true positives, false positives or false negatives,
+      shaded by its share of the row. It answers what kind of error each caller makes.
+
+      How to read: a caller with a large false positive cell is too permissive, and one with a large false
+      negative cell is too strict. Compare the rows, since the truth set is the same for every callset.
+
+      Lines and annotations: a true positive is a variant in both the truth and the query. A query-only
+      variant is a false positive and a truth-only variant a false negative.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - id: precision_ci
+    component: advanced_viz
+    kind: metric_ci_bars
+    roles: {label: caller, value: precision, lower: precision_lower, upper: precision_upper}
+    title: Precision with its interval
+    config:
+      metric_name: Precision
+    description: >-
+      Each point is a callset's precision with a bar for its confidence interval. It answers whether two
+      callsets really differ in precision or only appear to.
+
+      How to read: callsets whose intervals do not overlap differ in precision. A wide interval means few
+      calls, so the value is uncertain.
+
+      Lines and annotations: the bars are the 95% confidence interval for a binomial proportion, computed
+      by the Jeffreys method (som.py default level 0.95).
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - id: recall_ci
+    component: advanced_viz
+    kind: metric_ci_bars
+    roles: {label: caller, value: recall, lower: recall_lower, upper: recall_upper}
+    title: Recall with its interval
+    config:
+      metric_name: Recall
+    description: >-
+      Each point is a callset's recall with a bar for its confidence interval. It answers whether two
+      callsets really differ in the share of truth variants they find.
+
+      How to read: callsets whose intervals do not overlap differ in recall. A wide interval means few truth
+      variants were tested.
+
+      Lines and annotations: the bars are the 95% confidence interval for a binomial proportion, computed
+      by the Jeffreys method (som.py default level 0.95).
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: caller
+      y: f1
+      color: variant_type
+      barmode: group
+      labels: {caller: Caller, f1: F1 score, variant_type: Variant type}
+    title: F1 by caller
+    description: >-
+      Each bar is the F1 score of a callset for one variant type (SNVs or indels), the harmonic mean of its
+      precision and recall. It answers which caller is most accurate for each type.
+
+      How to read: a higher bar is a better balance of finding true variants and avoiding false ones. Open
+      the precision and recall views to see which side limits a low bar.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: card
+    column: f1
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: F1 over the callsets, with its spread
+    title: Best F1
+    description: >-
+      The hero number is the highest F1 score among the callsets and the box shows the spread of all of
+      them. It answers how good the best caller is and how far the others trail.
+
+      How to read: a best F1 far above the median means the callers differ a lot. Open the precision and
+      recall views to see why.
+  - component: table
+    title: Benchmark summary table
+    description: >-
+      Each row is a callset and variant type with its true positives, false positives, false negatives,
+      recall, precision, F1 and their confidence intervals. It answers the exact numbers behind every tile.
+
+      How to read: sort by F1, then check the counts, since a high ratio on few variants is weak evidence.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: caller, aggregation: nunique, secondary_layout: donut, breakdown_col: variant_type, top_n_count: 3 }
-  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: card, column: recall, aggregation: average, secondary_layout: gauge, coverage_max: 1 }
-  - { component: card, column: precision, aggregation: median, secondary_layout: threshold, threshold_value: 0.5, threshold_direction: min, threshold_warn: 0.25 }
-  - { component: card, column: fp, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fn, aggregation: sum, secondary_layout: histogram }
-  - { component: card, column: f1, aggregation: max, aggregations: [min, median, average, max], secondary_layout: grid }
+  - component: card
+    column: tp
+    aggregation: sum
+    aggregations: [max, median]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: true positives, by caller
+    title: True positives by caller
+    description: >-
+      The hero number is the total of true positives over the callsets, and the bars rank the callers by
+      how many they found. It answers which caller recovers the most truth variants.
+
+      How to read: a caller far ahead on true positives is not necessarily best, since it may also add many
+      false positives. Compare with the false positive card.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: card
+    column: f1
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    caption: median F1, with its spread
+    title: Median F1
+    description: >-
+      The hero number is the median F1 score over the callsets and the box shows its quartiles. It answers
+      how accurate a typical caller is on this truth set.
+
+      How to read: a high median with a narrow box means the callers agree. A low median points to a hard
+      truth set or to calls that need filtering.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: card
+    column: recall
+    aggregation: average
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: mean recall, with its lowest and highest
+    title: Recall
+    description: >-
+      The hero number is the mean recall over the callsets, the share of truth variants they find, with the
+      lowest and highest beside it. It answers how complete the calls are.
+
+      How to read: a low lowest value marks a caller that misses many truth variants. A gap between lowest
+      and highest means the callers are not interchangeable.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: card
+    column: precision
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: median precision, with its lowest and highest
+    title: Precision
+    description: >-
+      The hero number is the median precision over the callsets, the share of calls that are true, with the
+      lowest and highest beside it. It answers how clean the calls are.
+
+      How to read: a very low lowest value marks a caller that adds many false positives and needs
+      filtering. No cut-off is applied, because som.py defines none.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: card
+    column: fp
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: false positives, by caller
+    title: False positives by caller
+    description: >-
+      The hero number is the total of false positives over the callsets, and the bars rank the callers by
+      how many they added. It answers which caller is noisiest.
+
+      How to read: false positives often differ by orders of magnitude between callers. The caller leading
+      this ranking is the first to filter.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: card
+    column: fn
+    aggregation: sum
+    aggregations: [min, max, median]
+    secondary_layout: compact
+    caption: false negatives, with their range over callsets
+    title: False negatives
+    description: >-
+      The hero number is the total of truth variants missed over the callsets, with the lowest, highest and
+      median per callset beside it. It answers how many variants the calls fail to find.
+
+      How to read: a narrow range means every caller misses about the same variants, which points to hard
+      truth variants such as low allele fraction ones.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md
+  - component: card
+    column: f1
+    aggregation: max
+    aggregations: [min, median, average]
+    secondary_layout: grid
+    caption: F1 over the callsets
+    title: F1 summary
+    description: >-
+      The hero number is the best F1 score, with the lowest, median and mean beside it. It answers the
+      range of accuracy over the callsets.
+
+      How to read: a large gap between the lowest and the best F1 means the choice of caller matters here.
+
+      Source: https://raw.githubusercontent.com/Illumina/hap.py/master/doc/sompy.md

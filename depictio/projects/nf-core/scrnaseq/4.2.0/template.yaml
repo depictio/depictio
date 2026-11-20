@@ -89,7 +89,7 @@
 template:
   template_id: "nf-core/scrnaseq/4.2.0"
   description: "nf-core/scrnaseq template: per-cell QC and MAD-based flagging, graph-based clusters and their marker genes, UMAP/t-SNE/PCA embeddings and CellBender's ambient-RNA removal on the Cell Ranger route, on top of the MultiQC report, plus an optional aligner-concordance comparison against simpleaf/alevin-fry and kallisto|bustools."
-  version: "2.0.0"
+  version: "3.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of the megatest results: one subdirectory per --aligner route (aligner_cellranger/ required; aligner_simpleaf/, aligner_kallisto/ optional, feed the Aligner concordance tab) plus aligner_cellranger/multiqc/multiqc_data/multiqc.parquet."
@@ -1059,9 +1059,12 @@ workflows:
               quote_char: null
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One physical line of map_info.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the row came from; the sample name is derived from it"
 
       - data_collection_tag: "simpleaf_quantjson_raw"
@@ -1083,9 +1086,12 @@ workflows:
               quote_char: null
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One physical line of quant.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the row came from; the sample name is derived from it"
 
       - data_collection_tag: "qcatch_metrics_raw"
@@ -1240,9 +1246,12 @@ workflows:
               quote_char: null
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One physical line of run_info.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the row came from; the sample name is derived from it"
 
       - data_collection_tag: "kallisto_inspect_raw"
@@ -1264,9 +1273,12 @@ workflows:
               quote_char: null
               new_columns: ["raw"]
               include_file_paths: "source_path"
+              row_index_name: "source_line"
+              row_index_offset: 1
               infer_schema_length: 0
             columns_description:
               "raw": "One physical line of inspect.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_line": "Line number of the row in its file, from 1: the file's lines are read back in that order"
               "source_path": "File the row came from; the sample name is derived from it"
 
       - data_collection_tag: "kallisto_barcodes_raw"

@@ -607,7 +607,10 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Categorical flow'}
-      subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      subtitle={
+        (metadata as { description?: string; subtitle?: string }).description ||
+        (metadata as { description?: string; subtitle?: string }).subtitle
+      }
       primaryControls={primaryControls}
       controls={controls}
       loading={loading}

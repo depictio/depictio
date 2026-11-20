@@ -36,7 +36,17 @@ export function useThreeDmolStatus(): ThreeDmolStatus {
     import('3dmol')
       .then((mod) => {
         if (cancelled) return;
-        const stub = (mod as unknown as { CATALOG_PREVIEW_STUB?: boolean }).CATALOG_PREVIEW_STUB;
+        // `isCatalogPreviewStub()` when the module offers it: the static
+        // runtime's add-on forwarder asks at mount time, since the add-on's
+        // script may come after the runtime's in the page.
+        const m = mod as unknown as {
+          CATALOG_PREVIEW_STUB?: boolean;
+          isCatalogPreviewStub?: () => boolean;
+        };
+        const stub =
+          typeof m.isCatalogPreviewStub === 'function'
+            ? m.isCatalogPreviewStub()
+            : m.CATALOG_PREVIEW_STUB;
         setStatus(stub ? 'unavailable' : 'ready');
       })
       .catch(() => {

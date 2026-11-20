@@ -19,16 +19,161 @@ renders_as:
   - id: measure_agreement
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: normfinder_rank, y: genorm_rank, label: gene_name, color: section }
+    title: Normfinder against geNorm rank
+    roles: {x: normfinder_rank, y: genorm_rank, label: gene_name, color: section}
+    config:
+      x_title: Normfinder rank within section
+      y_title: geNorm rank within section
+      reference_line: diagonal
+      reference_label: Same rank in both methods
+      top_n_labels: 8
+    description: >-
+      Each point is a candidate gene: its rank by Normfinder on the horizontal axis
+      and its rank by geNorm M on the vertical axis, within its expression section,
+      coloured by section. It answers whether two independent stability methods pick
+      the same genes.
+
+      How to read: points near the diagonal are genes both methods rank alike, and
+      those at the lower left are stable by both accounts. A gene far from the
+      diagonal is good by one method only, so check its distribution before using it
+      as a reference.
+
+      Lines and annotations: the diagonal is y = x, where both methods give the same
+      rank. It is a reference of the plot and not a cut-off.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/15289330/ and https://pubmed.ncbi.nlm.nih.gov/12184808/
   - id: candidate_record
     component: advanced_viz
     kind: record_card
-    roles: { id: gene_id, title: gene_name }
-  - { id: candidate_count, component: card, column: gene_id, aggregation: count, secondary_layout: composition, breakdown_col: expression_level, headline: true }
-  - { id: best_score, component: card, column: stability_score, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { id: candidate_measured, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }
-  - { id: score_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: stability_score, color: section } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: section }
-  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }
-  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }
-  - { id: candidate_table, component: table, row_selection_enabled: true, row_selection_column: gene_id }
+    roles: {id: gene_id, title: gene_name}
+    title: Candidate gene record
+    description: >-
+      One card per candidate gene, listing its stability score, rank, the four
+      measures behind it and its expression level. It answers how a single gene
+      scored.
+
+      How to read: select a row in the table to load a gene, then compare its
+      measures with the section it belongs to.
+  - id: candidate_count
+    component: card
+    column: gene_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: expression_level
+    headline: true
+    title: Candidate genes
+    caption: candidates, by expression level
+    description: >-
+      The hero number is the count of candidate genes that were scored, and the bar
+      splits them by expression level. It answers how many candidates each part of
+      the expression range contributes.
+
+      How to read: candidates are shortlisted per section by their coefficient of
+      variation, so every section should contribute. A level with very few
+      candidates means that part of the range has little stable signal.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/README.md
+  - id: best_score
+    component: card
+    column: stability_score
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Best stability score
+    caption: scores, with their spread
+    description: >-
+      The hero number is the lowest stability score, the most stable candidate, and
+      the box shows the quartiles of all scores. It answers how stable the best gene
+      is and how the rest compare.
+
+      How to read: lower is more stable. A best score far below the median means a
+      clear standout, and a tight box means most candidates are alike. The score is
+      relative to this run and has no absolute cut-off.
+
+      Lines and annotations: none are drawn. The pipeline publishes no cut-off for
+      the stability score.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/README.md
+  - id: candidate_measured
+    component: card
+    column: measured_share
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: histogram
+    title: Share of samples measuring a gene
+    caption: share measured, per candidate
+    description: >-
+      The hero number is the median share of samples in which a candidate gene was
+      measured, and the histogram shows its spread over candidates. It answers how
+      complete the evidence behind each score is.
+
+      How to read: a gene measured in few samples is scored on little evidence and
+      carries a missing-value penalty. Prefer candidates with a high share.
+
+      Source: https://github.com/nf-core/stableexpression/blob/1.1.0/nextflow_schema.json
+  - id: score_by_section
+    component: figure
+    visu_type: box
+    title: Stability score by section
+    dict_kwargs:
+      x: section
+      y: stability_score
+      color: section
+      labels: {section: Expression section, stability_score: Stability score}
+    reference_lines:
+      - axis: y
+        stat: median
+        column: stability_score
+    description: >-
+      Each box is an expression section and summarises the stability scores of its
+      candidates, a view of this catalog: the pipeline's report boxes the
+      normalised expression of the top 25 genes per section instead. Section 1
+      holds the most expressed genes, and the chart answers how stable genes are
+      at each level of expression.
+
+      How to read: lower scores are more stable. Sections whose box sits lower
+      offer better reference genes, and a wide box means the choice within that
+      section matters.
+
+      Lines and annotations: The dashed line is the median stability score of this
+      table, a reference computed from the rows on show (it follows the filters),
+      not a cut-off of nf-core/stableexpression.
+
+      Source:
+      https://github.com/nf-core/stableexpression/blob/1.1.0/docs/output.md
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: section
+    title: Expression section
+    description: >-
+      Keeps only the candidates of the chosen sections, to look for a reference gene
+      at a given expression level.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: expression_level
+    title: Expression level
+    description: >-
+      Keeps only candidates in the chosen expression level, from very high to very
+      low.
+  - component: interactive
+    interactive_type: RangeSlider
+    column_name: stability_score
+    title: Stability score
+    description: >-
+      Keeps only candidates whose stability score falls in the chosen range. Lower
+      scores are more stable.
+  - id: candidate_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Candidate genes table
+    description: >-
+      Each row is a candidate gene with its stability score, ranks, the four
+      measures behind the score, its expression level and the platforms that measured
+      it. It answers which genes to take forward as references and lets a row
+      selection open the gene's record.
+
+      How to read: sort by stability score or by section rank, and read the measured
+      share beside it before trusting a low score.

@@ -144,6 +144,24 @@ def _dashboard_doc() -> dict[str, Any]:
     }
 
 
+def _register_collection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The project owns ``DC_OID`` and ``deltatables`` holds its location: a
+    bundle ships only its project's collections, located from there."""
+    from depictio.api.v1 import db as db_mod
+
+    project = {
+        "_id": PROJECT_OID,
+        "links": [],
+        "workflows": [{"_id": WF_OID, "data_collections": [{"_id": DC_OID}]}],
+    }
+    monkeypatch.setattr(db_mod, "projects_collection", _FakeCollection([project]))
+    monkeypatch.setattr(
+        db_mod,
+        "deltatables_collection",
+        _FakeCollection([{"data_collection_id": DC_OID, "delta_table_location": "memory://dcA"}]),
+    )
+
+
 @pytest.fixture
 def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     from depictio.api.v1 import celery_tasks as celery_mod
@@ -151,11 +169,8 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     from depictio.api.v1 import deltatables_utils as dtu_mod
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
-    monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
     # Phase 7 reads the project for its cross-DC links; this one declares none.
-    monkeypatch.setattr(
-        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
-    )
+    _register_collection(monkeypatch)
 
     monkeypatch.setattr(
         dtu_mod,
@@ -354,10 +369,7 @@ def test_no_data_bundled_when_no_code_figure_binds(monkeypatch: pytest.MonkeyPat
     doc = _dashboard_doc()
     doc["stored_metadata"] = [_code_component("fig-miss", MISS_CODE)]
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
-    monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
-    monkeypatch.setattr(
-        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
-    )
+    _register_collection(monkeypatch)
     monkeypatch.setattr(
         dtu_mod,
         "schema_deltatable_lite",

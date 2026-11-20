@@ -37,7 +37,7 @@ from depictio.models.components.constants import (
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
 )
-from depictio.models.components.types import CardVariant, FigureStyle
+from depictio.models.components.types import CardVariant, FigureStyle, ReferenceStat
 
 #: Namespace for deriving a component's `index` from its YAML `tag`.
 #: Fixed forever: changing it silently renames every tagged component, which
@@ -147,6 +147,44 @@ class BaseLiteComponent(BaseModel):
         return self
 
 
+class ReferenceLine(BaseModel):
+    """A guide line on a UI figure: a fixed value, or a statistic of the data on show.
+
+    ``value`` draws the line where the author says; ``stat`` draws it at the
+    median (mean, p75..p99) of ``column`` over the filtered rows, computed by
+    the server figure builder and labelled as such ("median of this table"),
+    which is how RULES.md §17 lets a data-defined reference onto a plot.
+    Exactly one of the two.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    axis: Literal["x", "y"] = Field(
+        description="`y` draws a horizontal line at a y value, `x` a vertical one at an x value"
+    )
+    value: float | None = Field(default=None, description="Where the line sits")
+    stat: ReferenceStat | None = Field(
+        default=None,
+        description="Place the line at this statistic of `column` over the rows on show",
+    )
+    column: str | None = Field(
+        default=None, description="The numeric column `stat` is computed over"
+    )
+    label: str | None = Field(
+        default=None,
+        description="Text naming the line on the plot. Unset names the statistic "
+        "(`median of this table`) or writes `y = value`",
+    )
+
+    @model_validator(mode="after")
+    def _value_or_stat(self) -> "ReferenceLine":
+        if (self.value is None) == (self.stat is None):
+            raise ValueError("a reference line takes exactly one of `value` or `stat`")
+        if self.stat is not None and not self.column:
+            raise ValueError("a reference line with `stat` needs the `column` it is computed over")
+        return self
+
+
 class FigureLiteComponent(BaseLiteComponent):
     """Lite figure component for user definition.
 
@@ -246,6 +284,14 @@ class FigureLiteComponent(BaseLiteComponent):
         "selection.",
     )
 
+    reference_lines: list[ReferenceLine] = Field(
+        default_factory=list,
+        description="Guide lines drawn over a UI-mode figure: `{axis: x|y, value}` at a "
+        "fixed place, or `{axis, stat: median|mean|p75|p90|p95|p99, column}` at a "
+        "statistic of the rows on show, computed server-side after the filters and named "
+        "as such on the plot (`median of this table`).",
+    )
+
     @model_validator(mode="after")
     def validate_figure_constraints(self) -> "FigureLiteComponent":
         """Validate figure-specific cross-field constraints."""
@@ -263,6 +309,9 @@ class FigureLiteComponent(BaseLiteComponent):
 
         if self.selection_enabled and not self.selection_column:
             raise ValueError("selection_column is required when selection_enabled=True")
+
+        if self.reference_lines and self.mode != "ui":
+            raise ValueError("reference_lines are drawn on UI-mode figures only")
 
         return self
 
@@ -468,7 +517,8 @@ class CardLiteComponent(BaseLiteComponent):
             "``concentration``, ``composition`` and ``donut`` use ``breakdown_col``; "
             "``coverage`` and ``gauge`` use ``coverage_max``; ``trend`` uses "
             "``trend_col``; ``histogram``, ``completeness`` and ``uniqueness`` need no "
-            "extra config."
+            "extra config. Under every other layout, the scalar ``aggregations`` are "
+            "listed in a compact line below the strip (not on a headline card)."
         ),
     )
     breakdown_col: str | None = Field(

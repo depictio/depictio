@@ -10,14 +10,148 @@ description: >-
 find:
   path_glob: "**/purple/*.purple.somatic.vcf.gz"
 recipe: purple/somatic_variants.py
+# The fixture is enriched synthetically from 16 real rows (copies with seeded noise), so the preview shows several variant types.
 fixture: somatic_variants.tsv
 renders_as:
-  - { id: variant_count, component: card, column: variant_key, aggregation: count, secondary_layout: top_n, breakdown_col: variant_type, top_n_count: 3 }
-  - { id: coding_variant_count, component: card, column: variant_key, aggregation: count, secondary_layout: top_n, breakdown_col: coding_effect, top_n_count: 3, filter_expr: "pl.col('coding_effect').is_in(['MISSENSE', 'NONSENSE_OR_FRAMESHIFT', 'SPLICE', 'SYNONYMOUS'])" }
-  - { id: purity_adjusted_af_spread, component: card, column: purple_af, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: variant_cn_spread, component: card, column: variant_copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { id: purity_adjusted_af_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: purple_af, color: variant_type} }
-  - { id: variant_cn_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: variant_copy_number, color: variant_type} }
-  - { id: somatic_variant_genome, component: advanced_viz, kind: genome_view, roles: {chr: chrom, pos: pos, score: purple_af, feature: variant_key, sample: sample, category: variant_type} }
-  - { id: coding_effect_filter, component: interactive, interactive_type: MultiSelect, column_name: coding_effect }
-  - { id: somatic_variant_table, component: table, row_selection_enabled: true, row_selection_column: variant_key }
+  - id: variant_count
+    component: card
+    column: variant_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: variant_type
+    top_n_count: 3
+    title: Somatic variants
+    caption: calls, by variant type
+    description: >-
+      The hero number is the count of passing somatic calls, and the bars rank the variant
+      types (SNV, MNV, indel) by how many they hold. The count beside it is the number of
+      distinct sites. It answers how many variants the tumors carry and of which kind.
+
+      How to read: SNVs usually lead. A high share of indels can point to a defect in
+      mismatch repair. Open the genome view to see where the calls lie.
+  - id: coding_variant_count
+    component: card
+    column: variant_key
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: coding_effect
+    top_n_count: 3
+    filter_expr: "pl.col('coding_effect').is_in(['MISSENSE', 'NONSENSE_OR_FRAMESHIFT', 'SPLICE', 'SYNONYMOUS'])"
+    title: Coding variants
+    caption: calls, by coding effect
+    description: >-
+      The hero number is the count of calls that fall in coding sequence, and the bars rank
+      them by effect (missense, nonsense or frameshift, splice, synonymous). The count beside
+      it is the number of distinct sites. It answers how many variants can change a protein.
+
+      How to read: missense calls usually lead and loss-of-function calls are the rarest. A
+      synonymous call does not change the protein.
+  - id: purity_adjusted_af_spread
+    component: card
+    column: purple_af
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Purity-adjusted allele frequency
+    caption: median, with its spread
+    description: >-
+      The hero number is the median purity-adjusted allele frequency of the calls in view, and
+      the box shows their quartiles. It answers what share of tumor cells carry a typical
+      variant.
+
+      How to read: clonal heterozygous variants sit near 0.5 on a diploid region and higher on
+      a region of higher copy number. A low box means many variants are subclonal.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: variant_cn_spread
+    component: card
+    column: variant_copy_number
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Variant copy number
+    caption: median, with its spread
+    description: >-
+      The hero number is the median copy number of the variants in view, the number of copies
+      of the genome that carry each one, and the box shows the quartiles. It answers how many
+      copies of a locus carry a typical variant.
+
+      How to read: a clonal variant has a copy number near one, and values well below one
+      point to a subclonal variant. Higher values are variants on amplified regions.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: purity_adjusted_af_histogram
+    component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: purple_af
+      color: variant_type
+      labels: {purple_af: Purity-adjusted allele frequency, variant_type: Variant type, count: Number of variants}
+    title: Allele frequency distribution
+    description: >-
+      Each bar counts the variants in a range of purity-adjusted allele frequency, stacked by
+      variant type. It answers how the variants divide between clonal and subclonal ones.
+
+      How to read: a peak near 0.5 is the clonal heterozygous variants of a diploid tumor, and a
+      second peak at lower frequency is a subclone. Peaks shift to the right on regions with
+      more than two copies.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: variant_cn_histogram
+    component: figure
+    visu_type: histogram
+    dict_kwargs:
+      x: variant_copy_number
+      color: variant_type
+      labels: {variant_copy_number: Variant copy number, variant_type: Variant type, count: Number of variants}
+    title: Variant copy-number distribution
+    description: >-
+      Each bar counts the variants in a range of variant copy number, stacked by variant type.
+      It answers how many copies of the genome carry each variant, and how many are subclonal.
+
+      How to read: a main peak near one is the clonal variants, and variants below it are
+      subclonal. PURPLE marks a fitted peak as subclonal when its variant copy number is below
+      0.85.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  # C1: coloured by variant type.
+  - id: somatic_variant_genome
+    component: advanced_viz
+    kind: genome_view
+    title: Variants along the genome
+    roles: {chr: chrom, pos: pos, score: purple_af, feature: variant_key, sample: sample, category: variant_type}
+    config:
+      score_title: Purity-adjusted allele frequency
+    description: >-
+      Each point is a somatic variant placed on its chromosome, with its purity-adjusted allele
+      frequency on the vertical axis, coloured by variant type. It answers where the variants lie
+      and how clonal they are.
+
+      How to read: clusters of points in one region are a hypermutated segment, and a band at a
+      higher frequency over a region is a gain of the copy carrying the variants. Zoom into a
+      region and pick a point to open its row in the table.
+
+      Source: https://raw.githubusercontent.com/hartwigmedical/hmftools/master/purple/README.md
+  - id: coding_effect_filter
+    component: interactive
+    interactive_type: MultiSelect
+    column_name: coding_effect
+    title: Coding effect
+    description: >-
+      Choose the coding effects to keep. It answers which variants the other tiles show.
+
+      How to read: keep missense and loss-of-function effects to leave out the variants outside
+      coding sequence.
+  - id: somatic_variant_table
+    component: table
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    title: Somatic variants table
+    description: >-
+      Each row is a passing somatic call with its locus, alleles, gene, effect, allele frequency,
+      copy numbers and flags. It answers the exact content behind each tile.
+
+      How to read: sort by allele frequency to find the clonal variants, and filter on hotspot or
+      reported to find the likely drivers. Select a row to follow it on the other tiles.

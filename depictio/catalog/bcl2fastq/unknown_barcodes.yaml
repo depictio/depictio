@@ -10,6 +10,50 @@ find:
 recipe: bcl2fastq/unknown_barcodes.py
 fixture: unknown_barcodes.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: barcode, y: pct_of_lane, color: swap_class, title: Most frequent unknown barcodes} }
-  - { component: card, column: reads, aggregation: sum, secondary_layout: donut, breakdown_col: swap_class }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: barcode
+      y: pct_of_lane
+      color: swap_class
+      facet_col: lane_label
+      facet_col_wrap: 2
+      labels: {barcode: Index pair, pct_of_lane: Share of the lane (%), swap_class: Index status, lane_label: Lane}
+    title: Most frequent unknown barcodes
+    description: >-
+      Each bar is an index pair that bcl2fastq could not assign to a library, sized by its share
+      of the lane and coloured by whether its indexes belong to libraries of the lane, one panel
+      per lane. It answers what the unassigned reads are.
+
+      How to read: a pair whose two indexes are both in use points to index hopping or a swap in
+      the sample sheet, and a pair with only one index in use suggests a sequencing error or a
+      mislabelled index. A pair with neither index in use suggests a library missing from the
+      sheet. Index swapping is a known effect of patterned flow cells.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/29739332/
+  - component: card
+    column: reads
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: swap_class
+    title: Unknown reads by index status
+    caption: split by status, with the median and largest per barcode
+    description: >-
+      The hero number is the total of reads in the listed unknown barcodes, and the ring splits
+      them by whether their indexes are in use. It answers which cause is behind the
+      unassigned reads.
+
+      How to read: a ring dominated by pairs with both indexes in use points to hopping or a
+      sheet swap, and one dominated by pairs with no index in use points to a missing
+      library. Only the most frequent barcodes of each lane are listed, so the total is a
+      part of the Undetermined reads.
+  - component: table
+    title: Unknown barcode table
+    description: >-
+      Each row is an unknown index pair of a lane, with its reads, its rank, its share of the
+      lane and of the Undetermined reads, and whether each index belongs to a library of the
+      lane. It answers which barcodes explain the unassigned reads.
+
+      How to read: sort by rank and filter on the index status to find a swap candidate, then
+      check the sample sheet for the pair.

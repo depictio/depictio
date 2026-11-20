@@ -10,12 +10,93 @@ find:
 recipe: vcftools/filter_summary.py
 fixture: filter_summary.tsv
 renders_as:
-  - { id: filter_partition, component: figure, visu_type: bar,
-      dict_kwargs: {x: caller, y: n_variants, color: filter_label, barmode: stack} }
-  - { component: card, column: pct_of_calls, aggregation: average, secondary_layout: donut,
-      breakdown_col: filter_label }
-  - { component: card, column: n_variants, aggregation: sum, secondary_layout: top_n,
-      breakdown_col: caller, top_n_count: 3 }
-  - { component: card, column: ts_tv, aggregation: median, aggregations: [box_plot_stats],
-      secondary_layout: box_plot }
-  - { component: table }
+  - id: filter_partition
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: caller
+      y: n_variants
+      color: filter_label
+      barmode: stack
+      labels: {caller: Caller, n_variants: Variants, filter_label: FILTER value}
+    title: Calls by FILTER value per caller
+    description: >-
+      Each bar is a caller, stacked by the FILTER value its calls carry, with the number
+      of variants in each. It answers what each caller keeps and what it flags as
+      filtered.
+
+      How to read: a bar that is mostly PASS means a caller that keeps most of its calls.
+      A large share under another label shows what the caller's own filters remove, and
+      a caller that applies no filter shows a single segment. Compare shares and not
+      heights, since callers differ in the number of calls.
+
+      Source: https://vcftools.github.io/man_latest.html
+  # The ring splits the calls by FILTER value; the sum is the callset size.
+  - component: card
+    column: n_variants
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: donut
+    breakdown_col: filter_label
+    caption: calls, by FILTER value
+    title: Calls by FILTER value
+    description: >-
+      The hero number is the total count of calls across the callers in view, and the
+      ring splits them by FILTER value. It answers what share of the calls pass the
+      callers' own filters.
+
+      How to read: a ring that is mostly PASS means the filters remove little. A large
+      slice of another label is what the callers discard, so check its Ts/Tv in the table
+      to see whether the removed calls look like noise.
+
+      Source: https://vcftools.github.io/man_latest.html
+  - component: card
+    column: n_variants
+    aggregation: sum
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    caption: calls, by caller
+    title: Calls by caller
+    description: >-
+      The hero number is the total count of calls, and the bars rank the callers by how
+      many calls they made. It answers which caller is the most and the least productive.
+
+      How to read: a caller far ahead may be more sensitive or less strict, so read the
+      count with its Ts/Tv and its share of PASS calls.
+
+      Source: https://vcftools.github.io/man_latest.html
+  # The ratio is read on the calls a caller keeps: PASS, or the unfiltered "." of a
+  # caller that sets no FILTER. A pooled median would mix them with the rejected calls.
+  - component: card
+    column: ts_tv
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('filter_label').is_in(['PASS', '.'])"
+    caption: kept calls, median with its spread
+    title: Ts/Tv of kept calls
+    description: >-
+      The hero number is the median transition to transversion ratio of the calls that
+      carry PASS or no filter, and the box shows the spread across callers and samples.
+      It answers whether the kept calls have the balance expected of real variants.
+
+      How to read: false calls are spread evenly over bases, so they pull the ratio down.
+      A caller whose kept calls sit below the others adds noise, and the expected value
+      depends on the genome region sequenced, whole genome or exome.
+
+      Note: the tool publishes no cut-off for the ratio, so none is drawn.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/25297068/
+  - component: table
+    title: FILTER summary table
+    description: >-
+      Each row is a caller and a FILTER value, with the number of calls, how many are
+      transitions and transversions, their ratio and their share of the callset. It
+      answers the exact numbers behind each tile.
+
+      How to read: compare the Ts/Tv of the rejected labels with PASS to see whether a
+      filter removes noise or good calls.
+
+      Source: https://vcftools.github.io/man_latest.html

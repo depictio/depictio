@@ -13,4 +13,20 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: falco }
+  - component: multiqc
+    section: falco
+    title: Raw-read QC (Falco)
+    description: >-
+      Falco's own MultiQC plots, a FastQC reimplementation: per-base quality, GC
+      content, duplication and adapter content per sample. They answer whether the
+      demultiplexed reads are fit to analyse.
+
+      How to read: Quality should stay high along the read and adapter content
+      should be near zero. A GC profile with an extra peak points to contamination,
+      and falling quality at the 3' end to a run problem, so trim or resequence.
+
+      Lines and annotations: The per-base quality plot is banded green, orange and
+      red at the Phred 28 and 20 limits used by MultiQC's FastQC plots, and the
+      adapter plot is banded the same way by percentage of reads.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/fastqc/fastqc.py

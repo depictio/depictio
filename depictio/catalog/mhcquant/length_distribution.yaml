@@ -9,10 +9,61 @@ find: { path_glob: "*.tsv" }
 recipe: mhcquant/length_distribution.py
 fixture: length_distribution.tsv
 renders_as:
+  # C3: the shaded band is mhcquant's own default peptide length window
+  # (peptide_min_length 8, peptide_max_length 12), read from its schema.
   - id: length_profile
     component: advanced_viz
     kind: profile
+    title: Peptide length profile
     roles: { series: sample, x: length, y: fraction }
-  - { component: figure, visu_type: bar, dict_kwargs: { x: length_class, y: peptides, color: sample } }
-  - { component: interactive, interactive_type: MultiSelect, column_name: length_class }
-  - { component: table }
+    config:
+      x_title: Peptide length (residues)
+      y_title: Share of the sample's peptides
+      shaded_bands:
+        - [8, 12, "mhcquant default length window"]
+    description: >-
+      Each curve is one sample: the share of its distinct peptides at each length.
+      It answers what the length signature of the immunopeptidome is, which tells
+      the class of molecule that presented the peptides.
+
+      How to read: a sharp peak at 9 residues inside the shaded window is the
+      expected class I signature, and class II ligands peak near 15 residues in the
+      HLA Ligand Atlas. A broad shoulder of longer peptides points to class II
+      presentation or to contamination.
+
+      Lines and annotations: the shaded band is the peptide length window mhcquant
+      keeps by default, 8 to 12 residues. It is the pipeline's setting, so it hides
+      longer peptides unless the run widened it.
+
+      Sources: https://github.com/nf-core/mhcquant/blob/3.2.0/nextflow_schema.json and
+      https://pubmed.ncbi.nlm.nih.gov/33858848/
+  - component: figure
+    visu_type: bar
+    title: Peptides per length class
+    dict_kwargs:
+      x: length_class
+      y: peptides
+      color: sample
+      barmode: group
+      labels: {length_class: Peptide length, peptides: Distinct peptides, sample: Sample}
+    description: >-
+      Each bar is the count of distinct peptides of one length in one sample,
+      coloured by sample. It answers how many peptides each length class holds.
+
+      How to read: the tallest bar should be the 9-mer for a class I sample. Samples
+      of different depth differ in height, so use the profile above to compare
+      shapes.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: length_class
+    title: Peptide length
+    description: >-
+      Pick one or more peptide lengths to restrict the tiles to them. It answers
+      what the table and the bars show for a single length.
+  - component: table
+    title: Peptide length counts
+    description: >-
+      Each row is one sample and peptide length, with the count of distinct peptides
+      and their share of the sample. It answers the exact values behind the profile.
+
+      How to read: filter by length class to compare samples at one length.

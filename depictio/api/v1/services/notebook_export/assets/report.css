@@ -1,0 +1,174 @@
+
+/* The header bar: the app's own header, at the top of the page. */
+.dpx-appbar { border-bottom: 1px solid var(--gl-hair, #dee2e6); background: var(--gl-paper, #fff); }
+.dpx-appbar-inner {
+  max-width: 1440px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center;
+  justify-content: space-between; gap: 16px; min-height: 52px; box-sizing: border-box;
+}
+.dpx-appbar-brand { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.dpx-appbar-logo { height: 28px; width: auto; max-width: 140px; object-fit: contain; }
+.dpx-appbar-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.dpx-appbar-title {
+  font-weight: 700; font-size: 1.05rem; color: var(--gl-fg, #212529);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dpx-powered {
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none !important;
+  color: inherit !important; white-space: nowrap;
+}
+.dpx-powered-label { font-size: 12px; font-weight: 700; color: var(--gl-muted, #868e96); }
+.dpx-dark-only { display: none !important; }
+body.quarto-dark .dpx-dark-only { display: inline-block !important; }
+body.quarto-dark .dpx-light-only { display: none !important; }
+@media (max-width: 640px) {
+  .dpx-appbar-inner { padding: 8px 16px; }
+  .dpx-powered-label { display: none; }
+}
+/* The dashboard's grid rows: tiles side by side, as wide as their columns. */
+.dpx-grid.quarto-layout-panel { margin: 0 0 16px; }
+.dpx-grid .quarto-layout-row { gap: 16px; align-items: stretch; }
+.dpx-grid .quarto-layout-cell {
+  min-width: 0; margin: 0 !important; padding: 0 !important; display: flex; flex-direction: column;
+}
+.dpx-grid .quarto-layout-cell > .dpx-surface-card,
+.dpx-grid .quarto-layout-cell > .dpx-cell > .dpx-surface-card { flex: 1 1 auto; }
+.dpx-grid .quarto-layout-cell > .dpx-cell { display: flex; flex-direction: column; flex: 1 1 auto; }
+.dpx-grid .cell-output-display { margin-bottom: 0; }
+@media (max-width: 760px) {
+  .dpx-grid .quarto-layout-row { flex-direction: column; }
+  .dpx-grid .quarto-layout-cell { flex-basis: auto !important; }
+}
+/* A text tile drawn on a card surface (`surface: card`). */
+.dpx-surface-card {
+  background: var(--gl-paper, #fff); border: 1px solid var(--gl-hair, #dee2e6);
+  border-radius: var(--gl-tile-radius, 12px); box-shadow: var(--gl-tile-shadow, none);
+  padding: 18px 22px 10px; margin: 0 0 16px;
+}
+.dpx-grid .dpx-surface-card { margin-bottom: 0; }
+.dpx-surface-card h5, .dpx-surface-card h6 { margin-top: .2rem; }
+/* A fact list (an icon, a bold label, a value: "The run"): label column,
+   hairline between rows, as the live text renderer draws it. */
+.dpx-surface-card ul:has(> li > span:first-child + strong) {
+  padding-inline-start: 0; list-style: none;
+}
+.dpx-surface-card ul:has(> li > span:first-child + strong) > li {
+  padding: 6px 0; border-bottom: 1px solid var(--gl-hair, #dee2e6);
+}
+.dpx-surface-card ul:has(> li > span:first-child + strong) > li:last-child { border-bottom: 0; }
+.dpx-surface-card ul > li > span:first-child + strong {
+  display: inline-block; min-width: 7em; font-weight: 500; color: var(--gl-muted, #868e96);
+}
+.dpx-surface-card ul > li > span:first-child { color: var(--gl-muted, #868e96); }
+/* The text tile's header logo, in place of its title. */
+.dpx-hero-logo { height: 72px; width: auto; max-width: 100%; margin: .25rem 0 .5rem; }
+/* The stepper (`::: steps`). */
+.dpx-steps > ol {
+  list-style: none; padding: 0; margin: 1rem 0 .5rem; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 18px 16px;
+}
+.dpx-steps > ol > li { position: relative; padding: 0; margin: 0; line-height: 1.4; }
+.dpx-step-mark {
+  display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  border-radius: 50%; margin-bottom: 10px; color: #fff; font-size: 17px;
+  background: var(--dpx-accent, var(--gl-accent, #228be6));
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.dpx-step-mark > span { margin: 0 !important; }
+.dpx-steps > ol > li:not(:last-child) > .dpx-step-mark::after,
+.dpx-steps > ol > li:not(:last-child) > p > .dpx-step-mark::after {
+  content: ""; position: absolute; top: 16px; left: 44px; right: 0; height: 2px;
+  background: color-mix(in srgb, var(--dpx-accent, #228be6) 45%, transparent);
+}
+.dpx-step-label {
+  font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--gl-muted, #868e96); margin-inline-end: .5em;
+}
+.dpx-step-links { font-size: .75rem; white-space: normal; }
+.dpx-step-links a { margin-inline-end: .5em; }
+.dpx-step-text { display: block; font-weight: 600; margin-top: 2px; }
+/* A section's filter bar, as the export saw it. */
+.dpx-filterbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.dpx-filterchip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: .8125rem;
+  padding: 4px 12px; border-radius: 999px; background: var(--gl-well, #f1f3f5);
+  color: var(--gl-fg, #212529);
+}
+.dpx-filterchip b { font-weight: 600; }
+.dpx-filterchip i { font-style: normal; color: var(--gl-muted, #868e96); }
+/* "About this component": a quiet, folded note under its tile. */
+.callout.dpx-about { margin: -6px 0 16px; border-left-width: 0 !important; background: none; }
+.callout.dpx-about .callout-header { background: none !important; padding-left: 0; }
+.callout.dpx-about .callout-title-container { font-size: .8125rem; font-weight: 600;
+  color: var(--gl-muted, #868e96); }
+.callout.dpx-about .callout-body-container { font-size: .875rem; padding-left: 0; }
+/* Figure captions: the tile's caption, then where its data came from. */
+.quarto-float-caption, figcaption { font-size: .8125rem; color: var(--gl-muted, #6c757d); }
+.dpx-asof {
+  display: inline-block; margin-inline-start: .4em; padding: 0 .55em; border-radius: 999px;
+  background: var(--gl-well, #f1f3f5); font-size: .75rem; color: var(--gl-muted, #868e96);
+  white-space: nowrap;
+}
+/* The exported state, under the title. */
+.dpx-state-line { font-size: .875rem; color: var(--gl-muted, #868e96); margin: 0 0 1rem; }
+.dpx-state-line b { color: var(--gl-fg, #212529); font-weight: 600; }
+/* The two buttons of the title (Quarto's "Code", the combined file's
+   "Dashboard"): one pair, Paper's default buttons, the dashboard one filled
+   with the brand primary. */
+#quarto-code-tools-source, .dpx-open-dashboard { vertical-align: middle; }
+#quarto-code-tools-source.btn, .code-tools-button, .dpx-open-dashboard.btn {
+  display: inline-flex !important; align-items: center; gap: 6px; height: 32px;
+  padding: 0 14px !important; border-radius: 999px !important; font-size: .8125rem !important;
+  font-weight: 600 !important; line-height: 1 !important; box-shadow: none !important;
+  border: 1px solid var(--gl-hair, #ced4da) !important; background: var(--gl-paper, #fff) !important;
+  color: var(--gl-fg, #212529) !important; transition: background-color .12s ease, border-color .12s ease;
+}
+#quarto-code-tools-source.btn:hover, .code-tools-button:hover {
+  background: var(--gl-well, #f1f3f5) !important;
+}
+.code-tools-button > i, .code-tools-button > svg, .dpx-open-dashboard > svg {
+  width: 14px; height: 14px; font-size: 14px; margin: 0 !important;
+}
+.dpx-open-dashboard.btn {
+  background: var(--gl-accent, #228be6) !important; border-color: var(--gl-accent, #228be6) !important;
+  color: #fff !important; margin-inline-end: 8px !important;
+}
+.dpx-open-dashboard.btn:hover {
+  background: color-mix(in srgb, var(--gl-accent, #228be6) 88%, #000) !important;
+}
+#quarto-code-tools-source.btn:focus-visible, .dpx-open-dashboard.btn:focus-visible {
+  outline: 2px solid var(--gl-accent, #228be6) !important; outline-offset: 2px;
+}
+/* Methods: a closing part, not a rail. */
+.dpx-body[data-dpx-kind="methods"] { border-inline-start: 0; padding-inline-start: 0; margin-inline-start: 0; }
+#methods ul { margin-bottom: 1rem; }
+#refs { font-size: .875rem; }
+/* The highlight line over a figure another tab owns: a caption, not prose. */
+.dpx-grid p:has(> em:first-child > a[href^="#tab-"]) { font-size: .875rem; color: var(--gl-muted, #868e96); }
+/* The foot. */
+.dpx-footer {
+  max-width: 1100px; margin: 3rem auto 2rem; padding: 18px 24px 0;
+  border-top: 1px solid var(--gl-hair, #dee2e6); font-size: .8125rem;
+  color: var(--gl-muted, #868e96); box-sizing: border-box;
+}
+.dpx-foot-brand { margin-bottom: 10px; }
+.dpx-foot-meta { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
+.dpx-foot-row { display: contents; }
+.dpx-foot-meta dt { font-weight: 600; color: var(--gl-muted, #868e96); }
+.dpx-foot-meta dd { margin: 0; color: var(--gl-fg, #212529); overflow-wrap: anywhere; }
+/* Print: one tab a page, nothing that only works on screen. */
+@media print {
+  .dpx-appbar { border-bottom: 1px solid #ccc; }
+  .dpx-appbar-inner { padding: 4px 0; }
+  .dpx-all, .dpx-tab-all, .dpx-zoom, .dpx-chev, #quarto-code-tools-source, .code-tools-button,
+  .dpx-open-dashboard, .dpx-tile-links, .quarto-color-scheme-toggle { display: none !important; }
+  .dpx-folded { opacity: 1; }
+  /* Above the buttons' own `display` (two classes, !important). */
+  body #quarto-code-tools-source.btn, body .code-tools-button.btn,
+  body .dpx-open-dashboard.btn { display: none !important; }
+  section[data-dpx-kind="tab"] { break-before: page; }
+  section[data-dpx-kind="tab"]:first-of-type { break-before: auto; }
+  .dpx-grid { break-inside: avoid; }
+  .dpx-body { display: block !important; }
+  .callout.dpx-about .callout-collapse { display: block !important; height: auto !important; }
+  .dpx-footer { break-inside: avoid; }
+}

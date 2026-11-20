@@ -9,17 +9,147 @@ find: { path_glob: "**/*.ribowaltz.frames.tsv" }
 recipe: ribowaltz/library_summary.py
 fixture: library_summary.tsv
 renders_as:
+  # C1: the sample is the only categorical column, so each library gets a colour.
+  # C3: the reference at a third is the split of the three frames with no
+  # preference, a plain expectation and not a riboWaltz cut-off.
   - id: phasing_plane
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: cds_pct, y: frame0_cds_pct, label: sample, size: psites }
+    title: CDS share against frame 0 share
+    roles: { x: cds_pct, y: frame0_cds_pct, label: sample, size: psites, color: sample }
+    config:
+      x_title: P-sites in the CDS (%)
+      y_title: CDS P-sites in frame 0 (%)
+      reference_line: horizontal
+      reference_value: 33.3
+      reference_label: No frame preference (one third)
+    description: >-
+      Each point is a library: the share of its P-sites that fall in the CDS against the
+      share of CDS P-sites in frame 0, sized by the number of P-sites, with one colour per library. It answers which libraries are both
+      enriched on coding sequence and phased.
+
+      How to read: good libraries sit top right. A point near the line, or with a
+      negative margin, has no clear periodicity, which usually means the P-site offsets
+      are wrong for that library. A point far left of its peers is dominated by UTR
+      signal, as fragmented RNA would be.
+
+      Lines and annotations: the horizontal line at a third marks the frame 0 share of a
+      library with no frame preference. It is an arithmetic reference, an even split over three frames, and not a riboWaltz cut-off.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
   - id: library_record
     component: advanced_viz
     kind: record_card
+    title: Library record
     roles: { id: sample }
-  - { component: card, column: frame0_cds_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: frame_bias, aggregation: min, secondary_layout: threshold, threshold_value: 20, threshold_direction: min, threshold_warn: 10 }
-  - { component: card, column: cds_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: psites, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: modal_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+    config:
+      labels:
+        psites: P-sites assigned
+        frame0_cds_pct: CDS P-sites in frame 0 (%)
+        frame_bias: Frame 0 margin (points)
+        cds_pct: P-sites in the CDS (%)
+        utr5_pct: P-sites in the 5' UTR (%)
+        utr3_pct: P-sites in the 3' UTR (%)
+        cds_enrichment: CDS enrichment over length
+        modal_length: Modal footprint length (nt)
+        length_iqr: Footprint length spread (nt)
+    description: >-
+      Each record is one library with its quality readouts side by side. It answers how a
+      single library scores on phasing, region share and footprint length.
+
+      How to read: pick a library from the table or the plot to read its numbers
+      together. A low frame 0 share with a negative margin and a CDS enrichment near one
+      point to poor periodicity.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: frame0_card
+    component: card
+    column: frame0_cds_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: CDS P-sites in frame 0
+    description: >-
+      The hero number is the median share of CDS P-sites in the annotated reading frame,
+      and the box shows the spread across libraries. It answers how well phased the
+      libraries are.
+
+      How to read: a third means no periodicity and well-phased footprints sit well above
+      it. A long box means some libraries are phased and others are not.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: frame_bias_card
+    component: card
+    column: frame_bias
+    aggregation: min
+    aggregations: [median]
+    secondary_layout: compact
+    caption: lowest margin, with the median
+    title: Frame 0 margin
+    description: >-
+      The hero number is the lowest margin of frame 0 over the next frame, in percentage
+      points, and the second number is the median across libraries. It answers whether
+      the worst library is still phased.
+
+      How to read: a negative margin means another frame dominates, which usually means
+      the P-site offsets are wrong for that library. riboWaltz publishes no minimum
+      margin, so read it against the other libraries.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: cds_share_card
+    component: card
+    column: cds_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: P-sites in the CDS
+    description: >-
+      The hero number is the median share of P-sites on coding sequence, and the box
+      shows the spread. It answers how well the libraries capture translation.
+
+      How to read: footprints of translating ribosomes pile into the CDS. A library whose
+      share follows the length of the CDS looks like fragmented RNA.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: psites_card
+    component: card
+    column: psites
+    aggregation: sum
+    aggregations: [median]
+    secondary_layout: compact
+    caption: P-sites, with the median per library
+    title: P-sites assigned
+    description: >-
+      The hero number is the total of P-sites assigned over all libraries, and the second
+      number is the median per library. It answers how much signal the run holds.
+
+      How to read: libraries with far fewer P-sites than the median give noisy phasing
+      and region shares, so read their numbers with care.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - id: modal_length_card
+    component: card
+    column: modal_length
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: compact
+    caption: median, with the shortest and longest
+    title: Modal footprint length
+    description: >-
+      The hero number is the median of each library's most common read length, with the
+      shortest and longest beside it. It answers whether libraries agree on the footprint
+      length.
+
+      How to read: libraries of one protocol should share the same mode. A library off by
+      several nucleotides was digested or size-selected differently.
+
+      Source: https://raw.githubusercontent.com/LabTranslationalArchitectomics/riboWaltz/master/README.md
+  - component: table
+    title: Library quality table
+    description: >-
+      Each row is a library with its P-sites, phasing, region shares and footprint length.
+      It answers the exact readouts behind the tiles of this tab.
+
+      How to read: sort by frame 0 share to find the libraries that are least phased.

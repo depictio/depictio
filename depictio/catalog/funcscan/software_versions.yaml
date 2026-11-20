@@ -18,9 +18,90 @@ find:
 recipe: funcscan/software_versions.py
 fixture: software_versions.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: screen, y: tools, color: tool, title: Tools per screen} }
-  - { component: card, column: tool, aggregation: nunique, secondary_layout: top_n, breakdown_col: screen, top_n_count: 4 }
-  - { component: card, column: process, aggregation: nunique, secondary_layout: donut, breakdown_col: screen, top_n_count: 4 }
-  - { component: card, column: tools, aggregation: sum, secondary_layout: composition, breakdown_col: screen, top_n_count: 4 }
-  - { component: card, column: version, aggregation: nunique, secondary_layout: top_n, breakdown_col: tool, top_n_count: 4 }
-  - { component: table }
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: screen
+      y: tools
+      color: tool
+      labels: {screen: Screen, tools: Tools, tool: Tool}
+    title: Tools per screen
+    description: >-
+      Each bar is a screen of the pipeline (resistance, peptides, clusters, CAZymes or
+      shared steps), stacked by the tools the run recorded for it. It answers which
+      tools each screen ran.
+
+      How to read: a screen with a single tool is a thin check, and one with many
+      tools cross-validates its calls. Compare it with the findings in the screening
+      tabs.
+
+      Source: https://raw.githubusercontent.com/nf-core/funcscan/master/docs/output.md
+  - component: card
+    column: tool
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: screen
+    top_n_count: 4
+    caption: tools, by screen
+    title: Tools in the run
+    description: >-
+      The hero number is the count of distinct tools the run recorded and the bars rank
+      the screens by how many each used. It answers how many tools the run drew on.
+
+      How to read: the count depends on which screens and tools were enabled, so a
+      lower number than expected points to skipped tools.
+  - component: card
+    column: process
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: donut
+    breakdown_col: screen
+    top_n_count: 4
+    caption: process records, by screen
+    title: Processes by screen
+    description: >-
+      The hero number is the count of process and tool records and the ring splits them
+      by screen. It answers how the workflow is divided between the screens.
+
+      How to read: a large share for a screen means many steps (downloads, summaries,
+      conversions) beside the tool itself.
+  - component: card
+    column: tool
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: composition
+    breakdown_col: screen
+    top_n_count: 4
+    caption: tool records, by screen
+    title: Tool records by screen
+    description: >-
+      The hero number is the count of tool version records and the bar shows the share
+      each screen holds. It answers which screens carry the most software.
+
+      How to read: a tool recorded in several processes appears several times, so the
+      share reflects usage as well as variety.
+  - component: card
+    column: version
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: tool
+    top_n_count: 4
+    caption: versions, by tool
+    title: Versions in the run
+    description: >-
+      The hero number is the count of distinct version strings the run recorded and the
+      bars rank the tools by how many versions each reports. It answers whether any
+      tool ran in more than one version.
+
+      How to read: one version per tool is the normal case. A tool with two versions
+      means mixed containers, which hurts reproducibility, so compare it with the table.
+  - component: table
+    title: Software versions table
+    description: >-
+      Each row is a process and tool with the version the run recorded, and the screen
+      the process belongs to. It answers the exact software the results came from.
+
+      How to read: filter by screen or tool, and cite the versions in a methods
+      section.

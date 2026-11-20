@@ -40,9 +40,20 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { CATALOG_ACCENT, IdentityLink, TypeBadge, lastSeg, logoFor, metaFor } from './shared';
+import { Columns2, LayoutGrid, PanelLeftClose, PanelLeftOpen, Table2 } from 'lucide-react';
+import {
+  CATALOG_ACCENT,
+  IdentityLink,
+  TypeBadge,
+  lastSeg,
+  logoFor,
+  metaFor,
+  useCatalogPaper,
+} from './shared';
 import type { OutputEntry, ToolEntry } from './shared';
 import OutputView from './OutputView';
+import CatalogHeader from './CatalogHeader';
+import ReleaseBar from './ReleaseBar';
 
 type ViewMode = 'split' | 'cards' | 'table';
 type SortCol = 'tool' | 'output' | 'fixture';
@@ -207,7 +218,14 @@ const OutputCard: React.FC<{ tool: ToolEntry; entry: OutputEntry; onOpen: (id: s
   const { types, kinds } = renderTags(entry);
   const meta = metaFor(types[0] || '');
   return (
-    <Card withBorder radius="md" shadow="sm" padding="md" style={{ opacity: entry.ok ? 1 : 0.6 }}>
+    <Card
+      withBorder
+      radius="md"
+      shadow="sm"
+      padding="md"
+      className="cp-card"
+      style={{ opacity: entry.ok ? 1 : 0.6 }}
+    >
       <Group justify="space-between" wrap="nowrap" align="flex-start" mb={6}>
         <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: 1 }}>
           <ThemeIcon size={40} radius="md" variant="light" color={meta.color} style={{ flexShrink: 0 }}>
@@ -249,6 +267,15 @@ const OutputCard: React.FC<{ tool: ToolEntry; entry: OutputEntry; onOpen: (id: s
   );
 };
 
+/** The module revision beside a tool's name, in the rail and the cards view: the
+ *  gallery's one display of it (an output's own versions are its VersionChip). */
+const ToolVersion: React.FC<{ version?: string | null }> = ({ version }) =>
+  version ? (
+    <Text span className="cp-tool-ver" title={`Module revision ${version}`}>
+      v{version}
+    </Text>
+  ) : null;
+
 const ToolSection: React.FC<{
   tool: ToolEntry;
   entries: OutputEntry[];
@@ -256,7 +283,7 @@ const ToolSection: React.FC<{
   onToggle: (id: string) => void;
   onOpen: (id: string) => void;
 }> = ({ tool, entries, opened, onToggle, onOpen }) => (
-  <Card withBorder radius="md" padding={0}>
+  <Card withBorder radius="md" padding={0} className="cp-section">
     <Group
       justify="space-between"
       wrap="nowrap"
@@ -277,6 +304,7 @@ const ToolSection: React.FC<{
         <Title order={4} style={{ lineHeight: 1.1 }}>
           {tool.name}
         </Title>
+        <ToolVersion version={tool.version} />
         <Badge size="sm" variant="light" color="gray" radius="sm">
           {entries.length}
         </Badge>
@@ -323,6 +351,7 @@ const FlatTable: React.FC<{
   groups: { tool: ToolEntry; entries: OutputEntry[] }[];
   onOpen: (id: string) => void;
 }> = ({ groups, onOpen }) => {
+  const { accentVar } = useCatalogPaper();
   const [sort, setSort] = useState<{ col: SortCol; dir: SortDir } | null>(null);
 
   const rows: FlatRow[] = groups.flatMap((g) => g.entries.map((entry) => ({ tool: g.tool, entry })));
@@ -368,7 +397,7 @@ const FlatTable: React.FC<{
                 : 'mdi:unfold-more-horizontal'
             }
             width={13}
-            color={active ? `var(--mantine-color-${ACCENT}-6)` : 'var(--mantine-color-dimmed)'}
+            color={active ? accentVar : 'var(--mantine-color-dimmed)'}
           />
         </Group>
       </Table.Th>
@@ -376,7 +405,7 @@ const FlatTable: React.FC<{
   };
 
   return (
-    <Card withBorder radius="md" padding={0}>
+    <Card withBorder radius="md" padding={0} className="cp-table">
       <Table.ScrollContainer minWidth={820}>
         <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="md" stickyHeader>
           <Table.Thead>
@@ -449,6 +478,7 @@ const RailRow: React.FC<{
   onClick: () => void;
 }> = ({ toolId, entry, selected, onClick }) => {
   const { types, kinds } = renderTags(entry);
+  const { paper } = useCatalogPaper();
   return (
     <Box
       component="button"
@@ -456,17 +486,32 @@ const RailRow: React.FC<{
       onClick={onClick}
       px="sm"
       py={6}
+      className="cp-row"
+      data-selected={selected || undefined}
+      aria-current={selected ? 'true' : undefined}
       style={{
         display: 'block',
         width: '100%',
         textAlign: 'left',
         border: 'none',
         cursor: 'pointer',
-        background: selected ? 'var(--mantine-color-default-hover)' : 'transparent',
-        borderLeft: `2px solid ${selected ? `var(--mantine-color-${ACCENT}-6)` : 'transparent'}`,
+        // Paper draws the row from catalog-paper.css: a rounded row, the open
+        // one an accent wash.
+        ...(paper
+          ? {}
+          : {
+              background: selected ? 'var(--mantine-color-default-hover)' : 'transparent',
+              borderLeft: `2px solid ${selected ? `var(--mantine-color-${ACCENT}-6)` : 'transparent'}`,
+            }),
       }}
     >
-      <Text size="sm" fw={selected ? 600 : 400} lineClamp={1} c={selected ? ACCENT : undefined}>
+      <Text
+        size="sm"
+        fw={selected ? 600 : 400}
+        lineClamp={1}
+        c={selected && !paper ? ACCENT : undefined}
+        className="cp-row-title"
+      >
         {entry.output.name || shortId(toolId, entry.output.id)}
       </Text>
       <Group gap={4} mt={2} wrap="wrap">
@@ -483,6 +528,16 @@ const RailRow: React.FC<{
             {k}
           </Text>
         ))}
+        {entry.output.output_version &&
+        entry.output.output_version === entry.output.module_version ? (
+          <Text
+            span
+            className="cp-row-changed"
+            title={`Changed in this module revision, ${entry.output.output_version}`}
+          >
+            changed in {entry.output.output_version}
+          </Text>
+        ) : null}
       </Group>
     </Box>
   );
@@ -497,12 +552,14 @@ const Rail: React.FC<{
   collapsed: Set<string>;
   onToggle: (id: string) => void;
   filters: React.ReactNode;
-}> = ({ groups, selectedId, onSelect, collapsed, onToggle, filters }) => (
+  width: number;
+  onHide: () => void;
+}> = ({ groups, selectedId, onSelect, collapsed, onToggle, filters, width, onHide }) => (
   <Box
-    w="28%"
-    miw={260}
-    maw={400}
+    className="cp-rail"
+    id="cp-rail"
     style={{
+      width,
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
@@ -513,14 +570,32 @@ const Rail: React.FC<{
     <Box
       px="sm"
       py="sm"
+      className="cp-rail-head"
       style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
     >
-      {filters}
+      <Group gap={6} wrap="nowrap" align="flex-start">
+        <Box style={{ flex: 1, minWidth: 0 }}>{filters}</Box>
+        <Tooltip label="Hide the list" withArrow openDelay={300}>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size={36}
+            radius="md"
+            className="cp-rail-hide"
+            onClick={onHide}
+            aria-label="Hide the list"
+            aria-controls="cp-rail"
+            aria-expanded
+          >
+            <PanelLeftClose size={18} strokeWidth={1.8} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
     </Box>
     {/* Native overflow, not Mantine's ScrollArea: this document is embedded in a
         fixed-height iframe on the docs site, where a custom-scrollbar container
         has previously failed to take the wheel. */}
-    <Box style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+    <Box className="cp-rail-list" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
       {groups.length === 0 ? (
         <Text size="sm" c="dimmed" ta="center" py="xl">
           No outputs match your filters.
@@ -531,6 +606,7 @@ const Rail: React.FC<{
           return (
             <Box
               key={g.tool.id}
+              className="cp-tool"
               style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
             >
               <Box
@@ -539,6 +615,7 @@ const Rail: React.FC<{
                 onClick={() => onToggle(g.tool.id)}
                 px="sm"
                 py={8}
+                className="cp-tool-head"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -557,7 +634,8 @@ const Rail: React.FC<{
                 <Text size="sm" fw={700} lineClamp={1} style={{ flex: 1, textAlign: 'left' }}>
                   {g.tool.name}
                 </Text>
-                <Badge size="xs" variant="light" color="gray" circle>
+                <ToolVersion version={g.tool.version} />
+                <Badge size="xs" variant="light" color="gray" circle className="gp-tag-plain cp-count">
                   {g.entries.length}
                 </Badge>
               </Box>
@@ -582,6 +660,119 @@ const Rail: React.FC<{
   </Box>
 );
 
+/** The rail's width and whether it shows, kept in this browser across visits. */
+const RAIL_KEY = 'depictio-catalog-rail';
+const RAIL_MIN = 220;
+const RAIL_MAX = 560;
+const RAIL_DEFAULT = 320;
+const clampRail = (w: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(w)));
+
+function readRail(): { width: number; hidden: boolean } {
+  try {
+    const v = JSON.parse(localStorage.getItem(RAIL_KEY) || '{}');
+    return {
+      width: typeof v.width === 'number' ? clampRail(v.width) : RAIL_DEFAULT,
+      hidden: v.hidden === true,
+    };
+  } catch {
+    return { width: RAIL_DEFAULT, hidden: false };
+  }
+}
+
+function useRail() {
+  const [state, setState] = useState(readRail);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(RAIL_KEY, JSON.stringify(state));
+    } catch {
+      /* storage blocked: the rail still works for this visit */
+    }
+  }, [state]);
+  return {
+    ...state,
+    setWidth: (width: number) => setState((s) => ({ ...s, width: clampRail(width) })),
+    setHidden: (hidden: boolean) => setState((s) => ({ ...s, hidden })),
+  };
+}
+
+/** The handle between the rail and the pane: drag it, or focus it and use the
+ *  arrow keys (Home/End for the bounds); a double click restores the default. */
+const RailResizer: React.FC<{ width: number; onWidth: (w: number) => void }> = ({
+  width,
+  onWidth,
+}) => {
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    el.dataset.dragging = '';
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const move = (ev: PointerEvent) => onWidth(startW + ev.clientX - startX);
+    const up = () => {
+      delete el.dataset.dragging;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 64 : 16;
+    if (e.key === 'ArrowLeft') onWidth(width - step);
+    else if (e.key === 'ArrowRight') onWidth(width + step);
+    else if (e.key === 'Home') onWidth(RAIL_MIN);
+    else if (e.key === 'End') onWidth(RAIL_MAX);
+    else return;
+    e.preventDefault();
+  };
+  return (
+    <div
+      className="cp-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the list"
+      aria-controls="cp-rail"
+      aria-valuemin={RAIL_MIN}
+      aria-valuemax={RAIL_MAX}
+      aria-valuenow={width}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      onDoubleClick={() => onWidth(RAIL_DEFAULT)}
+    />
+  );
+};
+
+/** The rail folded away: a slim strip that brings it back. */
+const RailStrip: React.FC<{ onShow: () => void; count: number }> = ({ onShow, count }) => (
+  <Box className="cp-rail-strip">
+    <Tooltip label="Show the list" withArrow position="right" openDelay={300}>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size={36}
+        radius="md"
+        onClick={onShow}
+        aria-label="Show the list"
+        aria-controls="cp-rail"
+        aria-expanded={false}
+      >
+        <PanelLeftOpen size={18} strokeWidth={1.8} />
+      </ActionIcon>
+    </Tooltip>
+    <Text className="cp-rail-strip-label" size="xs" c="dimmed" fw={600}>
+      {count} outputs
+    </Text>
+  </Box>
+);
+
 const Gallery: React.FC<{
   tools: ToolEntry[];
   /** Currently open output, or null. Owned by the app shell so the History API
@@ -589,16 +780,20 @@ const Gallery: React.FC<{
   selected?: string | null;
   onOpen: (id: string | null) => void;
   theme?: string;
-}> = ({ tools, selected = null, onOpen, theme }) => {
+  /** Tool ids to pre-filter on (from a `#tool=` deep link). */
+  initialToolFilter?: string[];
+}> = ({ tools, selected = null, onOpen, theme, initialToolFilter }) => {
+  const { paper, tone } = useCatalogPaper();
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
-  const [toolFilter, setToolFilter] = useState<string[]>([]);
+  const [toolFilter, setToolFilter] = useState<string[]>(initialToolFilter ?? []);
   const [fixtureOnly, setFixtureOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   // Track collapsed sections (default: all open — a fresh tool shows expanded).
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const rail = useRail();
 
   // A histogram of the catalog, so the facets convey its shape. Type and kind
   // count RENDERS — they are properties of a render, and one output ships four
@@ -791,7 +986,7 @@ const Gallery: React.FC<{
         <Chip.Group multiple value={typeFilter} onChange={setTypeFilter}>
           <Group gap={6}>
             {typeOptions.map((o) => (
-              <Chip key={o.value} value={o.value} size="xs" variant="outline" color={ACCENT}>
+              <Chip key={o.value} value={o.value} size="xs" variant="outline" color={tone}>
                 {o.label} {o.count}
               </Chip>
             ))}
@@ -856,7 +1051,7 @@ const Gallery: React.FC<{
         <Button
           size="compact-xs"
           variant={activeFilterCount ? 'light' : 'subtle'}
-          color={activeFilterCount ? ACCENT : 'gray'}
+          color={activeFilterCount ? tone : 'gray'}
           leftSection={<Icon icon="mdi:filter-variant" width={14} />}
           rightSection={
             <Icon icon={filtersOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />
@@ -882,9 +1077,13 @@ const Gallery: React.FC<{
     </Stack>
   );
 
+  const viewIcon = (mdi: string, Lucide: typeof Columns2) =>
+    paper ? <Lucide size={15} strokeWidth={1.8} /> : <Icon icon={mdi} width={15} />;
+
   const viewControl = (
     <SegmentedControl
       size="xs"
+      className="cp-views"
       value={viewMode}
       onChange={(v) => setViewMode(v as ViewMode)}
       data={[
@@ -892,7 +1091,7 @@ const Gallery: React.FC<{
           value: 'split',
           label: (
             <Group gap={6} wrap="nowrap">
-              <Icon icon="mdi:view-split-vertical" width={15} />
+              {viewIcon('mdi:view-split-vertical', Columns2)}
               <span>Browse</span>
             </Group>
           ),
@@ -901,7 +1100,7 @@ const Gallery: React.FC<{
           value: 'cards',
           label: (
             <Group gap={6} wrap="nowrap">
-              <Icon icon="mdi:view-grid-outline" width={15} />
+              {viewIcon('mdi:view-grid-outline', LayoutGrid)}
               <span>Cards</span>
             </Group>
           ),
@@ -910,7 +1109,7 @@ const Gallery: React.FC<{
           value: 'table',
           label: (
             <Group gap={6} wrap="nowrap">
-              <Icon icon="mdi:table" width={15} />
+              {viewIcon('mdi:table', Table2)}
               <span>Table</span>
             </Group>
           ),
@@ -927,7 +1126,23 @@ const Gallery: React.FC<{
    * a count badge and a full-width button across a viewport it did not fit: at
    * iframe width both the badge and the button clipped mid-word. Here the two
    * right-hand groups never shrink and the title is what gives way. */
-  const topBar = (
+
+  /* Paper: depictio's Paper bar, as Tool Studio draws it (CatalogHeader): the
+   * rose, "Tools catalog" with the totals after it, the view switch, the
+   * credit and the icon keys (Tool Studio, docs, source). */
+  const paperTopBar = (
+    <CatalogHeader
+      context={`${tools.length} tools · ${totalOutputs} outputs · ${totalRenders} renders`}
+      extras={
+        <>
+          <ReleaseBar />
+          {viewControl}
+        </>
+      }
+    />
+  );
+
+  const classicTopBar = (
     <Group
       h={48}
       px="md"
@@ -953,6 +1168,7 @@ const Gallery: React.FC<{
         </Text>
       </Group>
       <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+        <ReleaseBar />
         {viewControl}
         {/* Tool Studio — the no-backend web app to author a new tool entry.
             Hosted on GitHub Pages from the depictio-tool-studio showcase repo. */}
@@ -986,10 +1202,14 @@ const Gallery: React.FC<{
     </Group>
   );
 
+  const topBar = paper ? paperTopBar : classicTopBar;
+
   // ── Split browser ────────────────────────────────────────────────────────
   if (viewMode === 'split') {
     return (
       <Box
+        className={paper ? 'gp-shell cp-shell' : undefined}
+        data-view="split"
         style={{
           height: '100vh',
           display: 'flex',
@@ -998,16 +1218,34 @@ const Gallery: React.FC<{
         }}
       >
         {topBar}
-        <Group gap={0} wrap="nowrap" align="stretch" style={{ flex: 1, minHeight: 0 }}>
-          <Rail
-            groups={groups}
-            selectedId={paneId}
-            onSelect={onOpen}
-            collapsed={collapsed}
-            onToggle={toggle}
-            filters={railFilters}
-          />
-          <Box style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
+        <Group
+          gap={0}
+          wrap="nowrap"
+          align="stretch"
+          className="cp-split"
+          style={{ flex: 1, minHeight: 0 }}
+        >
+          {rail.hidden ? (
+            <RailStrip
+              onShow={() => rail.setHidden(false)}
+              count={groups.reduce((n, g) => n + g.entries.length, 0)}
+            />
+          ) : (
+            <>
+              <Rail
+                groups={groups}
+                selectedId={paneId}
+                onSelect={onOpen}
+                collapsed={collapsed}
+                onToggle={toggle}
+                filters={railFilters}
+                width={rail.width}
+                onHide={() => rail.setHidden(true)}
+              />
+              <RailResizer width={rail.width} onWidth={rail.setWidth} />
+            </>
+          )}
+          <Box className="cp-pane" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
             {paneEntry ? (
               <OutputView
                 key={paneEntry.output.id}
@@ -1023,7 +1261,7 @@ const Gallery: React.FC<{
                 </ThemeIcon>
                 <Text c="dimmed">No outputs match your filters.</Text>
                 {hasFilters ? (
-                  <Button variant="light" color={ACCENT} size="xs" onClick={clearAll}>
+                  <Button variant="light" color={tone} size="xs" onClick={clearAll}>
                     Clear all filters
                   </Button>
                 ) : null}
@@ -1053,10 +1291,21 @@ const Gallery: React.FC<{
   }
 
   return (
-    <Box>
+    <Box className={paper ? 'gp-shell cp-shell' : undefined} data-view={viewMode}>
       {topBar}
-      <Box p="lg" style={{ maxWidth: 1280, margin: '0 auto' }}>
-        <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-default-hover)">
+      <Box
+        p="lg"
+        className={paper ? 'gp-main cp-main' : undefined}
+        style={paper ? undefined : { maxWidth: 1280, margin: '0 auto' }}
+      >
+       <Box className={paper ? 'gp-page' : undefined}>
+        <Paper
+          withBorder
+          radius="md"
+          p="sm"
+          bg={paper ? undefined : 'var(--mantine-color-default-hover)'}
+          className="cp-facets"
+        >
           {facetPanel(
             'row',
             <TextInput
@@ -1141,7 +1390,7 @@ const Gallery: React.FC<{
             {hasFilters ? (
               <Button
                 variant="light"
-                color={ACCENT}
+                color={tone}
                 size="xs"
                 leftSection={<Icon icon="mdi:filter-off-outline" width={14} />}
                 onClick={clearAll}
@@ -1166,6 +1415,7 @@ const Gallery: React.FC<{
             ))}
           </Stack>
         )}
+       </Box>
       </Box>
     </Box>
   );

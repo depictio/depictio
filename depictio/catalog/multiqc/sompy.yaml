@@ -14,4 +14,15 @@ find:
 # `section` selects this module's plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: sompy }
+  - component: multiqc
+    section: sompy
+    title: Somatic benchmark (som.py)
+    description: >-
+      som.py's accuracy tables per caller: recall, precision and the true positive,
+      false negative and false positive counts for the combined, indel and SNV
+      records. It answers how accurate a somatic caller is against a truth set.
+
+      How to read: Values close to one are better. Low recall means missed variants
+      and low precision means false calls, and indels are usually harder than SNVs.
+
+      Source: https://raw.githubusercontent.com/MultiQC/MultiQC/main/multiqc/modules/sompy/sompy.py

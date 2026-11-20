@@ -13,11 +13,67 @@ find:
 recipe: samtools/idxstats.py
 fixture: idxstats.tsv
 renders_as:
-  - { id: reads_by_contig_class, component: card, column: mapped_reads, aggregation: sum,
-      secondary_layout: composition, breakdown_col: contig_class }
-  - { id: mito_share, component: card, column: mapped_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot,
-      filter_expr: "col('contig_class') == 'mitochondrion'" }
-  - { id: contig_class_bars, component: figure, visu_type: bar,
-      dict_kwargs: {x: sample, y: mapped_pct, color: contig_class} }
-  - { component: table }
+  - id: reads_by_contig_class
+    component: card
+    column: mapped_reads
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: composition
+    breakdown_col: contig_class
+    caption: reads, by contig class
+    title: Mapped reads by contig class
+    description: >-
+      The hero number is the total of mapped reads, the second number is the largest
+      count on a single contig, and the bar splits the reads into autosome, X, Y,
+      mitochondrion and other contigs. It answers where the reads went.
+
+      How to read: most reads should fall on autosomes. A large share on other contigs
+      points to alt, unplaced or decoy sequence soaking up reads, and a large
+      mitochondrial share points to a stressed or poorly prepared library.
+
+      Source: https://www.htslib.org/doc/samtools-idxstats.html
+  - id: mito_share
+    component: card
+    column: mapped_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('contig_class') == 'mitochondrion'"
+    caption: median, with its spread
+    title: Mitochondrial share
+    description: >-
+      The hero number is the median share of mapped reads on the mitochondrial genome,
+      and the box shows the spread across samples. It answers how much of each library
+      is mitochondrial.
+
+      How to read: a sample far above its peers wasted sequencing on the mitochondrion,
+      often from lysis or a protocol that does not deplete it. Acceptable levels depend
+      on the assay, so compare against samples of the same type.
+
+      Source: https://www.htslib.org/doc/samtools-idxstats.html
+  - id: contig_class_bars
+    component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: mapped_pct
+      color: contig_class
+      labels: {sample: Sample, mapped_pct: Share of mapped reads (%), contig_class: Contig class}
+    title: Mapped reads by contig class per sample
+    description: >-
+      Each segment is the share of a sample's mapped reads that fall on one class of
+      contig. It answers how the composition of mapped reads differs between samples.
+
+      How to read: samples should look alike. A sample with a taller mitochondrial or
+      other segment, or an odd Y share, stands out from its peers and may be a swap or
+      a quality problem. Open the table for the contigs behind a segment.
+
+      Source: https://www.htslib.org/doc/samtools-idxstats.html
+  - component: table
+    title: Reads per contig
+    description: >-
+      Each row is a contig of a sample with its length, its class, its mapped reads and
+      its share of the sample. It answers the exact count on every contig.
+
+      How to read: sort by reads per megabase to find contigs that attract more reads
+      than their length explains.

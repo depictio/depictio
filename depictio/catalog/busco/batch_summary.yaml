@@ -16,17 +16,130 @@ find:
     - "**/*-busco/batch_summary.txt"
     - "**/*batch_summary.txt"
 recipe: busco/batch_summary.py
+# The fixture is enriched synthetically from 3 real rows (copies with seeded noise), so the preview shows several assemblies and lineages.
 fixture: batch_summary.tsv
 renders_as:
-  - { id: completeness_vs_duplication, component: advanced_viz, kind: scatter_xy,
-      roles: {x: complete_pct, y: duplicated_pct, label: assembly_id, color: lineage, size: contig_n50} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: complete_pct, color: lineage, title: Complete BUSCOs per assembly} }
-  - { component: card, column: complete_pct, aggregation: max,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: duplicated_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: missing_pct, aggregation: median,
-      aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: assembly_id, aggregation: nunique,
-      secondary_layout: donut, breakdown_col: lineage }
-  - { component: table }
+  - id: completeness_vs_duplication
+    component: advanced_viz
+    kind: scatter_xy
+    title: Completeness against duplication
+    roles: {x: complete_pct, y: duplicated_pct, label: assembly_id, color: lineage, size: contig_n50}
+    config:
+      x_title: Complete BUSCOs (%)
+      y_title: Duplicated BUSCOs (%)
+      top_n_labels: 5
+      legend_pos: bottom
+    description: >-
+      Each point is an assessed assembly, with the percent of complete BUSCOs on the
+      horizontal axis and the percent of duplicated BUSCOs on the vertical axis,
+      sized by contig N50 and coloured by lineage dataset. It answers which
+      assemblies are both complete and free of duplication.
+
+      How to read: the best assemblies sit far right and low. Points high on the
+      vertical axis hold the same marker genes twice, which BUSCO explains by a
+      recent genome duplication or by a chimeric assembly of haplotypes. A larger
+      point is a more contiguous assembly.
+
+      Note: BUSCO publishes no pass mark and asks that results be read in the
+      biology of the organism, so no reference line is drawn.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: figure
+    visu_type: bar
+    title: Complete BUSCOs per assembly
+    dict_kwargs:
+      x: assembly_id
+      y: complete_pct
+      color: lineage
+      labels: {assembly_id: Assembly, complete_pct: Complete BUSCOs (%), lineage: Lineage dataset}
+    reference_lines:
+      - {axis: y, stat: median, column: complete_pct}
+    description: >-
+      Each bar is an assessed assembly, with the percent of its BUSCO markers found
+      complete, coloured by the lineage dataset used. It answers which assemblies
+      recover the most expected genes.
+
+      How to read: a taller bar is a more complete assembly. Assemblies are only
+      comparable when scored against the same lineage dataset, which the colour
+      shows.
+
+      Lines and annotations: the dashed line is the median percent of complete BUSCOs of
+      this table, a reference computed from the rows on show (it follows the filters), not
+      a cut-off of BUSCO. BUSCO publishes no completeness cut-off.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: card
+    column: complete_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Complete BUSCOs
+    description: >-
+      The hero number is the median percent of complete BUSCOs over the assessed
+      assemblies, and the box shows the spread. It answers how complete the
+      assemblies are overall.
+
+      How to read: a high median with a narrow box means a consistent set. A long
+      lower whisker is an assembly that lost marker genes and deserves a look.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: card
+    column: duplicated_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Duplicated BUSCOs
+    description: >-
+      The hero number is the median percent of BUSCOs found more than once, and the
+      box shows the spread. It answers how much redundancy the assemblies carry.
+
+      How to read: BUSCO explains a high duplication by a recent genome duplication
+      or by a chimeric assembly of haplotypes, and an unfiltered transcriptome or
+      protein set also inflates it. Check the ploidy and the isoform handling of the
+      input.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: card
+    column: missing_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    caption: median, with its spread
+    title: Missing BUSCOs
+    description: >-
+      The hero number is the median percent of BUSCOs not found, and the box shows
+      the spread. It answers how many expected genes the assemblies lack.
+
+      How to read: BUSCO notes that missing genes may be of biological or technical
+      origin. A tissue limited transcriptome is not expected to be BUSCO complete,
+      so compare consistency across samples there.
+
+      Source: https://busco.ezlab.org/busco_userguide.html
+  - component: card
+    column: assembly_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: vertical
+    caption: BUSCO runs behind it
+    title: Assemblies assessed
+    description: >-
+      The hero number is the count of distinct assemblies scored, and the strip
+      gives the count of BUSCO runs. It answers how many assemblies the other tiles
+      summarise.
+
+      How to read: runs exceed assemblies when one assembly is scored in more than
+      one mode, for example as a genome and as its annotated proteins.
+  - component: table
+    title: BUSCO completeness per assembly
+    description: >-
+      Each row is a BUSCO run, with its lineage dataset, the complete,
+      single-copy, duplicated, fragmented and missing percentages, the number of
+      markers and the contiguity BUSCO measures. It answers the exact scores behind
+      every other tile.
+
+      How to read: sort by complete or by duplicated to rank assemblies, and read
+      the lineage and mode columns before comparing two rows.
+
+      Source: https://busco.ezlab.org/busco_userguide.html

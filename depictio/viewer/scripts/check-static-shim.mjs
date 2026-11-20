@@ -2,10 +2,12 @@
 /**
  * Shim-coverage gate for the serverless static bundle.
  *
- * Walks the module graph the static entry (`src/static-runtime/main.tsx`)
- * actually pulls in — following named imports to the file each name comes
- * from, barrels included, and applying the same module swaps as
- * `vite.static.config.ts` — and collects every `depictio-react-core` api.ts
+ * Walks the module graph the two static entries actually pull in — the bundle
+ * (`src/static-runtime/main.tsx`) and the runtime a report embeds
+ * (`src/static-runtime/combined/main.tsx`) — following named imports to the
+ * file each name comes from, barrels included, and applying the same module
+ * swaps as `vite-plugins/static-runtime.ts` (shared by `vite.static.config.ts`
+ * and `vite.combined.config.ts`) — and collects every `depictio-react-core` api.ts
  * export the graph imports. Each one that reaches the network (its body, or a
  * local function it calls, uses `fetch` / `authFetch` / a WebSocket /
  * EventSource) must be either
@@ -35,10 +37,10 @@ const ROOT = path.resolve(VIEWER, '../..');
 const CORE = path.join(ROOT, 'packages/depictio-react-core/src');
 const RUNTIME = path.join(VIEWER, 'src/static-runtime');
 const API = path.join(CORE, 'api.ts');
-const ENTRY = path.join(RUNTIME, 'main.tsx');
+const ENTRIES = [path.join(RUNTIME, 'main.tsx'), path.join(RUNTIME, 'combined', 'main.tsx')];
 const SHIM_FILES = [path.join(RUNTIME, 'tabApiShim.ts'), path.join(RUNTIME, 'apiShim.ts')];
 
-// The swaps of vite.static.config.ts (api.ts is handled by name, below).
+// The swaps of vite-plugins/static-runtime.ts (api.ts is handled by name, below).
 const SWAPS = {
   [path.join(CORE, 'realtime.ts')]: path.join(RUNTIME, 'realtimeShim.ts'),
   [path.join(VIEWER, 'src/hooks/useCurrentUser.ts')]: path.join(RUNTIME, 'useCurrentUserShim.ts'),
@@ -58,10 +60,10 @@ const ALIASES = [
   ['depictio-static-core', path.join(ROOT, 'packages/depictio-static-core/src')],
 ];
 
-const viteConfig = fs.readFileSync(path.join(VIEWER, 'vite.static.config.ts'), 'utf8');
+const viteConfig = fs.readFileSync(path.join(VIEWER, 'vite-plugins', 'static-runtime.ts'), 'utf8');
 for (const shim of [...Object.values(SWAPS), SHIM_FILES[0]]) {
   if (!viteConfig.includes(path.basename(shim))) {
-    console.error(`check-static-shim: ${path.basename(shim)} is no longer swapped in vite.static.config.ts — update SWAPS`);
+    console.error(`check-static-shim: ${path.basename(shim)} is no longer swapped in vite-plugins/static-runtime.ts — update SWAPS`);
     process.exit(2);
   }
 }
@@ -237,7 +239,7 @@ const apiExports = (() => {
 
 const used = new Map(); // api name -> first importer
 const visited = new Set();
-const queue = [ENTRY];
+const queue = [...ENTRIES];
 
 function visit(file) {
   if (visited.has(file) || file === API || SHIM_FILES.includes(file)) return;

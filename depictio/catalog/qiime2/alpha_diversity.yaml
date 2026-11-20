@@ -8,9 +8,24 @@ recipe: qiime2/alpha_diversity_multi_canonical.py
 # bindable sample (recipe declares only sample_id/habitat; metric cols are dynamic)
 fixture: alpha_diversity.tsv
 renders_as:
-  # code-mode figure: 2×2 facet of the four alpha-diversity metrics by habitat,
+  # code-mode figure: 2x2 facet of the four alpha-diversity metrics by habitat,
   # each panel with its own y-scale (metrics span very different ranges).
+  # Coloured by habitat (C1); the habitat column is run-dependent metadata, which
+  # is why this figure is code and not a bound figure.
   - component: figure
+    title: Alpha diversity by habitat
+    description: >-
+      Each box summarises the samples of one habitat for one alpha-diversity metric,
+      and each dot is a sample. It answers whether within-sample diversity differs
+      between habitats.
+
+      How to read: boxes that do not overlap point to habitats with different
+      diversity, and a wide box means the samples of that habitat are heterogeneous.
+      Shannon and Faith's PD grow with richness, and evenness says how equally the
+      features share the reads. Compare with the beta-diversity ordination to see
+      whether the same habitats also differ in composition.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/
     code: |
       # reshape wide -> long so each metric becomes a facet panel (stays polars)
       df_modified = df.unpivot(
@@ -25,15 +40,87 @@ renders_as:
           x="habitat", y="value", color="habitat",
           facet_col="metric", facet_col_wrap=2, points="all",
           category_orders={"metric": ["shannon", "observed_features", "faith_pd", "evenness"]},
-          title="Alpha diversity by habitat",
+          labels={"habitat": "Habitat", "value": "Value"},
       )
 
       fig.update_yaxes(matches=None)  # each panel keeps its own scale
       fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-      fig.update_layout(showlegend=True, legend_title_text="habitat", boxmode="group")
+      fig.update_layout(showlegend=True, legend_title_text="Habitat", boxmode="group", margin=dict(t=10))
   # one Tukey box-plot distribution card per metric (hero average + box-plot strip)
-  - { component: card, column: shannon,           aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
-  - { component: card, column: observed_features, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: faith_pd,          aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: evenness,          aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: table }
+  - component: card
+    column: shannon
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    headline: true
+    title: Shannon diversity
+    caption: median, with its spread
+    description: >-
+      The hero number is the median Shannon diversity over the samples in view, and
+      the box shows their quartiles. It answers how diverse a typical sample is,
+      counting both richness and evenness.
+
+      How to read: a higher value means more features and a more even share of the
+      reads. A long whisker means samples differ a lot, so filter by habitat to see
+      where. QIIME 2 publishes no pass or fail cut-off for this index.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/
+  - component: card
+    column: observed_features
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Observed features
+    caption: median, with its spread
+    description: >-
+      The hero number is the median count of distinct features (ASVs) observed per
+      sample, and the box shows their quartiles. It answers how rich a typical sample
+      is.
+
+      How to read: a high count means many distinct features were detected, but it
+      depends on the sequencing depth, so read it together with the rarefaction
+      curves. QIIME 2 publishes no pass or fail cut-off for this index.
+
+      Source: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/
+  - component: card
+    column: faith_pd
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Faith's phylogenetic diversity
+    caption: median, with its spread
+    description: >-
+      The hero number is the median Faith's phylogenetic diversity per sample, and the
+      box shows its quartiles. It answers how much of the phylogenetic tree a typical
+      sample covers.
+
+      How to read: a higher value means the features of the sample are spread over
+      more distant lineages, not just more numerous. It needs a rooted tree, so it
+      is absent from runs without one. QIIME 2 publishes no pass or fail cut-off.
+
+      Sources: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/ and
+      https://scikit.bio/docs/latest/generated/skbio.diversity.alpha.faith_pd.html
+  - component: card
+    column: evenness
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Evenness
+    caption: median, with its spread
+    description: >-
+      The hero number is the median Pielou's evenness per sample, and the box shows its
+      quartiles. It answers how equally the reads are shared between the features.
+
+      How to read: values near 1 mean an even community and values near 0 a community
+      dominated by few features. QIIME 2 publishes no pass or fail cut-off.
+
+      Sources: https://docs.qiime2.org/2024.10/tutorials/moving-pictures/ and
+      https://scikit.bio/docs/latest/generated/skbio.diversity.alpha.pielou_e.html
+  - component: table
+    title: Alpha-diversity table
+    description: >-
+      Each row is a sample with its four alpha-diversity values and its metadata. It
+      answers the exact value behind each box and dot.
+
+      How to read: sort by a metric to find the least and most diverse samples, and
+      compare outliers with their sequencing depth.

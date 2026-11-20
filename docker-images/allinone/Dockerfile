@@ -6,7 +6,9 @@
 # and SeaweedFS (conda-forge builds, the same ones `local up` downloads), the
 # FastAPI API serving the built viewer, and the Celery worker. Its only state is
 # the local home mounted at /data, e.g. the depictio/ folder the Nextflow module
-# writes (results/depictio/<run>_depictio/). Published as
+# writes (results/depictio/<run>_depictio/). It is also that module's container:
+# `depictio local up` in the task uses the baked services, so the image both
+# produces the artifact and reopens it. Published as
 # ghcr.io/depictio/depictio-allinone:<version> by .github/workflows/build-images.yaml:
 #
 #   docker run --rm -p 127.0.0.1:8058:8058 -v "$PWD/results/depictio/<run>_depictio:/data" \
@@ -80,12 +82,15 @@ LABEL org.opencontainers.image.source="https://github.com/depictio/depictio"
 LABEL org.opencontainers.image.version="${VERSION:-latest}"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# tini: PID 1 that forwards signals to the entrypoint and reaps orphans.
+# tini: PID 1 that forwards signals to the entrypoint and reaps orphans. procps:
+# `ps`, which Nextflow's .command.run uses for task metrics (the depictio/ingest
+# module runs in this image).
 # Unpinned like every apt install in docker-images/: the digest-pinned base fixes
 # the Debian release.
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install --no-install-recommends -y \
         ca-certificates \
+        procps \
         tini \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -117,6 +122,11 @@ COPY --from=viewer-builder /build/depictio/viewer/dist-embed/embed.html \
 # The serverless bundle template every static export injects its manifest into.
 COPY --from=viewer-builder /build/depictio/viewer/dist-static/static.html \
     /app/depictio/viewer/dist-static/static.html
+# The runtime a rendered report embeds, alone or with the dashboard (same
+# build:static).
+COPY --from=viewer-builder /build/depictio/viewer/dist-static/combined-runtime.js \
+    /build/depictio/viewer/dist-static/combined-runtime.css \
+    /app/depictio/viewer/dist-static/
 COPY --from=services /opt/depictio-services /opt/depictio-services
 COPY docker-images/allinone/entrypoint.py /usr/local/bin/depictio-allinone
 
@@ -133,6 +143,9 @@ RUN mkdir -p /app/depictio/api/static/dashboard_logos /app/depictio/api/static/b
     && test -f /app/depictio/viewer/dist/index.html \
     && test -d /app/depictio/viewer/dist/assets
 
+# DEPICTIO_SERVICES_PREFIX: `depictio local up` (the Nextflow module's artifact
+# mode) and the entrypoint read the services from the baked prefix, checked against
+# its .depictio-specs.json, and download nothing.
 # GLIBC_TUNABLES: official mongo images need rseq=1 on Linux 6.19+ (SERVER-121912).
 # The conda-forge mongod carries the same startup check; glibc >= 2.35 (bookworm:
 # 2.36) owns rseq by default, so this only pins that default against an inherited value.
@@ -144,6 +157,11 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     DEPICTIO_SERVICES_PREFIX=/opt/depictio-services \
     DEPICTIO_TELEMETRY_DEPLOYMENT_KIND=docker \
     GLIBC_TUNABLES=glibc.pthread.rseq=1
+
+# Fail the build, not the first pipeline task, if the baked services are not the
+# ones this depictio's `local up` accepts (CONDA_SPECS, the platform).
+RUN python -c "from depictio.cli.cli import local_stack as ls; \
+ls.check_preinstalled_services(ls.services_prefix()); print('services prefix OK')"
 
 VOLUME ["/data"]
 EXPOSE 8058

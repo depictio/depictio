@@ -9,10 +9,127 @@ find: { path_glob: "**/dbcan/cazyme_annotation/*/*_overview.tsv" }
 recipe: dbcan/overview.py
 fixture: overview.tsv
 renders_as:
-  - { id: cazyme_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [cazy_class, family, substrate], abundance: genes} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: genes, color: cazy_class, title: CAZyme classes per sample} }
-  - { component: card, column: genes, aggregation: sum, secondary_layout: donut, breakdown_col: cazy_class }
-  - { component: card, column: family, aggregation: nunique, secondary_layout: top_n, breakdown_col: cazy_class, top_n_count: 4, headline: true }
-  - { component: card, column: gene_id, aggregation: count, secondary_layout: composition, breakdown_col: substrate }
-  - { component: card, column: n_tools, aggregation: average, secondary_layout: gauge, coverage_max: 3.0 }
-  - { component: table, row_selection_enabled: true, row_selection_column: family }
+  - id: cazyme_hierarchy
+    component: advanced_viz
+    kind: sunburst
+    title: CAZy class, family and substrate
+    roles: {ranks: [cazy_class, family, substrate], abundance: genes}
+    config:
+      colour_by_rank: cazy_class
+    description: >-
+      Each arc is a group of CAZyme genes: the inner ring is the CAZy class, the
+      middle ring the family and the outer ring the predicted substrate, sized by
+      the number of genes and coloured by class. It answers which enzyme classes
+      and families dominate and what they are predicted to act on.
+
+      How to read: a wide arc is a class or family that many genes carry. A large
+      share of genes under an unassigned substrate means the substrate prediction
+      covers little of the set. Click an arc to zoom in on it.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html
+  - component: figure
+    visu_type: bar
+    title: CAZyme classes per sample
+    dict_kwargs:
+      x: sample
+      y: genes
+      color: cazy_class
+      labels: {sample: Sample, genes: CAZyme genes, cazy_class: CAZy class}
+    description: >-
+      Each bar is a sample, split by the CAZy class of its CAZyme genes. It answers
+      how large the CAZyme repertoire of each sample is and how it divides between
+      glycoside hydrolases, glycosyltransferases and the other classes.
+
+      How to read: a taller bar is a larger repertoire, which also follows depth and
+      assembly size. Compare the colour shares between samples to see a shift in
+      enzyme classes.
+  - component: card
+    column: genes
+    aggregation: sum
+    aggregations: [count]
+    secondary_layout: donut
+    breakdown_col: cazy_class
+    caption: genes, by CAZy class
+    title: CAZyme genes
+    description: >-
+      The hero number is the count of predicted CAZyme genes, and the ring splits
+      them by CAZy class. It answers how many carbohydrate-active enzymes were found
+      and which classes they belong to.
+
+      How to read: a class that is absent or unexpectedly large is worth checking
+      against the sample type.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html
+  - component: card
+    column: family
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: cazy_class
+    top_n_count: 4
+    headline: true
+    caption: classes with the most distinct families
+    title: Distinct CAZy families
+    description: >-
+      The hero number is the count of distinct CAZy families found, and the bars
+      rank the CAZy classes by how many families each holds. It answers how diverse
+      the enzyme set is.
+
+      How to read: a class with many families is the more diverse one.
+      Compare with the gene count: many genes in few families means redundancy.
+  - component: card
+    column: genes
+    aggregation: sum
+    aggregations: [count]
+    secondary_layout: composition
+    breakdown_col: substrate
+    filter_expr: "col('substrate') != 'unassigned'"
+    caption: genes, by predicted substrate
+    title: Genes with a predicted substrate
+    description: >-
+      The hero number is the count of CAZyme genes that have a predicted substrate,
+      and the bar splits them by substrate. It answers which carbohydrates the
+      predicted enzymes act on.
+
+      How to read: a dominant substrate points at what the community degrades most.
+      Genes without a substrate are left out, so the count is lower than the total
+      number of CAZyme genes.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html
+  # The dbCAN2 paper removes CAZymes found by only one of its tools to improve
+  # accuracy; two tools is the floor that rule implies.
+  - component: card
+    column: n_tools
+    aggregation: average
+    aggregations: [median, min]
+    secondary_layout: threshold
+    threshold_value: 2
+    threshold_direction: min
+    caption: average tools agreeing, against 2
+    title: Tools agreeing on a gene
+    description: >-
+      The hero number is the average count of tools, out of the three of run_dbCAN,
+      that call the same gene a CAZyme, and the strip compares it with 2. It answers
+      how confident the annotation is.
+
+      How to read: genes called by all three tools are the safest. A low average
+      means many calls rest on one tool and may be false.
+
+      Lines and annotations: the threshold is 2 tools. The dbCAN2 paper combines the
+      tools and removes the CAZymes found by only one of them to improve accuracy.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/29771380/
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: family
+    title: CAZyme genes
+    description: >-
+      Each row is a predicted CAZyme gene, with the family each of the three tools
+      called, how many agree, the resolved family, its class, its substrate and its
+      EC number. It answers the exact detail behind every other tile and lets a row
+      selection filter the dashboard.
+
+      How to read: filter by substrate or family to list the genes behind a bar, or
+      sort by the tools column to inspect the weakest calls.
+
+      Source: https://dbcan.readthedocs.io/en/latest/user_guide/run_from_raw_reads.html

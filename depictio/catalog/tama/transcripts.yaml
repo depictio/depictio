@@ -15,10 +15,95 @@ fixture: transcripts.tsv
 renders_as:
   # Length against support, coloured by category: the novel isoforms worth a
   # look are the well supported ones, top of the plot.
-  - { id: isoform_support_plane, component: advanced_viz, kind: scatter_xy,
-      roles: {x: transcript_length, y: read_support, label: transcript_id, color: structural_category} }
-  - { component: figure, visu_type: box, dict_kwargs: {x: structural_category, y: transcript_length, color: structural_category} }
-  - { component: card, column: transcript_id, aggregation: count, secondary_layout: top_n, breakdown_col: structural_category, top_n_count: 4, headline: true }
-  - { component: card, column: read_support, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: interactive, interactive_type: MultiSelect, column_name: structural_category }
-  - { component: table }
+  - id: isoform_support_plane
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: transcript_length, y: read_support, label: transcript_id, color: structural_category}
+    title: Isoform length against read support
+    config:
+      log_y: true
+      x_title: Isoform length (nt)
+      y_title: FLNC reads supporting the isoform
+      top_n_labels: 10
+    description: >-
+      Each point is an isoform of the merged transcriptome: its spliced length on the horizontal axis and the
+      full-length reads collapsed into it on the vertical axis (log scale), coloured by structural category.
+      It answers which novel isoforms are well supported.
+
+      How to read: novel isoforms (NIC, NNC) high on the plot are the well supported ones worth following up.
+      Novel isoforms at the bottom rest on one or two reads, so treat them with caution: the SQANTI study
+      found that a share of novel long-read isoforms are technical artefacts.
+
+      Lines and annotations: the colours are the structural categories of SQANTI3 (FSM full splice match,
+      ISM incomplete, NIC new combination of known splice sites, NNC at least one unannotated splice site).
+      No cut-off is drawn.
+
+      Sources: https://raw.githubusercontent.com/wiki/ConesaLab/SQANTI3/SQANTI3-isoform-classification:-categories-and-subcategories.md
+      and https://pubmed.ncbi.nlm.nih.gov/29440222/
+  - component: figure
+    visu_type: box
+    dict_kwargs:
+      x: structural_category
+      y: transcript_length
+      color: structural_category
+      labels: {structural_category: Structural category, transcript_length: Isoform length (nt)}
+    title: Isoform length by category
+    description: >-
+      Each box is a structural category: the spread of isoform lengths in it. It answers whether novel
+      isoforms are shorter or longer than the isoforms that match the reference.
+
+      How to read: incomplete splice matches (ISM) lack 5' exons of their reference transcript, so they can be
+      shorter than full splice matches. A category much shorter than the rest may reflect partial reads. Similar lengths across
+      categories argue for real isoforms.
+
+      Source: https://raw.githubusercontent.com/wiki/ConesaLab/SQANTI3/SQANTI3-isoform-classification:-categories-and-subcategories.md
+  - component: card
+    column: transcript_id
+    aggregation: count
+    aggregations: [nunique]
+    secondary_layout: top_n
+    breakdown_col: structural_category
+    top_n_count: 4
+    headline: true
+    caption: isoforms, by structural category
+    title: Isoforms in the merge
+    description: >-
+      The hero number counts the isoforms of the merged transcriptome, and the bars rank the structural
+      categories by how many isoforms each holds. The second figure counts the distinct isoform ids. It
+      answers how large the transcriptome is and what it is made of.
+
+      How to read: a leading full splice match bar means the data mostly confirm the annotation. A leading
+      novel category means the reference is incomplete for this tissue or the data hold many artefacts.
+
+      Source: https://raw.githubusercontent.com/wiki/ConesaLab/SQANTI3/SQANTI3-isoform-classification:-categories-and-subcategories.md
+  - component: card
+    column: read_support
+    aggregation: median
+    aggregations: [q1, q3, max]
+    secondary_layout: compact
+    caption: reads per isoform, median with its quartiles and maximum
+    title: Read support per isoform
+    description: >-
+      The hero number is the median count of full-length reads behind an isoform, with the quartiles and the
+      maximum beside it. It answers how well supported a typical isoform is.
+
+      How to read: a median of one or two reads means most isoforms are singletons and the transcriptome is
+      under-sampled. A maximum orders of magnitude above the median is normal, since a few abundant genes
+      dominate the reads.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: structural_category
+    title: Structural category
+    description: >-
+      Pick one or more structural categories to restrict every tile of the tab to those isoforms. It answers
+      what the novel isoforms alone look like.
+
+      How to read: select NIC and NNC to look at novel isoforms only, then read the support scatter.
+  - component: table
+    title: Isoforms table
+    description: >-
+      Each row is an isoform: its position, exon count, length, read support, structural category and the
+      reference gene and transcript it matches. It answers which isoforms to follow up.
+
+      How to read: filter to a novel category and sort by read support to list the best supported new
+      isoforms.

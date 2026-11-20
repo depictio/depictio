@@ -12,6 +12,14 @@ import type { DashboardShell } from '../shell/types';
 
 import glass from './glass/glass';
 import GlassShell from './glass/Shell';
+import {
+  INSTANCE_KEY,
+  PREF_EVENT,
+  PREF_KEY,
+  SESSION_KEY,
+  readStoredChromeId,
+  resolveChromeId,
+} from './resolveId';
 
 /**
  * The app's chrome styles: Glass (the default) and Classic (`base`, the
@@ -42,42 +50,15 @@ export function useDashboardShell(): DashboardShell {
 }
 
 const BY_ID = new Map(CHROME_VARIANTS.map((v) => [v.id, v]));
-const PREF_KEY = 'depictio-chrome-variant';
-const PREF_EVENT = 'depictio:chrome-variant-pref';
-const SESSION_KEY = 'depictio-chrome-session';
-const INSTANCE_KEY = 'depictio-chrome-instance-default';
-
-/** `?chrome=` of this page, or the last one this browser session saw. */
-function sessionChromeVariant(): string | null {
-  const fromUrl = new URLSearchParams(window.location.search).get('chrome')?.toLowerCase();
-  try {
-    if (fromUrl && BY_ID.has(fromUrl)) {
-      sessionStorage.setItem(SESSION_KEY, fromUrl);
-      return fromUrl;
-    }
-    const kept = sessionStorage.getItem(SESSION_KEY);
-    return kept && BY_ID.has(kept) ? kept : null;
-  } catch {
-    return fromUrl && BY_ID.has(fromUrl) ? fromUrl : null;
-  }
-}
-
-function readStored(key: string): string | null {
-  try {
-    const id = localStorage.getItem(key);
-    return id && BY_ID.has(id) ? id : null;
-  } catch {
-    return null;
-  }
-}
+const KNOWN: ReadonlySet<string> = new Set(BY_ID.keys());
 
 /** The reader's own pick, or null when they follow the instance default. */
 function readChromePref(): string | null {
-  return readStored(PREF_KEY);
+  return readStoredChromeId(PREF_KEY, KNOWN);
 }
 
 function readInstanceDefault(): string | null {
-  return readStored(INSTANCE_KEY);
+  return readStoredChromeId(INSTANCE_KEY, KNOWN);
 }
 
 /** Keeps the reader's pick in this browser. A pick made in the profile also
@@ -120,7 +101,7 @@ export function applyInstanceDefault(id: string | null | undefined): void {
 }
 
 function resolveChromeVariant(): ChromeStyle {
-  const id = sessionChromeVariant() ?? readChromePref() ?? readInstanceDefault();
+  const id = resolveChromeId(KNOWN);
   return (id && BY_ID.get(id)) || DEFAULT_CHROME;
 }
 

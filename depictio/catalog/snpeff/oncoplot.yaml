@@ -9,8 +9,31 @@ description: >-
 find:
   path_glob: "**/*_snpEff.genes.txt"
 recipe: snpeff/oncoplot.py
+# The fixture is enriched synthetically from 15 real rows (copies with seeded noise), so the preview shows several impact classes.
 fixture: oncoplot.tsv
 renders_as:
-  - { id: gene_impact_grid, component: advanced_viz, kind: oncoplot,
-      roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type} }
-  - { component: table }
+  - id: gene_impact_grid
+    component: advanced_viz
+    kind: oncoplot
+    title: Gene impact by callset
+    roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type}
+    config:
+      top_genes: 30
+      legend_position: bottom
+    description: >-
+      Each cell is a gene (row) in a callset (column, a sample called by one caller),
+      coloured by the most severe SnpEff impact class that gene carries there. It
+      answers which genes carry damaging variants and which callers agree.
+
+      How to read: on a germline run this is caller agreement, not a cohort mutation
+      landscape. A gene coloured HIGH in every column is a robust finding, and a gene
+      coloured in one column only is a call to inspect.
+
+      Source: https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+  - component: table
+    title: Gene impact table
+    description: >-
+      Each row is a gene in one callset with its worst impact class and its variant
+      count. It answers the exact values behind the grid.
+
+      How to read: filter by impact class to list the genes with disruptive variants.

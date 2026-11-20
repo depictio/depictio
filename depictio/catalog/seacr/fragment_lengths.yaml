@@ -2,8 +2,8 @@ id: seacr_fragment_lengths
 name: Fragment length distribution
 mode: qc/fragments
 description: >-
-  How long the sequenced fragments were, per sample: the count and the fraction
-  of fragments at every length, plus the running fraction at most that long.
+  How long the sequenced fragments were, per sample: the count and the fraction of
+  fragments at every length, plus the running fraction at most that long.
 # The signature CUT&RUN QC figure. MNase cuts around nucleosomes, so a working
 # experiment shows a sharp sub-nucleosomal peak below about 120 bp next to a
 # mononucleosomal shoulder around 180 bp; a flat curve is a failed digestion.
@@ -12,12 +12,101 @@ find:
 recipe: seacr/fragment_lengths.py
 fixture: fragment_lengths.tsv
 renders_as:
-  - { id: seacr_fragment_curve, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction, color: sample, title: Fragment length distribution} }
-  - { id: seacr_fragment_cumulative, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: cumulative_fraction, color: sample, title: Cumulative fragment length} }
-  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - id: seacr_fragment_curve
+    component: figure
+    visu_type: line
+    dict_kwargs:
+      x: fragment_length
+      y: fraction
+      color: target
+      line_group: sample
+      labels: {fragment_length: Fragment length (bp), fraction: Share of fragments, target: Target}
+    title: Fragment length distribution
+    description: >-
+      Each line is a sample: the share of its fragments at every length, coloured by
+      target. It answers whether the experiment cut around nucleosomes.
+
+      How to read: a working experiment shows a nucleosome shoulder, about 150 to 180 bp,
+      and for sharp marks or transcription factors a peak of short fragments below about
+      120 bp. A flat, featureless curve is a failed digestion. Replicates of one target
+      should overlap.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28079019/ and
+      https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/output.md
+  - id: seacr_fragment_cumulative
+    component: figure
+    visu_type: line
+    dict_kwargs:
+      x: fragment_length
+      y: cumulative_fraction
+      color: target
+      line_group: sample
+      labels: {fragment_length: Fragment length (bp), cumulative_fraction: Cumulative share of fragments, target: Target}
+    title: Cumulative fragment length
+    description: >-
+      Each line is a sample: the share of its fragments that are at most as long as the
+      length on the horizontal axis, coloured by target. It answers how much of the
+      library is short and how fast it fills up.
+
+      How to read: a steep early rise means many short fragments and a late rise means
+      long, poorly digested chromatin. Replicates that diverge differ in digestion. Read
+      the value at 120 bp for the sub-nucleosomal share.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28079019/
+  - component: card
+    column: count
+    aggregation: sum
+    aggregations: [max]
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    caption: fragments, by target
+    title: Fragments counted
+    description: >-
+      The hero number is the total of fragments in view and the bars rank the targets by
+      how many they hold. The extra figure is the largest count at one length. It answers
+      how much data each target contributes.
+
+      How to read: a target with far fewer fragments has less depth, so its length curve
+      is noisier.
   # No median card on `fragment_length`: the table has one row per length, so
   # a median over it is the middle of the x axis. The per-sample median is
   # `seacr/fragment_classes.sample_median_length`.
-  - { component: card, column: fraction, aggregation: max, secondary_layout: histogram }
-  - { component: card, column: target, aggregation: count, secondary_layout: donut, breakdown_col: target }
-  - { component: table }
+  - component: card
+    column: fraction
+    aggregation: max
+    aggregations: [q3]
+    secondary_layout: histogram
+    caption: highest share at one length, with the distribution
+    title: Highest share at one length
+    description: >-
+      The hero number is the highest share of fragments at any single length and the
+      histogram shows how the shares are distributed over all lengths and samples. It
+      answers how sharp the length peak is.
+
+      How to read: a high maximum means a sharp peak, as for a transcription factor. A low
+      maximum with a wide spread is broad chromatin.
+
+      Source: https://pubmed.ncbi.nlm.nih.gov/28079019/
+  - component: card
+    column: sample
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    caption: samples, by target
+    title: Samples
+    description: >-
+      The hero number is the count of samples with a fragment histogram and the bars rank
+      the targets by how many samples they hold. The extra figure counts the length rows.
+      It answers how many libraries the curves are drawn from.
+
+      How to read: targets with one sample cannot show replicate agreement.
+  - component: table
+    title: Fragment length table
+    description: >-
+      Each row is a sample and a fragment length, with the count, its share and the share
+      at most that long. It answers the exact numbers behind the curves.
+
+      How to read: filter on a sample and sort by count to find its dominant lengths.

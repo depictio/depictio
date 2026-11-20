@@ -14,4 +14,14 @@ find:
 # plot anchors out of the shared report.
 fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 renders_as:
-  - { component: multiqc, section: salmon }
+  - component: multiqc
+    section: salmon
+    title: Transcript quantification
+    description: >-
+      Salmon's MultiQC plots: the fragment-length distribution and the mapping rate,
+      per sample. They answer how well the reads support the quantification.
+
+      How to read: A smooth fragment-length distribution and a high mapping rate are
+      good. A low mapping rate means contamination or an incomplete transcriptome.
+
+      Source: https://docs.seqera.io/multiqc/modules/salmon

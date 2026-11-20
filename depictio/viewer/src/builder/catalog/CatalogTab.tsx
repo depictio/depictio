@@ -76,6 +76,18 @@ async function buildConfigFromRender(
   render: CatalogRender,
   dcId: string,
 ): Promise<Record<string, unknown>> {
+  // The render's own title and About text travel with every component type.
+  const own = {
+    ...(render.title ? { title: render.title } : {}),
+    ...(render.description ? { description: render.description } : {}),
+  };
+  return { ...(await buildTypedConfigFromRender(render, dcId)), ...own };
+}
+
+async function buildTypedConfigFromRender(
+  render: CatalogRender,
+  dcId: string,
+): Promise<Record<string, unknown>> {
   if (render.component === 'advanced_viz') {
     // `preset_config` carries the catalog preview's computed config (role
     // bindings + data-derived viz-control defaults). buildMetadata overlays its
@@ -101,6 +113,11 @@ async function buildConfigFromRender(
       visu_type: render.visu_type ?? 'scatter',
       dict_kwargs: render.dict_kwargs ?? {},
       ...(render.code ? { code_content: render.code, mode: 'code' } : { mode: 'ui' }),
+      // Guide lines the preview drew (a median of this table, a fixed cut-off):
+      // the added figure draws the same ones.
+      ...(!render.code && render.reference_lines?.length
+        ? { reference_lines: render.reference_lines }
+        : {}),
     };
   }
   if (render.component === 'card') {
@@ -124,6 +141,7 @@ async function buildConfigFromRender(
       ...(render.attrition_cols?.length ? { attrition_cols: render.attrition_cols } : {}),
       ...(render.trend_col ? { trend_col: render.trend_col } : {}),
       ...(render.filter_expr ? { filter_expr: render.filter_expr } : {}),
+      ...(render.caption ? { caption: render.caption } : {}),
     };
   }
   if (render.component === 'interactive') {

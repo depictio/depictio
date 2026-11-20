@@ -1,14 +1,17 @@
 """HTTP surface for the serverless static-bundle exporter (producer A).
 
-Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
+Five thin endpoints around ``depictio.serverless.producer_a.export_static``:
 
 * ``GET  /export-static/{dashboard_id}/preflight`` — the ``--check`` tier table,
   per component and per tab of the dashboard's family, plus the bundle's
-  estimated size against the two ceilings (viewer permission, writes nothing).
-  It *does* read data: deciding a figure's tier means running the
+  estimated size against the two ceilings (writes nothing). For a caller who
+  may export it *does* read data: deciding a figure's tier means running the
   bind-and-refill builder over the frame the bundle would carry, so this is a
-  seconds-long call, not an instant one — and it is bounded by the same hard
-  size ceiling the build is, which it reports as a 413 rather than a 404.
+  seconds-long call, bounded by the same hard size ceiling the build is (413)
+  and by a per-process concurrency cap (429). Any other viewer gets the
+  data-free plan.
+* ``GET  /export-static/{dashboard_id}/can-export`` — whether the dispatch would
+  accept this caller (the UI's button state); the same rule, no data read.
 * ``POST /export-static/{dashboard_id}`` — owner-gated; enqueues the build as a
   Celery task and returns a ``job_id``. The bundle carries the whole tab family,
   entered on the requested tab.
@@ -16,6 +19,12 @@ Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
   their Celery result.
 * ``GET  /export-static/download/{job_id}`` — proxies the finished bundle out of
   S3 so the browser never needs to reach MinIO directly.
+
+And the routes a Quarto report uses to host the same runtime when its reader
+renders it (``depictio/serverless/report.py``): ``GET /report-runtime`` (the
+runtime's script and stylesheet), and ``POST /report-manifest/{id}`` + ``GET
+/report-manifest/job/{job_id}`` (producer A's manifest, owner-gated like the
+build, opening on a state: built by a worker, polled like a build).
 
 Job docs live in the ``static_exports`` collection (plain dicts + pymongo, no
 Beanie) and are readable only by their owner or an admin — a leaked job_id must
@@ -25,31 +34,33 @@ not expose someone else's dashboard.
 from __future__ import annotations
 
 import functools
+import json
+import threading
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
 import anyio.to_thread
 import boto3
-from bson import ObjectId
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.celery_tasks import export_static_bundle as export_static_bundle_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import dashboards_collection, static_exports_collection
-from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+from depictio.api.v1.db import static_exports_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
+from depictio.models.models.analysis_state import NotebookExportRequest
 from depictio.serverless.preflight import rows_for_tab, tier_counts
 from depictio.serverless.producer_a import (
     BYTES_PER_MB,
     BundleSize,
     BundleTooLargeError,
     ProducerAError,
+    export_denial,
     export_static,
 )
 
@@ -258,6 +269,40 @@ def _compact_timestamp(built_at: Any) -> str:
 #: wants the runtime's offer (the export modal) asks for ``auto`` explicitly.
 DEFAULT_PYTHON_RUNTIME: Literal["auto", "on", "off"] = "off"
 
+#: Data-reading preflights one API process runs at once. Each loads and prunes
+#: every collection the bundle would carry (up to the size ceiling) and runs the
+#: figure builder in an API thread, so they are counted; one past the limit is
+#: a 429 the modal can retry, not a queue that holds memory.
+PREFLIGHT_CONCURRENCY = 2
+_preflight_slots = threading.BoundedSemaphore(PREFLIGHT_CONCURRENCY)
+
+
+class _PreflightBusy(Exception):
+    """Every data-reading preflight slot of this process is taken."""
+
+
+def _run_preflight(dashboard_id: str, user: Any, python_runtime: str) -> tuple[Any, bool]:
+    """``(ExportResult, bound)``: the binding preflight for whoever may export,
+    the data-free plan for everyone else.
+
+    The binding preflight reads data (see :func:`preflight_export_static`), and
+    its only reader is the export modal, which only a project owner can open.
+    A viewer (anonymous in public mode) gets the instant plan instead: the same
+    rows, figures still ``provisional``, no size and no data read.
+    """
+    if export_denial(dashboard_id, user, "owner") is not None:
+        result = export_static(
+            dashboard_id, check=True, bind=False, user=user, python_runtime=python_runtime
+        )
+        return result, False
+    if not _preflight_slots.acquire(blocking=False):
+        raise _PreflightBusy()
+    try:
+        result = export_static(dashboard_id, check=True, user=user, python_runtime=python_runtime)
+    finally:
+        _preflight_slots.release()
+    return result, True
+
 
 @serverless_endpoint_router.get("/export-static/{dashboard_id}/preflight")
 async def preflight_export_static(
@@ -301,20 +346,24 @@ async def preflight_export_static(
     exactly as it is a refusal there — the ceiling bounds this path's memory
     too.
 
-    Needs *viewer* on the dashboard's project — every row it reads is a row the
-    normal render endpoints would already serve that viewer — and writes nothing.
-    ``export_static`` is synchronous and blocks on Mongo, S3 and plotly, so it
-    runs in a worker thread rather than on the event loop.
+    Only a caller who may export (``owner`` on the project, the dispatch's own
+    rule) gets that binding preflight, and at most ``PREFLIGHT_CONCURRENCY`` run
+    at once per API process (429 past that). Any other *viewer* — anonymous in
+    public mode — gets the data-free plan: the same rows, figures left
+    ``provisional``, no ``size_estimate``, and nothing read but the documents.
+    ``bound`` says which one answered. Writes nothing. ``export_static`` is
+    synchronous and blocks on Mongo, S3 and plotly, so it runs in a worker
+    thread rather than on the event loop.
     """
     try:
-        result = await anyio.to_thread.run_sync(
-            functools.partial(
-                export_static,
-                dashboard_id,
-                check=True,
-                user=current_user,
-                python_runtime=python_runtime,
-            )
+        result, bound = await anyio.to_thread.run_sync(
+            functools.partial(_run_preflight, dashboard_id, current_user, python_runtime)
+        )
+    except _PreflightBusy:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many export previews are running; try again in a few seconds.",
+            headers={"Retry-After": "5"},
         )
     except BundleTooLargeError as exc:
         # Not a 404: the dashboard exists and this caller may read it. Answering
@@ -377,6 +426,7 @@ async def preflight_export_static(
 
     return {
         "dashboard_id": dashboard_id,
+        "bound": bound,
         "tiers": tiers,
         "tabs": tabs,
         "links": links,
@@ -386,6 +436,20 @@ async def preflight_export_static(
         # and what it adds to the file, so the modal can offer it with its size.
         "python_runtime": result.python,
     }
+
+
+@serverless_endpoint_router.get("/export-static/{dashboard_id}/can-export")
+def can_export_static(
+    dashboard_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, bool]:
+    """Whether the dispatch below would accept this caller, for the UI's button.
+
+    The same :func:`producer_a.export_denial` the dispatch and the build ask, so
+    the button is enabled exactly when the export would be accepted (project
+    owner), whoever owns the dashboard document. Reads two documents, no data.
+    """
+    return {"can_export": export_denial(dashboard_id, current_user, "owner") is None}
 
 
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
@@ -399,17 +463,9 @@ def dispatch_export_static(
     Owner-gated (RFC §8 — a bundle is bulk data exfiltration). Denials return 404
     rather than 403 so the endpoint cannot be used to enumerate dashboards.
     """
-    try:
-        oid = ObjectId(str(dashboard_id))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
-
-    dashboard = dashboards_collection.find_one({"dashboard_id": oid})
-    if not dashboard:
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
-
-    project_id = dashboard.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "owner"):
+    denial = export_denial(dashboard_id, current_user, "owner")
+    if denial is not None:
+        logger.info(f"Static export refused for {dashboard_id}: {denial}")
         raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
 
     job_id = uuid4().hex
@@ -490,4 +546,130 @@ def download_export_static(
         iterfile(),
         media_type="text/html",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# The report host of the static runtime (depictio/serverless/report.py)
+# ---------------------------------------------------------------------------
+
+
+@serverless_endpoint_router.get("/report-runtime")
+def get_report_runtime(
+    addons: str = "",
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """The static runtime, for a reader rendering an exported ``.qmd`` themselves.
+
+    ``{"js", "css", "addons": {name: markup}}``: the runtime's script and
+    stylesheet (``dist-static/combined-runtime.{js,css}``) and the add-ons a
+    manifest names (``addons=3dmol``). Code, not data — but served to signed-in
+    callers only, like every other route here. 503 when this deployment has not
+    built it.
+    """
+    from depictio.serverless import combined
+    from depictio.serverless.addons import addon_markup
+
+    if not current_user or not getattr(current_user, "id", None):
+        raise HTTPException(status_code=401, detail="Sign in to fetch the report runtime.")
+    try:
+        assets = combined.runtime_assets()
+    except combined.RuntimeUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    # Pyodide is assembled from the manifest's package list at export time; a
+    # reader's render does not get it from here.
+    names = [n.strip() for n in addons.split(",") if n.strip() and n.strip() != "pyodide"]
+    markup = addon_markup([{"name": n} for n in names], skip_missing=True)
+    return {"js": assets.js, "css": assets.css, "addons": markup}
+
+
+#: What a failed manifest job answers, by the exception the worker raised.
+_MANIFEST_REFUSALS: tuple[tuple[str, int], ...] = (
+    ("ReportRuntimeRefused", 409),
+    ("BundleTooLargeError", 413),
+    ("ProducerAError", 404),
+)
+
+
+@serverless_endpoint_router.post("/report-manifest/{dashboard_id}", status_code=202)
+def post_report_manifest(
+    dashboard_id: str,
+    request: NotebookExportRequest,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Start building producer A's manifest of the dashboard's family, opening on
+    ``request.state``; poll ``/report-manifest/job/{job_id}``.
+
+    The manifest a static export would bundle — same producer, same owner gate
+    (404 on a denial, as ``/export-static``), same size ceilings (413) — with
+    ``initial_filters`` set to the state's filters. 409 for a state the
+    in-page runtime cannot reproduce (pinned data, selection groups): the
+    report then keeps every tile's own output. As long as a static export's
+    build (it runs the same computes), so it runs on a worker, like the build.
+    """
+    from depictio.api.celery_app import build_report_manifest_job
+    from depictio.serverless import report
+
+    if not current_user or not getattr(current_user, "id", None):
+        raise HTTPException(status_code=401, detail="Sign in to build a report's manifest.")
+    reason = report.ineligibility(request.state)
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
+    if export_denial(dashboard_id, current_user, required="owner"):
+        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
+
+    job_id = uuid4().hex
+    build_report_manifest_job.apply_async(
+        kwargs={
+            "job_id": job_id,
+            "runtime": {
+                "dashboard_id": str(dashboard_id),
+                "state": request.state.model_dump(mode="json"),
+                "user": report.user_payload(current_user),
+            },
+        },
+        task_id=job_id,
+    )
+    return {"job_id": job_id, "status": "queued"}
+
+
+@serverless_endpoint_router.get("/report-manifest/job/{job_id}")
+def poll_report_manifest(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """A manifest job: ``{"status": "queued"|"running"}`` while it builds, then
+    ``{"status": "ready", "manifest": {...}}``. A refusal is the status the
+    synchronous route would have answered (404, 409, 413). Only the caller
+    who started the job reads it."""
+    from depictio.api.v1.services.notebook_export import store
+
+    result = AsyncResult(job_id, app=celery_app)
+    payload = result.result if isinstance(result.result, dict) else {}
+    owner = str(payload.get("user_id") or "")
+    if owner and owner != str(getattr(current_user, "id", "")):
+        raise HTTPException(status_code=404, detail="Job not found")
+    if result.failed():
+        error = result.result
+        name = type(error).__name__
+        for refused, status in _MANIFEST_REFUSALS:
+            if name == refused:
+                detail = (
+                    "Dashboard not found or access denied" if status == 404 else str(error)[:500]
+                )
+                raise HTTPException(status_code=status, detail=detail)
+        raise HTTPException(status_code=500, detail=_error_text(result))
+    if not result.successful():
+        return {"job_id": job_id, "status": "running" if result.state == "PROGRESS" else "queued"}
+    if not owner:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        manifest = store.get(str(payload["key"]))
+    except Exception as exc:  # noqa: BLE001 - a missing object is a gone manifest
+        raise HTTPException(status_code=404, detail="The manifest is no longer stored.") from exc
+    # The stored JSON goes out as it is: a manifest runs to tens of MB.
+    head = {"job_id": job_id, "status": "ready"}
+    return Response(
+        content=json.dumps(head)[:-1].encode() + b',"manifest":' + manifest + b"}",
+        media_type="application/json",
     )

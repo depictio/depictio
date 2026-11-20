@@ -606,6 +606,39 @@ def build_figure_preview(payload: dict) -> dict:
     except Exception as exc:  # never lose a figure to its own tidying
         logger.warning(f"celery_tasks.build_figure_preview: facet tidy skipped: {exc}")
 
+    # Guide lines (``reference_lines``): fixed, or at a statistic of a column
+    # over the filtered rows. The statistic is read off its own scan, never off
+    # ``df``, which is capped or sampled for point plots and absent when the
+    # aggregation path drew the figure.
+    if mode != "code" and metadata.get("reference_lines"):
+        from depictio.api.v1.services.figure.reference_lines import (
+            apply_reference_lines,
+            normalise_reference_lines,
+            resolve_reference_lines,
+            stat_requests,
+        )
+
+        try:
+            lines = normalise_reference_lines(metadata.get("reference_lines"))
+            stats_frame = None
+            requests = stat_requests(lines)
+            if requests:
+                from depictio.api.v1.deltatables_utils import open_deltatable_scan
+
+                stats_frame = open_deltatable_scan(
+                    workflow_id=wf_oid,
+                    data_collection_id=str(dc_id),
+                    metadata=filter_metadata or None,
+                    init_data=init_data,
+                    select_columns=sorted({column for column, _ in requests.values()}),
+                    delta_version=payload.get("delta_version"),
+                )
+                if stats_frame is None and df is not None and not render_stats.get("sampled"):
+                    stats_frame = df
+            fig = apply_reference_lines(fig, resolve_reference_lines(lines, stats_frame), theme)
+        except Exception as exc:  # a guide line never costs the figure
+            logger.warning(f"celery_tasks.build_figure_preview: reference lines skipped: {exc}")
+
     if hasattr(fig, "to_json"):
         fig_dict = json.loads(fig.to_json())
     else:
@@ -2654,7 +2687,7 @@ def _sankey_result_from_frame(
     link_frames: list[pl.DataFrame] = []
     for src_col, tgt_col in zip(step_cols[:-1], step_cols[1:]):
         link_frames.append(
-            df.group_by([src_col, tgt_col])
+            df.group_by([src_col, tgt_col], maintain_order=True)
             .agg(pl.col("__sk_weight").sum().alias("value"))
             .rename({src_col: "source_value", tgt_col: "target_value"})
             .with_columns(
@@ -2687,21 +2720,21 @@ def _sankey_result_from_frame(
         if sort_mode == "total_flow" and links_df.height > 0:
             outgoing = (
                 links_df.filter(pl.col("source_col") == step_col)
-                .group_by("source_value")
+                .group_by("source_value", maintain_order=True)
                 .agg(pl.col("value").sum().alias("total"))
                 .rename({"source_value": "label"})
             )
             incoming = (
                 links_df.filter(pl.col("target_col") == step_col)
-                .group_by("target_value")
+                .group_by("target_value", maintain_order=True)
                 .agg(pl.col("value").sum().alias("total"))
                 .rename({"target_value": "label"})
             )
             totals = (
                 pl.concat([outgoing, incoming], how="vertical_relaxed")
-                .group_by("label")
+                .group_by("label", maintain_order=True)
                 .agg(pl.col("total").sum())
-                .sort("total", descending=True)
+                .sort(["total", "label"], descending=[True, False])
             )
             return totals.get_column("label").to_list()
         return sorted(df.get_column(step_col).unique().to_list())
@@ -3352,6 +3385,54 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     return _close_step(ok, message)
 
 
+#: Where finished static bundles are parked in S3, one prefix per dashboard.
+STATIC_EXPORT_PREFIX = "serverless-exports/"
+
+
+def static_export_key(dashboard_id: str, built_at: Any, job_id: str) -> str:
+    """The S3 key of one export's bundle.
+
+    The job id is part of it: two exports of one dashboard in the same second
+    (a double click, or two owners with different options) must not overwrite
+    each other's bundle.
+    """
+    return (
+        f"{STATIC_EXPORT_PREFIX}{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}-{job_id}.html"
+    )
+
+
+def prune_static_exports(
+    client: Any,
+    bucket: str,
+    retention_days: int,
+    now: Any = None,
+) -> int:
+    """Delete the bundles under ``serverless-exports/`` older than the retention.
+
+    Run by every export before it builds, so the prefix stays bounded without a
+    scheduler; the job documents expire on their own (the ``static_exports``
+    TTL index, :func:`core_indexes.ensure_static_exports_ttl`). ``0`` keeps
+    everything. Returns how many objects were deleted.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    if retention_days <= 0:
+        return 0
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=retention_days)
+    stale: list[dict[str, str]] = []
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=STATIC_EXPORT_PREFIX):
+        for obj in page.get("Contents") or []:
+            modified = obj.get("LastModified")
+            if modified is not None and modified < cutoff:
+                stale.append({"Key": obj["Key"]})
+    for start in range(0, len(stale), 1000):  # DeleteObjects takes 1000 keys
+        client.delete_objects(
+            Bucket=bucket, Delete={"Objects": stale[start : start + 1000], "Quiet": True}
+        )
+    return len(stale)
+
+
 @celery_app.task(
     name="depictio.serverless.export_static",
     soft_time_limit=600,
@@ -3376,7 +3457,8 @@ def export_static_bundle(payload: dict) -> dict:
 
     Args:
         payload: ``{"job_id", "dashboard_id", "user": {"id", "email", "is_admin",
-            "is_anonymous"}, "single_tab"?}`` — JSON-serializable throughout.
+            "is_anonymous"}, "single_tab"?, "python_runtime"?}`` —
+            JSON-serializable throughout. The job id is part of the S3 key.
 
     Returns:
         ``{"s3_key", "bucket", "size_bytes", "built_at", "tab_count"}``.
@@ -3384,6 +3466,7 @@ def export_static_bundle(payload: dict) -> dict:
     import tempfile
     from datetime import datetime, timezone
     from pathlib import Path
+    from uuid import uuid4
 
     # Deferred: producer A pulls in polars / the endpoint bodies, and importing
     # it lazily keeps the module-attribute monkeypatch seam that tests use.
@@ -3393,7 +3476,19 @@ def export_static_bundle(payload: dict) -> dict:
     dashboard_id = str(payload["dashboard_id"])
     export_user = producer_a.ExportUser(**payload["user"])
     built_at = datetime.now(timezone.utc)
-    key = f"serverless-exports/{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}.html"
+    key = static_export_key(dashboard_id, built_at, str(payload.get("job_id") or uuid4().hex))
+
+    # Retention: the bundles past their age go before a new one is added.
+    try:
+        pruned = prune_static_exports(
+            s3_client, settings.s3.bucket, settings.performance.static_export_retention_days
+        )
+        if pruned:
+            logger.info("static export retention: pruned %d expired bundle(s)", pruned)
+    except SoftTimeLimitExceeded:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a failed prune must not fail the export
+        logger.warning(f"static export retention: prune failed: {exc}")
 
     started = time.monotonic()
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -3446,3 +3541,93 @@ __all__: list[str] = [
     "manifest_refresh_dc_task",
     "export_static_bundle",
 ]
+
+
+_EXTRACT_TIME_LIMIT_S = 200
+
+
+@celery_app.task(
+    name="depictio.embed.extract_figure", soft_time_limit=150, time_limit=_EXTRACT_TIME_LIMIT_S
+)
+def extract_component_figure_task(payload: dict) -> dict:
+    """Read a component's Plotly figure off the viewer's embed page (headless).
+
+    ``payload``: ``{dashboard_id, component_id, state, theme, expect, user_id,
+    job_id}``, where ``expect`` is ``"image"`` for a renderer that is not
+    Plotly (a PNG of the tile comes back instead of a figure). The page is
+    loaded as ``user_id``, the user who asked, through a token minted here for
+    this one pass and revoked after it: never with the admin's session.
+    Returns a ``ComponentFigureResponse``-shaped dict; failures are reported in
+    it rather than raised so the poll endpoint can hand the reason to the
+    notebook.
+    """
+    import asyncio
+
+    from beanie import init_beanie
+    from celery.exceptions import SoftTimeLimitExceeded
+    from pymongo import AsyncMongoClient
+
+    from depictio.api.v1.configs.config import MONGODB_URL, settings
+    from depictio.api.v1.services.embed.extract import extract_component_figure
+    from depictio.api.v1.services.notebook_export import jobs
+    from depictio.api.v1.services.task_tokens import (
+        browser_token_payload,
+        mint_task_token,
+        revoke,
+    )
+    from depictio.models.models.users import TokenBeanie, UserBeanie
+
+    user_id = str(payload.get("user_id") or "")
+    job_id = str(payload.get("job_id") or "")
+    if not user_id:
+        # A pass queued before passes ran as their requester: there is nobody
+        # to run it as, and the admin is not an option.
+        return {"status": "error", "figure": None, "reason": "no requester for this extraction"}
+
+    async def run() -> dict:
+        client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
+        token = None
+        try:
+            await init_beanie(
+                database=client[settings.mongodb.db_name],
+                document_models=[TokenBeanie, UserBeanie],
+            )
+            token = await mint_task_token(
+                user_id, f"embed-extract-{job_id or 'pass'}", _EXTRACT_TIME_LIMIT_S + 300
+            )
+            return await extract_component_figure(
+                dashboard_id=str(payload.get("dashboard_id")),
+                component_id=str(payload.get("component_id")),
+                state=dict(payload.get("state") or {}),
+                theme=str(payload.get("theme") or "light"),
+                expect="image" if payload.get("expect") == "image" else "plotly",
+                token_payload=browser_token_payload(token),
+            )
+        finally:
+            try:
+                await revoke(token)
+            finally:
+                await client.close()
+
+    status = "failed"
+    try:
+        result = asyncio.run(run())
+        status = "success" if result.get("status") == "ready" else "failed"
+        return result
+    except SoftTimeLimitExceeded:
+        raise
+    except Exception as exc:
+        # str(exc) is empty for several Playwright/asyncio exceptions (bare
+        # TimeoutError, CancelledError); repr always carries the exception
+        # type, so the log line is never silently blank. The notebook gets a
+        # sentence: the exception can carry worker paths.
+        reason = str(exc) or repr(exc)
+        logger.warning(f"embed extract failed for {payload.get('component_id')}: {reason}")
+        return {
+            "status": "error",
+            "figure": None,
+            "reason": "the component could not be extracted (the server log has the details)",
+        }
+    finally:
+        if job_id:
+            jobs.finish(job_id, status)

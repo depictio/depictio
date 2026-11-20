@@ -11,5 +11,39 @@ find: { path_glob: "**/summary/tables/wittyer/wittyer.summary.csv" }
 recipe: wittyer/summary.py
 fixture: summary.tsv
 renders_as:
-  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1, color: stats_type, barmode: group} } # F1 per callset, event vs base
-  - { component: table }
+  # C1: the bars are coloured by the level Wittyer scores, per event or per base.
+  # stats_type is in the recipe's OUTPUT_SCHEMA ("Not reported" on a table without it).
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: label
+      y: f1
+      color: stats_type
+      barmode: group
+      labels: {label: Callset, f1: F1 score, stats_type: Scoring level}
+    title: F1 per callset, event and base
+    description: >-
+      Each bar is the F1 score of one callset against the truth set, with the event
+      level and the base level side by side. It answers how well the large variant
+      calls match the truth, and whether they match in count or in the bases they cover.
+
+      How to read: a high event bar means the callset finds the right events, and a high
+      base bar means it covers the right bases. A callset good at one level and poor at
+      the other has events that match in position but not in extent.
+
+      Note: Wittyer counts an event as a match by percentage or base-pair distance and
+      requires the genotype to match by default, and counts every overlapped base at
+      the base level. The cited README states no cut-off for F1, so none is drawn.
+
+      Source: https://raw.githubusercontent.com/Illumina/witty.er/master/README.md
+  - component: table
+    title: Large variant benchmark
+    description: >-
+      Each row is a callset at one scoring level with its precision, recall and F1, and
+      the caller, the truth set and the strata when the table carries them. It answers
+      the numbers behind the bars.
+
+      How to read: compare recall and precision at each level to see whether a callset
+      misses variants or adds false ones.
+
+      Source: https://raw.githubusercontent.com/Illumina/witty.er/master/README.md

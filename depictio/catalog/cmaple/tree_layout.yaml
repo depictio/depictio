@@ -14,20 +14,44 @@ find:
 recipe: cmaple/tree_layout.py
 fixture: tree_layout.tsv
 renders_as:
+  # Each family is its own pair of traces, so a family takes its own colour from
+  # the figure's colourway. The edge trace of a family keeps the null separator rows,
+  # which break the line between segments.
   - component: figure
+    title: Family trees
+    description: >-
+      Each tree is a protein family: branches are drawn from the root with their length in substitutions per
+      site, and each dot is a member at the tip of a branch. It answers how the members of a family relate to
+      each other.
+
+      How to read: members on short branches close together are near-identical, and long branches mark
+      divergent members. A family filter draws one tree. Hover a dot to read the member and its family.
+
+      Lines and annotations: the horizontal scale is the branch length from the root, estimated by CMAPLE. No
+      support values or cut-offs are drawn.
     code: |
       d = df.sort('draw_order')
-      tips = d.filter(pl.col('is_tip'))
-      edges = go.Scatter(
-          x=d['x'].to_list(), y=d['y'].to_list(), mode='lines', connectgaps=False,
-          line={'width': 1}, hoverinfo='skip', showlegend=False,
-      )
-      tip_marks = go.Scatter(
-          x=tips['x'].to_list(), y=tips['y'].to_list(), mode='markers',
-          marker={'size': 6}, text=tips['node'].to_list(), customdata=tips['family'].to_list(),
-          hovertemplate='%{text}<br>%{customdata}<extra></extra>', showlegend=False,
-      )
-      fig = go.Figure(data=[edges, tip_marks])
+      traces = []
+      for fam in d['family'].unique(maintain_order=True).to_list():
+          part = d.filter(pl.col('family') == fam)
+          tips = part.filter(pl.col('is_tip'))
+          traces.append(go.Scatter(
+              x=part['x'].to_list(), y=part['y'].to_list(), mode='lines', connectgaps=False,
+              line={'width': 1}, hoverinfo='skip', showlegend=False, legendgroup=fam,
+          ))
+          traces.append(go.Scatter(
+              x=tips['x'].to_list(), y=tips['y'].to_list(), mode='markers',
+              marker={'size': 6}, text=tips['node'].to_list(), customdata=tips['family'].to_list(),
+              hovertemplate='%{text}<br>%{customdata}<extra></extra>', showlegend=False, legendgroup=fam,
+          ))
+      fig = go.Figure(data=traces)
       fig.update_layout(xaxis_title='Substitutions per site from the root', margin={'t': 16, 'l': 16, 'r': 16, 'b': 48})
       fig.update_yaxes(visible=False, autorange='reversed')
-  - { component: table }
+  - component: table
+    title: Tree segments
+    description: >-
+      Each row is a point of a tree drawing: its family, horizontal distance from the root, vertical slot and,
+      at a tip, the member. It answers what the figure is drawn from.
+
+      How to read: this is a drawing table with separator rows, so use the family filter and the figure rather
+      than reading it row by row.

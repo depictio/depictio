@@ -10,10 +10,114 @@ find:
 recipe: qualimap/coverage_per_contig.py
 fixture: coverage_per_contig.tsv
 renders_as:
-  - { id: contig_depth_scatter, component: advanced_viz, kind: scatter_xy,
-      roles: {x: length, y: relative_coverage, label: chromosome, color: sample, size: mapped_bases} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: chromosome, y: relative_coverage, color: sample, title: 'Depth per contig, relative to the library mean'} }
-  - { component: card, column: relative_coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mapped_bases, aggregation: sum, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
-  - { component: card, column: length, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
-  - { component: table, page_size: 25 }
+  - id: contig_depth_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    title: Contig depth against contig length
+    roles: {x: length, y: relative_coverage, label: chromosome, color: sample, size: mapped_bases}
+    config:
+      log_x: true
+      x_title: Contig length (bp)
+      y_title: Depth relative to the library mean
+      reference_line: horizontal
+      reference_value: 1
+      reference_label: Library mean
+      top_n_labels: 8
+    description: >-
+      Each point is a contig in one library: its length on the horizontal axis and
+      its depth relative to the library mean on the vertical axis, with the marker
+      sized by the bases mapped to it. It answers whether any contig is over- or
+      under-covered compared with the rest of the genome.
+
+      How to read: most long contigs should sit near the mean. A short contig far
+      above it is typically an organelle genome or a repeat, and a contig well below
+      it may be a sex chromosome or a missing sequence. Compare libraries before
+      reading a contig as a sex call.
+
+      Lines and annotations: the horizontal line is a relative depth of 1, the
+      library's own genome-wide mean by definition. It is a data-defined reference,
+      not a cut-off.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: figure
+    visu_type: bar
+    dict_kwargs:
+      x: chromosome
+      y: relative_coverage
+      color: sample
+      labels: {chromosome: Contig, relative_coverage: Depth relative to the library mean, sample: Library}
+    title: 'Depth per contig, relative to the library mean'
+    description: >-
+      Each bar is a contig in a library: its depth divided by the library's
+      genome-wide mean. It answers which contigs deviate from the genome-wide level.
+
+      How to read: a bar near 1 is a contig at the library mean. A bar far above or
+      below it is worth a look, and an organelle contig is expected to tower over
+      the rest.
+
+      Lines and annotations: a relative depth of 1 is the library's own mean by
+      definition, no cut-off is drawn.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  # The relative depth spans orders of magnitude (organelle contigs against nuclear
+  # ones), so a box plot would be squashed: a stat strip is used instead.
+  - component: card
+    column: relative_coverage
+    aggregation: median
+    aggregations: [min, max]
+    secondary_layout: vertical
+    title: Relative contig depth
+    caption: median relative depth, with the lowest and highest contig
+    description: >-
+      The hero number is the median depth of a contig relative to its library mean,
+      and the strip shows the lowest and highest contig. It answers how far the
+      contigs depart from the genome-wide level.
+
+      How to read: a median near 1 is expected. A maximum far above it points to an
+      organelle genome or a repeat that took many reads.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: mapped_bases
+    aggregation: sum
+    aggregations: [max, median]
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    title: Bases mapped per contig
+    caption: total bases mapped, with the largest contigs ranked
+    description: >-
+      The hero number is the total of bases mapped, and the bars rank the contigs
+      that hold most of them. It answers whether one scaffold soaked up the library.
+
+      How to read: the ranking should follow contig length. A contig far above its
+      share of the genome holds more reads than its size explains.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: card
+    column: length
+    aggregation: sum
+    aggregations: [max, median]
+    secondary_layout: donut
+    breakdown_col: chromosome
+    title: Reference length by contig
+    caption: total length, split by contig
+    description: >-
+      Each unit is a base of the reference and the ring splits them by contig. It
+      answers how the reference is divided, to put the depth of each contig in
+      context.
+
+      How to read: a ring dominated by a few contigs means a chromosome-level
+      assembly, and many thin slices mean a fragmented one.
+
+      Source: http://qualimap.conesalab.org/doc_html/analysis.html
+  - component: table
+    page_size: 25
+    title: Per-contig depth
+    description: >-
+      Each row is a contig in a library with its length, mapped bases, mean depth,
+      standard deviation and depth relative to the library mean. It answers the
+      exact numbers behind the contig tiles.
+
+      How to read: sort by relative depth to find the contigs that depart from the
+      library mean.

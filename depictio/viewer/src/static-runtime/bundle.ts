@@ -16,7 +16,12 @@
  * `dashboard` is per-tab: data_refs / tiers / frozen / bindings / prologues /
  * links are component- or dc-keyed and span the whole family.
  */
-import { parseManifest, type BundleManifest, type TabEntry } from 'depictio-static-core';
+import {
+  BUNDLE_MANIFEST_ID,
+  parseManifest,
+  type BundleManifest,
+  type TabEntry,
+} from 'depictio-static-core';
 
 import type { DashboardSummary } from '../../../../packages/depictio-react-core/src/api';
 
@@ -36,8 +41,10 @@ let activeTabId: string | null = null;
  */
 let activeView: BundleManifest | null = null;
 
-export function loadBundleFromDocument(): BundleManifest {
-  const el = document.getElementById('bundle-manifest');
+/** `elementId`: the bundle's `bundle-manifest`, or the report's own
+ *  `depictio-report-manifest` (report/boot.tsx) — one contract, two hosts. */
+export function loadBundleFromDocument(elementId = BUNDLE_MANIFEST_ID): BundleManifest {
+  const el = document.getElementById(elementId);
   const manifest = parseManifest(JSON.parse(el?.textContent || 'null'));
   window.__DEPICTIO_BUNDLE__ = manifest;
   activeTabId = manifest.dashboard.id;

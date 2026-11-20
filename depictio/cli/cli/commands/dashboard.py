@@ -6,10 +6,12 @@ Provides simple commands for dashboard YAML management:
 - import: Import YAML to server (project from YAML or --project override)
 - export: Export dashboard from server to YAML
 - build-static: Build a backend-less static bundle from a spec + local Parquet
+- combine-report: Turn a rendered report into the combined report + dashboard file
 """
 
 import os
 import re
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import quote
@@ -983,6 +985,69 @@ def export_static_cmd(
         import webbrowser
 
         webbrowser.open(out.resolve().as_uri())
+
+
+class DefaultView(str, Enum):
+    report = "report"
+    dashboard = "dashboard"
+
+
+@app.command("combine-report")
+def combine_report_cmd(
+    report: Annotated[
+        Path,
+        typer.Argument(
+            help=(
+                "A rendered report that embeds the dashboard's runtime (the server's "
+                "'Report only' download, or `quarto render` of an export made by an owner)"
+            ),
+            exists=True,
+            dir_okay=False,
+        ),
+    ],
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out", "-o", help="Output HTML path (default: <report>-report-dashboard.html)"
+        ),
+    ] = None,
+    default_view: Annotated[
+        DefaultView,
+        typer.Option("--default-view", help="The view the file opens on"),
+    ] = DefaultView.report,
+    open_browser: Annotated[
+        bool, typer.Option("--open", help="Open the combined file in a browser tab")
+    ] = False,
+) -> None:
+    """Turn a rendered report into the combined report + dashboard file.
+
+    Offline, from the file alone: a report that embeds the dashboard's runtime
+    already holds the whole interactive dashboard (one runtime serves both);
+    this turns its "Report | Dashboard" switch on — one filter state across
+    both views. The server's default export produces the same file directly.
+
+    Example:
+        depictio dashboard combine-report penguins.html --out penguins-all.html
+    """
+    from depictio.serverless import combined
+
+    html = report.read_text(encoding="utf-8")
+    try:
+        html = combined.set_output(html, "combined", default_view.value)
+    except ValueError:
+        console.print(
+            "[red]Error: this report does not embed the dashboard's runtime. Render it with "
+            "the runtime embedded (the server's report, or an export made by an owner).[/red]"
+        )
+        raise typer.Exit(1)
+    target = out or report.with_name(combined.combined_filename(report.stem))
+    target.write_text(html, encoding="utf-8")
+    size_mb = target.stat().st_size / 1_048_576
+    console.print(f"[green]✓ Report + dashboard written: {target} ({size_mb:.2f} MB)[/green]")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(target.resolve().as_uri())
 
 
 @app.command()

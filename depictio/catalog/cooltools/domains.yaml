@@ -8,21 +8,101 @@ description: >-
 find:
   path_glob: "**/*_balanced_insulation.tsv"
 recipe: cooltools/domains.py
+# The fixture is enriched synthetically from 18 real domains (copies with seeded noise), so the preview shows several samples.
 fixture: domains.tsv
 renders_as:
-  # Intervals on a chromosome-aware axis: one rectangle per domain. The
-  # dashboard tile sets `mark: rect`, which is what turns pos/end into a span.
+  # Intervals on a chromosome-aware axis: one rectangle per domain.
   - id: domain_track
     component: advanced_viz
     kind: genome_view
+    title: TAD domains along the genome
     roles: {chr: chrom, pos: start, score: size_kb, end: end, sample: sample}
+    config:
+      mark: rect
+      score_title: Domain size (kb)
+    description: >-
+      Each rectangle is a domain, drawn from its start to its end on a
+      chromosome-aware axis, at a height equal to its size in kilobases. It answers
+      how the genome is partitioned into topological domains and how large they are.
+
+      How to read: neighbouring rectangles of similar height are a regular
+      partition. Very large domains often span poorly mappable regions or
+      centromeres, and a run of very small ones suggests noise in the boundary
+      calls.
+
+      Note: domains are derived from the insulation boundary calls, so they change
+      with the window size and the boundary threshold.
+
+      Source: https://raw.githubusercontent.com/open2c/cooltools/master/cooltools/api/insulation.py
   # Same intervals on the Plotly track, so a tab still reads if the GenomeSpy
   # renderer is unavailable.
   - id: domain_size_track
     component: advanced_viz
     kind: coverage_track
+    title: TAD domain size track
     roles: {chromosome: chrom, position: start, value: size_kb, end: end, sample: sample}
-  - { component: card, column: size_kb, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: size_kb, aggregation: count, secondary_layout: top_n, breakdown_col: chrom, top_n_count: 3 }
-  - { component: card, column: valid_fraction, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: table }
+    config:
+      color_by: sample
+    description: >-
+      Each segment is a domain on its chromosome, with its size in kilobases on the
+      vertical axis. It answers the same question as the domain track with a
+      Plotly renderer.
+
+      How to read: compare the sizes along a chromosome and between samples. A
+      consistent size range means a stable partition, and isolated very tall
+      segments mark unusually large domains.
+  - component: card
+    column: size_kb
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Domain size
+    caption: median domain size in kilobases, with its spread
+    description: >-
+      The hero number is the median size of a domain in kilobases, and the box shows
+      how sizes spread. It answers how large the topological domains are.
+
+      How to read: the median depends on the window size and on the resolution, so
+      compare samples at the same settings. A long upper whisker means a few very
+      large domains.
+  - component: card
+    column: size_kb
+    aggregation: count
+    aggregations: [median, max]
+    secondary_layout: top_n
+    breakdown_col: chrom
+    top_n_count: 3
+    title: Domains per chromosome
+    caption: domains in view, with the chromosomes holding most ranked
+    description: >-
+      The hero number is the count of domains, and the bars rank the chromosomes
+      that hold most of them. It answers how the domains are spread over the
+      genome.
+
+      How to read: the leaders should be the longest chromosomes. A short one among
+      them means smaller domains or noisier boundary calls there.
+  # valid_fraction is a 0-1 share, so a gauge would draw it on a fixed scale
+  # (RULES section 5); the histogram shows how the domains spread.
+  - component: card
+    column: valid_fraction
+    aggregation: average
+    aggregations: [min, median]
+    secondary_layout: histogram
+    title: Mappable share of a domain
+    caption: average share of valid bins, with the lowest and the median
+    description: >-
+      The hero number is the average share of a domain's bins that hold usable
+      data, and the histogram shows how the domains spread. It answers how much of
+      the domain calls rest on mappable sequence.
+
+      How to read: values close to one are well supported. A pile at low values means
+      many domains sit across unmappable regions, so their edges are less reliable.
+  - component: table
+    title: TAD domains
+    description: >-
+      Each row is a domain with its chromosome, start, end, size, number of bins,
+      valid fraction and the boundary strength at its two edges. It answers the
+      exact coordinates and support of every domain.
+
+      How to read: sort by size or by edge strength to find the largest and the
+      best supported domains.

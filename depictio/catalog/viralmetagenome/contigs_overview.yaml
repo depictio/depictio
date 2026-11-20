@@ -10,16 +10,91 @@ description: >-
 find:
   path_glob: "**/overview-tables/*contigs_overview.tsv"
 recipe: viralmetagenome/contigs_overview.py
+# The fixture is enriched synthetically from 4 real rows (copies with seeded noise), so the preview shows several viruses.
 fixture: contigs_overview.tsv
 renders_as:
-  - { id: denovo_genomes, component: card, column: genome_id, aggregation: nunique,
-      secondary_layout: composition, breakdown_col: virus, headline: true }
-  - { id: denovo_ambiguous, component: card, column: n_pct, aggregation: median,
-      secondary_layout: threshold, threshold_value: 5, threshold_direction: max, threshold_warn: 20 }
+  - id: denovo_genomes
+    component: card
+    column: genome_id
+    aggregation: nunique
+    aggregations: [count]
+    secondary_layout: composition
+    breakdown_col: virus
+    headline: true
+    title: De novo consensus genomes
+    caption: genomes, by virus
+    description: >-
+      The hero number is the count of final de novo consensus genomes, and the bar
+      splits them by the virus of their closest annotated reference. It answers what
+      the run reconstructed.
+
+      How to read: genomes of the expected virus are the result, and other viruses
+      may be co-infections or contamination. Genomes with no assigned virus had no
+      significant hit in the annotation database.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  # No sourced cut-off for ambiguous bases of a consensus genome: the pipeline
+  # only masks positions below its minimum depth, so the card shows the spread.
+  - id: denovo_ambiguous
+    component: card
+    column: n_pct
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    title: Ambiguous bases per genome
+    caption: ambiguous bases (%), with their spread
+    description: >-
+      The hero number is the median share of ambiguous bases (N) in the final
+      consensus genomes, and the box shows their quartiles. It answers how complete
+      the called sequence is.
+
+      How to read: a median near zero means the genomes are fully called. A high
+      median or a long upper whisker marks genomes with gaps, usually where depth was
+      too low to call a base.
+
+      Lines and annotations: none are drawn. The pipeline masks positions covered by
+      fewer than 5 reads by default (min_consensus_depth) and publishes no cut-off for
+      the share of ambiguous bases of a genome.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/nextflow_schema.json
   # Ambiguous bases against identity to the closest reference: the genomes
   # worth trusting sit top left.
   - id: denovo_identity_vs_n
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: n_pct, y: annotation_identity_pct, label: genome_id, color: virus, size: mean_depth }
-  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }
+    title: Ambiguous bases against identity
+    roles: {x: n_pct, y: annotation_identity_pct, label: genome_id, color: virus, size: mean_depth}
+    config:
+      x_title: Ambiguous bases (%)
+      y_title: Identity to the closest reference (%)
+      top_n_labels: 5
+      reference_line: horizontal
+      reference_stat: median
+    description: >-
+      Each point is a final de novo consensus genome: its share of ambiguous bases on
+      the horizontal axis and its identity to the closest annotated reference on the
+      vertical axis, sized by mean depth and coloured by virus. It answers which
+      genomes are both complete and close to a known sequence.
+
+      How to read: genomes at the top left are fully called and close to a reference.
+      Genomes to the right have gaps, and those low on the axis are divergent or
+      poorly assembled, so check their depth before using them.
+
+      Lines and annotations: the dashed line is the median identity to the closest
+      reference of this table, a reference computed from the rows on show (it
+      follows the filters), not a cut-off of the pipeline or the annotation
+      database.
+
+      Source: https://github.com/nf-core/viralmetagenome/blob/1.2.0/docs/output.md
+  - component: table
+    row_selection_enabled: true
+    row_selection_column: genome_id
+    title: De novo genomes table
+    description: >-
+      Each row is a final de novo consensus genome with its closest reference,
+      identity, ambiguous bases, best BLAST hit, CheckV call, mapping, depth and
+      variant counts. It answers how good each reconstructed genome is, and lets a row
+      selection filter the other tiles.
+
+      How to read: sort by ambiguous bases or identity, and read the CheckV call and
+      the depth before accepting a genome.

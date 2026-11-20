@@ -9,9 +9,40 @@ find: { path_glob: "*.tsv" }
 recipe: mhcquant/motif_matrix.py
 fixture: motif_matrix.tsv
 renders_as:
+  # The 20 amino-acid columns are fixed by the recipe, so they are named. Rows are
+  # ordered by position within a sample, so clustering would scramble them.
   - id: motif_heatmap
     component: advanced_viz
     kind: complex_heatmap
-    roles: { index: row_id, row_annotation_cols: [length_class] }
-  - { component: interactive, interactive_type: MultiSelect, column_name: length_class }
-  - { component: table }
+    title: Amino-acid frequency by peptide position
+    roles:
+      index: row_id
+      value_columns: [A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y]
+      row_annotation_cols: [sample, length_class]
+    config:
+      cluster_rows: false
+      cluster_cols: false
+    description: >-
+      Each row is one position of the peptides of a given length in one sample, and
+      each column an amino acid, coloured by the share of peptides carrying that
+      residue there. It answers which residues the presented peptides favour at each
+      position.
+
+      How to read: columns that are dark at only a few positions are anchor
+      residues, the signature of the presenting MHC allele. A flat, pale row has no preference, so little motif.
+  - component: interactive
+    interactive_type: MultiSelect
+    column_name: length_class
+    title: Peptide length
+    description: >-
+      Pick one or more peptide lengths to restrict the heatmap and the table to
+      them. It answers what the motif looks like for a single length.
+  - component: table
+    title: Positional amino-acid frequencies
+    description: >-
+      Each row is one position of one peptide length in one sample, with the number
+      of peptides and the frequency of each amino acid. It answers the exact values
+      behind the heatmap.
+
+      How to read: filter by sample and length, then sort a residue column to find
+      the position where it dominates.
