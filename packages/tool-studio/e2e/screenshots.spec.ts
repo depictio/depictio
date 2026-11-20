@@ -52,9 +52,9 @@ test('capture documentation screenshots', async ({ page }) => {
   test.setTimeout(120_000);
   // 0) Start screen — what a catalog entry is, the four steps, and what it does
   //    not cover. Taller viewport for this one shot, set before navigating: the
-  //    cascade plus the scope pair overflows 900 px and the pinned footer then
-  //    covers the Start button, and resizing after load re-renders the step
-  //    tiles before their icons have resolved.
+  //    step tiles plus the scope pair overflow 900 px of the scrolling canvas,
+  //    and resizing after load re-renders the step tiles before their icons
+  //    have resolved.
   await page.setViewportSize({ width: 1440, height: 1040 });
   await page.goto('./');
   await page.getByTestId('start').waitFor();
@@ -83,8 +83,8 @@ test('capture documentation screenshots', async ({ page }) => {
   await page.getByLabel('Tool id').fill('qiime2');
   const recognized = page.getByText('is already in the catalog');
   await recognized.waitFor();
-  // `fullPage` is useless in this app: the AppShell body is its own scroll
-  // container, so Playwright's page-height capture still crops at the viewport.
+  // `fullPage` is useless in this app: the canvas under the top bar is its own
+  // scroll container, so Playwright's page-height capture still crops at the viewport.
   // Grow the viewport instead, and scroll the panel to the top so the eight
   // outputs and their render badges are all in frame.
   await page.setViewportSize({ width: 1440, height: 1220 });

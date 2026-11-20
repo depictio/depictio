@@ -32,6 +32,10 @@ export interface ParsedFixture {
   rows: Record<string, unknown>[];
   /** Raw file text, exported verbatim as the fixture. */
   raw: string;
+  /** Structural problems found while parsing (ragged rows, unclosed quotes,
+   *  no data rows). Shown next to the preview: a file that parses here with a
+   *  row silently dropped will not ground the same way in CI. */
+  parseWarnings?: string[];
 }
 
 /** Where the tool comes from — drives the picker favicon + which module.yaml
@@ -50,13 +54,22 @@ export interface ToolMeta {
   homepage?: string;
   biotools_url?: string;
   description?: string;
+  /** Semver of the entry (model default 1.0.0, omitted when unchanged). */
+  version?: string;
+  /** Pipeline stage: drives tab placement in `template compose`. */
+  stage?: Stage;
+  /** EDAM topic URIs or `topic_NNNN` ids. */
+  edam_topics?: string[];
 }
 
 // ── Render specs (one per catalog `renders_as` entry) ──────────────────────
 // Discriminated union on `component`. Only the subset the client can author is
 // modelled; each maps 1:1 to a catalog Render.
 
-export type FigureVisuType = 'scatter' | 'line' | 'bar' | 'box' | 'histogram' | 'heatmap';
+// Derived from the catalog schema (13 types); a hand-copied list had fallen to 6.
+import type { VisuType, InteractiveType, Stage } from './catalog/generated/renderSpec';
+export type FigureVisuType = VisuType;
+export type { Stage };
 
 // The card enums come from `generated/cardSpec.ts`, derived from
 // catalog.schema.json at build time — they used to be hand-copied here and fell
@@ -106,6 +119,10 @@ export interface FigureRender extends RenderText {
   uid: string;
   component: 'figure';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   /** UI mode: plotly-express visu type. Omitted for code-mode figures. */
   visu_type?: FigureVisuType;
   /** UI mode: column-valued kwargs (x/y/color/…) + free kwargs (title, log_x…). */
@@ -120,6 +137,11 @@ export interface FigureRender extends RenderText {
   /** Preview-only: the Plotly {data,layout} produced by executing a code-mode
    *  figure in-browser. NOT exported — lets the render list show the real plot. */
   _previewFigure?: { data: unknown[]; layout: Record<string, unknown> };
+  /** Runtime-only: the code came from outside this session (a `#draft=` link,
+   *  an imported zip/folder/draft JSON, `toolStudio.load*`) and is NOT run
+   *  until the author reads it and presses "Run this code" on its card. Kept
+   *  across a reload (still untrusted), never exported. */
+  _untrusted?: boolean;
 }
 
 export interface CardRender extends RenderText {
@@ -146,6 +168,12 @@ export interface CardRender extends RenderText {
   trend_col?: string;
   /** Optional polars pre-filter applied before the aggregation. */
   filter_expr?: string;
+  /** Promote to a composed dashboard's Overview strip. */
+  headline?: boolean;
+  /** Order among headline cards (lower first). */
+  priority?: number;
+  /** e.g. the MultiQC section name. */
+  section?: string;
   /** What the secondary strip shows ("median, with its spread"). */
   caption?: string;
 }
@@ -157,6 +185,10 @@ export interface TableRender extends RenderText {
   uid: string;
   component: 'table';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   /** Displayed columns. Omitted (not an empty list) when all are visible. */
   columns?: string[];
   page_size?: number;
@@ -175,25 +207,25 @@ export interface InteractiveRender extends RenderText {
   uid: string;
   component: 'interactive';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   interactive_type: InteractiveVariant;
   column_name: string;
 }
 
-/** depictio's `InteractiveType` literal (models/components/types.py). */
-export type InteractiveVariant =
-  | 'Select'
-  | 'MultiSelect'
-  | 'SegmentedControl'
-  | 'Slider'
-  | 'RangeSlider'
-  | 'DateRangePicker'
-  | 'Timeline'
-  | 'Switch';
+/** depictio's `InteractiveType` literal, generated from the catalog schema. */
+export type InteractiveVariant = InteractiveType;
 
 export interface AdvancedVizRender extends RenderText {
   uid: string;
   component: 'advanced_viz';
   id?: string;
+  /** Composed-dashboard ordering (lower first) and section label; carried
+   *  through import → export, not edited in the Studio. */
+  priority?: number;
+  section?: string;
   kind: string;
   /** role → column, or → ordered column list for the few list-typed roles
    *  (`sankey.steps`, `sunburst.ranks`, ComplexHeatmap's column lists) and
@@ -214,7 +246,46 @@ export interface OutputMeta {
   /** Short output slug, e.g. "coverage" → output id "<tool>_<slug>". */
   slug: string;
   path_glob: string;
+  /** Alternative globs for runs that name the file differently (needs path_glob). */
+  path_glob_alt?: string[];
+  /** Exact file name, the other `find` key (used when no glob is needed). */
+  filename?: string;
+  /** Display name in the output picker; unique within the tool. */
+  name?: string;
   description?: string;
+  /** A reshape the raw file needs before it is bindable. When set, the
+   *  fixture is the recipe's OUTPUT (what the renders bind), the raw samples
+   *  below are only for running it here, and the recipe ships as
+   *  `<tool>/<slug>.py` (`recipe:` in the output YAML). */
+  recipe?: RecipeDraft;
+  /** Declared bindable columns (polars dtype names). Only meaningful — and
+   *  only emitted — when there is no recipe (SCHEMA.md: recipe XOR columns). */
+  columns?: Record<string, string>;
+  /** Per-output overrides and identity fields, carried through import →
+   *  export (see SCHEMA.md `outputs[]`). */
+  stage?: Stage;
+  origin_tool?: string;
+  mode?: string;
+  nf_core_url?: string;
+  biotools_url?: string;
+  edam_operations?: string[];
+  edam_formats?: string[];
+}
+
+export interface RecipeDraft {
+  /** Python module: SOURCES, OUTPUT_SCHEMA, transform(sources). */
+  code: string;
+  /** The committed `recipe:` reference when it is not the default
+   *  `<tool>/<slug>.py` (a differently named module-owned file such as
+   *  `mosdepth/coverage_track_canonical.py`, or a pipeline-keyed
+   *  `nf-core/<pipeline>/<name>.py`). Kept verbatim on export. */
+  ref?: string;
+  /** Samples of the raw file(s) the recipe reads. In memory only: never
+   *  exported, linked, returned by getDraft() or saved with the draft. */
+  inputs?: Array<{ ref?: string; fileName: string; text: string; sourcePath?: string }>;
+  /** Runtime-only: the recipe came from a link or an import (see
+   *  FigureRender._untrusted). Cleared when the author runs it. */
+  _untrusted?: boolean;
 }
 
 /** A file output channel parsed from a tool source's metadata (nf-core
@@ -227,6 +298,9 @@ export interface OutputChannel {
   name: string;
   /** Glob pattern for the file, e.g. "*.summary.txt" (may be ''). */
   pattern: string;
+  /** Further patterns when the source gives several (`*.{bam,cram}`): the
+   *  catalog's fnmatch has no brace expansion, so they become `path_glob_alt`. */
+  altPatterns?: string[];
   description: string;
   /** meta.yml `type` (kept for filtering; only "file" outputs are surfaced). */
   type: string;
@@ -253,5 +327,9 @@ export interface KindDescriptor {
   required_roles: string[];
   heavy: boolean;
   label: string;
+  /** Roles bound to an ordered column list (generated from `_LIST_ROLES`). */
+  list_roles?: string[];
+  /** Roles that pick a setting, not a column (`_NON_COLUMN_ROLES`). */
+  setting_roles?: string[];
 }
 export type KindsMap = Record<string, KindDescriptor>;

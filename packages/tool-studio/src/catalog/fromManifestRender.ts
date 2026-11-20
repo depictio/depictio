@@ -8,6 +8,7 @@
  * narrow returns null and is listed without a preview, which is the honest
  * outcome for a render written against a model this build does not know.
  */
+import { INTERACTIVE_TYPES, VISU_TYPES } from './generated/renderSpec';
 import type { ManifestRender } from './catalog';
 import type {
   Aggregation,
@@ -31,18 +32,9 @@ const strList = (v: unknown): string[] | undefined =>
 const oneOf = <T extends string>(v: unknown, allowed: readonly string[]): T | undefined =>
   typeof v === 'string' && allowed.includes(v) ? (v as T) : undefined;
 
-const INTERACTIVE_VARIANTS = [
-  'Select',
-  'MultiSelect',
-  'SegmentedControl',
-  'Slider',
-  'RangeSlider',
-  'DateRangePicker',
-  'Timeline',
-  'Switch',
-] as const;
-
-const VISU_TYPES = ['scatter', 'line', 'bar', 'box', 'histogram', 'heatmap'] as const;
+// Generated from the schema, so every type the catalog accepts re-imports as
+// an editable spec instead of being dropped (violin, ecdf, TextInput, ...).
+const INTERACTIVE_VARIANTS = INTERACTIVE_TYPES;
 
 const REFERENCE_STATS = ['median', 'mean', 'p75', 'p90', 'p95', 'p99'] as const;
 
@@ -74,9 +66,15 @@ export function renderSpecFromManifest(
   uid: string,
 ): RenderSpec | null {
   const id = str(raw.id);
+  // `section` and `priority` are accepted on every render type; carried so an
+  // imported entry re-exports them (cards set priority below, as before).
+  const section = str(raw.section);
+  const priority = typeof raw.priority === 'number' && Number.isInteger(raw.priority) ? raw.priority : undefined;
   const base = {
     uid,
     ...(id ? { id } : {}),
+    ...(section ? { section } : {}),
+    ...(priority !== undefined && raw.component !== 'card' ? { priority } : {}),
     ...(str(raw.title) ? { title: str(raw.title) } : {}),
     ...(str(raw.description) ? { description: str(raw.description) } : {}),
   };
@@ -144,6 +142,8 @@ export function renderSpecFromManifest(
         ...(strList(raw.attrition_cols) ? { attrition_cols: strList(raw.attrition_cols) } : {}),
         ...(str(raw.trend_col) ? { trend_col: str(raw.trend_col) } : {}),
         ...(str(raw.filter_expr) ? { filter_expr: str(raw.filter_expr) } : {}),
+        ...(raw.headline === true ? { headline: true } : {}),
+        ...(typeof raw.priority === 'number' ? { priority: raw.priority } : {}),
         ...(str(raw.caption) ? { caption: str(raw.caption) } : {}),
       };
     }
@@ -153,6 +153,8 @@ export function renderSpecFromManifest(
         component: 'table',
         ...(strList(raw.columns) ? { columns: strList(raw.columns) } : {}),
         ...(num(raw.page_size) != null ? { page_size: num(raw.page_size) } : {}),
+        ...(typeof raw.sortable === 'boolean' ? { sortable: raw.sortable } : {}),
+        ...(typeof raw.filterable === 'boolean' ? { filterable: raw.filterable } : {}),
         ...(typeof raw.row_selection_enabled === 'boolean'
           ? { row_selection_enabled: raw.row_selection_enabled }
           : {}),

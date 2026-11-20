@@ -3,14 +3,13 @@
  * fixture — what the offline api shim serves `previewFigure` / `renderFigure`
  * from.
  *
- * IMPORTANT: this is a CLIENT-SIDE APPROXIMATION for preview only. depictio's
- * authoritative figure is built in Python by plotly-express
- * (`create_figure_from_data`), which has no in-browser equivalent, so the
- * geometry is re-derived here and `dev catalog validate` / depictio remain the
- * source of truth. It is the ONE preview in the Studio that is not depictio's
- * own renderer: every other component type — cards, tables, interactive
- * controls, and 13 of the 18 advanced-viz kinds — draws through
- * depictio-react-core off the shim's data.
+ * IMPORTANT: this is a CLIENT-SIDE APPROXIMATION, the instant first answer.
+ * depictio's authoritative figure is built in Python by plotly-express
+ * (`create_figure_from_data`); Tool Studio runs that very code under Pyodide
+ * (`./exactFigures.ts`) and swaps its figure in once the engine has loaded in
+ * the background. This builder serves until then, and whenever the exact path
+ * cannot (Pyodide unavailable, a package it lacks), so facets, trendlines and
+ * marginals are not reproduced here and the theme is only close.
  */
 // Import the shared palette from its module directly (not the barrel) so we
 // don't pull react-core's full renderer tree — and its heavy peers — into this
@@ -159,7 +158,7 @@ function buildBasicFigure(fixture: ParsedFixture, render: FigureRender): Preview
   const sizeCol = kw.size;
   const textCol = kw.text;
 
-  if (!x && render.visu_type !== 'box') {
+  if (!x && render.visu_type !== 'box' && render.visu_type !== 'violin' && render.visu_type !== 'strip') {
     return { unavailable: true, reason: 'Set an x binding to preview.' };
   }
 
@@ -244,6 +243,33 @@ function buildBasicFigure(fixture: ParsedFixture, render: FigureRender): Preview
         break;
       case 'box':
         data.push({ type: 'box', y: y ? gy : (gx as number[]), x: y && x ? gx : undefined, name, marker: { color: traceColor }, opacity });
+        break;
+      case 'violin':
+        data.push({ type: 'violin', y: y ? gy : (gx as number[]), x: y && x ? gx : undefined, name, line: { color: traceColor }, opacity, box: { visible: false }, points: false });
+        break;
+      case 'strip':
+        // px.strip = a box trace with only its jittered points visible.
+        data.push({ type: 'box', y: y ? gy : (gx as number[]), x: y && x ? gx : undefined, name, boxpoints: 'all', jitter: 0.5, pointpos: 0, fillcolor: 'rgba(0,0,0,0)', line: { width: 0 }, marker: { color: traceColor }, opacity });
+        break;
+      case 'area':
+        data.push({ type: 'scatter', mode: 'lines', x: gx, y: gy, name, stackgroup: 'one', line: { color: traceColor }, opacity });
+        break;
+      case 'ecdf': {
+        // Empirical CDF of x: sorted values against their cumulative share.
+        const vals = (gx as unknown[]).map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+        data.push({ type: 'scatter', mode: 'lines', line: { shape: 'hv', color: traceColor }, x: vals, y: vals.map((_, i) => (i + 1) / vals.length), name, opacity });
+        layout.yaxis = { title: { text: 'probability' } };
+        break;
+      }
+      case 'funnel':
+        data.push({ type: 'funnel', x: gy, y: gx, name, marker: { color: traceColor }, opacity });
+        break;
+      case 'density_heatmap':
+        data.push({ type: 'histogram2d', x: gx, y: gy, colorscale: 'Blues' });
+        layout.showlegend = false;
+        break;
+      case 'density_contour':
+        data.push({ type: 'histogram2dcontour', x: gx, y: gy, colorscale: 'Blues', contours: { coloring: 'lines' }, name });
         break;
       case 'heatmap':
         // density heatmap of x,y — Plotly 2d histogram.

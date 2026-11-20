@@ -251,6 +251,8 @@ export async function openCatalogPr(
   entry: GeneratedEntry,
   target: PrTarget = DEFAULT_TARGET,
   onProgress: (msg: string) => void = () => {},
+  /** The tool's other outputs (multi-output entry); their YAML + fixture join the commit. */
+  moreOutputs: GeneratedEntry[] = [],
 ): Promise<OpenPrResult> {
   const dir = `depictio/catalog/${entry.toolId}`;
   const body = [
@@ -261,8 +263,11 @@ export async function openCatalogPr(
     '| File | Purpose |',
     '| --- | --- |',
     '| `module.yaml` | Tool identity (id, name, links). |',
-    `| \`${entry.outputYamlName}\` | Output definition + \`renders_as\` (the dashboard components). |`,
-    `| \`${entry.fixtureName}\` | Fixture that grounds the bindings in CI (nothing computed server-side). |`,
+    ...[entry, ...moreOutputs].flatMap((e) => [
+      `| \`${e.outputYamlName}\` | Output definition + \`renders_as\` (the dashboard components). |`,
+      `| \`${e.fixtureName}\` | Fixture that grounds the bindings in CI (nothing computed server-side). |`,
+      ...(e.recipeFile ? [`| \`${e.recipeFile.name}\` | Recipe: reshapes the raw file into the columns the renders bind. |`] : []),
+    ]),
     '',
     '## Validation',
     'CI `dev catalog validate` is the authoritative check for this entry.',
@@ -286,8 +291,11 @@ export async function openCatalogPr(
     {
       files: [
         { path: `${dir}/module.yaml`, content: entry.moduleYaml },
-        { path: `${dir}/${entry.outputYamlName}`, content: entry.outputYaml },
-        { path: `${dir}/${entry.fixtureName}`, content: entry.fixtureContent },
+        ...[entry, ...moreOutputs].flatMap((e) => [
+          { path: `${dir}/${e.outputYamlName}`, content: e.outputYaml },
+          { path: `${dir}/${e.fixtureName}`, content: e.fixtureContent },
+          ...(e.recipeFile ? [{ path: `${dir}/${e.recipeFile.name}`, content: e.recipeFile.content }] : []),
+        ]),
       ],
       branchSlug: entry.toolId,
       commitMessage: `feat(catalog): add ${entry.toolId}`,
@@ -307,6 +315,7 @@ export async function openNewOutputPr(
   dir: string,
   target: PrTarget = DEFAULT_TARGET,
   onProgress: (msg: string) => void = () => {},
+  moreOutputs: GeneratedEntry[] = [],
 ): Promise<OpenPrResult> {
   const body = [
     '## Summary',
@@ -334,10 +343,11 @@ export async function openNewOutputPr(
   return openFilesPr(
     token,
     {
-      files: [
-        { path: `${dir}/${entry.outputYamlName}`, content: entry.outputYaml },
-        { path: `${dir}/${entry.fixtureName}`, content: entry.fixtureContent },
-      ],
+      files: [entry, ...moreOutputs].flatMap((e) => [
+        { path: `${dir}/${e.outputYamlName}`, content: e.outputYaml },
+        { path: `${dir}/${e.fixtureName}`, content: e.fixtureContent },
+        ...(e.recipeFile ? [{ path: `${dir}/${e.recipeFile.name}`, content: e.recipeFile.content }] : []),
+      ]),
       branchSlug: `${entry.toolId}-${entry.outputSlug}`,
       commitMessage: `feat(catalog): add ${entry.outputSlug} output to ${entry.toolId}`,
       title: `Add ${entry.outputSlug} output to ${entry.toolId}`,

@@ -18,6 +18,8 @@ export interface GroundingIssue {
   renderUid: string;
   severity: 'error' | 'warning';
   message: string;
+  /** Stable machine-readable code (see diagnostics.ts). */
+  code?: string;
 }
 
 // Aggregations that only make sense on a numeric column (min/max/count/nunique/
@@ -56,6 +58,7 @@ const LIST_ROLES: Record<string, string[]> = {
   sankey: ['steps'],
   sunburst: ['ranks'],
   complex_heatmap: ['value_columns', 'row_annotation_cols'],
+  spatial_cells: ['value_columns'],
 };
 
 const SETTING_ROLES: Record<string, string[]> = {
@@ -175,10 +178,30 @@ export function validateRender(
     // Unknown role names. The kind descriptor carries the column roles; the
     // list and setting roles a few kinds bind are named here because they are
     // config fields rather than entries in the role/dtype table.
-    const extraRoles = [
-      ...(LIST_ROLES[render.kind] ?? []),
-      ...(SETTING_ROLES[render.kind] ?? []),
-    ];
+    // Prefer the snapshot (generated from the model); the constants above are
+    // the fallback for an older kinds.json.
+    const listRoles = desc.list_roles?.length ? desc.list_roles : (LIST_ROLES[render.kind] ?? []);
+    const settingRoles = desc.setting_roles?.length ? desc.setting_roles : (SETTING_ROLES[render.kind] ?? []);
+    const extraRoles = [...listRoles, ...settingRoles];
+    // Shape: a list role takes a list, any other role a single column
+    // (`Render._check_roles` in the catalog model).
+    for (const [role, value] of Object.entries(render.roles)) {
+      if (Array.isArray(value) && !listRoles.includes(role)) {
+        issues.push({
+          renderUid: render.uid,
+          severity: 'error',
+          code: 'render.role_shape',
+          message: `Role "${role}" of ${render.kind} takes one column, not a list.`,
+        });
+      } else if (!Array.isArray(value) && value && listRoles.includes(role)) {
+        issues.push({
+          renderUid: render.uid,
+          severity: 'error',
+          code: 'render.role_shape',
+          message: `Role "${role}" of ${render.kind} takes a list of columns.`,
+        });
+      }
+    }
     for (const role of Object.keys(render.roles)) {
       if (render.roles[role] && !desc.roles[role] && !extraRoles.includes(role)) {
         issues.push({
@@ -218,9 +241,11 @@ export function validateRender(
       for (const col of Array.isArray(value) ? value : [value]) {
         const column = colByName.get(col);
         if (column && !accepted.includes(column.dtype)) {
+          // An error, as in `ground_render_dtypes`: CI fails on it.
           issues.push({
             renderUid: render.uid,
-            severity: 'warning',
+            severity: 'error',
+            code: 'render.role_dtype',
             message: `Role "${role}" expects ${accepted.join('/')}, but "${col}" is ${column.dtype}.`,
           });
         }

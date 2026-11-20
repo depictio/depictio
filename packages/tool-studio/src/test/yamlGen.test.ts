@@ -95,6 +95,12 @@ describe('genOutputYaml', () => {
     expect(yaml).toContain('  - { component: table }');
     expect(yaml).not.toContain('columns:');
   });
+
+  it('writes an empty renders list as [] (a bare key is null and fails the schema)', () => {
+    const yaml = genOutputYaml(tool, output, 'results.csv', []);
+    expect(yaml).toContain('renders_as: []');
+    expect(yaml).not.toMatch(/renders_as:\s*$/m);
+  });
 });
 
 describe('appendRendersToYaml', () => {
@@ -333,5 +339,20 @@ describe('appendRenders — shapes it must NOT corrupt', () => {
   it('ends the file with exactly one newline', () => {
     const src = 'id: t_out\nrenders_as:\n  - { component: table }\n\n\n';
     expect(appendRenders(src, add).yaml.endsWith('}\n')).toBe(true);
+  });
+});
+
+describe('code-mode figures keep their snippet byte-exact', () => {
+  it.each(['fig = 1', 'fig = 1\n', 'fig = 1\n\n', '  indented = 1\nfig = 2\n', 'a = 1\n\n\nfig = 2'])('%j', async (code) => {
+    const { default: yaml } = await import('js-yaml');
+    const { genOutputYaml } = await import('../catalog/yamlGen');
+    const text = genOutputYaml(
+      { id: 't', name: 'T', source: 'nf-core' },
+      { slug: 'o', path_glob: '*' },
+      'o.csv',
+      [{ uid: 'u', component: 'figure', code, section: 'S', priority: 1 }],
+    );
+    const doc = yaml.load(text) as { renders_as: Array<Record<string, unknown>> };
+    expect(doc.renders_as[0]).toEqual({ component: 'figure', code, section: 'S', priority: 1 });
   });
 });

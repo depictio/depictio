@@ -9,6 +9,12 @@
  *   src/test/generated/cardMetricsGolden.json ← the real card_metrics /
  *       card_breakdown output for e2e/golden/card_metrics.csv, which pins the
  *       TypeScript port in src/api/cardMetrics.ts to the server's numbers
+ *   src/pyodide/generated/pin.json ← depictio/serverless/pyodide/pin.json
+ *   public/pyodide/depictio_modules.json ← depictio.recipes (+ lib, RecipeSource)
+ *       for the in-browser recipe engine (src/pyodide/depictioModules.ts)
+ *   public/pyodide/depictio_figure_modules.json ← create_figure_from_data and
+ *       the figure path around it, for exact figure previews
+ *       (src/pyodide/figureModules.ts)
  *
  * All are also committed as snapshots. This script REGENERATES them from the
  * in-repo Python source when a depictio-capable Python is reachable (CI, dev
@@ -21,6 +27,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, copyFileSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectDepictioModules } from '../src/pyodide/depictioModules';
+import { collectFigureModules } from '../src/pyodide/figureModules';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(here, '..');
@@ -50,6 +58,17 @@ function copySnapshot(src: string, dst: string, label: string): void {
 //    sources of truth. The MultiQC list is what the Tool step warns against
 //    (`catalog refresh-index` regenerates it from the MultiQC repo).
 copySnapshot(schemaSrc, schemaDst, 'catalog.schema.json');
+// The per-file schemas the exported YAML points its `$schema` header at; the
+// app validates module.yaml / <output>.yaml against them (ajv), so they are
+// snapshotted next to the combined one.
+for (const name of ['module.schema.json', 'output.schema.json']) {
+  copySnapshot(resolve(repoRoot, 'depictio', 'catalog', name), resolve(publicDir, name), name);
+}
+// Existence indices `catalog validate` checks nf-core modules and EDAM terms
+// against (vendored seeds; `catalog refresh-index` makes them authoritative).
+for (const name of ['nf_core_modules.txt', 'edam_terms.txt']) {
+  copySnapshot(resolve(repoRoot, 'depictio', 'catalog', '_index', name), resolve(publicDir, name), name);
+}
 copySnapshot(
   resolve(repoRoot, 'depictio', 'catalog', '_index', 'multiqc_modules.txt'),
   resolve(publicDir, 'multiqc_modules.txt'),
@@ -184,6 +203,54 @@ function cardMetricsGolden(): void {
 
 cardMetricsGolden();
 
+// 2c. The Pyodide engine's inputs (src/pyodide/engine.ts). Plain file work, no
+//     Python needed: the serverless bundle's pin (same Pyodide version and
+//     wheels as an exported dashboard), the depictio modules a recipe imports
+//     (depictio.recipes + recipes.lib + RecipeSource) and the ones a UI-mode
+//     figure is built with, shipped verbatim as the serverless bundle ships its
+//     server modules.
+mkdirSync(resolve(pkgRoot, 'src', 'pyodide', 'generated'), { recursive: true });
+copySnapshot(
+  resolve(repoRoot, 'depictio', 'serverless', 'pyodide', 'pin.json'),
+  resolve(pkgRoot, 'src', 'pyodide', 'generated', 'pin.json'),
+  'pyodide pin.json',
+);
+{
+  const dst = resolve(publicDir, 'pyodide', 'depictio_modules.json');
+  const files = collectDepictioModules(repoRoot);
+  if (files) {
+    mkdirSync(dirname(dst), { recursive: true });
+    writeFileSync(dst, JSON.stringify({ files }) + '\n');
+    console.log(
+      `[genKinds] regenerated public/pyodide/depictio_modules.json (${Object.keys(files).length} files)`,
+    );
+  } else if (existsSync(dst) && !STRICT) {
+    console.log('[genKinds] depictio sources absent — keeping committed depictio_modules.json');
+  } else {
+    console.error('[genKinds] ERROR: cannot collect the depictio modules for the Pyodide engine');
+    process.exit(1);
+  }
+}
+// The figure builder's modules (create_figure_from_data, the aggregation fast
+// path, the mantine templates, the style presets), loaded only when a figure
+// preview asks for the exact rendering.
+{
+  const dst = resolve(publicDir, 'pyodide', 'depictio_figure_modules.json');
+  const files = collectFigureModules(repoRoot);
+  if (files) {
+    mkdirSync(dirname(dst), { recursive: true });
+    writeFileSync(dst, JSON.stringify({ files }) + '\n');
+    console.log(
+      `[genKinds] regenerated public/pyodide/depictio_figure_modules.json (${Object.keys(files).length} files)`,
+    );
+  } else if (existsSync(dst) && !STRICT) {
+    console.log('[genKinds] depictio sources absent — keeping committed depictio_figure_modules.json');
+  } else {
+    console.error('[genKinds] ERROR: cannot collect the figure modules for the Pyodide engine');
+    process.exit(1);
+  }
+}
+
 // 3. Card spec: the enums the exporter must stay in step with, derived from the
 //    schema we just copied. They live in TS (not JSON) so a layout added on the
 //    depictio side becomes a *compile* error in `cardRules.ts`'s exhaustive
@@ -227,6 +294,36 @@ ${asList(enumOf(renderProps.threshold_direction, 'threshold_direction'))}
 ] as const;
 export type ThresholdDirection = (typeof THRESHOLD_DIRECTIONS)[number];
 `;
+
+// 4. Render/identity enums the editors offer: figure types, interactive types,
+//    stages. Hand-copied lists here fell behind (5 of 13 figure types offered).
+const moduleSchema = JSON.parse(readFileSync(resolve(publicDir, 'module.schema.json'), 'utf8')) as {
+  properties: Record<string, Record<string, unknown>>;
+};
+const renderSpecTs = `/**
+ * GENERATED by scripts/genKinds.ts from depictio/catalog/{catalog,module}.schema.json.
+ * Do not edit by hand — run \`pnpm --filter tool-studio genkinds\`.
+ */
+
+export const VISU_TYPES = [
+${asList(enumOf(renderProps.visu_type, 'visu_type'))}
+] as const;
+export type VisuType = (typeof VISU_TYPES)[number];
+
+export const INTERACTIVE_TYPES = [
+${asList(enumOf(renderProps.interactive_type, 'interactive_type'))}
+] as const;
+export type InteractiveType = (typeof INTERACTIVE_TYPES)[number];
+
+export const STAGES = [
+${asList(enumOf(moduleSchema.properties.stage, 'stage'))}
+] as const;
+export type Stage = (typeof STAGES)[number];
+`;
+const renderSpecDst = resolve(pkgRoot, 'src', 'catalog', 'generated', 'renderSpec.ts');
+mkdirSync(dirname(renderSpecDst), { recursive: true });
+writeFileSync(renderSpecDst, renderSpecTs);
+console.log('[genKinds] regenerated src/catalog/generated/renderSpec.ts from the schemas');
 
 const cardSpecDst = resolve(pkgRoot, 'src', 'catalog', 'generated', 'cardSpec.ts');
 mkdirSync(dirname(cardSpecDst), { recursive: true });

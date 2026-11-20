@@ -1,0 +1,874 @@
+{
+  "$defs": {
+    "CatalogFind": {
+      "additionalProperties": false,
+      "description": "How to recognise the raw output file among a scanned run's files.",
+      "properties": {
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path Glob"
+        },
+        "path_glob_alt": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Path Glob Alt",
+          "type": "array"
+        }
+      },
+      "title": "CatalogFind",
+      "type": "object"
+    },
+    "ReferenceLine": {
+      "additionalProperties": false,
+      "description": "A guide line on a UI figure: a fixed value, or a statistic of the data on show.\n\n``value`` draws the line where the author says; ``stat`` draws it at the\nmedian (mean, p75..p99) of ``column`` over the filtered rows, computed by\nthe server figure builder and labelled as such (\"median of this table\"),\nwhich is how RULES.md \u00a717 lets a data-defined reference onto a plot.\nExactly one of the two.",
+      "properties": {
+        "axis": {
+          "description": "`y` draws a horizontal line at a y value, `x` a vertical one at an x value",
+          "enum": [
+            "x",
+            "y"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the line sits",
+          "title": "Value"
+        },
+        "stat": {
+          "anyOf": [
+            {
+              "enum": [
+                "median",
+                "mean",
+                "p75",
+                "p90",
+                "p95",
+                "p99"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Place the line at this statistic of `column` over the rows on show",
+          "title": "Stat"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The numeric column `stat` is computed over",
+          "title": "Column"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Text naming the line on the plot. Unset names the statistic (`median of this table`) or writes `y = value`",
+          "title": "Label"
+        }
+      },
+      "required": [
+        "axis"
+      ],
+      "title": "ReferenceLine",
+      "type": "object"
+    },
+    "Render": {
+      "additionalProperties": false,
+      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `interactive` \u2192 `interactive_type` + `column_name`, the two fields\n  `InteractiveLiteComponent` requires to instantiate a filter control.\n- `table` \u2192 optional display options mirroring `TableLiteComponent`.\n- `multiqc`/`text`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "component": {
+          "anyOf": [
+            {
+              "enum": [
+                "card",
+                "figure",
+                "interactive",
+                "table",
+                "text",
+                "jbrowse",
+                "image",
+                "map",
+                "advanced_viz"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "multiqc",
+              "type": "string"
+            }
+          ],
+          "title": "Component"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "pattern": "^\\d+\\.\\d+\\.\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priority"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "volcano",
+                "embedding",
+                "manhattan",
+                "stacked_bar",
+                "stacked_taxonomy",
+                "phylogenetic",
+                "rarefaction",
+                "da_barplot",
+                "enrichment",
+                "complex_heatmap",
+                "upset_plot",
+                "ma",
+                "dot_plot",
+                "lollipop",
+                "qq",
+                "sunburst",
+                "oncoplot",
+                "coverage_track",
+                "sankey",
+                "pr_benchmark",
+                "roc_pr_curve",
+                "confusion_matrix",
+                "metric_ci_bars",
+                "profile",
+                "signal_matrix",
+                "fusion_structure",
+                "gene_arrow_track",
+                "gsea_running_score",
+                "sashimi",
+                "scatter_xy",
+                "contact_map",
+                "knee_plot",
+                "damage_profile",
+                "genome_view",
+                "group_compare",
+                "transcript_structure",
+                "cnv_profile",
+                "genome_chord",
+                "record_card",
+                "parallel_coordinates",
+                "molecule_3d",
+                "msa",
+                "sequence_track",
+                "hmm_logo",
+                "secondary_structure",
+                "domain_architecture",
+                "pae_matrix",
+                "ramachandran",
+                "ideogram",
+                "ranked_distribution",
+                "spatial_cells",
+                "allele_grid",
+                "pedigree",
+                "ranked_table"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "config": {
+          "additionalProperties": true,
+          "title": "Config",
+          "type": "object"
+        },
+        "roles": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Roles",
+          "type": "object"
+        },
+        "visu_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "scatter",
+                "line",
+                "bar",
+                "box",
+                "violin",
+                "histogram",
+                "ecdf",
+                "strip",
+                "area",
+                "funnel",
+                "density_heatmap",
+                "density_contour",
+                "heatmap"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Visu Type"
+        },
+        "dict_kwargs": {
+          "additionalProperties": true,
+          "title": "Dict Kwargs",
+          "type": "object"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "reference_lines": {
+          "items": {
+            "$ref": "#/$defs/ReferenceLine"
+          },
+          "title": "Reference Lines",
+          "type": "array"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column"
+        },
+        "aggregation": {
+          "anyOf": [
+            {
+              "enum": [
+                "count",
+                "sum",
+                "average",
+                "median",
+                "min",
+                "max",
+                "range",
+                "variance",
+                "std_dev",
+                "skewness",
+                "kurtosis",
+                "percentile",
+                "q1",
+                "q3",
+                "box_plot_stats",
+                "nunique",
+                "mode"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aggregation"
+        },
+        "aggregations": {
+          "items": {
+            "enum": [
+              "count",
+              "sum",
+              "average",
+              "median",
+              "min",
+              "max",
+              "range",
+              "variance",
+              "std_dev",
+              "skewness",
+              "kurtosis",
+              "percentile",
+              "q1",
+              "q3",
+              "box_plot_stats",
+              "nunique",
+              "mode"
+            ],
+            "type": "string"
+          },
+          "title": "Aggregations",
+          "type": "array"
+        },
+        "secondary_layout": {
+          "anyOf": [
+            {
+              "enum": [
+                "vertical",
+                "compact",
+                "grid",
+                "box_plot",
+                "top_n",
+                "coverage",
+                "gauge",
+                "concentration",
+                "composition",
+                "donut",
+                "histogram",
+                "threshold",
+                "completeness",
+                "uniqueness",
+                "attrition",
+                "trend"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secondary Layout"
+        },
+        "breakdown_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Breakdown Col"
+        },
+        "top_n_count": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top N Count"
+        },
+        "coverage_max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coverage Max"
+        },
+        "threshold_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Value"
+        },
+        "threshold_direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "min",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Direction"
+        },
+        "threshold_warn": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Warn"
+        },
+        "attrition_cols": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Attrition Cols",
+          "type": "array"
+        },
+        "trend_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trend Col"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
+        "headline": {
+          "default": false,
+          "title": "Headline",
+          "type": "boolean"
+        },
+        "interactive_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "Select",
+                "MultiSelect",
+                "SegmentedControl",
+                "TextInput",
+                "Slider",
+                "RangeSlider",
+                "DateRangePicker",
+                "Timeline",
+                "Switch"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Type"
+        },
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "page_size": {
+          "anyOf": [
+            {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Size"
+        },
+        "sortable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sortable"
+        },
+        "filterable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filterable"
+        },
+        "row_selection_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Selection Enabled"
+        },
+        "row_selection_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Selection Column"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section"
+        }
+      },
+      "required": [
+        "component"
+      ],
+      "title": "Render",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One file a tool emits \u2192 one or more dashboard renders.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "origin_tool": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Origin Tool"
+    },
+    "mode": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mode"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "enum": [
+            "qc",
+            "alignment",
+            "quantification",
+            "peaks",
+            "variants",
+            "fusions",
+            "taxonomy",
+            "annotation",
+            "immune",
+            "differential",
+            "benchmarking",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
+    },
+    "find": {
+      "$ref": "#/$defs/CatalogFind"
+    },
+    "recipe": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recipe"
+    },
+    "columns": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Columns",
+      "type": "object"
+    },
+    "renders_as": {
+      "items": {
+        "$ref": "#/$defs/Render"
+      },
+      "title": "Renders As",
+      "type": "array"
+    },
+    "fixture": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fixture"
+    },
+    "nf_core_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nf Core Url"
+    },
+    "biotools_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Biotools Url"
+    },
+    "edam_operations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Edam Operations",
+      "type": "array"
+    },
+    "edam_formats": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Edam Formats",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "find"
+  ],
+  "title": "CatalogOutput",
+  "type": "object"
+}

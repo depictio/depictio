@@ -25,7 +25,14 @@ const raw = readFileSync(
   resolve(__dirname, '..', '..', 'e2e', 'golden', golden.fixture),
   'utf8',
 );
-const frame = buildFrame(parseFixture(golden.fixture, raw));
+// The golden is computed with `try_parse_dates=True` so `trend`'s temporal
+// branch is exercised; inference no longer parses dates (polars' default, which
+// `catalog validate` uses), so declare the date column the way the golden reads it.
+const parsed = parseFixture(golden.fixture, raw);
+const frame = buildFrame({
+  ...parsed,
+  columns: parsed.columns.map((c) => (c.name === 'day' ? { ...c, dtype: 'Datetime' as const } : c)),
+});
 
 /** Doubles summed in a different order differ in the last bits, and polars
  *  does not promise row order in its reductions. Compare numerically with a

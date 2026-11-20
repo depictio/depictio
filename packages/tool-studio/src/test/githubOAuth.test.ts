@@ -62,6 +62,15 @@ describe('devToken', () => {
   });
 });
 
+describe('token storage', () => {
+  it('clears a token an earlier build left in sessionStorage', async () => {
+    sessionStorage.setItem('depictio-gh-token', 'old');
+    const m = await loadModule();
+    expect(sessionStorage.getItem('depictio-gh-token')).toBeNull();
+    expect(m.getStoredToken()).toBeNull();
+  });
+});
+
 describe('signIn', () => {
   const env = { VITE_GH_CLIENT_ID: 'abc', VITE_GH_OAUTH_WORKER_URL: 'https://w/exchange' };
 
@@ -70,7 +79,7 @@ describe('signIn', () => {
     await expect(m.signIn()).rejects.toThrow(/not configured/i);
   });
 
-  it('exchanges the code and caches the token in sessionStorage', async () => {
+  it('exchanges the code and keeps the token in memory, never in storage', async () => {
     const m = await loadModule(env);
     stubPopup();
     vi.stubGlobal(
@@ -82,6 +91,9 @@ describe('signIn', () => {
     postFromCallback({ code: 'the-code', state: stateFromAuthorizeUrl() });
     await expect(pending).resolves.toBe('tok');
     expect(m.getStoredToken()).toBe('tok');
+    // Python run under Pyodide can read storage; it cannot read a module closure.
+    expect(JSON.stringify({ ...sessionStorage })).not.toContain('tok');
+    expect(JSON.stringify({ ...localStorage })).not.toContain('tok');
     m.clearStoredToken();
     expect(m.getStoredToken()).toBeNull();
   });

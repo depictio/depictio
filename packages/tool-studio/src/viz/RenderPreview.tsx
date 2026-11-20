@@ -10,7 +10,7 @@
  * limits the shim states out loud (see `src/api/studioApi.ts`).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Center } from '@mantine/core';
+import { Alert, Box, Center, Group, Loader, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
   ComponentRenderer,
@@ -22,6 +22,9 @@ import type { StoredMetadata } from 'depictio-react-core';
 import { registerComponent, unregisterComponent } from '../api/fixtureRegistry';
 import type { ParsedFixture, RenderSpec } from '../types';
 import { STUDIO_DASHBOARD_ID, metadataFromRender } from './renderMetadata';
+import { usePreviewFilters } from './previewFilters';
+import { requestExactFigures, useExactFigures } from './exactFigures';
+import { needsConsent } from '../catalog/trust';
 
 /** How depictio frames a component that is NOT sitting in a dashboard grid.
  *
@@ -69,6 +72,21 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
 
   // Cards are the one type whose value the parent owns rather than the
   // renderer fetching it — same contract as the dashboard's bulk compute.
+  // Controls in the list filter every other preview, as on a dashboard; the
+  // shim applies them through depictio-static-core like the exported bundle.
+  const filters = usePreviewFilters((s) => s.filters);
+  const upsertFilter = usePreviewFilters((s) => s.upsert);
+
+  // A UI-mode figure is drawn by depictio's own figure code once the Pyodide
+  // engine is loaded; showing one is what starts that load (in the
+  // background — the approximation answers meanwhile). `epoch` moves when the
+  // engine is ready, and as the renderer's refreshTick it refetches the figure.
+  const exactCandidate = metadata.component_type === 'figure' && metadata.mode !== 'code';
+  useEffect(() => {
+    if (exactCandidate && fixture.rows.length) requestExactFigures();
+  }, [exactCandidate, fixture.rows.length]);
+  const exactEpoch = useExactFigures((s) => s.epoch);
+
   const [card, setCard] = useState<{
     value?: unknown;
     secondary?: Record<string, unknown>;
@@ -76,7 +94,7 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
   useEffect(() => {
     if (metadata.component_type !== 'card' || !registered) return;
     let cancelled = false;
-    bulkComputeCards(STUDIO_DASHBOARD_ID, [], [metadata.index])
+    bulkComputeCards(STUDIO_DASHBOARD_ID, filters, [metadata.index])
       .then((res) => {
         if (cancelled) return;
         setCard({
@@ -90,7 +108,7 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
     return () => {
       cancelled = true;
     };
-  }, [metadata, registered]);
+  }, [metadata, registered, filters]);
 
   // A dashboard box's height for the types that get one; depictio's own
   // preview width — and its natural height — for the two that never do.
@@ -103,6 +121,16 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
       previewWidth: undefined,
     };
   }, [metadata.component_type]);
+
+  // Code from a link or an import is never mounted: its card offers to run it
+  // (VizDesigner's UntrustedCode), and the shim refuses it regardless.
+  if (needsConsent(render)) {
+    return (
+      <Alert color="yellow" variant="light" icon={<Icon icon="mdi:shield-alert-outline" />} data-testid="untrusted-preview">
+        This figure's code came from a link or an import and has not been run.
+      </Alert>
+    );
+  }
 
   if (!fixture.rows.length) {
     return (
@@ -128,18 +156,62 @@ export default function RenderPreview({ fixture, render, index, position = 0 }: 
         <ComponentRenderer
           dashboardId={STUDIO_DASHBOARD_ID}
           metadata={metadata as StoredMetadata}
-          filters={[]}
+          filters={filters}
+          onFilterChange={upsertFilter}
           cardValue={card?.value}
           cardSecondaryValues={card?.secondary}
           cardLoading={metadata.component_type === 'card' && card === null}
           showDragHandle={false}
+          refreshTick={exactCandidate ? exactEpoch : undefined}
         />
       )}
     </Box>
   );
 
+  if (exactCandidate) {
+    return (
+      <>
+        {preview}
+        <FigureFidelity index={String(metadata.index)} />
+      </>
+    );
+  }
+
   // A component narrower than the frame is centred in it rather than left in a
   // corner of empty background — the same framing depictio's own card builder
   // gives its preview.
   return previewWidth ? <Center>{preview}</Center> : preview;
+}
+
+/** One line under a UI-mode figure while it is not depictio's own rendering:
+ *  the exact renderer is loading, could not load, or could not draw this one
+ *  (the approximation is shown instead). Nothing once it is exact. */
+function FigureFidelity({ index }: { index: string }) {
+  const status = useExactFigures((s) => s.status);
+  const error = useExactFigures((s) => s.error);
+  const entry = useExactFigures((s) => s.fidelity[index]);
+  if (entry?.fidelity === 'exact') return null;
+  let text: string;
+  let title: string | undefined;
+  let state: string;
+  if (status === 'failed') {
+    state = 'unavailable';
+    text = 'Approximate preview — exact rendering unavailable';
+    title = error;
+  } else if (status === 'ready' && entry && entry.reason !== 'loading') {
+    state = 'fallback';
+    text = "Approximate preview — depictio's renderer could not draw this figure here";
+    title = entry.reason;
+  } else {
+    state = 'loading';
+    text = 'Approximate preview — exact rendering loading…';
+  }
+  return (
+    <Group gap={6} mt={4} wrap="nowrap" data-testid="figure-fidelity" data-state={state} title={title}>
+      {state === 'loading' && <Loader size={10} />}
+      <Text fz="xs" c="dimmed">
+        {text}
+      </Text>
+    </Group>
+  );
 }

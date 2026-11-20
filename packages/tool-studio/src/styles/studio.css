@@ -1,0 +1,402 @@
+/* Tool Studio in depictio's Paper chrome.
+ *
+ * The shell is depictio's component-builder shell: `gp-shell bgl-shell` from
+ * pages.css and builder-glass.css (the top bar row, the canvas, the step bar
+ * docked under it), with the Paper top bar of the dashboards and the serverless
+ * bundles (`hy-top`, layout.css). Everything here is what those sheets have no
+ * counterpart for: the entry panel docked on the right, the section tone, the
+ * start screen's step tiles and the About card. Like those sheets it names no
+ * colour of its own: every surface, line, radius and shadow is a --gl-* / --gp-*
+ * token from glass.css and pages.css, scoped to [data-chrome='glass']. */
+
+/* ------------------------------------------------------------ section tone */
+
+/* The Studio's hue (theme.ts, STUDIO_TONE) is the page's primary
+ * (components/Tone.tsx), so the --gl-* accents glass.css derives from it follow
+ * on their own. What is left is the tint of the page's tiles, which pages.css
+ * and builder-glass.css read from --gp-tint / --bgl-head-tint. */
+:root[data-chrome='glass'] .ts-tone {
+  --gp-tint: var(--mantine-color-violet-filled);
+  --bgl-head-tint: var(--mantine-color-violet-filled);
+}
+
+/* ------------------------------------------------------------------ shell */
+
+/* The entry panel takes a second column, from under the top bar to the foot,
+ * like the dashboards' Filters panel. */
+:root[data-chrome='glass'] .ts-shell {
+  --ts-panel-w: 360px;
+}
+@media (min-width: 88em) {
+  :root[data-chrome='glass'] .ts-shell {
+    --ts-panel-w: 420px;
+  }
+}
+:root[data-chrome='glass'] .ts-shell[data-panel] {
+  grid-template-columns: minmax(0, 1fr) var(--ts-panel-w);
+}
+:root[data-chrome='glass'] .ts-shell .bgl-foot {
+  grid-column: 1;
+}
+:root[data-chrome='glass'] .ts-shell .gp-main {
+  padding-top: 10px;
+}
+
+/* The top bar's title is the Studio's name; the step after it is where the
+ * reader is (the serverless bar's "dashboard › tab"). */
+.ts-shell .hy-top-brand {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.ts-shell span.hy-top-brand {
+  cursor: default;
+}
+.ts-shell .hy-top-brand:not(button):hover {
+  background: transparent;
+}
+.ts-shell .hy-key--top {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+/* ------------------------------------------------------------ entry panel */
+
+:root[data-chrome='glass'] .ts-panel {
+  grid-row: 2 / span 2;
+  grid-column: 2;
+  position: relative;
+  z-index: 25;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+:root[data-chrome='glass'] .ts-panel[hidden] {
+  display: none;
+}
+:root[data-chrome='glass'] .ts-panel-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: var(--gl-pane-inset) var(--gl-pane-inset) var(--gl-pane-inset) 0;
+  border-radius: var(--gl-drawer-radius);
+  background: var(--gl-drawer-bg);
+  border: var(--gl-drawer-border);
+  box-shadow: var(--gl-drawer-shadow);
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .ts-panel .hy-drawer-head {
+  border-bottom: 1px solid var(--gl-line-soft);
+}
+:root[data-chrome='glass'] .ts-panel-body {
+  flex: 1;
+  min-height: 0;
+}
+:root[data-chrome='glass'] .ts-panel-foot {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px var(--gl-panel-pad);
+  border-top: 1px solid var(--gl-line-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .ts-panel-foot svg {
+  flex: none;
+  margin-top: 1px;
+}
+/* The file list: the sidebar's rows (pages.css .gp-row), in the panel. */
+:root[data-chrome='glass'] .ts-panel .mantine-NavLink-root {
+  border-radius: 12px;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .ts-panel .mantine-NavLink-root:hover:not([data-active]) {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .ts-panel .mantine-NavLink-root[data-active] {
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 25%, transparent);
+}
+:root[data-chrome='glass'] .ts-panel .mantine-CodeHighlight-root {
+  border-radius: 14px;
+  border: 1px solid var(--gl-hair);
+  background: var(--gl-well);
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .ts-panel .mantine-CodeHighlight-root pre,
+:root[data-chrome='glass'] .ts-panel .mantine-CodeHighlight-code {
+  background: transparent;
+}
+
+/* The panel's toggle in the step's toolbar: a Paper key, lit while open. */
+:root[data-chrome='glass'] .ts-shell .ts-panel-toggle[data-variant='light'] {
+  background: var(--gl-on-bg);
+  color: var(--gl-on-fg);
+  box-shadow: var(--gl-on-ring);
+}
+
+/* ------------------------------------------------------------- the canvas */
+
+/* The steps strip and the step's toolbar share the page's column. */
+:root[data-chrome='glass'] .ts-shell .bgl-stepper {
+  margin-bottom: 18px;
+}
+:root[data-chrome='glass'] .ts-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+:root[data-chrome='glass'] .ts-shell .gp-head {
+  padding-top: 12px;
+}
+/* Mantine's dimmed ink is a shade lighter than the chrome's muted one; on the
+ * canvas the chrome's wins, so help text reads the way the pages' does. */
+:root[data-chrome='glass'] .ts-shell .gp-main .mantine-Text-root[data-c='dimmed'],
+:root[data-chrome='glass'] .ts-shell .gp-main .mantine-InputWrapper-description {
+  color: var(--gl-muted);
+}
+
+/* -------------------------------------------------------- the start screen */
+
+:root[data-chrome='glass'] .ts-start {
+  gap: 26px;
+  /* Fill the scrolling canvas so the footer can sit at its bottom edge. */
+  flex: 1 0 auto;
+}
+:root[data-chrome='glass'] .gp-page:has(> .ts-start) {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+/* On the landing the footer is the last thing on the page: no gutter under it. */
+:root[data-chrome='glass'] .gp-main:has(.ts-start) {
+  padding-bottom: 0;
+}
+:root[data-chrome='glass'] .ts-start {
+  padding-bottom: 12px;
+}
+:root[data-chrome='glass'] .ts-start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+:root[data-chrome='glass'] .ts-start-actions .mantine-Button-root {
+  height: 44px;
+  padding-inline: 22px;
+  font-size: 15px;
+}
+:root[data-chrome='glass'] .ts-start-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 20px;
+  width: 100%;
+  max-width: 1120px;
+  /* Pushed to the bottom of the landing, however short the content above. */
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--gl-line, var(--mantine-color-default-border));
+  font-size: 12px;
+  color: var(--gl-muted, var(--mantine-color-dimmed));
+}
+:root[data-chrome='glass'] .ts-start-foot-build {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+:root[data-chrome='glass'] .ts-start-foot-links {
+  display: inline-flex;
+  gap: 16px;
+}
+:root[data-chrome='glass'] .ts-start-foot-links a {
+  color: inherit;
+  text-decoration: none;
+}
+:root[data-chrome='glass'] .ts-start-foot-links a:hover {
+  color: var(--mantine-primary-color-filled);
+  text-decoration: underline;
+}
+:root[data-chrome='glass'] .ts-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+:root[data-chrome='glass'] .ts-steps .bgl-tile {
+  cursor: default;
+  justify-content: flex-start;
+}
+:root[data-chrome='glass'] .ts-steps .bgl-tile:hover {
+  translate: 0 0;
+  box-shadow: var(--gp-card-shadow);
+}
+:root[data-chrome='glass'] .ts-steps .bgl-tile-desc {
+  max-width: 30ch;
+}
+:root[data-chrome='glass'] .ts-step-num {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gl-faint);
+}
+:root[data-chrome='glass'] .ts-scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 880px;
+}
+:root[data-chrome='glass'] .ts-scope-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: var(--gl-tile-radius);
+  background: var(--gp-card-bg);
+  border: 1px solid var(--gl-rim);
+  box-shadow: var(--gp-card-shadow);
+}
+:root[data-chrome='glass'] .ts-scope-card .bgl-tile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+}
+:root[data-chrome='glass'] .ts-scope-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .ts-scope-desc {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--gl-muted);
+}
+@media (max-width: 63.99em) {
+  :root[data-chrome='glass'] .ts-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 47.99em) {
+  :root[data-chrome='glass'] .ts-steps,
+  :root[data-chrome='glass'] .ts-scope {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-chrome='glass'] .ts-steps .bgl-tile {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    padding: 14px 16px;
+  }
+  :root[data-chrome='glass'] .ts-steps .bgl-tile-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+  :root[data-chrome='glass'] .ts-steps .bgl-tile-label {
+    margin-top: 0;
+  }
+  :root[data-chrome='glass'] .ts-start .bgl-choice-title {
+    font-size: 25px;
+  }
+}
+
+/* -------------------------------------------------------------- about card */
+
+:root[data-chrome='glass'] .ts-about {
+  border-radius: var(--gl-float-radius) !important;
+  border: 1px solid var(--gl-float-line) !important;
+  background: var(--gl-float-bg) !important;
+  box-shadow: var(--gl-float-shadow) !important;
+}
+:root[data-chrome='glass'] .ts-about-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .ts-about-row svg {
+  flex: none;
+  margin-top: 1px;
+}
+:root[data-chrome='glass'] .ts-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gl-hair);
+  font-size: 13px;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .ts-about-links a {
+  color: var(--gl-accent-fg);
+  text-decoration: none;
+}
+:root[data-chrome='glass'] .ts-about-links a:hover {
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------- notifications */
+
+/* depictio's corner, lifted over the step bar so a toast never covers Next. */
+:root[data-chrome='glass'][data-ts-foot] .mantine-Notifications-root[data-position='bottom-right'] {
+  bottom: 92px;
+}
+
+/* ----------------------------------------------------------------- phone */
+
+@media (max-width: 47.99em) {
+  /* The bar keeps the mark, the Studio's name, About and the theme. */
+  .ts-shell .hy-top--compact :is(.hy-top-powered, .ts-key-wide) {
+    display: none;
+  }
+  .ts-shell .hy-top--compact .hy-top-dash {
+    font-size: 17px;
+  }
+  /* Four steps do not fit a phone in a row with their names: the numbers stay
+   * in one row and only the current step keeps its name. */
+  :root[data-chrome='glass'] .ts-shell .bgl-stepper .mantine-Stepper-steps {
+    flex-wrap: nowrap;
+  }
+  :root[data-chrome='glass'] .ts-shell .bgl-stepper .mantine-Stepper-step:not([data-progress]) .mantine-Stepper-stepBody {
+    display: none;
+  }
+  /* gp-main is absolutely placed under the compact bar (pages.css). */
+  :root[data-chrome='glass'] .ts-shell .gp-main {
+    padding-top: 12px;
+  }
+  /* The entry panel turns into a sheet over the canvas, between the bar and
+   * the step bar, and the toggle in the step's toolbar closes it again. */
+  :root[data-chrome='glass'] .ts-panel {
+    position: fixed;
+    z-index: 45;
+    inset: 66px 8px calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+  :root[data-chrome='glass'] .ts-panel-card {
+    margin: 0;
+  }
+  :root[data-chrome='glass'][data-ts-foot] .mantine-Notifications-root[data-position='bottom-right'] {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+}

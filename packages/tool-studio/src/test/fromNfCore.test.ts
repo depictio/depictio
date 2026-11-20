@@ -4,6 +4,7 @@ import {
   metaYmlUrl,
   parseOutputChannels,
   fetchNfCoreMeta,
+  expandPattern,
 } from '../catalog/fromNfCore';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -68,11 +69,20 @@ describe('parseOutputChannels', () => {
     ]);
   });
 
-  it('unwraps a single-option brace but keeps a multi-option one for the author', () => {
+  it('unwraps a single-option brace and splits a multi-option one into alternatives', () => {
     const single = parseOutputChannels({ c: { type: 'file', pattern: '*.{summary.txt}' } });
     expect(single[0].pattern).toBe('*.summary.txt');
+    expect(single[0].altPatterns).toBeUndefined();
+    // fnmatch has no brace expansion: one glob per option.
     const multi = parseOutputChannels({ c: { type: 'file', pattern: '*.{bam,cram}' } });
-    expect(multi[0].pattern).toBe('*.{bam,cram}');
+    expect(multi[0].pattern).toBe('*.bam');
+    expect(multi[0].altPatterns).toEqual(['*.cram']);
+  });
+
+  it('repairs an unbalanced brace (macs3/callpeak meta.yml)', () => {
+    expect(expandPattern('*.gappedPeak,*.narrowPeak}')).toEqual(['*.gappedPeak', '*.narrowPeak']);
+    expect(expandPattern('{*.bed')).toEqual(['*.bed']);
+    expect(expandPattern('*.xls')).toEqual(['*.xls']);
   });
 
   it('skips channels with no file descriptor', () => {
@@ -101,13 +111,39 @@ output:
   it('extracts identity, bio.tools id and outputs', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(META, { status: 200 })));
     const meta = await fetchNfCoreMeta(`${MODULE}/meta.yml`);
-    expect(meta.name).toBe('MOSDEPTH');
+    // The tool (tools[0] key), not the module's own `name`.
+    expect(meta.name).toBe('mosdepth');
     expect(meta.description).toBe('Fast BAM/CRAM depth calculation');
     expect(meta.homepage).toBe('https://github.com/brentp/mosdepth');
     expect(meta.biotools_url).toBe('https://bio.tools/mosdepth');
     // The pasted meta.yml URL is normalised before it reaches module.yaml.
     expect(meta.source_url).toBe(MODULE);
     expect(meta.outputs[0].pattern).toBe('*.summary.txt');
+  });
+
+  it('takes the id and description from the tool, not the module', async () => {
+    const macs3 = `
+name: "macs3_callpeak"
+description: Peak calling of enriched genomic regions of ChIP-seq and ATAC-seq
+  experiments
+tools:
+  - macs3:
+      description: "Model Based Analysis for ChIP-Seq data"
+      homepage: "https://macs3-project.github.io/MACS/"
+      identifier: ""
+`;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(macs3, { status: 200 })));
+    const meta = await fetchNfCoreMeta('https://github.com/nf-core/modules/tree/master/modules/nf-core/macs3/callpeak');
+    expect(meta.name).toBe('macs3');
+    expect(meta.description).toBe('Model Based Analysis for ChIP-Seq data');
+    expect(meta.biotools_url).toBe('');
+  });
+
+  it('falls back to the module name and description without a tools block', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('name: foo_bar\ndescription: Does  things\n', { status: 200 })));
+    const meta = await fetchNfCoreMeta(MODULE);
+    expect(meta.name).toBe('foo_bar');
+    expect(meta.description).toBe('Does things');
   });
 
   it('ignores a non-biotools identifier', async () => {

@@ -803,6 +803,7 @@ def catalog_kinds(
     """
     import json
 
+    from depictio.models.components.advanced_viz.catalog import _LIST_ROLES, _NON_COLUMN_ROLES
     from depictio.models.components.advanced_viz.schemas import ROLE_NAMES, kind_descriptors
 
     kinds = [
@@ -816,6 +817,12 @@ def catalog_kinds(
                 role: sorted(names)
                 for role, names in ROLE_NAMES.get(descriptor["viz_kind"], {}).items()
             },
+            # Roles bound to a column LIST, and roles that pick a setting rather
+            # than a column: the catalog model accepts both, the role/dtype
+            # table above does not describe them, and a hand-copied list in the
+            # studio had already fallen behind (spatial_cells).
+            "list_roles": sorted(_LIST_ROLES.get(descriptor["viz_kind"], ())),
+            "setting_roles": sorted(_NON_COLUMN_ROLES.get(descriptor["viz_kind"], ())),
         }
         for descriptor in kind_descriptors()
     ]
@@ -904,6 +911,15 @@ def catalog_manifest(
         except Exception:
             return None
 
+    def _fixture_sha256(path: Path | None) -> str | None:
+        """sha256 of the whole fixture file, the digest `validate` compares."""
+        import hashlib
+
+        try:
+            return hashlib.sha256(path.read_bytes()).hexdigest() if path and path.exists() else None
+        except OSError:
+            return None
+
     tools: list[dict[str, object]] = []
     for entry in load_entries_from_dir(CATALOG_DIR):
         outs: list[dict[str, object]] = []
@@ -920,6 +936,9 @@ def catalog_manifest(
                     "yamlPath": _rel(yaml_path),
                     "rawYaml": raw,
                     "fixtureContent": _fixture_text(o.fixture_file()),
+                    # Lets Tool Studio flag a fixture byte-identical to another
+                    # tool's before CI does (`_check_fixture_sanity`).
+                    "fixtureSha256": _fixture_sha256(o.fixture_file()),
                 }
             )
         tools.append(

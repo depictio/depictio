@@ -2,6 +2,7 @@ import { Alert, Badge, Button, Divider, Group, Paper, Stack, Text, ThemeIcon, An
 import { Icon } from '@iconify/react';
 import { useStudioStore } from '../state/useStudioStore';
 import type { DuplicateReason, ManifestRender, ManifestTool } from '../catalog/catalog';
+import { STUDIO_TONE } from '../theme';
 
 /** Short label for an existing render badge — the most specific of kind /
  *  visu_type / component. */
@@ -29,7 +30,7 @@ export default function RecognizedTool({
   return (
     <Paper withBorder radius="md" p="md" bg="var(--app-subtle-bg)">
       <Group gap="sm" mb="xs" wrap="nowrap">
-        <ThemeIcon variant="light" color="accent" radius="md" size={34}>
+        <ThemeIcon variant="light" color="teal" radius="md" size={34}>
           <Icon icon="mdi:check-decagram" width={20} />
         </ThemeIcon>
         <div>
@@ -49,7 +50,7 @@ export default function RecognizedTool({
           return (
             <Alert
               key={output.id}
-              color="brand"
+              color="blue"
               variant="light"
               p="sm"
               icon={<Icon icon="mdi:file-document-outline" />}
@@ -74,7 +75,7 @@ export default function RecognizedTool({
                       </Text>
                     ) : (
                       renders.map((r, i) => (
-                        <Badge key={r.id ?? i} variant="light" color="brand" size="sm" radius="sm">
+                        <Badge key={r.id ?? i} variant="light" color={STUDIO_TONE} size="sm" radius="sm">
                           {renderLabel(r)}
                         </Badge>
                       ))
@@ -83,7 +84,7 @@ export default function RecognizedTool({
                 </div>
                 <Button
                   size="xs"
-                  color="brand"
+                  color={STUDIO_TONE}
                   variant="light"
                   style={{ flexShrink: 0 }}
                   leftSection={<Icon icon="mdi:plus" />}
@@ -101,7 +102,7 @@ export default function RecognizedTool({
 
       <Group justify="space-between" wrap="nowrap">
         <Button
-          color="accent"
+          color="teal"
           variant="light"
           leftSection={<Icon icon="mdi:file-plus-outline" />}
           onClick={() => startNewOutput(tool)}

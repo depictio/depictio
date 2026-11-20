@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Stack,
   Title,
@@ -15,6 +15,8 @@ import {
   Paper,
   TextInput,
   Divider,
+  Switch,
+  NumberInput,
 } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
@@ -27,10 +29,49 @@ import type { ManifestRender } from '../catalog/catalog';
 import RenderPreview from '../viz/RenderPreview';
 import AddComponentModal from '../builder/AddComponentModal';
 import type { KindsMap, ParsedFixture, RenderSpec } from '../types';
-import { HEADING_FONT } from '../theme';
+import { usePreviewFilters } from '../viz/previewFilters';
+import { STUDIO_TONE } from '../theme';
+import StepHead from '../components/StepHead';
+import { InstancePrimary } from '../components/Tone';
+import { needsConsent } from '../catalog/trust';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+/** A code-mode figure whose code came from a link or an import: shown, not
+ *  run. Python runs in this page (Pyodide), so it could read anything the page
+ *  can; the author decides, having read it. */
+function UntrustedCode({ code, onRun }: { code: string; onRun: () => void }) {
+  return (
+    <Stack gap="xs" data-testid="untrusted-code">
+      <Alert
+        color="yellow"
+        variant="light"
+        icon={<Icon icon="mdi:shield-alert-outline" />}
+        title="Code from a link or an imported file"
+      >
+        <Text size="sm">
+          This figure is drawn by Python that you did not write in this session. It runs in this
+          page, with access to everything the page can reach, so it is not run until you have read
+          it and choose to.
+        </Text>
+      </Alert>
+      <CodeHighlight code={code} language="python" withCopyButton />
+      <Group>
+        <Button
+          size="xs"
+          variant="light"
+          color={STUDIO_TONE}
+          leftSection={<Icon icon="mdi:play" width={14} />}
+          onClick={onRun}
+          data-testid="run-untrusted"
+        >
+          Run this code
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
 
 /** One added visualization, styled like the depictio Catalog `ComponentCard`
  *  (colored type icon + name/variant + render index, role→column binds, a
@@ -127,12 +168,21 @@ function RenderCard({
             How this renders on a dashboard.
           </Text>
           <Paper withBorder radius="sm" p="xs" bg="var(--app-subtle-bg)">
-            <RenderPreview
-              fixture={fixture}
-              render={render}
-              index={index}
-              position={position}
-            />
+            {needsConsent(render) && render.component === 'figure' ? (
+              <UntrustedCode
+                code={render.code ?? ''}
+                onRun={() => onUpdate({ _untrusted: undefined } as Partial<RenderSpec>)}
+              />
+            ) : (
+              <InstancePrimary>
+                <RenderPreview
+                  fixture={fixture}
+                  render={render}
+                  index={index}
+                  position={position}
+                />
+              </InstancePrimary>
+            )}
           </Paper>
           {issues.length > 0 && (
             <Stack gap={4} mt="sm">
@@ -187,6 +237,29 @@ function RenderCard({
             size="xs"
             mb="sm"
           />
+          {render.component === 'card' && (
+            <Group gap="md" mb="sm" align="flex-end">
+              <Switch
+                size="xs"
+                label="Headline card (shown in a composed dashboard's Overview)"
+                checked={Boolean(render.headline)}
+                onChange={(e) => onUpdate({ headline: e.currentTarget.checked || undefined } as Partial<RenderSpec>)}
+                data-testid="card-headline"
+              />
+              <NumberInput
+                size="xs"
+                w={140}
+                label="Priority"
+                description="lower first"
+                min={0}
+                allowDecimal={false}
+                value={render.priority ?? ''}
+                onChange={(v) =>
+                  onUpdate({ priority: typeof v === 'number' ? v : undefined } as Partial<RenderSpec>)
+                }
+              />
+            </Group>
+          )}
           <Text size="xs" c="dimmed" mb={6}>
             Catalog definition, written into <Code fz="xs">{fileName}</Code> under{' '}
             <Code fz="xs">renders_as</Code>:
@@ -231,7 +304,7 @@ function ExistingRenders({
 
   return (
     <Alert
-      color="brand"
+      color="blue"
       variant="light"
       icon={<Icon icon="mdi:playlist-edit" />}
       title={`Existing renders on ${toolId} / ${outputSlug} (read-only)`}
@@ -255,7 +328,9 @@ function ExistingRenders({
                   )}
                 </Group>
                 {spec && fixture ? (
-                  <RenderPreview fixture={fixture} render={spec} index={index} />
+                  <InstancePrimary>
+                    <RenderPreview fixture={fixture} render={spec} index={index} />
+                  </InstancePrimary>
                 ) : (
                   <Text size="xs" c="dimmed">
                     No preview for this render here — it still renders in depictio.
@@ -276,6 +351,10 @@ function ExistingRenders({
 
 export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
   const fixture = useStudioStore((s) => s.fixture);
+  const previewFilters = usePreviewFilters((s) => s.filters);
+  const clearPreviewFilters = usePreviewFilters((s) => s.clear);
+  // A new fixture (or another output) invalidates the picks.
+  useEffect(() => clearPreviewFilters(), [fixture, clearPreviewFilters]);
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const renders = useStudioStore((s) => s.renders);
@@ -327,20 +406,37 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Title order={3} style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
-            Visualizations
-          </Title>
-          <Text c="dimmed" size="sm">
-            Add dashboard components with depictio's component builder. Each card mirrors how it
-            appears in the depictio Catalog.
-          </Text>
-        </div>
-        <Button leftSection={<Icon icon="mdi:plus" />} color="brand" onClick={() => setModalOpen(true)}>
-          Add visualization
-        </Button>
-      </Group>
+      <StepHead
+        step={2}
+        title="Visualizations"
+        description="Add dashboard components with depictio's component builder. Each card mirrors how it appears in the depictio Catalog."
+        actions={
+          <Button leftSection={<Icon icon="mdi:plus" />} color={STUDIO_TONE} onClick={() => setModalOpen(true)}>
+            Add visualization
+          </Button>
+        }
+      />
+
+      {previewFilters.length > 0 && (
+        <Alert
+          color="blue"
+          variant="light"
+          icon={<Icon icon="mdi:filter-outline" />}
+          data-testid="preview-filters"
+          data-count={previewFilters.length}
+        >
+          <Group justify="space-between" wrap="nowrap">
+            <Text size="sm">
+              {previewFilters.length} control filter{previewFilters.length > 1 ? 's' : ''} applied to the
+              previews below, as on a dashboard ({previewFilters.map((f) => f.column_name).filter(Boolean).join(', ')}).
+              Previews only; nothing is exported.
+            </Text>
+            <Button size="xs" variant="light" onClick={clearPreviewFilters}>
+              Clear filters
+            </Button>
+          </Group>
+        </Alert>
+      )}
 
       {existing && (
         <ExistingRenders
@@ -353,7 +449,7 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
       )}
 
       {renders.length === 0 && (
-        <Alert color="brand" variant="light" icon={<Icon icon="mdi:information-outline" />}>
+        <Alert color="blue" variant="light" icon={<Icon icon="mdi:information-outline" />}>
           {existing
             ? 'Add at least one new visualization to append to this tool.'
             : 'No visualizations yet. Add at least one to continue.'}

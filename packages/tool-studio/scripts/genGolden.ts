@@ -36,7 +36,12 @@ const renders: RenderSpec[] = [
     visu_type: 'histogram',
     dict_kwargs: { x: 'log2fc', color: 'sample', nbinsx: '30', log_y: 'true', title: 'Golden histogram' },
   },
-  { uid: 'r2', component: 'card', column: 'coverage', aggregation: 'average' },
+  // The figure types offered since the list is generated from the schema.
+  { uid: 'r1b', component: 'figure', visu_type: 'violin', dict_kwargs: { x: 'sample', y: 'log2fc' } },
+  { uid: 'r1c', component: 'figure', visu_type: 'ecdf', dict_kwargs: { x: 'log2fc' } },
+  { uid: 'r1d', component: 'figure', visu_type: 'density_contour', dict_kwargs: { x: 'log2fc', y: 'pvalue' } },
+  // headline/priority are emitted unquoted (bool/int in the model).
+  { uid: 'r2', component: 'card', column: 'coverage', aggregation: 'average', headline: true, priority: 1 },
   // One card per layout family that requires a companion field, so a missing
   // mapping in fromBuilderStore/yamlGen fails the round-trip instead of a PR.
   {
@@ -85,6 +90,7 @@ const renders: RenderSpec[] = [
   },
   { uid: 'r4', component: 'interactive', interactive_type: 'MultiSelect', column_name: 'sample' },
   { uid: 'r4b', component: 'interactive', interactive_type: 'RangeSlider', column_name: 'coverage' },
+  { uid: 'r4c', component: 'interactive', interactive_type: 'TextInput', column_name: 'gene' },
   {
     uid: 'r5',
     component: 'advanced_viz',
@@ -100,8 +106,41 @@ const entry = generateEntry({
     source: 'nf-core',
     description: 'Golden round-trip tool.',
     homepage: 'https://example.org/golden',
+    version: '1.1.0',
+    stage: 'differential',
+    edam_topics: ['topic_0203'],
   },
-  output: { slug: 'results', path_glob: '**/golden/*.csv', description: 'Golden round-trip fixture.' },
+  output: {
+    slug: 'results',
+    name: 'Golden results',
+    path_glob: '**/golden/*.csv',
+    path_glob_alt: ['**/golden_alt/*.csv'],
+    description: 'Golden round-trip fixture.',
+    // A module-owned recipe: written as <slug>.py, resolved by `validate --path`
+    // next to the YAML, and its OUTPUT_SCHEMA must be covered by the fixture.
+    recipe: {
+      code: [
+        'import polars as pl',
+        '',
+        'from depictio.models.models.transforms import RecipeSource',
+        '',
+        `SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref="${toolId}_results_raw")]`,
+        'OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {',
+        '    "gene": pl.Utf8,',
+        '    "log2fc": pl.Float64,',
+        '    "pvalue": pl.Float64,',
+        '    "sample": pl.Utf8,',
+        '    "coverage": pl.Int64,',
+        '}',
+        'OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}',
+        '',
+        '',
+        'def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:',
+        '    return sources["raw"]',
+        '',
+      ].join('\n'),
+    },
+  },
   fixtureFileName: fixture.fileName,
   fixtureContent: fixture.raw,
   renders,
@@ -112,6 +151,7 @@ mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, 'module.yaml'), entry.moduleYaml);
 writeFileSync(join(outDir, entry.outputYamlName), entry.outputYaml);
 writeFileSync(join(outDir, entry.fixtureName), entry.fixtureContent);
+if (entry.recipeFile) writeFileSync(join(outDir, entry.recipeFile.name), entry.recipeFile.content);
 
 console.log(`[genGolden] wrote entry to ${outDir}`);
 console.log('--- module.yaml ---\n' + entry.moduleYaml);

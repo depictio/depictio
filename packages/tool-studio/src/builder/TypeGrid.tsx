@@ -7,6 +7,7 @@
  */
 import { Card, Center, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { useMediaQuery } from '@mantine/hooks';
 import { COMPONENT_TYPES } from 'depictio-builder/componentTypes';
 import type { ComponentType } from 'depictio-builder/store/useBuilderStore';
 
@@ -18,12 +19,14 @@ export default function TypeGrid({ onPick }: { onPick: (t: ComponentType) => voi
   // fill 1fr). A 6-col track lets each card span 2 so a trailing row of 2 sits
   // centered (cards 4 & 5 offset to columns 2 and 4).
   const remainder = cards.length % 3;
+  // Below ~600px the 3-up track crushes the labels; fall back to one column.
+  const narrow = useMediaQuery('(max-width: 37.5em)');
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(6, 1fr)',
-        gap: '1.5rem',
+        gridTemplateColumns: narrow ? '1fr' : 'repeat(6, 1fr)',
+        gap: narrow ? '0.75rem' : '1.5rem',
         maxWidth: 900,
         width: '100%',
         margin: '1.5rem auto',
@@ -56,7 +59,7 @@ export default function TypeGrid({ onPick }: { onPick: (t: ComponentType) => voi
               width: '100%',
               font: 'inherit',
               color: 'inherit',
-              gridColumn: inLastRow ? `${startCol} / span 2` : 'span 2',
+              gridColumn: narrow ? 'auto' : inLastRow ? `${startCol} / span 2` : 'span 2',
             }}
             className="cs-type-card"
           >

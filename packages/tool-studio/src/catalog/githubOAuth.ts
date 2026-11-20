@@ -37,13 +37,28 @@ export function devToken(): string | null {
   return raw;
 }
 
-const TOKEN_KEY = 'depictio-gh-token';
+/** Where earlier builds kept the token. Cleared on load (below), never written.
+ *
+ *  The token lives in this module's closure only. Storage is reachable from
+ *  any script on the origin — including Python run under Pyodide on the main
+ *  thread (`import js; js.sessionStorage…`) — whereas a module-scoped `let` is
+ *  not on `globalThis` at all. The popup flow never navigates the main window,
+ *  so nothing needs the token to survive a reload: a reload costs one more
+ *  sign-in click, which is the trade. */
+const LEGACY_TOKEN_KEY = 'depictio-gh-token';
+try {
+  sessionStorage.removeItem(LEGACY_TOKEN_KEY);
+} catch {
+  /* storage blocked: nothing was stored there either */
+}
+
+let token: string | null = null;
 
 export function getStoredToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY);
+  return token;
 }
 export function clearStoredToken(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
+  token = null;
 }
 
 function randomState(): string {
@@ -103,6 +118,6 @@ export async function signIn(): Promise<string> {
   const { access_token } = (await res.json()) as { access_token?: string };
   if (!access_token) throw new Error('Token exchange returned no token.');
 
-  sessionStorage.setItem(TOKEN_KEY, access_token);
+  token = access_token;
   return access_token;
 }

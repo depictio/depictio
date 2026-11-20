@@ -1,19 +1,22 @@
 import { useMemo, useState } from 'react';
-import { Stack, Title, Text, Button, Group, Paper, Alert, Tabs, Code, Badge, List, Anchor } from '@mantine/core';
+import { Stack, Title, Text, Button, Group, Paper, Alert, Tabs, Code, Badge, List, Anchor, Checkbox } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import JSZip from 'jszip';
-import { useStudioStore } from '../state/useStudioStore';
+import { allOutputs, outputsWithoutFixture, useStudioStore } from '../state/useStudioStore';
 import { generateEntry, appendRenders } from '../catalog/yamlGen';
 import AppendedYamlPreview from './AppendedYamlPreview';
-import { validateAll } from '../catalog/grounding';
+import { useDiagnostics } from '../hooks/useDiagnostics';
+import DiagnosticsList from '../components/DiagnosticsList';
+import type { CatalogManifest } from '../catalog/catalog';
 import { oauthConfigured, signIn, getStoredToken, clearStoredToken, devToken } from '../catalog/githubOAuth';
 import { openCatalogPr, openAddRendersPr, openNewOutputPr, resolveTarget } from '../catalog/github';
 import type { PrTarget } from '../catalog/github';
 import { useUpstreamFile } from '../catalog/upstreamFile';
 import type { KindsMap } from '../types';
-import { HEADING_FONT } from '../theme';
+import { STUDIO_TONE } from '../theme';
+import StepHead from '../components/StepHead';
 
 // Fallback when OAuth isn't configured for the deployment: point GitHub's web
 // uploader at the existing parent dir (a non-existent <tool>/ dir 404s) and have
@@ -27,16 +30,22 @@ const editUrl = (t: PrTarget, path: string) =>
 
 type PrPhase = { status: 'idle' | 'working' | 'done' | 'error'; message?: string; url?: string };
 
-export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
+export default function ExportPanel({ kinds, catalog }: { kinds: KindsMap; catalog?: CatalogManifest }) {
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const fixture = useStudioStore((s) => s.fixture);
   const renders = useStudioStore((s) => s.renders);
   const existing = useStudioStore((s) => s.existing);
   const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
+  const siblings = useStudioStore((s) => s.siblings);
+  const activeIndex = useStudioStore((s) => s.activeIndex);
   const dev = devToken();
   const [signedIn, setSignedIn] = useState<boolean>(() => Boolean(getStoredToken() || dev));
   const [pr, setPr] = useState<PrPhase>({ status: 'idle' });
+  const setStep = useStudioStore((s) => s.setStep);
+  // Errors block export by default; this is the explicit, per-session way past
+  // a check the client may have wrong (CI stays the judge).
+  const [override, setOverride] = useState(false);
 
   // New-tool AND new-output modes generate a fresh entry (a full <slug>.yaml +
   // fixture); the append mode instead edits the tool's current output YAML.
@@ -50,6 +59,26 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
       renders,
     });
   }, [tool, output, fixture, renders, existing]);
+
+  // The tool's other outputs, generated the same way (multi-output entry).
+  const moreEntries = useMemo(
+    () =>
+      existing
+        ? []
+        : allOutputs({ output, fixture, renders, siblings, activeIndex })
+            .filter((_, i) => i !== activeIndex)
+            .filter((o) => o.fixture)
+            .map((o) =>
+              generateEntry({
+                tool,
+                output: o.output,
+                fixtureFileName: o.fixture!.fileName,
+                fixtureContent: o.fixture!.raw,
+                renders: o.renders,
+              }),
+            ),
+    [tool, output, fixture, renders, siblings, activeIndex, existing],
+  );
 
   // Preview + download rebase on the file as it is upstream right now; the
   // build-time snapshot is only the fallback when the fetch fails (offline,
@@ -65,8 +94,16 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   );
   const updatedYaml = append?.yaml ?? null;
 
-  const issues = fixture ? validateAll(renders, fixture.columns, kinds) : [];
-  const errors = issues.filter((i) => i.severity === 'error');
+  const diagnostics = useDiagnostics(kinds, catalog);
+  const errors = diagnostics.filter((d) => d.severity === 'error');
+  // An output with no fixture has nothing to export: it used to be dropped
+  // from the zip/PR without a word under "Export anyway". Named here, and it
+  // blocks export whatever the override says.
+  const withoutFixture = useMemo(
+    () => outputsWithoutFixture({ output, fixture, renders, siblings, activeIndex, existing }),
+    [output, fixture, renders, siblings, activeIndex, existing],
+  );
+  const blocked = (errors.length > 0 && !override) || withoutFixture.length > 0;
   // The textual splice refuses a few legal YAML shapes rather than corrupting
   // them; when it does, there is nothing valid to download or commit.
   const appendProblem = append?.problem ?? null;
@@ -80,7 +117,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
     a.download = name;
     a.click();
     URL.revokeObjectURL(url);
-    notifications.show({ color: 'accent', message: `Downloaded ${name}` });
+    notifications.show({ color: 'teal', message: `Downloaded ${name}` });
   };
 
   const doDownload = async () => {
@@ -90,13 +127,16 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
         downloadBlob(`${existing.outputSlug}.yaml`, new Blob([updatedYaml], { type: 'text/yaml' }));
         return;
       }
-      if (!entry) return;
+      if (!entry || withoutFixture.length) return;
       const zip = new JSZip();
       const dir = zip.folder(tool.id)!;
       // New output on an existing tool: only the new files — module.yaml already exists.
       if (!newOutputTarget) dir.file('module.yaml', entry.moduleYaml);
-      dir.file(entry.outputYamlName, entry.outputYaml);
-      dir.file(entry.fixtureName, entry.fixtureContent);
+      for (const e of [entry, ...moreEntries]) {
+        dir.file(e.outputYamlName, e.outputYaml);
+        dir.file(e.fixtureName, e.fixtureContent);
+        if (e.recipeFile) dir.file(e.recipeFile.name, e.recipeFile.content);
+      }
       const zipName = newOutputTarget ? `${tool.id}-${output.slug}.zip` : `${tool.id}-catalog.zip`;
       downloadBlob(zipName, await zip.generateAsync({ type: 'blob' }));
     } catch (e) {
@@ -121,6 +161,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   };
 
   const doOpenPr = async () => {
+    if (withoutFixture.length) return;
     // Enter the working state up-front so the button is disabled during the
     // OAuth popup too — a second click would open a second popup + listener and
     // trip the state check.
@@ -158,10 +199,10 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
               onProgress,
             )
           : newOutputTarget
-            ? await openNewOutputPr(token, entry!, newOutputTarget.dir, resolveTarget(), onProgress)
-            : await openCatalogPr(token, entry!, resolveTarget(), onProgress);
+            ? await openNewOutputPr(token, entry!, newOutputTarget.dir, resolveTarget(), onProgress, moreEntries)
+            : await openCatalogPr(token, entry!, resolveTarget(), onProgress, moreEntries);
       setPr({ status: 'done', url: result.prUrl });
-      notifications.show({ color: 'accent', message: 'Pull request opened.' });
+      notifications.show({ color: 'teal', message: 'Pull request opened.' });
     } catch (e) {
       const message = (e as Error).message;
       // Only an auth failure justifies dropping the token: doing it on ANY
@@ -189,11 +230,11 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
 
   return (
     <Stack gap="lg">
-      <div>
-        <Title order={3} style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
-          Export
-        </Title>
-        <Text c="dimmed" size="sm">
+      <StepHead
+        step={3}
+        title="Export"
+        description={
+          <>
           {mode === 'append' && existing ? (
             <>Append {renders.length} render(s) to <Code>{existing.yamlPath}</Code>, </>
           ) : mode === 'newOutput' ? (
@@ -203,37 +244,57 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           )}
           or open a pull request on GitHub. CI (<Code>dev catalog validate</Code>) is the
           authoritative check.
-        </Text>
-      </div>
+          </>
+        }
+      />
 
-      {errors.length > 0 ? (
-        <Alert color="red" variant="light" icon={<Icon icon="mdi:alert-circle" />} title={`${errors.length} grounding error(s)`}>
-          <Stack gap={2}>
-            {errors.map((e, i) => (
-              <Text key={i} size="sm">
-                {e.message}
-              </Text>
-            ))}
-          </Stack>
-          <Text size="xs" c="dimmed" mt="xs">
-            You can still export, but CI will reject these until fixed.
+      {diagnostics.length > 0 && <DiagnosticsList diagnostics={diagnostics} onGoTo={setStep} />}
+      {withoutFixture.length > 0 && (
+        <Alert
+          color="red"
+          variant="light"
+          icon={<Icon icon="mdi:table-off" />}
+          title="Some outputs have no fixture"
+          data-testid="missing-fixtures"
+          data-count={withoutFixture.length}
+        >
+          <Text size="sm">
+            {withoutFixture.map((slug, k) => (
+              <span key={slug + k}>
+                {k ? ', ' : ''}
+                <Code>{slug}</Code>
+              </span>
+            ))}{' '}
+            {withoutFixture.length > 1 ? 'have' : 'has'} no fixture, so there is nothing to export for{' '}
+            {withoutFixture.length > 1 ? 'them' : 'it'}. Add a fixture (Fixture step) or remove the output; export stays
+            blocked until then, even with &ldquo;Export anyway&rdquo;.
           </Text>
         </Alert>
+      )}
+      {errors.length > 0 ? (
+        <Checkbox
+          checked={override}
+          onChange={(e) => setOverride(e.currentTarget.checked)}
+          label="Export anyway: I know CI will reject these until they are fixed"
+          data-testid="export-anyway"
+        />
       ) : (
-        <Alert color="accent" variant="light" icon={<Icon icon="mdi:check-circle-outline" />}>
+        <Alert color="teal" variant="light" icon={<Icon icon="mdi:check-circle-outline" />} data-testid="checks-pass">
           Client checks pass: {renders.length} render(s) grounded against{' '}
           <Badge variant="light" size="sm">
             {fixture.fileName}
           </Badge>
-          .
+          {diagnostics.length ? ', with warnings above' : ''}. <Code>dev catalog validate</Code> in CI remains the
+          authoritative check.
         </Alert>
       )}
 
       <Group>
         <Button
           size="md"
-          color="brand"
-          disabled={Boolean(appendProblem)}
+          color={STUDIO_TONE}
+          disabled={Boolean(appendProblem) || blocked}
+          data-testid="download"
           leftSection={<Icon icon={existing ? 'mdi:file-download-outline' : 'mdi:folder-zip-outline'} />}
           onClick={doDownload}
         >
@@ -244,7 +305,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           pr.status === 'done' && pr.url ? (
             <Button
               size="md"
-              color="accent"
+              color="teal"
               component="a"
               href={pr.url}
               target="_blank"
@@ -258,7 +319,8 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             <Button
               size="md"
               variant="light"
-              disabled={Boolean(appendProblem)}
+              disabled={Boolean(appendProblem) || blocked}
+              data-testid="open-pr"
               leftSection={<Icon icon="mdi:github" />}
               loading={pr.status === 'working'}
               onClick={doOpenPr}
@@ -270,6 +332,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           <Button
             size="md"
             variant="light"
+            disabled={blocked}
             leftSection={<Icon icon="mdi:github" />}
             rightSection={<Icon icon="mdi:open-in-new" width={14} />}
             onClick={contributeViaUpload}
@@ -277,6 +340,35 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             Contribute on GitHub
           </Button>
         )}
+      </Group>
+
+      <Group gap="xs">
+        <Button
+          size="xs"
+          variant="subtle"
+          leftSection={<Icon icon="mdi:link-variant" width={14} />}
+          data-testid="copy-link"
+          onClick={async () => {
+            const url = await window.toolStudio?.link();
+            if (!url) return;
+            await navigator.clipboard?.writeText(url).catch(() => undefined);
+            notifications.show({ color: 'teal', message: 'Link to this draft copied (fixture trimmed to 200 rows).' });
+          }}
+        >
+          Copy a link to this draft
+        </Button>
+        <Button
+          size="xs"
+          variant="subtle"
+          leftSection={<Icon icon="mdi:code-json" width={14} />}
+          data-testid="download-draft"
+          onClick={() => {
+            const draft = window.toolStudio?.getDraft();
+            if (draft) downloadBlob(`${tool.id || 'draft'}.studio.json`, new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' }));
+          }}
+        >
+          Download draft JSON
+        </Button>
       </Group>
 
       {!canPr && (
@@ -296,12 +388,12 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
       {canPr ? (
         <>
           {pr.status === 'working' && (
-            <Alert color="brand" variant="light" icon={<Icon icon="mdi:loading" />}>
+            <Alert color="blue" variant="light" icon={<Icon icon="mdi:loading" />}>
               {pr.message ?? 'Working…'}
             </Alert>
           )}
           {pr.status === 'done' && pr.url && (
-            <Alert color="accent" variant="light" icon={<Icon icon="mdi:check-circle" />} title="Pull request opened">
+            <Alert color="teal" variant="light" icon={<Icon icon="mdi:check-circle" />} title="Pull request opened">
               <Anchor href={pr.url} target="_blank" rel="noopener noreferrer">
                 {pr.url}
               </Anchor>
@@ -319,9 +411,9 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
               {mode === 'append' && existing ? (
                 <>commits the updated <Code>{existing.yamlPath}</Code></>
               ) : mode === 'newOutput' ? (
-                <>commits the two new files under <Code>{targetDir}</Code></>
+                <>commits the {2 * (1 + moreEntries.length)} new files under <Code>{targetDir}</Code></>
               ) : (
-                <>commits the three files under <Code>{targetDir}</Code></>
+                <>commits the {1 + 2 * (1 + moreEntries.length)} files under <Code>{targetDir}</Code></>
               )}
               , and opens the PR. Only the <Code>public_repo</Code> scope is requested.
               {dev ? ' (Local dev token in use.)' : ''}
@@ -329,7 +421,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           )}
         </>
       ) : existing ? (
-        <Alert color="brand" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
+        <Alert color="blue" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
           <List size="sm" spacing={2} type="ordered">
             <List.Item>
               <strong>Contribute on GitHub</strong> downloads the updated{' '}
@@ -342,7 +434,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           </List>
         </Alert>
       ) : (
-        <Alert color="brand" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
+        <Alert color="blue" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
           <List size="sm" spacing={2} type="ordered">
             <List.Item>
               <strong>Contribute on GitHub</strong> downloads the zip and opens GitHub's file uploader.
@@ -382,7 +474,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
         )}
         {existing && upstream.status === 'ok' && upstream.drifted && (
           <Alert
-            color="brand"
+            color="blue"
             variant="light"
             mb="sm"
             icon={<Icon icon="mdi:source-branch-sync" />}

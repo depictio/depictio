@@ -19,6 +19,8 @@ export interface KindDescriptorPayload {
   required_roles: string[];
   roles: Record<string, { required: boolean; dtypes: string[]; description: string }>;
   heavy: boolean;
+  list_roles?: string[];
+  setting_roles?: string[];
 }
 
 export function kindsMapFrom(payload: KindDescriptorPayload[]): KindsMap {
@@ -28,6 +30,8 @@ export function kindsMapFrom(payload: KindDescriptorPayload[]): KindsMap {
       label: k.label,
       heavy: k.heavy,
       required_roles: k.required_roles,
+      list_roles: k.list_roles ?? [],
+      setting_roles: k.setting_roles ?? [],
       roles: Object.fromEntries(
         Object.entries(k.roles ?? {}).map(([role, spec]) => [role, spec.dtypes]),
       ),

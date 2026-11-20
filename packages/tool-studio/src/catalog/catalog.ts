@@ -32,6 +32,8 @@ export interface ManifestOutput {
   yamlPath?: string | null;
   /** The output YAML's raw text (append target). */
   rawYaml?: string | null;
+  /** sha256 of the full fixture file (cross-tool copy check). */
+  fixtureSha256?: string | null;
 }
 
 export interface ManifestTool {
@@ -107,4 +109,39 @@ export function findDuplicateTool(
     if (name && norm(tool.name) === name) return { tool, reason: 'name' };
   }
   return null;
+}
+
+/** A tool id without its trailing major version: macs3 → macs, bowtie2 → bowtie. */
+const family = (id: string) => norm(id).replace(/[-_]?v?\d+$/, '');
+
+/** `macs2/callpeak` from an nf-core module URL, or ''. */
+const moduleDir = (url?: string | null) => {
+  const m = (url ? canonicalNfCoreUrl(url) : '').match(/\/modules\/nf-core\/(.+)$/);
+  return m ? m[1] : '';
+};
+
+/**
+ * A catalog tool that is not the same tool but looks like the same family:
+ * another major version (macs3 next to macs2), or the same nf-core subcommand
+ * of such a version (macs3/callpeak next to macs2/callpeak). Not a duplicate,
+ * so it never routes the author; it is a hint that an existing entry (and its
+ * recipes) may already cover the file, before a parallel entry is written.
+ */
+export function findSimilarTool(
+  catalog: CatalogManifest,
+  draft: { id?: string; nf_core_url?: string | null },
+): ManifestTool | null {
+  const id = norm(draft.id);
+  const fam = family(id);
+  if (fam.length < 3) return null;
+  const sub = moduleDir(draft.nf_core_url).split('/').slice(1).join('/');
+  let best: ManifestTool | null = null;
+  for (const tool of catalog.tools) {
+    if (norm(tool.id) === id || family(tool.id) !== fam) continue;
+    // Prefer the tool whose nf-core module is the same subcommand.
+    const toolSub = moduleDir(tool.nf_core_url).split('/').slice(1).join('/');
+    if (sub && toolSub === sub) return tool;
+    best ??= tool;
+  }
+  return best;
 }

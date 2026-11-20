@@ -55,12 +55,30 @@ interface MetaYml {
   output?: unknown;
 }
 
-/** nf-core wraps the extension in braces, e.g. "*.{summary.txt}". With a single
- *  option (no comma) that's just literal text, but the catalog `find` uses
- *  Python glob/fnmatch, which doesn't do brace expansion — so unwrap it. Leave
- *  multi-option braces ("*.{bam,cram}") for the author to resolve by hand. */
-function cleanPattern(p: string): string {
-  return p.replace(/\{([^{},]*)\}/g, '$1');
+/**
+ * The fnmatch globs an nf-core `pattern` stands for. The catalog's `find` uses
+ * Python fnmatch, which has no brace expansion, so:
+ *   "*.{summary.txt}"      → ["*.summary.txt"]           (single option, unwrapped)
+ *   "*.{bam,cram}"         → ["*.bam", "*.cram"]          (one glob per option)
+ *   "*.gappedPeak,*.narrowPeak}" → ["*.gappedPeak", "*.narrowPeak"]
+ * The last one is a real meta.yml (macs3/callpeak) with its opening brace
+ * missing: stray braces are dropped and top-level commas still split, so a
+ * typo upstream does not become an invalid glob in the entry.
+ */
+export function expandPattern(p: string): string[] {
+  const trimmed = p.trim();
+  if (!trimmed) return [''];
+  const m = trimmed.match(/^([^{}]*)\{([^{}]*)\}([^{}]*)$/);
+  if (m) {
+    const [, pre, body, post] = m;
+    return body.split(',').map((o) => `${pre}${o.trim()}${post}`).filter((g) => g !== pre + post);
+  }
+  // Unbalanced or nested braces: drop them, then split on commas.
+  return trimmed
+    .replace(/[{}]/g, '')
+    .split(',')
+    .map((g) => g.trim())
+    .filter(Boolean);
 }
 
 /** Depth-first: find the first descriptor node with `type: file` + a string
@@ -94,11 +112,13 @@ function findFileDescriptor(node: unknown): { pattern: string; description: stri
  *  list form (`output: [ { channel: … } ]`). Non-file channels are skipped. */
 export function parseOutputChannels(output: unknown): OutputChannel[] {
   const outs: OutputChannel[] = [];
+  const channel = (name: string, d: { pattern: string; description: string }): OutputChannel => {
+    const [pattern = '', ...alts] = expandPattern(d.pattern);
+    return { name, pattern, ...(alts.length ? { altPatterns: alts } : {}), description: d.description.trim(), type: 'file' };
+  };
   const push = (name: string, value: unknown) => {
     const d = findFileDescriptor(value);
-    if (d) {
-      outs.push({ name, pattern: cleanPattern(d.pattern), description: d.description.trim(), type: 'file' });
-    }
+    if (d) outs.push(channel(name, d));
   };
   if (Array.isArray(output)) {
     for (const item of output) {
@@ -107,7 +127,7 @@ export function parseOutputChannels(output: unknown): OutputChannel[] {
         if (entries.length === 1) push(entries[0][0], entries[0][1]);
         else {
           const d = findFileDescriptor(item);
-          if (d) outs.push({ name: cleanPattern(d.pattern), pattern: cleanPattern(d.pattern), description: d.description.trim(), type: 'file' });
+          if (d) outs.push(channel(expandPattern(d.pattern)[0] ?? d.pattern, d));
         }
       }
     }
@@ -125,14 +145,20 @@ export async function fetchNfCoreMeta(moduleUrl: string): Promise<ExtractedMeta>
   const doc = (yaml.load(text) ?? {}) as MetaYml;
 
   // meta.yml `tools` is a list of single-key maps: [{ tool: {description,...} }]
-  let description = doc.description ?? '';
+  // A catalog entry describes the TOOL (macs2, samtools), not the nf-core
+  // module (macs2_callpeak, samtools_flagstat): its id, name and card text come
+  // from `tools[0]`, and the module only from its URL. The module's own name
+  // and description are the fallback when the tool block is missing.
+  let toolName = '';
+  let description = '';
   let homepage = doc.homepage ?? '';
   let biotools = '';
   const first = doc.tools?.[0];
   if (first) {
-    const [, info] = Object.entries(first)[0] ?? [];
+    const [key, info] = Object.entries(first)[0] ?? [];
+    toolName = key ?? '';
     if (info) {
-      description = description || info.description || '';
+      description = (info.description ?? '').trim();
       // Many meta.yml leave `homepage` empty; the catalog card still needs a
       // link, so fall back to the source repository, then the docs.
       homepage = homepage || info.homepage || info.tool_dev_url || info.documentation || '';
@@ -141,8 +167,8 @@ export async function fetchNfCoreMeta(moduleUrl: string): Promise<ExtractedMeta>
     }
   }
   return {
-    name: doc.name ?? '',
-    description,
+    name: toolName || doc.name || '',
+    description: description || (doc.description ?? '').replace(/\s+/g, ' ').trim(),
     homepage,
     biotools_url: biotools,
     source_url: canonicalNfCoreUrl(moduleUrl.trim()),

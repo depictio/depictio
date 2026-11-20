@@ -21,6 +21,9 @@ on:
       - "depictio/api/v1/services/figure/definitions.py"
       - "depictio/api/v1/services/figure/parameter_discovery.py"
       - "depictio/cli/cli/commands/catalog.py"
+      # Shipped verbatim into the in-browser recipe runtime (public/pyodide/).
+      - "depictio/recipes/**"
+      - "depictio/serverless/pyodide/**"
       - ".github/workflows/tool-studio-ci.yaml"
   push:
     branches: [main]
@@ -38,6 +41,9 @@ on:
       - "depictio/api/v1/services/figure/definitions.py"
       - "depictio/api/v1/services/figure/parameter_discovery.py"
       - "depictio/cli/cli/commands/catalog.py"
+      # Shipped verbatim into the in-browser recipe runtime (public/pyodide/).
+      - "depictio/recipes/**"
+      - "depictio/serverless/pyodide/**"
       - ".github/workflows/tool-studio-ci.yaml"
 
 jobs:
@@ -109,6 +115,12 @@ jobs:
             packages/tool-studio/public/figureParams.json \
             packages/tool-studio/public/catalog.json \
             packages/tool-studio/public/catalog.schema.json \
+            packages/tool-studio/public/module.schema.json \
+            packages/tool-studio/public/output.schema.json \
+            packages/tool-studio/public/nf_core_modules.txt \
+            packages/tool-studio/public/edam_terms.txt \
+            packages/tool-studio/public/pyodide/ \
+            packages/tool-studio/src/pyodide/generated/ \
             packages/tool-studio/public/multiqc_modules.txt \
             packages/tool-studio/src/catalog/generated/ \
             packages/tool-studio/src/test/generated/ \
@@ -119,6 +131,21 @@ jobs:
           source venv/bin/activate
           pnpm --filter tool-studio exec tsx scripts/genGolden.ts "$RUNNER_TEMP/golden"
           depictio dev catalog validate --path "$RUNNER_TEMP/golden"
+
+      - name: Parity, every case the Studio flags must fail catalog validate
+        # genNegatives exits 1 if the Studio misses a case; each folder must then
+        # be rejected by the CLI too, or the client is stricter than CI.
+        run: |
+          source venv/bin/activate
+          pnpm --filter tool-studio exec tsx scripts/genNegatives.ts "$RUNNER_TEMP/negatives"
+          status=0
+          for dir in "$RUNNER_TEMP"/negatives/neg*/; do
+            if depictio dev catalog validate --path "$dir" > /dev/null 2>&1; then
+              echo "::error::catalog validate ACCEPTED $(basename "$dir"), which the Studio rejects"
+              status=1
+            fi
+          done
+          exit $status
 
   e2e:
     runs-on: ubuntu-22.04

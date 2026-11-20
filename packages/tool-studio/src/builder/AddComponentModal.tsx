@@ -9,11 +9,13 @@ import { useState } from 'react';
 import { Modal, Group, Button, Title, Text, Stack, Divider } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
+import { useMediaQuery } from '@mantine/hooks';
 import type { ComponentType } from 'depictio-builder/store/useBuilderStore';
 import type { ParsedFixture, RenderSpec } from '../types';
 import { getComponentTypeMeta } from 'depictio-builder/componentTypes';
 import TypeGrid from './TypeGrid';
 import DesignArea from './DesignArea';
+import { InstancePrimary } from '../components/Tone';
 import { seedBuilderStore } from './seedStore';
 import { renderSpecFromStore } from '../catalog/fromBuilderStore';
 
@@ -30,8 +32,15 @@ export default function AddComponentModal({
 }) {
   const [type, setType] = useState<ComponentType | null>(null);
   const [seeding, setSeeding] = useState(false);
+  // Inline, next to the button that failed, instead of a toast that outlived
+  // the modal and sat over the stepper after a later success.
+  const [incomplete, setIncomplete] = useState(false);
+  const small = useMediaQuery('(max-width: 48em)');
 
-  const reset = () => setType(null);
+  const reset = () => {
+    setType(null);
+    setIncomplete(false);
+  };
 
   const close = () => {
     reset();
@@ -51,11 +60,12 @@ export default function AddComponentModal({
   const confirm = () => {
     const spec = renderSpecFromStore();
     if (!spec) {
-      notifications.show({ color: 'red', message: 'Complete the required bindings first.' });
+      setIncomplete(true);
       return;
     }
     onAdd(spec);
-    notifications.show({ color: 'accent', message: 'Visualization added.' });
+    notifications.clean();
+    notifications.show({ color: 'teal', message: 'Visualization added.', autoClose: 2500 });
     close();
   };
 
@@ -66,12 +76,13 @@ export default function AddComponentModal({
       opened={opened}
       onClose={close}
       size="90rem"
+      fullScreen={small}
       // Fixed tall shell so the modal stays the SAME size across every option
       // (type grid, figure, card, table, interactive, advanced) — the design
       // surface scrolls internally instead of resizing the dialog.
       styles={{
-        content: { height: '88vh' },
-        body: { height: 'calc(88vh - 64px)', display: 'flex', flexDirection: 'column' },
+        content: { height: small ? '100dvh' : '88vh' },
+        body: { height: small ? 'calc(100dvh - 64px)' : 'calc(88vh - 64px)', display: 'flex', flexDirection: 'column' },
       }}
       title={
         <Group gap="xs">
@@ -103,16 +114,30 @@ export default function AddComponentModal({
             </Text>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '1rem 0' }}>
-            <DesignArea type={type} />
+            {/* depictio's builder, in the instance primary as on a dashboard. */}
+            <InstancePrimary>
+              <DesignArea type={type} />
+            </InstancePrimary>
           </div>
           <Divider />
           <Group justify="space-between" pt="sm" style={{ flexShrink: 0 }}>
             <Button variant="default" leftSection={<Icon icon="mdi:chevron-left" />} onClick={reset}>
               Change type
             </Button>
-            <Button color="brand" leftSection={<Icon icon="mdi:plus" />} onClick={confirm}>
-              Add to output
-            </Button>
+            <Group gap="sm" wrap="nowrap">
+              {incomplete && (
+                <Text size="sm" c="red" role="alert" data-testid="add-incomplete">
+                  Bind every required field (marked *) first.
+                </Text>
+              )}
+              <Button
+                leftSection={<Icon icon="mdi:plus" />}
+                onClick={confirm}
+                data-testid="add-to-output"
+              >
+                Add to output
+              </Button>
+            </Group>
           </Group>
         </>
       )}

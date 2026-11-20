@@ -7,6 +7,7 @@
       "icon": "tabler:layout-columns",
       "label": "Allele grid",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample_id",
         "locus",
@@ -147,6 +148,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "allele_grid"
     },
     {
@@ -156,6 +158,7 @@
       "icon": "tabler:chart-dots-3",
       "label": "Copy-number profile",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample",
         "chrom",
@@ -310,6 +313,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "cnv_profile"
     },
     {
@@ -319,6 +323,10 @@
       "icon": "tabler:grid-pattern",
       "label": "ComplexHeatmap (clustered)",
       "legacy": false,
+      "list_roles": [
+        "row_annotation_cols",
+        "value_columns"
+      ],
       "required_roles": [
         "index"
       ],
@@ -343,6 +351,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "complex_heatmap"
     },
     {
@@ -352,6 +361,7 @@
       "icon": "tabler:grid-dots",
       "label": "Confusion matrix",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "label",
         "tp",
@@ -455,6 +465,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "confusion_matrix"
     },
     {
@@ -464,6 +475,7 @@
       "icon": "tabler:layout-grid",
       "label": "Contact map",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "chrom1",
         "start1",
@@ -659,6 +671,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "contact_map"
     },
     {
@@ -668,6 +681,7 @@
       "icon": "tabler:chart-area-line",
       "label": "Coverage track",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "chromosome",
         "position",
@@ -762,6 +776,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "coverage_track"
     },
     {
@@ -771,6 +786,7 @@
       "icon": "tabler:chart-bar-popular",
       "label": "Differential-abundance bars (tool)",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "feature_id",
         "contrast",
@@ -837,6 +853,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "da_barplot"
     },
     {
@@ -846,6 +863,7 @@
       "icon": "tabler:dna-2",
       "label": "Damage profile",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample",
         "end",
@@ -948,6 +966,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "damage_profile"
     },
     {
@@ -957,6 +976,7 @@
       "icon": "tabler:timeline",
       "label": "Domain architecture",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "entity",
         "start",
@@ -1207,6 +1227,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "domain_architecture"
     },
     {
@@ -1216,6 +1237,7 @@
       "icon": "tabler:circle-dot",
       "label": "Dot plot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "cluster",
         "gene",
@@ -1280,6 +1302,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "dot_plot"
     },
     {
@@ -1289,6 +1312,7 @@
       "icon": "tabler:atom",
       "label": "Embedding / clustering",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample_id",
         "dim_1",
@@ -1385,6 +1409,9 @@
           "required": true
         }
       },
+      "setting_roles": [
+        "compute_method"
+      ],
       "viz_kind": "embedding"
     },
     {
@@ -1394,6 +1421,7 @@
       "icon": "tabler:chart-dots",
       "label": "GSEA / pathway enrichment (tool)",
       "legacy": true,
+      "list_roles": [],
       "required_roles": [
         "term",
         "nes",
@@ -1476,6 +1504,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "enrichment"
     },
     {
@@ -1485,6 +1514,7 @@
       "icon": "tabler:arrows-join-2",
       "label": "Fusion structure",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "fusion_id",
         "partner",
@@ -1627,6 +1657,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "fusion_structure"
     },
     {
@@ -1636,6 +1667,7 @@
       "icon": "tabler:arrow-big-right-lines",
       "label": "Gene arrow track",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "contig",
         "feature_id",
@@ -1785,6 +1817,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "gene_arrow_track"
     },
     {
@@ -1794,6 +1827,7 @@
       "icon": "tabler:circle-dotted",
       "label": "Genome chord",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "chrom_a",
         "pos_a",
@@ -1928,6 +1962,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "genome_chord"
     },
     {
@@ -1937,6 +1972,7 @@
       "icon": "tabler:dna-2",
       "label": "Genome view",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "chr",
         "pos",
@@ -2040,6 +2076,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "genome_view"
     },
     {
@@ -2049,6 +2086,7 @@
       "icon": "tabler:arrows-diff",
       "label": "Group comparison",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "index"
       ],
@@ -2081,6 +2119,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "group_compare"
     },
     {
@@ -2090,6 +2129,7 @@
       "icon": "tabler:chart-area-line",
       "label": "GSEA running score",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "gene_set",
         "rank",
@@ -2176,6 +2216,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "gsea_running_score"
     },
     {
@@ -2185,6 +2226,7 @@
       "icon": "tabler:letter-case",
       "label": "HMM logo",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "state",
         "letter",
@@ -2387,6 +2429,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "hmm_logo"
     },
     {
@@ -2396,6 +2439,7 @@
       "icon": "tabler:align-left",
       "label": "Ideogram",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "chrom",
         "start",
@@ -2565,6 +2609,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "ideogram"
     },
     {
@@ -2574,6 +2619,7 @@
       "icon": "tabler:trending-down",
       "label": "Knee plot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample",
         "rank",
@@ -2665,6 +2711,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "knee_plot"
     },
     {
@@ -2674,6 +2721,7 @@
       "icon": "tabler:chart-arcs",
       "label": "Lollipop / needle plot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "feature_id",
         "position",
@@ -2753,6 +2801,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "lollipop"
     },
     {
@@ -2762,6 +2811,7 @@
       "icon": "tabler:chart-bubble",
       "label": "MA plot",
       "legacy": true,
+      "list_roles": [],
       "required_roles": [
         "feature_id",
         "avg_log_intensity",
@@ -2830,6 +2880,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "ma"
     },
     {
@@ -2839,6 +2890,7 @@
       "icon": "tabler:chart-histogram",
       "label": "Manhattan plot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "chr",
         "pos",
@@ -2914,6 +2966,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "manhattan"
     },
     {
@@ -2923,6 +2976,7 @@
       "icon": "tabler:chart-bar",
       "label": "Metric bars with CI",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "label",
         "value",
@@ -2990,6 +3044,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "metric_ci_bars"
     },
     {
@@ -2999,6 +3054,7 @@
       "icon": "tabler:cube-3d-sphere",
       "label": "3D structure",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "position"
       ],
@@ -3186,6 +3242,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "molecule_3d"
     },
     {
@@ -3195,6 +3252,7 @@
       "icon": "tabler:align-justified",
       "label": "Sequence alignment",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "msa_id",
         "seq_id",
@@ -3302,6 +3360,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "msa"
     },
     {
@@ -3311,6 +3370,7 @@
       "icon": "tabler:grid-pattern",
       "label": "Oncoplot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample_id",
         "gene",
@@ -3359,6 +3419,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "oncoplot"
     },
     {
@@ -3368,6 +3429,7 @@
       "icon": "tabler:chart-grid-dots",
       "label": "Predicted aligned error",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "position"
       ],
@@ -3452,6 +3514,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "pae_matrix"
     },
     {
@@ -3461,6 +3524,7 @@
       "icon": "tabler:chart-line",
       "label": "Parallel coordinates",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample"
       ],
@@ -3501,6 +3565,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "parallel_coordinates"
     },
     {
@@ -3510,6 +3575,7 @@
       "icon": "mdi:family-tree",
       "label": "Pedigree",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "individual",
         "father",
@@ -3728,6 +3794,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "pedigree"
     },
     {
@@ -3737,6 +3804,7 @@
       "icon": "tabler:hierarchy-3",
       "label": "Phylogenetic tree",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "taxon"
       ],
@@ -3786,6 +3854,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "phylogenetic"
     },
     {
@@ -3795,6 +3864,7 @@
       "icon": "tabler:target-arrow",
       "label": "Precision-recall benchmark",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "label",
         "recall",
@@ -3882,6 +3952,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "pr_benchmark"
     },
     {
@@ -3891,6 +3962,7 @@
       "icon": "tabler:chart-line",
       "label": "Signal profile",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "series",
         "x",
@@ -3982,6 +4054,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "profile"
     },
     {
@@ -3991,6 +4064,7 @@
       "icon": "tabler:chart-line",
       "label": "QQ plot",
       "legacy": true,
+      "list_roles": [],
       "required_roles": [
         "p_value"
       ],
@@ -4029,6 +4103,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "qq"
     },
     {
@@ -4038,6 +4113,7 @@
       "icon": "tabler:angle",
       "label": "Ramachandran plot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "position"
       ],
@@ -4179,6 +4255,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "ramachandran"
     },
     {
@@ -4188,6 +4265,7 @@
       "icon": "tabler:chart-candle",
       "label": "Ranked distribution",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "feature_id",
         "score"
@@ -4447,6 +4525,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "ranked_distribution"
     },
     {
@@ -4456,6 +4535,7 @@
       "icon": "mdi:podium",
       "label": "Ranked table",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "title",
         "score"
@@ -4555,6 +4635,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "ranked_table"
     },
     {
@@ -4564,6 +4645,7 @@
       "icon": "tabler:chart-line",
       "label": "Rarefaction curves",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample_id",
         "depth",
@@ -4657,6 +4739,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "rarefaction"
     },
     {
@@ -4666,6 +4749,7 @@
       "icon": "tabler:id",
       "label": "Record card",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "id"
       ],
@@ -4705,6 +4789,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "record_card"
     },
     {
@@ -4714,6 +4799,7 @@
       "icon": "tabler:chart-line",
       "label": "ROC / PR curve",
       "legacy": true,
+      "list_roles": [],
       "required_roles": [
         "recall",
         "precision"
@@ -4771,6 +4857,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "roc_pr_curve"
     },
     {
@@ -4780,9 +4867,13 @@
       "icon": "tabler:chart-sankey",
       "label": "Sankey (categorical flow)",
       "legacy": false,
+      "list_roles": [
+        "steps"
+      ],
       "required_roles": [],
       "role_names": {},
       "roles": {},
+      "setting_roles": [],
       "viz_kind": "sankey"
     },
     {
@@ -4792,6 +4883,7 @@
       "icon": "tabler:chart-arcs",
       "label": "Splice junctions",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "chr",
         "start",
@@ -4904,6 +4996,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "sashimi"
     },
     {
@@ -4913,6 +5006,7 @@
       "icon": "tabler:chart-dots",
       "label": "Scatter (X/Y)",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "x",
         "y"
@@ -5018,6 +5112,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "scatter_xy"
     },
     {
@@ -5027,6 +5122,7 @@
       "icon": "tabler:wave-sine",
       "label": "Secondary structure",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "position",
         "state"
@@ -5182,6 +5278,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "secondary_structure"
     },
     {
@@ -5191,6 +5288,7 @@
       "icon": "tabler:ruler-2",
       "label": "Sequence track",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "position"
       ],
@@ -5292,6 +5390,7 @@
           "required": false
         }
       },
+      "setting_roles": [],
       "viz_kind": "sequence_track"
     },
     {
@@ -5301,6 +5400,7 @@
       "icon": "tabler:grid-pattern",
       "label": "Signal matrix",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "region_id",
         "position",
@@ -5382,6 +5482,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "signal_matrix"
     },
     {
@@ -5391,6 +5492,9 @@
       "icon": "tabler:microscope",
       "label": "Spatial cells",
       "legacy": false,
+      "list_roles": [
+        "value_columns"
+      ],
       "required_roles": [
         "cell_id",
         "x",
@@ -5555,6 +5659,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "spatial_cells"
     },
     {
@@ -5564,6 +5669,7 @@
       "icon": "tabler:chart-bar",
       "label": "Stacked bar",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "sample_id",
         "taxon",
@@ -5644,6 +5750,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "stacked_bar"
     },
     {
@@ -5653,6 +5760,7 @@
       "icon": "tabler:chart-bar",
       "label": "Stacked taxonomy",
       "legacy": true,
+      "list_roles": [],
       "required_roles": [
         "sample_id",
         "taxon",
@@ -5733,6 +5841,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "stacked_taxonomy"
     },
     {
@@ -5742,6 +5851,9 @@
       "icon": "tabler:sun",
       "label": "Sunburst",
       "legacy": false,
+      "list_roles": [
+        "ranks"
+      ],
       "required_roles": [
         "abundance"
       ],
@@ -5775,6 +5887,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "sunburst"
     },
     {
@@ -5784,6 +5897,7 @@
       "icon": "tabler:layout-rows",
       "label": "Transcript structure",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "transcript_id",
         "gene_id",
@@ -5956,6 +6070,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "transcript_structure"
     },
     {
@@ -5965,9 +6080,11 @@
       "icon": "tabler:chart-bar-popular",
       "label": "UpSet plot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [],
       "role_names": {},
       "roles": {},
+      "setting_roles": [],
       "viz_kind": "upset_plot"
     },
     {
@@ -5977,6 +6094,7 @@
       "icon": "tabler:chart-scatter",
       "label": "Volcano plot",
       "legacy": false,
+      "list_roles": [],
       "required_roles": [
         "feature_id",
         "effect_size",
@@ -6071,6 +6189,7 @@
           "required": true
         }
       },
+      "setting_roles": [],
       "viz_kind": "volcano"
     }
   ]

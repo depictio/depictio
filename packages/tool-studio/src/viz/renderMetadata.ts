@@ -51,7 +51,14 @@ export function metadataFromRender(
         ? { reference_lines: render.reference_lines }
         : {}),
       ...(render.code
-        ? { mode: 'code', code_content: render.code, _previewFigure: render._previewFigure }
+        ? {
+            mode: 'code',
+            code_content: render.code,
+            _previewFigure: render._previewFigure,
+            // Code from a link or an import: the shim refuses to run it until
+            // the author has pressed "Run this code" (catalog/trust.ts).
+            ...(render._untrusted ? { _untrusted: true } : {}),
+          }
         : { mode: 'ui' }),
     };
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findDuplicateTool, type CatalogManifest } from '../catalog/catalog';
+import { findDuplicateTool, findSimilarTool, type CatalogManifest } from '../catalog/catalog';
 
 const catalog: CatalogManifest = {
   tools: [
@@ -52,5 +52,27 @@ describe('findDuplicateTool', () => {
     });
     expect(match?.reason).toBe('nf-core module');
     expect(match?.tool.id).toBe('mosdepth');
+  });
+});
+
+describe('findSimilarTool', () => {
+  const nf = (m: string) => `https://github.com/nf-core/modules/tree/master/modules/nf-core/${m}`;
+  const fam: CatalogManifest = {
+    tools: [
+      { id: 'macs2', name: 'MACS2', nf_core_url: nf('macs2/callpeak'), outputs: [] },
+      { id: 'bowtie', name: 'Bowtie', outputs: [] },
+      { id: 'mosdepth', name: 'mosdepth', outputs: [] },
+    ],
+  };
+
+  it('finds another major version of the same tool', () => {
+    expect(findSimilarTool(fam, { id: 'macs3', nf_core_url: nf('macs3/callpeak') })?.id).toBe('macs2');
+    expect(findSimilarTool(fam, { id: 'bowtie2' })?.id).toBe('bowtie');
+  });
+
+  it('is not a duplicate match and ignores unrelated tools', () => {
+    expect(findSimilarTool(fam, { id: 'macs2' })).toBeNull();
+    expect(findSimilarTool(fam, { id: 'fastp' })).toBeNull();
+    expect(findSimilarTool(fam, { id: 'm3' })).toBeNull();
   });
 });

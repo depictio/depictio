@@ -306,6 +306,10 @@
   if (!R || !root.customElements || customElements.get('depictio-rose')) return;
 
   const BOUNCE = { soft: .7, medium: .5, strong: .35 };
+  // The easing the settle-back animation in _apply uses. It was only declared
+  // in the geometry IIFE above, so stopping the rose mid-animation threw
+  // "OUT is not defined".
+  const OUT = 'cubic-bezier(.2, .7, .3, 1)';
   const NUM = (v, d) => (v === null || v === '' || isNaN(parseFloat(v)) ? d : parseFloat(v));
   let uid = 0;
 

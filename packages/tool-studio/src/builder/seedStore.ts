@@ -15,8 +15,11 @@ import type { ComponentType } from 'depictio-builder/store/useBuilderStore';
 import type { ParsedFixture } from '../types';
 import { fixtureToColumnSpecs } from './columnSpecs';
 
-/** Catalog `visu_type` enum ∩ plotly-express builder visualizations. */
-export const CATALOG_FIGURE_TYPES = ['scatter', 'line', 'bar', 'box', 'histogram'];
+import { VISU_TYPES } from '../catalog/generated/renderSpec';
+
+/** Catalog `visu_type` enum (generated) ∩ the builder's plotly-express list
+ *  (figureParams.json). `heatmap` has no px function, so it stays code-only. */
+export const CATALOG_FIGURE_TYPES: readonly string[] = VISU_TYPES;
 
 interface FigureParamsSnapshot {
   visualizations: Array<{ name: string; label: string; description: string; icon: string; group: string }>;

@@ -948,7 +948,8 @@ const AdvancedVizBuilder: React.FC = () => {
                 style={{
                   cursor: 'pointer',
                   borderColor: isSelected ? 'var(--mantine-color-pink-6)' : undefined,
-                  background: isSelected ? 'var(--mantine-color-pink-0)' : undefined,
+                  // pink-light is theme-aware; pink-0 stayed pastel in dark mode and hid the title.
+                  background: isSelected ? 'var(--mantine-color-pink-light)' : undefined,
                   transition: 'transform 120ms ease, box-shadow 120ms ease',
                   transform: isSelected ? 'translateY(-1px)' : undefined,
                 }}
