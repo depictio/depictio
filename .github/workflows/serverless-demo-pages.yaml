@@ -1,0 +1,52 @@
+name: serverless-demo-pages
+
+# Publishes the per-phase serverless demos (depictio/viewer/dist-static/site/)
+# to GitHub Pages so each milestone stays browsable side by side.
+#
+# Manual only (Actions → serverless-demo-pages → Run workflow). It used to run
+# on every push to feat/serverless-deployment and failed each time, because
+# GitHub Pages is not enabled on the repository. One-time repo prerequisite
+# before the first run: Settings → Pages → Source = "GitHub Actions". Until
+# then the deploy job fails cleanly; the `serverless-demos` artifact uploaded
+# by serverless-ci.yaml on every push is the way to get the demos.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build static bundle + demo site
+        working-directory: depictio/viewer
+        run: pnpm run demo:static
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: depictio/viewer/dist-static/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

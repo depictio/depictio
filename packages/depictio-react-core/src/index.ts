@@ -78,7 +78,25 @@ export { default as PhylogeneticRenderer } from './components/advanced_viz/Phylo
 export { imageServeUrl } from './components/advanced_viz/spatial_cells/spatialLayout';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
-export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
+export {
+  default as Glyph,
+  glyphColorVar,
+  isImagePath,
+  isMultiqcIcon,
+  multiqcLogoOverride,
+  multiqcLogoSrc,
+  setMultiqcLogoSources,
+  themedIconSrc,
+} from './components/Glyph';
+export type { MultiqcLogoSources, MultiqcLogoVariant } from './components/Glyph';
+// Offline hosts (the static bundle): GenomeSpy fonts and gene tables without a
+// network (components/advanced_viz/genomespy/offlineAssets.ts).
+export {
+  setGeneAssetSource,
+  setGenomeSpyFontsEmbeddedOnly,
+  withEmbeddedFonts,
+} from './components/advanced_viz/genomespy/offlineAssets';
+export type { GeneAssetSource } from './components/advanced_viz/genomespy/offlineAssets';
 export {
   DEFAULT_PALETTE_SHADE,
   paletteHex,
@@ -431,6 +449,9 @@ export {
   FULLSCREEN_EXIT_ICON,
   LOAD_ALL_ACTIVE_ICON,
   TILE_ACTION_STYLE,
+  StaticBadgeProvider,
+  StaticTierBadge,
+  useIsStaticBundle,
 } from './components/chrome';
 export type {
   ComponentChromeProps,
@@ -445,7 +466,18 @@ export type {
   TileActionStyle,
   TileActionStyleKey,
   WrapWithChromeOpts,
+  StaticTierEntry,
+  StaticTierMap,
 } from './components/chrome';
+// Tier badge vocabulary — shared between the in-bundle StaticTierBadge and the
+// viewer's Export-static preflight modal. Aliased to avoid generic names in
+// the package namespace. Note 'live' is absent (see StaticBadgeContext).
+export {
+  BADGE_LABEL as STATIC_TIER_BADGE_LABEL,
+  BADGE_COLOR as STATIC_TIER_BADGE_COLOR,
+  // Curated per-verdict sentence — the modal promises what the badge will say.
+  staticTierExplanation,
+} from './components/chrome/StaticBadgeContext';
 
 // Component comments & annotation threads (/comments API).
 export {
@@ -604,6 +636,12 @@ export {
   importDashboardYaml,
   validateDashboardJson,
   exportDashboardJson,
+  // Serverless static export
+  preflightStaticExport,
+  dispatchStaticExport,
+  pollStaticExport,
+  downloadStaticExport,
+  canExportStatic,
   // Project management
   fetchProject,
   fetchIngestionReport,
@@ -1209,6 +1247,15 @@ export type {
   EditDashboardInput,
   ImportDashboardOptions,
   ImportDashboardResult,
+  // Serverless static export types
+  StaticExportTierRow,
+  StaticExportLinkRow,
+  StaticExportSizeEstimate,
+  StaticExportPreflight,
+  StaticExportPythonRuntime,
+  PythonRuntimeMode,
+  StaticExportResult,
+  StaticExportJob,
   // Project management types
   CreateProjectInput,
   CreateProjectResult,

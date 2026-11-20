@@ -33,6 +33,7 @@ import type { InteractionMode } from './interactionMode';
 import { hasMarkEvents, launchWithRetry, toError } from './embedLaunch';
 import { attachDragTracker, brushToPublish } from './pointerGesture';
 import type { LaunchAttempt } from './embedLaunch';
+import { genomeSpyFontsEmbeddedOnly, withEmbeddedFonts } from './offlineAssets';
 
 export type GenomeSpyBackend = 'webgl' | 'canvas';
 
@@ -199,7 +200,10 @@ export function useGenomeSpy(
       // that did not launch.
       const attempt = async (): Promise<LaunchAttempt<EmbedResult>> => {
         let failure: Error | null = null;
-        const result = await embed(el, spec, {
+        // Offline hosts draw every label in the embedded font: any other
+        // weight or face is fetched from GitHub (`./offlineAssets.ts`).
+        const embedded = genomeSpyFontsEmbeddedOnly() ? withEmbeddedFonts(spec) : spec;
+        const result = await embed(el, embedded, {
           renderer: backend,
           // GenomeSpy would otherwise render its own param widgets under the
           // canvas; Depictio's Settings popover is where controls live.

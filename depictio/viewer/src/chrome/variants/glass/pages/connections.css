@@ -1,8 +1,11 @@
 /* The connections map in Paper: collections as hairline chips in columns,
  * links and joins as soft curves between them. Nothing is hued but the
- * accent, spent on what the pointer or a pick has lit. */
+ * accent, spent on what the pointer or a pick has lit.
+ *
+ * Drawn on the project page (`.gp-main`) and on a static bundle's read-only
+ * project page (`.dc-bundle-project`, laid over the dashboard canvas). */
 
-:root[data-chrome='glass'] .gp-main .cm-bar {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -10,35 +13,35 @@
   padding: 12px 0 14px;
 }
 
-:root[data-chrome='glass'] .gp-main .cm {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm {
   display: grid;
   gap: 12px;
   min-width: 0;
 }
-:root[data-chrome='glass'] .gp-main .cm-host {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-host {
   min-width: 0;
 }
-:root[data-chrome='glass'] .gp-main .cm-canvas {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-canvas {
   position: relative;
 }
-:root[data-chrome='glass'] .gp-main .cm-svg {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-svg {
   position: absolute;
   inset: 0;
   overflow: visible;
 }
 
 /* Edges: faint at rest, accent when lit, nearly gone when something else is. */
-:root[data-chrome='glass'] .gp-main .cm-edge {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge {
   color: var(--gl-faint);
   cursor: pointer;
 }
-:root[data-chrome='glass'] .gp-main .cm-hit {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-hit {
   fill: none;
   stroke: transparent;
   stroke-width: 14;
   pointer-events: stroke;
 }
-:root[data-chrome='glass'] .gp-main .cm-line {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-line {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
@@ -49,39 +52,39 @@
     stroke-width 150ms ease;
   pointer-events: none;
 }
-:root[data-chrome='glass'] .gp-main .cm-end {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-end {
   fill: currentColor;
   opacity: 0.7;
   transition: opacity 150ms ease;
   pointer-events: none;
 }
-:root[data-chrome='glass'] .gp-main .cm-edge[data-kind='join'] .cm-line {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-kind='join'] .cm-line {
   stroke-dasharray: 5 4;
 }
-:root[data-chrome='glass'] .gp-main .cm-edge[data-off] .cm-line,
-:root[data-chrome='glass'] .gp-main .cm-edge[data-off] .cm-end {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-off] .cm-line,
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-off] .cm-end {
   opacity: 0.25;
 }
-:root[data-chrome='glass'] .gp-main .cm-edge[data-state='on'] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-state='on'] {
   color: var(--gl-accent);
 }
-:root[data-chrome='glass'] .gp-main .cm-edge[data-state='on'] .cm-line {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-state='on'] .cm-line {
   stroke-width: 2.25;
   opacity: 1;
 }
-:root[data-chrome='glass'] .gp-main .cm-edge[data-state='on'][data-off] .cm-line {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-state='on'][data-off] .cm-line {
   opacity: 0.55;
 }
-:root[data-chrome='glass'] .gp-main .cm-edge[data-state='on'] .cm-end {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-state='on'] .cm-end {
   opacity: 1;
 }
-:root[data-chrome='glass'] .gp-main .cm-edge[data-state='dim'] .cm-line,
-:root[data-chrome='glass'] .gp-main .cm-edge[data-state='dim'] .cm-end {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-state='dim'] .cm-line,
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-edge[data-state='dim'] .cm-end {
   opacity: 0.1;
 }
 
 /* Collections. */
-:root[data-chrome='glass'] .gp-main .cm-node {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node {
   position: absolute;
   display: flex;
   align-items: center;
@@ -101,11 +104,11 @@
     opacity 150ms ease,
     background-color 150ms ease;
 }
-:root[data-chrome='glass'] .gp-main .cm-node svg {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node svg {
   flex: none;
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-node-tag {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node-tag {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -113,35 +116,35 @@
   white-space: nowrap;
   font-weight: 600;
 }
-:root[data-chrome='glass'] .gp-main .cm-node-count {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node-count {
   flex: none;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--gl-faint);
   font-variant-numeric: tabular-nums;
 }
-:root[data-chrome='glass'] .gp-main .cm-node:hover,
-:root[data-chrome='glass'] .gp-main .cm-node[data-state='on'] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node:hover,
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node[data-state='on'] {
   box-shadow: 0 0 0 1px var(--gl-faint);
 }
-:root[data-chrome='glass'] .gp-main .cm-node[data-state='on'] svg {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node[data-state='on'] svg {
   color: var(--gl-accent-fg);
 }
-:root[data-chrome='glass'] .gp-main .cm-node[data-primary],
-:root[data-chrome='glass'] .gp-main .cm-node[aria-pressed='true'] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node[data-primary],
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node[aria-pressed='true'] {
   background: linear-gradient(var(--gl-accent-soft), var(--gl-accent-soft)), var(--gl-paper);
   box-shadow: 0 0 0 2px var(--gl-accent);
 }
-:root[data-chrome='glass'] .gp-main .cm-node[data-state='dim'] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node[data-state='dim'] {
   opacity: 0.4;
 }
-:root[data-chrome='glass'] .gp-main .cm-node:focus-visible {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-node:focus-visible {
   outline: 2px solid var(--gl-ring);
   outline-offset: 2px;
 }
 
 /* The label on a lit edge: column, then its resolver. */
-:root[data-chrome='glass'] .gp-main .cm-pill {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-pill {
   position: absolute;
   display: inline-flex;
   align-items: baseline;
@@ -159,7 +162,7 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
-:root[data-chrome='glass'] .gp-main .cm-pill i {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-pill i {
   font-family: var(--mantine-font-family);
   font-style: normal;
   font-weight: 500;
@@ -167,7 +170,7 @@
 }
 
 /* Legend and the line about collections with no connection. */
-:root[data-chrome='glass'] .gp-main .cm-legend {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-legend {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -175,43 +178,43 @@
   font-size: 12.5px;
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-key {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-key {
   display: inline-flex;
   align-items: center;
   gap: 7px;
 }
-:root[data-chrome='glass'] .gp-main .cm-key line {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-key line {
   stroke: var(--gl-faint);
   stroke-width: 1.5;
   stroke-linecap: round;
 }
-:root[data-chrome='glass'] .gp-main .cm-key[data-kind='join'] line {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-key[data-kind='join'] line {
   stroke-dasharray: 5 4;
 }
-:root[data-chrome='glass'] .gp-main .cm-key[data-off] line {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-key[data-off] line {
   opacity: 0.35;
 }
-:root[data-chrome='glass'] .gp-main .cm-legend-hint {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-legend-hint {
   margin-left: auto;
   color: var(--gl-faint);
 }
-:root[data-chrome='glass'] .gp-main .cm-alone,
-:root[data-chrome='glass'] .gp-main .cm-empty {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-alone,
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-empty {
   margin: 0;
   font-size: 13px;
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-empty {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-empty {
   padding: 14px 0 4px;
 }
 
 /* What a pick holds: its connections as rows, with the existing actions. */
-:root[data-chrome='glass'] .gp-main .cm-detail {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-detail {
   border-radius: 14px;
   background: var(--gl-well);
   padding: 10px 12px 6px;
 }
-:root[data-chrome='glass'] .gp-main .cm-detail-head {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-detail-head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -219,16 +222,16 @@
   font-size: 13px;
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-detail-head b {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-detail-head b {
   font-size: 14px;
   color: var(--gl-fg);
 }
-:root[data-chrome='glass'] .gp-main .cm-rows {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-rows {
   margin: 0;
   padding: 0;
   list-style: none;
 }
-:root[data-chrome='glass'] .gp-main .cm-row {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -239,59 +242,59 @@
   font-size: 13px;
   color: var(--gl-fg);
 }
-:root[data-chrome='glass'] .gp-main .cm-row[data-off] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row[data-off] {
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-row-path {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row-path {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
-:root[data-chrome='glass'] .gp-main .cm-row-path b {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row-path b {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-:root[data-chrome='glass'] .gp-main .cm-row-path svg {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row-path svg {
   flex: none;
   color: var(--gl-faint);
 }
-:root[data-chrome='glass'] .gp-main .cm-row code {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row code {
   padding: 1px 7px;
   border-radius: 6px;
   background: var(--gl-paper);
   box-shadow: 0 0 0 1px var(--gl-hair);
   font-size: 12px;
 }
-:root[data-chrome='glass'] .gp-main .cm-row-kind {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row-kind {
   padding: 1px 8px;
   border-radius: 999px;
   box-shadow: 0 0 0 1px var(--gl-hair);
   font-size: 12px;
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-row-off {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row-off {
   font-size: 12px;
   font-weight: 600;
   color: var(--gl-faint);
 }
-:root[data-chrome='glass'] .gp-main .cm-row-actions {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-row-actions {
   display: inline-flex;
   gap: 2px;
   margin-left: auto;
 }
 
 /* Narrow: one block per source, its targets as chips. */
-:root[data-chrome='glass'] .gp-main .cm-list {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-list {
   display: grid;
   gap: 14px;
 }
-:root[data-chrome='glass'] .gp-main .cm-group {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-group {
   display: grid;
   gap: 8px;
 }
-:root[data-chrome='glass'] .gp-main .cm-group-name {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-group-name {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -308,19 +311,19 @@
   text-align: left;
   cursor: pointer;
 }
-:root[data-chrome='glass'] .gp-main .cm-group-name svg {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-group-name svg {
   flex: none;
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-group-name[aria-pressed='true'] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-group-name[aria-pressed='true'] {
   color: var(--gl-accent-fg);
 }
-:root[data-chrome='glass'] .gp-main .cm-chips {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-:root[data-chrome='glass'] .gp-main .cm-chip {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -337,39 +340,39 @@
   text-align: left;
   cursor: pointer;
 }
-:root[data-chrome='glass'] .gp-main .cm-chip svg {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-chip svg {
   flex: none;
   color: var(--gl-faint);
 }
-:root[data-chrome='glass'] .gp-main .cm-chip small {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-chip small {
   font-family: var(--mantine-font-family-monospace);
   font-size: 11.5px;
   color: var(--gl-muted);
 }
-:root[data-chrome='glass'] .gp-main .cm-chip[data-kind='join'] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-chip[data-kind='join'] {
   box-shadow: 0 0 0 1px var(--gl-hair);
   background: var(--gl-well);
 }
-:root[data-chrome='glass'] .gp-main .cm-chip[data-off] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-chip[data-off] {
   opacity: 0.5;
 }
-:root[data-chrome='glass'] .gp-main .cm-chip[aria-pressed='true'] {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-chip[aria-pressed='true'] {
   background: linear-gradient(var(--gl-accent-soft), var(--gl-accent-soft)), var(--gl-paper);
   box-shadow: 0 0 0 2px var(--gl-accent);
 }
-:root[data-chrome='glass'] .gp-main :is(.cm-chip, .cm-group-name):focus-visible {
+:root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) :is(.cm-chip, .cm-group-name):focus-visible {
   outline: 2px solid var(--gl-ring);
   outline-offset: 2px;
 }
 
 @media (max-width: 36em) {
-  :root[data-chrome='glass'] .gp-main .cm-legend-hint {
+  :root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) .cm-legend-hint {
     display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root[data-chrome='glass'] .gp-main :is(.cm-node, .cm-line, .cm-end) {
+  :root[data-chrome='glass'] :is(.gp-main, .dc-bundle-project) :is(.cm-node, .cm-line, .cm-end) {
     transition: none;
   }
 }

@@ -20,6 +20,7 @@ for the region exactly as the single-resolution path always did.
 from __future__ import annotations
 
 import math
+import time
 from typing import Any
 
 import polars as pl
@@ -225,4 +226,141 @@ def summarise(
         "bins_per_pixel": (span / resolution / px) if (span and resolution) else None,
         "multi_resolution": len(resolutions) > 1,
         "truncated": truncated,
+    }
+
+
+def contact_map_window(
+    df: pl.DataFrame, payload: dict[str, Any], resolution_col: str | None
+) -> dict[str, Any]:
+    """One window of a loaded (already filter-masked) contact frame.
+
+    The part of ``compute_contact_map`` after the Delta load: the sample, the
+    resolution partition (the requested level when the table holds it, else
+    :func:`choose_resolution` stepped coarser by :func:`coarsest_within_budget`),
+    the square window, the (chrom1, start1, start2) sort, the cell budget, and
+    the column-oriented rows + :func:`summarise`. Pure, so the serverless
+    bundle's browser port is pinned against it.
+    """
+    started = time.monotonic()
+    chrom1_col = payload["chrom1_col"]
+    start1_col = payload["start1_col"]
+    chrom2_col = payload["chrom2_col"]
+    start2_col = payload["start2_col"]
+    count_col = payload["count_col"]
+    end1_col = payload.get("end1_col")
+    end2_col = payload.get("end2_col")
+    sample_col = payload.get("sample_col")
+    project_cols = [
+        c
+        for c in (
+            chrom1_col,
+            start1_col,
+            end1_col,
+            chrom2_col,
+            start2_col,
+            end2_col,
+            count_col,
+            sample_col,
+            resolution_col,
+        )
+        if c
+    ]
+
+    sample = payload.get("sample")
+    if sample and sample_col:
+        df = df.filter(pl.col(sample_col) == sample)
+
+    resolutions: list[int] = []
+    if resolution_col and df.height:
+        resolutions = sorted(
+            {
+                int(v)
+                for v in df.get_column(resolution_col).unique().to_list()
+                if v is not None and int(v) > 0
+            }
+        )
+
+    chrom = payload.get("chrom") or None
+    start = payload.get("start")
+    end = payload.get("end")
+    span = (
+        float(end) - float(start)
+        if start is not None and end is not None and float(end) > float(start)
+        else None
+    )
+    max_cells = int(payload.get("max_cells") or DEFAULT_MAX_CELLS)
+
+    requested = payload.get("resolution")
+    resolution: int | None = None
+    if resolutions:
+        if requested and int(requested) in resolutions:
+            resolution = int(requested)
+        else:
+            resolution = choose_resolution(
+                resolutions, span, payload.get("pixels"), payload.get("target_bins_per_pixel")
+            )
+            resolution = coarsest_within_budget(resolutions, resolution, span, max_cells)
+        df = df.filter(pl.col(resolution_col) == resolution)
+
+    df = apply_window(
+        df,
+        chrom1_col=chrom1_col,
+        start1_col=start1_col,
+        chrom2_col=chrom2_col,
+        start2_col=start2_col,
+        end1_col=end1_col,
+        end2_col=end2_col,
+        chrom=chrom,
+        start=None if start is None else float(start),
+        end=None if end is None else float(end),
+        resolution=resolution,
+    )
+    df = df.sort([chrom1_col, start1_col, start2_col])
+
+    truncated = df.height > max_cells
+    if truncated:
+        # Only reachable on a single-resolution DC too fine for the window  -
+        # there is no coarser partition to step up to. Keep the densest cells
+        # (they are sorted by position, so this keeps a contiguous corner) and
+        # say so, rather than pretend the matrix is complete.
+        df = df.head(max_cells)
+
+    region = (
+        {"chrom": chrom, "start": start, "end": end}
+        if chrom and start is not None and end is not None
+        else ({"chrom": chrom, "start": None, "end": None} if chrom else None)
+    )
+
+    rows: dict[str, list] = {}
+    for col in project_cols:
+        if col and col not in rows:
+            rows[col] = df.get_column(col).to_list()
+
+    return {
+        "rows": rows,
+        "columns": {
+            "chrom1": chrom1_col,
+            "start1": start1_col,
+            "end1": end1_col,
+            "chrom2": chrom2_col,
+            "start2": start2_col,
+            "end2": end2_col,
+            "count": count_col,
+            "sample": sample_col,
+            "resolution": resolution_col,
+        },
+        "summary": summarise(
+            df,
+            chrom1_col=chrom1_col,
+            start1_col=start1_col,
+            resolution_col=resolution_col,
+            sample_col=sample_col,
+            resolutions=resolutions,
+            resolution=resolution,
+            region=region,
+            pixels=payload.get("pixels"),
+            truncated=truncated,
+        ),
+        "row_count": int(df.height),
+        "compute_ms": int((time.monotonic() - started) * 1000),
     }

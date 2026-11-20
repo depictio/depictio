@@ -7607,6 +7607,39 @@ export async function fetchUserByEmail(email: string): Promise<{
   };
 }
 
+/** The filename a `Content-Disposition` header names, else `fallback`.
+ *  The RFC 5987 `filename*=UTF-8''…` form wins over the plain `filename=`
+ *  (which a server may have reduced to ASCII). */
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  const extended = header?.match(/filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/);
+  if (extended) {
+    try {
+      return decodeURIComponent(extended[1].trim());
+    } catch {
+      // A malformed escape: fall through to the plain form.
+    }
+  }
+  const m = header?.match(/filename\s*=\s*"?([^";]+)"?/);
+  return m ? m[1].trim() : fallback;
+}
+
+/** Save a successful download response to the user's disk (blob → anchor
+ *  click), under the name its `Content-Disposition` gives, else
+ *  `fallbackName`. Returns the name used. */
+async function saveResponseAs(res: Response, fallbackName: string): Promise<string> {
+  const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), fallbackName);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 /** Export a project bundle as a ZIP. Backend returns binary content; we
  *  wrap it in a Blob and trigger a browser download. Mirrors the Dash
  *  flow at projects.py:2360 (`/migrate/export-project`). */
@@ -7616,15 +7649,7 @@ export async function exportProjectZip(projectId: string): Promise<void> {
     body: JSON.stringify({ project_id: projectId, mode: 'all' }),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to export project');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `depictio_export_${projectId}.zip`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, `depictio_export_${projectId}.zip`);
 }
 
 /** POST body for /projects/{id}/export_template. `template_id` is a
@@ -8465,6 +8490,182 @@ export async function exportDashboardJson(
   return res.json();
 }
 
+// ---- Serverless static export --------------------------------------------
+//
+// Owner-gated "Export static" flow: preflight tells the user which components
+// stay live / degrade / drop before they commit; dispatch + poll mirror the
+// advanced-viz Celery job contract; download streams the built single-file
+// HTML artifact. Endpoints live under `/serverless/export-static`.
+
+/** One row of the preflight per-component liveness verdict. `tier` mirrors
+ *  `StaticTierEntry` in StaticBadgeContext (the badge the bundle itself
+ *  renders); `reason`/`detail` explain non-live verdicts. */
+export interface StaticExportTierRow {
+  component_id: string;
+  title?: string | null;
+  component_type?: string | null;
+  tier: 'live' | 'partial' | 'frozen' | 'omitted';
+  reason?: string | null;
+  detail?: string | null;
+  /** Dashboard id of the tab this component sits on, for a tab-family export. */
+  tab_id?: string | null;
+  /** True while the build can still overturn this row. A provisional row is
+   *  undecided, not a verdict.
+   *
+   *  The preflight now runs the real bind-and-refill decision before it
+   *  answers, so no figure comes back provisional from a current API. The field
+   *  survives for a viewer talking to an older one, which classified without
+   *  reading data: it called every figure frozen and left the build to upgrade
+   *  the ones it could redraw. */
+  provisional?: boolean;
+}
+
+/** Cross-DC link resolution plan for the bundle. */
+export interface StaticExportLinkRow {
+  link_id: string;
+  source: string;
+  target: string;
+  resolver: string;
+  tier: 'A' | 'B' | 'inert';
+  enabled: boolean;
+  entries: number;
+  note?: string | null;
+}
+
+/** How big the bundle would be, and which side of the deployment's two
+ *  ceilings it lands on — the preflight's answer to "is this worth building?".
+ *
+ *  Every field is optional: an API older than this block returns nothing at
+ *  all, and a report that read no data returns `null` rather than a fabricated
+ *  zero. Sizes are bytes; the ceilings are megabytes, because that is how they
+ *  are configured, and `0` means that check is disabled.
+ *
+ *  `estimated_total_bytes` is an UPPER BOUND, not a measurement: the exact
+ *  `runtime_bytes` plus a data figure derived from row/column counts before any
+ *  compression, which runs roughly 2x high on compressible frames. Present it
+ *  as a ceiling ("up to about N MB"), never as a size. */
+export interface StaticExportSizeEstimate {
+  estimated_total_bytes?: number;
+  estimated_data_bytes?: number;
+  /** The static runtime every bundle carries whatever its data. Exact, and on
+   *  a small dashboard most of the total. */
+  runtime_bytes?: number;
+  soft_limit_mb?: number;
+  hard_limit_mb?: number;
+  /** The thresholds already applied, so a caller cannot disagree with the
+   *  producer that would run the build. */
+  verdict?: 'ok' | 'over_soft_limit' | 'would_be_refused';
+}
+
+/** The optional Python runtime (Pyodide) a bundle can embed: which tiles it
+ *  makes live and what it adds to the file. */
+export interface StaticExportPythonRuntime {
+  mode: 'auto' | 'on' | 'off';
+  embedded: boolean;
+  version: string;
+  /** Tiles the runtime would make live (empty: nothing to gain). */
+  candidates: string[];
+  components: string[];
+  bytes: number;
+  bytes_if_embedded: number;
+  unavailable?: string;
+  /** Each candidate's tier without the runtime (what it ships as when it is off). */
+  without?: Record<string, { tier: string; reason: string | null; detail: string | null }>;
+}
+
+export type PythonRuntimeMode = 'auto' | 'on' | 'off';
+
+export interface StaticExportPreflight {
+  dashboard_id: string;
+  /** True when the figures were really bound (data read: a caller who may
+   *  export); false for the data-free plan everyone else gets. */
+  bound?: boolean;
+  tiers: StaticExportTierRow[];
+  links: StaticExportLinkRow[];
+  counts: { live: number; partial: number; frozen: number; omitted: number };
+  size_estimate?: StaticExportSizeEstimate | null;
+  python_runtime?: StaticExportPythonRuntime | null;
+}
+
+export interface StaticExportResult {
+  s3_key: string;
+  bucket: string;
+  size_bytes: number;
+  built_at: string;
+  /** Pre-signed URL when the deployment can mint one; null otherwise —
+   *  callers should prefer the authenticated download endpoint anyway. */
+  download_url: string | null;
+}
+
+export interface StaticExportJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: StaticExportResult | null;
+  error?: string | null;
+}
+
+/** Preflight a static export: per-component tier verdicts + link plan.
+ *  404 (`detail`) when the dashboard is unknown or not viewable. */
+export async function preflightStaticExport(
+  dashboardId: string,
+  pythonRuntime: PythonRuntimeMode = 'auto',
+): Promise<StaticExportPreflight> {
+  const res = await authFetch(
+    `${API_BASE}/serverless/export-static/${dashboardId}/preflight?python_runtime=${pythonRuntime}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Static export preflight failed');
+  return res.json();
+}
+
+/** Dispatch the static-export Celery build. Owner-only (404 otherwise).
+ *  Returns a job the caller polls via pollStaticExport(). */
+export async function dispatchStaticExport(
+  dashboardId: string,
+  pythonRuntime: PythonRuntimeMode = 'auto',
+): Promise<StaticExportJob> {
+  const res = await authFetch(
+    `${API_BASE}/serverless/export-static/${dashboardId}?python_runtime=${pythonRuntime}`,
+    { method: 'POST' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to dispatch static export');
+  return res.json();
+}
+
+/** Poll a previously-dispatched static export build. */
+export async function pollStaticExport(jobId: string): Promise<StaticExportJob> {
+  const res = await authFetch(`${API_BASE}/serverless/export-static/status/${jobId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to poll static export');
+  return res.json();
+}
+
+/** Download the built HTML artifact (409 while not ready) and save it under
+ *  the server's name for it (`filename` when the response names none). */
+export async function downloadStaticExport(
+  jobId: string,
+  filename: string,
+): Promise<void> {
+  const res = await authFetch(`${API_BASE}/serverless/export-static/download/${jobId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download static export');
+  await saveResponseAs(res, filename);
+}
+
+/** Whether the server would accept a static export of this dashboard from the
+ *  current user: the very rule `dispatchStaticExport` is held to (project
+ *  owner), so the button is enabled exactly when the export would go through.
+ *  Any failure reads as "no". */
+export async function canExportStatic(dashboardId: string): Promise<boolean> {
+  try {
+    const res = await authFetch(
+      `${API_BASE}/serverless/export-static/${dashboardId}/can-export`,
+    );
+    if (!res.ok) return false;
+    const body = (await res.json()) as { can_export?: unknown };
+    return body.can_export === true;
+  } catch {
+    return false;
+  }
+}
+
 // ---- Admin (system-wide) helpers ----------------------------------------
 //
 // These back the React /admin page. Backend already enforces `is_admin`
@@ -8774,15 +8975,7 @@ export async function createBackup(): Promise<BackupCreateResult> {
 export async function downloadBackup(backupId: string): Promise<void> {
   const res = await authFetch(`${API_BASE}/backup/download/${backupId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to download backup');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `depictio_backup_${backupId}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveResponseAs(res, `depictio_backup_${backupId}.json`);
 }
 
 /** Upload a backup file; the server stores it as a first-class backup and

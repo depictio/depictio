@@ -23,6 +23,7 @@ import {
   withSampleCustomdata,
 } from '../../annotations/multiqc';
 import MultiQCGeneralStats from './MultiQCGeneralStats';
+import { multiqcLogoSrc } from '../Glyph';
 
 interface MultiQCFigureProps {
   dashboardId: string;
@@ -353,16 +354,18 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
           <RefetchOverlay visible={showRefetchOverlay} />
           {/* MultiQC logo overlay — official icon set
             (https://github.com/MultiQC/logo). Dark icon on light backgrounds,
-            white icon in dark mode. Asset shipped via the SPA's public/ folder
-            and served by the FastAPI mount at /dashboard/logos/. */}
+            white icon in dark mode. The served SVG on a server; a serverless
+            static bundle (file://, no /dashboard/logos/ mount) hands in
+            inlined copies through `setMultiqcLogoSources`. `onError` still
+            retires the element should a source ever fail to load, rather
+            than leave a broken-image glyph in the corner of the tile. */}
           <img
-            src={
-              theme === 'dark'
-                ? '/dashboard/logos/multiqc_icon_white.svg'
-                : '/dashboard/logos/multiqc_icon_dark.svg'
-            }
+            src={multiqcLogoSrc(theme === 'dark' ? 'white' : 'dark')}
             title="Generated with MultiQC"
             alt="MultiQC"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
             style={{
               position: 'absolute',
               top: 10,

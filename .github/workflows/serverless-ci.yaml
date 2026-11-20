@@ -1,0 +1,199 @@
+name: serverless-ci
+
+# Dedicated CI for the serverless static-bundle stack (RFC:
+# docs/design/rfc-serverless-deployment.md). Runs when the contract, the
+# runtime, the shims, or their tests change — fast, focused signal.
+on:
+  pull_request:
+    paths:
+      - "packages/depictio-static-core/**"
+      - "packages/depictio-react-core/**"
+      - "depictio/viewer/**"
+      - "depictio/models/models/serverless.py"
+      - "depictio/models/models/serverless.schema.json"
+      - "depictio/serverless/**"
+      - "depictio/api/v1/services/figure/code_executor.py"
+      - "depictio/api/v1/services/group_compare.py"
+      - "depictio/api/v1/services/contact_map.py"
+      - "depictio/tests/unit/serverless/**"
+      - "depictio/tests/e2e-playwright/tests/static-runtime/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/serverless-ci.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/depictio-static-core/**"
+      - "depictio/viewer/**"
+      - "depictio/models/models/serverless.py"
+      - "depictio/serverless/**"
+      - ".github/workflows/serverless-ci.yaml"
+
+jobs:
+  static-core:
+    name: depictio-static-core (vitest + tsc)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter depictio-static-core typecheck
+      - run: pnpm --filter depictio-static-core test
+
+  manifest-contract:
+    name: manifest contract (pytest + ty)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+      - name: Serverless unit tests (schema snapshot + fixture pinning)
+        run: |
+          source venv/bin/activate
+          python -m pytest depictio/tests/unit/serverless -q
+      - name: ty gate (models — includes serverless.py)
+        run: |
+          source venv/bin/activate
+          ty check depictio/models/
+
+  bundles:
+    name: bundles (build + byte budget + offline e2e)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The single-file builds inline every dynamic import of the whole viewer;
+      # Node's default heap runs out on them (same cap as the other builds).
+      # Every api.ts network call the static entry's module graph reaches
+      # must be shimmed (or declared unsupported with a reason).
+      - name: Static shim coverage
+        working-directory: depictio/viewer
+        run: pnpm run check:static-shim
+
+      - name: Build static-runtime bundle + demo site
+        working-directory: depictio/viewer
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: pnpm run demo:static
+
+      - name: Build catalog-preview bundle
+        working-directory: depictio/viewer
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: pnpm run build:catalog-preview
+
+      # Budgets (gzip bytes). A bump is a reviewable diff on these two lines.
+      #
+      # Re-set on the rebase onto main v1.21, whose viewer grew a lot (genome
+      # views, protein kinds, new chrome): measured 3.76 MB for the static
+      # runtime (with JBrowse and 3Dmol stubbed out, see vite.static.config.ts)
+      # and 4.06 MB for main's own catalog preview, against 2.2 MB / 2.21 MB
+      # when these guards were introduced. Each budget is today's measure plus
+      # ~0.4 MB of headroom: static runtime 4.2 MB, catalog preview 4.5 MB.
+      - name: Byte budget — static runtime
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/static.html 4404019 static-runtime
+
+      # The structure-viewer floor: the base runtime plus the conditional
+      # 3Dmol.js add-on (dist-static/static-structure.html, written by
+      # build-demo.mjs). Only bundles holding a molecule_3d tile carry it, so it
+      # has its own line rather than raising the base one. Measured 3.91 MB
+      # (+0.15 MB over the base 3.76 MB); budget = the base budget + 0.2 MB.
+      - name: Byte budget — static runtime + structure viewer (3Dmol add-on)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/static-structure.html 4613734 static-runtime+3dmol
+
+      # The genome-browser floor: the base runtime plus the conditional JBrowse
+      # add-on (dist-static/static-genome.html, written by build-demo.mjs). The
+      # add-on is JBrowse 2 + MUI + mobx, 3.04 MB raw / 0.92 MB gzip; the base
+      # runtime keeps the depictio half of the renderer (+0.06 MB gzip). Measured
+      # 4.73 MB; budget = the base budget + the add-on + 0.3 MB.
+      - name: Byte budget — static runtime + genome browser (JBrowse add-on)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/static-genome.html 5662310 static-runtime+jbrowse
+
+      - name: Byte budget — catalog preview
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 4718592 catalog-preview
+
+      # The Python-runtime demo (Pyodide, RFC §13.6) is built by producer B,
+      # not injected from a committed manifest: it inlines ~70 MB of Pyodide
+      # assets the build fetches from the pinned CDN / PyPI URLs and verifies
+      # against depictio/serverless/pyodide/pin.json (cached between runs).
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Cache Pyodide assets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/depictio/pyodide
+          key: pyodide-${{ hashFiles('depictio/serverless/pyodide/pin.json') }}
+      - name: Build the Python-runtime demo
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+          DEPICTIO_CONTEXT=cli python -m depictio.serverless.pyodide.demo \
+            depictio/viewer/dist-static/site/demo-python-runtime.html
+
+      # Not a budget for the base runtime: the size of the opt-in Python add-on
+      # for this demo's job set (code figure + group comparison + PCA: core,
+      # numpy, polars, pandas, scipy, plotly, RestrictedPython). Measured
+      # 81.5 MB raw, 52.6 MiB gzip (the base64 of already-compressed wheels
+      # barely gzips); a jump here means the pin or the package closure grew.
+      - name: Byte budget — static runtime + Python runtime (demo job set)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/site/demo-python-runtime.html 62914560 static-runtime+pyodide
+
+      - name: Install Playwright
+        working-directory: depictio/tests/e2e-playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Offline static-runtime specs (no backend, no network)
+        working-directory: depictio/tests/e2e-playwright
+        run: npx playwright test --project=static-runtime
+
+      # The demo site is directly openable (manifests already injected) —
+      # download, unzip, double-click index.html. static.html stays the raw
+      # token template the producers consume.
+      - name: Upload demo site artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serverless-demos
+          path: |
+            depictio/viewer/dist-static/site/
+            depictio/viewer/dist-static/static.html
+            depictio/viewer/dist-static/addons/
+          retention-days: 7

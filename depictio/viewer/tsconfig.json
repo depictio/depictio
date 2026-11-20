@@ -19,7 +19,8 @@
     "allowSyntheticDefaultImports": true,
     "paths": {
       "depictio-components": ["../../packages/depictio-components/src/lib"],
-      "depictio-react-core": ["../../packages/depictio-react-core/src"]
+      "depictio-react-core": ["../../packages/depictio-react-core/src"],
+      "depictio-static-core": ["../../packages/depictio-static-core/src"]
     }
   },
   "include": ["src"],

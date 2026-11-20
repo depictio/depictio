@@ -42,6 +42,7 @@ import {
   ChromeButton,
   ChromeButtonGroup,
   useChromeStyle,
+  useIsStaticBundle,
   Z_LAYERS,
 } from 'depictio-react-core';
 
@@ -56,10 +57,13 @@ import {
   DrawerHead,
   ProfileRows,
   ProfileTile,
+  ProjectRow,
   RailTabs,
   ServerSheetRow,
   SideRow,
   SideStatus,
+  SnapshotSheetRow,
+  SnapshotStatus,
   TabList,
   ThemeTile,
   TopBar,
@@ -443,6 +447,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
 
   const ICON = 20;
   const stroke = STROKE;
+  const isStaticBundle = useIsStaticBundle();
 
   return (
     <div
@@ -581,14 +586,28 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
             )}
           </div>
           <div className="hy-side-spacer" />
-          <div className="hy-side-foot">
-            <SideStatus open={sideOpen} />
-            <SideRow
-              open={sideOpen}
-              icon={<ArrowLeft size={ICON - 1} strokeWidth={stroke} aria-hidden />}
-              label="All dashboards"
-              href={nav.model.backHref}
-            />
+          <div className="hy-side-foot" data-static={isStaticBundle || undefined}>
+            {isStaticBundle ? (
+              // A file has no server to be online and no dashboards list to go
+              // back to. In their places: what the file is (a static snapshot,
+              // its depictio and export day; the card opens who exported it,
+              // from where, and the live copy), and the way to its project,
+              // whose page the bundle draws itself.
+              <>
+                <SnapshotStatus open={sideOpen} />
+                {nav.model.project && <ProjectRow project={nav.model.project} open={sideOpen} />}
+              </>
+            ) : (
+              <>
+                <SideStatus open={sideOpen} />
+                <SideRow
+                  open={sideOpen}
+                  icon={<ArrowLeft size={ICON - 1} strokeWidth={stroke} aria-hidden />}
+                  label="All dashboards"
+                  href={nav.model.backHref}
+                />
+              </>
+            )}
           </div>
         </nav>
       </MantineThemeContext.Provider>
@@ -815,6 +834,7 @@ const PhoneLayout: React.FC<DashboardShellProps> = ({
           <ThemeTile place="sheet" />
           <ProfileRows />
           <ServerSheetRow />
+          <SnapshotSheetRow />
         </div>
       </Sheet>
 

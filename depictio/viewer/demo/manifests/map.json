@@ -1,0 +1,537 @@
+{
+ "addons": [],
+ "allow_network_tiles": false,
+ "bindings": {},
+ "built_at": "2026-11-16T14:11:48.859419+00:00",
+ "dashboard": {
+  "doc": {
+   "left_panel_layout_data": [
+    {
+     "h": 3,
+     "i": "box-biome-filter",
+     "static": false,
+     "w": 2,
+     "x": 0,
+     "y": 2
+    }
+   ],
+   "right_panel_layout_data": [
+    {
+     "h": 2,
+     "i": "box-sample-count",
+     "static": true,
+     "w": 2,
+     "x": 0,
+     "y": 0
+    },
+    {
+     "h": 6,
+     "i": "box-sampling-map",
+     "resizeHandles": [
+      "se",
+      "s",
+      "e",
+      "sw",
+      "w"
+     ],
+     "static": false,
+     "w": 6,
+     "x": 2,
+     "y": 0
+    }
+   ],
+   "stored_layout_data": [],
+   "stored_metadata": [
+    {
+     "aggregation": "count",
+     "attrition_cols": [],
+     "column_name": "sample_id",
+     "column_type": "object",
+     "component_type": "card",
+     "data_collection_tag": "sampling_locations",
+     "dc_id": "2d928279e5dd0e8f8b770fa0",
+     "description": "",
+     "follow_region_filter": false,
+     "index": "sample-count",
+     "secondary_layout": "vertical",
+     "threshold_direction": "min",
+     "title": "Samples",
+     "title_align": "left",
+     "title_size": "sm",
+     "top_n_count": 3,
+     "wf_id": "1d81bf708640dc9d5b46edc9",
+     "workflow_tag": "map_demo"
+    },
+    {
+     "always_selected": false,
+     "column_name": "biome",
+     "column_type": "object",
+     "component_type": "interactive",
+     "data_collection_tag": "sampling_locations",
+     "dc_id": "2d928279e5dd0e8f8b770fa0",
+     "default_order": "desc",
+     "description": "",
+     "index": "biome-filter",
+     "interactive_component_type": "MultiSelect",
+     "multiple": false,
+     "placement": "left",
+     "title": "Biome",
+     "title_align": "left",
+     "wf_id": "1d81bf708640dc9d5b46edc9",
+     "workflow_tag": "map_demo"
+    },
+    {
+     "color_column": "biome",
+     "component_type": "map",
+     "data_collection_tag": "sampling_locations",
+     "dc_id": "2d928279e5dd0e8f8b770fa0",
+     "description": "",
+     "dict_kwargs": {},
+     "featureidkey": "id",
+     "floating_initial_state": "compact",
+     "hover_columns": [
+      "sample_id",
+      "site_name",
+      "country"
+     ],
+     "index": "sampling-map",
+     "lat_column": "latitude",
+     "lon_column": "longitude",
+     "map_style": "carto-positron",
+     "map_type": "scatter_map",
+     "opacity": 1.0,
+     "placement": "grid",
+     "selection_enabled": false,
+     "size_column": "read_count",
+     "size_max": 18,
+     "title": "Sampling locations",
+     "title_align": "left",
+     "title_size": "sm",
+     "wf_id": "1d81bf708640dc9d5b46edc9",
+     "workflow_tag": "map_demo"
+    }
+   ],
+   "subtitle": "Producer B worked example (frozen map with its basemap)",
+   "title": "Sampling map \u2014 static bundle example"
+  },
+  "id": "e4d1eb3546ffb4782a9768dc",
+  "title": "Sampling map \u2014 static bundle example"
+ },
+ "data_refs": {
+  "2d928279e5dd0e8f8b770fa0": {
+   "aggregation_hash": "c31df806dd46783cffa4b3a21ed9ed8717e58b4c2e5155a3afcadcc9781857f2",
+   "codebooks": {},
+   "columns": [
+    {
+     "dtype": "String",
+     "name": "sample_id"
+    },
+    {
+     "dtype": "String",
+     "name": "biome"
+    }
+   ],
+   "companions": {},
+   "row_group_bytes": null,
+   "rows": 24,
+   "size_bytes": 977,
+   "uri": "inline:dc_2d928279e5dd0e8f8b770fa0"
+  }
+ },
+ "depictio_version": "1.21.0-b6",
+ "frozen": {
+  "sampling-map": {
+   "filter_state": [],
+   "kind": "map",
+   "payload": {
+    "figure": {
+     "data": [
+      {
+       "customdata": [
+        [
+         "TREC001",
+         "Paris_Seine",
+         "France"
+        ],
+        [
+         "TREC002",
+         "London_Thames",
+         "United_Kingdom"
+        ],
+        [
+         "TREC003",
+         "New_York_Hudson",
+         "United_States"
+        ],
+        [
+         "TREC004",
+         "Tokyo_Bay",
+         "Japan"
+        ],
+        [
+         "TREC011",
+         "Rome_Tiber",
+         "Italy"
+        ],
+        [
+         "TREC015",
+         "Milan_Navigli",
+         "Italy"
+        ],
+        [
+         "TREC018",
+         "Prague_Vltava",
+         "Czech_Republic"
+        ],
+        [
+         "TREC020",
+         "Bucharest_Dambovita",
+         "Romania"
+        ]
+       ],
+       "hovertemplate": "biome=urban<br>read_count=%{marker.size}<br>latitude=%{lat}<br>longitude=%{lon}<br>sample_id=%{customdata[0]}<br>site_name=%{customdata[1]}<br>country=%{customdata[2]}<extra></extra>",
+       "lat": {
+        "bdata": "duCcEaVtSEDF/rJ78sBJQF5LyAc9W0RAEce6uI3WQUAWak3zjvNEQM9m1edqu0ZAi2zn+6kJSUBm9+RhoTZGQA==",
+        "dtype": "f8"
+       },
+       "legendgroup": "urban",
+       "lon": {
+        "bdata": "qDXNO07RAkDr4jYawFvAv6rx0k1igFLA1xLyQc90YUADeAskKP4oQOF6FK5HYSJAqmBUUifgLEAK16NwPRo6QA==",
+        "dtype": "f8"
+       },
+       "marker": {
+        "color": "#e8590c",
+        "opacity": 1.0,
+        "size": {
+         "bdata": "SOgBANB+AQCwKgIA2FMBAGBhAgDwzAEA+B4CALj/AQA=",
+         "dtype": "i4"
+        },
+        "sizemode": "area",
+        "sizeref": 756.1728395061729
+       },
+       "mode": "markers",
+       "name": "urban",
+       "showlegend": true,
+       "subplot": "map",
+       "type": "scattermap"
+      },
+      {
+       "customdata": [
+        [
+         "TREC005",
+         "Stockholm_Baltic",
+         "Sweden"
+        ],
+        [
+         "TREC006",
+         "Marseille_Med",
+         "France"
+        ],
+        [
+         "TREC007",
+         "Malaga_Med",
+         "Spain"
+        ],
+        [
+         "TREC008",
+         "Copenhagen_Sound",
+         "Denmark"
+        ],
+        [
+         "TREC013",
+         "Athens_Aegean",
+         "Greece"
+        ],
+        [
+         "TREC014",
+         "Lisbon_Atlantic",
+         "Portugal"
+        ],
+        [
+         "TREC021",
+         "Tromso_Arctic",
+         "Norway"
+        ],
+        [
+         "TREC022",
+         "Trondheim_Fjord",
+         "Norway"
+        ],
+        [
+         "TREC023",
+         "Gothenburg_Skagerrak",
+         "Sweden"
+        ],
+        [
+         "TREC024",
+         "Gdansk_Baltic",
+         "Poland"
+        ]
+       ],
+       "hovertemplate": "biome=marine<br>read_count=%{marker.size}<br>latitude=%{lat}<br>longitude=%{lon}<br>sample_id=%{customdata[0]}<br>site_name=%{customdata[1]}<br>country=%{customdata[2]}<extra></extra>",
+       "lat": {
+        "bdata": "UkmdgCaqTUDLoUW286VFQGpN845TXEJArWnecYrWS0AE54wo7f1CQE3zjlN0XENA097gC5NpUUDJdr6fGrdPQDQRNjy92kxAkxgEVg4tS0A=",
+        "dtype": "f8"
+       },
+       "legendgroup": "marine",
+       "lon": {
+        "bdata": "b4EExY8RMkBCPujZrHoVQDojSnuDrxHANKK0N/giKUAK16NwPbo3QGWqYFRSRyLA2/l+arz0MkCYTBWMSsokQPtcbcX+8idA9pfdk4elMkA=",
+        "dtype": "f8"
+       },
+       "marker": {
+        "color": "#1c7ed6",
+        "opacity": 1.0,
+        "size": {
+         "bdata": "+BgDAFC3AgC4+QIAWIwCAEhfAwBI4gIACL0DAHAFAwCArwIAuHwCAA==",
+         "dtype": "i4"
+        },
+        "sizemode": "area",
+        "sizeref": 756.1728395061729
+       },
+       "mode": "markers",
+       "name": "marine",
+       "showlegend": true,
+       "subplot": "map",
+       "type": "scattermap"
+      },
+      {
+       "customdata": [
+        [
+         "TREC009",
+         "Reykjavik_Lake",
+         "Iceland"
+        ],
+        [
+         "TREC010",
+         "Helsinki_Lake",
+         "Finland"
+        ],
+        [
+         "TREC012",
+         "Berlin_Spree",
+         "Germany"
+        ],
+        [
+         "TREC016",
+         "Dublin_Liffey",
+         "Ireland"
+        ],
+        [
+         "TREC017",
+         "Zurich_Lake",
+         "Switzerland"
+        ],
+        [
+         "TREC019",
+         "Sofia_Reservoir",
+         "Bulgaria"
+        ]
+       ],
+       "hovertemplate": "biome=freshwater<br>read_count=%{marker.size}<br>latitude=%{lat}<br>longitude=%{lon}<br>sample_id=%{customdata[0]}<br>site_name=%{customdata[1]}<br>country=%{customdata[2]}<extra></extra>",
+       "lat": {
+        "bdata": "/mX35GEJUECSy39IvxVOQMP1KFyPQkpABhIUP8asSkBj7lpCPrBHQKg1zTtOWUVA",
+        "dtype": "f8"
+       },
+       "legendgroup": "freshwater",
+       "lon": {
+        "bdata": "qDXNO07xNcAAkX77OvA4QI/C9ShczypAX5hMFYwKGcCFfNCzWRUhQBiV1AloUjdA",
+        "dtype": "f8"
+       },
+       "marker": {
+        "color": "#2f9e44",
+        "opacity": 1.0,
+        "size": {
+         "bdata": "gLUBAHALAgCYLgIAGPABAMBRAgDgpQEA",
+         "dtype": "i4"
+        },
+        "sizemode": "area",
+        "sizeref": 756.1728395061729
+       },
+       "mode": "markers",
+       "name": "freshwater",
+       "showlegend": true,
+       "subplot": "map",
+       "type": "scattermap"
+      }
+     ],
+     "layout": {
+      "legend": {
+       "itemsizing": "constant",
+       "title": {
+        "text": "biome"
+       },
+       "tracegroupgap": 0
+      },
+      "map": {
+       "center": {
+        "lat": 56.2377275108306,
+        "lon": 32.82214999999999
+       },
+       "domain": {
+        "x": [
+         0.0,
+         1.0
+        ],
+        "y": [
+         0.0,
+         1.0
+        ]
+       },
+       "style": "carto-positron",
+       "uirevision": "preserve",
+       "zoom": 1
+      },
+      "mapbox": {
+       "center": {
+        "lat": 56.2377275108306,
+        "lon": 32.82214999999999
+       },
+       "style": "carto-positron",
+       "zoom": 1
+      },
+      "margin": {
+       "b": 0,
+       "l": 0,
+       "r": 0,
+       "t": 30
+      },
+      "paper_bgcolor": "rgba(0,0,0,0)",
+      "template": {
+       "layout": {
+        "colorscale": {
+         "sequential": [
+          [
+           0.0,
+           "#1864ab"
+          ],
+          [
+           0.14285714285714285,
+           "#7065b9"
+          ],
+          [
+           0.2857142857142857,
+           "#af61b7"
+          ],
+          [
+           0.42857142857142855,
+           "#e35ea5"
+          ],
+          [
+           0.5714285714285714,
+           "#ff6587"
+          ],
+          [
+           0.7142857142857143,
+           "#ff7c63"
+          ],
+          [
+           0.8571428571428571,
+           "#ff9e3d"
+          ],
+          [
+           1.0,
+           "#fcc419"
+          ]
+         ]
+        },
+        "colorway": [
+         "#228be6",
+         "#fa5252",
+         "#40c057",
+         "#7950f2",
+         "#fd7e14",
+         "#15aabf",
+         "#e64980",
+         "#fab005"
+        ],
+        "font": {
+         "color": "#343a40",
+         "family": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\""
+        },
+        "geo": {
+         "bgcolor": "rgba(0,0,0,0)"
+        },
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+        "xaxis": {
+         "color": "#343a40",
+         "gridcolor": "rgba(0,0,0,0.08)",
+         "gridwidth": 0.5,
+         "linecolor": "rgba(0,0,0,0.08)",
+         "zerolinecolor": "rgba(0,0,0,0.35)"
+        },
+        "yaxis": {
+         "color": "#343a40",
+         "gridcolor": "rgba(0,0,0,0.08)",
+         "gridwidth": 0.5,
+         "linecolor": "rgba(0,0,0,0.08)",
+         "zerolinecolor": "rgba(0,0,0,0.35)"
+        }
+       }
+      },
+      "title": {
+       "font": {
+        "size": 14
+       },
+       "text": "Sampling locations",
+       "x": 0.5,
+       "xanchor": "center"
+      },
+      "uirevision": "persistent"
+     }
+    },
+    "metadata": {
+     "displayed_count": 24,
+     "filter_applied": false,
+     "map_type": "scatter_map",
+     "total_count": 24
+    }
+   }
+  }
+ },
+ "inline_blobs": {
+  "dc_2d928279e5dd0e8f8b770fa0": "UEFSMRUEFZAEFeIBTBUwFQAAAIgCKAcAAABUUkVDMDAxGQsAMhkLADMZCwA0GQsANRkLADYZCwA3GQsAOBkLADkVCwQxMBkLGW4AMRluADEZbgAxGW4AMRluADEZbgAxGW4AMRluADEZbgAyGW4AMhluADIZbjAyMwcAAABUUkVDMDI0FQAVLhUyLBUwFRAVBhUGHDYAKAdUUkVDMDI0GAdUUkVDMDAxAAAAF1gCAAAAMAEFByCIQYo5KKnFmnswykmrvRUMGTUABhAZGAlzYW1wbGVfaWQVAhYwFqoFFoADJogCJggcNgAoB1RSRUMwMjQYB1RSRUMwMDEAABUEFUIVRkwVBhUAAAAhgAUAAAB1cmJhbgYAAABtYXJpbmUKAAAAZnJlc2h3YXRlchUAFRwVICwVMBUQFQYVBhw2ACgFdXJiYW4YCmZyZXNod2F0ZXIAAAAONAIAAAAwAQIHAFWKhSJVFQwZNQAGEBkYBWJpb21lFQIWMBbIARbQASbaBCb6Axw2ACgFdXJiYW4YCmZyZXNod2F0ZXIAABkRAhkYB1RSRUMwMDEZGAdUUkVDMDI0FQAZFgAAGRECGRgKZnJlc2h3YXRlchkYBXVyYmFuFQAZFgAAGRwWiAIVgAEWAAAAGRwW2gQVcBYAAAAVAhk8SARyb290FQQAFQwlAhgJc2FtcGxlX2lkJQBMHAAAABUMJQIYBWJpb21lJQBMHAAAABYwGRwZLCaIBRwVDBk1AAYQGRgJc2FtcGxlX2lkFQIWMBaqBRaAAyaIAiYIHDYAKAdUUkVDMDI0GAdUUkVDMDAxAAAWrgcVGBa4BhU6ACaqBhwVDBk1AAYQGRgFYmlvbWUVAhYwFsgBFtABJtoEJvoDHDYAKAV1cmJhbhgKZnJlc2h3YXRlcgAAFsYHFRYW8gYVPAAW8gYWMCYIFtAEFAAAGRwYDEFSUk9XOnNjaGVtYRjgAS8vLy8vNTRBQUFBRUFBQUE4di8vL3hRQUFBQUVBQUVBQUFBS0FBc0FDQUFLQUFRQStQLy8vd3dBQUFBSUFBZ0FBQUFFQUFJQUFBQXdBQUFBQkFBQUFNVC8vLzhZQUFBQUVBQUFBQWdBQUFBQkZBQUFBQUFBQU1ULy8vOEZBQUFBWW1sdmJXVUFBQURzLy8vL0xBQUFBQ0FBQUFBWUFBQUFBUlFBQUJBQUVnQUVBQkFBRVFBSUFBQUFEQUFBQUFBQS9QLy8vd1FBQkFBSkFBQUFjMkZ0Y0d4bFgybGtBQT09ABgGUG9sYXJzGSwcAAAcAAAA2wEAAFBBUjE="
+ },
+ "limits": {
+  "advanced_viz_no_sample_max_rows": 2000000,
+  "advanced_viz_tail_effect_threshold": 1.0,
+  "advanced_viz_tail_p_threshold": 0.05,
+  "figure_max_points": 10000
+ },
+ "links": {
+  "configs": [],
+  "tables": {}
+ },
+ "manifest_version": 1,
+ "mode": "single-file",
+ "objects": {},
+ "producer": "B",
+ "prologues": {},
+ "provenance": {
+  "dashboard_url": null,
+  "exported_at": null,
+  "exported_by": null,
+  "project_name": null,
+  "source": null
+ },
+ "python_components": {},
+ "resolved_structures": [],
+ "tabs": [],
+ "tiers": {
+  "biome-filter": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  },
+  "sample-count": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  },
+  "sampling-map": {
+   "detail": "frozen at the default filter state with the dashboard's own basemap, which loads from its tile host when the reader is online; offline, the same markers draw on a blank background",
+   "reason": "map_tiles",
+   "tier": "frozen"
+  }
+ }
+}

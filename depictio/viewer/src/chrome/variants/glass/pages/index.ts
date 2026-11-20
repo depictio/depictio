@@ -5,6 +5,13 @@
  * `glass`; with Classic (`base`) the pages keep their own shells.
  */
 export { useGlassPages, usePageMark, GLASS_ID } from './useGlassPages';
-export { default as GlassPage, GlassKey, HomeMark, ProfileKey, STROKE } from './GlassPage';
+export {
+  default as GlassPage,
+  GlassKey,
+  GlassPageInset,
+  HomeMark,
+  ProfileKey,
+  STROKE,
+} from './GlassPage';
 export type { Crumb, GlassPageProps } from './GlassPage';
 export { default as GlassTray } from './GlassTray';

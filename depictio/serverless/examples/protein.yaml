@@ -1,0 +1,119 @@
+# Worked producer-B example — protein structure confidence (structure add-on).
+#
+# The three protein kinds that read object files — a 3D structure (molecule_3d,
+# drawn by the conditional 3Dmol.js add-on), its predicted aligned error
+# (pae_matrix) and its backbone torsions (ramachandran) — over the demo protein
+# of the advanced-visualisation showcase
+# (depictio/projects/init/advanced_viz_showcase/data/), plus a residue-range
+# filter that every tile follows.
+#
+# Expected data-dir layout (producer-B conventions):
+#
+#   <data_dir>/protein_demo/protein_residues_demo.parquet   the residue table
+#   <data_dir>/protein_demo/structures/demo_protein.pdb      indexed_file DC "structures"
+#   <data_dir>/protein_demo/pae/demo_protein.pae.tsv         indexed_file DC "pae"
+#
+# An indexed_file collection is a directory named after its tag, one file per
+# entity (the file name without its extensions). Build the committed demo
+# manifest with depictio/serverless/examples/generate_demo_manifest.py.
+
+title: "Protein structure — static bundle example"
+subtitle: "Producer B worked example (structure, PAE and torsions from bundled files)"
+
+components:
+  - tag: text-protein
+    component_type: text
+    title: "Structure confidence, offline"
+    order: 2
+    alignment: left
+    body: >
+      The demo protein's model, its predicted aligned error and its backbone torsions, all drawn
+      from files shipped inside this HTML. Narrow the residue range on the left: every tile follows.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: viz-structure
+    component_type: advanced_viz
+    workflow_tag: protein_demo
+    data_collection_tag: protein_residues_demo
+    title: "Structure"
+    viz_kind: molecule_3d
+    config:
+      viz_kind: molecule_3d
+      structure_source: file
+      structure_dc_tag: structures
+      entity_col: entity
+      position_col: position
+      chain_col: chain
+      color_mode: plddt
+      representation: cartoon
+      representations: [cartoon]
+      spin: false
+      show_variants: false
+      selection_enabled: true
+      follow_selection: true
+    layout: {x: 0, y: 1, w: 4, h: 7}
+
+  - tag: viz-pae
+    component_type: advanced_viz
+    workflow_tag: protein_demo
+    data_collection_tag: protein_residues_demo
+    title: "Predicted aligned error"
+    viz_kind: pae_matrix
+    config:
+      viz_kind: pae_matrix
+      entity_col: entity
+      position_col: position
+      value_col: plddt
+      pae_dc_tag: pae
+      brush: diagonal
+      show_plddt: true
+      selection_enabled: true
+      follow_selection: true
+    layout: {x: 4, y: 1, w: 4, h: 7}
+
+  - tag: viz-ramachandran
+    component_type: advanced_viz
+    workflow_tag: protein_demo
+    data_collection_tag: protein_residues_demo
+    title: "Ramachandran plot"
+    viz_kind: ramachandran
+    config:
+      viz_kind: ramachandran
+      structure_source: file
+      structure_dc_tag: structures
+      entity_col: entity
+      position_col: position
+      chain_col: chain
+      color_mode: plddt
+      show_regions: true
+      selection_enabled: true
+      follow_selection: true
+    layout: {x: 0, y: 8, w: 4, h: 7}
+
+  - tag: viz-plddt
+    component_type: advanced_viz
+    workflow_tag: protein_demo
+    data_collection_tag: protein_residues_demo
+    title: "Confidence along the sequence"
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: entity
+      x_col: position
+      y_col: plddt
+      x_title: Residue
+      y_title: pLDDT
+      residue_axis: true
+      legend_pos: none
+    layout: {x: 4, y: 8, w: 4, h: 7}
+
+  - tag: filter-position
+    component_type: interactive
+    workflow_tag: protein_demo
+    data_collection_tag: protein_residues_demo
+    interactive_component_type: RangeSlider
+    column_name: position
+    column_type: int64
+    title: "Residue range"
+    placement: left
+    layout: {x: 0, y: 0, w: 1, h: 3}

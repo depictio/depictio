@@ -1,0 +1,495 @@
+/**
+ * TypeScript mirror of the serverless bundle-manifest contract.
+ *
+ * Source of truth: `depictio/models/models/serverless.py` (Pydantic).
+ * Both sides are pinned by the committed JSON-schema snapshot
+ * `depictio/models/models/serverless.schema.json` — the vitest suite asserts
+ * this module's top-level keys against that snapshot, and the Python suite
+ * asserts the snapshot against the model. Change the contract there first,
+ * regenerate the snapshot, then update this mirror.
+ */
+
+import type { TrendlineKind } from './trendline';
+
+export const MANIFEST_VERSION = 1;
+
+export type BundleMode = 'single-file' | 'static-dir' | 'remote';
+
+/** A = export-from-instance, B = build-from-spec, C = API endpoint. */
+export type Producer = 'A' | 'B' | 'C';
+
+export type ComponentTier = 'live' | 'partial' | 'frozen' | 'omitted';
+
+export type TierReason =
+  | 'multiqc'
+  | 'celery_compute'
+  | 'code_mode'
+  | 'binding_miss'
+  | 'max_points'
+  | 'link_table_too_big'
+  | 'map_tiles'
+  | 'jbrowse'
+  | 'image'
+  | 'whole_frame_viz'
+  | 'filter_expr_window'
+  | 'unsupported';
+
+export interface ColumnSpec {
+  name: string;
+  /** Polars dtype string at export time (e.g. 'Int64', 'Utf8'). */
+  dtype: string;
+}
+
+/** One data collection's bundled table (mirrors load_deltatable_lite's init_data). */
+export interface DataRef {
+  /**
+   * 'inline:dc_<id>' (single-file, resolved against inline_blobs),
+   * a bundle-relative path like 'data/<id>.parquet' (static-dir),
+   * or an absolute URL (remote). Resolve only via resolveUri().
+   */
+  uri: string;
+  rows: number;
+  size_bytes: number;
+  row_group_bytes?: number | null;
+  columns: ColumnSpec[];
+  /**
+   * Companion column name -> source: '__ts__<col>' epoch-µs datetime companion,
+   * '__fe__<sha8>' boolean filter_expr column (value = source expr text),
+   * '__code__<col>' Int32 codebook codes for categorical column <col>.
+   */
+  companions: Record<string, string>;
+  /**
+   * Per categorical non-String column: JSON-serialized option value -> integer
+   * code in the '__code__<col>' companion. A selected value absent from the
+   * codebook matches nothing (same as a failed cast server-side).
+   */
+  codebooks: Record<string, Record<string, number>>;
+  aggregation_hash?: string | null;
+}
+
+export interface TierEntry {
+  tier: ComponentTier;
+  reason?: TierReason | null;
+  detail?: string | null;
+}
+
+export interface FrozenPayload {
+  kind: string;
+  /** Exactly what the corresponding api.ts function would have returned. */
+  payload: Record<string, unknown>;
+  filter_state: Record<string, unknown>[];
+}
+
+export interface TraceBinding {
+  /** Trace index in the scaffold figure. */
+  i: number;
+  /** Equality predicates (grouping column -> value) selecting this trace's rows. */
+  group: Record<string, unknown>;
+  /** Trace field path (e.g. 'x', 'y', 'marker.size') -> source column. */
+  fields: Record<string, string>;
+  /**
+   * Source columns feeding the 2-D `customdata` array, in plotly's column
+   * order: `customdata[k]` is this list's k-th column, which is what the
+   * hovertemplate's `%{customdata[k]}` indices address. Absent/empty when the
+   * trace has no customdata (and absent in pre-phase-8 bundles).
+   */
+  customdata?: string[];
+  /** Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id. */
+  axes: Record<string, string>;
+}
+
+export interface TrendlineBinding {
+  i: number;
+  /** Index of the raw-data trace the refit runs against. */
+  on: number;
+  /** px `trendline` kind; absent on bundles built before non-OLS refits (= 'ols'). */
+  kind?: TrendlineKind;
+  /** px `trendline_options`, verbatim (the binder only admits ones `trendline.ts` ports). */
+  options?: Record<string, unknown>;
+}
+
+export interface BindingTable {
+  /** Full figure JSON from the real create_figure_from_data, data arrays stripped. */
+  scaffold: Record<string, unknown>;
+  /** px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]. */
+  group_cols: string[];
+  traces: TraceBinding[];
+  trendlines: TrendlineBinding[];
+  /** True when the build sampled before filtering -> partial tier. */
+  sampled: boolean;
+}
+
+/** JSON scalar allowed in predicate comparisons / is_in lists. */
+export type PrologueScalar = string | number | boolean | null;
+
+export type CmpOp = '<' | '<=' | '>' | '>=' | '==' | '!=';
+
+/**
+ * Predicate tree for the `filter` prologue op. Evaluation is polars-faithful
+ * three-valued logic: a comparison involving null is null, and/or/not are
+ * Kleene, and a row passes only when the tree is strictly true.
+ */
+export type Pred =
+  | { and: Pred[] }
+  | { or: Pred[] }
+  | { not: Pred }
+  | { cmp: { col: string; op: CmpOp; value: PrologueScalar } }
+  | { is_null: { col: string } }
+  | { is_not_null: { col: string } }
+  | { is_in: { col: string; values: PrologueScalar[] } };
+
+/**
+ * Closed group_by aggregation allowlist (the agg kernel's AggFn minus mode,
+ * plus `len`). `count` is the NON-NULL count of `col`; `len` is the GROUP SIZE
+ * — every row of the group, nulls included, independent of any column.
+ */
+export type PrologueAggFn =
+  | 'sum'
+  | 'mean'
+  | 'median'
+  | 'min'
+  | 'max'
+  | 'count'
+  | 'len'
+  | 'nunique'
+  | 'std'
+  | 'var'
+  | 'first'
+  | 'last';
+
+/**
+ * One reducer of a `group_by`. `col` is null/absent only for a bare `len`
+ * (polars `pl.len()` / `pl.count()`, which read no column); the column-attached
+ * `pl.col(c).len()` keeps `col: c` — the value is still the group size, but
+ * polars names the output after `c` and raises when `c` is missing, so the
+ * interpreter validates it. `alias` is always the output column name the
+ * transpiler already resolved (polars' no-alias default: `col`, except bare
+ * `pl.len()` -> 'len' and bare `pl.count()` -> 'count').
+ */
+export type PrologueAgg =
+  | { col: string; fn: Exclude<PrologueAggFn, 'len'>; alias: string }
+  | { col?: string | null; fn: 'len'; alias: string };
+
+/**
+ * One step of a component's data prologue — the closed JSON IR the Python
+ * transpiler emits and `runPrologue` (../prologue.ts) executes in the browser
+ * with pinned Polars semantics. Shapes are the phase-6 contract, byte-for-byte
+ * shared with the Python side; the polars-generated differential fixture is
+ * the arbiter.
+ */
+export type PrologueOp =
+  | { op: 'filter'; pred: Pred }
+  | { op: 'unpivot'; on: string[]; index: string[]; variable: string; value: string }
+  | { op: 'group_by'; by: string[]; agg: PrologueAgg[] }
+  | { op: 'sort'; by: string[]; desc: boolean[] }
+  | { op: 'rename'; map: Record<string, string> };
+
+export interface LinkTable {
+  /** Source value -> translated target values. */
+  values: Record<string, string[]>;
+}
+
+export interface LinksSection {
+  configs: Record<string, unknown>[];
+  tables: Record<string, LinkTable>;
+}
+
+/**
+ * Sampling ceilings the runtime enforces, pinned from the building instance's
+ * PerformanceConfig. Defaults match the server defaults, so manifests built
+ * before this field existed behave identically.
+ */
+export interface RuntimeLimits {
+  figure_max_points: number;
+  advanced_viz_no_sample_max_rows: number;
+  advanced_viz_tail_p_threshold: number;
+  advanced_viz_tail_effect_threshold: number;
+}
+
+export const DEFAULT_LIMITS: RuntimeLimits = {
+  figure_max_points: 10_000,
+  advanced_viz_no_sample_max_rows: 2_000_000,
+  advanced_viz_tail_p_threshold: 0.05,
+  advanced_viz_tail_effect_threshold: 1.0,
+};
+
+export interface DashboardSection {
+  /**
+   * Dashboard id passed to App. Must be non-empty: ComponentRenderer silently
+   * no-ops figure/table/image/map/jbrowse/multiqc without a dashboardId.
+   */
+  id: string;
+  title: string;
+  /** DashboardDataLite-shaped document: layout + stored_metadata components. */
+  doc: Record<string, unknown>;
+}
+
+/**
+ * One tab of a bundled tab family. Server-side a family is a main tab plus
+ * children carrying parent_dashboard_id, and the viewer's left rail switches
+ * between them by navigating to /dashboard/<id>. A bundle has no routing, so it
+ * carries every tab's document and switches in place.
+ */
+export interface TabEntry {
+  id: string;
+  title: string;
+  tab_order: number;
+  is_main_tab: boolean;
+  /** Pill icon: the tab's own `tab_icon`, else the dashboard's. */
+  icon?: string | null;
+  icon_color?: string | null;
+  /**
+   * The rest of what the server's tab list gives the left rail. Absent from
+   * manifests written before them: read them through the runtime's
+   * `tabSummaries`, which falls back to the tab document's own fields.
+   */
+  main_tab_name?: string | null;
+  /** Sidebar section of a child tab; null when ungrouped. */
+  tab_group?: string | null;
+  /** The tab's own icon as authored (Iconify id or image path). */
+  tab_icon?: string | null;
+  tab_icon_color?: string | null;
+  subtitle?: string | null;
+  doc: Record<string, unknown>;
+}
+
+/** Who built the bundle, from where, and against which data. */
+export interface ExportProvenance {
+  exported_by?: string | null;
+  exported_at?: string | null;
+  source?: string | null;
+  project_name?: string | null;
+  dashboard_url?: string | null;
+}
+
+/** The template a project was built from: id and revision only. */
+export interface ProjectTemplateSummary {
+  template_id: string;
+  template_version?: string | null;
+  applied_at?: string | null;
+}
+
+export interface ProjectWorkflowSummary {
+  id: string;
+  name: string;
+  tag?: string | null;
+  engine?: string | null;
+  engine_version?: string | null;
+  version?: string | null;
+  /** Public http(s) URL only. */
+  repository_url?: string | null;
+  catalog?: string | null;
+}
+
+/** One column of a collection as its last ingestion recorded it. */
+export interface ProjectColumnSummary {
+  name: string;
+  /** Column dtype as recorded at ingestion (e.g. 'string', 'float64'). */
+  type?: string | null;
+  description?: string | null;
+  /** Distinct values at ingestion. */
+  distinct?: number | null;
+}
+
+/**
+ * One data collection of the project. The ingestion facts are what the live
+ * data collection viewer shows; absent from manifests written before them, so
+ * every one is optional (read `data_refs` for a bundled table's own figures).
+ */
+export interface ProjectDataCollectionSummary {
+  id: string;
+  tag: string;
+  type: string;
+  metatype?: string | null;
+  workflow_id?: string | null;
+  description?: string | null;
+  /** Rows at the last ingestion. */
+  rows?: number | null;
+  /** Stored size at the last ingestion. */
+  size_bytes?: number | null;
+  /** Time of the last ingestion. */
+  updated_at?: string | null;
+  /** Delta commit of the last ingestion. */
+  version?: number | null;
+  /** Source file format (csv, parquet, ...). */
+  format?: string | null;
+  /** Schema at the last ingestion. */
+  columns?: ProjectColumnSummary[];
+}
+
+/** A cross-collection link without its value mappings. */
+export interface ProjectLinkSummary {
+  id: string;
+  source_dc_id: string;
+  source_dc_tag?: string | null;
+  source_column: string;
+  target_dc_id: string;
+  target_dc_tag?: string | null;
+  target_type: string;
+  resolver: string;
+  target_field?: string | null;
+  description?: string | null;
+  enabled: boolean;
+}
+
+export interface ProjectJoinSummary {
+  name?: string | null;
+  left_dc: string;
+  right_dc: string;
+  on_columns: string[];
+  how?: string | null;
+  description?: string | null;
+}
+
+/** A recorded run parameter; paths keep their last part, secrets are withheld. */
+export interface RunParameter {
+  source: string;
+  group: string;
+  key: string;
+  value: string;
+  highlight: boolean;
+}
+
+/**
+ * What a reader can know offline about the dashboard's project — the bundle's
+ * project page. Display facts only: no ACL, owners, storage or server paths.
+ */
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  project_type?: string | null;
+  registered_at?: string | null;
+  /** The project's external (LIMS / data platform) page, http(s) only. */
+  external_url?: string | null;
+  /** The live project page, when the instance declares a public URL. */
+  project_url?: string | null;
+  template?: ProjectTemplateSummary | null;
+  workflows: ProjectWorkflowSummary[];
+  data_collections: ProjectDataCollectionSummary[];
+  links: ProjectLinkSummary[];
+  joins: ProjectJoinSummary[];
+  run_parameters: RunParameter[];
+  run_parameter_files: string[];
+}
+
+/** One object-store file shipped inside the bundle (a structure, a PAE matrix). */
+export interface BundledObject {
+  sample: string;
+  name: string;
+  /** 'inline:obj_<sha>' resolved against inline_blobs. */
+  uri: string;
+  size_bytes: number;
+  /** Bytes were gzip-compressed at export; the reader gunzips by magic bytes. */
+  gzip?: boolean;
+}
+
+/** The shipped part of one indexed_file data collection. */
+export interface ObjectCollection {
+  format: string;
+  files: BundledObject[];
+  total: number;
+  cap_bytes: number;
+  dropped: string[];
+}
+
+/** A structure-resolver answer frozen at export (molecule_3d `resolve` mode). */
+export interface ResolvedStructureEntry {
+  uniprot?: string | null;
+  gene?: string | null;
+  sequence?: string | null;
+  taxon: number;
+  uri: string;
+  origin?: string | null;
+  accession?: string | null;
+  model_sequence: string;
+}
+
+/** An optional runtime piece the producer embedded (3Dmol.js, Pyodide, JBrowse). */
+export interface RuntimeAddon {
+  name: '3dmol' | 'pyodide' | 'jbrowse';
+  version: string;
+  packages: string[];
+  bytes: number;
+  reason: string;
+}
+
+/** A tile the optional Python runtime (Pyodide) recomputes in the browser. */
+export interface PythonComponent {
+  job: 'code_figure' | 'group_compare' | 'embedding';
+  dc_id: string;
+  spec: Record<string, unknown>;
+  max_rows?: number | null;
+  /** 'inline:ipc_<dc_id>': Arrow IPC copy for Python (Pyodide polars has no Parquet reader). */
+  table_uri: string;
+}
+
+export interface BundleManifest {
+  manifest_version: number;
+  mode: BundleMode;
+  producer: Producer;
+  built_at: string;
+  depictio_version: string;
+  dashboard: DashboardSection;
+  /**
+   * Every tab of the family, main tab first, each with its own document. Empty
+   * for a single-tab bundle, where `dashboard` is the whole story; when
+   * populated it includes the entry tab, so `dashboard.doc` duplicates one
+   * entry. Component-keyed sections span the whole family — component ids are
+   * uuids, so they never collide across tabs.
+   */
+  tabs: TabEntry[];
+  provenance: ExportProvenance;
+  /** The dashboard's project (producer A); null or absent otherwise. */
+  project?: ProjectSummary | null;
+  data_refs: Record<string, DataRef>;
+  tiers: Record<string, TierEntry>;
+  frozen: Record<string, FrozenPayload>;
+  bindings: Record<string, BindingTable>;
+  prologues: Record<string, PrologueOp[]>;
+  links: LinksSection;
+  /** Absent in pre-phase-4 manifests — read via `limitsOf()` for defaults. */
+  limits?: RuntimeLimits;
+  /** Not read: a map keeps its own basemap in every bundle (online), blank offline. */
+  allow_network_tiles: boolean;
+  /** single-file only: 'dc_<id>' -> base64 Parquet bytes, 'obj_<sha>' -> object bytes. */
+  inline_blobs: Record<string, string>;
+  /** indexed_file dc_id -> shipped objects. Absent in older manifests. */
+  objects?: Record<string, ObjectCollection>;
+  /** Resolver answers frozen at export. Absent in older manifests. */
+  resolved_structures?: ResolvedStructureEntry[];
+  /** Add-ons embedded into this bundle's HTML. Absent in older manifests. */
+  addons?: RuntimeAddon[];
+  /** component_id -> Python job (only with the Pyodide add-on). */
+  python_components?: Record<string, PythonComponent>;
+}
+
+/** The manifest's sampling ceilings, with server defaults for older bundles. */
+export function limitsOf(m: BundleManifest): RuntimeLimits {
+  return { ...DEFAULT_LIMITS, ...(m.limits ?? {}) };
+}
+
+/** Runtime parse with the checks the runtime actually depends on. */
+export function parseManifest(json: unknown): BundleManifest {
+  if (typeof json !== 'object' || json === null) {
+    throw new Error('bundle manifest: not an object');
+  }
+  const m = json as BundleManifest;
+  if (m.manifest_version !== MANIFEST_VERSION) {
+    throw new Error(
+      `bundle manifest: version ${String(m.manifest_version)} not supported (runtime speaks ${MANIFEST_VERSION})`,
+    );
+  }
+  if (!m.dashboard || typeof m.dashboard.id !== 'string' || m.dashboard.id.length === 0) {
+    throw new Error('bundle manifest: dashboard.id must be a non-empty string');
+  }
+  if (m.mode !== 'single-file' && m.mode !== 'static-dir' && m.mode !== 'remote') {
+    throw new Error(`bundle manifest: unknown mode "${String(m.mode)}"`);
+  }
+  for (const [dcId, ref] of Object.entries(m.data_refs ?? {})) {
+    if (ref.uri.startsWith('inline:') && !(ref.uri.slice('inline:'.length) in (m.inline_blobs ?? {}))) {
+      throw new Error(`bundle manifest: data_refs[${dcId}] points at missing inline blob "${ref.uri}"`);
+    }
+  }
+  return m;
+}

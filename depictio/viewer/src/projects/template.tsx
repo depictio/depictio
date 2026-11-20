@@ -2,7 +2,7 @@ import React from 'react';
 import { Anchor, Avatar, Badge, Box, Group, Stack, Text, Tooltip } from '@mantine/core';
 
 import type { ParsedTemplate, ProjectListEntry } from 'depictio-react-core';
-import { parseTemplateOrigin, readTemplateRevision } from 'depictio-react-core';
+import { parseTemplateOrigin, readTemplateRevision, useIsStaticBundle } from 'depictio-react-core';
 
 /** Template identifiers are parsed and matched in `depictio-react-core`
  *  (`templateFilter.ts`), where both listings' filters can share the rules and
@@ -104,7 +104,9 @@ export const TemplateSourceLogo: React.FC<{ source: string; size?: number }> = (
   size = 22,
 }) => {
   const meta = sourceMeta(source);
-  const Logo = meta.Logo;
+  // A static bundle opens from file://, where `logos/workflows/*` resolves to
+  // nothing next to the file: the initials stand in rather than a broken image.
+  const Logo = useIsStaticBundle() ? undefined : meta.Logo;
   return Logo ? (
     <Box
       w={size}
@@ -154,7 +156,9 @@ export const WorkflowEngineLogo: React.FC<{ engine: string; size?: number }> = (
   size = 16,
 }) => {
   const logo = ENGINES[engine.toLowerCase()]?.logo;
-  return logo ? <BrandImg src={LOGO(logo)} alt={engineLabel(engine)} size={size} /> : null;
+  // No served logos in a static bundle (see TemplateSourceLogo).
+  const isStatic = useIsStaticBundle();
+  return logo && !isStatic ? <BrandImg src={LOGO(logo)} alt={engineLabel(engine)} size={size} /> : null;
 };
 
 /** Shared chip that renders a template's brand mark (or letter fallback) +

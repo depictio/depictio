@@ -1,0 +1,2293 @@
+{
+  "$defs": {
+    "AggFn": {
+      "description": "Closed allowlist of ``group_by().agg()`` reducers.",
+      "enum": [
+        "sum",
+        "mean",
+        "median",
+        "min",
+        "max",
+        "count",
+        "len",
+        "nunique",
+        "std",
+        "var",
+        "first",
+        "last"
+      ],
+      "title": "AggFn",
+      "type": "string"
+    },
+    "AggSpec": {
+      "additionalProperties": false,
+      "description": "One reducer of a ``group_by().agg()``.\n\n``col`` is null only for ``fn == \"len\"`` spelled bare (``pl.len()`` /\nthe deprecated ``pl.count()``): the group size reads no column. The\ncolumn-attached spelling ``pl.col(c).len()`` keeps ``col = c`` \u2014 Polars\nstill returns the group size there, but names the output after ``c``, and\na missing ``c`` still raises.",
+      "properties": {
+        "alias": {
+          "description": "Output column name. Polars defaults it to ``col``, except for a bare ``pl.len()`` -> 'len' and a bare ``pl.count()`` -> 'count'",
+          "title": "Alias",
+          "type": "string"
+        },
+        "col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source column reduced; null only for a bare ``len`` (group size)",
+          "title": "Col"
+        },
+        "fn": {
+          "$ref": "#/$defs/AggFn"
+        }
+      },
+      "required": [
+        "fn",
+        "alias"
+      ],
+      "title": "AggSpec",
+      "type": "object"
+    },
+    "AndPred": {
+      "additionalProperties": false,
+      "description": "``{\"and\": [<Pred>, ...]}`` \u2014 the field is aliased because ``and`` is a keyword.",
+      "properties": {
+        "and": {
+          "description": "Conjuncts, evaluated left to right",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CmpPred"
+              },
+              {
+                "$ref": "#/$defs/IsNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsNotNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsInPred"
+              },
+              {
+                "$ref": "#/$defs/AndPred"
+              },
+              {
+                "$ref": "#/$defs/OrPred"
+              },
+              {
+                "$ref": "#/$defs/NotPred"
+              }
+            ]
+          },
+          "title": "And",
+          "type": "array"
+        }
+      },
+      "required": [
+        "and"
+      ],
+      "title": "AndPred",
+      "type": "object"
+    },
+    "BindingTable": {
+      "additionalProperties": false,
+      "description": "Everything the runtime needs to refill a ui-mode figure (RFC \u00a74).",
+      "properties": {
+        "group_cols": {
+          "description": "px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
+          "items": {
+            "type": "string"
+          },
+          "title": "Group Cols",
+          "type": "array"
+        },
+        "sampled": {
+          "default": false,
+          "description": "True when the build sampled before filtering (FIGURE_MAX_POINTS) -> partial tier",
+          "title": "Sampled",
+          "type": "boolean"
+        },
+        "scaffold": {
+          "additionalProperties": true,
+          "description": "Full figure JSON from the real create_figure_from_data, data arrays stripped",
+          "title": "Scaffold",
+          "type": "object"
+        },
+        "traces": {
+          "items": {
+            "$ref": "#/$defs/TraceBinding"
+          },
+          "title": "Traces",
+          "type": "array"
+        },
+        "trendlines": {
+          "items": {
+            "$ref": "#/$defs/TrendlineBinding"
+          },
+          "title": "Trendlines",
+          "type": "array"
+        }
+      },
+      "required": [
+        "scaffold",
+        "traces"
+      ],
+      "title": "BindingTable",
+      "type": "object"
+    },
+    "BundleMode": {
+      "description": "Delivery mode \u2014 only ``data_refs[].uri`` semantics change between them.",
+      "enum": [
+        "single-file",
+        "static-dir",
+        "remote"
+      ],
+      "title": "BundleMode",
+      "type": "string"
+    },
+    "BundledObject": {
+      "additionalProperties": false,
+      "description": "One object-store file shipped inside the bundle (a structure, a PAE matrix).\n\nThe runtime answers the renderer's ``GET /files/indexed/{dc_id}`` from\n:class:`ObjectCollection` and hands it a ``blob:`` URL over these bytes, so\nthe renderer's own download path (gunzip by magic bytes, per-object cache)\nruns unchanged and nothing leaves the page.",
+      "properties": {
+        "gzip": {
+          "default": false,
+          "description": "Bytes were gzip-compressed at export (the reader gunzips)",
+          "title": "Gzip",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "File name as stored (format sniffing reads its extension)",
+          "title": "Name",
+          "type": "string"
+        },
+        "sample": {
+          "description": "Entity the file belongs to (the indexed_file sample)",
+          "title": "Sample",
+          "type": "string"
+        },
+        "size_bytes": {
+          "description": "Size of the original object in bytes",
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "uri": {
+          "description": "'inline:obj_<sha>' resolved against inline_blobs",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample",
+        "name",
+        "uri",
+        "size_bytes"
+      ],
+      "title": "BundledObject",
+      "type": "object"
+    },
+    "CmpArgs": {
+      "additionalProperties": false,
+      "description": "Argument of ``cmp``: column, operator, literal.",
+      "properties": {
+        "col": {
+          "title": "Col",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/CmpOperator"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "JSON scalar compared against the column (never null \u2014 use is_null)",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "col",
+        "op",
+        "value"
+      ],
+      "title": "CmpArgs",
+      "type": "object"
+    },
+    "CmpOperator": {
+      "description": "Comparison operators expressible in a prologue predicate.",
+      "enum": [
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "==",
+        "!="
+      ],
+      "title": "CmpOperator",
+      "type": "string"
+    },
+    "CmpPred": {
+      "additionalProperties": false,
+      "description": "``{\"cmp\": {\"col\": \"q_val\", \"op\": \"<\", \"value\": 0.05}}``",
+      "properties": {
+        "cmp": {
+          "$ref": "#/$defs/CmpArgs"
+        }
+      },
+      "required": [
+        "cmp"
+      ],
+      "title": "CmpPred",
+      "type": "object"
+    },
+    "ColRef": {
+      "additionalProperties": false,
+      "description": "Argument of the unary null predicates: ``{\"col\": \"x\"}``.",
+      "properties": {
+        "col": {
+          "description": "Column the predicate tests",
+          "title": "Col",
+          "type": "string"
+        }
+      },
+      "required": [
+        "col"
+      ],
+      "title": "ColRef",
+      "type": "object"
+    },
+    "ColumnSpec": {
+      "additionalProperties": false,
+      "description": "One physical column of a bundled Parquet file.",
+      "properties": {
+        "dtype": {
+          "description": "Polars dtype string at export time (e.g. 'Int64', 'Utf8')",
+          "title": "Dtype",
+          "type": "string"
+        },
+        "name": {
+          "description": "Column name as stored in the Parquet file",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "dtype"
+      ],
+      "title": "ColumnSpec",
+      "type": "object"
+    },
+    "ComponentTier": {
+      "description": "Per-component liveness in the static runtime (RFC \u00a73.2).",
+      "enum": [
+        "live",
+        "partial",
+        "frozen",
+        "omitted"
+      ],
+      "title": "ComponentTier",
+      "type": "string"
+    },
+    "DashboardSection": {
+      "additionalProperties": false,
+      "description": "The dashboard document the runtime mounts.",
+      "properties": {
+        "doc": {
+          "additionalProperties": true,
+          "description": "DashboardDataLite-shaped document: layout + stored_metadata components",
+          "title": "Doc",
+          "type": "object"
+        },
+        "id": {
+          "description": "Dashboard id the runtime passes to App \u2014 real Mongo id (producer A/C) or synthetic sha1(workflow_tag + ':' + dc_tag)[:24]-style id (producer B). Must be non-empty: ComponentRenderer silently no-ops several component types without a dashboardId.",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc"
+      ],
+      "title": "DashboardSection",
+      "type": "object"
+    },
+    "DataRef": {
+      "additionalProperties": false,
+      "description": "One data collection's bundled table.\n\nMirrors the shape of ``load_deltatable_lite``'s ``init_data`` entries\n(``deltatables_utils.py:1393``) \u2014 the proven \"resolve a DC without an API\nround-trip\" contract \u2014 extended with serverless-only fields.",
+      "properties": {
+        "aggregation_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Staleness token: server-side _get_aggregation_hash for producer A, hash of the input Parquet bytes for producer B",
+          "title": "Aggregation Hash"
+        },
+        "codebooks": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "description": "Per categorical non-String column: JSON-serialized option value -> integer code stored in the '__code__<col>' companion. Keys are serialized with the same _json_safe path that produces MultiSelect options, so option values and codebook keys are byte-identical. A selected value absent from the codebook matches nothing (same as a failed cast server-side).",
+          "title": "Codebooks",
+          "type": "object"
+        },
+        "columns": {
+          "description": "Physical schema after pruning + companions",
+          "items": {
+            "$ref": "#/$defs/ColumnSpec"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "companions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Companion column name -> source. '__ts__<col>': epoch-microsecond datetime companion for <col>; '__fe__<sha8>': boolean column for the component-static filter_expr whose source text is the value; '__code__<col>': Int32 codebook codes for categorical column <col>.",
+          "title": "Companions",
+          "type": "object"
+        },
+        "row_group_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target row-group size used at export (tuned for Range requests in remote mode)",
+          "title": "Row Group Bytes"
+        },
+        "rows": {
+          "description": "Row count at export time",
+          "minimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "size_bytes": {
+          "description": "Parquet file size in bytes",
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "uri": {
+          "description": "Where the Parquet bytes live. 'inline:dc_<id>' (single-file, resolved against inline_blobs), a bundle-relative path like 'data/<id>.parquet' (static-dir), or an absolute URL (remote). All resolution goes through the runtime's single resolveUri() helper.",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "rows",
+        "size_bytes",
+        "columns"
+      ],
+      "title": "DataRef",
+      "type": "object"
+    },
+    "ExportProvenance": {
+      "additionalProperties": false,
+      "description": "Who built the bundle, from where, and against which data.\n\nSurfaced in the bundle's left rail: a bundle outlives the instance it came\nfrom, so a reader needs to know whose export it is and how old.",
+      "properties": {
+        "dashboard_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute URL of the live dashboard, when the builder knows it",
+          "title": "Dashboard Url"
+        },
+        "exported_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601; mirrors built_at, kept here for display",
+          "title": "Exported At"
+        },
+        "exported_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Email of the exporting user",
+          "title": "Exported By"
+        },
+        "project_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Name"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Instance the export ran against (host or deployment name)",
+          "title": "Source"
+        }
+      },
+      "title": "ExportProvenance",
+      "type": "object"
+    },
+    "FilterOp": {
+      "additionalProperties": false,
+      "description": "``df.filter(<pred>)`` \u2014 row selection. Nulls never match.",
+      "properties": {
+        "op": {
+          "const": "filter",
+          "default": "filter",
+          "title": "Op",
+          "type": "string"
+        },
+        "pred": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CmpPred"
+            },
+            {
+              "$ref": "#/$defs/IsNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsNotNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsInPred"
+            },
+            {
+              "$ref": "#/$defs/AndPred"
+            },
+            {
+              "$ref": "#/$defs/OrPred"
+            },
+            {
+              "$ref": "#/$defs/NotPred"
+            }
+          ],
+          "title": "Pred"
+        }
+      },
+      "required": [
+        "pred"
+      ],
+      "title": "FilterOp",
+      "type": "object"
+    },
+    "FrozenPayload": {
+      "additionalProperties": false,
+      "description": "A precomputed component payload, rendered when the component is frozen.",
+      "properties": {
+        "filter_state": {
+          "description": "Filter state the payload was computed at (default state = [])",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Filter State",
+          "type": "array"
+        },
+        "kind": {
+          "description": "Component type the payload feeds (figure|table|card|multiqc|advanced_viz|map|image)",
+          "title": "Kind",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "description": "Exactly what the corresponding api.ts function would have returned",
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "payload"
+      ],
+      "title": "FrozenPayload",
+      "type": "object"
+    },
+    "GroupByOp": {
+      "additionalProperties": false,
+      "description": "``df.group_by(by, maintain_order=True).agg(...)`` \u2014 first-appearance group order.",
+      "properties": {
+        "agg": {
+          "items": {
+            "$ref": "#/$defs/AggSpec"
+          },
+          "title": "Agg",
+          "type": "array"
+        },
+        "by": {
+          "description": "Grouping key columns; a null key forms its own group",
+          "items": {
+            "type": "string"
+          },
+          "title": "By",
+          "type": "array"
+        },
+        "op": {
+          "const": "group_by",
+          "default": "group_by",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "agg"
+      ],
+      "title": "GroupByOp",
+      "type": "object"
+    },
+    "IsInArgs": {
+      "additionalProperties": false,
+      "description": "Argument of ``is_in``: column plus the literal membership set.",
+      "properties": {
+        "col": {
+          "title": "Col",
+          "type": "string"
+        },
+        "values": {
+          "description": "Literal scalars the column must be one of",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "col",
+        "values"
+      ],
+      "title": "IsInArgs",
+      "type": "object"
+    },
+    "IsInPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_in\": {\"col\": \"x\", \"values\": [...]}}``",
+      "properties": {
+        "is_in": {
+          "$ref": "#/$defs/IsInArgs"
+        }
+      },
+      "required": [
+        "is_in"
+      ],
+      "title": "IsInPred",
+      "type": "object"
+    },
+    "IsNotNullPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_not_null\": {\"col\": \"x\"}}``",
+      "properties": {
+        "is_not_null": {
+          "$ref": "#/$defs/ColRef"
+        }
+      },
+      "required": [
+        "is_not_null"
+      ],
+      "title": "IsNotNullPred",
+      "type": "object"
+    },
+    "IsNullPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_null\": {\"col\": \"x\"}}``",
+      "properties": {
+        "is_null": {
+          "$ref": "#/$defs/ColRef"
+        }
+      },
+      "required": [
+        "is_null"
+      ],
+      "title": "IsNullPred",
+      "type": "object"
+    },
+    "LinkTable": {
+      "additionalProperties": false,
+      "description": "Precomputed value-mapping for a DC link whose source DC is not bundled (tier B).",
+      "properties": {
+        "values": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Source value -> translated target values",
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "title": "LinkTable",
+      "type": "object"
+    },
+    "LinksSection": {
+      "additionalProperties": false,
+      "description": "DC link configs plus precomputed translation tables (RFC \u00a78).",
+      "properties": {
+        "configs": {
+          "description": "Link configs as stored in Mongo, verbatim",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Configs",
+          "type": "array"
+        },
+        "tables": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LinkTable"
+          },
+          "description": "link_id -> precomputed translation table",
+          "title": "Tables",
+          "type": "object"
+        }
+      },
+      "title": "LinksSection",
+      "type": "object"
+    },
+    "NotPred": {
+      "additionalProperties": false,
+      "description": "``{\"not\": <Pred>}``",
+      "properties": {
+        "not": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CmpPred"
+            },
+            {
+              "$ref": "#/$defs/IsNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsNotNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsInPred"
+            },
+            {
+              "$ref": "#/$defs/AndPred"
+            },
+            {
+              "$ref": "#/$defs/OrPred"
+            },
+            {
+              "$ref": "#/$defs/NotPred"
+            }
+          ],
+          "description": "Negated sub-predicate",
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "NotPred",
+      "type": "object"
+    },
+    "ObjectCollection": {
+      "additionalProperties": false,
+      "description": "The shipped part of one ``indexed_file`` data collection.",
+      "properties": {
+        "cap_bytes": {
+          "default": 0,
+          "description": "Per-bundle object budget in force at export (raw bytes)",
+          "minimum": 0,
+          "title": "Cap Bytes",
+          "type": "integer"
+        },
+        "dropped": {
+          "description": "Samples left out because they did not fit the cap (named in the tier detail)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Dropped",
+          "type": "array"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/BundledObject"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "format": {
+          "default": "",
+          "description": "indexed_file format (pdb, mmcif, pae, ...)",
+          "title": "Format",
+          "type": "string"
+        },
+        "total": {
+          "default": 0,
+          "description": "Objects the collection held at export",
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "title": "ObjectCollection",
+      "type": "object"
+    },
+    "OrPred": {
+      "additionalProperties": false,
+      "description": "``{\"or\": [<Pred>, ...]}``",
+      "properties": {
+        "or": {
+          "description": "Disjuncts, evaluated left to right",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CmpPred"
+              },
+              {
+                "$ref": "#/$defs/IsNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsNotNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsInPred"
+              },
+              {
+                "$ref": "#/$defs/AndPred"
+              },
+              {
+                "$ref": "#/$defs/OrPred"
+              },
+              {
+                "$ref": "#/$defs/NotPred"
+              }
+            ]
+          },
+          "title": "Or",
+          "type": "array"
+        }
+      },
+      "required": [
+        "or"
+      ],
+      "title": "OrPred",
+      "type": "object"
+    },
+    "Producer": {
+      "description": "Which producer built the bundle (RFC \u00a73.3).",
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ],
+      "title": "Producer",
+      "type": "string"
+    },
+    "ProjectColumnSummary": {
+      "additionalProperties": false,
+      "description": "One column of a collection as its last ingestion recorded it.\n\nThe schema the live project page lists (name, dtype, description, distinct\nvalues), so a bundle shows it for every collection of the project, the\nones the export left out included. Statistics other than the distinct\ncount (min, max, samples of values) stay on the server.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "distinct": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Distinct values at ingestion",
+          "title": "Distinct"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Column dtype as recorded at ingestion",
+          "title": "Type"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProjectColumnSummary",
+      "type": "object"
+    },
+    "ProjectDataCollectionSummary": {
+      "additionalProperties": false,
+      "description": "One data collection of the project. Size comes from ``data_refs`` when the\nbundle carries the table; a collection the export left out is still listed,\nso a reader can see what the live project holds.\n\nThe ingestion facts (rows, columns, size, time, version, format) are what\nthe live data collection viewer shows; none of them names a location, a\nuser or a run folder.",
+      "properties": {
+        "columns": {
+          "description": "Schema at the last ingestion",
+          "items": {
+            "$ref": "#/$defs/ProjectColumnSummary"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source file format (csv, parquet, ...)",
+          "title": "Format"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "metatype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Free-form label, display only",
+          "title": "Metatype"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rows at the last ingestion",
+          "title": "Rows"
+        },
+        "size_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stored size at the last ingestion",
+          "title": "Size Bytes"
+        },
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        },
+        "type": {
+          "default": "table",
+          "description": "dc type (table, multiqc, image, ...)",
+          "title": "Type",
+          "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Time of the last ingestion",
+          "title": "Updated At"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Delta commit of the last ingestion",
+          "title": "Version"
+        },
+        "workflow_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Owning workflow, null when direct",
+          "title": "Workflow Id"
+        }
+      },
+      "required": [
+        "id",
+        "tag"
+      ],
+      "title": "ProjectDataCollectionSummary",
+      "type": "object"
+    },
+    "ProjectJoinSummary": {
+      "additionalProperties": false,
+      "description": "A top-level join definition: which collections it combines, on what.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "how": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "How"
+        },
+        "left_dc": {
+          "title": "Left Dc",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "on_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "On Columns",
+          "type": "array"
+        },
+        "right_dc": {
+          "title": "Right Dc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "left_dc",
+        "right_dc"
+      ],
+      "title": "ProjectJoinSummary",
+      "type": "object"
+    },
+    "ProjectLinkSummary": {
+      "additionalProperties": false,
+      "description": "A cross-collection link (``DCLink``) without its value mappings.\n\nMappings and patterns are the resolver's working data, can be large, and\nthe bundle already ships what it needs of them in ``links``; this is the\nreader's view of which collection filters which.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "resolver": {
+          "default": "direct",
+          "title": "Resolver",
+          "type": "string"
+        },
+        "source_column": {
+          "title": "Source Column",
+          "type": "string"
+        },
+        "source_dc_id": {
+          "title": "Source Dc Id",
+          "type": "string"
+        },
+        "source_dc_tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Dc Tag"
+        },
+        "target_dc_id": {
+          "title": "Target Dc Id",
+          "type": "string"
+        },
+        "target_dc_tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Dc Tag"
+        },
+        "target_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Field"
+        },
+        "target_type": {
+          "default": "table",
+          "title": "Target Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_dc_id",
+        "source_column",
+        "target_dc_id"
+      ],
+      "title": "ProjectLinkSummary",
+      "type": "object"
+    },
+    "ProjectSummary": {
+      "additionalProperties": false,
+      "description": "What a reader can know offline about the dashboard's project.\n\nProducer A reads it from the project document and keeps only display\nfacts: no permissions, owners, emails, tokens, storage credentials or\nserver paths. The bundle's project page renders it.",
+      "properties": {
+        "data_collections": {
+          "items": {
+            "$ref": "#/$defs/ProjectDataCollectionSummary"
+          },
+          "title": "Data Collections",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "external_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "data_management_platform_project_url, kept only when it is http(s)",
+          "title": "External Url"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "joins": {
+          "items": {
+            "$ref": "#/$defs/ProjectJoinSummary"
+          },
+          "title": "Joins",
+          "type": "array"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/ProjectLinkSummary"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "project_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "basic | advanced",
+          "title": "Project Type"
+        },
+        "project_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute URL of the live project page, when the instance has one",
+          "title": "Project Url"
+        },
+        "registered_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Project registration time",
+          "title": "Registered At"
+        },
+        "run_parameter_files": {
+          "description": "File names the parameters were read from (no paths)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Run Parameter Files",
+          "type": "array"
+        },
+        "run_parameters": {
+          "items": {
+            "$ref": "#/$defs/RunParameter"
+          },
+          "title": "Run Parameters",
+          "type": "array"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectTemplateSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "workflows": {
+          "items": {
+            "$ref": "#/$defs/ProjectWorkflowSummary"
+          },
+          "title": "Workflows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "ProjectSummary",
+      "type": "object"
+    },
+    "ProjectTemplateSummary": {
+      "additionalProperties": false,
+      "description": "The template a project was built from \u2014 its id and revision, nothing more.\n\n``TemplateOrigin`` also carries ``data_root``, ``variables`` and a\n``config_snapshot``: server paths and storage layout, which a file shared\noutside the instance must not leak.",
+      "properties": {
+        "applied_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the template was applied",
+          "title": "Applied At"
+        },
+        "template_id": {
+          "description": "e.g. 'nf-core/ampliseq/2.14.0'",
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Template schema revision",
+          "title": "Template Version"
+        }
+      },
+      "required": [
+        "template_id"
+      ],
+      "title": "ProjectTemplateSummary",
+      "type": "object"
+    },
+    "ProjectWorkflowSummary": {
+      "additionalProperties": false,
+      "description": "One workflow of the project, as a reader names it.",
+      "properties": {
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Catalog name (nf-core, WorkflowHub)",
+          "title": "Catalog"
+        },
+        "engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "nextflow, snakemake, galaxy, ...",
+          "title": "Engine"
+        },
+        "engine_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Version"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "repository_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Public http(s) repository URL; anything else is dropped",
+          "title": "Repository Url"
+        },
+        "tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "workflow_tag (engine/name)",
+          "title": "Tag"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The pipeline's own version",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "ProjectWorkflowSummary",
+      "type": "object"
+    },
+    "PythonComponent": {
+      "additionalProperties": false,
+      "description": "A tile the optional Python runtime (Pyodide) recomputes in the browser.\n\nThe runtime runs the server's own function for ``job`` over the bundled\ntable under the current filter mask and answers the tile's request with\nit; the frozen payload, when there is one, stays as the fallback (Python\nruntime not embedded, failed to boot, or the frame above ``max_rows``).",
+      "properties": {
+        "dc_id": {
+          "description": "The bundled table the job reads (all user columns)",
+          "title": "Dc Id",
+          "type": "string"
+        },
+        "job": {
+          "enum": [
+            "code_figure",
+            "group_compare",
+            "embedding"
+          ],
+          "title": "Job",
+          "type": "string"
+        },
+        "max_rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Filtered rows above which the runtime serves the frozen payload instead",
+          "title": "Max Rows"
+        },
+        "spec": {
+          "additionalProperties": true,
+          "description": "Job inputs fixed at export (code_figure: code + category colours)",
+          "title": "Spec",
+          "type": "object"
+        },
+        "table_uri": {
+          "description": "'inline:ipc_<dc_id>': the table as Arrow IPC (zstd), for Python \u2014 Pyodide's polars is built without its Parquet reader. Same rows and order as the Parquet data_ref, user columns only, so the browser's row mask applies as is",
+          "title": "Table Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job",
+        "dc_id",
+        "table_uri"
+      ],
+      "title": "PythonComponent",
+      "type": "object"
+    },
+    "RenameOp": {
+      "additionalProperties": false,
+      "description": "``df.rename({\"old\": \"new\"})``.",
+      "properties": {
+        "map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Old column name -> new column name",
+          "title": "Map",
+          "type": "object"
+        },
+        "op": {
+          "const": "rename",
+          "default": "rename",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "map"
+      ],
+      "title": "RenameOp",
+      "type": "object"
+    },
+    "ResolvedStructure": {
+      "additionalProperties": false,
+      "description": "A structure-resolver answer frozen at export (molecule_3d ``resolve`` mode).",
+      "properties": {
+        "accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accession"
+        },
+        "gene": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gene"
+        },
+        "model_sequence": {
+          "default": "",
+          "description": "One-letter sequence of the model",
+          "title": "Model Sequence",
+          "type": "string"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "afdb | esmfold",
+          "title": "Origin"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sequence"
+        },
+        "taxon": {
+          "default": 9606,
+          "title": "Taxon",
+          "type": "integer"
+        },
+        "uniprot": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uniprot"
+        },
+        "uri": {
+          "description": "'inline:obj_<sha>' of the PDB model",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "ResolvedStructure",
+      "type": "object"
+    },
+    "RunParameter": {
+      "additionalProperties": false,
+      "description": "One recorded run parameter (``ProvenanceEntry``), as safe to share.\n\nValues that are absolute paths or object-store URIs keep their last part\nonly (``\u2026/samplesheet.tsv``), and keys that look like credentials have\ntheir value withheld: the parameters say how the data was produced, the\nserver's directory layout and secrets are not part of that.",
+      "properties": {
+        "group": {
+          "default": "Other",
+          "title": "Group",
+          "type": "string"
+        },
+        "highlight": {
+          "default": false,
+          "title": "Highlight",
+          "type": "boolean"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "default": "",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "RunParameter",
+      "type": "object"
+    },
+    "RuntimeAddon": {
+      "additionalProperties": false,
+      "description": "An optional runtime piece embedded only into bundles that need it.\n\nThe base runtime (``static.html``) stays inside its byte budget; a producer\nappends an add-on's script when a component needs it, and records it here so\nthe runtime and the tier table can say what was embedded and why.",
+      "properties": {
+        "bytes": {
+          "default": 0,
+          "description": "Size the add-on adds to the HTML file",
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "name": {
+          "enum": [
+            "3dmol",
+            "pyodide",
+            "jbrowse"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "packages": {
+          "description": "Python packages loaded (pyodide only)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Packages",
+          "type": "array"
+        },
+        "reason": {
+          "default": "",
+          "description": "Which components needed it",
+          "title": "Reason",
+          "type": "string"
+        },
+        "version": {
+          "description": "Exact version of the embedded add-on",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "RuntimeAddon",
+      "type": "object"
+    },
+    "RuntimeLimits": {
+      "additionalProperties": false,
+      "description": "Sampling ceilings the runtime enforces, pinned from the building instance.\n\nMirrors ``PerformanceConfig`` (settings_models.py): the advanced_viz data\npath reduces the filtered frame to ``figure_max_points`` rows under the\nkind's policy, and flags aggregating kinds as degraded past\n``advanced_viz_no_sample_max_rows``. Defaults match the server defaults so\nmanifests built before this field existed keep the same behaviour.",
+      "properties": {
+        "advanced_viz_no_sample_max_rows": {
+          "default": 2000000,
+          "description": "Ceiling past which 'none'-policy kinds are sampled anyway (degraded); 0 disables",
+          "title": "Advanced Viz No Sample Max Rows",
+          "type": "integer"
+        },
+        "advanced_viz_tail_effect_threshold": {
+          "default": 1.0,
+          "description": "Fallback tail threshold for signed effect columns",
+          "title": "Advanced Viz Tail Effect Threshold",
+          "type": "number"
+        },
+        "advanced_viz_tail_p_threshold": {
+          "default": 0.05,
+          "description": "Fallback tail threshold for raw p-value columns",
+          "title": "Advanced Viz Tail P Threshold",
+          "type": "number"
+        },
+        "figure_max_points": {
+          "default": 10000,
+          "description": "Scan-level reduction cap (rows) for sampled render paths",
+          "title": "Figure Max Points",
+          "type": "integer"
+        }
+      },
+      "title": "RuntimeLimits",
+      "type": "object"
+    },
+    "SortOp": {
+      "additionalProperties": false,
+      "description": "``df.sort(by, descending=desc)`` with Polars' default null placement.",
+      "properties": {
+        "by": {
+          "items": {
+            "type": "string"
+          },
+          "title": "By",
+          "type": "array"
+        },
+        "desc": {
+          "description": "Per-key direction; same length as ``by``",
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Desc",
+          "type": "array"
+        },
+        "op": {
+          "const": "sort",
+          "default": "sort",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "desc"
+      ],
+      "title": "SortOp",
+      "type": "object"
+    },
+    "TabEntry": {
+      "additionalProperties": false,
+      "description": "One tab of a bundled tab family.\n\nServer-side a family is a main tab (``is_main_tab``) plus children carrying\n``parent_dashboard_id``; the viewer's left rail switches between them by\nnavigating to /dashboard/<id>. A bundle has no routing, so it carries every\ntab's document and switches in place.",
+      "properties": {
+        "doc": {
+          "additionalProperties": true,
+          "description": "That tab's DashboardDataLite-shaped document",
+          "title": "Doc",
+          "type": "object"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pill icon: the tab's own tab_icon, else the dashboard's (Iconify id or image path)",
+          "title": "Icon"
+        },
+        "icon_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon Color"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_main_tab": {
+          "default": false,
+          "title": "Is Main Tab",
+          "type": "boolean"
+        },
+        "main_tab_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name the rail shows for the main tab (dashboard title otherwise)",
+          "title": "Main Tab Name"
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One line on what the tab shows (tab links describe it with this)",
+          "title": "Subtitle"
+        },
+        "tab_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sidebar section of a child tab; null when ungrouped",
+          "title": "Tab Group"
+        },
+        "tab_icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The tab's own icon as authored (Iconify id or image path)",
+          "title": "Tab Icon"
+        },
+        "tab_icon_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The tab's own icon colour",
+          "title": "Tab Icon Color"
+        },
+        "tab_order": {
+          "default": 0,
+          "description": "0 for the main tab, then child order",
+          "title": "Tab Order",
+          "type": "integer"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc"
+      ],
+      "title": "TabEntry",
+      "type": "object"
+    },
+    "TierEntry": {
+      "additionalProperties": false,
+      "description": "Per-component liveness verdict, shown by ``--check`` and the runtime badge.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human string for the --check table and badge tooltip",
+          "title": "Detail"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TierReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Machine-readable cause when tier != live"
+        },
+        "tier": {
+          "$ref": "#/$defs/ComponentTier"
+        }
+      },
+      "required": [
+        "tier"
+      ],
+      "title": "TierEntry",
+      "type": "object"
+    },
+    "TierReason": {
+      "description": "Why a component is not fully live. ``detail`` carries the human string.",
+      "enum": [
+        "multiqc",
+        "celery_compute",
+        "code_mode",
+        "binding_miss",
+        "max_points",
+        "link_table_too_big",
+        "map_tiles",
+        "jbrowse",
+        "image",
+        "whole_frame_viz",
+        "filter_expr_window",
+        "unsupported"
+      ],
+      "title": "TierReason",
+      "type": "string"
+    },
+    "TraceBinding": {
+      "additionalProperties": false,
+      "description": "One trace's binding in the bind-and-refill scheme (RFC \u00a74).",
+      "properties": {
+        "axes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id",
+          "title": "Axes",
+          "type": "object"
+        },
+        "customdata": {
+          "description": "Source columns feeding the 2-D customdata array, in plotly's column order \u2014 customdata[k] is this list's k-th column, which is what the hovertemplate's %{customdata[k]} indices address",
+          "items": {
+            "type": "string"
+          },
+          "title": "Customdata",
+          "type": "array"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Trace field path (e.g. 'x', 'y', 'marker.size') -> source column",
+          "title": "Fields",
+          "type": "object"
+        },
+        "group": {
+          "additionalProperties": true,
+          "description": "Equality predicates (grouping column -> value) selecting this trace's rows",
+          "title": "Group",
+          "type": "object"
+        },
+        "i": {
+          "description": "Trace index in the scaffold figure",
+          "minimum": 0,
+          "title": "I",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "i",
+        "fields"
+      ],
+      "title": "TraceBinding",
+      "type": "object"
+    },
+    "TrendlineBinding": {
+      "additionalProperties": false,
+      "description": "A px trendline trace refit client-side over its raw trace's rows.\n\n``kind`` and ``options`` are px's ``trendline`` / ``trendline_options``; the\nbinder only emits combinations the runtime ports exactly (anything else\nfreezes the figure), so the runtime treats an unknown option as a contract\nviolation.",
+      "properties": {
+        "i": {
+          "description": "Trendline trace index in the scaffold",
+          "minimum": 0,
+          "title": "I",
+          "type": "integer"
+        },
+        "kind": {
+          "default": "ols",
+          "description": "px trendline kind",
+          "enum": [
+            "ols",
+            "lowess",
+            "rolling",
+            "expanding",
+            "ewm"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "on": {
+          "description": "Index of the raw-data trace it is fit against",
+          "minimum": 0,
+          "title": "On",
+          "type": "integer"
+        },
+        "options": {
+          "additionalProperties": true,
+          "description": "px trendline_options, verbatim",
+          "title": "Options",
+          "type": "object"
+        }
+      },
+      "required": [
+        "i",
+        "on"
+      ],
+      "title": "TrendlineBinding",
+      "type": "object"
+    },
+    "UnpivotOp": {
+      "additionalProperties": false,
+      "description": "``df.unpivot(on=, index=, variable_name=, value_name=)`` (a.k.a. legacy ``melt``).",
+      "properties": {
+        "index": {
+          "description": "Columns carried through unchanged",
+          "items": {
+            "type": "string"
+          },
+          "title": "Index",
+          "type": "array"
+        },
+        "on": {
+          "description": "Columns melted into (variable, value) pairs, in block order",
+          "items": {
+            "type": "string"
+          },
+          "title": "On",
+          "type": "array"
+        },
+        "op": {
+          "const": "unpivot",
+          "default": "unpivot",
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "default": "value",
+          "description": "Name of the emitted value column",
+          "title": "Value",
+          "type": "string"
+        },
+        "variable": {
+          "default": "variable",
+          "description": "Name of the emitted variable column",
+          "title": "Variable",
+          "type": "string"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "UnpivotOp",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The serverless bundle contract (RFC \u00a73.1). manifest_version 1.",
+  "properties": {
+    "addons": {
+      "description": "Optional runtime add-ons embedded into this bundle's HTML (3Dmol.js, Pyodide)",
+      "items": {
+        "$ref": "#/$defs/RuntimeAddon"
+      },
+      "title": "Addons",
+      "type": "array"
+    },
+    "allow_network_tiles": {
+      "default": false,
+      "description": "Not read: every bundle keeps a map's own basemap, loaded when the reader is online (depictio/serverless/maps.py); offline the runtime draws the markers on a blank background",
+      "title": "Allow Network Tiles",
+      "type": "boolean"
+    },
+    "bindings": {
+      "additionalProperties": {
+        "$ref": "#/$defs/BindingTable"
+      },
+      "description": "component_id -> bind-and-refill table (phase 5)",
+      "title": "Bindings",
+      "type": "object"
+    },
+    "built_at": {
+      "description": "ISO 8601 build timestamp",
+      "title": "Built At",
+      "type": "string"
+    },
+    "dashboard": {
+      "$ref": "#/$defs/DashboardSection"
+    },
+    "data_refs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DataRef"
+      },
+      "description": "dc_id -> bundled table",
+      "title": "Data Refs",
+      "type": "object"
+    },
+    "depictio_version": {
+      "description": "Depictio version that built the bundle",
+      "title": "Depictio Version",
+      "type": "string"
+    },
+    "frozen": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FrozenPayload"
+      },
+      "description": "component_id -> precomputed payload",
+      "title": "Frozen",
+      "type": "object"
+    },
+    "inline_blobs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "single-file only: 'dc_<id>' -> base64 Parquet bytes, 'obj_<sha>' -> base64 object bytes, both referenced by inline: URIs",
+      "title": "Inline Blobs",
+      "type": "object"
+    },
+    "limits": {
+      "$ref": "#/$defs/RuntimeLimits",
+      "description": "Sampling ceilings pinned from the building instance's PerformanceConfig"
+    },
+    "links": {
+      "$ref": "#/$defs/LinksSection"
+    },
+    "manifest_version": {
+      "default": 1,
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "mode": {
+      "$ref": "#/$defs/BundleMode"
+    },
+    "objects": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ObjectCollection"
+      },
+      "description": "indexed_file dc_id -> the objects shipped for it (structures, PAE matrices), read at export from the collection's storage under a stated cap",
+      "title": "Objects",
+      "type": "object"
+    },
+    "producer": {
+      "$ref": "#/$defs/Producer"
+    },
+    "project": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectSummary"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The dashboard's project as the bundle's project page shows it (producer A); null when the producer has no project to describe"
+    },
+    "prologues": {
+      "additionalProperties": {
+        "items": {
+          "discriminator": {
+            "mapping": {
+              "filter": "#/$defs/FilterOp",
+              "group_by": "#/$defs/GroupByOp",
+              "rename": "#/$defs/RenameOp",
+              "sort": "#/$defs/SortOp",
+              "unpivot": "#/$defs/UnpivotOp"
+            },
+            "propertyName": "op"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FilterOp"
+            },
+            {
+              "$ref": "#/$defs/UnpivotOp"
+            },
+            {
+              "$ref": "#/$defs/GroupByOp"
+            },
+            {
+              "$ref": "#/$defs/SortOp"
+            },
+            {
+              "$ref": "#/$defs/RenameOp"
+            }
+          ]
+        },
+        "type": "array"
+      },
+      "description": "component_id -> code-mode prologue IR (phase 6): the ops the runtime replays on the filtered frame before bind-and-refill. Absent for components whose code needs no reshape (they bind to the base table)",
+      "title": "Prologues",
+      "type": "object"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ExportProvenance"
+    },
+    "python_components": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PythonComponent"
+      },
+      "description": "component_id -> the Python job the Pyodide add-on runs for it (present only when the add-on is embedded)",
+      "title": "Python Components",
+      "type": "object"
+    },
+    "resolved_structures": {
+      "description": "Structure-resolver answers frozen at export (molecule_3d resolve mode)",
+      "items": {
+        "$ref": "#/$defs/ResolvedStructure"
+      },
+      "title": "Resolved Structures",
+      "type": "array"
+    },
+    "tabs": {
+      "description": "Every tab of the bundled family, main tab first, each with its own document. Empty for a single-tab bundle, where `dashboard` is the whole story; when populated it includes the entry tab too, so `dashboard.doc` duplicates one entry. Component-keyed sections (tiers, frozen, bindings, prologues) span the whole family \u2014 component ids are uuids, so they never collide across tabs",
+      "items": {
+        "$ref": "#/$defs/TabEntry"
+      },
+      "title": "Tabs",
+      "type": "array"
+    },
+    "tiers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TierEntry"
+      },
+      "description": "component_id -> liveness verdict",
+      "title": "Tiers",
+      "type": "object"
+    }
+  },
+  "required": [
+    "mode",
+    "producer",
+    "built_at",
+    "depictio_version",
+    "dashboard"
+  ],
+  "title": "BundleManifest",
+  "type": "object"
+}

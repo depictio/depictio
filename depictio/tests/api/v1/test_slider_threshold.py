@@ -64,3 +64,27 @@ def test_grid_number_filters_keep_their_operator() -> None:
     )
     [expr] = process_metadata_and_filter([entry])
     assert DF.filter(expr)["min_contig_length"].to_list() == [1000]
+
+
+def test_slider_mode_survives_the_dashboard_filter_cleaning() -> None:
+    """``clean_filter_payload`` (every dashboard render) keeps the mode.
+
+    The SliderRenderer sends it under ``metadata``; the cleaner used to drop it,
+    so a dashboard render always compared with ``>=``.
+    """
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+
+    cleaned = clean_filter_payload(
+        [
+            {
+                "index": "s1",
+                "value": 5000,
+                "column_name": "min_contig_length",
+                "interactive_component_type": "Slider",
+                "metadata": {"column_name": "min_contig_length", "slider_mode": "eq"},
+            }
+        ]
+    )
+    assert cleaned[0]["slider_mode"] == "eq"
+    [expr] = process_metadata_and_filter(cleaned)
+    assert DF.filter(expr)["min_contig_length"].to_list() == [5000]

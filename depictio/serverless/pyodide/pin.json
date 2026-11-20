@@ -1,0 +1,119 @@
+{
+  "version": "314.0.7",
+  "python": "3.14.2",
+  "base_url": "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/",
+  "lock": {
+    "file": "pyodide-lock.json",
+    "sha256": "5dc2fc119108bc148c7457dc86e7675b5c87e1cafd420b9c34c1eaef7b36c010"
+  },
+  "core": {
+    "pyodide.mjs": {
+      "sha256": "6f1d60f7bf529beb300f0f47983c921d3982363640ba20af0e38efdddbc66109",
+      "bytes": 17931,
+      "gzip": false,
+      "embedded_bytes": 23908
+    },
+    "pyodide.asm.mjs": {
+      "sha256": "f7cdc8ece80678ceb712f8e65ebe6d3a83203a180c399865f49612a051693635",
+      "bytes": 1250344,
+      "gzip": true,
+      "embedded_bytes": 346612
+    },
+    "pyodide.asm.wasm": {
+      "sha256": "cc36e3cab04fdfc9a63ff13eb52eae2b911bf46c025cc7b281f394bd3de1d5e6",
+      "bytes": 9598218,
+      "gzip": true,
+      "embedded_bytes": 4705072
+    },
+    "python_stdlib.zip": {
+      "sha256": "fa1957e5777068fc4f7437f96d860ae2fbe9c19732ba06c84e004ec16dd7dd7a",
+      "bytes": 2545637,
+      "gzip": false,
+      "embedded_bytes": 3394184
+    }
+  },
+  "packages": {
+    "numpy": {
+      "file_name": "numpy-2.4.6-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "sha256": "a292c1f5d7d8a2208cd5e94fc467604c131cabcd2fc14fed6eefde121e7fabdf",
+      "embedded_bytes": 3947424
+    },
+    "polars": {
+      "file_name": "polars-1.33.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "sha256": "5131b0d5c92c7a24fe904c3c48c3dc2be16be9a8cae77a2cff064136346b7fab",
+      "embedded_bytes": 24431164
+    },
+    "narwhals": {
+      "file_name": "narwhals-2.18.1-py3-none-any.whl",
+      "sha256": "1cc4f6985e9d93cd427ea20ff8248d0b6ef9ba385971162462bfb2666aea737f",
+      "embedded_bytes": 593272
+    },
+    "packaging": {
+      "file_name": "packaging-26.1-py3-none-any.whl",
+      "sha256": "565acbbea54da30348b6d68b6a54373e6f777987db9f1db6966b4b3a5060d303",
+      "embedded_bytes": 127804
+    },
+    "scipy": {
+      "file_name": "scipy-1.18.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "sha256": "17ee329a957863516d1bb6a6aaa0c60576fac027e9cd3d43de27f58b5b599b50",
+      "embedded_bytes": 18706336
+    },
+    "scikit-learn": {
+      "file_name": "scikit_learn-1.8.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "sha256": "432f560f54c5283d13e9d7c11dddc8bdf2f15aec326cc1d7314f600786154181",
+      "embedded_bytes": 5932272
+    },
+    "joblib": {
+      "file_name": "joblib-1.5.3-py3-none-any.whl",
+      "sha256": "fb2860ff70d0b6b43a3df5e3ce52d3a938ad2fcacd80a3f2f3f37e930843e607",
+      "embedded_bytes": 240424
+    },
+    "threadpoolctl": {
+      "file_name": "threadpoolctl-3.6.0-py3-none-any.whl",
+      "sha256": "3521783ffb6bf212e03fb67ec1955af206d6ba7ea09ac21f200875077bbbe7c2",
+      "embedded_bytes": 24852
+    },
+    "pandas": {
+      "file_name": "pandas-3.0.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "sha256": "45ff57772cc2f366a8582c7d3097cc4e6676342ecd5a3c08184a43462d5a02ae",
+      "embedded_bytes": 5570332
+    },
+    "python-dateutil": {
+      "file_name": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "sha256": "9b13365edf9c188f570baf9c540bbb3029ada2a2dacb9694b3659941693ee9e5",
+      "embedded_bytes": 306524
+    },
+    "six": {
+      "file_name": "six-1.17.0-py2.py3-none-any.whl",
+      "sha256": "228c50f73aa7addf2c2ccf2979c256802a59ab69cad8152b31b9443cc8140f42",
+      "embedded_bytes": 14736
+    },
+    "pytz": {
+      "file_name": "pytz-2026.1.post1-py2.py3-none-any.whl",
+      "sha256": "b8249d6450146e0b61e6d710dc02ebb35a904796c4c2f97fe87d4ac5872db36a",
+      "embedded_bytes": 680652
+    }
+  },
+  "extras": {
+    "plotly": {
+      "version": "6.9.0",
+      "url": "https://files.pythonhosted.org/packages/24/18/d8544811ab076f876c4892b3714f5b0dad335e1dc33aef826df431b8325d/plotly-6.9.0-py3-none-any.whl",
+      "sha256": "36bebe2f1bb13884774fe61689c329071446f6ce4a8927fb1f0d6fb24f581236",
+      "strip": [
+        "plotly/package_data/plotly.min.js",
+        "plotly/package_data/widgetbundle.js",
+        "plotly/labextension/",
+        "plotly-6.9.0.data/",
+        "plotly/package_data/datasets/",
+        "plotly/matplotlylib/"
+      ],
+      "embedded_bytes": 5170884
+    },
+    "restrictedpython": {
+      "version": "8.4",
+      "url": "https://files.pythonhosted.org/packages/29/93/eef88eeb06085a08091f8797b79db786f27600243ddf98d009cfadf145e6/restrictedpython-8.4-py3-none-any.whl",
+      "sha256": "ae89a3a4f0eeab314714004117bc49b63b0362ca5bf6a318236c6533fc46de67",
+      "embedded_bytes": 40412
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react';
 import { StoredMetadata } from '../../api';
 import CatalogButton from './CatalogButton';
 import { useEscapeClear } from './escapeClear';
+import { StaticTierBadge } from './StaticBadgeContext';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
@@ -449,6 +450,19 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         }}
         onBlur={() => setActionsKbFocus(false)}
       >
+        {/* Static-bundle liveness badge. Vertical-orientation components
+         * (figure/map/multiqc/advanced_viz) render it as the FIRST cell of
+         * this action column so it hugs the empty top-right corner and the
+         * hover-revealed icons flow below it instead of on top of it.
+         * Horizontal components get it bottom-right instead (see below the
+         * Group): their titles run along the top edge, so any top corner
+         * placement collides on narrow components (e.g. interactive filters).
+         * Renders nothing outside the static runtime (no StaticBadgeProvider
+         * mounted) or for live components; always visible inside a bundle
+         * (exempt from the row's hover-only opacity — see chrome.css). */}
+        {vertical && (
+          <StaticTierBadge componentIndex={metadata?.index} />
+        )}
         {vertical && clearSlot}
         {/* Grouping action first (after the grip, which stays where authors
          * expect it): the analysis marker / save-as-group action belongs above
@@ -527,6 +541,26 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         {otherActions.map((child, i) => wrapAction(child, `extra-${i}`))}
         {!vertical && clearSlot}
       </Group>
+      {/* Horizontal-orientation static-bundle badge — pinned to the empty
+       * bottom-right corner (titles/values sit along the top edge on these
+       * components, so the top corners are contested; the bottom-right is
+       * padding). Same z-index as the action row so it clears Plotly-style
+       * embedded chrome. StaticTierBadge renders null outside static bundles,
+       * leaving only a zero-size inert span here in server builds. */}
+      {!vertical && (
+        <span
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            right: 8,
+            zIndex: 1100,
+            display: 'inline-flex',
+            pointerEvents: 'none',
+          }}
+        >
+          <StaticTierBadge componentIndex={metadata?.index} />
+        </span>
+      )}
       {children}
       {/* Pinned at the bottom-left, out of the action row: a hover-only badge
        *  would let the tile pass for the past at rest, and the top-left is

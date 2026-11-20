@@ -1,0 +1,38 @@
+[
+  {
+    "id": "phase-0",
+    "title": "Phase 0 \u2014 static runtime, everything frozen",
+    "manifest": "../../packages/depictio-static-core/fixtures/manifest-basic.json",
+    "description": "The real viewer mounted offline from a hand-written manifest: card, Plotly figure, MultiSelect and text component, all served from frozen payloads with tier badges. No backend, no network."
+  },
+  {
+    "id": "penguins-live",
+    "title": "Penguins fully LIVE \u2014 cards, filters, figures, tables, advanced viz, cross-DC links (phases 1+3+4+5+6+7)",
+    "manifest": "demo/manifests/penguins.json",
+    "description": "Built by producer B from a spec + local Parquet (depictio dashboard build-static). All 12 components are live, none frozen: change the species or year selection and the cards recompute, the scatter re-renders (bind-and-refill), the live table re-filters, the sunburst and dot plot reload their frames through the in-browser port of the advanced-viz sampling policy \u2014 and the CODE-MODE bar chart re-derives itself, replaying its Python prologue (group_by + sort, transpiled to a JSON IR) over the filtered rows before refilling. The bundle now carries TWO data collections joined by a cross-DC link: the Region selector lives on a small island \u2192 region lookup table, and `region` is not a penguins column at all \u2014 picking one runs the in-browser link resolver (translate region \u2192 island on the lookup collection, then apply the islands it resolved to), so every penguins component re-filters through the link. Region \"Uncharted\" maps to an island no penguin lives on: the whole dashboard drops to its zero state. Header-click sorting and pagination included, all computed offline through the in-browser hyparquet engine with server-exact Polars semantics. Regenerate with depictio/serverless/examples/generate_demo_manifest.py."
+  },
+  {
+    "id": "protein-structure",
+    "title": "Protein structure \u2014 3D model, PAE and torsions from bundled files (3Dmol.js add-on)",
+    "manifest": "demo/manifests/protein.json",
+    "description": "Built by producer B from the advanced-visualisation showcase's demo protein. The structure (PDB) and its predicted aligned error (TSV) are read at build time from two indexed_file collections and shipped inside the HTML (gzip, base64), under a stated cap; the runtime serves the tiles' file reads from the bundle as blob: URLs. molecule_3d draws with 3Dmol.js, embedded only into bundles that hold one (+0.16 MB gzip, a conditional add-on outside the base runtime's budget); the PAE matrix (canvas) and the Ramachandran plot (Plotly, torsions computed in the browser from the bundled structure) need no add-on. Narrow the residue range: every tile follows. No network."
+  },
+  {
+    "id": "compute-kinds",
+    "title": "Large computes \u2014 group comparison frozen at its opening pair, contact-map windows live",
+    "manifest": "demo/manifests/compute.json",
+    "description": "Built by producer B from the advanced-visualisation showcase. The group comparison (a per-gene Wilcoxon test between two clusters, a server compute) opens on cluster_1 vs cluster_2, computed at build time with the server's own group_compare_from_frame; picking another pair says it needs the live dashboard instead of relabelling the frozen rows. The Hi-C contact map reads its whole-chromosome view through the data path and replays every zoom window in the browser (contactMapWindow, the port of the task's contact_map_window, pinned by a parity fixture). No network."
+  },
+  {
+    "id": "genome-browser",
+    "title": "Genome browser \u2014 JBrowse over bundled files, a BAM sliced to its opening locus (JBrowse add-on)",
+    "manifest": "demo/manifests/genome.json",
+    "description": "The real JBrowse 2 view, offline. The session producer A froze is rewritten so every file it reads (a FASTA and its index, a BED, a bedGraph, a BAM and its BAI) points at bytes shipped inside the HTML; the runtime answers JBrowse's range requests from memory. The BAM is sliced: only the 256 KiB pages its index names for the opening locus (and its header) are shipped, and a read past them fails in the track with the region the bundle holds. JBrowse itself is a conditional add-on embedded only into bundles with a genome browser. Regenerate with depictio/serverless/examples/genome_demo.py. No network."
+  },
+  {
+    "id": "genomespy-offline",
+    "title": "Genome tracks offline \u2014 GenomeSpy fonts and the hg38 gene table inside the file",
+    "manifest": "demo/manifests/genomespy.json",
+    "description": "Built by producer B from the advanced-visualisation showcase's locus coverage. A genome_view tile draws one lane per ChIP-seq track over the hg38 gene lane. Live, its bold lane titles make GenomeSpy fetch a font from GitHub and the gene lane fetches the server's gene table; here every label uses the font GenomeSpy embeds and the gene table (gzip, base64) travels in the HTML, so the gene search works offline too. Regenerate with depictio/serverless/examples/generate_demo_manifest.py. No network."
+  }
+]

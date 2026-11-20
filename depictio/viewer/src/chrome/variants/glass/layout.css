@@ -510,6 +510,34 @@
   right: 3px;
   transform: none;
 }
+/* A static bundle's foot. The snapshot card stands where the live app's
+   server card does, in the same soft well: the package glyph takes the live
+   dot's column (a file has no state to signal, so no colour), then "Static
+   snapshot" with the dimmed depictio version, then the export day where the
+   instance mode would be. Folded, the glyph alone in the 40px well. */
+.hy-status[data-state='static'] .hy-status-glyph {
+  color: var(--gl-rail-muted);
+}
+.hy-status[data-state='static']:hover .hy-status-glyph {
+  color: var(--gl-rail-fg);
+}
+
+/* The way to the project, where the live foot has "All dashboards": one row
+   of the same height, the folder glyph and the project's name, left-aligned
+   like a navigation row (a long name centred reads as a caption) and cut with
+   an ellipsis. Folded, the folder glyph alone. */
+.hy-shell:not([data-side='folded']) .hy-side-foot .hy-row--project {
+  justify-content: flex-start;
+  text-align: left;
+}
+.hy-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hy-side-spacer {
   flex: 0 0 12px;
 }

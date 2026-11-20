@@ -3029,17 +3029,12 @@ def compute_contact_map(payload: dict) -> dict:
     the requested region of the whole frame, which is what the renderer got
     before the column existed.
     """
-    import polars as pl
 
     from depictio.api.v1.db import deltatables_collection
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
     from depictio.api.v1.services.contact_map import (
-        DEFAULT_MAX_CELLS,
-        apply_window,
-        choose_resolution,
-        coarsest_within_budget,
+        contact_map_window,
         resolve_resolution_column,
-        summarise,
     )
 
     wf_id = payload.get("wf_id")
@@ -3112,116 +3107,20 @@ def compute_contact_map(payload: dict) -> dict:
         init_data=init_data,
     )
     load_ms = int((time.monotonic() - started) * 1000)
-    compute_started = time.monotonic()
 
-    sample = payload.get("sample")
-    if sample and sample_col:
-        df = df.filter(pl.col(sample_col) == sample)
-
-    resolutions: list[int] = []
-    if resolution_col and df.height:
-        resolutions = sorted(
-            {
-                int(v)
-                for v in df.get_column(resolution_col).unique().to_list()
-                if v is not None and int(v) > 0
-            }
-        )
-
-    chrom = payload.get("chrom") or None
-    start = payload.get("start")
-    end = payload.get("end")
-    span = (
-        float(end) - float(start)
-        if start is not None and end is not None and float(end) > float(start)
-        else None
-    )
-    max_cells = int(payload.get("max_cells") or DEFAULT_MAX_CELLS)
-
-    requested = payload.get("resolution")
-    resolution: int | None = None
-    if resolutions:
-        if requested and int(requested) in resolutions:
-            resolution = int(requested)
-        else:
-            resolution = choose_resolution(
-                resolutions, span, payload.get("pixels"), payload.get("target_bins_per_pixel")
-            )
-            resolution = coarsest_within_budget(resolutions, resolution, span, max_cells)
-        df = df.filter(pl.col(resolution_col) == resolution)
-
-    df = apply_window(
-        df,
-        chrom1_col=chrom1_col,
-        start1_col=start1_col,
-        chrom2_col=chrom2_col,
-        start2_col=start2_col,
-        end1_col=end1_col,
-        end2_col=end2_col,
-        chrom=chrom,
-        start=None if start is None else float(start),
-        end=None if end is None else float(end),
-        resolution=resolution,
-    )
-    df = df.sort([chrom1_col, start1_col, start2_col])
-
-    truncated = df.height > max_cells
-    if truncated:
-        # Only reachable on a single-resolution DC too fine for the window  -
-        # there is no coarser partition to step up to. Keep the densest cells
-        # (they are sorted by position, so this keeps a contiguous corner) and
-        # say so, rather than pretend the matrix is complete.
-        df = df.head(max_cells)
-
-    region = (
-        {"chrom": chrom, "start": start, "end": end}
-        if chrom and start is not None and end is not None
-        else ({"chrom": chrom, "start": None, "end": None} if chrom else None)
-    )
-
-    rows: dict[str, list] = {}
-    for col in project_cols:
-        if col and col not in rows:
-            rows[col] = df.get_column(col).to_list()
-
-    compute_ms = int((time.monotonic() - compute_started) * 1000)
+    # Everything after the load is a pure function of the loaded frame, shared
+    # with the serverless bundle's in-browser port (static-core contactMap.ts,
+    # pinned against it by fixtures/contact-map-expected.json).
+    out = contact_map_window(df, payload, resolution_col)
     logger.info(
         "compute_contact_map: %d cells, resolution=%s, chrom=%s in %dms (load %dms)",
-        df.height,
-        resolution,
-        chrom,
-        compute_ms,
+        out["row_count"],
+        out["summary"]["resolution"],
+        payload.get("chrom") or None,
+        out["compute_ms"],
         load_ms,
     )
-    return {
-        "rows": rows,
-        "columns": {
-            "chrom1": chrom1_col,
-            "start1": start1_col,
-            "end1": end1_col,
-            "chrom2": chrom2_col,
-            "start2": start2_col,
-            "end2": end2_col,
-            "count": count_col,
-            "sample": sample_col,
-            "resolution": resolution_col,
-        },
-        "summary": summarise(
-            df,
-            chrom1_col=chrom1_col,
-            start1_col=start1_col,
-            resolution_col=resolution_col,
-            sample_col=sample_col,
-            resolutions=resolutions,
-            resolution=resolution,
-            region=region,
-            pixels=payload.get("pixels"),
-            truncated=truncated,
-        ),
-        "row_count": int(df.height),
-        "load_ms": load_ms,
-        "compute_ms": compute_ms,
-    }
+    return {**out, "load_ms": load_ms}
 
 
 # A step in any of these statuses will never change again on its own, so the
@@ -3486,6 +3385,147 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     return _close_step(ok, message)
 
 
+#: Where finished static bundles are parked in S3, one prefix per dashboard.
+STATIC_EXPORT_PREFIX = "serverless-exports/"
+
+
+def static_export_key(dashboard_id: str, built_at: Any, job_id: str) -> str:
+    """The S3 key of one export's bundle.
+
+    The job id is part of it: two exports of one dashboard in the same second
+    (a double click, or two owners with different options) must not overwrite
+    each other's bundle.
+    """
+    return (
+        f"{STATIC_EXPORT_PREFIX}{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}-{job_id}.html"
+    )
+
+
+def prune_static_exports(
+    client: Any,
+    bucket: str,
+    retention_days: int,
+    now: Any = None,
+) -> int:
+    """Delete the bundles under ``serverless-exports/`` older than the retention.
+
+    Run by every export before it builds, so the prefix stays bounded without a
+    scheduler; the job documents expire on their own (the ``static_exports``
+    TTL index, :func:`core_indexes.ensure_static_exports_ttl`). ``0`` keeps
+    everything. Returns how many objects were deleted.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    if retention_days <= 0:
+        return 0
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=retention_days)
+    stale: list[dict[str, str]] = []
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=STATIC_EXPORT_PREFIX):
+        for obj in page.get("Contents") or []:
+            modified = obj.get("LastModified")
+            if modified is not None and modified < cutoff:
+                stale.append({"Key": obj["Key"]})
+    for start in range(0, len(stale), 1000):  # DeleteObjects takes 1000 keys
+        client.delete_objects(
+            Bucket=bucket, Delete={"Objects": stale[start : start + 1000], "Quiet": True}
+        )
+    return len(stale)
+
+
+@celery_app.task(
+    name="depictio.serverless.export_static",
+    soft_time_limit=600,
+    time_limit=900,
+)
+def export_static_bundle(payload: dict) -> dict:
+    """Build a dashboard's static HTML bundle and park it in S3.
+
+    Producer A writes to a filesystem path, so the bundle is rendered into a
+    temp dir and uploaded from there — the worker keeps nothing on disk.
+
+    One bundle carries the dashboard's whole tab family, and the Celery-computed
+    advanced_viz kinds are computed in-process while it builds. Both are bounded
+    by producer A's own compute budget (DEPICTIO_SERVERLESS_COMPUTE_BUDGET_S /
+    _TOTAL_BUDGET_S, defaulting to 120 s per component and 300 s overall) so a
+    large family cannot run this task into its 900 s hard limit.
+
+    ProducerAError / ProducerBError are deliberately NOT caught: Celery marks the
+    task failed and the poll endpoint surfaces the message. That is the path a
+    deployment without the prebuilt static-runtime template takes (see
+    ``DEPICTIO_SERVERLESS_TEMPLATE_PATH``).
+
+    Args:
+        payload: ``{"job_id", "dashboard_id", "user": {"id", "email", "is_admin",
+            "is_anonymous"}, "single_tab"?, "python_runtime"?}`` —
+            JSON-serializable throughout. The job id is part of the S3 key.
+
+    Returns:
+        ``{"s3_key", "bucket", "size_bytes", "built_at", "tab_count"}``.
+    """
+    import tempfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from uuid import uuid4
+
+    # Deferred: producer A pulls in polars / the endpoint bodies, and importing
+    # it lazily keeps the module-attribute monkeypatch seam that tests use.
+    from depictio.api.v1.s3 import s3_client
+    from depictio.serverless import producer_a
+
+    dashboard_id = str(payload["dashboard_id"])
+    export_user = producer_a.ExportUser(**payload["user"])
+    built_at = datetime.now(timezone.utc)
+    key = static_export_key(dashboard_id, built_at, str(payload.get("job_id") or uuid4().hex))
+
+    # Retention: the bundles past their age go before a new one is added.
+    try:
+        pruned = prune_static_exports(
+            s3_client, settings.s3.bucket, settings.performance.static_export_retention_days
+        )
+        if pruned:
+            logger.info("static export retention: pruned %d expired bundle(s)", pruned)
+    except SoftTimeLimitExceeded:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a failed prune must not fail the export
+        logger.warning(f"static export retention: prune failed: {exc}")
+
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out = Path(tmpdir) / "bundle.html"
+        result = producer_a.export_static(
+            dashboard_id,
+            out_path=out,
+            user=export_user,
+            single_tab=bool(payload.get("single_tab", False)),
+            python_runtime=str(payload.get("python_runtime") or "off"),
+        )
+        html_bytes = out.read_bytes()
+
+    s3_client.put_object(
+        Bucket=settings.s3.bucket,
+        Key=key,
+        Body=html_bytes,
+        ContentType="text/html; charset=utf-8",
+    )
+    logger.info(
+        "static export built: dashboard=%s tabs=%d components=%d key=%s bytes=%d (%.1fs)",
+        dashboard_id,
+        len(result.tabs),
+        len(result.tier_rows),
+        key,
+        len(html_bytes),
+        time.monotonic() - started,
+    )
+    return {
+        "s3_key": key,
+        "bucket": settings.s3.bucket,
+        "size_bytes": len(html_bytes),
+        "built_at": built_at.isoformat(),
+        "tab_count": len(result.tabs),
+    }
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -3499,4 +3539,5 @@ __all__: list[str] = [
     "compute_sankey",
     "compute_group_compare",
     "manifest_refresh_dc_task",
+    "export_static_bundle",
 ]

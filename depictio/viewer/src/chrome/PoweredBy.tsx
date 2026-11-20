@@ -1,5 +1,6 @@
 import React from 'react';
 import { Anchor, Group, Text } from '@mantine/core';
+import { useIsStaticBundle } from 'depictio-react-core';
 
 import DepictioLogo from './DepictioLogo';
 import { useBrandLogoMode } from './useBrandLogoMode';
@@ -29,9 +30,12 @@ interface PoweredByProps {
 
 const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false, always = false }) => {
   const logoMode = useBrandLogoMode();
+  // A static bundle has no app rail and no login card: the badge is the only
+  // place left that says what the file is, so it always shows there.
+  const isStaticBundle = useIsStaticBundle();
 
   // `'inherit'` is exactly when BrandLogo shows the depictio wordmark.
-  if (logoMode === 'inherit' && !always) return null;
+  if (logoMode === 'inherit' && !always && !isStaticBundle) return null;
 
   const groupStyle: React.CSSProperties = withRightBorder
     ? {

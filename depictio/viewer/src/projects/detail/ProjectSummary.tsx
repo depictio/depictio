@@ -13,7 +13,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
-import { fetchIngestionReport } from 'depictio-react-core';
+import { fetchIngestionReport, useIsStaticBundle } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 import { useListingAccents } from '../../lib/useListingAccents';
 import { DcTypeIcon, dcTypeMeta } from '../dcTypeIcon';
@@ -174,13 +174,16 @@ export const ProjectSummary: React.FC<ProjectSummaryProps> = ({
   onShowRuns,
 }) => {
   const accent = useListingAccents('projects');
+  // A static bundle carries no run names (they live in the ingestion report):
+  // its summary leaves the Runs fact out rather than say "not recorded".
+  const offline = useIsStaticBundle();
   const [runNames, setRunNames] = useState<string[] | null>(
     projectId ? (runNamesCache.get(projectId) ?? null) : null,
   );
   const [failedCollections, setFailedCollections] = useState(0);
   // The runs live in the server's `runs` collection; `workflows[].runs` is empty.
   useEffect(() => {
-    if (!projectId) return undefined;
+    if (!projectId || offline) return undefined;
     let cancelled = false;
     fetchIngestionReport(projectId)
       .then((report) => {
@@ -198,7 +201,7 @@ export const ProjectSummary: React.FC<ProjectSummaryProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [projectId, refreshKey]);
+  }, [projectId, refreshKey, offline]);
   const layout = useMemo(() => projectLayout(project, { runNames }), [project, runNames]);
   const source = useMemo(() => projectSource(project), [project]);
   const pipelines = useMemo(() => projectPipelines(project), [project]);
@@ -282,7 +285,7 @@ export const ProjectSummary: React.FC<ProjectSummaryProps> = ({
             />
           </Fact>
         )}
-        {(layout.runCount > 0 || layout.realWorkflows.length > 0) && (
+        {!offline && (layout.runCount > 0 || layout.realWorkflows.length > 0) && (
           <Fact
             label={layout.runCount > 1 ? 'Runs' : 'Run'}
             count={layout.runCount}

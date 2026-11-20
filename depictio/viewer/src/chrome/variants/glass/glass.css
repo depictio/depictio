@@ -774,8 +774,11 @@
   background: var(--gl-glass-strong);
   box-shadow: var(--gl-float-shadow), 0 40px 80px -40px var(--gl-shade-b) !important;
 }
+/* The header sticks while the body scrolls under it, so it wears the
+ * content's own opaque paper: transparent, a long table's rows printed
+ * through the title. */
 :root[data-chrome='glass'] .mantine-Modal-header {
-  background: transparent;
+  background: var(--gl-glass-strong);
 }
 :root[data-chrome='glass'] .mantine-Modal-title {
   font-weight: 700;

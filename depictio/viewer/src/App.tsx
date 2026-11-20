@@ -172,11 +172,13 @@ import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
+import { useBundleProjectPage } from './chrome/bundlePage';
 import { shouldSuppressWalkthrough } from './coach';
 import { LandingHost } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
+import ExportStaticModal from './chrome/ExportStaticModal';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import ChangeMarksProvider from './changes/ChangeMarksProvider';
@@ -323,6 +325,8 @@ const App: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const [searchOpened, { open: openSearch, close: closeSearch }] = useDisclosure(false);
+  const [exportStaticOpened, { open: openExportStatic, close: closeExportStatic }] =
+    useDisclosure(false);
   // The section the settings open on when something asks for one (the Guide's
   // "Open Your view"); unset, they open on the one last visited.
   const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
@@ -1683,33 +1687,51 @@ const App: React.FC = () => {
     (typeof dashboard?.subtitle === 'string' ? dashboard.subtitle.trim() : '') ||
     (parentTab?.title || dashboard?.title || '').trim() ||
     null;
+  // A static bundle's project page (null everywhere else). It is laid over
+  // the canvas like the Guide, so the two take turns: opening one closes the
+  // other, and the canvas is hidden while either is up.
+  const projectPage = useBundleProjectPage();
+  const projectPageOpen = Boolean(projectPage?.open);
+  const pageOver = guide.open || projectPageOpen;
   // On a phone the sidebar is an overlay: leave it open over the Guide and the
   // Guide is behind it.
   const openGuideFromSidebar = useCallback(() => {
+    projectPage?.closePage();
     guide.openGuide();
     if (isNarrow && mobileOpened) toggleMobile();
-  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  }, [guide, projectPage, isNarrow, mobileOpened, toggleMobile]);
   const closeGuideFromSidebar = useCallback(() => {
     guide.closeGuide();
     if (isNarrow && mobileOpened) toggleMobile();
   }, [guide, isNarrow, mobileOpened, toggleMobile]);
   // The Analysis panel is docked beside the canvas: the Guide takes its place.
   useEffect(() => {
-    if (guide.open) {
+    if (pageOver) {
       setAnalysisOpen(false);
       setMetadataOpen(false);
     }
-  }, [guide.open]);
+  }, [pageOver]);
+  // The project page opens from the Settings drawer's project link as much as
+  // from the sidebar: whatever it opened from, it takes the screen.
+  useEffect(() => {
+    if (!projectPageOpen) return;
+    closeSettings();
+    if (guide.open) guide.closeGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+    // Only the page opening is an event here; the rest is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPageOpen]);
   // Before the dashboard search lands on something of this tab: the Guide and,
   // on a phone, the tab list both cover the canvas, and a filter lives in a
   // drawer there.
   const uncoverForSearch = useCallback(
     (index: string | null) => {
       if (guide.open) guide.closeGuide();
+      projectPage?.closePage();
       if (isNarrow && mobileOpened) toggleMobile();
       if (index && isNarrow && leftComponents.some((m) => m.index === index)) openFilterDrawer();
     },
-    [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
+    [guide, projectPage, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
   );
 
   // The tab's scope: its `always_selected` filters, shown in a banner under
@@ -1974,9 +1996,9 @@ const App: React.FC = () => {
         // the Guide closes, but neither painted nor in the focus order.
         // Only the canvas: the filter panel stays on screen beside the
         // Guide, so its "Show me" rings the real panel in place.
-        aria-hidden={guide.open || undefined}
+        aria-hidden={pageOver || undefined}
         style={{
-          visibility: guide.open ? 'hidden' : undefined,
+          visibility: pageOver ? 'hidden' : undefined,
           // Page-width preference: the canvas centres in what the
           // filter panel leaves, the panel staying by the sidebar.
           padding: 4,
@@ -2165,7 +2187,7 @@ const App: React.FC = () => {
       )}
       {/* The page's fixed furniture sits above the Guide's layer; hidden
           with the canvas while the Guide is up. */}
-      <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+      <div style={pageOver ? { visibility: 'hidden' } : undefined}>
         {/* Unmounted while previewing. It would start from the snapshot's
             notes, and `saveDashboardNotes` writes the editor's text onto the
             live dashboard it re-reads, so a save here would put a past
@@ -2241,6 +2263,16 @@ const App: React.FC = () => {
           }
         />
       )}
+      {projectPage?.open &&
+        projectPage.render({
+          tabName:
+            (activeTab && !activeTab.parent_dashboard_id
+              ? activeTab.main_tab_name || activeTab.title
+              : activeTab?.title) ||
+            dashboard?.title ||
+            'the dashboard',
+          onClose: projectPage.closePage,
+        })}
     </>
   );
   const outside = (
@@ -2250,6 +2282,15 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         initialSection={settingsSection}
+        dashboardId={dashboardId}
+        // Hand off rather than stack: a Modal opened over a still-open
+        // settings modal leaves two Mantine focus traps and two overlays
+        // fighting each other.
+        onExportStatic={() => {
+          closeSettings();
+          openExportStatic();
+        }}
+        previewing={Boolean(previewVersionId)}
         filters={
           remembering
             ? {
@@ -2260,6 +2301,12 @@ const App: React.FC = () => {
               }
             : undefined
         }
+      />
+      <ExportStaticModal
+        opened={exportStaticOpened}
+        onClose={closeExportStatic}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title ?? null}
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
@@ -2479,7 +2526,17 @@ export default App;
 function extractDashboardId(): string | null {
   const path = window.location.pathname;
   const match = path.match(/\/dashboard\/([^/?#]+)/);
-  return match?.[1] || null;
+  if (match?.[1]) return match[1];
+  // Serverless static bundles have no /dashboard/<id> route (they load from
+  // file:// or an arbitrary static host); their entry sets this global from
+  // the bundle manifest before mounting. Undefined in the server build.
+  return window.__DEPICTIO_STATIC_DASHBOARD_ID__ ?? null;
+}
+
+declare global {
+  interface Window {
+    __DEPICTIO_STATIC_DASHBOARD_ID__?: string;
+  }
 }
 
 interface InitialFilterHydration {

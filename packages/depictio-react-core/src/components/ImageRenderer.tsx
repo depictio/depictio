@@ -203,6 +203,8 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   // already ends with `/phenobase/`, which would otherwise produce
   // `…/phenobase/phenobase/cell_001.png` and 404.
   const buildImageUrl = (relativePath: string): string => {
+    // An offline bundle hands over the thumbnail it shipped as a blob: URL.
+    if (/^(blob|data):/.test(relativePath)) return relativePath;
     const base = s3BaseFolder.replace(/\/+$/, '');
     const lastSegment = base.split('/').pop() || '';
     let rel = relativePath.replace(/^\/+/, '');

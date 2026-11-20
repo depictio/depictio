@@ -6,6 +6,35 @@
 # same Python codebase as the API.
 # -----------------------------
 
+# -----------------------------
+# serverless template stage
+# -----------------------------
+# The Celery task `export_static` (producer C) injects a manifest into the
+# prebuilt single-file runtime `pnpm run build:static` writes. It is gitignored
+# build output, so without this stage every static export dispatched to the
+# worker fails with "static runtime template not built". Node/pnpm pins mirror
+# docker-images/Dockerfile.api; the runtime layer below carries no Node.
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS static-template-builder
+WORKDIR /build
+RUN corepack enable && corepack prepare pnpm@10 --activate
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY patches ./patches/
+COPY packages/depictio-components/package.json ./packages/depictio-components/
+COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY packages/depictio-static-core/package.json ./packages/depictio-static-core/
+COPY depictio/viewer/package.json ./depictio/viewer/
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+COPY packages ./packages/
+COPY depictio/viewer ./depictio/viewer/
+# `pnpm run icons` also scans these for icon ids named only in dashboard data
+# and the kind catalogue (scripts/generate-icon-subset.mjs), as in the
+# all-in-one image; without them a bundle draws those icons blank.
+COPY depictio/models/components/advanced_viz/schemas.py ./depictio/models/components/advanced_viz/schemas.py
+COPY depictio/projects ./depictio/projects/
+RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build:static
+
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
 
 ARG VERSION=latest
@@ -112,6 +141,11 @@ COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server --group worker-reload \
     || uv sync --no-dev --extra server --group worker-reload
+
+# The serverless bundle template, built in the stage above.
+COPY --from=static-template-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-static/static.html \
+    /app/depictio/viewer/dist-static/static.html
 
 COPY --chown=depictio:depictio docker-images/run_celery_worker.sh /app/run_celery_worker.sh
 RUN chmod +x /app/run_celery_worker.sh

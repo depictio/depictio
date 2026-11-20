@@ -1,15 +1,17 @@
 import React from 'react';
-import { Modal, Tooltip } from '@mantine/core';
-import { useBrandScopeAttributes, Z_LAYERS } from 'depictio-react-core';
+import { Modal, Popover, Tooltip } from '@mantine/core';
+import { useBrandScopeAttributes, useIsStaticBundle, Z_LAYERS } from 'depictio-react-core';
 import {
   ArrowLeft,
   Bell,
   BookOpenText,
   ChevronRight,
   Compass,
+  FolderKanban,
   Globe,
   LogIn,
   Moon,
+  Package,
   Server,
   Sun,
   UserRound,
@@ -32,6 +34,7 @@ import { ServerInfoPanel, ServerInfoPopover, UpdateDot } from '../../server';
 import type { HeaderModel } from '../../Header';
 import type { TabNavModel } from '../../Sidebar';
 import { SIGN_IN_PATH, rememberHere } from '../../../auth/guestSignIn';
+import { StaticSnapshotDetails, exportedDay, useStaticManifest } from '../../StaticProvenance';
 import { cn } from './cn';
 import { STROKE } from './icons';
 
@@ -167,12 +170,25 @@ export const TabList: React.FC<{
           <span className="hy-tablist-label">Guide</span>
         </a>
       )}
-      <a href={nav.backHref} className="hy-tablist-item hy-tablist-quiet">
-        <span className="hy-tablist-icon">
-          <ArrowLeft size={20} strokeWidth={1.9} aria-hidden />
-        </span>
-        <span className="hy-tablist-label">All dashboards</span>
-      </a>
+      {nav.project && (
+        <button
+          type="button"
+          onClick={() => {
+            nav.project?.onClick();
+            onNavigate?.();
+          }}
+          className="hy-tablist-item hy-tablist-quiet"
+          data-active={nav.project.open || undefined}
+          aria-pressed={nav.project.open}
+          data-testid="glass-project-sheet"
+        >
+          <span className="hy-tablist-icon">
+            <FolderKanban size={20} strokeWidth={1.9} aria-hidden />
+          </span>
+          <span className="hy-tablist-label">Project · {nav.project.name}</span>
+        </button>
+      )}
+      <BackToDashboards href={nav.backHref} />
     </div>}
   </nav>
 );
@@ -305,7 +321,7 @@ export const BellTile: React.FC = () => (
 );
 
 /** The reader: initials (or a figure) linking straight to Account settings. */
-export const ProfileTile: React.FC = () => {
+const ProfileTileLive: React.FC = () => {
   const who = useAccountIdentity();
   if (who.signIn) {
     return (
@@ -331,7 +347,7 @@ export const ProfileTile: React.FC = () => {
 
 /** The same, as the phone's More sheet row: avatar and name, linking to
  *  Account settings. */
-export const ProfileRows: React.FC = () => {
+const ProfileRowsLive: React.FC = () => {
   const who = useAccountIdentity();
   if (who.signIn) {
     return (
@@ -369,7 +385,7 @@ function statusLabel(status: string, version: string | null): string {
  *  footer: one soft card holding the live dot with "Online" and the dimmed
  *  version, then the instance mode (single user, public, demo). Folded, the
  *  dot alone. It opens the server info popover. */
-export const SideStatus: React.FC<{ open: boolean }> = ({ open }) => {
+const SideStatusLive: React.FC<{ open: boolean }> = ({ open }) => {
   const { status, version } = useServerStatus();
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const label = statusLabel(status, version);
@@ -416,7 +432,7 @@ export const SideStatus: React.FC<{ open: boolean }> = ({ open }) => {
 
 /** The same as a row of the phone's More sheet: a popover has no room on a
  *  phone, so the panel opens in a modal above the sheet. */
-export const ServerSheetRow: React.FC = () => {
+const ServerSheetRowLive: React.FC = () => {
   const { status, version } = useServerStatus();
   const { show } = useUpdateNotice();
   const [opened, setOpened] = React.useState(false);
@@ -467,8 +483,24 @@ const HomeMark: React.FC<{ home: string; height: number; markSize: number }> = (
 }) => {
   const mode = useBrandLogoMode();
   const [hovered, setHovered] = React.useState(false);
+  const isStaticBundle = useIsStaticBundle();
   if (mode === 'none') return null;
   const markOnly = mode === 'inherit';
+  if (isStaticBundle) {
+    // No "all dashboards" to go home to from a file: the mark is identity only.
+    return (
+      <span
+        className={cn('hy-top-brand', markOnly && 'hy-top-brand--mark')}
+        data-testid={markOnly ? 'glass-logo' : undefined}
+      >
+        {markOnly ? (
+          <DepictioRose mode="logo" size={markSize} label="depictio" />
+        ) : (
+          <BrandLogo height={height} width="auto" testId="glass-logo" />
+        )}
+      </span>
+    );
+  }
   return (
     <Tooltip label="All dashboards" withArrow openDelay={400}>
       <a
@@ -561,3 +593,167 @@ export const DrawerHead: React.FC<{
     </Tooltip>
   </div>
 );
+
+/** A static bundle has no account and no server: ProfileTile draws nothing there. */
+export const ProfileTile: React.FC = () => (useIsStaticBundle() ? null : <ProfileTileLive />);
+
+/** A static bundle has no account and no server: ProfileRows draws nothing there. */
+export const ProfileRows: React.FC = () => (useIsStaticBundle() ? null : <ProfileRowsLive />);
+
+/** A static bundle has no account and no server: ServerSheetRow draws nothing there. */
+export const ServerSheetRow: React.FC = () => (useIsStaticBundle() ? null : <ServerSheetRowLive />);
+
+/** The server card at the sidebar's foot; nothing in a static bundle. */
+export const SideStatus: React.FC<{ open: boolean }> = ({ open }) =>
+  useIsStaticBundle() ? null : <SideStatusLive open={open} />;
+
+/* ------------------------------------------------------- static bundle */
+
+/**
+ * The snapshot card at the foot of a static bundle's sidebar, where the live
+ * app shows its server card ("● Online v1.21.0"). A file has no server to be
+ * online: the card says what the file is instead, on ONE line like the live
+ * card — "Static snapshot" and the export day — and opens the whole provenance
+ * (who, from where, which depictio built it, the live copy) in a popover, as
+ * the server card opens the server's. Folded, the package glyph alone.
+ *
+ * One line, not two: with the project row below it, a two-line card made the
+ * bundle's foot taller than the live one, and the tab list above scrolled where
+ * the live rail shows every tab (ampliseq's last tab, Phylogeny, went under).
+ */
+export const SnapshotStatus: React.FC<{ open: boolean }> = ({ open }) => {
+  const manifest = useStaticManifest();
+  if (!manifest) return null;
+  const day = exportedDay(manifest);
+  const version = manifest.depictio_version ? `v${manifest.depictio_version}` : null;
+  const summary = [day ? `exported ${day}` : null, version ? `depictio ${version}` : null]
+    .filter(Boolean)
+    .join(', ');
+  const label = `Static snapshot${summary ? `, ${summary}` : ''}. Show export details`;
+  return (
+    <div className="hy-status-card hy-status-card--static" data-testid="hy-snapshot-card">
+      <Popover position="right-end" withArrow width={300} shadow="md" offset={12}>
+        <Popover.Target>
+          <Tooltip
+            label={[`Static snapshot`, day, version].filter(Boolean).join(' · ')}
+            withArrow
+            openDelay={200}
+            disabled={open}
+          >
+            <button
+              type="button"
+              className="hy-status"
+              data-state="static"
+              aria-label={label}
+              aria-haspopup="dialog"
+              data-testid="hy-snapshot"
+            >
+              <Package size={14} strokeWidth={STROKE} aria-hidden className="hy-status-glyph" />
+              <span className="hy-status-text">
+                <span>Static snapshot</span>
+                {day && (
+                  <span className="hy-status-ver" title={`Exported ${day}`}>
+                    {day}
+                  </span>
+                )}
+              </span>
+            </button>
+          </Tooltip>
+        </Popover.Target>
+        <Popover.Dropdown>
+          <StaticSnapshotDetails manifest={manifest} />
+        </Popover.Dropdown>
+      </Popover>
+    </div>
+  );
+};
+
+/** The snapshot card as a row of the phone's More sheet: its details open in
+ *  a dialog above the sheet, as the server row's do. */
+export const SnapshotSheetRow: React.FC = () => {
+  const manifest = useStaticManifest();
+  const [opened, setOpened] = React.useState(false);
+  if (!manifest) return null;
+  const day = exportedDay(manifest);
+  return (
+    <>
+      <button
+        type="button"
+        className="hy-sheet-link"
+        onClick={() => setOpened(true)}
+        aria-haspopup="dialog"
+        data-testid="hy-sheet-snapshot"
+      >
+        <Package size={18} strokeWidth={STROKE} aria-hidden />
+        <span className="hy-sheet-link-text">
+          Static snapshot
+          <span className="hy-sheet-link-note">
+            {[day ? `Exported ${day}` : null, manifest.depictio_version ? `v${manifest.depictio_version}` : null]
+              .filter(Boolean)
+              .join(' · ') || 'A self-contained copy'}
+          </span>
+        </span>
+      </button>
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="About this file"
+        centered
+        size="sm"
+        zIndex={Z_LAYERS.nestedOverlay}
+      >
+        <StaticSnapshotDetails manifest={manifest} />
+      </Modal>
+    </>
+  );
+};
+
+/**
+ * The way to the project, at the sidebar's foot where the live app has "All
+ * dashboards": a static bundle's project page. The row names the project
+ * under a small "Project" eyebrow (a project name is long, and the eyebrow
+ * says what the row is when it is cut); folded, the folder glyph with the
+ * name in its tooltip. Lit while the page is open.
+ */
+export const ProjectRow: React.FC<{
+  project: NonNullable<TabNavModel['project']>;
+  open: boolean;
+}> = ({ project, open }) => (
+  <Tooltip
+    label={project.open ? 'Back to the dashboard' : `Project: ${project.name}`}
+    withArrow
+    openDelay={200}
+    disabled={open && !project.open}
+  >
+    <button
+      type="button"
+      className="hy-row hy-row--project"
+      onClick={project.onClick}
+      data-active={project.open || undefined}
+      aria-pressed={project.open}
+      aria-label={`Project: ${project.name}`}
+      data-testid="glass-project"
+      data-tour-id="project"
+    >
+      <span className="hy-row-icon">
+        <FolderKanban size={20} strokeWidth={STROKE} aria-hidden />
+      </span>
+      {/* One line, as "All dashboards" is in the live foot: the folder glyph
+          and the tooltip say it is the project. */}
+      <span className="hy-row-label hy-row-name" title={`Project: ${project.name}`}>
+        {project.name}
+      </span>
+    </button>
+  </Tooltip>
+);
+
+/** "All dashboards" in the phone sheet; a static bundle has no such page. */
+const BackToDashboards: React.FC<{ href: string }> = ({ href }) =>
+  useIsStaticBundle() ? null : (
+    <a href={href} className="hy-tablist-item hy-tablist-quiet">
+      <span className="hy-tablist-icon">
+        <ArrowLeft size={20} strokeWidth={1.9} aria-hidden />
+      </span>
+      <span className="hy-tablist-label">All dashboards</span>
+    </a>
+  );

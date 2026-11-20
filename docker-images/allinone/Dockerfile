@@ -35,6 +35,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY patches ./patches/
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY packages/depictio-static-core/package.json ./packages/depictio-static-core/
 COPY depictio/viewer/package.json ./depictio/viewer/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
@@ -46,7 +47,8 @@ COPY depictio/projects ./depictio/projects/
 ENV VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm --filter depictio-viewer build \
     && pnpm --filter depictio-viewer build:catalog-preview \
-    && pnpm --filter depictio-viewer build:embed
+    && pnpm --filter depictio-viewer build:embed \
+    && pnpm --filter depictio-viewer build:static
 
 # -----------------------------
 # 2. Native services from conda-forge, for the target platform
@@ -117,6 +119,9 @@ COPY --from=viewer-builder /build/depictio/viewer/dist-catalog-preview/catalog-p
     /app/depictio/viewer/dist-catalog-preview/catalog-preview.html
 COPY --from=viewer-builder /build/depictio/viewer/dist-embed/embed.html \
     /app/depictio/viewer/dist-embed/embed.html
+# The serverless bundle template every static export injects its manifest into.
+COPY --from=viewer-builder /build/depictio/viewer/dist-static/static.html \
+    /app/depictio/viewer/dist-static/static.html
 COPY --from=services /opt/depictio-services /opt/depictio-services
 COPY docker-images/allinone/entrypoint.py /usr/local/bin/depictio-allinone
 

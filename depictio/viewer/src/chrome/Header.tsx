@@ -10,7 +10,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
-import { paletteVar } from 'depictio-react-core';
+import { isMultiqcIcon, paletteVar, themedIconSrc, useIsStaticBundle } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 import { PublishedLockBadge } from '../projects/detail/PublishedLockBadge';
 import { useFeedbackLink } from '../feedback';
@@ -23,18 +23,10 @@ function isImagePath(s: string | null | undefined): boolean {
   return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
-
-/** Map any MultiQC logo path (legacy PNG or new SVGs) to the SPA-served
- *  themed SVG. Mirrors the same helper in Sidebar.tsx. */
+/** Map any MultiQC logo path (legacy PNG or new SVGs) to the themed SVG —
+ *  `themedIconSrc`, so a static bundle's inlined copies apply here too. */
 function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
-  if (!isMultiqcIcon(path)) return path;
-  return theme === 'dark'
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
+  return themedIconSrc(path, theme === 'dark');
 }
 
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`. */
@@ -181,6 +173,10 @@ export function useHeaderModel({
 }: HeaderProps): HeaderModel {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  // Static bundles are read-only snapshots with no backend: the editor route
+  // does not exist there, so the Edit / Exit-Edit affordance is hidden
+  // entirely instead of rendered disabled. Inert in server builds (false).
+  const isStaticBundle = useIsStaticBundle();
 
   const tabIconRaw = resolveTabIcon(activeTab);
   const tabIconIsImage = isImagePath(tabIconRaw);
@@ -210,6 +206,10 @@ export function useHeaderModel({
   const activeLabel = isChild
     ? activeTab?.title || dashboardId || 'Dashboard'
     : activeTab?.main_tab_name ||
+      // A static bundle's tab entries carry no `main_tab_name`; the document
+      // on screen (this main tab) does, else the breadcrumb printed the
+      // dashboard's title twice.
+      (dashboard as { main_tab_name?: string | null } | null | undefined)?.main_tab_name ||
       activeTab?.title ||
       dashboard?.title ||
       dashboardId ||
@@ -337,7 +337,7 @@ export function useHeaderModel({
   }
   // Comments, Analysis, live updates: ways of *reading* the dashboard.
   if (extraActions) actions.push(...extraActions);
-  actions.push(
+  if (!isStaticBundle) actions.push(
     mode === 'view'
       ? {
           id: 'edit',

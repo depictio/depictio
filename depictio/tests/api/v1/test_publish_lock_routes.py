@@ -140,6 +140,10 @@ EXEMPT_MODULES: dict[str, str] = {
     "advanced_viz_endpoints.routes": "computes a render, writes nothing",
     "advanced_viz_endpoints.structure_resolver": "resolves a structure for rendering",
     "export_endpoints.routes": "exports a component, writes nothing",
+    "serverless_endpoints.routes": (
+        "builds a static HTML export of a dashboard into its own job store "
+        "(static_exports + an S3 object); writes no project content"
+    ),
     "monitoring_endpoints.routes": "ingestion and agent telemetry; the CLI preflight refuses a locked project",
     "cli_endpoints.routes": "validates a CLI config, writes nothing",
     "backup_endpoints.routes": "admin-only instance backup and restore",

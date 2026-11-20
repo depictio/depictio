@@ -26,6 +26,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY patches ./patches/
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY packages/depictio-static-core/package.json ./packages/depictio-static-core/
 COPY depictio/viewer/package.json ./depictio/viewer/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
@@ -33,6 +34,10 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 # ---- Source + build ----
 COPY packages ./packages/
 COPY depictio/viewer ./depictio/viewer/
+# Dashboard tab icons are authored in the project corpus, not in source, and the
+# icon-subset generator scans it. Without this the built viewer ships blank tab
+# icons: the CSP forbids resolving them from the Iconify API at runtime.
+COPY depictio/projects ./depictio/projects/
 
 # Memory caps for typical 6 GB container limits: sourcemaps off (peak-mem
 # win, not shipped to users anyway), heap capped at 4 GB to leave cgroup
