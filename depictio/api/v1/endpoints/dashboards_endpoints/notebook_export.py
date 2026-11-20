@@ -760,6 +760,8 @@ def _runtime_refusal(
     """Why this report cannot embed the runtime, or ``None`` when it can."""
     from depictio.serverless import combined
 
+    if not settings.static_export.enabled:
+        return "the static dashboard export is not enabled on this server"
     if not combined.runtime_available():
         return "the static runtime is not built on this deployment"
     return _owner_refusal(dashboard_id, state, current_user)

@@ -46,6 +46,8 @@ import { useBranding } from '../branding';
 import { useFeedbackLink } from '../feedback';
 import { UiScaleField } from '../components/settings/preferences';
 import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks/useContentWidthPref';
+import { useNotebookExportEnabled } from '../hooks/useNotebookExportEnabled';
+import { useStaticExportEnabled } from '../hooks/useStaticExportEnabled';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -666,6 +668,44 @@ const ExportBlock: React.FC<{
 }> = ({ dashboard, getAnalysisState, staticExport }) => {
   const [opened, setOpened] = useState<ExportChoice | null>(null);
   const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
+  // The combined file embeds the static runtime: without the static export
+  // (switched off on this server) only the report and its source are offered.
+  const combinedOffered = Boolean(staticExport);
+  const modal = (
+    <NotebookExportModal
+      opened={opened !== null}
+      onClose={() => setOpened(null)}
+      initialOutput={opened ?? (combinedOffered ? 'combined' : 'report')}
+      dashboardId={dashboardId}
+      dashboardTitle={dashboard?.title}
+      getAnalysisState={getAnalysisState}
+      combinedOffered={combinedOffered}
+      onExportDashboardOnly={
+        staticExport?.allowed && !staticExport.previewing ? staticExport.onExportStatic : undefined
+      }
+    />
+  );
+  if (!combinedOffered) {
+    return (
+      <Stack gap="xs" data-testid="export-section">
+        <Group>
+          <Button
+            leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
+            onClick={() => setOpened('report')}
+            disabled={!dashboardId}
+            data-testid="export-notebook"
+          >
+            Export report
+          </Button>
+        </Group>
+        <Text size="xs" c="dimmed">
+          The report rendered here, or the Quarto document (<code>.qmd</code>) to render and keep
+          working in yourself.
+        </Text>
+        {modal}
+      </Stack>
+    );
+  }
   return (
     <Stack gap="sm" data-testid="export-section">
       <Text size="sm" c="dimmed">
@@ -721,19 +761,7 @@ const ExportBlock: React.FC<{
           </Accordion.Panel>
         </Accordion.Item>
       </Accordion>
-      <NotebookExportModal
-        opened={opened !== null}
-        onClose={() => setOpened(null)}
-        initialOutput={opened ?? 'combined'}
-        dashboardId={dashboardId}
-        dashboardTitle={dashboard?.title}
-        getAnalysisState={getAnalysisState}
-        onExportDashboardOnly={
-          staticExport?.allowed && !staticExport.previewing
-            ? staticExport.onExportStatic
-            : undefined
-        }
-      />
+      {modal}
     </Stack>
   );
 };
@@ -1094,8 +1122,12 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   // against, so the export is absent rather than disabled. Inert (false) in
   // server builds.
   const isStaticBundle = useIsStaticBundle();
+  // Each export is also the server's switch (`features` in server-info), off
+  // until it answers: a switched-off export is absent, not disabled.
+  const staticExportEnabled = useStaticExportEnabled();
+  const notebookExportEnabled = useNotebookExportEnabled();
   const staticExportAllowed = useCanExportStatic(
-    onExportStatic && !isStaticBundle ? (dashboardId ?? null) : null,
+    onExportStatic && !isStaticBundle && staticExportEnabled ? (dashboardId ?? null) : null,
   );
   const surface: Surface =
     onChangeBrandTheme ||
@@ -1234,16 +1266,21 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   }
   // One "Export" section, two outputs: the static HTML bundle (owner-gated)
   // and the Quarto document (any reader). Both need the API, so a static
-  // bundle shows neither.
-  const showStaticExport = Boolean(onExportStatic) && !isStaticBundle;
-  const showNotebookExport = Boolean(getAnalysisState) && !isStaticBundle;
+  // bundle shows neither; each also needs its server switch.
+  const showStaticExport = Boolean(onExportStatic) && !isStaticBundle && staticExportEnabled;
+  const showNotebookExport = Boolean(getAnalysisState) && !isStaticBundle && notebookExportEnabled;
   if (showStaticExport || showNotebookExport) {
     sections.push({
       key: 'export',
       icon: 'mdi:export-variant',
       title: 'Export',
       navLabel: 'Export',
-      subtitle: 'The report and the dashboard in one offline HTML file, or each on its own',
+      subtitle:
+        showStaticExport && showNotebookExport
+          ? 'The report and the dashboard in one offline HTML file, or each on its own'
+          : showStaticExport
+            ? 'The dashboard as one offline HTML file'
+            : 'The report, or its Quarto source',
       body: (
         <Stack gap="lg">
           {showNotebookExport && getAnalysisState ? (

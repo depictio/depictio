@@ -54,6 +54,9 @@ interface NotebookExportModalProps {
   dashboardId: string;
   dashboardTitle?: string;
   getAnalysisState: () => AnalysisState;
+  /** Whether the combined file is offered at all: false where the server has
+   *  the static export switched off, and the choice is then not shown. */
+  combinedOffered?: boolean;
   /** Which output the modal opens on (the combined file by default). */
   initialOutput?: ExportChoice;
   /** Opens the dashboard-only export (the static bundle's own modal). */
@@ -109,6 +112,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   dashboardTitle,
   getAnalysisState,
   initialOutput = 'combined',
+  combinedOffered = true,
   onExportDashboardOnly,
 }) => {
   const [state, setState] = useState<AnalysisState | null>(null);
@@ -443,11 +447,15 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                   value={format}
                   onChange={(v) => setFormat(v as ExportChoice)}
                   data={[
-                    {
-                      label: 'Report + dashboard',
-                      value: 'combined',
-                      disabled: !combinedAvailable,
-                    },
+                    ...(combinedOffered
+                      ? [
+                          {
+                            label: 'Report + dashboard',
+                            value: 'combined',
+                            disabled: !combinedAvailable,
+                          },
+                        ]
+                      : []),
                     { label: 'Report only', value: 'report', disabled: !renderAvailable },
                     { label: 'Quarto source (.qmd)', value: 'qmd' },
                   ]}

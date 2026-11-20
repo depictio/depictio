@@ -29,6 +29,11 @@ _PYTEST_DEFAULTS = {
     # check, which would call api.github.com. Tests of the check itself patch
     # `settings.version_check.enabled`.
     "DEPICTIO_VERSION_CHECK_ENABLED": "false",
+    # Off by default while they are finalised; the suite exercises both, so it
+    # turns them on. `test_export_feature_flags.py` asserts the shipped defaults
+    # with these unset.
+    "DEPICTIO_NOTEBOOK_EXPORT_ENABLED": "true",
+    "DEPICTIO_STATIC_EXPORT_ENABLED": "true",
 }
 
 for _k, _v in _PYTEST_DEFAULTS.items():

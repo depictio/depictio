@@ -2963,10 +2963,12 @@ class NotebookExportConfig(BaseSettings):
     """
 
     enabled: bool = Field(
-        default=True,
+        default=False,
         description=(
-            "Expose notebook export (a Quarto document), component embeds and the "
-            "Parquet data endpoint used by `depictio.notebook`."
+            "Expose notebook export (a Quarto document, and the rendered report), component "
+            "embeds and the Parquet data endpoint used by `depictio.notebook`. Off by default "
+            "while the feature is finalised: the API answers 404 and the viewer hides the "
+            "export (`features.notebook_export` in `/utils/server-info`)."
         ),
     )
     max_rows: int = Field(
@@ -2989,7 +2991,8 @@ class NotebookExportConfig(BaseSettings):
         default=True,
         description=(
             "Offer the rendered HTML report (and the combined report + dashboard file, the "
-            "default export) as well as the Quarto document. On by default: the worker image "
+            "default export) as well as the Quarto document. Only read when `enabled` is on; "
+            "the combined file also needs `DEPICTIO_STATIC_EXPORT_ENABLED`. On by default: the worker image "
             "ships Quarto and the Jupyter kernel (`WITH_QUARTO`, `--extra render`). Turn it "
             "off for a worker built without them; the render executes the exported document "
             "on a worker and costs a browser pass per rendered tile. "
@@ -3044,6 +3047,29 @@ class NotebookExportConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_")
 
 
+class StaticExportConfig(BaseSettings):
+    """The serverless dashboard export: one self-contained HTML file.
+
+    Gates every `/serverless` route: the static export (preflight, can-export,
+    dispatch, status, download) and the report runtime/manifest that the rendered
+    report and the combined report + dashboard file embed. Its size and retention
+    knobs stay in `PerformanceConfig`.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Expose the static (serverless) dashboard export and the runtime a rendered "
+            "report embeds. Off by default while the feature is finalised: the API answers "
+            "404 and the viewer hides the export (`features.static_export` in "
+            "`/utils/server-info`). The offline CLI commands (`depictio dashboard "
+            "export-static`, `combine-report`) do not read it."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_STATIC_EXPORT_")
+
+
 # ── Root ──────────────────────────────────────────────────────────────────────
 
 
@@ -3094,6 +3120,7 @@ class Settings(BaseSettings):
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
     notebook_export: NotebookExportConfig = Field(default_factory=NotebookExportConfig)
+    static_export: StaticExportConfig = Field(default_factory=StaticExportConfig)
 
     disable_example_dashboards: bool = Field(
         default=False,
