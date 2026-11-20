@@ -10,7 +10,8 @@ kept) and what they share:
   per content (an output that did not change between releases is one file);
 - ``modules/<tool_id>.json``: a module's version history across the slots;
 - ``releases.json``: per slot, its version, publication date and what changed;
-- ``versions.json`` and ``index.html`` (redirect to ``latest/``), as before.
+- ``versions.json`` (with ``stable``, the newest non-beta release), ``stable/``
+  and ``index.html``, redirects to that release (``latest/`` before any).
 
 The export is copied into its slot, then every slot is normalised: ``data/outputs/``
 moves to ``objects/`` (each output entry gets a ``dataRef``), ``assets/`` moves to the
@@ -51,13 +52,20 @@ _ASSET_REF = re.compile(r"""(\b(?:src|href)=)(["'])\./assets/([^"']*)""")
 # Vite names a chunk <name>-<content hash>.<ext>; only such a file can be shared between slots.
 _HASHED = re.compile(r"-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$")
 
-_REDIRECT = """<!doctype html>
+STABLE = "stable"
+
+
+def redirect_html(target: str) -> str:
+    """A page that sends its reader to ``target``, keeping the URL hash
+    (``#tool=``, ``#output=``), so a ``stable/`` deep link lands in the release."""
+    return f"""<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <title>Depictio Tools Catalog</title>
-<meta http-equiv="refresh" content="0; url=latest/">
-<link rel="canonical" href="latest/">
-<a href="latest/">Depictio Tools Catalog</a>
+<link rel="canonical" href="{target}">
+<script>location.replace({target!r} + location.search + location.hash)</script>
+<noscript><meta http-equiv="refresh" content="0; url={target}"></noscript>
+<a href="{target}">Depictio Tools Catalog</a>
 """
 
 
@@ -537,12 +545,27 @@ def publish(site: Path, export: Path, slot: str, now: datetime | None = None) ->
             if stale.stem not in modules:
                 stale.unlink()
 
+    rels = releases(site)
+    # A beta tag (vX.Y.Z-bN) is a release slot, never what `stable/` names.
+    stable = next((r for r in rels if "-b" not in r), None)
     _write_json(site / "releases.json", {"releases": release_entries})
     _write_json(
         site / "versions.json",
-        {"latest": LATEST if (site / LATEST).is_dir() else None, "versions": releases(site)},
+        {
+            "latest": LATEST if (site / LATEST).is_dir() else None,
+            "stable": stable,
+            "versions": rels,
+        },
     )
-    (site / "index.html").write_text(_REDIRECT)
+    # `stable/` is the newest release (what the docs link to); the site root
+    # opens it too, and falls back to `latest/` before any release exists.
+    stable_dir = site / STABLE
+    stable_dir.mkdir(exist_ok=True)
+    if stable:
+        (stable_dir / "index.html").write_text(redirect_html(f"../{stable}/"))
+    else:
+        (stable_dir / "index.html").write_text(redirect_html(f"../{LATEST}/"))
+    (site / "index.html").write_text(redirect_html(f"{stable or LATEST}/"))
     # Pages would otherwise run Jekyll and drop directories starting with "_".
     (site / ".nojekyll").touch()
     return removed

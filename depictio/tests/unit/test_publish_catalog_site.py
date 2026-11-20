@@ -150,8 +150,25 @@ def test_every_release_is_kept_and_listed_newest_first(tmp_path) -> None:
     versions = _json(site, "versions.json")
     assert versions["latest"] == "latest"
     assert versions["versions"][:2] == ["v1.14.0", "v1.13.0"] and len(versions["versions"]) == 14
-    assert "url=latest/" in (site / "index.html").read_text()
+    # The root and `stable/` open the newest release, keeping a deep link's hash.
+    assert versions["stable"] == "v1.14.0"
+    assert "url=v1.14.0/" in (site / "index.html").read_text()
+    stable = (site / "stable" / "index.html").read_text()
+    assert "url=../v1.14.0/" in stable and "location.hash" in stable
     assert (site / ".nojekyll").exists()
+
+
+def test_stable_skips_betas_and_falls_back_to_latest(tmp_path) -> None:
+    site = tmp_path / "site"
+    pcs.publish(site, _simple(tmp_path, "main", "1.15.0+abc"), "latest", now=T0)
+    assert _json(site, "versions.json")["stable"] is None
+    assert "url=latest/" in (site / "index.html").read_text()
+    assert "url=../latest/" in (site / "stable" / "index.html").read_text()
+
+    pcs.publish(site, _simple(tmp_path, "b", "1.15.0"), "v1.15.0-b1", now=T0)
+    assert _json(site, "versions.json")["stable"] is None
+    pcs.publish(site, _simple(tmp_path, "r", "1.14.0"), "v1.14.0", now=T0)
+    assert _json(site, "versions.json")["stable"] == "v1.14.0"
 
 
 def test_republishing_a_slot_replaces_it(tmp_path) -> None:

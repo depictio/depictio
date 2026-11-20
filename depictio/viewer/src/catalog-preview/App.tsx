@@ -9,6 +9,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdvancedVizConfigDraftProvider } from 'depictio-react-core';
 import Gallery from './Gallery';
+import Landing from './Landing';
+import { useCatalogPaper } from './shared';
 import OutputView from './OutputView';
 import type { CatalogGlobal, OutputEntry } from './shared';
 
@@ -74,8 +76,24 @@ function postConfigDraft(renderId: string | null) {
   };
 }
 
+/** Whether the URL names something to open (otherwise the site shows its front page). */
+const hashNamesRoute = () => /[#&](output|tool|browse|type|category)(=|&|$)/.test(window.location.hash);
+
+/** Component type to pre-filter the gallery on (#type=figure). */
+function readHashType(): string | null {
+  const m = window.location.hash.match(/[#&]type=([^&]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Tool category to pre-filter the gallery on (#category=qc). */
+function readHashCategory(): string | null {
+  const m = window.location.hash.match(/[#&]category=([^&]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
   const tools = g.tools || [];
+  const { paper } = useCatalogPaper();
   const totalOutputs = useMemo(() => tools.reduce((n, t) => n + t.outputs.length, 0), [tools]);
   // `#tool=<id>` selects a tool: its first output opens and the gallery filters to it.
   const initialTool = useMemo(() => {
@@ -87,6 +105,10 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
   const [selected, setSelected] = useState<string | null>(
     readHashOutputId() ?? g.initialOutputId ?? toolFirstOutput(initialTool),
   );
+  // A tool opened from the front page filters the gallery as a #tool= link does.
+  const [toolRoute, setToolRoute] = useState<string | null>(initialTool);
+  const [typeRoute, setTypeRoute] = useState<string | null>(readHashType());
+  const [categoryRoute, setCategoryRoute] = useState<string | null>(readHashCategory());
 
   // Hash takes priority over injected value (works without backend restart).
   const renderId = readHashRenderId() ?? g.initialRenderId ?? null;
@@ -119,6 +141,25 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
     );
   }, []);
 
+  // The front page: the site only (a single-file gallery and the editor's
+  // picker open on the list), in Paper, when the URL names nothing to open.
+  const pinnedRender = renderId !== null || tileHeight !== null;
+  const siteFront = Boolean(g.lazyOutputs) && paper && !pinnedRender && !g.initialOutputId;
+  const [landing, setLanding] = useState<boolean>(siteFront && !hashNamesRoute());
+
+  const leaveLanding = useCallback((hash: string) => {
+    setLanding(false);
+    window.history.pushState(null, '', `${window.location.pathname}${window.location.search}${hash}`);
+  }, []);
+  const goHome = useCallback(() => {
+    setLanding(true);
+    setSelected(null);
+    setToolRoute(null);
+    setTypeRoute(null);
+    setCategoryRoute(null);
+    window.history.pushState(null, '', `${window.location.pathname}${window.location.search}`);
+  }, []);
+
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
       const id =
@@ -126,10 +167,11 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
         readHashOutputId() ??
         toolFirstOutput(readHashToolId());
       setSelected(id ?? null);
+      setLanding(siteFront && !hashNamesRoute());
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  }, [siteFront]);
 
   const draftSink = useMemo(() => postConfigDraft(renderId), [renderId]);
 
@@ -149,9 +191,30 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
   // selection from here on — its default view shows the catalogue and the opened
   // output side by side, so handing it `selected` is what keeps #output= deep
   // links and the back button working.
-  const pinned = renderId !== null || tileHeight !== null;
-  const body =
-    entry && (pinned || totalOutputs <= 1) ? (
+  const pinned = pinnedRender;
+  const body = landing ? (
+    <Landing
+      tools={tools}
+      onBrowse={() => leaveLanding('#browse')}
+      onBrowseType={(type) => {
+        setTypeRoute(type);
+        leaveLanding(`#type=${encodeURIComponent(type)}`);
+      }}
+      onBrowseCategory={(c) => {
+        setCategoryRoute(c);
+        leaveLanding(`#category=${encodeURIComponent(c)}`);
+      }}
+      onOpenOutput={(id) => {
+        setSelected(id);
+        leaveLanding(`#output=${encodeURIComponent(id)}`);
+      }}
+      onOpenTool={(id) => {
+        setToolRoute(id);
+        setSelected(toolFirstOutput(id));
+        leaveLanding(`#tool=${encodeURIComponent(id)}`);
+      }}
+    />
+  ) : entry && (pinned || totalOutputs <= 1) ? (
       <OutputView
         entry={entry}
         onBack={totalOutputs > 1 ? () => navigate(null) : undefined}
@@ -165,7 +228,11 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
         selected={selected}
         onOpen={navigate}
         theme={g.theme}
-        initialToolFilter={initialTool ? [initialTool] : undefined}
+        initialToolFilter={toolRoute ? [toolRoute] : undefined}
+        onHome={siteFront ? goHome : undefined}
+        initialTypeFilter={typeRoute ? [typeRoute] : undefined}
+        initialCategoryFilter={categoryRoute ? [categoryRoute] : undefined}
+        key={`${typeRoute ?? 'all'}|${categoryRoute ?? 'all'}`}
       />
     );
 

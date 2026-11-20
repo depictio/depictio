@@ -474,3 +474,57 @@
 :root[data-chrome='glass'] .cp-hist-row[data-current] {
   border-left-color: var(--gl-accent);
 }
+
+/* Component-type tag (shared.tsx TypeBadge): filter bar and cards alike. */
+.cp-type-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tag-ink) 28%, transparent);
+  background: color-mix(in srgb, var(--tag-ink) 9%, transparent);
+  color: var(--mantine-color-text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.cp-type-tag svg { color: var(--tag-ink); flex: none; }
+.cp-type-tag b { font-weight: 700; color: var(--mantine-color-dimmed); font-variant-numeric: tabular-nums; }
+button.cp-type-tag { cursor: pointer; background: transparent; border-color: var(--mantine-color-default-border); }
+button.cp-type-tag:hover { border-color: color-mix(in srgb, var(--tag-ink) 60%, transparent); }
+button.cp-type-tag[data-active] {
+  background: color-mix(in srgb, var(--tag-ink) 16%, transparent);
+  border-color: var(--tag-ink);
+}
+button.cp-type-tag[data-active] b { color: var(--mantine-color-text); }
+
+/* The filter bar stays in view while the tool grid or the table scrolls. */
+:root[data-chrome='glass'] .cp-shell:is([data-view='tools'], [data-view='table']) .cp-facets {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+/* What scrolls under the bar does not show above it. */
+:root[data-chrome='glass'] .cp-shell:is([data-view='tools'], [data-view='table']) .cp-facets::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  right: -16px;
+  bottom: 100%;
+  height: 72px;
+  background: var(--mantine-color-body);
+  pointer-events: none;
+}
+
+/* Category tag: same family as the type tag, square corners. */
+.cp-cat-tag { border-radius: 6px; }
+.cp-cat-tag[data-compact] { padding: 0; width: 22px; justify-content: center; flex: none; }
+/* Facet placeholders sit on the field's centre line, like the search text. */
+.cp-facets .mantine-MultiSelect-input { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+.cp-facets .mantine-MultiSelect-pillsList { flex: 1; }
+/* Mantine colours an option's svgs (its check mark); a tag keeps its own ink. */
+.mantine-MultiSelect-option .cp-type-tag svg { color: var(--tag-ink) !important; width: 13px !important; height: 13px !important; display: block !important; opacity: 1 !important; position: static !important; transform: none !important; margin: 0 !important; }
