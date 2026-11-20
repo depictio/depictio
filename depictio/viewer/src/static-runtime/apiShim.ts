@@ -1396,6 +1396,25 @@ export const downloadStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
 export async function canExportStatic(): Promise<boolean> {
   return false;
 }
+// The notebook export (#1034) builds its document from the server's own copy
+// of the dashboard, its data and its funnel: nothing a bundle could answer. The
+// Settings "Export" section is hidden in a bundle; these refuse any other
+// opener without a request.
+export async function fetchNotebookPreflight(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+export async function exportNotebook(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+export async function startNotebookRender(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+export async function fetchNotebookRenderStatus(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+export async function downloadNotebookRender(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
 
 // Comments: a write path with a server-side ACL. `can_comment: false` is what
 // the real call answers a viewer without access, so the comments UI hides.

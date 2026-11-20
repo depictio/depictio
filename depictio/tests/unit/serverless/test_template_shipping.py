@@ -22,6 +22,10 @@ def test_the_wheel_ships_the_template() -> None:
     assert "viewer/dist-static/static.html" in globs
     check = (REPO / "scripts" / "check_depictio_wheel.py").read_text()
     assert r"depictio/viewer/dist-static/static\.html" in check
+    # The runtime a rendered report embeds (serverless/combined.py).
+    for name in ("combined-runtime.js", "combined-runtime.css"):
+        assert f"viewer/dist-static/{name}" in globs
+        assert f"depictio/viewer/dist-static/{name.replace('.', chr(92) + '.')}" in check
 
 
 def test_every_producer_image_builds_and_copies_the_template() -> None:
@@ -29,6 +33,7 @@ def test_every_producer_image_builds_and_copies_the_template() -> None:
         text = (REPO / "docker-images" / name).read_text()
         assert "build:static" in text, name
         assert re.search(r"COPY --from=\S+.*\n?.*dist-static/static\.html", text), name
+        assert re.search(r"dist-static/combined-runtime\.js", text), name
 
 
 def test_the_wheel_ci_builds_it_before_packaging() -> None:

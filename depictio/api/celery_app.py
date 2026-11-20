@@ -3,6 +3,8 @@ Celery application for background task processing.
 Integrated with FastAPI backend for dashboard component generation.
 """
 
+from typing import Any
+
 from celery import Celery
 from celery.signals import task_failure
 
@@ -45,6 +47,13 @@ celery_app.conf.update(
     task_routes={
         "depictio.deltatable.finalize_upsert": {"queue": settings.celery.ingestion_queue},
         "depictio.ingestion.run_project": {"queue": settings.celery.ingestion_queue},
+        # The notebook export's browser passes and reports: a pass dispatches the
+        # renderer's own compute task (default queue) and waits on it, and a
+        # report waits on its passes, so sharing one pool lets them starve each
+        # other. run_celery_worker.sh consumes all three by default; a
+        # deployment can give these two a worker of their own.
+        "depictio.embed.extract_figure": {"queue": settings.celery.export_queue},
+        "render_notebook_report": {"queue": settings.celery.report_queue},
     },
 )
 
@@ -1000,6 +1009,327 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
             _release_lock(cache, lock_key, owner)
         except Exception as exc:
             logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
+
+
+def _runtime_args(runtime: dict) -> tuple[str, Any, Any]:
+    """``(dashboard_id, ExportUser, AnalysisState)`` from a task's ``runtime``
+    argument (``{dashboard_id, state, user}``, as the endpoints send it)."""
+    from depictio.models.models.analysis_state import AnalysisState
+    from depictio.serverless.producer_a import ExportUser
+
+    return (
+        str(runtime["dashboard_id"]),
+        ExportUser(**runtime["user"]),
+        AnalysisState.model_validate(runtime["state"]),
+    )
+
+
+#: Seconds producer A may take to build a manifest: its compute budget, its
+#: MultiQC wait and the data reads, as the static export task allows it
+#: (``depictio.serverless.export_static``, soft limit 600 s).
+MANIFEST_BUILD_S = 600
+
+
+def _report_manifest(runtime: dict) -> Any:
+    """Producer A's manifest for a report, with the requester's rights."""
+    from depictio.serverless import report
+
+    dashboard_id, user, state = _runtime_args(runtime)
+    return report.build_report_manifest(dashboard_id, user, state)
+
+
+def _runtime_manifest(job_id: str, runtime: dict, *, required: bool) -> Any:
+    """The manifest a rendered report embeds, or ``None`` when it cannot have
+    one and the report keeps every tile's own output (``required`` raises
+    instead). A time limit always goes through: it is the task's, not the
+    manifest's."""
+    from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+
+    from depictio.api.v1.configs.logging_init import logger
+    from depictio.serverless import combined
+
+    try:
+        if not combined.runtime_available():
+            raise combined.RuntimeUnavailable("the static runtime is not built on this worker")
+        manifest = _report_manifest(runtime)
+    except (SoftTimeLimitExceeded, TimeLimitExceeded):
+        raise
+    except Exception as exc:  # noqa: BLE001 - the fallbacks stand in
+        if required:
+            raise
+        logger.warning(f"📄 Report {job_id}: tiles keep the export's own output ({exc})")
+        return None
+    logger.info(f"📄 Report {job_id}: manifest built for the runtime")
+    return manifest
+
+
+def _embed_runtime(
+    job_id: str, html: bytes, manifest: Any, runtime: dict, combined: dict | None
+) -> bytes:
+    """The rendered report with the runtime and ``manifest`` embedded: the
+    combined file when ``combined`` is set (whose failure fails the job), else
+    the report alone (which keeps every tile's own output on a failure)."""
+    from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+
+    from depictio.api.v1.configs.logging_init import logger
+    from depictio.serverless.combined import embed_runtime
+    from depictio.serverless.report import manifest_json
+
+    try:
+        result = embed_runtime(
+            html.decode("utf-8"),
+            manifest_json(manifest),
+            list(manifest.addons),
+            config=runtime.get("config"),
+            output="combined" if combined else "report",
+            default_view=(combined or {}).get("default_view") or "report",
+        )
+    except (SoftTimeLimitExceeded, TimeLimitExceeded):
+        raise
+    except Exception as exc:  # noqa: BLE001 - the fallbacks stand in
+        if combined:
+            raise
+        logger.warning(f"📄 Report {job_id}: tiles keep the export's own output ({exc})")
+        return html
+    out = result.html.encode("utf-8")
+    logger.info(
+        f"📄 Report {job_id}: runtime embedded ({len(out) / 1e6:.1f} MB; "
+        f"report's plotly.js dropped: {result.plotly_dropped / 1e6:.1f} MB)"
+    )
+    return out
+
+
+@celery_app.task(
+    bind=True,
+    name="build_report_manifest",
+    soft_time_limit=MANIFEST_BUILD_S,
+    time_limit=MANIFEST_BUILD_S + 300,
+)
+def build_report_manifest_job(self, job_id: str, runtime: dict) -> dict:
+    """A report's manifest for a reader rendering the ``.qmd`` themselves
+    (``POST /serverless/report-manifest``): built here rather than in the API
+    request, as long as a static export's build. Stored as JSON under the
+    requester's prefix; producer A's refusals fail the task, and the poll
+    answers them as the route would have."""
+    from depictio.api.v1.services.notebook_export import store
+    from depictio.serverless import report
+
+    user_id = str(runtime["user"]["id"])
+    self.update_state(state="PROGRESS", meta={"user_id": user_id, "job_id": job_id})
+    key = store.job_key(user_id, job_id, "manifest.json")
+    body = report.manifest_json(_report_manifest(runtime)).encode("utf-8")
+    store.put(key, body, "application/json")
+    return {"user_id": user_id, "job_id": job_id, "key": key, "size": len(body)}
+
+
+_REPORT_SLOT = "report"
+# A report that finds every report slot taken waits this long before asking
+# again, without holding a worker meanwhile.
+_REPORT_SLOT_RETRY_S = 30
+
+
+@celery_app.task(
+    bind=True,
+    name="render_notebook_report",
+    # Room for the manifest the runtime embeds (producer A's build) and the
+    # optional PDF, a second render of the same document.
+    soft_time_limit=MANIFEST_BUILD_S + 2 * settings.notebook_export.render_timeout_s + 60,
+    time_limit=MANIFEST_BUILD_S + 2 * settings.notebook_export.render_timeout_s + 120,
+    # Waiting for a report slot: retried until the job's own record expires.
+    max_retries=None,
+)
+def render_notebook_report(
+    self,
+    job_id: str,
+    user_id: str,
+    notebook_key: str,
+    stem: str,
+    api_url: str,
+    runtime: dict | None = None,
+    combined: dict | None = None,
+    filename: str | None = None,
+    pdf: bool = False,
+    **_legacy: Any,
+) -> dict:
+    """Execute an exported notebook and keep the report Quarto renders from it.
+
+    The notebook itself is staged in S3 by the endpoint rather than sent here:
+    an export runs to ~10 MB, which is not what a broker message is for.
+
+    The render executes the notebook against this deployment's own API with the
+    caller's rights, through a token minted here, when the work starts (a job
+    can wait in the queue), for at least the task's time limit, and revoked as
+    soon as the render is over, whichever way it ends. Every tile that is
+    rendered rather than computed costs a browser pass, which is why this is a
+    worker task and not a request.
+
+    ``runtime`` (``{dashboard_id, state, user, config}``, set when the endpoint
+    cleared the report to embed the static runtime) has this worker build the
+    dashboard's manifest in-process before the render — producer A, as the
+    static export task does — and embed the runtime and the manifest once the
+    report is rendered (``serverless/combined.py``), in place of Quarto's own
+    plotly.js. The document's last cell prints nothing meanwhile
+    (``DEPICTIO_REPORT_RUNTIME_DEFERRED``). A failed manifest leaves the report
+    with every tile's own output, and the render goes on.
+
+    ``combined`` (``{default_view}``, with ``runtime``) makes the job produce
+    the combined report + dashboard file instead: the same embedding, with the
+    "Report | Dashboard" switch on. A failed manifest then fails the job: a
+    combined file without its dashboard is not what was asked for.
+
+    At most ``report_concurrency`` reports run at once on the deployment: a
+    report holds its worker while the passes it waits on need workers too.
+    A report finding no free slot is retried later rather than holding one.
+
+    A failure is reported to the user as a sentence; Quarto's log, which can
+    carry worker paths and whatever the document printed, stays in the
+    worker's log.
+    """
+    import asyncio
+
+    from beanie import init_beanie
+    from celery.exceptions import SoftTimeLimitExceeded
+    from pymongo import AsyncMongoClient
+
+    from depictio.api.v1.configs.config import MONGODB_URL
+    from depictio.api.v1.configs.logging_init import logger
+    from depictio.api.v1.services.notebook_export import jobs, store
+    from depictio.api.v1.services.notebook_export.render import (
+        RenderUnavailable,
+        render_quarto_html,
+        render_quarto_pdf,
+    )
+    from depictio.api.v1.services.task_tokens import mint_task_token, revoke
+    from depictio.models.models.users import TokenBeanie, UserBeanie
+    from depictio.notebook.report_runtime import RUNTIME_DEFERRED_ENV
+
+    extra_env: dict[str, str] = {}
+
+    limit_s = MANIFEST_BUILD_S + 2 * settings.notebook_export.render_timeout_s + 120
+    if not jobs.acquire_slot(
+        _REPORT_SLOT,
+        job_id,
+        capacity=settings.notebook_export.report_concurrency,
+        hold_s=limit_s,
+    ):
+        raise self.retry(countdown=_REPORT_SLOT_RETRY_S)
+
+    async def _with_beanie(action):
+        client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
+        try:
+            await init_beanie(
+                database=client[settings.mongodb.db_name],
+                document_models=[TokenBeanie, UserBeanie],
+            )
+            return await action()
+        finally:
+            await client.close()
+
+    token: TokenBeanie | None = None
+    out_name = filename or f"{stem}.html"
+    html_key = store.job_key(user_id, job_id, out_name)
+    manifest = None
+    status = "failed"
+    try:
+        token = asyncio.run(
+            _with_beanie(
+                lambda: mint_task_token(user_id, f"notebook-report-{job_id}", limit_s + 300)
+            )
+        )
+        if combined and not runtime:
+            raise RuntimeError("a combined file needs the dashboard's runtime settings")
+        if runtime:
+            self.update_state(state="PROGRESS", meta={"phase": "embedding", "job_id": job_id})
+            extra_env[RUNTIME_DEFERRED_ENV] = "1"
+            manifest = _runtime_manifest(job_id, runtime, required=bool(combined))
+        self.update_state(state="PROGRESS", meta={"phase": "rendering", "job_id": job_id})
+        notebook = store.get(notebook_key)
+        try:
+            html = render_quarto_html(
+                notebook,
+                stem=stem,
+                api_url=api_url,
+                api_token=token.access_token,
+                timeout_s=settings.notebook_export.render_timeout_s,
+                extra_env=extra_env,
+            )
+        except RenderUnavailable as exc:
+            if exc.log:
+                logger.warning(f"render_notebook_report {job_id}: quarto log:\n{exc.log}")
+            raise
+        if manifest is not None and runtime:
+            self.update_state(state="PROGRESS", meta={"phase": "combining", "job_id": job_id})
+            html = _embed_runtime(job_id, html, manifest, runtime, combined)
+        self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
+        store.put(html_key, html, store.HTML_MEDIA_TYPE)
+        logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
+        out = {
+            "status": "success",
+            "job_id": job_id,
+            "user_id": user_id,
+            "key": html_key,
+            "filename": out_name,
+            "size": len(html),
+        }
+        if pdf:
+            # The PDF is a second render (static figures); its failure never
+            # costs the HTML report, it is reported beside it.
+            self.update_state(state="PROGRESS", meta={"phase": "pdf", "job_id": job_id})
+            try:
+                pdf_bytes = render_quarto_pdf(
+                    notebook,
+                    stem=stem,
+                    api_url=api_url,
+                    api_token=token.access_token,
+                    timeout_s=settings.notebook_export.render_timeout_s,
+                    # The runtime a PDF drops anyway: its cell asks for none.
+                    extra_env=extra_env,
+                )
+                pdf_key = store.job_key(user_id, job_id, f"{stem}.pdf")
+                store.put(pdf_key, pdf_bytes, store.PDF_MEDIA_TYPE)
+                out.update(pdf_key=pdf_key, pdf_filename=f"{stem}.pdf")
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception as exc:  # noqa: BLE001 — the HTML report stands on its own
+                log = getattr(exc, "log", "")
+                logger.warning(f"render_notebook_report: PDF failed for {job_id}: {exc}\n{log}")
+                out["pdf_error"] = (
+                    str(exc) if isinstance(exc, RenderUnavailable) else "The PDF could not be made."
+                )
+        status = "success"
+        return out
+    except BaseException as exc:
+        # What the user is told: a sentence of ours, never the exception's
+        # text (a Quarto log, a worker path, what the document printed).
+        reason = (
+            str(exc)
+            if isinstance(exc, RenderUnavailable)
+            else "the report ran past its time limit"
+            if isinstance(exc, SoftTimeLimitExceeded)
+            else "the report could not be rendered (the server log has the details)"
+        )
+        logger.warning(f"render_notebook_report {job_id} failed: {exc!r}")
+        jobs.finish(job_id, "failed", reason=reason)
+        raise
+    finally:
+        # The staged notebook has served its purpose either way, and a token
+        # minted for one render outlives its usefulness the moment it ends.
+        store.delete(notebook_key)
+        jobs.release_slot(_REPORT_SLOT, job_id)
+        if status == "success":
+            jobs.finish(job_id, status)
+        try:
+            asyncio.run(_with_beanie(lambda: revoke(token)))
+        except SoftTimeLimitExceeded:
+            raise
+        except Exception as exc:  # noqa: BLE001 — never mask the render's own error
+            logger.warning(f"render_notebook_report: failed to revoke the token of {job_id}: {exc}")
+        try:
+            jobs.prune_reports()
+        except SoftTimeLimitExceeded:
+            raise
+        except Exception as exc:  # noqa: BLE001 — retention is best effort
+            logger.warning(f"render_notebook_report: pruning old reports failed: {exc}")
 
 
 # NOTE: Dash apps will import celery_app when they're created in flask_dispatcher.py

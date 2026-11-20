@@ -287,6 +287,59 @@ services:
       depictio-backend:
         condition: service_healthy
 
+
+  # Optional dedicated worker for the notebook export (the "export" and
+  # "report" queues): headless browser passes that read a tile's figure or
+  # snapshot, and rendered HTML reports. A pass dispatches the tile's own
+  # compute task (default queue) and waits for it, and a report waits for its
+  # passes; on one pool of DEPICTIO_CELERY_WORKERS slots they can starve each
+  # other until the extraction timeout fires. The default worker consumes
+  # these queues too, so this is needed only when reports are rendered: bring
+  # it up with `docker compose --profile export up -d` and set
+  # DEPICTIO_CELERY_QUEUES=celery on depictio-celery-worker. Keep its
+  # concurrency above DEPICTIO_NOTEBOOK_EXPORT_REPORT_CONCURRENCY (reports
+  # rendered at once on the deployment, 1 by default), since each report holds
+  # one slot while its passes use the others; a report finding no free report
+  # slot is retried later rather than holding a worker.
+  # The keys volume is mounted because the worker mints each render's (and
+  # each pass's) token for the requester. Quarto and its kernel run with an
+  # allow-listed environment, but as this container's user: a deployment that
+  # wants the render without the signing key in reach runs reports in a
+  # container of their own and mints tokens elsewhere.
+  depictio-export-worker:
+    container_name: depictio-export-worker
+    profiles: ["export"]
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.21.0-b6}
+    volumes:
+      - depictio_keys:/app/depictio/keys
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DEPICTIO_CONTEXT: "server"
+      DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
+      DEPICTIO_CELERY_QUEUES: "export,report"
+      DEPICTIO_CELERY_WORKERS: "${DEPICTIO_EXPORT_WORKER_CONCURRENCY:-3}"
+      DEPICTIO_CELERY_PREFETCH: "1"
+      DEPICTIO_CELERY_NODENAME: "export@%h"
+    command: ["/app/run_celery_worker.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d export@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      depictio-backend:
+        condition: service_healthy
+
 volumes:
   mongo_data:
     driver: local

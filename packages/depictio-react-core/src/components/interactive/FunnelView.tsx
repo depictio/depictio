@@ -110,6 +110,10 @@ export interface FunnelViewProps {
   /** The dashboard's saved selection groups, so a stage projected from a
    *  group filter can be badged in that group's color. */
   groups?: SelectionGroup[];
+  /** Stage order as component indexes, when the shell owns it (so it can be
+   *  exported with the analysis state). Uncontrolled when omitted. */
+  order?: string[];
+  onOrderChange?: (order: string[]) => void;
 }
 
 const FunnelView: React.FC<FunnelViewProps> = ({
@@ -118,6 +122,8 @@ const FunnelView: React.FC<FunnelViewProps> = ({
   dashboardId,
   filters,
   groups = NO_GROUPS,
+  order: controlledOrder,
+  onOrderChange,
 }) => {
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
@@ -131,8 +137,17 @@ const FunnelView: React.FC<FunnelViewProps> = ({
   /** DC ids to chart. `null` means "all of them", which is also what we fall
    *  back to when the user clears the selection. */
   const [visibleDcs, setVisibleDcs] = useState<string[] | null>(null);
-  /** User-chosen stage order, as component indexes. Empty = dashboard order. */
-  const [order, setOrder] = useState<string[]>([]);
+  /** User-chosen stage order, as component indexes. Empty = dashboard order.
+   *  Controlled by the shell when it passes `order`, local otherwise. */
+  const [localOrder, setLocalOrder] = useState<string[]>([]);
+  const order = controlledOrder ?? localOrder;
+  const setOrder = useCallback(
+    (next: string[]) => {
+      setLocalOrder(next);
+      onOrderChange?.(next);
+    },
+    [onOrderChange],
+  );
   const [mode, setMode] = useState<ChartMode>('rows');
   /** Column mode picks. `null` follows the defaults in `funnelStages`. */
   const [columnDc, setColumnDc] = useState<string | null>(null);

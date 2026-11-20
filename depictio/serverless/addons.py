@@ -37,11 +37,15 @@ Pyodide blocks are inert data until a tile boots the runtime.
 from __future__ import annotations
 
 import json
+import logging
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 from depictio.models.models.serverless import RuntimeAddon
+
+logger = logging.getLogger(__name__)
 
 ADDONS_DIR_ENV = "DEPICTIO_SERVERLESS_ADDONS_DIR"
 REGISTRY_NAME = "addons.json"
@@ -94,7 +98,16 @@ def addon_script(name: str) -> str:
     body = (addons_dir() / str(info["file"])).read_text(encoding="utf-8")
     if "</script" in body.lower():  # pragma: no cover - guarded at build time too
         raise AddonError(f"runtime add-on {name!r} contains '</script' and cannot be inlined")
-    return f'<script data-depictio-addon="{name}">{body}</script>'
+    # A Quarto report loads RequireJS (Jupyter's widget and Plotly outputs), and
+    # an add-on's UMD wrapper then registers itself as an anonymous AMD module
+    # ("Mismatched anonymous define()") instead of setting its global. AMD is
+    # hidden while the add-on runs and given back after; a page without it is
+    # unchanged.
+    return (
+        "<script>window.__dpxDefine=window.define;window.define=undefined;</script>"
+        f'<script data-depictio-addon="{name}">{body}</script>'
+        "<script>window.define=window.__dpxDefine;delete window.__dpxDefine;</script>"
+    )
 
 
 PYODIDE_META_ID = "depictio-pyodide-meta"
@@ -113,14 +126,49 @@ def pyodide_html(packages: list[str]) -> str:
         "lock": assets.lock,
         "modules": bundle_python_sources(),
     }
-    blob = json.dumps(meta, separators=(",", ":")).replace("</", "<\\/")
-    blocks = [f'<script type="application/json" id="{PYODIDE_META_ID}">{blob}</script>']
+    from depictio.notebook.report_runtime import json_script
+
+    blocks = [json_script(PYODIDE_META_ID, meta)]
     for f in assets.files:
         blocks.append(
             f'<script type="application/octet-stream" data-pya="{f.name}" '
             f'data-gz="{int(f.gzip)}">{f.embedded()}</script>'
         )
     return "".join(blocks)
+
+
+def addons_html(names: list[str], packages: list[str] | None = None) -> str:
+    """The add-ons' elements, in order, as the bundle embeds them before its
+    ``</body>``."""
+    return "".join(
+        pyodide_html(list(packages or [])) if n == "pyodide" else addon_script(n) for n in names
+    )
+
+
+def addon_markup(entries: Iterable[Any], *, skip_missing: bool = False) -> dict[str, str]:
+    """Each add-on ``entries`` names (``BundleManifest.addons``: models or their
+    JSON dicts), as its embedding markup, in order: what a report embeds beside
+    the runtime. Pyodide's data blocks are built from the entry's packages.
+
+    ``skip_missing`` leaves out an add-on that is not built (logged) instead of
+    raising :class:`AddonError`.
+    """
+    out: dict[str, str] = {}
+    for entry in entries:
+        data = entry if isinstance(entry, dict) else entry.model_dump()
+        name = str(data.get("name") or "")
+        if not name or name in out:
+            continue
+        try:
+            if name == "pyodide":
+                out[name] = pyodide_html(list(data.get("packages") or []))
+            else:
+                out[name] = addon_script(name)
+        except AddonError as exc:
+            if not skip_missing:
+                raise
+            logger.warning("runtime add-on %r unavailable: %s", name, exc)
+    return out
 
 
 def apply_addons(template: str, names: list[str], packages: list[str] | None = None) -> str:
@@ -130,9 +178,7 @@ def apply_addons(template: str, names: list[str], packages: list[str] | None = N
     """
     if not names:
         return template
-    scripts = "".join(
-        pyodide_html(list(packages or [])) if n == "pyodide" else addon_script(n) for n in names
-    )
+    scripts = addons_html(names, packages)
     at = template.rfind("</body>")
     if at < 0:
         return template + scripts

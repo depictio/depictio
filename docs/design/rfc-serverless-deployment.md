@@ -710,3 +710,82 @@ runtime exactly when a candidate survives the build; the export modal shows it a
 the measured size. Not ported in this round: complex_heatmap (its task reads a second, metadata
 collection per request and builds through plotly-complexheatmap + pandas — the next candidate,
 via the same extraction).
+
+## 14. The common trunk — one manifest, one runtime, two hosts
+
+The serverless bundle and the notebook export's rendered report (RFC
+`rfc-notebook-export.md` §3.9) are two offline outputs of one engine. Both embed
+the same thing — one `BundleManifest` built by producer A, one static runtime — and
+differ only in the page that hosts it:
+
+| | bundle (`/export-static`) | report (`/notebook_export/{id}/render`) |
+|---|---|---|
+| manifest | `producer_a.export_manifest` | the same call (`serverless/report.py::build_report_manifest`), plus `initial_filters` |
+| runtime | `dist-static/static.html` (viewer App, whole page) | `dist-static/combined-runtime.{js,css}` (`vite.combined.config.ts`: the App plus the mount mode), in both of a report's outputs |
+| module swaps | `vite-plugins/static-runtime.ts` | the same list — one module, imported by both configs |
+| page | the bundle's own | Quarto's: tiles mounted into `<div data-depictio-tile="<tab>:<index>">`, controls into `<div data-depictio-filters>` |
+| permission | owner (RFC §8) | owner, the same check — anyone else gets the report without the runtime |
+| add-ons | appended before `</body>` | inlined beside the runtime (`addons.addon_markup`) |
+
+**Contract.** One addition, `BundleManifest.initial_filters` (the viewer's
+`InteractiveFilter` wire shape): the report sets it to the exported analysis state and
+opens on exactly that (empty = no filter, not the dashboard's declared defaults), so the
+runtime shows the view the document narrates. The bundle host ignores it
+(`/export-static` always writes it empty, and the App opens on the defaults).
+
+**One runtime, two outputs.** Every report that embeds the runtime carries the same
+script (`serverless/combined.py`): the report alone, or the combined report + dashboard
+file. They differ only by the report config's `combined` section, which turns the
+"Report | Dashboard" switch on; `depictio dashboard combine-report` flips it, offline.
+The worker renders the document with its last cell printing nothing
+(`DEPICTIO_REPORT_RUNTIME_DEFERRED`), then puts the runtime where Quarto's plotly.js
+was (the runtime's Plotly draws the report's static figures, through the same
+offline-safe basemap check its own maps use) and the config, manifest and inert
+stylesheet at the page's end.
+
+**Mount mode** (`viewer/src/static-runtime/report/`). One React root, one manifest, one
+filter store: every tile is a portal into its placeholder, so a filter picked in the
+report's panel (the real `FilterPanel`, with the funnel and its overview) or a selection
+on a figure recomputes every tile in the page through the same shimmed data path. Cards
+are bulk-computed once per filter change, as App does. Paper is the chrome
+(`setChromeStyle(glass)`, glassPlotly); the report's primary colour and type ride in a
+config block. The runtime's CSS travels once, unscoped, as inert text; the report view
+scopes it in the page (`combined/scopeStyles.ts`: `:root`/`html`/`body` →
+`.depictio-report-root`, element selectors prefixed, class selectors untouched; Virgil
+dropped) and Mantine writes its
+variables for those roots only (`cssVariablesSelector`), its portals into a root of their
+own — the Quarto page keeps its fonts, colours and resets (asserted by the e2e). Inter is
+not bundled: the report already embeds it once.
+
+**Which tile is drawn** (`static-core/src/reportMount.ts`, unit-tested): `live`/`partial`
+always; `frozen` only when the report opens with no filter (the payload is computed
+there; at any other state the export's own output, computed at that state, is the honest
+one); `omitted` or unknown never. A card row is one placeholder and mounts whole or not at
+all. A tile that throws restores its fallback (per-tile error boundary).
+
+**Sizes** (Quarto 1.9.37, Paper, the seeded families at their unfiltered state; rendered
+against a stand-in API over the seeded projects' own files; manifests from producer A over
+a fake Mongo with the same files — frozen payloads stubbed, data, bindings and tiers real):
+
+| family | tiles drawn / placeholders | manifest | report before | report after |
+|---|---|---|---|---|
+| penguins (2 tabs, 44 components: 40 live, 4 frozen) | 16 / 16 | 0.15 MB | 9.01 MB raw · 2.47 MB gzip | 19.40 MB raw · 5.64 MB gzip |
+| iris (2 tabs, 47 components: 43 live, 4 frozen) | 15 / 15 | 0.13 MB | 9.03 MB raw · 2.47 MB gzip | 19.40 MB raw · 5.64 MB gzip |
+
+The difference was the report runtime's floor (9.76 MB raw, 3.01 MB gzip), beside
+Quarto's own plotly.js. Since the report and the combined file share one runtime, a report
+embeds the combined runtime's floor (`combined-runtime-floor.html`, its serverless-ci
+budget line: 12.45 MB raw, 3.91 MB gzip) and drops Quarto's plotly.js (4.85 MB raw), so a
+report-only file is smaller than before (penguins 6.04 → 5.47 MB gzip, ampliseq 7.50 →
+6.81 MB, advviz 7.24 → 6.82 MB) and differs from the combined file by its config alone.
+
+**Fallback-only, and why.** Text and highlight tiles (the narrative is Quarto's; a text
+tile's live values are the export's, not the panel's); frozen tiles under a filtered
+exported state; whatever producer A omits; a whole report whose state pins data or
+definitions (the manifest carries current data), or engages selection groups, colour-by or
+split panels (the report host has no group store); a report rendered for a non-owner;
+the Python runtime (the report path builds with `python_runtime="off"`, so its candidates
+stay frozen); and every report read with scripts blocked, rendered where the runtime is not
+built, or rendered by a reader whose client cannot fetch the manifest
+(`DepictioClient.report_runtime()` prints nothing and the fallbacks stand). A reader's own
+render embeds the same runtime from its last cell, beside Quarto's plotly.js.

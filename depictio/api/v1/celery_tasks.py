@@ -3541,3 +3541,93 @@ __all__: list[str] = [
     "manifest_refresh_dc_task",
     "export_static_bundle",
 ]
+
+
+_EXTRACT_TIME_LIMIT_S = 200
+
+
+@celery_app.task(
+    name="depictio.embed.extract_figure", soft_time_limit=150, time_limit=_EXTRACT_TIME_LIMIT_S
+)
+def extract_component_figure_task(payload: dict) -> dict:
+    """Read a component's Plotly figure off the viewer's embed page (headless).
+
+    ``payload``: ``{dashboard_id, component_id, state, theme, expect, user_id,
+    job_id}``, where ``expect`` is ``"image"`` for a renderer that is not
+    Plotly (a PNG of the tile comes back instead of a figure). The page is
+    loaded as ``user_id``, the user who asked, through a token minted here for
+    this one pass and revoked after it: never with the admin's session.
+    Returns a ``ComponentFigureResponse``-shaped dict; failures are reported in
+    it rather than raised so the poll endpoint can hand the reason to the
+    notebook.
+    """
+    import asyncio
+
+    from beanie import init_beanie
+    from celery.exceptions import SoftTimeLimitExceeded
+    from pymongo import AsyncMongoClient
+
+    from depictio.api.v1.configs.config import MONGODB_URL, settings
+    from depictio.api.v1.services.embed.extract import extract_component_figure
+    from depictio.api.v1.services.notebook_export import jobs
+    from depictio.api.v1.services.task_tokens import (
+        browser_token_payload,
+        mint_task_token,
+        revoke,
+    )
+    from depictio.models.models.users import TokenBeanie, UserBeanie
+
+    user_id = str(payload.get("user_id") or "")
+    job_id = str(payload.get("job_id") or "")
+    if not user_id:
+        # A pass queued before passes ran as their requester: there is nobody
+        # to run it as, and the admin is not an option.
+        return {"status": "error", "figure": None, "reason": "no requester for this extraction"}
+
+    async def run() -> dict:
+        client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
+        token = None
+        try:
+            await init_beanie(
+                database=client[settings.mongodb.db_name],
+                document_models=[TokenBeanie, UserBeanie],
+            )
+            token = await mint_task_token(
+                user_id, f"embed-extract-{job_id or 'pass'}", _EXTRACT_TIME_LIMIT_S + 300
+            )
+            return await extract_component_figure(
+                dashboard_id=str(payload.get("dashboard_id")),
+                component_id=str(payload.get("component_id")),
+                state=dict(payload.get("state") or {}),
+                theme=str(payload.get("theme") or "light"),
+                expect="image" if payload.get("expect") == "image" else "plotly",
+                token_payload=browser_token_payload(token),
+            )
+        finally:
+            try:
+                await revoke(token)
+            finally:
+                await client.close()
+
+    status = "failed"
+    try:
+        result = asyncio.run(run())
+        status = "success" if result.get("status") == "ready" else "failed"
+        return result
+    except SoftTimeLimitExceeded:
+        raise
+    except Exception as exc:
+        # str(exc) is empty for several Playwright/asyncio exceptions (bare
+        # TimeoutError, CancelledError); repr always carries the exception
+        # type, so the log line is never silently blank. The notebook gets a
+        # sentence: the exception can carry worker paths.
+        reason = str(exc) or repr(exc)
+        logger.warning(f"embed extract failed for {payload.get('component_id')}: {reason}")
+        return {
+            "status": "error",
+            "figure": None,
+            "reason": "the component could not be extracted (the server log has the details)",
+        }
+    finally:
+        if job_id:
+            jobs.finish(job_id, status)

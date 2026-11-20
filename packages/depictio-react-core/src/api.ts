@@ -1248,6 +1248,182 @@ export async function fetchFunnelValues(
   return res.json();
 }
 
+// =============================================================================
+// Notebook export (dashboard → a Quarto document, and its rendered report)
+// =============================================================================
+
+/** How a component reaches the notebook: as explicit code, re-rendered
+ *  through the API with the exported state, or not at all (with a reason). */
+export type NotebookInclusion = 'code' | 'api' | 'omitted';
+
+export interface NotebookPreflightComponent {
+  index: string;
+  title?: string | null;
+  component_type: string;
+  kind?: string | null;
+  status: NotebookInclusion;
+  /** What an `api` tile looks like in the report: a Plotly figure, static HTML,
+   *  or a PNG snapshot of a renderer that is not Plotly. */
+  output?: 'interactive' | 'static' | 'snapshot' | null;
+  reason?: string | null;
+  name?: string | null;
+  tab?: string | null;
+  section?: string | null;
+}
+
+export interface NotebookPreflight {
+  components: NotebookPreflightComponent[];
+  dcs: { dc_id: string; tag?: string | null; rows?: number | null }[];
+  stages: { index?: string | null; label?: string | null; rows_by_dc: Record<string, number | null> }[];
+  warnings: string[];
+  /** Whether this deployment offers the rendered HTML report as well. */
+  render_available?: boolean;
+  counts: Record<string, number>;
+  /** Whether this caller can have the combined report + dashboard file. */
+  combined_available?: boolean;
+  /** Why not, when it cannot (the export then defaults to the dashboard alone). */
+  combined_reason?: string | null;
+}
+
+/** What a render produces: the report alone, or the report and the dashboard
+ *  in one file behind a "Report | Dashboard" switch. */
+export type NotebookRenderOutput = 'report' | 'combined';
+/** The view a combined file opens on. */
+export type CombinedDefaultView = 'report' | 'dashboard';
+
+/** A render job: the notebook being executed on a worker, which takes minutes. */
+export interface NotebookRenderStatus {
+  job_id: string;
+  status: 'queued' | 'running' | 'ready' | 'error';
+  phase?: string | null;
+  filename?: string | null;
+  size?: number | null;
+  reason?: string | null;
+  /** The PDF beside the report, when one was asked for and rendered. */
+  pdf_filename?: string | null;
+  /** Why the PDF is missing, when it was asked for and failed. */
+  pdf_error?: string | null;
+}
+
+/** What an export will contain, before anything is generated. `state` is an
+ *  `AnalysisState` (see `analysisState.ts`). */
+export async function fetchNotebookPreflight(
+  dashboardId: string,
+  state: unknown,
+  signal?: AbortSignal,
+): Promise<NotebookPreflight> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/preflight`, {
+    method: 'POST',
+    body: JSON.stringify({ state }),
+    signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to prepare the notebook export');
+  return res.json();
+}
+
+/** The report's look: Depictio's Paper chrome (the app's default, from the
+ *  instance brand), or the classic one (Quarto's stock page, Plotly's figures). */
+export type NotebookTheme = 'paper' | 'classic';
+
+/** The PDF's colours: tab colours on headings and in the contents, or the
+ *  print-friendly neutral text colour throughout. */
+export type NotebookPdfStyle = 'colour' | 'mono';
+
+/** Download the dashboard as a Quarto document (`.qmd`). The server never
+ *  executes it: the document is generated text, run by whoever renders it. */
+export async function exportNotebook(
+  dashboardId: string,
+  state: unknown,
+  theme: NotebookTheme = 'paper',
+  pdf = false,
+  pdfStyle: NotebookPdfStyle = 'colour',
+): Promise<string> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({ state, theme, pdf, pdf_style: pdfStyle }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export the notebook');
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get('Content-Disposition'),
+    `dashboard_${dashboardId}.qmd`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
+/** Start rendering the dashboard's notebook into an HTML report.
+ *
+ *  This is the one export path that executes: the notebook runs end to end on
+ *  a worker, with the caller's own rights, and every tile the export renders
+ *  rather than computes costs a browser pass. Minutes, not seconds — hence a
+ *  job id to poll rather than a file. */
+export async function startNotebookRender(
+  dashboardId: string,
+  state: unknown,
+  theme: NotebookTheme = 'paper',
+  options: {
+    output?: NotebookRenderOutput;
+    defaultView?: CombinedDefaultView;
+    pdf?: boolean;
+    pdfStyle?: NotebookPdfStyle;
+  } = {},
+): Promise<NotebookRenderStatus> {
+  const body: Record<string, unknown> = { state, theme };
+  if (options.output) body.output = options.output;
+  if (options.defaultView) body.default_view = options.defaultView;
+  if (options.pdf) body.pdf = true;
+  if (options.pdfStyle) body.pdf_style = options.pdfStyle;
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report render');
+  return res.json();
+}
+
+/** Where a render job is: queued, running, ready to download, or failed. */
+export async function fetchNotebookRenderStatus(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/render/${jobId}`, { signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the render status');
+  return res.json();
+}
+
+/** Download a finished report: the HTML, or the PDF rendered beside it. */
+export async function downloadNotebookRender(
+  jobId: string,
+  format: 'html' | 'pdf' = 'html',
+): Promise<string> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download?format=${format}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download the report');
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get('Content-Disposition'),
+    `report_${jobId}.${format}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 /** Payload for a card's numeric / QC secondary layout (histogram, threshold,
  *  completeness, attrition), computed server-side by the same dispatcher the
  *  saved card uses.

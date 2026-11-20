@@ -122,6 +122,11 @@ COPY --from=viewer-builder /build/depictio/viewer/dist-embed/embed.html \
 # The serverless bundle template every static export injects its manifest into.
 COPY --from=viewer-builder /build/depictio/viewer/dist-static/static.html \
     /app/depictio/viewer/dist-static/static.html
+# The runtime a rendered report embeds, alone or with the dashboard (same
+# build:static).
+COPY --from=viewer-builder /build/depictio/viewer/dist-static/combined-runtime.js \
+    /build/depictio/viewer/dist-static/combined-runtime.css \
+    /app/depictio/viewer/dist-static/
 COPY --from=services /opt/depictio-services /opt/depictio-services
 COPY docker-images/allinone/entrypoint.py /usr/local/bin/depictio-allinone
 

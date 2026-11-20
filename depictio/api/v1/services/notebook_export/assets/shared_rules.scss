@@ -1,0 +1,43 @@
+
+// Depictio report chrome: the brand's SCSS rules layer (Quarto `brand`,
+// `defaults.bootstrap.rules`). Compiled once per colour scheme.
+html { scroll-padding-top: 72px; }
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+// The header bar stays on screen, slimmer once the page scrolls, over a
+// frosted copy of the page colour.
+body .dpx-appbar {
+  position: sticky; top: 0; z-index: 1030;
+  background: rgba($body-bg, 0.92);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px); backdrop-filter: saturate(1.4) blur(10px);
+  transition: box-shadow .2s ease;
+}
+body .dpx-appbar.dpx-scrolled { box-shadow: 0 1px 0 var(--gl-hair), 0 8px 20px -16px var(--gl-shade-b); }
+body .dpx-appbar .dpx-appbar-inner { transition: min-height .2s ease, padding .2s ease; }
+body .dpx-appbar.dpx-scrolled .dpx-appbar-inner { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
+// Type: Paper's scale, one step quieter than the Mantine defaults the
+// notebook chrome sets for every renderer. The document's parts (filters,
+// results, methods), a dashboard tab, a section: three clear levels.
+body section[data-dpx-kind] > h2 {
+  font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.015em;
+  padding-bottom: .55rem; margin-top: 2.25rem; border-bottom: 1px solid var(--gl-hair);
+}
+body section[data-dpx-kind="tab"] > h3 { font-size: 1.3rem; line-height: 1.35; letter-spacing: -0.012em; margin-top: 1.75rem; }
+body section[data-dpx-kind="section"] > h4 { font-size: 1.0625rem; line-height: 1.45; letter-spacing: -0.006em; }
+body .quarto-title-block .subtitle { font-size: 1.125rem; font-weight: 400; line-height: 1.5; color: var(--gl-muted); }
+// The header's record: a quiet two-column list, not a data table.
+body .dpx-provenance table { font-size: .875rem; margin: .25rem 0 1rem; }
+body .dpx-provenance table td { padding: .4rem .75rem .4rem 0; border-bottom: 1px solid var(--gl-hair); }
+body .dpx-provenance table tr:last-child td { border-bottom: 0; }
+body .dpx-provenance table td:first-child { width: 9.5rem; white-space: nowrap; color: var(--gl-muted); }
+body .dpx-provenance table td:first-child strong { font-weight: 600; }
+// Callouts: Paper's rounded note, a hairline frame and a thin accent edge.
+.callout:not(.dpx-about) {
+  border-radius: $border-radius-sm; border: 1px solid var(--gl-hair);
+  box-shadow: 0 1px 2px var(--gl-shade-a);
+}
+.callout:not(.dpx-about) .callout-header { border-top-left-radius: $border-radius-sm; border-top-right-radius: $border-radius-sm; }
+// Figure captions: quiet, close to their figure.
+.quarto-float-caption, figcaption { line-height: 1.45; margin-top: .5rem; }
+// Links: the brand's ink, underlined only on hover in the chrome around the text.
+#TOC a, .dpx-footer a, .dpx-provenance a { text-decoration: none; }
+#TOC a:hover, .dpx-footer a:hover, .dpx-provenance a:hover { text-decoration: underline; }

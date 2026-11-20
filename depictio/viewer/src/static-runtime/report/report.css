@@ -1,0 +1,81 @@
+/* The report host's own chrome: how a placeholder behaves around the runtime.
+ *
+ * Every selector here starts on a report class, so the scoping pass
+ * (vite-plugins/scope-css.ts) leaves them as written: they are the only rules
+ * of the runtime that reach outside the runtime's own roots, and each one only
+ * ever touches a placeholder the export wrote. */
+
+/* A drawn tile hides the export's own output for it: one tile, never two. */
+.depictio-tile[data-depictio-mounted] > .depictio-fallback {
+  display: none;
+}
+
+/* Until it is drawn (and forever, if the runtime cannot draw it) the mount
+   node takes no room: a tile the runtime leaves alone reads exactly as the
+   export wrote it. */
+.depictio-tile:not([data-depictio-mounted]) > .depictio-report-mount {
+  display: none;
+}
+
+.depictio-tile > .depictio-report-mount {
+  margin: 0.75rem 0 1.25rem;
+}
+
+/* A row of cards, as the dashboard lays a card strip out. */
+.depictio-report-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.depictio-report-filters {
+  margin: 0.75rem 0 1.25rem;
+}
+
+/* The filter panel is a rail in the app; here it is a block of the page. Its
+   intro line spans the page; the controls keep the width the app's left panel
+   gives them, not the report's full column. */
+.depictio-report-filters .depictio-report-filters-body {
+  max-width: 100%;
+}
+
+.depictio-report-filters .depictio-report-panel {
+  max-width: 380px;
+}
+
+/* The Mantine portal root (dropdowns, tooltips, the funnel modal) sits at the
+   end of <body> and carries the runtime's tokens without taking room. */
+.depictio-report-portal {
+  position: relative;
+  z-index: 1100;
+}
+
+/* The document numbers each figure and captions it (the tile's caption, then
+   where its data came from): the renderer's own copy under the plot would say
+   it twice. */
+.depictio-tile[data-depictio-mounted] [data-testid='figure-caption'],
+.depictio-tile[data-depictio-mounted] [data-testid='advanced-viz-caption'] {
+  display: none;
+}
+
+/* "About this component". A card's own info action stays on screen in a
+   report (on the dashboard it waits for a hover, with the rest of the row): a
+   reader of a document has no reason to hover a number to find its text. */
+.depictio-tile[data-depictio-mounted]
+  .depictio-component-chrome[data-component-type='card']
+  > .depictio-component-actions
+  > [data-tile-action='description'] {
+  opacity: 1;
+  pointer-events: auto;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+}
+
+/* Any other tile's "i" is the report's own, in the tile's action row above it
+   (the export's chrome script): the renderer's hover copy would be a second. */
+.depictio-tile:has(> .dpx-tile-links .dpx-info)
+  .depictio-component-chrome:not([data-component-type='card'])
+  > .depictio-component-actions
+  > [data-tile-action='description'] {
+  display: none;
+}

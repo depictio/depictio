@@ -797,6 +797,11 @@ export {
   fetchLinkMappingPreview,
   // Funnel filtering (issue #939)
   fetchFunnelValues,
+  fetchNotebookPreflight,
+  exportNotebook,
+  startNotebookRender,
+  fetchNotebookRenderStatus,
+  downloadNotebookRender,
   // MultiQC management (multipart uploads)
   createAssetDataCollection,
   createMultiQCDataCollection,
@@ -1390,6 +1395,9 @@ export type {
   FunnelTargetResult,
   FunnelStage,
   FunnelValuesResponse,
+  NotebookInclusion,
+  NotebookPreflight,
+  NotebookPreflightComponent,
   // Server-to-server push types
   MigrationRequestStatus,
   MigrationTransferMode,
@@ -1410,6 +1418,11 @@ export type {
   MigrationInviteState,
   MigrationInviteDefaults,
   MigrationInviteList,
+  NotebookRenderStatus,
+  NotebookPdfStyle,
+  NotebookTheme,
+  NotebookRenderOutput,
+  CombinedDefaultView,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
@@ -1784,6 +1797,27 @@ export {
   residueEntityFromFilters,
   isResidueFilter,
 } from './selection';
+
+export {
+  ANALYSIS_STATE_VERSION,
+  buildAnalysisState,
+  toAnalysisFilter,
+  toAnalysisGroup,
+  toAnalysisColorBy,
+} from './analysisState';
+export type {
+  AnalysisState,
+  AnalysisFilter,
+  AnalysisFilterMetadata,
+  AnalysisGroup,
+  AnalysisColorBy,
+  AnalysisFunnel,
+  AnalysisSplitPanel,
+  AnalysisContext,
+  BuildAnalysisStateInput,
+} from './analysisState';
+
+export { panelsForGrouping } from './splitPanels';
 
 // What changed since the reader's last visit (#1397).
 export {

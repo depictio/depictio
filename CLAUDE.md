@@ -323,6 +323,50 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   frames each keep their rows in order but may land in any order. Never feed deltalake a
   multi-batch stream of a table whose order is data
 
+### Notebook export & Python import
+- Dashboard → one Quarto document (`.qmd`), nothing else: `depictio/api/v1/services/notebook_export/` (generator),
+  `dashboards_endpoints/notebook_export.py` (endpoints), `AnalysisState` contract in
+  `depictio/models/models/analysis_state.py` (+ committed `analysis_state.schema.json`)
+- Any component in a notebook: `depictio/notebook/` (`DepictioClient`), headless figure
+  extraction via the viewer's `/embed/{dashboard}/{component}` route (`services/embed/`)
+- The rendered HTML report is that same `.qmd` run by `quarto render` on a worker, behind
+  `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (on). The server render never runs an author's Python:
+  code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`), and a dashboard
+  carrying them renders for project owners only; anonymous visitors cannot render
+- **Nothing dynamic reaches the `.qmd` raw**: Quarto runs inline `` `{python}` ``, chunk fences and
+  `{{< shortcodes >}}` (in prose, raw HTML/typst, code-cell strings and cell *output*). Every site
+  writes through `depictio/notebook/qmd_safe.py` (`esc`, `defuse`, `comment`, `typst_str`,
+  `meta_text`), `cells.render_cell` defuses every cell again, and the kernel's outputs are
+  shortcode-free (`inert_outputs`). `test_injection.py` renders a poisoned export through Quarto
+- Quarto runs with an allow-listed environment (`render.render_environment`: no S3/Mongo/`DEPICTIO_*`
+  secrets, only the API URL and a token the worker mints at task start and revokes), in its own
+  process group (killed whole on timeout). Jobs (`notebook_export/jobs.py`) are bound to their
+  requester in every state, limited per user (429), reports bounded deployment-wide
+  (`report_concurrency`, below the report worker's pool), kept `report_retention_hours`. Headless
+  extraction runs as the requester, never with the admin token
+- Design: `docs/design/rfc-notebook-export.md`
+
+### Offline outputs: one manifest, one runtime, two hosts
+- The serverless bundle (`/serverless/export-static`, `static.html`) and the rendered notebook report
+  embed the same `BundleManifest` from producer A (`depictio/serverless/producer_a.py`) and the same
+  static runtime. Module swaps live once in `viewer/vite-plugins/static-runtime.ts`;
+  `check:static-shim` walks both entries (`static-runtime/main.tsx`, `static-runtime/combined/main.tsx`)
+- Report host: ONE runtime, `dist-static/combined-runtime.{js,css}` (built by `build:static`). A
+  report-only file and a combined report+dashboard file differ only in the report config's
+  `combined` section: without it `combined/main.tsx` boots the report host alone (no Dashboard
+  switch, no iframe). `depictio dashboard combine-report` adds that section offline. The worker
+  builds the manifest before the render and `combined.embed_runtime` places the runtime where
+  Quarto's plotly.js was; `report_runtime.runtime_parts` is the one composer (worker + `DepictioClient`),
+  `combined-runtime.mjs` its JS twin (byte parity: `test_runtime_compose_parity.py`). The
+  generator wraps each tile in `data-depictio-tile="<tab>:<index>"` with its own output as
+  `.depictio-fallback`; `depictio/serverless/report.py` builds the block (owner-only, like a static
+  export; pinned/grouped states refused); `POST /serverless/report-manifest/{id}` is a Celery job
+  (202, then `GET .../job/{job_id}`)
+- Which tile mounts: `static-core/src/reportMount.ts` (live always, frozen only at the default state)
+- `BundleManifest.initial_filters` is the report's exported state; a contract change means
+  regenerating `serverless.schema.json` and `manifest-basic.json`
+- Design: `docs/design/rfc-serverless-deployment.md` §14, `rfc-notebook-export.md` §3.9
+
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
   `DEPICTIO_AUTH_SINGLE_USER_MODE`
