@@ -49,7 +49,7 @@ Both use the same fields; a folder just splits the outputs into files.
 | `source_url` | CAN | str | Where a non-nf-core definition was read from (a Snakemake wrapper dir, a Galaxy tool XML). Format-checked as http(s) only — there is no registry to check it against. |
 | `biotools_url` | **MUST** (may be `null`) | str \| null | Full `https://bio.tools/<id>` URL; `null` when bio.tools has no entry. |
 | `edam_topics` | CAN | list[str] | Full EDAM URLs. |
-| `stage` | CAN | one of `qc`, `alignment`, `quantification`, `peaks`, `variants`, `fusions`, `taxonomy`, `annotation`, `immune`, `differential`, `benchmarking`, `other` | Where the tool's outputs sit in a pipeline. A dashboard composed from the catalog (`depictio template compose`) opens one tab per stage present, in this order. Unset reads as `other`; an output can override it. |
+| `stage` | CAN | one of `qc`, `alignment`, `assembly`, `quantification`, `single_cell`, `differential`, `variants`, `tumour_profiling`, `fusions`, `epigenomics`, `taxonomy`, `genome_annotation`, `functional_annotation`, `immune`, `benchmarking`, `other` | The tool's analysis family. The catalog site filters and groups tools by it, and a dashboard composed from the catalog (`depictio template compose`) opens one tab per stage present, in this order. Unset reads as `other`; an output can override it. |
 | `outputs` | **MUST** (flat file) | list[Output] | In a folder, these are the sibling files. |
 
 **Identity is declared, not derived.** The payload reads a tool's identity from

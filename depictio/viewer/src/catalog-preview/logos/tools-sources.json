@@ -1,0 +1,135 @@
+{
+  "multiqc": {
+    "file": "multiqc.svg",
+    "width": 253,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/MultiQC/logo/HEAD/logos/multiqc_logo_dark.svg"
+  },
+  "qiime2": {
+    "file": "qiime2.webp",
+    "width": 106,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/qiime2/logos/HEAD/raster/transparent/qiime2-rect-400.png"
+  },
+  "deseq2": {
+    "file": "deseq2.webp",
+    "width": 42,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/Bioconductor/BiocStickers/HEAD/DESeq2/DESeq2.png"
+  },
+  "edger": {
+    "file": "edger.webp",
+    "width": 42,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/Bioconductor/BiocStickers/HEAD/edgeR/edgeR.png"
+  },
+  "dexseq": {
+    "file": "dexseq.webp",
+    "width": 42,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/Bioconductor/BiocStickers/HEAD/DEXSeq/DEXSeq.png"
+  },
+  "pangolin": {
+    "file": "pangolin.webp",
+    "width": 50,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/cov-lineages/pangolin/HEAD/docs/logo.png"
+  },
+  "nextclade": {
+    "file": "nextclade.svg",
+    "width": 48,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/nextstrain/nextclade/HEAD/packages/nextclade-web/src/assets/img/nextclade_logo.svg"
+  },
+  "openms": {
+    "file": "openms.webp",
+    "width": 112,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/OpenMS/OpenMS/HEAD/cmake/MacOSX/openms_logo_small_transparent.png"
+  },
+  "quast": {
+    "file": "quast.webp",
+    "width": 140,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/ablab/quast/HEAD/quast_libs/html_saver/static/img/quast_logo_black.png"
+  },
+  "cooler": {
+    "file": "cooler.webp",
+    "width": 136,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/open2c/cooler/HEAD/docs/cooler_logo.png"
+  },
+  "cooltools": {
+    "file": "cooltools.webp",
+    "width": 48,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/open2c/cooltools/HEAD/docs/figs/cooltools-logo-futura.png"
+  },
+  "simpleaf": {
+    "file": "simpleaf.webp",
+    "width": 48,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/COMBINE-lab/simpleaf/HEAD/docs/logo.png"
+  },
+  "taxpasta": {
+    "file": "taxpasta.webp",
+    "width": 92,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/taxprofiler/taxpasta/HEAD/docs/assets/images/taxpasta-logo-text.png"
+  },
+  "gtdbtk": {
+    "file": "gtdbtk.svg",
+    "width": 97,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/Ecogenomics/GTDBTk/HEAD/docs/src/_static/GTDBTk.svg"
+  },
+  "mirtop": {
+    "file": "mirtop.webp",
+    "width": 86,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/miRTop/mirtop/HEAD/artwork/logo.png"
+  },
+  "dbcan": {
+    "file": "dbcan.webp",
+    "width": 130,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/linnabrown/run_dbcan/HEAD/docs/_static/img/dbCAN3_logo.png"
+  },
+  "damageprofiler": {
+    "file": "damageprofiler.webp",
+    "width": 44,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/Integrative-Transcriptomics/DamageProfiler/HEAD/docs/contents/images/logo.png"
+  },
+  "cellbender": {
+    "file": "cellbender.webp",
+    "width": 65,
+    "height": 48,
+    "wordmark": false,
+    "source": "https://raw.githubusercontent.com/broadinstitute/CellBender/HEAD/docs/source/_static/design/logo_250_185.png"
+  },
+  "bowtie2": {
+    "file": "bowtie2.webp",
+    "width": 113,
+    "height": 48,
+    "wordmark": true,
+    "source": "https://raw.githubusercontent.com/BenLangmead/bowtie2/HEAD/doc/images/bowtie_logo.png"
+  }
+}

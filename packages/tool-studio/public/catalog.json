@@ -454,7 +454,7 @@
           "yamlPath": "depictio/catalog/agat/statistics.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "genome_annotation"
     },
     {
       "biotools_url": null,
@@ -780,7 +780,7 @@
           "yamlPath": "depictio/catalog/ampcombi/summary.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/anota2seq",
@@ -1929,7 +1929,7 @@
           "yamlPath": "depictio/catalog/assemblyscan/stats.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/ataqv",
@@ -2560,7 +2560,7 @@
           "yamlPath": "depictio/catalog/ataqv/tss_coverage.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": null,
@@ -6805,7 +6805,7 @@
           "yamlPath": "depictio/catalog/bismark/window_pca.yaml"
         }
       ],
-      "stage": "alignment"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": "https://bio.tools/bowtie2",
@@ -7301,7 +7301,7 @@
           "yamlPath": "depictio/catalog/busco/composition.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/CellBender",
@@ -7408,7 +7408,7 @@
           "yamlPath": "depictio/catalog/cellbender/metrics.yaml"
         }
       ],
-      "stage": "quantification"
+      "stage": "single_cell"
     },
     {
       "biotools_url": null,
@@ -10161,7 +10161,7 @@
           "yamlPath": "depictio/catalog/cellranger/pca_variance.yaml"
         }
       ],
-      "stage": "quantification"
+      "stage": "single_cell"
     },
     {
       "biotools_url": "https://bio.tools/checkm2",
@@ -10452,7 +10452,7 @@
           "yamlPath": "depictio/catalog/checkm2/quality_report.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/checkv",
@@ -10594,7 +10594,7 @@
           "yamlPath": "depictio/catalog/checkv/quality_summary.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": null,
@@ -10672,7 +10672,7 @@
           "yamlPath": "depictio/catalog/chord/prediction.yaml"
         }
       ],
-      "stage": "other"
+      "stage": "tumour_profiling"
     },
     {
       "biotools_url": null,
@@ -10736,7 +10736,7 @@
           "yamlPath": "depictio/catalog/cmaple/tree_layout.yaml"
         }
       ],
-      "stage": "alignment"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/cnvkit",
@@ -11256,7 +11256,7 @@
           "yamlPath": "depictio/catalog/combgc/tool_overlap.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/freec",
@@ -11497,7 +11497,7 @@
           "yamlPath": "depictio/catalog/cooler/contact_matrix.yaml"
         }
       ],
-      "stage": "quantification"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": "https://bio.tools/cooltools",
@@ -12114,7 +12114,7 @@
           "yamlPath": "depictio/catalog/cooltools/insulation.yaml"
         }
       ],
-      "stage": "quantification"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": null,
@@ -13593,7 +13593,7 @@
           "yamlPath": "depictio/catalog/cuppa/predictions.yaml"
         }
       ],
-      "stage": "other"
+      "stage": "tumour_profiling"
     },
     {
       "biotools_url": null,
@@ -14158,7 +14158,7 @@
           "yamlPath": "depictio/catalog/cutandrun/samples.yaml"
         }
       ],
-      "stage": "peaks"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": "https://bio.tools/damageprofiler",
@@ -14921,7 +14921,7 @@
           "yamlPath": "depictio/catalog/dbcan/tool_overlap.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/deeptools",
@@ -15376,7 +15376,7 @@
           "yamlPath": "depictio/catalog/deeptools/sample_pca.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": "https://bio.tools/deseq2",
@@ -19755,7 +19755,7 @@
           "yamlPath": "depictio/catalog/famsa/conservation.yaml"
         }
       ],
-      "stage": "alignment"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": null,
@@ -19825,7 +19825,7 @@
           "yamlPath": "depictio/catalog/fcsadaptor/actions.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": null,
@@ -19941,7 +19941,7 @@
           "yamlPath": "depictio/catalog/fcsgx/actions.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": null,
@@ -20575,7 +20575,7 @@
           "yamlPath": "depictio/catalog/funcscan/software_versions.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/fusioncatcher",
@@ -21598,7 +21598,7 @@
           "yamlPath": "depictio/catalog/genomescope/summary.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/gsea",
@@ -22323,7 +22323,7 @@
           "yamlPath": "depictio/catalog/gtf/transcripts.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "genome_annotation"
     },
     {
       "biotools_url": "https://bio.tools/hamronization",
@@ -22773,7 +22773,7 @@
           "yamlPath": "depictio/catalog/hamronization/tool_overlap.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/hap.py",
@@ -22993,7 +22993,7 @@
           "yamlPath": "depictio/catalog/hicexplorer/distance_decay.yaml"
         }
       ],
-      "stage": "quantification"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": "https://bio.tools/hic-pro",
@@ -23354,7 +23354,7 @@
           "yamlPath": "depictio/catalog/hicpro/pair_stats.yaml"
         }
       ],
-      "stage": "alignment"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": null,
@@ -23643,7 +23643,7 @@
           "yamlPath": "depictio/catalog/hmf_bamtools/summary.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "alignment"
     },
     {
       "biotools_url": "https://bio.tools/hmmer3",
@@ -24080,7 +24080,7 @@
           "yamlPath": "depictio/catalog/hmmer/hmmsearch_domtbl.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/homer",
@@ -24425,7 +24425,7 @@
           "yamlPath": "depictio/catalog/homer/tss_distance_profile.yaml"
         }
       ],
-      "stage": "peaks"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": null,
@@ -24725,7 +24725,7 @@
           "yamlPath": "depictio/catalog/interproscan/matches.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/isoseq3",
@@ -25594,7 +25594,7 @@
           "yamlPath": "depictio/catalog/jellyfish/histogram.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/kallisto",
@@ -27826,7 +27826,7 @@
           "yamlPath": "depictio/catalog/macs2/summit_profile.yaml"
         }
       ],
-      "stage": "peaks"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": null,
@@ -28364,7 +28364,7 @@
           "yamlPath": "depictio/catalog/mag/contig_depths.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "assembly"
     },
     {
       "biotools_url": null,
@@ -29195,7 +29195,7 @@
           "yamlPath": "depictio/catalog/mcquant/segmenter_agreement.yaml"
         }
       ],
-      "stage": "quantification"
+      "stage": "single_cell"
     },
     {
       "biotools_url": null,
@@ -29778,7 +29778,7 @@
           "yamlPath": "depictio/catalog/merqury/sequence_qv.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/metaphlan",
@@ -32076,7 +32076,7 @@
           "yamlPath": "depictio/catalog/mirtop/top_variable_heatmap.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "quantification"
     },
     {
       "biotools_url": "https://bio.tools/mosdepth",
@@ -36285,7 +36285,7 @@
           "yamlPath": "depictio/catalog/nextclade/report.yaml"
         }
       ],
-      "stage": "variants"
+      "stage": "taxonomy"
     },
     {
       "biotools_url": "https://bio.tools/nonpareil",
@@ -37424,7 +37424,7 @@
           "yamlPath": "depictio/catalog/orthofinder/species_stats.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "taxonomy"
     },
     {
       "biotools_url": "https://bio.tools/pangolin_cov-lineages",
@@ -37534,7 +37534,7 @@
           "yamlPath": "depictio/catalog/pangolin/report.yaml"
         }
       ],
-      "stage": "variants"
+      "stage": "taxonomy"
     },
     {
       "biotools_url": null,
@@ -38473,7 +38473,7 @@
           "yamlPath": "depictio/catalog/prokka/summary.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "genome_annotation"
     },
     {
       "biotools_url": null,
@@ -39406,7 +39406,7 @@
           "yamlPath": "depictio/catalog/proteinannotator/sample_summary.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": null,
@@ -39936,7 +39936,7 @@
           "yamlPath": "depictio/catalog/proteinfamilies/family_metadata.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": null,
@@ -40788,7 +40788,7 @@
           "yamlPath": "depictio/catalog/proteinfold/residues.yaml"
         }
       ],
-      "stage": "other"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": null,
@@ -41839,7 +41839,7 @@
           "yamlPath": "depictio/catalog/qcatch/metrics_summary.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "single_cell"
     },
     {
       "biotools_url": "https://bio.tools/qiime2",
@@ -44757,7 +44757,7 @@
           "yamlPath": "depictio/catalog/quast/reference_report.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/repeatmasker",
@@ -44972,7 +44972,7 @@
           "yamlPath": "depictio/catalog/repeatmasker/repeat_classes.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "genome_annotation"
     },
     {
       "biotools_url": null,
@@ -45115,7 +45115,7 @@
           "yamlPath": "depictio/catalog/ribocode/orfs.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "genome_annotation"
     },
     {
       "biotools_url": null,
@@ -45259,7 +45259,7 @@
           "yamlPath": "depictio/catalog/ribotish/orfs.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "genome_annotation"
     },
     {
       "biotools_url": "https://bio.tools/ribowaltz",
@@ -46508,7 +46508,7 @@
           "yamlPath": "depictio/catalog/s4pred/secondary_structure.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "functional_annotation"
     },
     {
       "biotools_url": "https://bio.tools/salmon",
@@ -48419,7 +48419,7 @@
           "yamlPath": "depictio/catalog/seacr/peaks.yaml"
         }
       ],
-      "stage": "peaks"
+      "stage": "epigenomics"
     },
     {
       "biotools_url": "https://bio.tools/seqfu",
@@ -48914,7 +48914,7 @@
           "yamlPath": "depictio/catalog/seqtk/cutn_gaps.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": null,
@@ -49345,7 +49345,7 @@
           "yamlPath": "depictio/catalog/sigs/allocation.yaml"
         }
       ],
-      "stage": "variants"
+      "stage": "tumour_profiling"
     },
     {
       "biotools_url": null,
@@ -49526,7 +49526,7 @@
           "yamlPath": "depictio/catalog/simpleaf/mapping_metrics.yaml"
         }
       ],
-      "stage": "quantification"
+      "stage": "single_cell"
     },
     {
       "biotools_url": "https://bio.tools/snpeff",
@@ -53726,7 +53726,7 @@
           "yamlPath": "depictio/catalog/tama/transcripts.yaml"
         }
       ],
-      "stage": "annotation"
+      "stage": "genome_annotation"
     },
     {
       "biotools_url": "https://bio.tools/taxpasta",
@@ -54717,7 +54717,7 @@
           "yamlPath": "depictio/catalog/teal/telomere_length.yaml"
         }
       ],
-      "stage": "other"
+      "stage": "tumour_profiling"
     },
     {
       "biotools_url": "https://bio.tools/tiara",
@@ -54822,7 +54822,7 @@
           "yamlPath": "depictio/catalog/tiara/classifications.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": null,
@@ -54939,7 +54939,7 @@
           "yamlPath": "depictio/catalog/tidk/search_windows.yaml"
         }
       ],
-      "stage": "qc"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/truvari",
@@ -56780,7 +56780,7 @@
           "yamlPath": "depictio/catalog/viralmetagenome/samples_overview.yaml"
         }
       ],
-      "stage": "other"
+      "stage": "assembly"
     },
     {
       "biotools_url": "https://bio.tools/vsearch",

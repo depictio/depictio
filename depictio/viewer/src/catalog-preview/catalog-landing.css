@@ -1,0 +1,223 @@
+/* The catalog site's front page (Landing.tsx). Tool and pipeline cards are the
+ * gallery's own `cp-card`, KPIs depictio's DepictioCard, tiles the catalog's
+ * own renders: this file only lays them out. */
+:root[data-chrome='glass'] .cl-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 clamp(16px, 4vw, 40px);
+}
+:root[data-chrome='glass'] .cl-page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 1120px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding-top: clamp(16px, 5vh, 48px);
+}
+:root[data-chrome='glass'] .cl-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+:root[data-chrome='glass'] .cl-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+:root[data-chrome='glass'] .cl-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+:root[data-chrome='glass'] .cl-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 750;
+  letter-spacing: -0.022em;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .cl-lead {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .cl-search {
+  width: 100%;
+  max-width: 640px;
+}
+:root[data-chrome='glass'] .cl-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+:root[data-chrome='glass'] .cl-kpi {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+:root[data-chrome='glass'] .cl-kpi .depictio-card { height: 100%; }
+:root[data-chrome='glass'] .cl-totals {
+  margin: -6px 0 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-faint);
+}
+:root[data-chrome='glass'] .cl-strip {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+:root[data-chrome='glass'] .cl-strip-track {
+  display: flex;
+  gap: 36px;
+  width: max-content;
+  animation: cl-scroll 60s linear infinite;
+}
+:root[data-chrome='glass'] .cl-strip:hover .cl-strip-track {
+  animation-play-state: paused;
+}
+@keyframes cl-scroll {
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-chrome='glass'] .cl-strip-track { animation: none; flex-wrap: wrap; width: auto; justify-content: center; }
+}
+:root[data-chrome='glass'] .cl-strip-item {
+  padding: 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  opacity: 0.75;
+}
+:root[data-chrome='glass'] .cl-strip-item:hover,
+:root[data-chrome='glass'] .cl-strip-item:focus-visible {
+  opacity: 1;
+}
+:root[data-chrome='glass'] .cl-showcase-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 12px;
+}
+:root[data-chrome='glass'] .cl-tile {
+  overflow: hidden;
+  min-width: 0;
+}
+:root[data-chrome='glass'] .cl-tile-fig { grid-row: span 2; }
+:root[data-chrome='glass'] .cl-tile-table { height: 300px; }
+:root[data-chrome='glass'] .cl-tile-fig { height: 456px; }
+:root[data-chrome='glass'] .cl-tile-card { height: 144px; }
+:root[data-chrome='glass'] .cl-section-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .cl-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+:root[data-chrome='glass'] .cl-tool-card {
+  display: block;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+:root[data-chrome='glass'] .cl-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 28%;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  color: light-dark(
+    color-mix(in oklab, var(--bgl-tint) 82%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--bgl-tint) 70%, var(--mantine-color-white))
+  );
+  background: color-mix(in srgb, var(--bgl-tint) 15%, var(--gl-surface));
+}
+:root[data-chrome='glass'] .cl-mark-img {
+  background: none;
+  border-radius: 0;
+}
+:root[data-chrome='glass'] .cl-mark-img img {
+  display: block;
+  width: auto;
+  object-fit: contain;
+}
+:root[data-chrome='glass'] .cl-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-top: auto;
+  padding: 14px 0 16px;
+  border-top: 1px solid var(--gl-line, var(--mantine-color-default-border));
+  font-size: 12px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .cl-foot-links { display: inline-flex; gap: 16px; }
+:root[data-chrome='glass'] .cl-foot-links a { color: inherit; text-decoration: none; }
+:root[data-chrome='glass'] .cl-foot-links a:hover { text-decoration: underline; }
+@media (max-width: 47.99em) {
+  :root[data-chrome='glass'] :is(.cl-grid, .cl-showcase-grid) { grid-template-columns: minmax(0, 1fr); }
+  :root[data-chrome='glass'] .cl-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  :root[data-chrome='glass'] .cl-tile-fig { grid-row: auto; height: 320px; }
+}
+:root[data-chrome='glass'] .cl-section-note {
+  max-width: 80ch;
+  margin: -6px 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .cl-section-note a { color: var(--mantine-color-violet-6); }
+@media (max-width: 74.99em) {
+  :root[data-chrome='glass'] .cl-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* The project page's stat card (project-detail.css scopes it to .gp-main). */
+:root[data-chrome='glass'] .cl-page .pd-stat { display: grid; align-content: start; gap: 12px; }
+:root[data-chrome='glass'] .cl-page .pd-stat-head { display: flex; align-items: center; gap: 10px; }
+:root[data-chrome='glass'] .cl-page .pd-stat-chip {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
+  background: var(--gl-accent-soft); color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .cl-page .pd-stat-label { font-size: 13px; font-weight: 600; color: var(--gl-muted); }
+:root[data-chrome='glass'] .cl-page .pd-stat-value {
+  font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+  color: var(--gl-fg); font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .cl-page .pd-stat-sub { margin-top: 2px; font-size: 12.5px; color: var(--gl-muted); }
+:root[data-chrome='glass'] .cl-types { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
+:root[data-chrome='glass'] .cl-type {
+  display: flex; align-items: center; gap: 6px; padding: 2px 0; border: 0; background: none;
+  font: inherit; font-size: 12.5px; color: var(--gl-muted); cursor: pointer; text-align: left;
+}
+:root[data-chrome='glass'] .cl-type:hover { color: var(--gl-fg); }
+:root[data-chrome='glass'] .cl-type i { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+:root[data-chrome='glass'] .cl-type b { margin-left: auto; color: var(--gl-fg); font-variant-numeric: tabular-nums; }
+
+/* Tool logos are drawn for a light page: in dark mode they sit on a light plate. */
+:root[data-chrome='glass'][data-mantine-color-scheme='dark'] .cl-mark-img img {
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: var(--mantine-color-gray-0);
+}
+/* The gallery's tool grid: a card is a button, so reset what buttons centre. */
+.cp-tool-card { display: block; width: 100%; font: inherit; text-align: left; color: inherit; cursor: pointer; }
+.cp-tool-card .mantine-Text-root { text-align: left; }

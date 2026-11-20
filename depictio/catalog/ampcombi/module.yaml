@@ -2,11 +2,11 @@
 # candidate with physicochemistry and aligns it against a reference AMP database.
 id: ampcombi
 name: AMPcombi
-version: "1.2.0"
+version: "1.2.1"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ampcombi2/complete
 description: >-
   Aggregates, filters and classifies antimicrobial peptide predictions from
   several AMP tools into one summary per sample.
 homepage: https://github.com/paleobiotechnology/AMPcombi
 biotools_url: null  # no bio.tools entry for this tool
-stage: annotation
+stage: functional_annotation

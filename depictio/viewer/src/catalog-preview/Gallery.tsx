@@ -21,15 +21,16 @@ import {
   Box,
   Button,
   Card,
-  Chip,
   Collapse,
   Divider,
   Group,
+  Input,
   MultiSelect,
   Paper,
   Pill,
   ScrollArea,
   SegmentedControl,
+  SimpleGrid,
   Stack,
   Switch,
   Table,
@@ -45,6 +46,9 @@ import {
   CATALOG_ACCENT,
   IdentityLink,
   TypeBadge,
+  CATEGORIES,
+  CategoryTag,
+  categoryOf,
   lastSeg,
   logoFor,
   metaFor,
@@ -54,8 +58,9 @@ import type { OutputEntry, ToolEntry } from './shared';
 import OutputView from './OutputView';
 import CatalogHeader from './CatalogHeader';
 import ReleaseBar from './ReleaseBar';
+import { isPipeline, isWordmark, logoFor as toolLogo, ToolMark } from './toolMarks';
 
-type ViewMode = 'split' | 'cards' | 'table';
+type ViewMode = 'tools' | 'split' | 'table';
 type SortCol = 'tool' | 'output' | 'fixture';
 type SortDir = 'asc' | 'desc';
 const ACCENT = CATALOG_ACCENT;
@@ -70,7 +75,7 @@ const UNIT_HINT = 'Type and kind counts are renders; tool counts are outputs.';
  *  (so searching a column like "CHROM" or a kind like "volcano" finds it). */
 const searchBlob = (tool: ToolEntry, e: OutputEntry): string => {
   const o = e.output;
-  const parts: string[] = [tool.id, tool.name, o.id, o.description || '', o.mode || '', o.recipe || ''];
+  const parts: string[] = [tool.id, tool.name, categoryOf(tool).label, o.id, o.description || '', o.mode || '', o.recipe || ''];
   if (o.find) parts.push(JSON.stringify(o.find));
   if (o.columns) parts.push(...o.columns);
   for (const r of e.renders) {
@@ -271,10 +276,81 @@ const OutputCard: React.FC<{ tool: ToolEntry; entry: OutputEntry; onOpen: (id: s
  *  gallery's one display of it (an output's own versions are its VersionChip). */
 const ToolVersion: React.FC<{ version?: string | null }> = ({ version }) =>
   version ? (
-    <Text span className="cp-tool-ver" title={`Module revision ${version}`}>
-      v{version}
+    <Text span className="cp-tool-ver" title={`Revision ${version} of this depictio catalog module (not the tool's own version)`}>
+      module v{version}
     </Text>
   ) : null;
+
+/** One card per tool: its mark, name, version, counts and the kinds of
+ *  component it ships. A click narrows the browser to that tool. Pipeline
+ *  entries come after the tools, in their own group. */
+const ToolGrid: React.FC<{ groups: { tool: ToolEntry; entries: OutputEntry[] }[]; onPick: (id: string) => void }> = ({
+  groups,
+  onPick,
+}) => {
+  const card = ({ tool, entries }: { tool: ToolEntry; entries: OutputEntry[] }) => {
+    const types = [...new Set(entries.flatMap((e) => e.renders.map((r) => String(r.component_type))))];
+    const renders = entries.reduce((n, e) => n + e.renders.length, 0);
+    const logo = toolLogo(tool);
+    return (
+      <Card
+        key={tool.id}
+        withBorder
+        radius="md"
+        shadow="sm"
+        padding="md"
+        className="cp-card cp-tool-card"
+        style={{ textAlign: 'left' }}
+        component="button"
+        type="button"
+        onClick={() => onPick(tool.id)}
+      >
+        <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
+          <Group gap="sm" wrap="nowrap" align="center" style={{ minWidth: 0 }}>
+            <ToolMark tool={tool} size={logo && isPipeline(tool) ? 30 : 36} />
+            {!(logo && isWordmark(tool)) && (
+              <Text fw={700} size="sm" truncate>
+                {tool.name}
+              </Text>
+            )}
+          </Group>
+          <ToolVersion version={tool.version} />
+        </Group>
+        <Box mt={8}>
+          <CategoryTag stage={tool.stage} />
+        </Box>
+        <Text size="xs" c="dimmed" mt={6} ta="left">
+          {entries.length} output{entries.length === 1 ? '' : 's'} · {renders} renders
+        </Text>
+        {tool.description ? (
+          <Text size="xs" lineClamp={2} mt={4} ta="left">
+            {tool.description}
+          </Text>
+        ) : null}
+        <Group gap={4} mt={8} wrap="wrap">
+          <TypeBadges types={types} />
+        </Group>
+      </Card>
+    );
+  };
+  const tools = groups.filter((g) => !isPipeline(g.tool));
+  const pipelines = groups.filter((g) => isPipeline(g.tool));
+  return (
+    <Stack gap="lg">
+      {tools.length > 0 && <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">{tools.map(card)}</SimpleGrid>}
+      {pipelines.length > 0 && (
+        <div>
+          <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb="xs" style={{ letterSpacing: '0.06em' }}>
+            nf-core pipeline entries
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            {pipelines.map(card)}
+          </SimpleGrid>
+        </div>
+      )}
+    </Stack>
+  );
+};
 
 const ToolSection: React.FC<{
   tool: ToolEntry;
@@ -304,6 +380,7 @@ const ToolSection: React.FC<{
         <Title order={4} style={{ lineHeight: 1.1 }}>
           {tool.name}
         </Title>
+        <CategoryTag stage={tool.stage} />
         <ToolVersion version={tool.version} />
         <Badge size="sm" variant="light" color="gray" radius="sm">
           {entries.length}
@@ -410,14 +487,15 @@ const FlatTable: React.FC<{
         <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="md" stickyHeader>
           <Table.Thead>
             <Table.Tr>
-              <SortTh col="tool" width="14%">
+              <SortTh col="tool" width="13%">
                 Tool
               </SortTh>
-              <SortTh col="output" width="26%">
+              <Table.Th style={{ width: '15%' }}>Category</Table.Th>
+              <SortTh col="output" width="20%">
                 Output
               </SortTh>
-              <Table.Th style={{ width: '26%' }}>Components</Table.Th>
-              <Table.Th style={{ width: '18%' }}>Kind</Table.Th>
+              <Table.Th style={{ width: '22%' }}>Components</Table.Th>
+              <Table.Th style={{ width: '14%' }}>Kind</Table.Th>
               <SortTh col="fixture" width="10%">
                 Fixture
               </SortTh>
@@ -431,6 +509,9 @@ const FlatTable: React.FC<{
                 <Table.Tr key={entry.output.id} style={{ opacity: entry.ok ? 1 : 0.6 }}>
                   <Table.Td>
                     <ToolNameLink tool={tool} />
+                  </Table.Td>
+                  <Table.Td>
+                    <CategoryTag stage={tool.stage} />
                   </Table.Td>
                   <Table.Td>
                     <Group gap={6} wrap="wrap" align="baseline">
@@ -634,6 +715,7 @@ const Rail: React.FC<{
                 <Text size="sm" fw={700} lineClamp={1} style={{ flex: 1, textAlign: 'left' }}>
                   {g.tool.name}
                 </Text>
+                <CategoryTag stage={g.tool.stage} compact />
                 <ToolVersion version={g.tool.version} />
                 <Badge size="xs" variant="light" color="gray" circle className="gp-tag-plain cp-count">
                   {g.entries.length}
@@ -782,15 +864,22 @@ const Gallery: React.FC<{
   theme?: string;
   /** Tool ids to pre-filter on (from a `#tool=` deep link). */
   initialToolFilter?: string[];
-}> = ({ tools, selected = null, onOpen, theme, initialToolFilter }) => {
+  /** Back to the site's front page (the rose and "Tools catalog" in the bar). */
+  onHome?: () => void;
+  /** Component types to pre-filter on (from a `#type=` link, the front page's cards). */
+  initialTypeFilter?: string[];
+  initialCategoryFilter?: string[];
+}> = ({ tools, selected = null, onOpen, theme, initialToolFilter, onHome, initialTypeFilter, initialCategoryFilter }) => {
   const { paper, tone } = useCatalogPaper();
   const [query, setQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string[]>(initialTypeFilter ?? []);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [toolFilter, setToolFilter] = useState<string[]>(initialToolFilter ?? []);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>(initialCategoryFilter ?? []);
   const [fixtureOnly, setFixtureOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  // Nothing open: the tool grid. An output named by the URL: the browser.
+  const [viewMode, setViewMode] = useState<ViewMode>(selected || initialToolFilter?.length ? 'split' : 'tools');
   // Track collapsed sections (default: all open — a fresh tool shows expanded).
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const rail = useRail();
@@ -846,6 +935,7 @@ const Gallery: React.FC<{
     const q = query.trim().toLowerCase();
     return tools
       .filter((t) => toolFilter.length === 0 || toolFilter.includes(t.id))
+      .filter((t) => categoryFilter.length === 0 || categoryFilter.includes(categoryOf(t).id))
       .map((t) => {
         const entries = t.outputs.filter((o) => {
           if (fixtureOnly && !o.output.fixture) return false;
@@ -858,19 +948,21 @@ const Gallery: React.FC<{
         return { tool: t, entries };
       })
       .filter((g) => g.entries.length > 0);
-  }, [tools, query, typeFilter, kindFilter, toolFilter, fixtureOnly]);
+  }, [tools, query, typeFilter, kindFilter, toolFilter, categoryFilter, fixtureOnly]);
 
   const hasFilters =
     query.trim() !== '' ||
     typeFilter.length > 0 ||
     kindFilter.length > 0 ||
     toolFilter.length > 0 ||
+    categoryFilter.length > 0 ||
     fixtureOnly;
   const clearAll = () => {
     setQuery('');
     setTypeFilter([]);
     setKindFilter([]);
     setToolFilter([]);
+    setCategoryFilter([]);
     setFixtureOnly(false);
   };
 
@@ -920,7 +1012,7 @@ const Gallery: React.FC<{
   const paneToolId = groups.find((g) => g.entries.some((e) => e.output.id === paneId))?.tool.id;
 
   const activeFilterCount =
-    typeFilter.length + kindFilter.length + toolFilter.length + (fixtureOnly ? 1 : 0);
+    typeFilter.length + kindFilter.length + toolFilter.length + categoryFilter.length + (fixtureOnly ? 1 : 0);
 
   /** How much of the catalogue is on screen, in one wording used everywhere it
    *  is stated: the rail, the page header, and the top bar's totals. Outputs and
@@ -950,10 +1042,31 @@ const Gallery: React.FC<{
    * those count renders and add up to the catalogue's render total; a tool owns
    * outputs, which is what the section badges show. Leaving that unsaid was the
    * confusing part: six numbers that summed to neither total. */
+  const categoryOptions = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const t of tools) n.set(categoryOf(t).id, (n.get(categoryOf(t).id) ?? 0) + 1);
+    return CATEGORIES.filter((c) => n.has(c.id)).map((c) => ({ value: c.id, label: c.label, count: n.get(c.id) ?? 0 }));
+  }, [tools]);
+
   const facetPanel = (layout: 'stack' | 'row', search?: React.ReactNode) => {
     const wide = layout === 'row';
     const selects = (
       <>
+        <MultiSelect
+          label="Category"
+          placeholder={`any of ${categoryOptions.length}`}
+          data={categoryOptions}
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          comboboxProps={{ width: 320, position: 'bottom-start' }}
+          renderOption={({ option }) => (
+            <CategoryTag stage={option.value} count={categoryOptions.find((c) => c.value === option.value)?.count} />
+          )}
+          size="xs"
+          w={wide ? 210 : undefined}
+          searchable
+          clearable
+        />
         <MultiSelect
           label="Visualisation kind"
           placeholder={`any of ${kindOptions.length}`}
@@ -979,20 +1092,23 @@ const Gallery: React.FC<{
       </>
     );
     const types = (
-      <Box>
-        <Text size="xs" fw={500} mb={4}>
-          Component type
-        </Text>
-        <Chip.Group multiple value={typeFilter} onChange={setTypeFilter}>
-          <Group gap={6}>
-            {typeOptions.map((o) => (
-              <Chip key={o.value} value={o.value} size="xs" variant="outline" color={tone}>
-                {o.label} {o.count}
-              </Chip>
-            ))}
-          </Group>
-        </Chip.Group>
-      </Box>
+      <Input.Wrapper label="Component type" size="xs">
+        <Group gap={6} h={36} align="center" wrap="nowrap">
+          {typeOptions.map((o) => (
+            <TypeBadge
+              key={o.value}
+              type={o.value}
+              count={o.count}
+              active={typeFilter.includes(o.value)}
+              onClick={() =>
+                setTypeFilter(
+                  typeFilter.includes(o.value) ? typeFilter.filter((x) => x !== o.value) : [...typeFilter, o.value],
+                )
+              }
+            />
+          ))}
+        </Group>
+      </Input.Wrapper>
     );
     // Only offered when it can remove something. Every bundled output has a
     // fixture today, so an always-inert switch is one more control to read
@@ -1088,20 +1204,20 @@ const Gallery: React.FC<{
       onChange={(v) => setViewMode(v as ViewMode)}
       data={[
         {
+          value: 'tools',
+          label: (
+            <Group gap={6} wrap="nowrap">
+              {viewIcon('mdi:view-grid-outline', LayoutGrid)}
+              <span>Tools</span>
+            </Group>
+          ),
+        },
+        {
           value: 'split',
           label: (
             <Group gap={6} wrap="nowrap">
               {viewIcon('mdi:view-split-vertical', Columns2)}
               <span>Browse</span>
-            </Group>
-          ),
-        },
-        {
-          value: 'cards',
-          label: (
-            <Group gap={6} wrap="nowrap">
-              {viewIcon('mdi:view-grid-outline', LayoutGrid)}
-              <span>Cards</span>
             </Group>
           ),
         },
@@ -1132,6 +1248,7 @@ const Gallery: React.FC<{
    * credit and the icon keys (Tool Studio, docs, source). */
   const paperTopBar = (
     <CatalogHeader
+      onHome={onHome}
       context={`${tools.length} tools · ${totalOutputs} outputs · ${totalRenders} renders`}
       extras={
         <>
@@ -1253,6 +1370,7 @@ const Gallery: React.FC<{
                 theme={theme}
                 variant="pane"
                 toolId={paneToolId}
+                toolStage={tools.find((t) => t.id === paneToolId)?.stage ?? null}
               />
             ) : (
               <Stack align="center" justify="center" h="100%" gap="sm" p="xl">
@@ -1285,6 +1403,7 @@ const Gallery: React.FC<{
           theme={theme}
           toolId={owner?.id}
           onBack={() => onOpen(null)}
+          toolStage={owner?.stage ?? null}
         />
       );
     }
@@ -1324,23 +1443,6 @@ const Gallery: React.FC<{
           <Text size="xs" c="dimmed">
             {countLine}
           </Text>
-          {viewMode === 'cards' ? (
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              color="gray"
-              leftSection={
-                <Icon
-                  icon={allCollapsed ? 'mdi:unfold-more-horizontal' : 'mdi:unfold-less-horizontal'}
-                  width={14}
-                />
-              }
-              onClick={allCollapsed ? expandAll : collapseAll}
-              disabled={shownToolIds.length === 0}
-            >
-              {allCollapsed ? 'Expand all' : 'Collapse all'}
-            </Button>
-          ) : null}
         </Group>
 
         {hasFilters ? (
@@ -1361,6 +1463,11 @@ const Gallery: React.FC<{
             {kindFilter.map((v) => (
               <Pill key={v} withRemoveButton onRemove={() => setKindFilter(kindFilter.filter((x) => x !== v))}>
                 {v}
+              </Pill>
+            ))}
+            {categoryFilter.map((v) => (
+              <Pill key={v} withRemoveButton onRemove={() => setCategoryFilter(categoryFilter.filter((x) => x !== v))}>
+                {categoryOf({ stage: v }).label}
               </Pill>
             ))}
             {toolFilter.map((v) => (
@@ -1402,18 +1509,15 @@ const Gallery: React.FC<{
         ) : viewMode === 'table' ? (
           <FlatTable groups={groups} onOpen={onOpen} />
         ) : (
-          <Stack gap="md">
-            {groups.map((g) => (
-              <ToolSection
-                key={g.tool.id}
-                tool={g.tool}
-                entries={g.entries}
-                opened={!collapsed.has(g.tool.id)}
-                onToggle={toggle}
-                onOpen={onOpen}
-              />
-            ))}
-          </Stack>
+          <ToolGrid
+            groups={groups}
+            onPick={(id) => {
+              setToolFilter([id]);
+              setViewMode('split');
+              const first = groups.find((g) => g.tool.id === id)?.entries[0];
+              if (first) onOpen(first.output.id);
+            }}
+          />
         )}
        </Box>
       </Box>

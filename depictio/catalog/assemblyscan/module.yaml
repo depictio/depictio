@@ -2,7 +2,7 @@
 # base composition) as one JSON or TSV record.
 id: assemblyscan
 name: assembly-scan
-version: "1.1.0"
+version: "1.1.1"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/assemblyscan
 homepage: https://github.com/rpetit3/assembly-scan
 biotools_url: null # no bio.tools entry for this tool
@@ -11,4 +11,4 @@ description: >-
   base composition and the contigs past 1 kb, 10 kb, 100 kb and 1 Mb.
 edam_topics:
   - http://edamontology.org/topic_0196 # Sequence assembly
-stage: qc
+stage: assembly
