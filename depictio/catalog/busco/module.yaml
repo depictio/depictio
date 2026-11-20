@@ -5,9 +5,9 @@
 # `run_*/` internals (tens of thousands of files per assembly) are not read.
 id: busco
 name: BUSCO
-version: "2.1.0"
+version: "2.1.1"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/busco/busco
 homepage: https://busco.ezlab.org
 description: Gene-content completeness of assemblies against a BUSCO lineage dataset.
 biotools_url: https://bio.tools/busco
-stage: qc
+stage: assembly

@@ -1282,9 +1282,7 @@ def test_an_output_stage_overrides_its_tool_stage():
 
 def test_stage_is_a_closed_vocabulary():
     with pytest.raises(ValueError, match="stage"):
-        CatalogOutput.model_validate(
-            {"id": "x", "find": {"filename": "x.tsv"}, "stage": "assembly"}
-        )
+        CatalogOutput.model_validate({"id": "x", "find": {"filename": "x.tsv"}, "stage": "peaks"})
 
 
 def test_headline_is_a_card_field():

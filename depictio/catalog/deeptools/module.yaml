@@ -10,11 +10,11 @@
 # tab-separated files beside the PDFs.
 id: deeptools
 name: deepTools
-version: "1.1.0"
+version: "1.1.1"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/deeptools/plotfingerprint
 homepage: https://deeptools.readthedocs.io/
 description: >-
   A set of user-friendly tools for normalization and visualization of deep-
   sequencing data.
 biotools_url: https://bio.tools/deeptools
-stage: qc
+stage: epigenomics

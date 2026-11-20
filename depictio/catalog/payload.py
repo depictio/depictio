@@ -1314,6 +1314,7 @@ def _tool_dict(tool: Any, outputs: list[dict[str, Any]]) -> dict[str, Any]:
         "nf_core_url": tool.nf_core_url,
         "biotools_url": tool.biotools_url,
         "edam_topics": list(tool.edam_topics),
+        "stage": getattr(tool, "stage", None) or "other",
         "outputs": outputs,
     }
 
