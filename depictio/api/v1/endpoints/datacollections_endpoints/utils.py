@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import time
+from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -588,8 +589,7 @@ def _editable_project_and_token(project_id: str, current_user) -> tuple[ObjectId
         )
     assert_project_unlocked(project_dict)
 
-    # Any active token for this user will do (the dash flow does the same).
-    full_token = tokens_collection.find_one({"user_id": current_user.id})
+    full_token = _usable_user_token(current_user.id)
     if not full_token:
         raise HTTPException(status_code=401, detail="No API token on file for this user.")
     return project_oid, full_token
@@ -1269,8 +1269,22 @@ def _build_multiqc_workflow(
     return workflow, data_collection
 
 
+def _usable_user_token(user_id) -> dict | None:
+    """The user's stored token that in-process CLI calls should sign with.
+
+    Only an unexpired one: the oldest token on file is usually a one-hour
+    login token, long expired, and signing with it fails with 401 "Invalid
+    token". The one that expires last wins, so a long-lived token is
+    preferred over a login token, and the newest among equals.
+    """
+    return tokens_collection.find_one(
+        {"user_id": user_id, "expire_datetime": {"$gt": datetime.now()}},
+        sort=[("expire_datetime", -1)],
+    )
+
+
 async def _ensure_user_cli_token(current_user) -> None:
-    """Ensure a long-lived CLI token exists for the current user.
+    """Ensure an unexpired CLI token exists for the current user.
 
     The viewer's DC-create flow needs to drive the same CLI helpers as the
     `depictio data process` command, which authenticate back to FastAPI with
@@ -1282,12 +1296,13 @@ async def _ensure_user_cli_token(current_user) -> None:
 
     Public/anonymous mode is left alone: the anonymous user has its own
     pre-provisioned token in db_init, so this code path only fires for real
-    authenticated users who haven't created a CLI token yet.
+    authenticated users who have no unexpired token on file (expired login
+    tokens stay in the collection until their refresh expires).
     """
     user_id = getattr(current_user, "id", None)
     if user_id is None:
         return
-    if tokens_collection.find_one({"user_id": user_id}) is not None:
+    if _usable_user_token(user_id) is not None:
         return
 
     from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
@@ -1334,7 +1349,7 @@ def _build_cli_config_for_user(current_user, remote_storage_options: ProjectS3Co
     over httpx); 401 when the user has none. See ``_cli_config_with_token``
     for ``remote_storage_options``.
     """
-    full_token = tokens_collection.find_one({"user_id": current_user.id})
+    full_token = _usable_user_token(current_user.id)
     if not full_token:
         raise HTTPException(status_code=401, detail="No API token on file for this user.")
     return _cli_config_with_token(current_user, full_token, remote_storage_options)
