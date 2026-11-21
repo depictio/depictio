@@ -14,10 +14,10 @@ all other columns are optional and are used as annotations dynamically.
 
 import json
 
-import plotly.colors
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.models.palette_tracks import track_colors
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -60,9 +60,9 @@ _SKIP_ANNOTATION_COLS = {
     "aggregation_time",
 }
 
-# Use Plotly's default qualitative color sequence for deterministic auto-coloring.
-# Sorted unique values always get the same color assignment, matching Plotly charts.
-_PLOTLY_QUALITATIVE = plotly.colors.qualitative.Plotly
+# Group colours come from the shared palette (depictio.models.palettes), minus the
+# hues at the ends of the heatmap's sequential scale.
+_SCALE_KIND = "sequential"
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -130,14 +130,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 if any(v == "" or v is None for v in values):
                     continue
 
-                # Auto-generate deterministic colors from Plotly's default palette.
-                # Sorted unique values always map to the same color, matching
-                # what Plotly charts produce when using the same color column.
+                # Deterministic colours from the shared palette: the same value always
+                # gets the same colour as in the viewer's group-by.
                 unique_vals = sorted(set(values))
-                colors = {
-                    v: _PLOTLY_QUALITATIVE[i % len(_PLOTLY_QUALITATIVE)]
-                    for i, v in enumerate(unique_vals)
-                }
+                colors = track_colors(unique_vals, _SCALE_KIND)
 
                 col_annotations[col] = {
                     "values": values,

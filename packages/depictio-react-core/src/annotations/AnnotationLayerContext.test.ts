@@ -16,11 +16,11 @@ describe('withAnnotatable', () => {
 });
 
 describe('initialPendingDraft', () => {
-  it('starts with an empty label, the kind colour and the captured geometry', () => {
+  it('starts with an empty label, the neutral ink and the captured geometry', () => {
     const geometry = { kind: 'ref_line', axis: 'x', value: 3 } as const;
     expect(initialPendingDraft({ componentIndex: 'c', kind: 'line', geometry })).toEqual({
       label: '',
-      color: 'red',
+      color: 'ink',
       geometry,
     });
   });

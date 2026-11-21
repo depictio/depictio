@@ -27,10 +27,9 @@ import re
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-from depictio.api.v1.services.advanced_viz.palette import TAB10_PALETTE, stable_color_map
+from depictio.api.v1.services.advanced_viz.palette import stable_color_map
+from depictio.models import palettes
 
-#: Colour for the lumped remainder. Grey so it reads as "not a taxon".
-_OTHER_COLOR = "#adb5bd"
 _OTHER_LABEL = "Other"
 
 
@@ -160,15 +159,17 @@ def build(
 
     # Palette off the full taxon universe present in the data, matching
     # stableColorMap(taxonUniverse, PALETTE) on the TS side.
-    colors = stable_color_map(taxon_totals.keys(), TAB10_PALETTE)
+    colors = stable_color_map(taxon_totals.keys(), mode=theme)
 
+    # The lumped remainder is grey so it reads as "not a taxon".
+    other_color = palettes.semantic("other", theme)
     data = [
         {
             "type": "bar",
             "name": taxon,
             "x": ordered_samples,
             "y": values,
-            "marker": {"color": _OTHER_COLOR if taxon == _OTHER_LABEL else colors.get(taxon)},
+            "marker": {"color": other_color if taxon == _OTHER_LABEL else colors.get(taxon)},
         }
         for taxon, values in series.items()
         if any(v > 0 for v in values)

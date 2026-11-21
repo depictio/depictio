@@ -1,0 +1,279 @@
+{
+  "$comment": "Python <-> TypeScript parity cases for assign_colors / assignColors. Regenerate: uv run --extra dev python depictio/tests/unit/test_palettes.py",
+  "cases": [
+    {
+      "name": "plain values, case-insensitive order",
+      "values": [
+        "beta",
+        "Alpha",
+        "gamma",
+        "alpha"
+      ],
+      "pinned": {},
+      "palette": null,
+      "mode": "light",
+      "expected": {
+        "Alpha": "#925FC4",
+        "alpha": "#F68B33",
+        "beta": "#37ADA1",
+        "gamma": "#F288C0"
+      }
+    },
+    {
+      "name": "reserved values take semantic greys",
+      "values": [
+        "Soil",
+        "Other",
+        "unclassified",
+        "NA",
+        "",
+        "Sediment"
+      ],
+      "pinned": {},
+      "palette": null,
+      "mode": "light",
+      "expected": {
+        "": "#CED4DA",
+        "NA": "#CED4DA",
+        "Other": "#ADB5BD",
+        "unclassified": "#868E96",
+        "Sediment": "#925FC4",
+        "Soil": "#F68B33"
+      }
+    },
+    {
+      "name": "pins win and their colour leaves the slot pool",
+      "values": [
+        "control",
+        "treated",
+        "recovery"
+      ],
+      "pinned": {
+        "control": "#745094"
+      },
+      "palette": null,
+      "mode": "light",
+      "expected": {
+        "control": "#745094",
+        "recovery": "#925FC4",
+        "treated": "#F68B33"
+      }
+    },
+    {
+      "name": "dark variant",
+      "values": [
+        "a",
+        "b",
+        "c"
+      ],
+      "pinned": {},
+      "palette": "marque",
+      "mode": "dark",
+      "expected": {
+        "a": "#A262C4",
+        "b": "#F68B33",
+        "c": "#45B8AC"
+      }
+    },
+    {
+      "name": "named preset",
+      "values": [
+        "x",
+        "y"
+      ],
+      "pinned": {},
+      "palette": "signature",
+      "mode": "light",
+      "expected": {
+        "x": "#604EA1",
+        "y": "#D77118"
+      }
+    },
+    {
+      "name": "explicit colour list: past its end, the Other grey",
+      "values": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "pinned": {},
+      "palette": [
+        "#111111",
+        "#222222"
+      ],
+      "mode": "light",
+      "expected": {
+        "s1": "#111111",
+        "s2": "#222222",
+        "s3": "#ADB5BD"
+      }
+    },
+    {
+      "name": "more values than slots: no hue repeats past the last slot",
+      "values": [
+        "v00",
+        "v01",
+        "v02",
+        "v03",
+        "v04",
+        "v05",
+        "v06",
+        "v07",
+        "v08",
+        "v09"
+      ],
+      "pinned": {},
+      "palette": null,
+      "mode": "light",
+      "expected": {
+        "v00": "#925FC4",
+        "v01": "#F68B33",
+        "v02": "#37ADA1",
+        "v03": "#F288C0",
+        "v04": "#6495ED",
+        "v05": "#EBD244",
+        "v06": "#6EC863",
+        "v07": "#E53935",
+        "v08": "#ADB5BD",
+        "v09": "#ADB5BD"
+      }
+    },
+    {
+      "name": "pinned value absent from data is kept",
+      "values": [
+        "a"
+      ],
+      "pinned": {
+        "z": "#000000"
+      },
+      "palette": null,
+      "mode": "light",
+      "expected": {
+        "a": "#925FC4",
+        "z": "#000000"
+      }
+    },
+    {
+      "name": "ranked keeps the caller order",
+      "values": [
+        "zeta",
+        "Alpha",
+        "beta",
+        "zeta"
+      ],
+      "pinned": {},
+      "palette": null,
+      "mode": "light",
+      "ranked": true,
+      "expected": {
+        "zeta": "#925FC4",
+        "Alpha": "#F68B33",
+        "beta": "#37ADA1"
+      }
+    },
+    {
+      "name": "overflow shade: twins after the 8 slots",
+      "values": [
+        "v00",
+        "v01",
+        "v02",
+        "v03",
+        "v04",
+        "v05",
+        "v06",
+        "v07",
+        "v08",
+        "v09",
+        "v10",
+        "v11"
+      ],
+      "pinned": {},
+      "palette": null,
+      "mode": "light",
+      "ranked": true,
+      "overflow": "shade",
+      "expected": {
+        "v00": "#925FC4",
+        "v01": "#F68B33",
+        "v02": "#37ADA1",
+        "v03": "#F288C0",
+        "v04": "#6495ED",
+        "v05": "#EBD244",
+        "v06": "#6EC863",
+        "v07": "#E53935",
+        "v08": "#632F90",
+        "v09": "#B85E00",
+        "v10": "#007A70",
+        "v11": "#BB578E"
+      }
+    },
+    {
+      "name": "overflow shade on a list equal to a named palette (dark)",
+      "values": [
+        "v00",
+        "v01",
+        "v02",
+        "v03",
+        "v04",
+        "v05",
+        "v06",
+        "v07",
+        "v08",
+        "v09",
+        "v10",
+        "v11"
+      ],
+      "pinned": {},
+      "palette": [
+        "#A262C4",
+        "#F68B33",
+        "#45B8AC",
+        "#D76A92",
+        "#73A5FF",
+        "#F9CB40",
+        "#82C466",
+        "#E63A36"
+      ],
+      "mode": "dark",
+      "ranked": true,
+      "overflow": "shade",
+      "expected": {
+        "v00": "#A262C4",
+        "v01": "#F68B33",
+        "v02": "#45B8AC",
+        "v03": "#D76A92",
+        "v04": "#73A5FF",
+        "v05": "#F9CB40",
+        "v06": "#82C466",
+        "v07": "#E63A36",
+        "v08": "#CF8DF3",
+        "v09": "#FFCBA8",
+        "v10": "#77E6D9",
+        "v11": "#FF9CBE"
+      }
+    },
+    {
+      "name": "overflow shade on a free colorway falls back to grey",
+      "values": [
+        "v00",
+        "v01",
+        "v02",
+        "v03"
+      ],
+      "pinned": {},
+      "palette": [
+        "#111111",
+        "#222222"
+      ],
+      "mode": "light",
+      "ranked": true,
+      "overflow": "shade",
+      "expected": {
+        "v00": "#111111",
+        "v01": "#222222",
+        "v02": "#ADB5BD",
+        "v03": "#ADB5BD"
+      }
+    }
+  ]
+}

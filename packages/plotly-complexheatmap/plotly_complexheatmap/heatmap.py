@@ -1050,9 +1050,7 @@ class ComplexHeatmap:
 
         return top_margin, bottom_margin
 
-    def _horizontal_margins(
-        self, layout: GridLayout, legend_texts: list[str] | None = None
-    ) -> tuple[float, float]:
+    def _horizontal_margins(self, layout: GridLayout, legend_texts: list[str] | None = None) -> tuple[float, float]:
         """Left and right margin in pixels.
 
         *legend_texts* is the measured legend content when the traces already

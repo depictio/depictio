@@ -14,12 +14,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-# Mantine's default gray scale. The viewer does not override `colors.gray`
-# (checked in depictio/viewer/src/theme.ts), so `theme.colors.gray[N]` in
-# plotlyTheme.ts resolves to these. Pinned as literals because the Python side
-# has no Mantine theme object to read from.
-_MANTINE_GRAY_2 = "#e9ecef"
-_MANTINE_GRAY_8 = "#343a40"
+from depictio.models import palettes
+
+# The text, grid and zero-line tokens are the shared plot chrome
+# (``depictio.models.palettes.chrome``), which the viewer's ``plotlyTheme.ts``
+# reads from the same JSON.
+_DARK_TEXT = palettes.chrome("dark")["text"]
 
 
 @dataclass(frozen=True)
@@ -34,10 +34,11 @@ class PlotlyThemeColors:
 
 def plotly_theme_colors(is_dark: bool) -> PlotlyThemeColors:
     """Resolve the four theme colours for a light or dark render."""
+    chrome = palettes.chrome("dark" if is_dark else "light")
     return PlotlyThemeColors(
-        text_color=_MANTINE_GRAY_2 if is_dark else _MANTINE_GRAY_8,
-        grid_color="rgba(255,255,255,0.08)" if is_dark else "rgba(0,0,0,0.08)",
-        zero_line_color="rgba(255,255,255,0.35)" if is_dark else "rgba(0,0,0,0.35)",
+        text_color=chrome["text"],
+        grid_color=chrome["grid"],
+        zero_line_color=chrome["zero"],
         bg_color="rgba(0,0,0,0)",
     )
 
@@ -122,7 +123,7 @@ def apply_layout_theme(layout: dict[str, Any] | None, c: PlotlyThemeColors) -> d
     # Theme-level values go last so they win over anything baked into the input.
     return {
         **out,
-        "template": "plotly_dark" if c.text_color == _MANTINE_GRAY_2 else "plotly_white",
+        "template": "plotly_dark" if c.text_color == _DARK_TEXT else "plotly_white",
         "plot_bgcolor": c.bg_color,
         "paper_bgcolor": c.bg_color,
         "font": {**(out.get("font") or {}), "color": c.text_color},

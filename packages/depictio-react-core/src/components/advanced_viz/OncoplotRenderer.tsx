@@ -8,7 +8,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
@@ -286,8 +286,10 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     // missing cells stay blank — plotly skips them in the heatmap.
     const colourSource = stableColorMap(
       mutationUniverse ?? mutList,
-      resolveCategoricalPalette(theme, TAB10_PALETTE),
+      resolveCategoricalPalette(theme, TAB10_PALETTE, isDark),
       mutationPinned,
+      isDark ? 'dark' : 'light',
+      plotOverflow(theme),
     );
     const mutToIdx = new Map<string, number>();
     mutList.forEach((m, i) => mutToIdx.set(m, i));

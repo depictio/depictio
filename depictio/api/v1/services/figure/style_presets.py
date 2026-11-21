@@ -5,7 +5,8 @@ the theme and brand templates have done their work, so it reaches every figure
 the same way: UI mode, code mode and the scan-level aggregation path all end in
 the same figure dict.
 
-``minimal`` is the "showcase" look of a landing page: a transparent plot, faint
+``default`` is the overview look (``overview_style.apply_overview``) and
+``classic`` the figure as built; ``minimal`` is the "showcase" look of a landing page: a transparent plot, faint
 dashed grid lines and no axis lines, small grey ticks, set in Inter with the
 category names in medium weight, the legend in one line under the plot, tight
 margins, large markers without outlines, bars without edges. The card header carries the title, so the plot drops its own. Grouped
@@ -26,36 +27,36 @@ import copy
 import re
 from typing import Any
 
+from depictio.api.v1.services.figure.overview_style import apply_overview
 from depictio.cli.cli.utils.mantine_templates import FONT_FAMILY as STOCK_FONT_FAMILY
+from depictio.models import palettes
 
-FIGURE_STYLES: tuple[str, ...] = ("default", "minimal")
+FIGURE_STYLES: tuple[str, ...] = ("default", "minimal", "classic")
 DEFAULT_FIGURE_STYLE = "default"
 
-# Mantine gray-6 / dark-2 for ticks and axis titles, gray-7 / dark-0 for labels
-# a reader reads (legend, group names). The grid is a near-transparent ink so it
-# sits on whatever the card's background is.
+
+# Chrome tokens come from the shared plot palette (``depictio.models.palettes``),
+# the same ones the viewer's Plotly theme reads: ``muted`` for ticks and axis
+# titles, ``text`` for labels a reader reads (legend, group names). The grid is a
+# near-transparent ink so it sits on whatever the card's background is.
+def _preset_palette(mode: str) -> dict[str, str]:
+    chrome = palettes.chrome(mode)
+    return {
+        "grid": chrome["grid"],
+        "tick": chrome["muted"],
+        "label": chrome["text"],
+        "hover_bg": chrome["hover_bg"],
+        "hover_border": chrome["hover_border"],
+        "hover_font": chrome["hover_text"],
+        "fallback_group": palettes.semantic("other", mode),
+        # The card a minimal figure sits on.
+        "surface": chrome["surface"],
+    }
+
+
 _PALETTE: dict[str, dict[str, str]] = {
-    "light": {
-        "grid": "rgba(15, 23, 42, 0.09)",
-        "tick": "#868e96",
-        "label": "#495057",
-        "hover_bg": "#ffffff",
-        "hover_border": "#dee2e6",
-        "hover_font": "#212529",
-        "fallback_group": "#adb5bd",
-        # The card a minimal figure sits on (Mantine's body colour).
-        "surface": "#ffffff",
-    },
-    "dark": {
-        "grid": "rgba(255, 255, 255, 0.09)",
-        "tick": "#909296",
-        "label": "#c1c2c5",
-        "hover_bg": "#25262b",
-        "hover_border": "#373a40",
-        "hover_font": "#c1c2c5",
-        "fallback_group": "#5c5f66",
-        "surface": "#242424",
-    },
+    "light": _preset_palette("light"),
+    "dark": _preset_palette("dark"),
 }
 
 _AXIS_KEY = re.compile(r"^([xy])axis(\d*)$")
@@ -144,9 +145,11 @@ def apply_figure_style(
 
     Args:
         figure: A serialised Plotly figure (``{"data": [...], "layout": {...}}``).
-        style: A name from ``FIGURE_STYLES``. ``default`` and unknown names
-            keep the drawing as it is (bar ``hide_legend``, and the tooltips
-            that wear their series colour).
+        style: A name from ``FIGURE_STYLES``. ``default`` (and unknown names)
+            is the overview look (``overview_style``) with tooltips that wear
+            their series colour; ``classic`` keeps the drawing as the figure
+            builds it, with those tooltips; ``minimal`` is the landing-page
+            look on top of the overview look.
         theme: ``light`` or ``dark``, for the grid, tick and hover colours.
         header_title: The card header shows the figure's title, so the plot
             drops its own rather than printing it twice.
@@ -156,23 +159,27 @@ def apply_figure_style(
     """
     if not isinstance(figure, dict):
         return figure
-    if normalize_figure_style(style) != "minimal":
-        # The default style leaves the drawing alone; only the tooltips follow
-        # the series colours, whatever the style (see ``_style_hover``).
-        out = dict(figure)
-        traces = [dict(t) if isinstance(t, dict) else t for t in (figure.get("data") or [])]
-        _style_hover([t for t in traces if isinstance(t, dict)])
-        out["data"] = traces
-        if hide_legend:
-            out["layout"] = {**(figure.get("layout") or {}), "showlegend": False}
-        return out
-    return _apply_minimal(
-        figure,
-        palette=_PALETTE["dark" if theme == "dark" else "light"],
-        header_title=header_title,
-        hide_legend=hide_legend,
-        category_colors=category_colors or {},
-    )
+    chosen = normalize_figure_style(style) or DEFAULT_FIGURE_STYLE
+    if chosen == "minimal":
+        return _apply_minimal(
+            apply_overview(figure, theme=theme, set_font=False, category_colors=category_colors),
+            palette=_PALETTE["dark" if theme == "dark" else "light"],
+            header_title=header_title,
+            hide_legend=hide_legend,
+            category_colors=category_colors or {},
+        )
+    if chosen == "default":
+        figure = apply_overview(figure, theme=theme, category_colors=category_colors)
+    # ``classic`` leaves the drawing alone (``default`` has just been drawn in the
+    # overview look); only the tooltips follow the series colours, whatever the
+    # style (see ``_style_hover``).
+    out = dict(figure)
+    traces = [dict(t) if isinstance(t, dict) else t for t in (figure.get("data") or [])]
+    _style_hover([t for t in traces if isinstance(t, dict)])
+    out["data"] = traces
+    if hide_legend:
+        out["layout"] = {**(figure.get("layout") or {}), "showlegend": False}
+    return out
 
 
 # ---------------------------------------------------------------------------

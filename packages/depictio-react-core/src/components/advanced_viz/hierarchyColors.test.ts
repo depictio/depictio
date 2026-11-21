@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { isUnassigned, lineageShade, mixHex } from './hierarchyColors';
+import { assignColors, semanticColor } from '../../palettes';
+import { abundanceRanked, isUnassigned, lineageShade, mixHex, remainderColour, ringColour, unassignedGrey } from './hierarchyColors';
 
 describe('mixHex', () => {
   it('moves a colour toward another, and leaves a non-hex one alone', () => {
@@ -32,5 +33,79 @@ describe('isUnassigned', () => {
       true, true, true, true, true,
     ]);
     expect(['Bacteria', 'Otherwise', 'uncultured'].map(isUnassigned)).toEqual([false, false, false]);
+  });
+});
+
+describe('remainderColour', () => {
+  it('takes the shared semantic grey of the remainder, per scheme', () => {
+    expect(remainderColour('Other (12)', false)).toBe(semanticColor('other', 'light'));
+    expect(remainderColour('NA', true)).toBe(semanticColor('na', 'dark'));
+    expect(remainderColour('Unclassified', false)).toBe(semanticColor('unclassified', 'light'));
+    expect(remainderColour('', true)).toBe(semanticColor('na', 'dark'));
+    expect(remainderColour('unknown', true)).toBe(unassignedGrey(true));
+  });
+});
+
+describe('abundanceRanked', () => {
+  const weight = new Map([['Bacteria', 90], ['Archaea', 5], ['Fungi', 5], ['Viruses', 1]]);
+
+  it('orders by weight (ties alphabetical), then the unseen rest of the universe', () => {
+    expect(abundanceRanked(weight, ['Zeta', 'Bacteria', 'Alpha', '', null])).toEqual([
+      'Bacteria', 'Archaea', 'Fungi', 'Viruses', 'Alpha', 'Zeta',
+    ]);
+    expect(abundanceRanked(weight, null)).toEqual(['Bacteria', 'Archaea', 'Fungi', 'Viruses']);
+  });
+
+  it('gives the heaviest values the slots and the tail the Other grey', () => {
+    const colours = assignColors(abundanceRanked(weight, null), {
+      palette: ['#111111', '#222222'],
+      ranked: true,
+    });
+    expect(colours.get('Bacteria')).toBe('#111111');
+    expect(colours.get('Archaea')).toBe('#222222');
+    expect(colours.get('Fungi')).toBe(semanticColor('other', 'light'));
+    expect(colours.get('Viruses')).toBe(semanticColor('other', 'light'));
+  });
+
+  it('keeps a pin whatever its rank', () => {
+    const colours = assignColors(abundanceRanked(weight, null), {
+      pinned: { Viruses: '#e8590c' },
+      palette: ['#111111', '#222222'],
+      ranked: true,
+    });
+    expect(colours.get('Viruses')).toBe('#e8590c');
+  });
+});
+
+describe('ringColour', () => {
+  const opts = {
+    localColourIdx: 1,
+    colourMap: new Map([['Pseudomonadota', '#925FC4'], ['Acidobacteriota', '#F68B33']]),
+    ringPins: [{ Bacteria: '#6495ED', Archaea: '#925FC4' }, null, null],
+    grey: '#adb5bd',
+    context: '#9aa1a8',
+    isDark: false,
+  };
+
+  it('paints the ring above the colour-by rank with its own column pins', () => {
+    const bacteria = { label: 'Bacteria', depth: 0, colourKey: null, unassigned: false };
+    expect(ringColour(bacteria, 0, opts)).toBe('#6495ED');
+    expect(ringColour({ ...bacteria, label: 'Eukaryota' }, 0, opts)).toBe('#9aa1a8');
+  });
+
+  it('paints the colour-by ring with the pinned colour itself, not a shade', () => {
+    const phylum = { label: 'Pseudomonadota', depth: 1, colourKey: 'Pseudomonadota', unassigned: false };
+    expect(ringColour(phylum, 0, opts)).toBe('#925FC4');
+    expect(ringColour({ ...phylum, label: 'Acidobacteriota', colourKey: 'Acidobacteriota' }, 1, opts)).toBe('#F68B33');
+  });
+
+  it('shades the rings below the colour-by rank from it', () => {
+    const cls = { label: 'Gammaproteobacteria', depth: 2, colourKey: 'Pseudomonadota', unassigned: false };
+    expect(ringColour(cls, 0, opts)).toBe(lineageShade('#925FC4', 1, 0, false));
+    expect(ringColour(cls, 0, opts)).not.toBe('#925FC4');
+  });
+
+  it('keeps a remainder grey', () => {
+    expect(ringColour({ label: 'Unclassified', depth: 1, colourKey: 'Unclassified', unassigned: true }, 0, opts)).toBe('#adb5bd');
   });
 });

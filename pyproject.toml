@@ -229,6 +229,8 @@ exclude = [
   "notebook/assets/**/*",
   # The report's stylesheets, scripts and typst (notebook_export/resources.py).
   "api/v1/services/notebook_export/assets/*",
+  # The plot palettes (models/palettes): colours, assignment parity cases.
+  "models/palettes/*.json",
 ]
 
 # Exclude patterns are fnmatch-based: `*` also crosses `/`, so each pattern matches

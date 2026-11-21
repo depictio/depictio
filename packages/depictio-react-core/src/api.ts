@@ -662,7 +662,7 @@ export interface StoredMetadata {
    *  components/figureStyle.ts). Unset takes its grid section's
    *  `figure_style`. `minimal`: the title in a card header with an icon badge
    *  and an inline subtitle, the plot restyled server-side. */
-  figure_style?: 'default' | 'minimal' | (string & {});
+  figure_style?: 'default' | 'minimal' | 'classic' | (string & {});
   /** Figures: a few dimmed words after the title in the `minimal` header. */
   subtitle?: string;
   /** Figures: draw without the legend. */
@@ -798,7 +798,7 @@ export interface FilterSectionSpec {
   visible_filters?: number | null;
   /** Grid sections: the style every figure in the section is drawn in unless
    *  the figure sets its own `figure_style`. */
-  figure_style?: 'default' | 'minimal' | null;
+  figure_style?: 'default' | 'minimal' | 'classic' | null;
 }
 
 /** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
@@ -2009,7 +2009,7 @@ export interface RenderFigureOptions {
 /** The `style` override of a render request; see `figure_style_payload` in
  *  depictio/api/v1/services/figure/style_presets.py. */
 export interface FigureStyleRequest {
-  figure_style?: 'default' | 'minimal';
+  figure_style?: 'default' | 'minimal' | 'classic';
   /** The card header shows the title, so the plot drops its own. */
   header_title?: boolean;
   hide_legend?: boolean;

@@ -117,3 +117,71 @@ def test_sets_covering_every_row_keep_every_row() -> None:
     result = _figure(_consensus(), _BINARY)
     assert result["row_count"] == 5
     assert sum(_intersection_sizes(result)) == 5
+
+
+def _annotated(frame: pl.DataFrame, **kwargs) -> dict:
+    return _upset_result_from_frame(
+        frame,
+        set_columns=["S1", "S2", "S3"],
+        sort_by="cardinality",
+        sort_order="descending",
+        min_size=1,
+        max_degree=None,
+        show_set_sizes=True,
+        show_values=False,
+        color_intersections_by="none",
+        set_colors=None,
+        annotation_cols=["phylum"],
+        **kwargs,
+    )
+
+
+def _phylum_frame(counts: dict[str, int]) -> pl.DataFrame:
+    phyla = [p for p, n in counts.items() for _ in range(n)]
+    n = len(phyla)
+    return pl.DataFrame(
+        {
+            "phylum": phyla,
+            "S1": [1] * n,
+            "S2": [i % 2 for i in range(n)],
+            "S3": [(i // 2) % 2 for i in range(n)],
+        }
+    ).with_columns(pl.col(["S1", "S2", "S3"]).cast(pl.Int8))
+
+
+def _track_colours(result: dict) -> dict[str, str]:
+    """``{category: colour}`` of the ``phylum`` track's legend bars."""
+    return {
+        t["name"].removeprefix("phylum: "): t["marker"]["color"]
+        for t in result["figure"]["data"]
+        if t.get("type") == "bar" and str(t.get("name", "")).startswith("phylum: ")
+    }
+
+
+def test_annotation_track_colours_follow_frequency_rank() -> None:
+    from depictio.models.palette_tracks import track_palette
+
+    result = _annotated(_phylum_frame({"A": 2, "B": 9, "C": 5}))
+    colours = _track_colours(result)
+    palette = track_palette("sets")
+    assert [colours["B"], colours["C"], colours["A"]] == palette[:3]
+
+
+def test_annotation_tail_folds_into_other() -> None:
+    from depictio.models import palettes
+    from depictio.models.palette_tracks import track_palette
+
+    counts = {f"P{i}": 20 - i for i in range(10)} | {"Unclassified": 3}
+    colours = _track_colours(_annotated(_phylum_frame(counts)))
+    slots = len(track_palette("sets"))
+    assert {f"P{i}" for i in range(slots)} <= set(colours)
+    assert {f"P{i}" for i in range(slots, 10)}.isdisjoint(colours)
+    assert colours["Other"] == palettes.semantic("other")
+    assert colours["Unclassified"] == palettes.semantic("unclassified")
+    assert len(colours) == slots + 2
+
+
+def test_annotation_pins_win_and_match_the_column_case_insensitively() -> None:
+    frame = _phylum_frame({"A": 2, "B": 9, "C": 5})
+    result = _annotated(frame, category_colors={"Phylum": {"A": "#123456"}})
+    assert _track_colours(result)["A"] == "#123456"

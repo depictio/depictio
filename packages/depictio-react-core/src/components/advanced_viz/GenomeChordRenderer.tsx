@@ -20,7 +20,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { mantineCategoricalPalette, resolveCategoricalPalette, plotOverflow, stableColorMap } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -171,7 +171,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
   const config = (metadata.config || {}) as GenomeChordConfig;
   const isDark = colorScheme === 'dark';
   const themeColors = plotlyThemeColors(isDark, theme);
-  const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
+  const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark);
 
   // Tier-2 controls. Defaults agree with GenomeChordConfig's own, so an
   // unconfigured component and a configured one draw the same ring.
@@ -355,8 +355,8 @@ const GenomeChordRenderer: React.FC<Props> = ({
         : colourBy === 'chrom_a'
           ? allLinks.map((l) => l.chromA)
           : [];
-    return stableColorMap(values, palette, pinnedColours);
-  }, [allLinks, colourBy, palette, pinnedColours]);
+    return stableColorMap(values, palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
+  }, [allLinks, colourBy, palette, pinnedColours, theme]);
 
   const neutralChordColour = isDark ? theme.colors.gray[5] : theme.colors.gray[6];
   const colourOf = useCallback(

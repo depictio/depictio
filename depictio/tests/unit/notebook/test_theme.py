@@ -39,23 +39,11 @@ def test_paper_layout_is_glass_plotly_light():
     assert theme.paper_layout("Lato")["font"]["family"] == "'Inter Variable', Inter, Lato"
 
 
-def test_colorway_leads_with_the_primary_then_glass_hues():
-    assert theme.paper_colorway(None) == [
-        "#228be6",
-        "#12b886",
-        "#fd7e14",
-        "#be4bdb",
-        "#15aabf",
-        "#e64980",
-        "#82c91e",
-        "#4c6ef5",
-        "#fab005",
-        "#fa5252",
-    ]
-    # A primary that already is one of the hues is not listed twice.
-    assert theme.paper_colorway("teal")[0] == "#12b886"
-    assert len(theme.paper_colorway("teal")) == 9
-    assert theme.paper_colorway("#123456")[0] == "#123456"
+def test_colorway_is_the_shared_palette():
+    from depictio.models import palettes
+
+    assert theme.paper_colorway(None) == palettes.categorical(None, "light")
+    assert theme.paper_colorway("#123456") == palettes.categorical(None, "light")
 
 
 def test_primary_resolves_to_shade_6_and_its_ink_at_shade_7():
@@ -115,7 +103,7 @@ def test_use_theme_registers_the_template_and_embeds_inter():
     assert "data:font/woff2;base64," in style and "unicode-range" in style
     assert pio.templates.default == "plotly_white+depictio_paper"
     template = pio.templates[theme.TEMPLATE_NAME]
-    assert template.layout.colorway[0] == "#7950f2"
+    assert list(template.layout.colorway) == theme.paper_colorway()  # the shared palette
     assert template.layout.plot_bgcolor == "rgba(0, 0, 0, 0)"
     # Every figure the document shows wears it, server-built ones included.
     bundle = figure_bundle(go.Figure(layout={"plot_bgcolor": "#e5ecf6"}))

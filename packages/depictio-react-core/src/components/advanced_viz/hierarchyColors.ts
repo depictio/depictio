@@ -7,9 +7,11 @@
  * one its top value wears everywhere else on the dashboard (a Kingdom's pinned
  * colour, say), and its descendants are shades of it, lighter the deeper they
  * sit; every other sibling is a touch lighter again, so neighbours part
- * without a new hue. Values that name no taxon ("Unclassified", "Other") are
- * grey, so they read as a remainder rather than as one more group.
+ * without a new hue. Values that name no taxon ("Unclassified", "Other") take
+ * the shared palette's semantic greys, so they read as a remainder rather than
+ * as one more group.
  */
+import { compareValues, plotChrome, reservedKind, semanticColor } from '../../palettes';
 
 const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -39,14 +41,27 @@ export function isUnassigned(label: string | null | undefined): boolean {
   return UNASSIGNED.has(l) || l.startsWith('unclassified') || /^other\b/.test(l);
 }
 
-/** The grey of a remainder, on either surface. */
+/** The grey of a remainder, on either surface (the palette's `unclassified` grey). */
 export function unassignedGrey(isDark: boolean): string {
-  return isDark ? '#5c5f66' : '#c1c6cc';
+  return semanticColor('unclassified', isDark ? 'dark' : 'light');
+}
+
+/**
+ * The grey of one remainder value: "Other" and "NA" keep their own semantic
+ * grey, anything else that names no group (an empty rank, "unknown") is
+ * `unclassified`.
+ */
+export function remainderColour(label: string | null | undefined, isDark: boolean): string {
+  const l = String(label ?? '').trim();
+  const kind = /^other\b/i.test(l)
+    ? 'other'
+    : (reservedKind(label == null ? null : l) ?? 'unclassified');
+  return semanticColor(kind, isDark ? 'dark' : 'light');
 }
 
 /** The surface shades are mixed toward: lighter on paper, darker on a dark card. */
 export function surfaceColour(isDark: boolean): string {
-  return isDark ? '#25262b' : '#ffffff';
+  return plotChrome(isDark ? 'dark' : 'light').surface;
 }
 
 /**
@@ -63,4 +78,62 @@ export function lineageShade(
   if (depthBelow <= 0) return base;
   const t = Math.min(0.66, 0.24 * depthBelow + (siblingIndex % 2 ? 0.08 : 0));
   return mixHex(base, surfaceColour(isDark), t);
+}
+
+/**
+ * The values of one rank in colouring order: those with a weight, heaviest
+ * first (ties alphabetical), then the rest of `universe` alphabetically, so a
+ * value a filter hides still has a colour when it comes back. Hand it to
+ * `assignColors` with `ranked: true`: the top values get the palette's slots
+ * and the tail falls to the grey.
+ */
+export function abundanceRanked(
+  weight: ReadonlyMap<string, number>,
+  universe: readonly unknown[] | null | undefined,
+): string[] {
+  const top = [...weight.keys()].sort((a, b) => (weight.get(b) ?? 0) - (weight.get(a) ?? 0) || compareValues(a, b));
+  const rest = Array.from(new Set((universe ?? []).filter((v) => v != null && v !== '').map(String)))
+    .filter((v) => !weight.has(v))
+    .sort(compareValues);
+  return [...top, ...rest];
+}
+
+/** What `ringColour` needs to know about one arc. */
+export interface RingNode {
+  label: string;
+  /** Ring index within the visible slice (0 is the innermost). */
+  depth: number;
+  /** The colour-by rank's value on this arc's path; null above that rank. */
+  colourKey: string | null;
+  /** Names no group, or sits under one that does. */
+  unassigned: boolean;
+}
+
+/**
+ * One arc's colour. A remainder is grey. An arc above the colour-by ring wears
+ * its own column's pinned colour (`ringPins[depth][label]`, a Kingdom keeps its
+ * Kingdom colour) and `context` when nothing is pinned for it. The colour-by
+ * ring takes `colourMap` (pins first, then the palette) and each ring below is
+ * a lineage shade of its colour-by ancestor.
+ */
+export function ringColour(
+  node: RingNode,
+  siblingIndex: number,
+  opts: {
+    localColourIdx: number;
+    colourMap: ReadonlyMap<string, string>;
+    ringPins: ReadonlyArray<Readonly<Record<string, string>> | null>;
+    grey: string;
+    context: string;
+    isDark: boolean;
+  },
+): string {
+  if (node.unassigned) return opts.grey;
+  if (node.colourKey == null) return opts.ringPins[node.depth]?.[node.label] ?? opts.context;
+  return lineageShade(
+    opts.colourMap.get(node.colourKey) ?? opts.context,
+    node.depth - opts.localColourIdx,
+    siblingIndex,
+    opts.isDark,
+  );
 }

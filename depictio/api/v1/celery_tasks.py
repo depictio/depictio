@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Sequence
+from collections import Counter
+from typing import Any, Iterable, Sequence
 
 from bson import ObjectId
 from celery.exceptions import SoftTimeLimitExceeded
@@ -24,6 +25,13 @@ from celery.exceptions import SoftTimeLimitExceeded
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models import palettes
+from depictio.models.palette_tracks import (
+    pins_for_column,
+    rank_by_frequency,
+    track_palette,
+    track_pins,
+)
 
 # For point plots we random-sample down to the plotted-point target, but we only
 # need to *load* a modest multiple of it for that sample to be representative —
@@ -1258,25 +1266,98 @@ def compute_embedding(payload: dict) -> dict:
 def _stable_palette_map(
     universes: dict[str, list[str]],
     palette: Sequence[str],
+    *,
+    mode: str = "light",
+    counts: dict[str, dict[str, int]] | None = None,
+    pinned: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, dict[str, str]]:
     """Map each annotation column's value universe onto *palette*.
 
-    The palette index runs ACROSS the columns, not from 0 within each one.
-    Restarting per column hands the first value of every track the same hue, so
-    two strips side by side (chipseq: ``consensus_set`` and ``support``) paint
-    the same colours in the same order and read as two views of one variable.
-    Continuing the cycle keeps distinct tracks on distinct hues for as long as
-    the palette lasts.
+    Colours come from the shared ``palettes.assign_colors`` rule, ranked over the
+    UNION of every column's universe: a value gets one colour wherever it shows
+    (every strip, the legend, the viewer's group-by), reserved values (Other,
+    Unclassified, NA) take their grey, and two strips only share a colour when
+    they share a value. That is what the old running offset was for (chipseq
+    ``consensus_set`` and ``support`` painted in the same hues), without making a
+    value's colour depend on the order of the columns.
 
-    Iteration order is the caller's insertion order, so the mapping is stable
-    for a given annotation-column list.
+    *palette* is the slot list to draw from, normally ``track_palette(...)``.
+
+    *counts* (``{column: {value: rows}}``) ranks the values by frequency, summed
+    over the columns, so the commonest values take the first slots and a long
+    tail lands on the Other grey; without it values are taken in name order.
+    *pinned* (``{column: {value: colour}}``, already screened against the scale's
+    reserved colours, see ``track_pins``) always wins for its column's values, and
+    its colours are kept out of the slots the other values draw from.
     """
-    colors: dict[str, dict[str, str]] = {}
-    offset = 0
+    if not universes:
+        return {}
+    pinned = pinned or {}
+    union = {v for universe in universes.values() for v in universe}
+    ranked = bool(counts)
+    ordered: Iterable[str] = union
+    if counts:
+        totals = dict.fromkeys(union, 0)
+        for col, universe in universes.items():
+            col_counts = counts.get(col) or {}
+            for v in universe:
+                totals[v] += int(col_counts.get(v, 0))
+        ordered = rank_by_frequency(totals)
+    union_pins: dict[str, str] = {}
     for col, universe in universes.items():
-        colors[col] = {v: palette[(offset + i) % len(palette)] for i, v in enumerate(universe)}
-        offset += len(universe)
-    return colors
+        for v, colour in (pinned.get(col) or {}).items():
+            if v in union:
+                union_pins.setdefault(v, colour)
+    colour_of = palettes.assign_colors(
+        ordered, pinned=union_pins, palette=list(palette), mode=mode, ranked=ranked
+    )
+    return {
+        col: {v: (pinned.get(col) or {}).get(v) or colour_of[str(v)] for v in universe}
+        for col, universe in universes.items()
+    }
+
+
+def _fold_tail_categories(
+    values: list[str],
+    pins: dict[str, str],
+    slots: int,
+    *,
+    other: str = "Other",
+) -> tuple[list[str], set[str]]:
+    """Keep the ``slots`` most frequent free categories; the rest fold into Other.
+
+    *values* is ranked, most frequent first. Pinned and reserved values (Other,
+    Unclassified, NA) are never folded and take no slot. Returns the categories to
+    draw (ranked, with ``other`` appended when something was folded) and the set
+    of values folded away.
+    """
+    keep: list[str] = []
+    free = 0
+    folded: set[str] = set()
+    for v in values:
+        if v in pins or palettes.reserved_kind(v) is not None:
+            keep.append(v)
+        elif free < slots:
+            keep.append(v)
+            free += 1
+        else:
+            folded.add(v)
+    if folded and other not in keep:
+        keep.append(other)
+    return keep, folded
+
+
+def _heatmap_scale_kind(colorscale: Any) -> str:
+    """``diverging`` or ``sequential``: which ends the heatmap's colour scale uses.
+
+    No scale named means the library default, the shared diverging ramp.
+    """
+    if not colorscale or not isinstance(colorscale, str):
+        return "diverging"
+    import plotly.colors as _pc
+
+    diverging = {n.lower() for n in dir(_pc.diverging) if not n.startswith("_")}
+    return "diverging" if colorscale.lower().removesuffix("_r") in diverging else "sequential"
 
 
 _BAKED_ANNOTATIONS_COL = "_col_annotations_json"
@@ -1437,7 +1518,7 @@ def _annotation_map_from_baked_column(
     since and every label would name the wrong sample: skip rather than mislabel.
 
     Recipe-supplied ``colors`` are deliberately dropped. The caller assigns the
-    column track its Dark2 palette so the four templates that reach this path
+    column track its palette (shared ``palettes``, minus the scale's end hues) so the four templates that reach this path
     agree with each other and stay visually distinct from the row track, which
     a per-recipe palette would not.
     """
@@ -1669,18 +1750,11 @@ def compute_complex_heatmap(payload: dict) -> dict:
         # annotation track's colour for that cluster. Matches the frontend
         # ``stableColorMap`` behaviour used by the scatter / rarefaction /
         # taxonomy renderers.
-        # Set2 pastel — same palette family used by ``compute_upset`` annotation
-        # tracks. Numeric columns are left untouched (library auto-picks bars).
-        _STABLE_PALETTE = [
-            "#66c2a5",
-            "#fc8d62",
-            "#8da0cb",
-            "#e78ac3",
-            "#a6d854",
-            "#ffd92f",
-            "#e5c494",
-            "#b3b3b3",
-        ]
+        # Shared palette (palettes.assign_colors) minus the hues at the ends of
+        # the heatmap's own scale; numeric columns are left untouched (library
+        # auto-picks bars).
+        _theme = payload.get("theme") or "light"
+        _STABLE_PALETTE = track_palette(_heatmap_scale_kind(colorscale), _theme)
         # Load the UNFILTERED annotation columns once via a lazy scan so the
         # universe stays invariant under sidebar filtering. Cheap — single
         # column read, no materialisation beyond unique().
@@ -1691,20 +1765,24 @@ def compute_complex_heatmap(payload: dict) -> dict:
                 dt_doc["delta_table_location"], storage_options=polars_s3_config
             )
             anno_universes: dict[str, list[str]] = {}
+            anno_counts: dict[str, dict[str, int]] = {}
             for ann_col in row_annotation_cols:
                 if ann_col not in pdf.columns:
                     continue
                 series = pdf[ann_col]
                 if series.dtype.kind not in ("U", "S", "O"):
                     continue
-                uniq_pl = (
-                    unfiltered_lazy.select(pl.col(ann_col)).unique().collect()[ann_col].to_list()
-                )
+                # Rows per value over the UNFILTERED table: the frequency rank
+                # that hands out the slots stays put under sidebar filtering.
+                tally = unfiltered_lazy.group_by(ann_col).agg(pl.len().alias("_n")).collect().rows()
                 # Fold empty/null into the same "Unclassified" label used on the
                 # data column above so every rendered category has a colour.
-                anno_universes[ann_col] = sorted(
-                    {(str(v) if v not in ("", None) else _ANNO_PLACEHOLDER) for v in uniq_pl}
-                )
+                col_counts: dict[str, int] = {}
+                for v, n in tally:
+                    key = str(v) if v not in ("", None) else _ANNO_PLACEHOLDER
+                    col_counts[key] = col_counts.get(key, 0) + int(n)
+                anno_counts[ann_col] = col_counts
+                anno_universes[ann_col] = sorted(col_counts)
         except Exception as exc:  # pragma: no cover - logged + falls back
             logger.warning(
                 "compute_complex_heatmap: unique-value lookup for annotations failed (%s); "
@@ -1712,11 +1790,25 @@ def compute_complex_heatmap(payload: dict) -> dict:
                 exc,
             )
             anno_universes = {}
+            anno_counts = {}
 
-        # Palette offset runs across the annotation columns — see
-        # ``_stable_palette_map``. Two strips that both started at index 0 gave
-        # e.g. consensus_set=EZH2_IP and support=2 the same #66c2a5.
-        anno_colors = _stable_palette_map(anno_universes, _STABLE_PALETTE)
+        # Ranked across the annotation columns — see ``_stable_palette_map``.
+        # Two strips that both started at index 0 gave e.g. consensus_set=EZH2_IP
+        # and support=2 the same colour. The dashboard's own pins (the same
+        # ``category_colors`` every other tile reads) win, except a pin on a
+        # colour of the scale's ends, which would make a group read as "low".
+        anno_colors = _stable_palette_map(
+            anno_universes,
+            _STABLE_PALETTE,
+            mode=_theme,
+            counts=anno_counts,
+            pinned=track_pins(
+                payload.get("category_colors"),
+                anno_universes,
+                _heatmap_scale_kind(colorscale),
+                _theme,
+            ),
+        )
 
         annotations_spec: dict[str, dict[str, Any]] = {}
         for ann_col in row_annotation_cols:
@@ -1736,42 +1828,41 @@ def compute_complex_heatmap(payload: dict) -> dict:
     # Column annotations — align dashboard-supplied {col: category} maps to the
     # current value_columns order, then forward as a top strip.
     #
-    # Palette choice: Dark2 (saturated sibling of the Set2 pastel used for the
-    # row-annotation track). Same hue families, different value range — so col
-    # vs row tracks read as distinct families at a glance instead of looking
-    # like two views of the same dimension. Source: matplotlib qualitative
-    # Dark2.
+    # Palette: the shared one (``palettes.assign_colors``), minus the hues at the
+    # ends of the heatmap's scale, so a value keeps its colour in the strip, the
+    # legend and the viewer's group-by.
     #
     # Dashboards can override per-annotation via the `col_annotation_colors`
     # payload field (shape: {annotation_name: {value: hex}}), e.g. to pin
     # habitat → Set1 across PCoA + UpSet + heatmap.
     if col_annotations_map and isinstance(col_annotations_map, dict):
-        _COL_PALETTE = [
-            "#1b9e77",
-            "#d95f02",
-            "#7570b3",
-            "#e7298a",
-            "#66a61e",
-            "#e6ab02",
-            "#a6761d",
-            "#666666",
-        ]
+        _theme = payload.get("theme") or "light"
+        _COL_PALETTE = track_palette(_heatmap_scale_kind(colorscale), _theme)
         col_annotation_colors = payload.get("col_annotation_colors") or {}
-        # Universes first, palette second: the offset has to run across the
-        # annotations (same reason as the row strips above), so no colour can
-        # be assigned before every universe is known.
+        # Universes first, palette second: values are ranked over every
+        # annotation together (same reason as the row strips above), so no
+        # colour can be assigned before every universe is known.
         col_ordered, col_universes = _drawable_col_annotations(col_annotations_map, value_columns)
-        col_palette_map = _stable_palette_map(col_universes, _COL_PALETTE)
+        col_counts_map = {
+            name: dict(Counter(x for x in values if x not in ("", _COL_ANNOTATION_GAP)))
+            for name, values in col_ordered.items()
+        }
+        # Pins: the per-annotation `col_annotation_colors` and the dashboard's
+        # `category_colors` (the former wins); both are screened against the
+        # scale's ends.
+        _scale_kind = _heatmap_scale_kind(colorscale)
+        col_pins = track_pins(payload.get("category_colors"), col_universes, _scale_kind, _theme)
+        col_override_pins = track_pins(col_annotation_colors, col_universes, _scale_kind, _theme)
+        for name, pins in col_override_pins.items():
+            col_pins[name] = {**col_pins.get(name, {}), **pins}
+        col_palette_map = _stable_palette_map(
+            col_universes, _COL_PALETTE, mode=_theme, counts=col_counts_map, pinned=col_pins
+        )
 
         col_ann_kwargs: dict[str, Any] = {}
         for ann_name, ordered_values in col_ordered.items():
-            # Dashboard-supplied palette override wins; otherwise palette-cycle.
-            override = (
-                (col_annotation_colors.get(ann_name) or {})
-                if isinstance(col_annotation_colors.get(ann_name), dict)
-                else {}
-            )
-            colors = {v: override.get(v) or hex_ for v, hex_ in col_palette_map[ann_name].items()}
+            # Pins (override, then category_colors) are already in the map.
+            colors = dict(col_palette_map[ann_name])
             colors.setdefault("—", "rgba(150,150,150,0.4)")
             col_ann_kwargs[ann_name] = {
                 "values": ordered_values,
@@ -2062,6 +2153,10 @@ def _resolve_upset_set_columns(
     return matched
 
 
+# Categories an UpSet track draws in colour before the tail folds into "Other".
+_UPSET_MAX_FREE_CATEGORIES = 8
+
+
 def _upset_result_from_frame(
     df,
     *,
@@ -2076,6 +2171,8 @@ def _upset_result_from_frame(
     set_colors: dict | None,
     annotation_cols: list[str],
     unfiltered_universes: dict[str, list] | None = None,
+    unfiltered_counts: dict[str, dict[str, int]] | None = None,
+    category_colors: dict | None = None,
 ) -> dict:
     """Build the UpSet figure from an already-loaded frame.
 
@@ -2113,22 +2210,11 @@ def _upset_result_from_frame(
     if set_colors:
         kwargs["set_colors"] = set_colors
 
-    # Distinct categorical palette for annotation tracks — picked to avoid
-    # collision with the library's default UPSET_PALETTE that drives the
-    # set + intersection-bar colouring. Without this, the first feature_group
-    # category and the first set (contrastA) draw from the same first colour
-    # and the two legends look like they describe the same partition.
-    # Source: matplotlib Set2 (pastel qualitative).
-    _ANNOTATION_PALETTE = [
-        "#66c2a5",
-        "#fc8d62",
-        "#8da0cb",
-        "#e78ac3",
-        "#a6d854",
-        "#ffd92f",
-        "#e5c494",
-        "#b3b3b3",
-    ]
+    # Annotation tracks draw from the shared palette minus the first slots, which
+    # the library's default set + intersection colours (also the shared palette)
+    # take. Without this, the first feature_group category and the first set
+    # (contrastA) share a colour and the two legends look like one partition.
+    _ANNOTATION_PALETTE = track_palette("sets")
 
     # Route through from_dataframe when set_columns and/or annotation_cols
     # are specified — that path resolves annotation specs and wires them
@@ -2182,7 +2268,28 @@ def _upset_result_from_frame(
                         if universe is not None
                         else [v for v in series.dropna().unique() if v not in ("", None)]
                     )
-                    cats = sorted(str(v) for v in values)
+                    # Rank by frequency (unfiltered when known, so a filter cannot
+                    # reshuffle the slots): the commonest categories take the first
+                    # slots, ties by name.
+                    counts = dict(
+                        (unfiltered_counts or {}).get(col)
+                        or pdf[col].dropna().astype(str).value_counts().to_dict()
+                    )
+                    cats = rank_by_frequency({str(v): int(counts.get(str(v), 0)) for v in values})
+                    pins = pins_for_column(category_colors, col)
+                    # Past the free slots a legend of near-identical greys says
+                    # nothing: fold the tail into one "Other" before the library
+                    # builds the track, so the strip and legend show the same set.
+                    pin_used = {c.lower() for c in pins.values()}
+                    slots = min(
+                        _UPSET_MAX_FREE_CATEGORIES,
+                        len([c for c in _ANNOTATION_PALETTE if c.lower() not in pin_used]),
+                    )
+                    cats, folded = _fold_tail_categories(cats, pins, slots)
+                    if folded:
+                        pdf[col] = pdf[col].map(
+                            lambda v, _f=folded: "Other" if v is not None and str(v) in _f else v
+                        )
                     # Pin the track type instead of leaving it to the library.
                     # Left out, the type is re-inferred by the library's own
                     # `_infer_type` — a second heuristic, run on the FILTERED
@@ -2195,10 +2302,9 @@ def _upset_result_from_frame(
                     # that consumes them agree by construction, so the track
                     # can't change shape or palette as filters narrow the data.
                     spec["type"] = "categorical"
-                    spec["colors"] = {
-                        cat: _ANNOTATION_PALETTE[i % len(_ANNOTATION_PALETTE)]
-                        for i, cat in enumerate(cats)
-                    }
+                    spec["colors"] = palettes.assign_colors(
+                        cats, pinned=pins, palette=_ANNOTATION_PALETTE, ranked=True
+                    )
                 annotations_spec[col] = spec
         else:
             # Empty, never None: `from_dataframe` reads None as "auto-detect",
@@ -2336,6 +2442,7 @@ def compute_upset(payload: dict) -> dict:
     # one category re-derives a one-entry palette and that category jumps to the
     # palette's first colour.
     unfiltered_universes: dict[str, list] = {}
+    unfiltered_counts: dict[str, dict[str, int]] = {}
     if annotation_cols:
         try:
             import polars as pl
@@ -2346,8 +2453,9 @@ def compute_upset(payload: dict) -> dict:
                 dt_doc["delta_table_location"], storage_options=polars_s3_config
             )
             for col in annotation_cols:
-                uniq = unfiltered_lazy.select(pl.col(col)).unique().collect()[col].to_list()
-                unfiltered_universes[col] = [v for v in uniq if v not in ("", None)]
+                tally = unfiltered_lazy.group_by(col).agg(pl.len().alias("_n")).collect().rows()
+                unfiltered_universes[col] = [v for v, _ in tally if v not in ("", None)]
+                unfiltered_counts[col] = {str(v): int(n) for v, n in tally if v not in ("", None)}
         except Exception as exc:  # pragma: no cover - logged + falls back
             logger.warning(
                 "compute_upset: unique-value lookup for annotations failed (%s); "
@@ -2355,11 +2463,14 @@ def compute_upset(payload: dict) -> dict:
                 exc,
             )
             unfiltered_universes = {}
+            unfiltered_counts = {}
 
     return {
         **_upset_result_from_frame(
             df,
             unfiltered_universes=unfiltered_universes,
+            unfiltered_counts=unfiltered_counts,
+            category_colors=payload.get("category_colors"),
             set_columns=set_columns,
             sort_by=sort_by,
             sort_order=sort_order,

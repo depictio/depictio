@@ -6,20 +6,16 @@
  * Mantine color scheme flips, and the server re-templates the figure with
  * `depictio/cli/cli/utils/mantine_templates.py`. A bundle has no server, so
  * the api shim swaps the frozen figure's `layout.template` with this
- * JS mirror of those exact templates instead — same colorway, backgrounds and
- * grid colors, all derived from the Mantine default palette (the server's
- * hexes ARE Mantine default shades: light grid = gray[3], dark grid =
- * gray[8], dark paper = dark[7], colorway = accent shade 6 / 8).
- *
- * One readability addition over the server templates: an explicit font/axis
- * text color (gray[8] light / gray[2] dark — the same pair the shared
- * advanced-viz helper `plotlyTheme.ts` uses), since Plotly's built-in #444
- * default is unreadable on the dark paper.
+ * JS mirror of those templates instead. Colorway, text, grid, zero-line and
+ * hover tokens and the font all come from depictio's shared plot palette
+ * (`palettes.ts`, one source with the Python side), so a frozen figure and a
+ * live one wear the same colours.
  */
-import { DEFAULT_THEME } from '@mantine/core';
-
-/** Mantine accent order used by the server templates. */
-const ACCENTS = ['blue', 'red', 'green', 'violet', 'orange', 'cyan', 'pink', 'yellow'] as const;
+import { PLOT_FONT_FAMILY } from '../../../../packages/depictio-react-core/src/palettes.generated';
+import {
+  categoricalPalette,
+  plotChrome,
+} from '../../../../packages/depictio-react-core/src/palettes';
 
 /** Sequential colorscale — verbatim mirror of `_SEQUENTIAL_COLORS` in
  *  `mantine_templates.py` (dmc's gradient; interpolated stops, so most of
@@ -43,27 +39,30 @@ export type ThemeName = 'light' | 'dark';
 
 /** Build the template object Plotly should merge under `layout.template`. */
 export function mantinePlotlyTemplate(theme: ThemeName): Record<string, unknown> {
-  const isDark = theme === 'dark';
-  const colors = DEFAULT_THEME.colors;
-  const colorway = ACCENTS.map((name) => colors[name][isDark ? 8 : 6]);
-  const bg = isDark ? colors.dark[7] : DEFAULT_THEME.white;
-  const grid = isDark ? colors.gray[8] : colors.gray[3];
-  const text = isDark ? colors.gray[2] : colors.gray[8];
+  const chrome = plotChrome(theme);
+  const colorway = [...categoricalPalette(null, theme)];
+  const bg = chrome.surface;
   const axis = {
-    gridcolor: grid,
+    gridcolor: chrome.grid,
     gridwidth: 0.5,
-    zerolinecolor: grid,
-    color: text,
+    zerolinecolor: chrome.zero,
+    linecolor: chrome.axis_line,
+    color: chrome.text,
   };
   return {
     layout: {
       colorway,
       paper_bgcolor: bg,
       plot_bgcolor: bg,
-      font: { family: DEFAULT_THEME.fontFamily, color: text },
+      font: { family: PLOT_FONT_FAMILY, color: chrome.text },
       xaxis: axis,
       yaxis: axis,
       geo: { bgcolor: bg },
+      hoverlabel: {
+        bgcolor: chrome.hover_bg,
+        bordercolor: chrome.hover_border,
+        font: { color: chrome.hover_text },
+      },
       colorscale: { sequential: SEQUENTIAL },
     },
   };

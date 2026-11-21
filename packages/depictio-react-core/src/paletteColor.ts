@@ -15,6 +15,8 @@
  */
 import type { MantineTheme } from '@mantine/core';
 
+import type { UiHuesOther } from './brandTheme';
+
 /** Default shade for a palette name that gives none. */
 export const DEFAULT_PALETTE_SHADE = 6;
 
@@ -77,15 +79,22 @@ export function paletteVar(
  * A colour as a concrete value (the theme's hex for a palette name), for code
  * that needs the channels, e.g. to mix a tint or paint a canvas. A literal
  * passes through; an unknown palette name returns the input unchanged.
+ *
+ * `isDark` picks the dark tuple of a hue the dashboard scope re-draws in the
+ * plot palette (`brandTheme.ts`, `theme.other.uiHues`): `theme.colors` holds the
+ * light tuple, the dark one lives beside it. Elsewhere it changes nothing.
  */
 export function paletteHex(
-  theme: Pick<MantineTheme, 'colors'>,
+  theme: Pick<MantineTheme, 'colors'> & Partial<Pick<MantineTheme, 'other'>>,
   color: string | null | undefined,
   defaultShade: number = DEFAULT_PALETTE_SHADE,
+  isDark = false,
 ): string | undefined {
   const parsed = parsePaletteColor(color);
   if (!parsed) return undefined;
   if (parsed.kind === 'literal') return parsed.value;
-  const tuple = theme.colors[parsed.name];
-  return tuple?.[parsed.shade ?? defaultShade] ?? parsed.name;
+  const shade = parsed.shade ?? defaultShade;
+  const uiHues = (theme.other as { uiHues?: UiHuesOther | null } | undefined)?.uiHues;
+  const tuple = (isDark && uiHues?.dark?.[parsed.name]) || theme.colors[parsed.name];
+  return tuple?.[shade] ?? parsed.name;
 }

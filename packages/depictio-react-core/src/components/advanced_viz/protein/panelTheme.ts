@@ -54,7 +54,7 @@ export function panelColours(theme: MantineTheme, isDark: boolean): PanelColours
     highlight,
     highlightFill: alpha(highlight, 0.22),
     neutral: cssToRgb(isDark ? theme.colors.gray[6] : theme.colors.gray[4]),
-    categorical: resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark)),
+    categorical: resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark),
     monoFont: theme.fontFamilyMonospace || 'monospace',
     font: theme.fontFamily || 'sans-serif',
   };

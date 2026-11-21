@@ -23,10 +23,10 @@ import {
   dispatchSankey,
   pollSankey,
 } from '../../api';
-import { stableColorMap } from '../../colors';
+import { plotOverflow, stableColorMap } from '../../colors';
 import { useCategoryColorSource, useCategoryPalette } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
-import { isUnassigned, lineageShade, unassignedGrey } from './hierarchyColors';
+import { isUnassigned, lineageShade, remainderColour } from './hierarchyColors';
 import { pinnedPalette } from './phylo/palette';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -317,6 +317,8 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       stepOptions[firstStep]?.length ? stepOptions[firstStep] : rootValues,
       palette,
       pinnedPalette(categorySource, null, firstStep),
+      isDark ? 'dark' : 'light',
+      plotOverflow(theme),
     );
     const inflow = new Map<number, Array<{ from: number; value: number }>>();
     link.source.forEach((src, i) => {
@@ -337,7 +339,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       rootOf.set(i, root);
       return root;
     };
-    const grey = unassignedGrey(isDark);
     const placeInStep = new Map<number, number>();
     const perStep = new Map<number, number>();
     nodes.forEach((n, i) => {
@@ -346,9 +347,9 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       perStep.set(n.step_index, k + 1);
     });
     const lineageColour = nodes.map((n, i) => {
-      if (isUnassigned(n.label)) return grey;
+      if (isUnassigned(n.label)) return remainderColour(n.label, isDark);
       const root = nodes[findRoot(i)];
-      if (!root || isUnassigned(root.label)) return grey;
+      if (!root || isUnassigned(root.label)) return remainderColour(root?.label, isDark);
       return lineageShade(rootColours.get(root.label), n.step_index, placeInStep.get(i) ?? 0, isDark);
     });
     const nodeColors = nodes.map((n, i) =>
@@ -465,6 +466,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     config.value_col,
     config.value_label,
     config.value_format,
+    theme,
   ]);
 
   // Encoding tier: how many steps the flow runs through, what the link colour

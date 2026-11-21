@@ -10,9 +10,11 @@ for figures (``merge_category_colors``).
 from __future__ import annotations
 
 import pandas as pd
-import plotly.express as px
 
 from depictio.api.v1.services.map.render import render_map
+from depictio.models import palettes
+
+DEFAULT_PALETTE = palettes.categorical(None, "light")
 
 DF = pd.DataFrame(
     {
@@ -41,7 +43,7 @@ def test_dashboard_colours_reach_the_map() -> None:
     assert colours["Athens"] == "#1a4f8f"
     assert colours["Rome"] == "#e8590c"
     # A value the dashboard does not name keeps its palette slot.
-    assert colours["Naples"] == px.colors.qualitative.Plotly[1]
+    assert colours["Naples"] == DEFAULT_PALETTE[1]
     assert info["color_discrete_map"]["Athens"] == "#1a4f8f"
 
 
@@ -71,7 +73,7 @@ def test_other_columns_and_the_auto_key_are_ignored() -> None:
         SCATTER,
         category_colors={"habitat": {"Soil": "#123456"}, "city": {"*": "auto"}},
     )
-    palette = px.colors.qualitative.Plotly
+    palette = DEFAULT_PALETTE
     assert _trace_colours(fig) == {
         "Athens": palette[0],
         "Naples": palette[1],
@@ -108,4 +110,4 @@ def test_choropleth_takes_the_dashboard_colours_for_a_categorical_column() -> No
     # A discrete choropleth is one trace per category, coloured by a flat scale.
     colours = {t.name: t.colorscale[0][1] for t in fig.data}
     assert colours["north"] == "#2a78d6"
-    assert colours["south"] == px.colors.qualitative.Plotly[1]
+    assert colours["south"] == DEFAULT_PALETTE[1]

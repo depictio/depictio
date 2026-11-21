@@ -36,18 +36,48 @@ BASE = {
 CASES = [
     ("whole chromosome", {"chrom": "chr7"}, None),
     ("no chromosome", {}, None),
-    ("window, picked level", {"chrom": "chr7", "start": 26_650_000, "end": 26_900_000, "pixels": 600}, None),
-    ("window, pinned level", {"chrom": "chr7", "start": 26_650_000, "end": 26_900_000, "resolution": 20_000}, None),
-    ("window without end columns", {"chrom": "chr7", "start": 26_655_000, "end": 26_800_000, "end1_col": None, "end2_col": None}, None),
-    ("tight cell budget", {"chrom": "chr7", "start": 26_600_000, "end": 26_900_000, "max_cells": 50}, None),
+    (
+        "window, picked level",
+        {"chrom": "chr7", "start": 26_650_000, "end": 26_900_000, "pixels": 600},
+        None,
+    ),
+    (
+        "window, pinned level",
+        {"chrom": "chr7", "start": 26_650_000, "end": 26_900_000, "resolution": 20_000},
+        None,
+    ),
+    (
+        "window without end columns",
+        {
+            "chrom": "chr7",
+            "start": 26_655_000,
+            "end": 26_800_000,
+            "end1_col": None,
+            "end2_col": None,
+        },
+        None,
+    ),
+    (
+        "tight cell budget",
+        {"chrom": "chr7", "start": 26_600_000, "end": 26_900_000, "max_cells": 50},
+        None,
+    ),
     ("whole chromosome, tight budget", {"chrom": "chr7", "max_cells": 100}, None),
-    ("masked by a filter", {"chrom": "chr7", "start": 26_600_000, "end": 26_800_000}, "count_gt_40"),
+    (
+        "masked by a filter",
+        {"chrom": "chr7", "start": 26_600_000, "end": 26_800_000},
+        "count_gt_40",
+    ),
     # A flat DC holds one level (no resolution column): the 10 kb rows. Polars'
     # sort is not stable, so a frame with tied (chrom, start1, start2) keys —
     # several levels mixed — has no single expected order; a real flat table
     # has none.
     ("flat table, truncated", {"chrom": "chr7", "max_cells": 100, "__flat__": True}, "res_10k"),
-    ("a level that does not exist", {"chrom": "chr7", "start": 26_600_000, "end": 26_700_000, "resolution": 12345}, None),
+    (
+        "a level that does not exist",
+        {"chrom": "chr7", "start": 26_600_000, "end": 26_700_000, "resolution": 12345},
+        None,
+    ),
 ]
 
 

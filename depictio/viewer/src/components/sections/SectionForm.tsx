@@ -69,6 +69,7 @@ const FIGURE_STYLE_OPTIONS: { value: FigureStyle | typeof INHERIT; label: string
   { value: INHERIT, label: 'Each figure’s own style' },
   { value: 'default', label: 'Default' },
   { value: 'minimal', label: 'Minimal (showcase)' },
+  { value: 'classic', label: 'Classic (as built)' },
 ];
 
 type Layout = 'tiles' | 'linked' | 'bar';

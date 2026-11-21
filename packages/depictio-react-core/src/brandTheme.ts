@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import {
+  alpha,
   createTheme,
   DEFAULT_THEME,
   mergeThemeOverrides,
@@ -8,6 +9,9 @@ import {
   type MantineThemeOverride,
 } from '@mantine/core';
 import { generateColors } from '@mantine/colors-generator';
+
+import { UI_HUES, UI_HUE_TUPLES } from './palettes.generated';
+import { isPaletteId } from './palettes';
 
 /**
  * Brand theme (#397): the one client-side declaration of a deployment's (or a
@@ -38,6 +42,13 @@ export interface BrandPlots {
   template?: string | null;
   colorway?: string[] | null;
   sequential?: string[] | null;
+  /** A depictio palette preset id (`PALETTE_IDS`); fills the colours below when unset. */
+  palette?: string | null;
+  /** Dark-theme variants, filled server-side from `palette`. */
+  colorway_dark?: string[] | null;
+  sequential_dark?: string[] | null;
+  /** Past the 8th value: the Other grey (`other`, default) or shade twins first (`shade`). */
+  overflow?: 'other' | 'shade' | null;
 }
 
 export interface BrandTheme {
@@ -206,6 +217,50 @@ export interface DepictioThemeOptions {
   brand?: BrandTheme | null;
   /** The active chrome style's theme overrides, laid over the brand theme. */
   chrome?: MantineThemeOverride | null;
+  /**
+   * The active depictio plot palette (`PALETTE_IDS`). When set, the Mantine hue
+   * names a dashboard's metadata uses (`teal`, `grape`, `orange`...) are re-drawn
+   * in that palette (see `ui_hues` in `depictio_palettes.json`), so the chrome and
+   * the figures read as one family. Only the dashboard's own scope passes it: the
+   * app shell keeps stock Mantine. `gray`, `dark`, `brandPrimary` are never remapped,
+   * and a hue the brand itself overrides (a `full` tint, a semantic role) keeps the
+   * brand's tuple.
+   */
+  uiPalette?: string | null;
+}
+
+/** Where the dark tuples of the remapped hues ride on the theme (`theme.other`). */
+export interface UiHuesOther {
+  palette: string;
+  /** Remapped name to its dark-scheme tuple; `theme.colors[name]` holds the light one. */
+  dark: Record<string, readonly string[]>;
+}
+
+/**
+ * The hue remap of one palette: light tuples (for `theme.colors`) and the dark
+ * ones. Names in `skip` (already overridden by the brand) are left alone.
+ *
+ * Why not Mantine's `virtualColor`: a virtual colour's tuple is
+ * `var(--mantine-color-<name>-<n>)` strings, and the dozens of renderers that
+ * read `theme.colors.teal[5]` for Plotly, canvas or JBrowse's MUI theme need a
+ * real hex. So `theme.colors[name]` stays a hex tuple (the light one) and the
+ * dark scheme is emitted as CSS variables by `brandCssVariablesResolver`, which
+ * is where a virtual colour's dark half ends up anyway.
+ */
+function uiHueTuples(
+  paletteId: string | null | undefined,
+  skip: ReadonlySet<string>,
+): { light: Record<string, MantineColorsTuple>; other: UiHuesOther } | null {
+  if (!isPaletteId(paletteId)) return null;
+  const light: Record<string, MantineColorsTuple> = {};
+  const dark: Record<string, readonly string[]> = {};
+  for (const hue of UI_HUES) {
+    if (skip.has(hue)) continue;
+    const tuple = UI_HUE_TUPLES[paletteId][hue];
+    light[hue] = tuple.light as unknown as MantineColorsTuple;
+    dark[hue] = tuple.dark;
+  }
+  return { light, other: { palette: paletteId, dark } };
 }
 
 const DEFAULT_FONT_FAMILY =
@@ -221,12 +276,15 @@ const DEFAULT_FONT_FAMILY =
  */
 export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
   const brand = options.brand ?? null;
+  const brandColors = brand ? paletteOverrides(brand) : {};
+  const uiHues = uiHueTuples(options.uiPalette, new Set(Object.keys(brandColors)));
   const colors: Record<string, MantineColorsTuple> = {
     ...(LOGO_PALETTES as unknown as Record<string, MantineColorsTuple>),
-    ...(brand ? paletteOverrides(brand) : {}),
+    ...(uiHues?.light ?? {}),
+    ...brandColors,
   };
   const hasPrimary = !!colors[BRAND_PALETTES.primary];
-  const primaryColor = hasPrimary
+  let primaryColor = hasPrimary
     ? BRAND_PALETTES.primary
     : isMantinePaletteName(brand?.primary)
       ? (brand!.primary as string)
@@ -238,6 +296,9 @@ export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
   if (!hasPrimary) {
     const stock = DEFAULT_THEME.colors as Record<string, MantineColorsTuple>;
     colors[BRAND_PALETTES.primary] = stock[primaryColor] ?? stock.blue;
+    // A remapped hue must not repaint the buttons: the primary becomes the stock
+    // tuple under its own name, so `blue` can be the palette's blue elsewhere.
+    if (uiHues && primaryColor in uiHues.light) primaryColor = BRAND_PALETTES.primary;
   }
 
   const theme = createTheme({
@@ -250,7 +311,10 @@ export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
     // `MantineTheme` can reach it — the Plotly renderers in particular, which
     // are handed a theme but no context, and which must follow a nested
     // provider when a dashboard overrides the instance branding.
-    other: { brand },
+    // `uiHues` is left out, not null, when there is no remap: a nested provider
+    // deep-merges its theme over the app's, and Mantine's merge of a null
+    // with an object yields an empty object, which would drop the tuples.
+    other: { brand, ...(uiHues ? { uiHues: uiHues.other } : {}) },
     headings: {
       // The Virgil hand-drawn face stays opt-in per place (e.g. AuthCard's
       // "Welcome to Depictio"); this is the brand's heading stack, if any.
@@ -307,7 +371,7 @@ export function brandCssVariablesResolver(brand: BrandTheme | null | undefined) 
       ? `var(--mantine-color-${BRAND_PALETTES[name]}-filled)`
       : `var(--mantine-color-${fallback}-filled)`;
 
-  return (_theme: MantineTheme) => ({
+  return (theme: MantineTheme) => ({
     // Scheme-independent brand hues, so plain CSS can reach the palette
     // without hardcoding a shade index per rule.
     variables: {
@@ -316,8 +380,38 @@ export function brandCssVariablesResolver(brand: BrandTheme | null | undefined) 
       '--depictio-brand-tertiary': role('tertiary', 'orange'),
     },
     light: scheme(brand?.surfaces_light),
-    dark: scheme(brand?.surfaces_dark),
+    dark: { ...uiHueDarkVariables(theme), ...scheme(brand?.surfaces_dark) },
   });
+}
+
+/**
+ * The dark half of the hue remap, as the CSS variables Mantine itself would emit
+ * for a colour with this tuple on the dark scheme (`get-css-color-variables`): the
+ * ten shades, then the `filled` / `light` / `outline` ones derived from the
+ * scheme's primary shade. Mantine computes them from `theme.colors`, which holds
+ * the light tuple here, so the dark block overrides all of them.
+ */
+function uiHueDarkVariables(theme: MantineTheme): Record<string, string> {
+  const hues = (theme.other as { uiHues?: UiHuesOther | null } | undefined)?.uiHues;
+  if (!hues?.dark) return {};
+  const shade = typeof theme.primaryShade === 'number' ? theme.primaryShade : theme.primaryShade.dark;
+  const vars: Record<string, string> = {};
+  for (const [name, tuple] of Object.entries(hues.dark)) {
+    const v = (suffix: string) => `--mantine-color-${name}-${suffix}`;
+    const ref = (n: number) => `var(--mantine-color-${name}-${n})`;
+    tuple.forEach((hex, i) => {
+      vars[v(String(i))] = hex;
+    });
+    vars[v('text')] = ref(4);
+    vars[v('filled')] = ref(shade);
+    vars[v('filled-hover')] = ref(shade === 9 ? 8 : shade + 1);
+    vars[v('light')] = alpha(tuple[Math.max(0, shade - 2)], 0.15);
+    vars[v('light-hover')] = alpha(tuple[Math.max(0, shade - 2)], 0.2);
+    vars[v('light-color')] = ref(Math.max(shade - 5, 0));
+    vars[v('outline')] = ref(Math.max(shade - 4, 0));
+    vars[v('outline-hover')] = alpha(tuple[Math.max(shade - 4, 0)], 0.05);
+  }
+  return vars;
 }
 
 // ── Consuming the brand from components ───────────────────────────────────────

@@ -38,7 +38,7 @@ describe('buildRowAnnotationMap', () => {
     expect(map.get('x')?.id).toBe('a');
   });
 
-  it('defaults to yellow and ignores unknown colours', () => {
+  it('defaults to the neutral ink and ignores unknown colours', () => {
     const map = buildRowAnnotationMap(
       [
         item('a', 1, rows('id', [1])),
@@ -46,8 +46,8 @@ describe('buildRowAnnotationMap', () => {
       ],
       'id',
     );
-    expect(map.get('1')?.color).toBe('yellow');
-    expect(map.get('2')?.color).toBe('yellow');
+    expect(map.get('1')?.color).toBe('ink');
+    expect(map.get('2')?.color).toBe('ink');
   });
 
   it('ignores other columns, coordinates and non-point geometries', () => {

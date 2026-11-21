@@ -3,9 +3,9 @@
 A template can say ``category_colors: {condition: auto}``: give every value of
 ``condition`` its own colour, without knowing the values in advance. The import
 reads the column's distinct values and calls :func:`assign_category_colors`,
-which hands out the slots of :data:`CATEGORY_PALETTE` in a fixed order, so one
-run's ``control`` is the same colour on every tab and, on a re-import, the same
-colour it had before.
+which hands out the slots of :data:`CATEGORY_PALETTE` (the shared depictio
+palette) in a fixed order, so one run's ``control`` is the same colour on every
+tab and, on a re-import, the same colour it had before.
 
 Pure: no I/O, no randomness. The same values, pins and previous colours always
 give the same map.
@@ -14,18 +14,12 @@ give the same map.
 import re
 from collections.abc import Iterable, Mapping
 
-# Colour-vision-deficiency safe, in the order slots are handed out: the first
-# two alone already separate under every common deficiency.
-CATEGORY_PALETTE: tuple[str, ...] = (
-    "#2a78d6",
-    "#eb6834",
-    "#1baf7a",
-    "#eda100",
-    "#e87ba4",
-    "#008300",
-    "#4a3aa7",
-    "#e34948",
-)
+from depictio.models import palettes
+
+# The default depictio palette (light variant), CVD-checked as a whole: slots are
+# handed out in its order. A dashboard stores these hexes, so the same value keeps
+# its colour on every tab.
+CATEGORY_PALETTE: tuple[str, ...] = tuple(palettes.categorical(None, "light"))
 
 _DIGITS = re.compile(r"(\d+)")
 
@@ -65,7 +59,9 @@ def assign_category_colors(
 
     Returns:
         ``{value: colour}``. Each value takes, in order of precedence, its
-        previous colour, its pinned colour, or the next palette slot no pinned
+        pinned colour (the template's explicit choice: a re-import that replaces
+        the dashboard applies a changed pin), its previous colour (an ``auto``
+        value keeps what it had), or the next palette slot no pinned
         or previous colour already uses (values in natural order). When more
         values need a slot than the palette has free, none is generated: the
         column keeps its pinned and previous colours only, and the dashboard's
@@ -81,7 +77,7 @@ def assign_category_colors(
 
     fixed: dict[str, str] = {}
     for value in ordered:
-        colour = previous.get(value) or pinned.get(value)
+        colour = pinned.get(value) or previous.get(value)
         if colour:
             fixed[value] = colour
 

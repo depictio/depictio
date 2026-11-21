@@ -9,6 +9,7 @@ from typing import Any
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.multiqc.themes import get_theme_template
+from depictio.models import palettes
 
 # Reference viewport for the fit: the server does not know the panel's real
 # size, so assume a conservative dashboard tile. Underestimating keeps every
@@ -157,6 +158,18 @@ def _compute_geojson_center_zoom(
         _extract_coords(coords)
 
     return _compute_auto_zoom(lats, lons)
+
+
+def _fallback_palette(theme: str) -> list[str]:
+    """Colours for categories no map names: the brand colorway, else the default palette."""
+    try:
+        from depictio.api.v1.services.branding import resolve_effective_brand_theme
+
+        plots = resolve_effective_brand_theme().plots
+        brand = plots and ((theme == "dark" and plots.colorway_dark) or plots.colorway)
+    except Exception:
+        brand = None
+    return list(brand or palettes.categorical(None, theme))
 
 
 def _dashboard_column_colors(category_colors: Any, column: str | None) -> dict[str, str]:
@@ -343,7 +356,9 @@ def render_map(
         and color_column in pandas_df.columns
     ):
         unique_vals = sorted(pandas_df[color_column].dropna().unique().tolist(), key=str)
-        palette = px.colors.qualitative.Plotly
+        # The brand colorway when the instance has one, else the default depictio
+        # palette: a map's categories and the figures beside it share colours.
+        palette = _fallback_palette(theme)
         auto_map = {str(v): palette[i % len(palette)] for i, v in enumerate(unique_vals)}
         if dashboard_map:
             from depictio.api.v1.services.figure.figure_builder import merge_category_colors

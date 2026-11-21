@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  capUpsetLegend,
   colourUpsetSets,
+  MAX_LEGEND_ENTRIES,
+  MAX_LEGEND_ROWS,
+  recolourUpsetAnnotationTracks,
   inkUpsetForDark,
   resolveUpsetSetColors,
   scaleUpsetDots,
@@ -316,5 +320,59 @@ describe('upset responsive layout', () => {
     expect(narrow[1]).toBe(bars);
     const wide = scaleUpsetDots([dots, bars], matrix, 1000);
     expect(wide[0]).toBe(dots);
+  });
+});
+
+describe('legend cap', () => {
+  const entry = (i: number) => ({ type: 'bar', name: `Kingdom: value number ${i}`, legendgroup: 'Kingdom', showlegend: true });
+  const flood = Array.from({ length: 80 }, (_, i) => entry(i));
+  const bare = { margin: { l: 90, r: 20, t: 30, b: 50 }, legend: { font: { size: 10 } } };
+
+  it('never takes more than MAX_LEGEND_ROWS rows, however long the legend', () => {
+    const top = (withUpsetResponsiveLayout(bare, flood, { width: 500 }).margin as { t: number }).t;
+    const rowHeight = Math.round(10 * 1.4) + 4;
+    expect(top).toBeLessThanOrEqual(MAX_LEGEND_ROWS * rowHeight + 8 + 20 + 50 + 20);
+    expect(top).toBe(
+      (withUpsetResponsiveLayout(bare, [...flood, entry(99)], { width: 500 }).margin as { t: number }).t,
+    );
+  });
+
+  it('lists at most MAX_LEGEND_ENTRIES and keeps every trace', () => {
+    const out = capUpsetLegend([{ type: 'bar', name: 'Intersection Size', showlegend: false }, ...flood]);
+    expect(out).toHaveLength(81);
+    expect(out.filter((t) => t.showlegend === true)).toHaveLength(MAX_LEGEND_ENTRIES);
+    expect(out[0].showlegend).toBe(false);
+    expect(flood[79].showlegend).toBe(true);
+  });
+});
+
+describe('recolourUpsetAnnotationTracks', () => {
+  const track = (group: string, cat: string, color: string) => ({
+    type: 'bar',
+    x: [0, 1],
+    y: [0.4, 0.6],
+    name: `${group}: ${cat}`,
+    legendgroup: group,
+    marker: { color, line: { width: 0.3 } },
+    hovertemplate: `${cat}: %{y:.0%}<extra></extra>`,
+  });
+  const bacteria = track('Kingdom', 'Bacteria', '#111111');
+  const archaea = track('Kingdom', 'Archaea', '#222222');
+  const phylum = track('Phylum', 'Bacteria', '#333333');
+  const numeric = { type: 'bar', name: 'Size: a', legendgroup: 'Size', hovertemplate: 'a: %{y:.2f}<extra></extra>', marker: { color: '#444444' } };
+  const intersections = { type: 'bar', name: 'Intersection Size', x: [0], y: [3], marker: { color: '#555555' } };
+
+  it('applies the pins of the track’s column and keeps the server colour elsewhere', () => {
+    const out = recolourUpsetAnnotationTracks(
+      [intersections, bacteria, archaea, phylum, numeric],
+      (g) => (g === 'Kingdom' ? { Bacteria: '#e8590c' } : null),
+    );
+    expect((out[1].marker as any).color).toBe('#e8590c');
+    expect((out[1].marker as any).line).toEqual({ width: 0.3 });
+    expect(out[2]).toBe(archaea);
+    expect(out[3]).toBe(phylum);
+    expect(out[4]).toBe(numeric);
+    expect(out[0]).toBe(intersections);
+    expect((bacteria.marker as any).color).toBe('#111111');
   });
 });

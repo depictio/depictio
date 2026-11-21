@@ -28,16 +28,7 @@ from typing import Any
 
 from depictio.api.v1.services.advanced_viz.color_scale import plotly_colorscale
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-
-_PALETTE: tuple[str, ...] = (
-    "#4C72B0",
-    "#DD8452",
-    "#55A467",
-    "#C44E52",
-    "#8172B3",
-    "#937860",
-    "#DA8BC3",
-)
+from depictio.models import palettes
 
 #: Contours drawn behind the points. Four is enough to read the gradient without
 #: turning the panel into graph paper.
@@ -159,8 +150,9 @@ def build(
     }
     if categories:
         unique = list(dict.fromkeys(str(v if v is not None else "") for v in categories))
+        palette = palettes.categorical(None, theme)
         marker["color"] = [
-            _PALETTE[unique.index(str(v if v is not None else "")) % len(_PALETTE)]
+            palette[unique.index(str(v if v is not None else "")) % len(palette)]
             for v in categories
         ]
     elif f1:
@@ -177,7 +169,7 @@ def build(
             }
         )
     else:
-        marker["color"] = "#3b82c4"
+        marker["color"] = palettes.categorical(None, theme)[0]
 
     hovertemplate = (
         f"<b>%{{customdata[0]}}</b><br>{recall_col}: %{{x:.3f}}<br>{precision_col}: %{{y:.3f}}"

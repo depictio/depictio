@@ -11,7 +11,7 @@ from typing import Any
 
 import polars as pl
 
-from ..theme import GLASS_HUES, MANTINE_SHADES, resolve_primary
+from ..theme import paper_colorway, resolve_primary
 from . import NativeRenderer, NothingToDraw, Tile, esc, html_result, register, require
 
 INK, DIMMED, FAINT, HAIR = "#212529", "#495057", "#868e96", "rgba(33,37,41,0.11)"
@@ -32,8 +32,8 @@ def category_colors(
     """A stable colour per value: the dashboard's own colour for a value it
     pins (``pinned``, ``Tile.pinned_colors``), else Paper's colorway, handed
     out in the sorted order of the values left."""
-    first, _ = resolve_primary(primary)
-    hues = [first, *(MANTINE_SHADES[h][0] for h in GLASS_HUES if MANTINE_SHADES[h][0] != first)]
+    del primary  # Paper's colorway no longer leads with the primary
+    hues = paper_colorway()
     pinned = pinned or {}
     keys = sorted({str(v) for v in values if v is not None}, key=_natural)
     free = [k for k in keys if k not in pinned]

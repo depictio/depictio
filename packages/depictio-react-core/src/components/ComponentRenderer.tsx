@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useContext, useMemo, useRef } from 'react';
-import { ActionIcon, Tooltip, useMantineTheme } from '@mantine/core';
+import { ActionIcon, Tooltip, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
@@ -1044,9 +1044,13 @@ const CardRenderer: React.FC<{
   // `lime` drew the CSS keyword, not the theme's shade.
   const sectionColor = useContext(SectionColorContext);
   const theme = useMantineTheme();
+  const isDarkScheme = useMantineColorScheme().colorScheme === 'dark';
   const ownColor = metadata.icon_color as string | undefined;
-  // `paletteHex` takes `orange` and the shaded `orange.4` alike.
-  const iconColor = paletteHex(theme, ownColor) || paletteHex(theme, sectionColor);
+  // `paletteHex` takes `orange` and the shaded `orange.4` alike; the scheme picks
+  // the dark tuple of a hue the dashboard scope re-draws in the plot palette.
+  const iconColor =
+    paletteHex(theme, ownColor, undefined, isDarkScheme) ||
+    paletteHex(theme, sectionColor, undefined, isDarkScheme);
   const wrapperStyle: React.CSSProperties = {
     opacity: dimming ? 0.6 : 1,
     transition: 'opacity 120ms ease-out',

@@ -353,7 +353,7 @@ class TestAnnotation:
     def test_defaults(self):
         ann = _range_annotation()
         assert ann.published is False
-        assert ann.color == "yellow"
+        assert ann.color is None  # drawn in the neutral annotation ink
         assert ann.style == AnnotationStyle()
 
     def test_palette_color_accepted(self):

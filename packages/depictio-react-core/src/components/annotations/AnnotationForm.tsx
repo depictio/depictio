@@ -12,8 +12,8 @@ import { defaultColorFor, KIND_LABELS, validateLabel } from '../../annotations/l
 import { DEFAULT_RANGE_OPACITY } from '../../annotations/toPlotly';
 import { annotationSummary } from '../../annotations/summary';
 import type { AnnotationStats } from '../../annotations/summary';
-import { MAX_LABEL_CHARS } from '../../annotations/types';
-import type { AnnotationColor, AnnotationStyle } from '../../annotations/types';
+import { ANNOTATION_INK, MAX_LABEL_CHARS } from '../../annotations/types';
+import type { AnnotationColorName, AnnotationStyle } from '../../annotations/types';
 import AnnotationColorPicker from './AnnotationColorPicker';
 import { RegionHighlightFields } from './AnnotationStyleFields';
 
@@ -44,7 +44,7 @@ const AnnotationForm: React.FC<AnnotationFormProps> = ({
   stats,
 }) => {
   const [label, setLabel] = useState('');
-  const [color, setColor] = useState<AnnotationColor>(defaultColorFor(pending.kind));
+  const [color, setColor] = useState<AnnotationColorName>(defaultColorFor(pending.kind));
   const [body, setBody] = useState('');
   const [published, setPublished] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -77,7 +77,8 @@ const AnnotationForm: React.FC<AnnotationFormProps> = ({
           kind: pending.kind,
           geometry,
           label: label.trim(),
-          color,
+          // The neutral ink is what an unset colour draws in: never stored.
+          ...(color !== ANNOTATION_INK ? { color } : {}),
           ...(style ? { style } : {}),
           published,
         },
@@ -122,7 +123,7 @@ const AnnotationForm: React.FC<AnnotationFormProps> = ({
         }}
         error={touched ? labelError : null}
       />
-      <AnnotationColorPicker value={color} onChange={setColor} />
+      <AnnotationColorPicker value={color} onChange={setColor} allowInk />
       {withRegion && (
         <RegionHighlightFields
           enabled={highlight}

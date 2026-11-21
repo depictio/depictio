@@ -35,7 +35,7 @@ import type { AnnotationStats } from './summary';
 import { annotationHoverText } from './summary';
 import { asPlainArray, customdataIds, customdataRow, isOverlayTraceName } from './layer';
 import type {
-  AnnotationColor,
+  AnnotationColorName,
   GeoNote,
   MarkedPoints,
   PointCoord,
@@ -346,7 +346,7 @@ export function centroidsSignature(m: ReadonlyMap<string, readonly [number, numb
 }
 
 export interface GeoAnnotationsOptions {
-  resolveColor: (name: AnnotationColor, shade?: number) => string;
+  resolveColor: (name: AnnotationColorName, shade?: number) => string;
   /** Label text colour; defaults to the annotation's own resolved colour. */
   fontColor?: string;
   /** The map's traces (see `normalizeGeoTraces`), to find marked points by id. */

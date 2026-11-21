@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { annotationStripCategories, recolourAnnotationStrips } from './heatmapAnnotationColors';
+import {
+  annotationStripCategories,
+  colourDistance,
+  matrixScaleEnds,
+  recolourAnnotationStrips,
+} from './heatmapAnnotationColors';
 
 /** A strip as plotly-complexheatmap emits it: a block per split plus legend entries. */
 function strip(name: string, cats: string[], colours: string[]) {
@@ -72,5 +77,46 @@ describe('recolourAnnotationStrips', () => {
     const odd = { ...condition.block, colorscale: [[0, '#000000'], [1, '#000000']] };
     const out = recolourAnnotationStrips([odd, ...condition.legend], () => ({ treated: '#e8590c' }));
     expect(out[0]).toBe(odd);
+  });
+});
+
+describe('scale-end guard', () => {
+  const scaled = (colorscale: unknown) => ({ ...matrix, colorscale });
+  const redBlue = [
+    [0, '#b2182b'],
+    [0.5, '#f7f7f7'],
+    [1, 'rgb(33,102,172)'],
+  ];
+
+  it('measures distance in Lab and ignores what is not a colour', () => {
+    expect(colourDistance('#ff0000', '#ff0000')).toBe(0);
+    expect(colourDistance('#ff0000', '#fe0000')).toBeLessThan(2);
+    expect(colourDistance('#ff0000', '#0000ff')).toBeGreaterThan(50);
+    expect(colourDistance('red', '#0000ff')).toBe(Infinity);
+  });
+
+  it('reads the ends of an explicit scale and of a named one', () => {
+    expect(matrixScaleEnds([scaled(redBlue), condition.block])).toEqual(['#b2182b', 'rgb(33,102,172)']);
+    expect(matrixScaleEnds([scaled('Viridis')])).toEqual(['#440154', '#fde725']);
+    expect(matrixScaleEnds([scaled('Unknown')])).toEqual([]);
+  });
+
+  it('keeps the server colour for a pin on a scale end, applies the others', () => {
+    const d = [scaled(redBlue), condition.block, ...condition.legend];
+    const out = recolourAnnotationStrips(d, () => ({ control: '#b3192c', treated: '#e8590c' }));
+    const block = out.find((t) => t.hovertemplate === 'condition: %{customdata}<extra></extra>')!;
+    expect(block.colorscale).toEqual([
+      [0, '#66c2a5'],
+      [0.5, '#66c2a5'],
+      [0.5, '#e8590c'],
+      [1, '#e8590c'],
+    ]);
+    const swatches = out.filter((t) => t.legendgroup === 'condition').map((t) => (t.marker as any).color);
+    expect(swatches).toEqual(['#66c2a5', '#e8590c']);
+  });
+
+  it('applies every pin when the scale is far from them, or unknown', () => {
+    const out = recolourAnnotationStrips([scaled('Viridis'), ...condition.legend], () => ({ treated: '#e8590c' }));
+    expect((out[2].marker as any).color).toBe('#e8590c');
   });
 });

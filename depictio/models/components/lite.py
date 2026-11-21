@@ -237,8 +237,12 @@ class FigureLiteComponent(BaseLiteComponent):
     figure_style: FigureStyle | None = Field(
         default=None,
         description="How the figure is drawn. Unset takes the style of the grid section "
-        "the figure sits in (`figure_style`), else `default`. `minimal`: the landing-page "
-        "look -- the title in the card header beside an icon badge with the subtitle "
+        "the figure sits in (`figure_style`), else `default`. `default`: the overview look "
+        "-- one hue where colour only repeats the axis, bars sorted biggest first, "
+        "Other/Unclassified/NA last and in grey, more than 8 colours folded into a grey "
+        "Other (colour only, no data dropped), light grid, markers sized by point count. "
+        "`classic`: the drawing exactly as the figure builds it. `minimal`: the landing-page "
+        "look (on top of the overview look) -- the title in the card header beside an icon badge with the subtitle "
         "inline, a transparent plot with faint dashed grid lines and no axis lines, small "
         "grey ticks, the legend in one line under the plot, large markers without "
         "outlines, tight margins, and the toolbar only on hover. Grouped bars get a "
@@ -1476,8 +1480,9 @@ class HighlightLiteComponent(BaseLiteComponent):
     )
     figure_style: FigureStyle | None = Field(
         default=None,
-        description="Style the figure is drawn in here. Unset: `minimal`, whatever the "
-        "source tab draws it in.",
+        description="Style the figure is drawn in here: `default` (overview look), "
+        "`minimal` or `classic` (drawing left as built). Unset: `minimal`, whatever "
+        "the source tab draws it in.",
     )
     subtitle: str | None = Field(
         default=None, description="Dimmed words after the title; unset takes the source's."

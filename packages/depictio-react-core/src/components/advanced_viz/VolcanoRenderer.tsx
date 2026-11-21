@@ -15,7 +15,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { isStaleFetch } from '../../fetchQueue';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
@@ -1435,8 +1435,10 @@ function buildQq(input: {
     const names = Array.from(new Set(cats.map(String))).sort();
     const colours = stableColorMap(
       names,
-      resolveCategoricalPalette(input.theme, TAB10_PALETTE),
+      resolveCategoricalPalette(input.theme, TAB10_PALETTE, input.isDark),
       input.catColours,
+      input.isDark ? 'dark' : 'light',
+      plotOverflow(input.theme),
     );
     const allPs: number[] = [];
     for (const name of names) {

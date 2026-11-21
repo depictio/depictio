@@ -18,11 +18,7 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-
-#: Tier colours, matching VolcanoRenderer.tsx:129-131.
-_COLOR_UP = "#e64980"
-_COLOR_DN = "#1c7ed6"
-_COLOR_NS = "rgba(160,160,160,0.55)"
+from depictio.api.v1.services.advanced_viz.palette import significance_colors
 
 #: Binary marker sizing so hits pop out of the grey NS cloud without
 #: distracting magnitude variation (VolcanoRenderer.tsx:135).
@@ -113,7 +109,8 @@ def build(
         else:
             tiers.append("NS")
 
-    colors = [_COLOR_UP if t == "UP" else _COLOR_DN if t == "DN" else _COLOR_NS for t in tiers]
+    up, down, ns = significance_colors(theme)
+    colors = [up if t == "UP" else down if t == "DN" else ns for t in tiers]
     sizes = [_SIZE_NS if t == "NS" else _SIZE_HIT for t in tiers]
 
     # Top-N by combined |effect| * significance so both axes matter.

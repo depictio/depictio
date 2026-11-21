@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Group, Stack, Tooltip } from '@mantine/core';
 
 import { formatAggregate, formatCardNumber, hexWithAlpha, percent } from './format';
+import { useBreakdownColour } from './useBreakdownColour';
 import { METRIC, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 import type { BreakdownPayload } from './types';
 
@@ -38,6 +39,7 @@ const TopNMetric: React.FC<{
    *  strip, which are in the card's unit. Shares print as they always did. */
   format?: string;
 }> = ({ payload, color, shares = true, format }) => {
+  const colourOf = useBreakdownColour(payload, color);
   if (!payload.top.length) return null;
   const barFill = hexWithAlpha(color, 0.75);
   const tailRows = Math.max(0, payload.unique_values - payload.top.length);
@@ -109,7 +111,7 @@ const TopNMetric: React.FC<{
                 style={{
                   width: `${Math.max(MIN_BAR_PCT, barPct(row))}%`,
                   height: '100%',
-                  background: barFill,
+                  background: colourOf(row.name, idx, barFill),
                   borderRadius: 2,
                 }}
               />

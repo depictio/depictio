@@ -18,10 +18,10 @@ Output: taxon, rank, one Float64 column per profiling run, _col_annotations_json
 
 import json
 
-import plotly.colors
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.models.palette_tracks import track_colors
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -51,7 +51,9 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _TOP_TAXA = 60
 _ANNOTATIONS_COL = "_col_annotations_json"
-_PLOTLY_QUALITATIVE = plotly.colors.qualitative.Plotly
+# Group colours come from the shared palette (depictio.models.palettes), minus the
+# hues at the ends of the heatmap's sequential scale.
+_SCALE_KIND = "sequential"
 
 
 def _column_annotations(runs: pl.DataFrame, columns: list[str]) -> str | None:
@@ -66,9 +68,7 @@ def _column_annotations(runs: pl.DataFrame, columns: list[str]) -> str | None:
         annotations[field] = {
             "values": values,
             "type": "categorical",
-            "colors": {
-                v: _PLOTLY_QUALITATIVE[i % len(_PLOTLY_QUALITATIVE)] for i, v in enumerate(unique)
-            },
+            "colors": track_colors(unique, _SCALE_KIND),
         }
     return json.dumps(annotations) if annotations else None
 

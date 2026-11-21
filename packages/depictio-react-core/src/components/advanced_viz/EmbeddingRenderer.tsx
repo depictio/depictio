@@ -14,7 +14,7 @@ import {
   StoredMetadata,
   type ComputeEmbeddingResult,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -536,10 +536,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
       }
       categories.sort();
     }
-    const categoricalPalette = resolveCategoricalPalette(theme, TAB10_PALETTE);
+    const categoricalPalette = resolveCategoricalPalette(theme, TAB10_PALETTE, isDark);
     let colourSource =
       isCategorical && colorValues
-        ? stableColorMap(colorUniverse ?? categories, categoricalPalette, pinnedColours)
+        ? stableColorMap(colorUniverse ?? categories, categoricalPalette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme))
         : null;
     // One trace per group only while the group count stays sane, see
     // MAX_CATEGORY_TRACES. A column with more values than that (a guide, a
@@ -558,7 +558,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
         .filter((c) => !kept.includes(c))
         .flatMap((c) => categoryIdx.get(c) ?? [])
         .sort((a, b) => a - b);
-      const keptColours = stableColorMap(kept, categoricalPalette, pinnedColours);
+      const keptColours = stableColorMap(kept, categoricalPalette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
       for (const cat of categories) if (!kept.includes(cat)) categoryIdx.delete(cat);
       categoryIdx.set(otherLabel, otherIdx);
       categories.splice(0, categories.length, ...kept, otherLabel);

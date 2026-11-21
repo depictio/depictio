@@ -15,6 +15,12 @@ from plotly_complexheatmap.utils import categorical_colorscale, generate_colors
 # Default track sizes (fraction of figure dimension)
 _CATEGORICAL_SIZE = 0.025  # thin colour bar like ComplexHeatmap
 _NUMERIC_SIZE = 0.06  # bar/scatter need more room
+# A row strip is a fraction of the figure WIDTH, which a responsive consumer
+# shrinks (and whose right margin, row labels and legend take a fixed ~150 px
+# off): 0.025 of the ~250-400 px left for the plot is a 6-10 px sliver, too
+# thin to tell its colours apart. A column strip is a fraction of the height,
+# which keeps its room, so only the row side is widened.
+_ROW_CATEGORICAL_SIZE = 0.045
 
 # Painted pixels a brick must keep AFTER the border gap has been taken out of
 # it. Plotly paints each brick at ``pitch - gap`` px between integer-rounded
@@ -506,12 +512,17 @@ class HeatmapAnnotation:
     # -- factory helpers -----------------------------------------------------
 
     @staticmethod
+    def _categorical_size(which: str) -> float:
+        return _ROW_CATEGORICAL_SIZE if which == "row" else _CATEGORICAL_SIZE
+
+    @staticmethod
     def _infer(name: str, values: Sequence[Any], which: str = "column") -> AnnotationTrack:
         arr = np.asarray(values)
+        size = HeatmapAnnotation._categorical_size(which)
         if arr.dtype.kind in ("U", "S", "O"):
-            return CategoricalTrack(name=name, values=list(values), which=which)
+            return CategoricalTrack(name=name, values=list(values), which=which, size=size)
         if arr.dtype.kind == "i" and len(np.unique(arr)) <= 10:
-            return CategoricalTrack(name=name, values=[str(v) for v in values], which=which)
+            return CategoricalTrack(name=name, values=[str(v) for v in values], which=which, size=size)
         return NumericBarTrack(name=name, values=values)
 
     @staticmethod
@@ -521,7 +532,8 @@ class HeatmapAnnotation:
         sz = cfg.get("size")
         if tp == "categorical":
             return CategoricalTrack(
-                name=name, values=list(vals), colors=cfg.get("colors"), which=which, size=sz or _CATEGORICAL_SIZE
+                name=name, values=list(vals), colors=cfg.get("colors"), which=which,
+                size=sz or HeatmapAnnotation._categorical_size(which),
             )
         if tp == "bar":
             return NumericBarTrack(name=name, values=vals, color=cfg.get("color", "#4C78A8"), size=sz or _NUMERIC_SIZE)

@@ -289,6 +289,13 @@ const MIN_SCALE = 0.7;
 const BASE_MARGIN = { l: 90, r: 10, t: 30, b: 20 };
 const BASE_FONT = 11;
 const BASE_LEGEND_FONT = 10;
+/** The legend band never takes more rows than this, whatever the figure lists:
+ *  a long legend must not squeeze the plot. */
+export const MAX_LEGEND_ROWS = 3;
+/** Entries past this many are left out of the legend (the data stays). */
+export const MAX_LEGEND_ENTRIES = 30;
+/** A label counts for at most this many characters when rows are estimated. */
+const MAX_LEGEND_LABEL_CHARS = 32;
 /** Pixels of figure above the bars that no legend or title takes. */
 const TOP_PAD = 20;
 
@@ -334,7 +341,7 @@ export function upsetLegendRows(
   let rows = 1;
   let used = 0;
   for (const label of labels) {
-    const w = label.length * fontSize * 0.6 + fontSize * 3.6;
+    const w = Math.min(label.length, MAX_LEGEND_LABEL_CHARS) * fontSize * 0.6 + fontSize * 3.6;
     if (used > 0 && used + w > room) {
       rows += 1;
       used = 0;
@@ -390,8 +397,11 @@ export function withUpsetResponsiveLayout(
 
   const legendFont = (layout.legend as { font?: Record<string, unknown> } | undefined)?.font;
   const legendSize = scaledSize(num(legendFont?.size, BASE_LEGEND_FONT), scale, 8);
-  const labels = options.hideLegend ? [] : upsetLegendLabels(data);
-  const rows = upsetLegendRows(labels, (options.width ?? UPSET_REFERENCE_WIDTH) - l - r, legendSize);
+  const labels = options.hideLegend ? [] : upsetLegendLabels(data).slice(0, MAX_LEGEND_ENTRIES);
+  const rows = Math.min(
+    MAX_LEGEND_ROWS,
+    upsetLegendRows(labels, (options.width ?? UPSET_REFERENCE_WIDTH) - l - r, legendSize),
+  );
   const rowHeight = Math.round(legendSize * 1.4) + 4;
   const legendBand = rows > 0 ? rows * rowHeight + 8 : 0;
 
@@ -437,5 +447,53 @@ export function scaleUpsetDots(data: Trace[], layout: Layout, width: number | nu
     const marker = t.marker as Record<string, unknown> | undefined;
     if (!marker || marker.size == null) return t;
     return { ...t, marker: { ...marker, size: shrink(marker.size) } };
+  });
+}
+
+/**
+ * The figure with at most `max` legend entries: the traces past it stay in
+ * the plot but drop out of the legend, so a long legend cannot grow without
+ * bound (`withUpsetResponsiveLayout` sizes its band for the same cap).
+ */
+export function capUpsetLegend(data: readonly Trace[], max: number = MAX_LEGEND_ENTRIES): Trace[] {
+  let listed = 0;
+  return data.map((t) => {
+    if (t.showlegend === false || !(t.showlegend === true || t.name != null)) return t;
+    listed += 1;
+    return listed > max ? { ...t, showlegend: false } : t;
+  });
+}
+
+const CATEGORY_HOVER = /^(.*): %\{y:\.0%\}<extra><\/extra>$/;
+
+/**
+ * The categorical annotation tracks (one stacked bar trace per category, named
+ * `<track>: <category>`, in the track's legend group) in the colours
+ * `coloursFor(track)` gives them: the dashboard's pins for the track's column.
+ * A category it does not name keeps the colour the server drew it in. Numeric
+ * tracks and every other trace are returned as they were.
+ */
+export function recolourUpsetAnnotationTracks(
+  data: readonly Trace[],
+  coloursFor: (track: string) => Record<string, string> | null,
+): Trace[] {
+  const cache = new Map<string, Record<string, string> | null>();
+  return data.map((t) => {
+    const group = t.legendgroup;
+    const name = t.name;
+    if (
+      t.type !== 'bar' ||
+      typeof group !== 'string' ||
+      typeof name !== 'string' ||
+      !name.startsWith(`${group}: `) ||
+      typeof t.hovertemplate !== 'string' ||
+      !CATEGORY_HOVER.test(t.hovertemplate)
+    ) {
+      return t;
+    }
+    if (!cache.has(group)) cache.set(group, coloursFor(group));
+    const colour = cache.get(group)?.[name.slice(group.length + 2)];
+    if (!colour) return t;
+    return { ...t, marker: { ...((t.marker as Record<string, unknown>) ?? {}), color: colour } };
   });
 }

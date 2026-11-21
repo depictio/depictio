@@ -16,6 +16,7 @@ import {
   StoredMetadata,
   UpsetResult,
 } from '../../api';
+import { columnCategoryColors, pinsForColumns } from '../../categoryColors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -35,8 +36,10 @@ import {
 import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import {
+  capUpsetLegend,
   colourUpsetSets,
   inkUpsetForDark,
+  recolourUpsetAnnotationTracks,
   resolveUpsetSetColors,
   scaleUpsetDots,
   upsetColumnSets,
@@ -60,11 +63,11 @@ import { demandForItems } from './contentDemand';
 const SET_ROW_PX = 26;
 /** The intersection-size bar panel above the matrix, which is the panel the
  *  plot is actually read from and must not be squeezed. */
-const INTERSECTION_PANEL_PX = 220;
+const INTERSECTION_PANEL_PX = 260;
 /** The intersection labels along the bottom plus the figure's own margins. */
 const UPSET_CHROME_PX = 90;
 /** One annotation track, drawn as its own band under the matrix. */
-const ANNOTATION_TRACK_PX = 70;
+const ANNOTATION_TRACK_PX = 110;
 
 interface UpsetPlotConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -170,6 +173,13 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
 
   const effectiveAnnotationCols = showAnnotations ? annotationCols : [];
 
+  // The dashboard pins of the strip columns, sent so the server keeps the slots
+  // they hold free and folds the rest of the tail into Other (a pinned colour is
+  // never repeated by an unpinned value).
+  const pinSource = useCategoryColorSource();
+  const annotationPins = useMemo(() => pinsForColumns(pinSource, effectiveAnnotationCols), [pinSource, JSON.stringify(effectiveAnnotationCols)]);
+  const annotationPinsKey = JSON.stringify(annotationPins);
+
   // ---- Intersection selection as a cross-filter ---------------------------
   // Resolved through selection.ts, so the chrome's capability marker and this
   // gate cannot disagree. A host with no onFilterChange is read-only.
@@ -216,6 +226,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
       ...(config.set_columns_pattern ? { set_columns_pattern: config.set_columns_pattern } : {}),
       set_colors: config.set_colors ?? null,
       annotation_cols: effectiveAnnotationCols.length > 0 ? effectiveAnnotationCols : null,
+      ...(annotationPins ? { category_colors: annotationPins } : {}),
       sort_by: sortBy,
       sort_order: sortOrder,
       min_size: minSize,
@@ -297,6 +308,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
     JSON.stringify(config.set_columns),
     config.set_columns_pattern,
     config.max_degree,
+    annotationPinsKey,
   ]);
 
   // Best-effort preview of the underlying binary table for the Show-data popover.
@@ -552,9 +564,22 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
     [],
   );
 
+  // The annotation tracks wear the dashboard's colours for their column (a
+  // Kingdom is the colour here it is on every other tile), and the legend is
+  // capped so a long one never squeezes the plot.
+  const shownData = useMemo(
+    () =>
+      figureData
+        ? capUpsetLegend(
+            recolourUpsetAnnotationTracks(figureData, (track) => columnCategoryColors(categorySource, track)),
+          )
+        : null,
+    [figureData, categorySource],
+  );
+
   const themedData = useMemo(() => {
-    if (!figureData || !figureLayout) return null;
-    let data = applyDataTheme(figureData, isDark, theme) as Record<string, unknown>[];
+    if (!shownData || !figureLayout) return null;
+    let data = applyDataTheme(shownData, isDark, theme) as Record<string, unknown>[];
     if (isDark) {
       data = inkUpsetForDark(data, figureLayout, {
         ink: theme.colors.gray[4],
@@ -565,7 +590,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
       scaleUpsetDots(colourUpsetSets(data, figureLayout, setColors), figureLayout, plotWidth),
       figureLayout,
     );
-  }, [figureData, figureLayout, isDark, theme, setColors, plotWidth]);
+  }, [shownData, figureLayout, isDark, theme, setColors, plotWidth]);
   // Hovering an intersection dims everything outside it, as the UpSet Shiny
   // app does. A selected one stays at full strength through the hover of
   // another, so both read: what is selected, and what a click would select.
@@ -597,13 +622,13 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
                 isDark,
                 theme,
               ) as Record<string, unknown>,
-              figureData ?? [],
+              shownData ?? [],
               { width: plotWidth, hideLegend },
             ),
             setColors,
           )
         : null,
-    [figureLayout, figureData, figureRevision, isDark, theme, setColors, plotWidth, hideLegend],
+    [figureLayout, shownData, figureRevision, isDark, theme, setColors, plotWidth, hideLegend],
   );
 
   // A pointer over an intersection says it can be clicked. Plotly puts its

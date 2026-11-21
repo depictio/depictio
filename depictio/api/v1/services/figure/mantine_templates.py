@@ -25,6 +25,7 @@ import plotly.io as pio
 from depictio.cli.cli.utils.mantine_templates import (
     ensure_mantine_templates as _ensure_base_templates,
 )
+from depictio.models import palettes
 from depictio.models.models.branding import BrandSurfaces, BrandTheme
 
 #: Template name -> which surface block themes it.
@@ -72,19 +73,25 @@ def _patch_key(theme: BrandTheme) -> str:
     )
 
 
-def _apply_to_template(template: Any, theme: BrandTheme, surfaces: Optional[BrandSurfaces]) -> Any:
-    """A copy of ``template`` with the brand theme's figure colors applied."""
+def _apply_to_template(
+    template: Any, theme: BrandTheme, surfaces: Optional[BrandSurfaces], dark: bool = False
+) -> Any:
+    """A copy of ``template`` with the brand theme's figure colors applied.
+
+    The dark template takes the brand's dark variants (``colorway_dark``,
+    ``sequential_dark``) when it has them, else the light ones. Without a brand
+    colorway the template keeps the default depictio palette it was built with.
+    """
     patched = copy.deepcopy(template)
     layout = patched.layout
 
     plots = theme.plots
-    if plots and plots.colorway:
-        layout.colorway = plots.colorway
-    if plots and plots.sequential and len(plots.sequential) > 1:
-        stops = len(plots.sequential) - 1
-        layout.colorscale.sequential = [
-            [i / stops, color] for i, color in enumerate(plots.sequential)
-        ]
+    colorway = plots and ((dark and plots.colorway_dark) or plots.colorway)
+    if colorway:
+        layout.colorway = colorway
+    sequential = plots and ((dark and plots.sequential_dark) or plots.sequential)
+    if sequential and len(sequential) > 1:
+        layout.colorscale.sequential = palettes.colorscale(sequential)
     if theme.font_family:
         layout.font.family = theme.font_family
 
@@ -125,7 +132,7 @@ def apply_brand_theme() -> None:
 
         for name, surfaces_field in _TEMPLATE_SCHEMES.items():
             pio.templates[name] = _apply_to_template(
-                _vanilla[name], theme, getattr(theme, surfaces_field)
+                _vanilla[name], theme, getattr(theme, surfaces_field), dark=name == "mantine_dark"
             )
         _applied_key = key
 

@@ -13,7 +13,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -209,7 +209,7 @@ ScatterXyPlot.displayName = 'ScatterXyPlot';
 const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as ScatterXyConfig;
   const isDark = colorScheme === 'dark';
   const themeColors = plotlyThemeColors(isDark, theme);
@@ -617,7 +617,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         else groups.set(k, [p]);
       }
       const names = Array.from(groups.keys()).sort();
-      const colourMap = stableColorMap(names, palette, pinnedColours);
+      const colourMap = stableColorMap(names, palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
       for (const name of names) {
         const group = groups.get(name) as typeof points;
         data.push({

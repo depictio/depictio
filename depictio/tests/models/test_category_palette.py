@@ -52,11 +52,13 @@ class TestAssignCategoryColors:
             "z": "#000000",
         }
 
-    def test_previous_colours_are_carried_over_and_win_over_pins(self):
+    def test_previous_colours_are_carried_over_but_a_pin_wins(self):
+        # A changed template pin applies on a replacing re-import; the keep path
+        # layers the stored map over the result, so viewer edits survive there.
         colours = assign_category_colors(
             ["a", "b", "new"], pinned={"a": "#111111"}, previous={"a": P[3], "b": P[0]}
         )
-        assert colours["a"] == P[3]
+        assert colours["a"] == "#111111"
         assert colours["b"] == P[0]
         # The first slot neither the pin nor the previous colours use.
         assert colours["new"] == P[1]

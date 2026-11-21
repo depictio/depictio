@@ -14,7 +14,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
@@ -158,7 +158,7 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
   // A gene set wears the dashboard's colour for it.
   const setPinned = usePinnedCategoryColors(config.gene_set_col);
   const isDark = colorScheme === 'dark';
-  const palette = resolveCategoricalPalette(theme);
+  const palette = resolveCategoricalPalette(theme, null, isDark);
 
   // Persisted Tier-2 controls — both keys are fields on GseaRunningScoreConfig.
   const [topNSets, setTopNSets] = usePersistedVizControl(metadata, 'top_n_sets', 5);
@@ -289,8 +289,8 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
   // every set — no second round-trip for the distinct values.
   const setNames = useMemo(() => allSeries.map((s) => s.name), [allSeries]);
   const colourMap = useMemo(
-    () => stableColorMap(setNames, palette, setPinned),
-    [setNames.join('\u0000'), palette, setPinned],
+    () => stableColorMap(setNames, palette, setPinned, isDark ? 'dark' : 'light', plotOverflow(theme)),
+    [setNames.join('\u0000'), palette, setPinned, theme],
   );
 
   /** rank → ranking metric, deduplicated: the metric repeats once per gene set. */

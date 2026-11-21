@@ -1943,3 +1943,29 @@ export {
 } from './api';
 export type { UsageGranularity, UsagePoint, UsageQuery, UsageReport } from './api';
 export { CARD_FRAME, CARD_RULE } from './components/cardFrame';
+
+// Shared plot palettes and chrome tokens (one source with the Python side).
+export {
+  PLOT_FONT_FAMILY,
+} from './palettes.generated';
+export {
+  DEFAULT_PALETTE_ID,
+  PALETTE_IDS,
+  annotationInk,
+  assignColors,
+  categoricalPalette,
+  divergingPalette,
+  orderWithRemainderLast,
+  plotChrome,
+  reservedKind,
+  semanticColor,
+  sequentialPalette,
+  toColorscale,
+} from './palettes';
+export type { ChromeTokens, ColorScheme, PaletteId, ReservedKind } from './palettes';
+export {
+  brandColorway,
+  defaultCategorical,
+  resolveCategoricalPalette,
+  stableColorMap,
+} from './colors';

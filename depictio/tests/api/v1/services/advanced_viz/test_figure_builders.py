@@ -21,11 +21,17 @@ from depictio.api.v1.services.advanced_viz.figure_registry import (
     required_columns,
     supported_kinds,
 )
+from depictio.api.v1.services.advanced_viz.palette import significance_colors
 from depictio.api.v1.services.advanced_viz.theme import (
     apply_layout_theme,
     colors_for_theme,
     plotly_theme_colors,
 )
+from depictio.models import palettes
+
+#: The shared up / down / not-significant colours (light mode).
+UP, DOWN, NS = significance_colors("light")
+CATEGORICAL = palettes.categorical(None, "light")
 
 # --- volcano ----------------------------------------------------------------
 
@@ -49,11 +55,11 @@ VOLCANO_ROWS = {
 def test_volcano_classifies_tiers_via_marker_colour() -> None:
     spec = build("volcano", config=VOLCANO_CONFIG, rows=VOLCANO_ROWS, theme="light")
     colors = spec["data"][0]["marker"]["color"]
-    assert colors[0] == "#e64980", "positive significant effect should be UP"
-    assert colors[1] == "#1c7ed6", "negative significant effect should be DN"
-    assert colors[2] == "rgba(160,160,160,0.55)", "sub-threshold effect should be NS"
-    assert colors[3] == "rgba(160,160,160,0.55)", "large effect but p>threshold is NS"
-    assert colors[4] == "rgba(160,160,160,0.55)", "null p-value cannot be a hit"
+    assert colors[0] == UP, "positive significant effect should be UP"
+    assert colors[1] == DOWN, "negative significant effect should be DN"
+    assert colors[2] == NS, "sub-threshold effect should be NS"
+    assert colors[3] == NS, "large effect but p>threshold is NS"
+    assert colors[4] == NS, "null p-value cannot be a hit"
 
 
 def test_volcano_sizes_hits_larger_than_background() -> None:
@@ -75,7 +81,7 @@ def test_volcano_skips_transform_when_already_neg_log10() -> None:
     rows = {"gene": ["a"], "lfc": [3.0], "padj": [4.0]}
     spec = build("volcano", config=config, rows=rows, theme="light")
     assert spec["data"][0]["y"] == [4.0]
-    assert spec["data"][0]["marker"]["color"] == ["#e64980"]
+    assert spec["data"][0]["marker"]["color"] == [UP]
 
 
 def test_volcano_threshold_lines_bracket_the_effect_threshold() -> None:
@@ -115,9 +121,9 @@ def test_volcano_controls_override_persisted_config() -> None:
     )
     colors = spec["data"][0]["marker"]["color"]
     # 'loud' (lfc 5.0, padj 0.5) now clears both relaxed thresholds.
-    assert colors[3] == "#e64980"
+    assert colors[3] == UP
     # 'up' (lfc 2.0) no longer clears the raised effect threshold.
-    assert colors[0] == "rgba(160,160,160,0.55)"
+    assert colors[0] == NS
 
 
 def test_volcano_required_columns_drop_unset_optionals() -> None:
@@ -148,9 +154,9 @@ MA_ROWS = {
 def test_ma_tiers_match_volcano_scheme() -> None:
     spec = build("ma", config=MA_CONFIG, rows=MA_ROWS, theme="light")
     assert spec["data"][0]["marker"]["color"] == [
-        "#e64980",
-        "#1c7ed6",
-        "rgba(160,160,160,0.55)",
+        UP,
+        DOWN,
+        NS,
     ]
 
 
@@ -159,9 +165,9 @@ def test_ma_without_significance_column_tiers_on_fold_change_alone() -> None:
     rows = {k: v for k, v in MA_ROWS.items() if k != "padj"}
     spec = build("ma", config=config, rows=rows, theme="light")
     assert spec["data"][0]["marker"]["color"] == [
-        "#e64980",
-        "#1c7ed6",
-        "rgba(160,160,160,0.55)",
+        UP,
+        DOWN,
+        NS,
     ]
     assert "padj" not in spec["data"][0]["hovertemplate"]
 
@@ -229,7 +235,7 @@ def test_qq_categories_produce_one_trace_each_with_stable_colours() -> None:
     named = [t for t in spec["data"] if t.get("name")]
     assert [t["name"] for t in named] == ["a", "b"]
     # Palette index follows the sorted universe, not encounter order.
-    assert named[0]["marker"]["color"] == "#1f77b4"
+    assert named[0]["marker"]["color"] == CATEGORICAL[0]
     assert spec["layout"]["showlegend"] is True
 
 
@@ -335,9 +341,9 @@ class TestTypeScriptParity:
 
         spec = build("volcano", config=self.CONFIG, rows=self._fixture(), theme="light")
         tier_of = {
-            "#e64980": "UP",
-            "#1c7ed6": "DN",
-            "rgba(160,160,160,0.55)": "NS",
+            UP: "UP",
+            DOWN: "DN",
+            NS: "NS",
         }
         counts = Counter(tier_of[c] for c in spec["data"][0]["marker"]["color"])
         assert dict(counts) == self.TS_TIER_COUNTS
@@ -449,9 +455,9 @@ def test_manhattan_offsets_positions_onto_one_axis() -> None:
 def test_manhattan_colours_by_tier_when_a_threshold_is_set() -> None:
     spec = build("manhattan", config=MANHATTAN_CONFIG, rows=MANHATTAN_ROWS, theme="light")
     colors = spec["data"][0]["marker"]["color"]
-    assert colors[0] == "#0ca678", "score 7 >= 5 is ABOVE"
-    assert colors[2] == "#0ca678", "score 6 >= 5 is ABOVE"
-    assert colors[1] == "rgba(160,160,160,0.45)", "sub-threshold dims under highlight=above"
+    assert colors[0] == UP, "score 7 >= 5 is ABOVE"
+    assert colors[2] == UP, "score 6 >= 5 is ABOVE"
+    assert colors[1].startswith("rgba("), "sub-threshold dims under highlight=above"
 
 
 def test_manhattan_draws_the_threshold_as_a_horizontal_line() -> None:
@@ -530,8 +536,8 @@ def test_embedding_colours_categories_off_the_universe() -> None:
     """Same rule as palette.stable_color_map: filtering must not re-map colours."""
     spec = build("embedding", config=EMBEDDING_CONFIG, rows=EMBEDDING_ROWS, theme="light")
     colors = {t["name"]: t["marker"]["color"] for t in spec["data"]}
-    assert colors["ctrl"] == "#1f77b4"
-    assert colors["treat"] == "#ff7f0e"
+    assert colors["ctrl"] == CATEGORICAL[0]
+    assert colors["treat"] == CATEGORICAL[1]
 
 
 def test_embedding_uses_a_colorbar_for_numeric_bindings() -> None:
@@ -602,8 +608,8 @@ def test_da_barplot_selects_by_magnitude_then_orders_signed() -> None:
 def test_da_barplot_fades_non_significant_bars() -> None:
     spec = build("da_barplot", config=DA_CONFIG, rows=DA_ROWS, theme="light")
     by_label = dict(zip(spec["data"][0]["y"], spec["data"][0]["marker"]["color"]))
-    assert by_label["f1"] == "#1f77b4", "significant positive"
-    assert by_label["f2"] == "#d62728", "significant negative"
+    assert by_label["f1"] == UP, "significant positive"
+    assert by_label["f2"] == DOWN, "significant negative"
     assert by_label["f4"] == "rgba(127,127,127,0.45)", "padj 0.5 is not significant"
 
 
@@ -1026,3 +1032,41 @@ def test_exported_colorscales_are_explicit_stops_not_bare_names() -> None:
     # Light at the low end is what makes the baked-in text colours correct.
     assert colorscale[0][1] == "rgb(247,251,255)"
     assert colorscale[-1][1] == "rgb(8,48,107)"
+
+
+# --- shared palette ---------------------------------------------------------
+
+
+def test_significance_kinds_share_one_up_down_scheme() -> None:
+    """Volcano, MA and Manhattan draw a hit in the same up / down colours."""
+    volcano = build("volcano", config=VOLCANO_CONFIG, rows=VOLCANO_ROWS, theme="light")
+    manhattan = build("manhattan", config=MANHATTAN_CONFIG, rows=MANHATTAN_ROWS, theme="light")
+    assert volcano["data"][0]["marker"]["color"][0] == UP
+    assert manhattan["data"][0]["marker"]["color"][0] == UP
+    below = build(
+        "manhattan",
+        config=MANHATTAN_CONFIG,
+        rows=MANHATTAN_ROWS,
+        theme="light",
+        controls={"highlight": "below"},
+    )
+    assert below["data"][0]["marker"]["color"][1] == DOWN
+
+
+def test_significance_colors_follow_the_theme() -> None:
+    assert significance_colors("dark") != significance_colors("light")
+    spec = build("volcano", config=VOLCANO_CONFIG, rows=VOLCANO_ROWS, theme="dark")
+    assert spec["data"][0]["marker"]["color"][0] == significance_colors("dark")[0]
+
+
+def test_stable_color_map_uses_the_shared_palette_with_reserved_greys() -> None:
+    from depictio.api.v1.services.advanced_viz.palette import stable_color_map
+
+    colors = stable_color_map(["b", "Other", "a"])
+    assert colors["a"] == CATEGORICAL[0]
+    assert colors["b"] == CATEGORICAL[1]
+    assert colors["Other"] == palettes.semantic("other", "light")
+    assert stable_color_map(["a"], mode="dark")["a"] == palettes.categorical(None, "dark")[0]
+    # A pin wins and frees its slot for the next value.
+    pinned = stable_color_map(["a", "b"], overrides={"a": CATEGORICAL[0]})
+    assert pinned["b"] == CATEGORICAL[1]

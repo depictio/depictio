@@ -16,7 +16,7 @@ import {
   pollComplexHeatmap,
   StoredMetadata,
 } from '../../api';
-import { columnCategoryColors } from '../../categoryColors';
+import { columnCategoryColors, pinsForColumns } from '../../categoryColors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
@@ -163,6 +163,13 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   const [colAnnotationCols, setColAnnotationCols] = useState<string[]>(
     config.col_annotation_cols ?? [],
   );
+
+  // The dashboard pins of the strip columns, sent so the server keeps the slots
+  // they hold free and folds the rest of the tail into Other (a pinned colour is
+  // never repeated by an unpinned value).
+  const pinSource = useCategoryColorSource();
+  const annotationPins = useMemo(() => pinsForColumns(pinSource, [...rowAnnotationCols, ...colAnnotationCols]), [pinSource, JSON.stringify([...rowAnnotationCols, ...colAnnotationCols])]);
+  const annotationPinsKey = JSON.stringify(annotationPins);
   const [colAnnotationOptions, setColAnnotationOptions] = useState<string[]>([]);
   const [colAnnotationConstant, setColAnnotationConstant] = useState<string[]>([]);
   const [schema, setSchema] = useState<Record<string, string> | null>(null);
@@ -223,6 +230,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       col_annotation_cols: colAnnotationCols,
       annotation_source_dc_tag: config.annotation_source_dc_tag ?? null,
       col_annotation_colors: config.col_annotation_colors ?? null,
+      ...(annotationPins ? { category_colors: annotationPins } : {}),
       cluster_rows: clusterRows,
       cluster_cols: clusterCols,
       cluster_method: clusterMethod,
@@ -301,6 +309,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     JSON.stringify(rowAnnotationCols),
     JSON.stringify(colAnnotationCols),
     groupColumns,
+    annotationPinsKey,
   ]);
 
   // The annotation strips wear the dashboard's colours for their column (a

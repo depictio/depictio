@@ -8,10 +8,11 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { brandColorway, defaultCategorical, plotOverflow, TAB10_CLASSIC } from '../../colors';
+import { assignColors } from '../../palettes';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
-import { isUnassigned, lineageShade, surfaceColour, unassignedGrey } from './hierarchyColors';
+import { abundanceRanked, isUnassigned, ringColour, surfaceColour, unassignedGrey } from './hierarchyColors';
 import { pinnedPalette } from './phylo/palette';
 import { VizControlGroup, VizFullRow, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
@@ -69,11 +70,11 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   // The instance (or dashboard) brand colorway, when there is one. It
   // becomes an option here and the default, so a branded deployment's
   // figures match its chrome without the viewer having to pick.
-  const brandPalette = brandColorway(theme);
-  const [palette, setPalette] = usePersistedVizControl<'brand' | 'tab10' | 'tab20'>(
+  const brandPalette = brandColorway(theme, isDark);
+  const [palette, setPalette] = usePersistedVizControl<'brand' | 'default' | 'tab10' | 'tab20'>(
     metadata,
     'palette',
-    brandPalette ? 'brand' : 'tab20',
+    brandPalette ? 'brand' : 'default',
   );
   const [showCounts, setShowCounts] = usePersistedVizControl<boolean>(metadata, 'show_counts', true);
   const [minPercent, setMinPercent] = usePersistedVizControl<number>(metadata, 'min_percent', 0.5);
@@ -259,18 +260,37 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     keep(tops, ROOT);
 
     const paletteArr =
-      palette === 'brand' ? (brandPalette ?? TAB20_PALETTE)
-      : palette === 'tab10' ? TAB10_PALETTE
+      palette === 'brand' ? (brandPalette ?? defaultCategorical(isDark))
+      : palette === 'default' ? defaultCategorical(isDark)
+      : palette === 'tab10' ? TAB10_CLASSIC
       : TAB20_PALETTE;
-    const colourMap = stableColorMap(
-      colourRankUniverse ?? kept.map((n) => n.colourKey).filter((k): k is string => Boolean(k)),
-      paletteArr as readonly string[],
+    // The colour-by rank's values, most abundant first, so the top values take
+    // the palette's slots and the tail falls to the grey (`ranked`). Values the
+    // current filters leave out follow, alphabetically from the full universe,
+    // so they still have a colour when a filter brings them back.
+    const weight = new Map<string, number>();
+    for (const n of nodes.values()) {
+      if (n.depth === localColourIdx && n.colourKey) {
+        weight.set(n.colourKey, (weight.get(n.colourKey) ?? 0) + n.value);
+      }
+    }
+    const colourUniverse = abundanceRanked(weight, colourRankUniverse);
+    const colourMap = assignColors(colourUniverse, {
       pinned,
-    );
+      palette: paletteArr as readonly string[],
+      scheme: isDark ? 'dark' : 'light',
+      ranked: true,
+      overflow: plotOverflow(theme),
+    });
     const grey = unassignedGrey(isDark);
-    // Rings above the colour-by rank carry no hue of their own: a neutral
-    // tone, so the colour starts where the grouping the viewer chose does.
+    // A ring above the colour-by rank wears its own column's dashboard colours
+    // (a Kingdom ring keeps the Kingdom colour it has on every other tile) and
+    // stays neutral for a column nothing is pinned for, so the colour starts
+    // where the grouping the viewer chose does.
     const context = isDark ? '#4a4d52' : '#9aa1a8';
+    const ringPins = visibleRanks.map((col, r) =>
+      r < localColourIdx ? pinnedPalette(categorySource, null, col) : null,
+    );
     const siblingIndex = new Map<string, number>();
     const seen = new Map<string, number>();
     for (const n of kept) {
@@ -278,11 +298,8 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       siblingIndex.set(n.id, i);
       seen.set(n.parent, i + 1);
     }
-    const colourOf = (n: NodeRec & { id: string }): string => {
-      if (n.unassigned) return grey;
-      if (n.colourKey == null) return context;
-      return lineageShade(colourMap.get(n.colourKey), n.depth - localColourIdx, siblingIndex.get(n.id) ?? 0, isDark);
-    };
+    const colourOf = (n: NodeRec & { id: string }): string =>
+      ringColour(n, siblingIndex.get(n.id) ?? 0, { localColourIdx, colourMap, ringPins, grey, context, isDark });
 
     const surface = surfaceColour(isDark);
     const ids = [ROOT, ...kept.map((n) => n.id)];
@@ -328,7 +345,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         autosize: true,
       },
     };
-  }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark, pinned]);
+  }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark, pinned, categorySource]);
 
   // Themed once per figure: react-plotly redraws on any new data/layout/config
   // reference, and a 600-node sunburst takes ~150 ms a time. Fresh objects on
@@ -387,9 +404,10 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           <VizSelect
             label="Palette"
             value={palette}
-            onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
+            onChange={(v) => v && setPalette(v as 'brand' | 'default' | 'tab10' | 'tab20')}
             data={[
               ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
+              { value: 'default', label: 'depictio palette' },
               { value: 'tab20', label: 'tab20 (20 colours)' },
               { value: 'tab10', label: 'tab10 (10 colours)' },
             ]}

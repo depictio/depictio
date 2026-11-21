@@ -12,10 +12,10 @@ import {
 } from './multiqc';
 import { componentSupportsAnnotation } from './plotDecorate';
 import { annotationsToPlotly, OVERLAY_TRACE_PREFIX } from './toPlotly';
-import type { AnnotationColor, RenderableAnnotation } from './types';
+import type { AnnotationColorName, RenderableAnnotation } from './types';
 import { MAX_VARIANT_CHARS } from './types';
 
-const resolveColor = (name: AnnotationColor, shade?: number) => `tok:${name}:${shade ?? 'd'}`;
+const resolveColor = (name: AnnotationColorName, shade?: number) => `tok:${name}:${shade ?? 'd'}`;
 
 const marked = (id: string, ids: string[], variant?: string): RenderableAnnotation => ({
   id,
@@ -176,7 +176,7 @@ describe('marked samples on a line graph', () => {
       x: [1, 2, 3],
       y: [11, 21, 31],
       name: `${OVERLAY_TRACE_PREFIX}a`,
-      line: { color: resolveColor('yellow') },
+      line: { color: resolveColor('ink') },
     });
     expect(out.stats.a).toEqual({ expected: 1, found: 1 });
     // Labelled at the middle of the line.

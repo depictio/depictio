@@ -65,6 +65,26 @@ def _nonempty(segment: pl.Expr) -> pl.Expr:
     return pl.when(segment.is_null() | (segment == "")).then(None).otherwise(segment)
 
 
+def rank_at(lineage: pl.Expr, position: int) -> pl.Expr:
+    """The ``position``-th rank of a collapsed lineage, ``Unclassified`` when blank.
+
+    Positional, for the collapsed ``rel-table-N`` fallbacks that carry no rank
+    names. An 8-rank database (sbdi-gtdb) writes its Domain *and* Kingdom, so
+    a lineage opens ``Bacteria;Bacteria;Pseudomonadota``: that repeated top
+    segment is dropped first, or every rank below it shifts by one (the Phylum
+    lands in the Class column and the Kingdom ring is drawn twice).
+    """
+    segments = _segments(lineage)
+    first = segments.list.get(0, null_on_oob=True)
+    second = segments.list.get(1, null_on_oob=True)
+    deduped = (
+        pl.when(first.is_not_null() & (first != "") & (first == second))
+        .then(segments.list.slice(1))
+        .otherwise(segments)
+    )
+    return _nonempty(deduped.list.get(position, null_on_oob=True)).fill_null(UNCLASSIFIED)
+
+
 def leaf_rank(lineage: pl.Expr) -> pl.Expr:
     """The rank the table collapses to: the last non-empty lineage segment.
 

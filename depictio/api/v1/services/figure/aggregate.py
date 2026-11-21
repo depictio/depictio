@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import plotly.express as px
@@ -39,6 +39,7 @@ import polars as pl
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.multiqc.themes import get_theme_template
+from depictio.models import palettes
 from depictio.recipes.lib.contigs import sort_by_axis
 
 # Reducing visualisations this module can serve. Everything else (the scatter
@@ -143,6 +144,9 @@ class AggPlan:
     facet_row: str | None = None
     facet_col: str | None = None
     style: dict[str, Any] = field(default_factory=dict)
+    #: ``light`` / ``dark``: picks the variant of the default palette when the
+    #: figure sets no colours of its own (set by ``build_aggregated_figure``).
+    theme: str = "light"
 
     @property
     def group_keys(self) -> list[str]:
@@ -261,6 +265,7 @@ def build_aggregated_figure(
 
     ensure_mantine_templates()
     template = template_override or get_theme_template(theme)
+    plan = replace(plan, theme=theme)
 
     try:
         available = set(scan.collect_schema().names())
@@ -400,8 +405,9 @@ def _trace_colors(plan: AggPlan, names: list[str]) -> list[str | None]:
     red/green while the box plots beside it, built through px, used the map.
 
     ``color_discrete_map`` wins per name, then ``color_discrete_sequence`` by
-    position, then px's default sequence. Same precedence px applies, and the
-    sequence cycles the same way for more groups than colours.
+    position, then the brand colorway, then the default depictio palette. Same
+    precedence px applies, and the sequence cycles the same way for more groups
+    than colours.
     """
     mapping = _as_json(plan.style.get("color_discrete_map")) or {}
     sequence = _as_json(plan.style.get("color_discrete_sequence"))
@@ -414,7 +420,8 @@ def _trace_colors(plan: AggPlan, names: list[str]) -> list[str | None]:
         # deployments. Resolved theme = env defaults + admin overrides, with a
         # colorway derived from the brand palette when none was set explicitly.
         plots = resolve_effective_brand_theme().plots
-        sequence = (plots.colorway if plots else None) or list(px.colors.qualitative.Plotly)
+        brand = plots and ((plan.theme == "dark" and plots.colorway_dark) or plots.colorway)
+        sequence = brand or palettes.categorical(None, plan.theme)
     if not isinstance(mapping, dict):
         mapping = {}
     return [mapping.get(name) or sequence[i % len(sequence)] for i, name in enumerate(names)]

@@ -6,6 +6,7 @@
 
 import type { InteractiveFilter } from '../../../api';
 import { stableColorMap } from '../../../colors';
+import type { OverflowMode } from '../../../palettes';
 import { sampleColorscale } from '../../../utils/colorScale';
 import { filtersExcludingOwnResidue } from '../../../selection';
 import { residueKey, toOneLetter, type StructureResidue } from './structureText';
@@ -510,6 +511,8 @@ export function buildColouring(
     categoryLabel?: string | null;
     /** Continuous scale of `value` mode (a `COLOUR_SCALES` name); Viridis by default. */
     valueScale?: string | null;
+    /** What categories past the palette's last slot get (`plotOverflow(theme)`). */
+    overflow?: OverflowMode | null;
   },
 ): Colouring {
   const { residues, rows, palette, neutral, uniform } = args;
@@ -529,7 +532,7 @@ export function buildColouring(
     }
     case 'chain': {
       const chains = Array.from(new Set(residues.map((r) => r.chain || '-')));
-      const map = stableColorMap(chains, palette);
+      const map = stableColorMap(chains, palette, null, undefined, args.overflow);
       return {
         colourOf: (c) => map.get(c || '-'),
         legend: chains.length > 1 ? swatchLegend('Chain', map) : null,
@@ -585,6 +588,9 @@ export function buildColouring(
       const map = stableColorMap(
         rows.map((r) => r.category),
         palette,
+        null,
+        undefined,
+        args.overflow,
       );
       return {
         colourOf: (c, p) => {

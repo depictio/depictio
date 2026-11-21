@@ -22,6 +22,7 @@ from typing import Any
 
 from depictio.api.v1.services.advanced_viz.color_scale import plotly_colorscale
 from depictio.api.v1.services.advanced_viz.figure_registry import register
+from depictio.api.v1.services.advanced_viz.palette import significance_colors
 
 #: Floor for -log10 so a reported padj of 0 does not become infinity.
 _PADJ_FLOOR = 1e-300
@@ -30,10 +31,8 @@ _COLOR_MODES = {
     "neg_log10_padj": ("Viridis", "-log10(padj)"),
     "abs_nes": ("YlOrRd", "|NES|"),
     "gene_count": ("Viridis", "gene count"),
-    "nes_sign": (
-        [[0.0, "#1f77b4"], [0.49, "#1f77b4"], [0.51, "#d62728"], [1.0, "#d62728"]],
-        "NES sign",
-    ),
+    # The two-stop scale is filled from the shared up / down colours at build time.
+    "nes_sign": ("", "NES sign"),
 }
 
 
@@ -138,6 +137,9 @@ def build(
         color_values = [float((r["nes"] > 0) - (r["nes"] < 0)) for r in top]
 
     colorscale, colorbar_title = _COLOR_MODES[color_by]
+    if color_by == "nes_sign":
+        up, down, _ = significance_colors(theme)
+        colorscale = [[0.0, down], [0.49, down], [0.51, up], [1.0, up]]
 
     marker: dict[str, Any] = {
         "size": sizes,

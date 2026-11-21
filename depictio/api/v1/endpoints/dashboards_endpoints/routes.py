@@ -8387,8 +8387,8 @@ def _resolve_auto_category_colors(
 
     For each column so marked, the values are read from the collection
     `_category_column_dc` finds, and coloured by `assign_category_colors`:
-    `previous` (the column's colours on the dashboard this import replaces)
-    first, the template's pins next, palette slots for the rest. `auto:<column>`
+    the template's pins first, `previous` (the column's colours on the dashboard
+    this import replaces) next, palette slots for the rest. `auto:<column>`
     hands the slots out largest first, by that column's sum, and stops when they
     run out. A column no collection of the project holds is dropped, pins
     included: nothing on the dashboard can be drawn by it. The stored map never
@@ -8843,7 +8843,8 @@ def _import_multi_tab_dashboard(
     # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
     _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
     _regenerate_component_indices(main_dashboard_dict, keep_indices=_tag_derived_indices(main_lite))
-    # Colours of the dashboard this one replaces win, so a refresh keeps them.
+    # Colours of the dashboard this one replaces carry over (the template's pins
+    # win), so a refresh keeps every auto value's colour.
     _resolve_auto_category_colors(
         main_dashboard_dict, project_id, (existing_main or {}).get("category_colors")
     )

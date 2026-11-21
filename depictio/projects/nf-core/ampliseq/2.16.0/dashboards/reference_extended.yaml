@@ -1279,7 +1279,6 @@ tabs:
       - Kingdom
       - Phylum
       - Class
-      palette: tab10
       min_percent: 0
     section: Taxonomic structure
     tag: advanced_viz-adv-sunburst-8e75c7

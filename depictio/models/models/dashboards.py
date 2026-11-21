@@ -433,7 +433,8 @@ class FilterSectionSpec(BaseModel):
     figure_style: FigureStyle | None = Field(
         default=None,
         description="The style every figure in this section is drawn in, unless the "
-        "figure sets its own `figure_style`: `minimal` gives a row of figures the "
+        "figure sets its own `figure_style`: `default` (overview look), `classic` (drawing "
+        "left as built) or `minimal`, which gives a row of figures the "
         "landing-page look (title and icon in the card header, faint grid, legend under "
         "the plot). Unset leaves each figure to its own style. Grid sections only.",
     )

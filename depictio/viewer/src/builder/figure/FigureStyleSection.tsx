@@ -40,11 +40,13 @@ import {
 const STYLE_LABEL: Record<FigureStyle, string> = {
   default: 'Default',
   minimal: 'Minimal',
+  classic: 'Classic',
 };
 
 const STYLE_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'minimal', label: 'Minimal' },
+  { value: 'classic', label: 'Classic' },
 ];
 
 interface FigureStyleConfig {

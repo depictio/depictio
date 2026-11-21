@@ -36,7 +36,7 @@ export function tabHueHex(
   const parsed = parsePaletteColor(tabColor);
   if (!parsed) return undefined;
   if (parsed.kind === 'palette' && NOT_A_HUE.has(parsed.name)) return undefined;
-  const hex = paletteHex(theme, tabColor, isDark ? 4 : 6);
+  const hex = paletteHex(theme, tabColor, isDark ? 4 : 6, isDark);
   // An unknown palette name comes back as itself: not a colour Plotly knows.
   return hex && (parsed.kind === 'literal' || hex !== parsed.name) ? hex : undefined;
 }

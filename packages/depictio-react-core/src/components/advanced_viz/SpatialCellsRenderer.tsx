@@ -11,7 +11,7 @@ import {
   signServeImageUrls,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -193,7 +193,7 @@ const SpatialCellsRenderer: React.FC<Props> = ({
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
-  const palette = resolveCategoricalPalette(theme, TAB10_PALETTE);
+  const palette = resolveCategoricalPalette(theme, TAB10_PALETTE, isDark);
   const config = (metadata.config || {}) as SpatialCellsConfig;
 
   const cellIdCol = config.cell_id_col || 'cell_id';
@@ -543,7 +543,7 @@ const SpatialCellsRenderer: React.FC<Props> = ({
       effectiveColorBy === 'category' && categories
         ? Array.from(new Set(cells.keep.map((i) => String(categories[i] ?? '')))).sort()
         : [];
-    const categoryColours = stableColorMap(categoryNames, palette, pinnedColours);
+    const categoryColours = stableColorMap(categoryNames, palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
 
     const data: Record<string, unknown>[] = [];
     const images: Record<string, unknown>[] = [];

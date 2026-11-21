@@ -10,7 +10,7 @@ import {
 } from './controls/VizControls';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -113,7 +113,7 @@ DamageProfilePlot.displayName = 'DamageProfilePlot';
 const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, HIGHLIGHT_PALETTE);
+  const palette = resolveCategoricalPalette(theme, HIGHLIGHT_PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as DamageProfileConfig;
   const isDark = colorScheme === 'dark';
 
@@ -272,7 +272,7 @@ const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
 
     const highlightSet = new Set(highlight.length ? highlight : DEFAULT_HIGHLIGHT);
     const highlightNames = Array.from(highlightSet).sort();
-    const highlightColours = stableColorMap(highlightNames, palette, null);
+    const highlightColours = stableColorMap(highlightNames, palette, null, isDark ? 'dark' : 'light', plotOverflow(theme));
     const { textColor } = plotlyThemeColors(isDark, theme);
     const mutedColour = isDark ? theme.colors.gray[6] : theme.colors.gray[5];
 

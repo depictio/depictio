@@ -9,7 +9,7 @@ import type { AnnotationStats } from './summary';
 import { sameStats } from './summary';
 import type {
   Annotation,
-  AnnotationColor,
+  AnnotationColorName,
   AnnotationKind,
   AnnotationStyle,
   Geometry,
@@ -31,7 +31,7 @@ export interface PendingAnnotation {
  */
 export interface PendingDraft {
   label: string;
-  color: AnnotationColor;
+  color: AnnotationColorName;
   style?: AnnotationStyle;
   /** The captured geometry, minus its region when the highlight is off. */
   geometry: Geometry;

@@ -30,6 +30,8 @@ from typing import Any, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from depictio.models import palettes as plot_palettes
+
 #: A concrete color value: ``#rrggbb``.
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 #: A Mantine palette name (e.g. ``teal``) — the other accepted color form.
@@ -295,17 +297,58 @@ class BrandPlots(BaseModel):
         description="Continuous colorscale stops (hex list, light to dark). Unset means "
         "'derive from the primary color'.",
     )
+    palette: Optional[str] = Field(
+        default=None,
+        description="A depictio palette preset (`depictio.models.palettes.palette_ids()`, e.g. "
+        "'marque', 'signature'). Fills `colorway`, `sequential` and their dark variants when "
+        "those are unset; an explicit `colorway` always wins.",
+    )
+    colorway_dark: Optional[list[str]] = Field(
+        default=None,
+        description="Categorical colours for the dark UI theme. Filled from `palette`; unset "
+        "means 'use `colorway` in both themes'.",
+    )
+    sequential_dark: Optional[list[str]] = Field(
+        default=None,
+        description="Colorscale stops for the dark UI theme, from the background end. Filled "
+        "from `palette`; unset means 'use `sequential`'.",
+    )
+    overflow: Optional[Literal["other", "shade"]] = Field(
+        default=None,
+        description="What a value past the palette's last slot gets: the Other grey "
+        "(`other`) or, first, a lightness-shifted twin of each slot (`shade`, named "
+        "palettes only). Unset means the depictio default (`other`).",
+    )
 
-    @field_validator("colorway", "sequential")
+    @field_validator("colorway", "sequential", "colorway_dark", "sequential_dark")
     @classmethod
     def _check_hex_list(cls, value: Optional[list[str]]) -> Optional[list[str]]:
         if value is None:
             return None
         return [validate_color(c, allow_palette_name=False) for c in value] or None
 
+    @field_validator("palette")
+    @classmethod
+    def _check_palette(cls, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        if value not in plot_palettes.palette_ids():
+            raise ValueError(
+                f"unknown palette {value!r}; choose one of {plot_palettes.palette_ids()}"
+            )
+        return value
+
     @property
     def is_empty(self) -> bool:
-        return self.template is None and not self.colorway and not self.sequential
+        return (
+            self.template is None
+            and not self.palette
+            and not self.colorway
+            and not self.sequential
+            and not self.colorway_dark
+            and not self.sequential_dark
+            and self.overflow is None
+        )
 
 
 class BrandTheme(BaseModel):
@@ -431,6 +474,7 @@ class BrandTheme(BaseModel):
 
 
 _NESTED_FIELDS = ("surfaces_light", "surfaces_dark", "plots")
+_PRESET_FILLED_FIELDS = ("colorway", "sequential", "colorway_dark", "sequential_dark")
 
 _M = TypeVar("_M", bound=BaseModel)
 
@@ -442,6 +486,11 @@ def _merge_pair(base: Optional[_M], override: Optional[_M]) -> Optional[_M]:
     if base is None:
         return override
     merged = base.model_dump()
+    if isinstance(override, BrandPlots) and override.palette:
+        # A preset names a whole set of colours: the layer below must not keep
+        # its own lists, or its custom colorway would beat this layer's choice.
+        for field in _PRESET_FILLED_FIELDS:
+            merged[field] = None
     merged.update(override.model_dump(exclude_none=True))
     return type(base)(**merged)
 
@@ -451,7 +500,8 @@ def merge_brand_themes(*layers: Optional[BrandTheme]) -> BrandTheme:
 
     Nested blocks (``surfaces_*``, ``plots``) merge field-wise too, so a
     dashboard that only sets ``plots.colorway`` keeps the instance's
-    ``plots.template``.
+    ``plots.template``. A layer naming a ``plots.palette`` preset replaces the
+    colour lists of the layers below it.
     """
     result = BrandTheme()
     for layer in layers:
@@ -481,6 +531,20 @@ def resolve_brand_theme(theme: Optional[BrandTheme]) -> BrandTheme:
 
     palette = resolved.palette
     plots = resolved.plots or BrandPlots()
+    # Precedence: an explicit colorway, then a palette preset, then one derived
+    # from the brand palette. With none of them the figures use the default
+    # depictio palette (depictio.models.palettes), which needs nothing here.
+    if plots.palette:
+        if not plots.colorway:
+            plots.colorway = plot_palettes.categorical(plots.palette, "light")
+            plots.colorway_dark = plots.colorway_dark or plot_palettes.categorical(
+                plots.palette, "dark"
+            )
+        if not plots.sequential:
+            plots.sequential = plot_palettes.sequential(plots.palette, "light")
+            plots.sequential_dark = plots.sequential_dark or plot_palettes.sequential(
+                plots.palette, "dark"
+            )
     if not plots.colorway and palette:
         plots.colorway = derive_colorway(palette)
     if not plots.sequential and palette:

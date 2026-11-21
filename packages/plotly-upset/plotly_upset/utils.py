@@ -11,36 +11,24 @@ from numpy.typing import NDArray
 
 FONT_FAMILY = "Arial, Helvetica, sans-serif"
 
-# Default UpSet qualitative palette.
+# Default UpSet qualitative palette: a dependency-free copy of depictio's "marque"
+# categorical slots (depictio/models/palettes/depictio_palettes.json, light mode).
+# This package must stay installable on its own, so it cannot import depictio;
+# depictio/tests/unit/test_palette_copies.py fails when the copy drifts.
 #
-# Near-black (#333333) is deliberately LAST, not first. `generate_colors` hands
-# out `UPSET_PALETTE[:n]`, so whatever sits at index 0 is what every degenerate
-# or first-assigned case gets: a single-category annotation track, the first
-# degree group in `color_intersections_by="degree"`, the first layer of a
-# stacked bar. With black at index 0 those all rendered as flat black and read
-# as "unstyled" rather than as a colour choice. It stays in the palette for the
-# tail end, where a dark neutral is a fine 20th hue.
+# `generate_colors` hands out `UPSET_PALETTE[:n]`, so index 0 is what every
+# degenerate or first-assigned case gets (a single-category annotation track,
+# the first degree group, the first layer of a stacked bar); it is a hue, never
+# a near-black that would read as "unstyled".
 UPSET_PALETTE = [
-    "#4C78A8",
-    "#E45756",
-    "#72B7B2",
-    "#FF9DA7",
-    "#54A24B",
-    "#EECA3B",
-    "#B279A2",
-    "#FF9D00",
-    "#9D755D",
-    "#E41A1C",
-    "#377EB8",
-    "#4DAF4A",
-    "#984EA3",
-    "#FF7F00",
-    "#A65628",
-    "#F781BF",
-    "#66C2A5",
-    "#8DA0CB",
-    "#FC8D62",
-    "#333333",
+    "#925FC4",
+    "#F68B33",
+    "#37ADA1",
+    "#F288C0",
+    "#6495ED",
+    "#EBD244",
+    "#6EC863",
+    "#E53935",
 ]
 
 

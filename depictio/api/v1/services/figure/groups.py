@@ -27,6 +27,7 @@ import polars as pl
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import _categorical_predicate
+from depictio.models import palettes
 
 GROUP_COLUMN = "__depictio_group__"
 # The name code-mode figures spread to opt into grouping:
@@ -74,7 +75,7 @@ def code_group_globals(
 
 OTHER_LABEL = "Other"
 # Neutral gray for unassigned rows: context, not a category of its own.
-OTHER_COLOR = "#adb5bd"
+OTHER_COLOR = palettes.semantic("other")
 #: The first panel of the "what's new" split: every row, whatever its group.
 #: Kept in step with `OVERALL_LABEL` in the viewer's `splitPanels.ts`.
 OVERALL_LABEL = "All"
@@ -88,12 +89,9 @@ MAX_NAME_LENGTH = 80
 # put an unbounded string into a cache key or a log line.
 MAX_DC_ID_LENGTH = 64
 
-# matplotlib tab10 — same palette as TAB10_PALETTE client-side, used when a
-# group arrives without a (valid) color.
-_TAB10 = (
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-)  # fmt: skip
+# The default depictio palette (the same one the client falls back to), used
+# when a group arrives without a (valid) color.
+_DEFAULT_GROUP_COLORS = tuple(palettes.categorical(None, "light"))
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -141,7 +139,7 @@ def sanitize_group_defs(raw: Any) -> list[dict]:
             continue
         color = entry.get("color")
         if not isinstance(color, str) or not _HEX_COLOR_RE.match(color):
-            color = _TAB10[len(out) % len(_TAB10)]
+            color = _DEFAULT_GROUP_COLORS[len(out) % len(_DEFAULT_GROUP_COLORS)]
         clean: dict = {
             "name": name,
             "column_name": column.strip(),

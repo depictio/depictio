@@ -25,17 +25,7 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-
-#: seaborn deep — mirrors PALETTE in the TSX.
-_PALETTE: tuple[str, ...] = (
-    "#4C72B0",
-    "#DD8452",
-    "#55A467",
-    "#C44E52",
-    "#8172B3",
-    "#937860",
-    "#DA8BC3",
-)
+from depictio.models import palettes
 
 
 def _columns(config: dict[str, Any]) -> list[str | None]:
@@ -102,9 +92,10 @@ def build(
         key = str(groups_raw[i]) if groups_raw and i < len(groups_raw) else ""
         grouped.setdefault(key, []).append(i)
 
+    palette = palettes.categorical(None, theme)
     data: list[dict[str, Any]] = []
     for position, (key, indices) in enumerate(grouped.items()):
-        color = _PALETTE[position % len(_PALETTE)]
+        color = palette[position % len(palette)]
         prefix = f"{key} · " if key else ""
 
         if roc_mode and fpr:

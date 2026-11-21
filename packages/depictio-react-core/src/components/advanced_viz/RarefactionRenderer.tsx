@@ -10,7 +10,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
@@ -105,7 +105,7 @@ const PALETTE = TAB10_PALETTE;
 const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as RarefactionConfig;
   const isDark = colorScheme === 'dark';
 
@@ -296,6 +296,8 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
       groupUniverse ?? uniqGroups,
       palette,
       pinnedColours,
+      isDark ? 'dark' : 'light',
+      plotOverflow(theme),
     );
     const colourForGroup = new Map<string, string>(
       uniqGroups.map((g) => [g, colourSource.get(g)]),

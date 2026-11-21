@@ -21,7 +21,7 @@ import {
   type InteractiveFilter,
   type StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { plotOverflow, resolveCategoricalPalette } from '../../colors';
 import { sortCategoryValues } from '../../categoryColors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import { filtersExcludingOwn } from '../../selection';
@@ -32,7 +32,7 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import type { PhylogeneticConfig } from './phylo/config';
 import type { PhyloView } from './phylo/view';
 import { parseNewick, type PhyloTree } from './phylo/newick';
-import { PHYLO_PALETTE, pinnedPalette } from './phylo/palette';
+import { PHYLO_PALETTE, phyloColorScale, pinnedPalette } from './phylo/palette';
 import { pruneToTips } from './phylo/prune';
 import {
   aggregateAbundance,
@@ -139,7 +139,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
-  const palette = resolveCategoricalPalette(theme, PHYLO_PALETTE);
+  const palette = resolveCategoricalPalette(theme, PHYLO_PALETTE, isDark);
 
   const taxonCol = config.taxon_col || 'taxon';
   const colorCol = config.color_col ?? null;
@@ -412,9 +412,16 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     [categorySource, config.category_palettes],
   );
   const colourScale = useMemo(() => {
-    const seen = colourUniverse ?? Array.from(new Set(tipInfo.colour.values())).filter(Boolean);
-    return stableColorMap(seen as string[], palette, pinnedFor(colorCol));
-  }, [colourUniverse, tipInfo, palette, colorCol, pinnedFor]);
+    // Ranked by tip count: the largest lineages get the slots, the tail is grey.
+    return phyloColorScale(
+      tipInfo.colour.values(),
+      colourUniverse,
+      palette,
+      pinnedFor(colorCol),
+      isDark ? 'dark' : 'light',
+      plotOverflow(theme),
+    );
+  }, [colourUniverse, tipInfo, palette, colorCol, pinnedFor, theme]);
   // The palette's darker hues (a navy, say) vanish as small dots on a dark
   // card; lift them a little there, legend included, so the tile stays legible.
   const tint = (c: string) => (isDark ? lighten(c, 0.22) : c);

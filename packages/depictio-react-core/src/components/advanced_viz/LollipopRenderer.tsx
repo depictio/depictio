@@ -15,7 +15,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { brandColorway, defaultCategorical, plotOverflow, stableColorMap, TAB10_CLASSIC } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionFilter,
@@ -113,11 +113,11 @@ const LollipopRenderer: React.FC<Props> = ({
   // The instance (or dashboard) brand colorway, when there is one. It
   // becomes an option here and the default, so a branded deployment's
   // figures match its chrome without the viewer having to pick.
-  const brandPalette = brandColorway(theme);
-  const [palette, setPalette] = usePersistedVizControl<'brand' | 'tab10' | 'tab20'>(
+  const brandPalette = brandColorway(theme, isDark);
+  const [palette, setPalette] = usePersistedVizControl<'brand' | 'default' | 'tab10' | 'tab20'>(
     metadata,
     'palette',
-    brandPalette ? 'brand' : 'tab10',
+    brandPalette ? 'brand' : 'default',
   );
   const [geneSort, setGeneSort] = usePersistedVizControl<GeneSort>(metadata, 'gene_sort', 'count');
   const [topNLabels, setTopNLabels] = usePersistedVizControl(metadata, 'top_n_labels', 0);
@@ -281,13 +281,16 @@ const LollipopRenderer: React.FC<Props> = ({
 
     const categories = Array.from(new Set(cv.map(String))).sort();
     const paletteArr =
-      palette === 'brand' ? (brandPalette ?? TAB10_PALETTE)
-      : palette === 'tab10' ? TAB10_PALETTE
+      palette === 'brand' ? (brandPalette ?? defaultCategorical(isDark))
+      : palette === 'default' ? defaultCategorical(isDark)
+      : palette === 'tab10' ? TAB10_CLASSIC
       : TAB20_PALETTE;
     const colourSource = stableColorMap(
       categoryUniverse ?? categories,
       paletteArr as readonly string[],
       categoryPinned,
+      isDark ? 'dark' : 'light',
+      plotOverflow(theme),
     );
 
     // Marker sizes from raw effect values when scaling is enabled. Range 5..14 px.
@@ -582,9 +585,10 @@ const LollipopRenderer: React.FC<Props> = ({
           <VizSelect
             label="Palette"
             value={palette}
-            onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
+            onChange={(v) => v && setPalette(v as 'brand' | 'default' | 'tab10' | 'tab20')}
             data={[
               ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
+              { value: 'default', label: 'depictio palette' },
               { value: 'tab10', label: 'tab10 (10 colours)' },
               { value: 'tab20', label: 'tab20 (20 colours)' },
             ]}

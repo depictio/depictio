@@ -29,7 +29,7 @@
 template:
   template_id: "nf-core/rnaseq/3.28.0"
   description: "nf-core/rnaseq template for bulk RNA-seq: MultiQC funnel, Salmon expression overview, gene explorer"
-  version: "2.5.0"
+  version: "2.5.1"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing rnaseq pipeline output for one aligner route (multiqc/, star_salmon/, salmon/, trimgalore/)"

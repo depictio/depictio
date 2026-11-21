@@ -1723,9 +1723,12 @@ class SunburstConfig(_BaseVizConfig):
         ge=1,
         description="How many rings to draw from the start rank outwards",
     )
-    palette: Literal["tab10", "tab20"] = Field(
-        default="tab20",
-        description="Categorical palette for the colour key; tab20 for wider hierarchies",
+    palette: Literal["default", "tab10", "tab20"] = Field(
+        default="default",
+        description=(
+            "Categorical palette for the colour key: the dashboard's palette, whose tail "
+            "past its slots goes grey (default), or matplotlib tab10 / tab20"
+        ),
     )
     show_counts: bool = Field(default=True, description="Label each arc with its share of the root")
     min_percent: float = Field(

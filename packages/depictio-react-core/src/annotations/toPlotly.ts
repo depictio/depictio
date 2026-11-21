@@ -7,7 +7,7 @@
 import type { Annotations, Data, Shape } from 'plotly.js';
 
 import type {
-  AnnotationColor,
+  AnnotationColorName,
   ArrowNote,
   AxisValue,
   MarkedPoints,
@@ -17,7 +17,7 @@ import type {
   XRange,
   YRange,
 } from './types';
-import { numberBadge } from './types';
+import { ANNOTATION_INK, numberBadge } from './types';
 import type { AnnotationStats } from './summary';
 import { annotationHoverText } from './summary';
 import type { RenderedPoint, RenderedPoints } from './renderedPoints';
@@ -32,7 +32,7 @@ export interface AnnotationTraceLike {
 }
 
 export interface AnnotationsToPlotlyOptions {
-  resolveColor: (name: AnnotationColor, shade?: number) => string;
+  resolveColor: (name: AnnotationColorName, shade?: number) => string;
   /** Label text colour; defaults to the annotation's own resolved colour. */
   fontColor?: string;
   /**
@@ -70,7 +70,8 @@ export interface AnnotationsToPlotlyResult {
   topLabelCount: number;
 }
 
-export const DEFAULT_COLOR: AnnotationColor = 'yellow';
+/** What an annotation with no chosen colour wears: the neutral annotation ink. */
+export const DEFAULT_COLOR: AnnotationColorName = ANNOTATION_INK;
 export const DEFAULT_RANGE_OPACITY = 0.15;
 export const DEFAULT_LINE_WIDTH = 1.5;
 export const DEFAULT_POINT_RING_WIDTH = 2;

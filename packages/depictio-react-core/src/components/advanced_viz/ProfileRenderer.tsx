@@ -9,7 +9,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -184,7 +184,7 @@ const RESIDUE_POSITION_COLUMN = 'position';
 const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as ProfileConfig;
   const isDark = colorScheme === 'dark';
 
@@ -411,7 +411,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       bySeries.get(name)!.sort((a, b) => a.x - b.x);
     }
 
-    const colours = stableColorMap(seriesUniverse ?? names, palette, pinnedColours);
+    const colours = stableColorMap(seriesUniverse ?? names, palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
     const dimming = selectedSeries.size > 0;
 
     const xLabel = config.x_title || config.x_col || 'x';

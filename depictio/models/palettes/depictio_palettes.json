@@ -1,0 +1,680 @@
+{
+  "$comment": "Single source of truth for depictio's plot colours. Python reads it through depictio.models.palettes; TypeScript reads the generated packages/depictio-react-core/src/palettes.generated.ts (scripts/gen_palette_ts.py). Edit here, then regenerate; tests/unit/test_palettes.py checks CVD safety, contrast and that the TS copy is fresh.",
+  "version": 1,
+  "default": "marque",
+  "slots": 8,
+  "palettes": {
+    "marque": {
+      "label": "Marque",
+      "description": "The depictio brand colours, nudged only as far as needed to stay distinct under every colour-vision deficiency.",
+      "categorical": {
+        "light": [
+          "#925FC4",
+          "#F68B33",
+          "#37ADA1",
+          "#F288C0",
+          "#6495ED",
+          "#EBD244",
+          "#6EC863",
+          "#E53935"
+        ],
+        "dark": [
+          "#A262C4",
+          "#F68B33",
+          "#45B8AC",
+          "#D76A92",
+          "#73A5FF",
+          "#F9CB40",
+          "#82C466",
+          "#E63A36"
+        ]
+      },
+      "sequential": {
+        "light": [
+          "#F9F2FE",
+          "#E1CDF4",
+          "#C9A8E7",
+          "#AF84D6",
+          "#9262BC",
+          "#7640A1",
+          "#5E2D86",
+          "#47226B",
+          "#331851"
+        ],
+        "dark": [
+          "#221C2B",
+          "#3B2850",
+          "#563476",
+          "#73449A",
+          "#8E61B6",
+          "#AA7ED3",
+          "#C39EE5",
+          "#DABFF1",
+          "#F0E1FC"
+        ]
+      },
+      "diverging": {
+        "light": [
+          "#0A6455",
+          "#178673",
+          "#53A593",
+          "#87C1B3",
+          "#BDDAD2",
+          "#F2F2F2",
+          "#F0D4C2",
+          "#ECB592",
+          "#DF9564",
+          "#C97436",
+          "#AC5708"
+        ],
+        "dark": [
+          "#69CDB7",
+          "#4EAE9A",
+          "#33917E",
+          "#2D7163",
+          "#324E47",
+          "#2E2E2E",
+          "#624634",
+          "#995E35",
+          "#C57740",
+          "#E3935C",
+          "#FBB180"
+        ]
+      }
+    },
+    "signature": {
+      "label": "Signature",
+      "description": "Violet, orange, deep teal, pink, blue, gold, sage, brick: a denser, drawn identity.",
+      "categorical": {
+        "light": [
+          "#604EA1",
+          "#D77118",
+          "#1D6D71",
+          "#E085B1",
+          "#2D7EBB",
+          "#CCA956",
+          "#698E5D",
+          "#AA4538"
+        ],
+        "dark": [
+          "#997AE6",
+          "#EEA250",
+          "#27C2AD",
+          "#F1AFCC",
+          "#7EABE5",
+          "#D8CC8C",
+          "#62A269",
+          "#FD7B7D"
+        ]
+      },
+      "sequential": {
+        "light": [
+          "#F5F3FE",
+          "#D7D0FA",
+          "#B8AEF1",
+          "#998CE2",
+          "#7C6AC8",
+          "#6049AE",
+          "#4A3591",
+          "#372974",
+          "#261D57"
+        ],
+        "dark": [
+          "#1E1D2D",
+          "#302C55",
+          "#463A7F",
+          "#5F4CA5",
+          "#7968C2",
+          "#9485DF",
+          "#B1A4EF",
+          "#CDC3F8",
+          "#E9E4FE"
+        ]
+      },
+      "diverging": {
+        "light": [
+          "#12625E",
+          "#1F847F",
+          "#4BA5A0",
+          "#83C1BD",
+          "#BBD9D7",
+          "#F2F2F2",
+          "#EFD4C1",
+          "#EBB790",
+          "#DD9760",
+          "#C67630",
+          "#A55D18"
+        ],
+        "dark": [
+          "#60CCC5",
+          "#45AEA8",
+          "#28908B",
+          "#26706C",
+          "#304E4C",
+          "#2E2E2E",
+          "#614733",
+          "#985F31",
+          "#C3793B",
+          "#E09457",
+          "#FEB073"
+        ]
+      }
+    },
+    "douce": {
+      "label": "Douce",
+      "description": "Lighter, calmer editorial tones.",
+      "categorical": {
+        "light": [
+          "#7F71C9",
+          "#E1A987",
+          "#029284",
+          "#E97FA0",
+          "#23719C",
+          "#C8B751",
+          "#5C8C5B",
+          "#A74B3E"
+        ],
+        "dark": [
+          "#8F85DB",
+          "#F4C9AD",
+          "#3AA7A3",
+          "#F8A3C5",
+          "#81ADDD",
+          "#CFC16A",
+          "#79A480",
+          "#D27564"
+        ]
+      },
+      "sequential": {
+        "light": [
+          "#F5F4FE",
+          "#D6D0FA",
+          "#B7AEF1",
+          "#988CE2",
+          "#7B6BC9",
+          "#5F49AF",
+          "#493692",
+          "#362974",
+          "#251D57"
+        ],
+        "dark": [
+          "#1D1D2D",
+          "#302C55",
+          "#463A7F",
+          "#5E4CA6",
+          "#7869C3",
+          "#9386E0",
+          "#AFA5F0",
+          "#CBC4F9",
+          "#E8E4FF"
+        ]
+      },
+      "diverging": {
+        "light": [
+          "#006359",
+          "#078679",
+          "#4FA599",
+          "#85C1B7",
+          "#BCDAD4",
+          "#F2F2F2",
+          "#F1D3C2",
+          "#EDB593",
+          "#E09566",
+          "#C97439",
+          "#AD560F"
+        ],
+        "dark": [
+          "#64CCBD",
+          "#49AEA0",
+          "#2D9184",
+          "#2A7167",
+          "#314E49",
+          "#2E2E2E",
+          "#624634",
+          "#9A5E36",
+          "#C67742",
+          "#E3925E",
+          "#FCB082"
+        ]
+      }
+    },
+    "joaillerie": {
+      "label": "Joaillerie",
+      "description": "Deep, saturated jewel tones.",
+      "categorical": {
+        "light": [
+          "#473EAB",
+          "#C37725",
+          "#018D55",
+          "#8B1B30",
+          "#3B6BAB",
+          "#C9A41F",
+          "#367006",
+          "#D16CC9"
+        ],
+        "dark": [
+          "#797BFD",
+          "#F3AC69",
+          "#1CBE9D",
+          "#E86882",
+          "#67A4F4",
+          "#EDCF2B",
+          "#65A436",
+          "#F4B1EF"
+        ]
+      },
+      "sequential": {
+        "light": [
+          "#F3F4FF",
+          "#D0D2FC",
+          "#ADB1F4",
+          "#8C90E6",
+          "#6E6FCC",
+          "#524EB3",
+          "#3D3A95",
+          "#2D2D76",
+          "#1D2059"
+        ],
+        "dark": [
+          "#1B1E2E",
+          "#2A2E56",
+          "#3C3D82",
+          "#5250A9",
+          "#6C6DC6",
+          "#878AE3",
+          "#A5A8F3",
+          "#C4C6FB",
+          "#E4E6FE"
+        ]
+      },
+      "diverging": {
+        "light": [
+          "#0A6541",
+          "#37855F",
+          "#63A481",
+          "#91C1A5",
+          "#C1D9CB",
+          "#F2F2F2",
+          "#EFD4C1",
+          "#EAB78F",
+          "#DC975F",
+          "#C6772E",
+          "#A45D16"
+        ],
+        "dark": [
+          "#7CCBA1",
+          "#62AD86",
+          "#49906B",
+          "#3C7055",
+          "#374E41",
+          "#2E2E2E",
+          "#614732",
+          "#976030",
+          "#C27A3A",
+          "#E09556",
+          "#FEB172"
+        ]
+      }
+    },
+    "terre": {
+      "label": "Terre",
+      "description": "Warm natural tones with the brand violet and teal as accents.",
+      "categorical": {
+        "light": [
+          "#605583",
+          "#D17A0B",
+          "#266F6C",
+          "#A35A4E",
+          "#227AB7",
+          "#C4A65F",
+          "#506D05",
+          "#CD83A7"
+        ],
+        "dark": [
+          "#B499EB",
+          "#FED2AC",
+          "#35A7A0",
+          "#C28C84",
+          "#648DB4",
+          "#E9AA3A",
+          "#7BA155",
+          "#EDA4D4"
+        ]
+      },
+      "sequential": {
+        "light": [
+          "#F6F3FE",
+          "#D9CFF9",
+          "#BCACEF",
+          "#9F8ADF",
+          "#8268C5",
+          "#6647AC",
+          "#50338F",
+          "#3C2772",
+          "#2A1C56"
+        ],
+        "dark": [
+          "#1F1D2D",
+          "#332B54",
+          "#4B387D",
+          "#644AA3",
+          "#7F66C0",
+          "#9A83DD",
+          "#B5A2ED",
+          "#D0C2F7",
+          "#EAE3FE"
+        ]
+      },
+      "diverging": {
+        "light": [
+          "#11625F",
+          "#1E8480",
+          "#4BA5A1",
+          "#83C1BD",
+          "#BBD9D7",
+          "#F2F2F2",
+          "#EED5C0",
+          "#E9B88D",
+          "#DA995D",
+          "#C47929",
+          "#A35F0E"
+        ],
+        "dark": [
+          "#5FCCC7",
+          "#44AEA9",
+          "#27908C",
+          "#26706D",
+          "#304E4C",
+          "#2E2E2E",
+          "#604731",
+          "#96612D",
+          "#C07B36",
+          "#DE9653",
+          "#FCB26F"
+        ]
+      }
+    },
+    "froide": {
+      "label": "Froide",
+      "description": "Blues, teals and violets first; warm hues as late accents.",
+      "categorical": {
+        "light": [
+          "#176FC4",
+          "#42A59A",
+          "#624A8A",
+          "#1E7B5A",
+          "#2BBCE4",
+          "#D58B4B",
+          "#955077",
+          "#A04034"
+        ],
+        "dark": [
+          "#5AA6FD",
+          "#5FF8C9",
+          "#947EC2",
+          "#3EAF86",
+          "#8ECCE8",
+          "#F4B581",
+          "#C98CB8",
+          "#D87A6B"
+        ]
+      },
+      "sequential": {
+        "light": [
+          "#EFF6FE",
+          "#BDD9FC",
+          "#8DBCF4",
+          "#5E9EE5",
+          "#357ECC",
+          "#105FAA",
+          "#044B86",
+          "#083B65",
+          "#022B4B"
+        ],
+        "dark": [
+          "#13212D",
+          "#113455",
+          "#074881",
+          "#105EA9",
+          "#367BC6",
+          "#5598E3",
+          "#7FB4F3",
+          "#ABCFFC",
+          "#DAE9FE"
+        ]
+      },
+      "diverging": {
+        "light": [
+          "#5F4589",
+          "#7D66A5",
+          "#9C88C2",
+          "#B9ABD7",
+          "#D5CEE5",
+          "#F2F2F2",
+          "#BEE3DD",
+          "#85D4CA",
+          "#43BFB2",
+          "#23A195",
+          "#1F8278"
+        ],
+        "dark": [
+          "#C1A9EE",
+          "#A38DCE",
+          "#8772AE",
+          "#695A87",
+          "#4A4359",
+          "#2E2E2E",
+          "#2C5650",
+          "#1F7F75",
+          "#1DA296",
+          "#2CC0B2",
+          "#54DDCE"
+        ]
+      }
+    }
+  },
+  "ui_hues": {
+    "$comment": "Mantine hue names a dashboard's chrome uses (KPI icons, section/tab colours, filter accents), re-drawn in the active palette inside a dashboard. slot = categorical slot (marque order: 0 violet, 1 orange, 2 teal, 3 pink, 4 blue, 5 gold, 6 green, 7 brick); dL / dC / dh = OKLCH nudge (hue shifts survive the text-contrast deepening, lightness shifts may not) that keeps a Mantine pair (violet/grape, blue/indigo, teal/cyan, green/lime) visibly apart. gray, dark, black, white and brandPrimary are never remapped. A palette whose slots run in another hue order lists its own entries under per_palette.",
+    "default": {
+      "violet": {
+        "slot": 0
+      },
+      "grape": {
+        "slot": 0,
+        "dh": 25
+      },
+      "blue": {
+        "slot": 4
+      },
+      "indigo": {
+        "slot": 4,
+        "dL": -0.08,
+        "dh": 15
+      },
+      "teal": {
+        "slot": 2
+      },
+      "cyan": {
+        "slot": 2,
+        "dh": 25,
+        "dC": 0.02
+      },
+      "green": {
+        "slot": 6
+      },
+      "lime": {
+        "slot": 6,
+        "dL": 0.09,
+        "dh": -15
+      },
+      "orange": {
+        "slot": 1
+      },
+      "yellow": {
+        "slot": 5
+      },
+      "pink": {
+        "slot": 3
+      },
+      "red": {
+        "slot": 7
+      }
+    },
+    "per_palette": {
+      "froide": {
+        "violet": {
+          "slot": 2
+        },
+        "grape": {
+          "slot": 2,
+          "dh": 25
+        },
+        "blue": {
+          "slot": 0
+        },
+        "indigo": {
+          "slot": 0,
+          "dL": -0.08,
+          "dh": 15
+        },
+        "teal": {
+          "slot": 1
+        },
+        "cyan": {
+          "slot": 1,
+          "dh": 25,
+          "dC": 0.02
+        },
+        "green": {
+          "slot": 3
+        },
+        "lime": {
+          "slot": 3,
+          "dL": 0.09,
+          "dh": -15
+        },
+        "orange": {
+          "slot": 5
+        },
+        "yellow": {
+          "slot": 5,
+          "dL": 0.03,
+          "dh": 30
+        },
+        "pink": {
+          "slot": 6
+        },
+        "red": {
+          "slot": 7
+        }
+      }
+    }
+  },
+  "semantic": {
+    "other": {
+      "light": "#ADB5BD",
+      "dark": "#5C5F66"
+    },
+    "unclassified": {
+      "light": "#868E96",
+      "dark": "#909296"
+    },
+    "na": {
+      "light": "#CED4DA",
+      "dark": "#373A40"
+    }
+  },
+  "reserved_values": {
+    "other": [
+      "other",
+      "others",
+      "other taxa",
+      "rest"
+    ],
+    "unclassified": [
+      "unclassified",
+      "unknown",
+      "unassigned",
+      "undetermined"
+    ],
+    "na": [
+      "",
+      "na",
+      "n/a",
+      "nan",
+      "none",
+      "null"
+    ]
+  },
+  "annotation_ink": {
+    "light": "#343A40",
+    "dark": "#E9ECEF"
+  },
+  "chrome": {
+    "font_family": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    "light": {
+      "text": "#343A40",
+      "muted": "#868E96",
+      "grid": "rgba(15,23,42,0.08)",
+      "zero": "rgba(15,23,42,0.35)",
+      "axis_line": "rgba(15,23,42,0.15)",
+      "hover_bg": "#FFFFFF",
+      "hover_border": "#DEE2E6",
+      "hover_text": "#212529",
+      "surface": "#FFFFFF"
+    },
+    "dark": {
+      "text": "#E9ECEF",
+      "muted": "#909296",
+      "grid": "rgba(255,255,255,0.08)",
+      "zero": "rgba(255,255,255,0.35)",
+      "axis_line": "rgba(255,255,255,0.15)",
+      "hover_bg": "#25262B",
+      "hover_border": "#373A40",
+      "hover_text": "#E9ECEF",
+      "surface": "#1A1B1E"
+    }
+  },
+  "style": {
+    "bar_corner_radius": 4,
+    "top_n": 8,
+    "overflow": "other",
+    "overflow_shade_dl": {
+      "light": -0.16,
+      "dark": 0.14
+    },
+    "scatter_markers": [
+      {
+        "max_n": 50,
+        "size": 9,
+        "opacity": 0.9,
+        "outline": true
+      },
+      {
+        "max_n": 500,
+        "size": 7,
+        "opacity": 0.8,
+        "outline": true
+      },
+      {
+        "max_n": 5000,
+        "size": 5,
+        "opacity": 0.6,
+        "outline": false
+      },
+      {
+        "max_n": null,
+        "size": 3.5,
+        "opacity": 0.4,
+        "outline": false
+      }
+    ]
+  },
+  "thresholds": {
+    "min_cvd_delta_e": 7.5,
+    "min_contrast": {
+      "light": 1.5,
+      "dark": 3.0
+    }
+  }
+}
