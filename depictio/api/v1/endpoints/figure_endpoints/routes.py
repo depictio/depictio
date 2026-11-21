@@ -261,7 +261,9 @@ async def preview_figure(
                 **metadata,
                 "dict_kwargs": merge_category_colors(
                     category_colors,
-                    merge_dashboard_brand_theme(brand_theme, metadata.get("dict_kwargs") or {}),
+                    merge_dashboard_brand_theme(
+                        brand_theme, metadata.get("dict_kwargs") or {}, theme=theme
+                    ),
                 ),
             }
 

@@ -103,6 +103,17 @@ class TestAssignCategoryColors:
         assert list(colours) == [*values[: len(P)], "Unclassified"]
         assert [colours[v] for v in values[: len(P)]] == list(P)
 
+    def test_a_reserved_value_takes_no_generated_slot(self):
+        # Other keeps its semantic grey at render: it must not eat a palette slot
+        # unless it is pinned or carried over.
+        colours = assign_category_colors(["control", "Other", "treated"])
+        assert "Other" not in colours
+        assert colours == {"control": P[0], "treated": P[1]}
+
+    def test_a_pinned_reserved_value_keeps_its_pin(self):
+        colours = assign_category_colors(["control", "Other"], pinned={"Other": "#868e96"})
+        assert colours == {"control": P[0], "Other": "#868e96"}
+
 
 class TestLiteCategoryColorsAuto:
     def test_a_bare_auto_is_the_star_map(self):

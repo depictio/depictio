@@ -16,7 +16,7 @@ import {
   StoredMetadata,
   UpsetResult,
 } from '../../api';
-import { columnCategoryColors, pinsForColumns } from '../../categoryColors';
+import { pinsForColumns } from '../../categoryColors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -39,7 +39,6 @@ import {
   capUpsetLegend,
   colourUpsetSets,
   inkUpsetForDark,
-  recolourUpsetAnnotationTracks,
   resolveUpsetSetColors,
   scaleUpsetDots,
   upsetColumnSets,
@@ -564,18 +563,10 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
     [],
   );
 
-  // The annotation tracks wear the dashboard's colours for their column (a
-  // Kingdom is the colour here it is on every other tile), and the legend is
-  // capped so a long one never squeezes the plot.
-  const shownData = useMemo(
-    () =>
-      figureData
-        ? capUpsetLegend(
-            recolourUpsetAnnotationTracks(figureData, (track) => columnCategoryColors(categorySource, track)),
-          )
-        : null,
-    [figureData, categorySource],
-  );
+  // The server already applies the dashboard's pins to the annotation tracks
+  // (screened against the set-bar colours in the payload), so the figure is
+  // worn as received; the legend is capped so a long one never squeezes the plot.
+  const shownData = useMemo(() => (figureData ? capUpsetLegend(figureData) : null), [figureData]);
 
   const themedData = useMemo(() => {
     if (!shownData || !figureLayout) return null;

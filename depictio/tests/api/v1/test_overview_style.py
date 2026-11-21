@@ -236,6 +236,21 @@ def test_folding_ranks_horizontal_bars_by_their_x_and_other_types_by_points():
     assert sorted(t["x"][-1] for t in folded) == [0, 1]  # the two shortest series
 
 
+def test_a_kept_colour_repeat_is_recoloured_from_the_figures_own_colorway():
+    """The brand's colorway is the figure's palette: a re-colour after the fold
+    hands out its hues, not the default palette's."""
+    colorway = palettes.categorical("signature")[:6]
+    fig = _bar_stack([f"g{i}" for i in range(12)], values=list(range(12, 0, -1)))
+    # One hue everywhere: the kept eight would repeat it.
+    for trace in fig["data"]:
+        trace["marker"]["color"] = colorway[0]
+    fig["layout"]["colorway"] = colorway
+    out = apply_overview(fig, theme="light")
+    grey = palettes.semantic("other", "light")
+    kept = [t for t in out["data"] if t["marker"]["color"] != grey]
+    assert [t["marker"]["color"] for t in kept] == [colorway[i % len(colorway)] for i in range(8)]
+
+
 def test_eight_series_are_left_alone():
     fig = _bar_stack([f"g{i}" for i in range(8)])
     out = apply_overview(fig, theme="light")

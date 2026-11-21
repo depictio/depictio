@@ -170,15 +170,25 @@ def _named(trace: dict) -> str | None:
     return name if isinstance(name, str) and name != "" else None
 
 
-def _first_colorway(layout: dict, mode: str) -> str:
+def _layout_colorway(layout: dict) -> list[str] | None:
+    """The figure's own colorway (layout, else its template), or None."""
     colorway = layout.get("colorway")
     if not (isinstance(colorway, (list, tuple)) and colorway):
         template = layout.get("template")
         inner = template.get("layout") if isinstance(template, dict) else None
         colorway = inner.get("colorway") if isinstance(inner, dict) else None
-    if isinstance(colorway, (list, tuple)) and colorway and isinstance(colorway[0], str):
-        return colorway[0]
-    return palettes.categorical(None, mode)[0]
+    if (
+        isinstance(colorway, (list, tuple))
+        and colorway
+        and all(isinstance(c, str) for c in colorway)
+    ):
+        return list(colorway)
+    return None
+
+
+def _first_colorway(layout: dict, mode: str) -> str:
+    colorway = _layout_colorway(layout)
+    return colorway[0] if colorway else palettes.categorical(None, mode)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -324,10 +334,11 @@ def _fold_tail(traces: list[dict], layout: dict, mode: str) -> None:
         folded = [n for n in listed if n not in keep]
 
         # A palette cycled past its slots gives two kept series one colour;
-        # the kept ones then take the palette's slots, in order.
+        # the kept ones then take the figure's own colorway's slots, in order
+        # (the default palette only when the layout carries none).
         colours = [_trace_colour(by_name[n][0]) for n in kept]
         if len({c for c in colours if c}) < len([c for c in colours if c]):
-            slots = palettes.categorical(None, mode)
+            slots = _layout_colorway(layout) or palettes.categorical(None, mode)
             for i, name in enumerate(kept):
                 for trace in by_name[name]:
                     _set_colour(trace, slots[i % len(slots)])

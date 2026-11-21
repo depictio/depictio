@@ -62,11 +62,13 @@ def assign_category_colors(
         pinned colour (the template's explicit choice: a re-import that replaces
         the dashboard applies a changed pin), its previous colour (an ``auto``
         value keeps what it had), or the next palette slot no pinned
-        or previous colour already uses (values in natural order). When more
-        values need a slot than the palette has free, none is generated: the
-        column keeps its pinned and previous colours only, and the dashboard's
-        brand colorway colours the rest. Pinned values absent from the data
-        are kept, after the others.
+        or previous colour already uses (values in natural order). A reserved
+        value (Other, Unclassified, NA) never gets a slot: it stays out of the
+        map unless pinned or previous, so it keeps its semantic grey at render.
+        When more values need a slot than the palette has free, none is
+        generated: the column keeps its pinned and previous colours only, and
+        the dashboard's brand colorway colours the rest. Pinned values absent
+        from the data are kept, after the others.
     """
     pinned = dict(pinned or {})
     previous = dict(previous or {})
@@ -83,7 +85,7 @@ def assign_category_colors(
 
     used = {c.lower() for c in fixed.values()} | {c.lower() for c in pinned.values()}
     free = [c for c in CATEGORY_PALETTE if c.lower() not in used]
-    unassigned = [v for v in ordered if v not in fixed]
+    unassigned = [v for v in ordered if v not in fixed and palettes.reserved_kind(v) is None]
     fits = ranked or len(unassigned) <= len(free)
     generated = dict(zip(unassigned, free)) if fits else {}
 

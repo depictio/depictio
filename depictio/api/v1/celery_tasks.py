@@ -1288,7 +1288,9 @@ def _stable_palette_map(
     tail lands on the Other grey; without it values are taken in name order.
     *pinned* (``{column: {value: colour}}``, already screened against the scale's
     reserved colours, see ``track_pins``) always wins for its column's values, and
-    its colours are kept out of the slots the other values draw from.
+    every colour any column pins — not just the one pin a shared value carries
+    into the union — is kept out of the slots the other values draw from, so an
+    unpinned value never takes a colour some column pins.
     """
     if not universes:
         return {}
@@ -1308,8 +1310,17 @@ def _stable_palette_map(
         for v, colour in (pinned.get(col) or {}).items():
             if v in union:
                 union_pins.setdefault(v, colour)
+    # A value pinned in two columns keeps one union colour, but both pins are
+    # taken: a free value that drew the other column's pin would share a hue
+    # with a different value on the same tile.
+    pinned_colours = {c.lower() for pins in pinned.values() for c in pins.values()}
+    free_slots = [c for c in palette if c.lower() not in pinned_colours]
+    if not free_slots:
+        # Every slot pinned: an empty palette would make assign_colors fall back
+        # to the default palette, so the free values land on the Other grey.
+        free_slots = [palettes.semantic("other", mode)]
     colour_of = palettes.assign_colors(
-        ordered, pinned=union_pins, palette=list(palette), mode=mode, ranked=ranked
+        ordered, pinned=union_pins, palette=free_slots, mode=mode, ranked=ranked
     )
     return {
         col: {v: (pinned.get(col) or {}).get(v) or colour_of[str(v)] for v in universe}

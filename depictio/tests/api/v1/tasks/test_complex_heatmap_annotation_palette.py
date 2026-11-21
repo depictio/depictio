@@ -111,6 +111,25 @@ def test_a_pin_wins_and_frees_no_other_pinned_slot() -> None:
     assert colors["a"]["y"] == _PALETTE[1]
 
 
+def test_a_free_value_takes_no_colour_any_column_pins() -> None:
+    """One value pinned differently in two columns: both hues stay theirs.
+
+    Only the first pin per shared value used to leave the union, so the other
+    column's pin stayed a free slot and an unrelated value could draw it —
+    two different values in one colour on the same tile.
+    """
+    cat = palettes.categorical()
+    pinned = {"group": {"X": cat[1]}, "cohort": {"X": cat[0]}}
+    colors = _stable_palette_map({"group": ["X", "Y"], "cohort": ["X", "Z"]}, cat, pinned=pinned)
+    # Each column keeps its own pin for the shared value.
+    assert colors["group"]["X"] == cat[1]
+    assert colors["cohort"]["X"] == cat[0]
+    # No free value draws a colour any column pins.
+    pinned_colours = {cat[0], cat[1]}
+    assert colors["group"]["Y"] not in pinned_colours
+    assert colors["cohort"]["Z"] not in pinned_colours
+
+
 def test_track_pins_match_the_column_case_insensitively() -> None:
     pins = track_pins({"Kingdom": {"Bacteria": "#123456"}}, ["kingdom", "other"], "diverging")
     assert pins == {"kingdom": {"Bacteria": "#123456"}}

@@ -328,7 +328,12 @@ const ColorwayEditor: React.FC<{
               variant="default"
               size="sm"
               aria-label="Add color"
-              onClick={() => setColors([...colors, colors[colors.length - 1] ?? '#636efa'])}
+              onClick={() =>
+                setColors([
+                  ...colors,
+                  colors[colors.length - 1] ?? PALETTES[DEFAULT_PALETTE_ID].categorical.light[0],
+                ])
+              }
             >
               <Icon icon="mdi:plus" width={14} />
             </ActionIcon>

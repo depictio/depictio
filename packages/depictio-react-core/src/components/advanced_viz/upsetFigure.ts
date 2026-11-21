@@ -463,37 +463,3 @@ export function capUpsetLegend(data: readonly Trace[], max: number = MAX_LEGEND_
     return listed > max ? { ...t, showlegend: false } : t;
   });
 }
-
-const CATEGORY_HOVER = /^(.*): %\{y:\.0%\}<extra><\/extra>$/;
-
-/**
- * The categorical annotation tracks (one stacked bar trace per category, named
- * `<track>: <category>`, in the track's legend group) in the colours
- * `coloursFor(track)` gives them: the dashboard's pins for the track's column.
- * A category it does not name keeps the colour the server drew it in. Numeric
- * tracks and every other trace are returned as they were.
- */
-export function recolourUpsetAnnotationTracks(
-  data: readonly Trace[],
-  coloursFor: (track: string) => Record<string, string> | null,
-): Trace[] {
-  const cache = new Map<string, Record<string, string> | null>();
-  return data.map((t) => {
-    const group = t.legendgroup;
-    const name = t.name;
-    if (
-      t.type !== 'bar' ||
-      typeof group !== 'string' ||
-      typeof name !== 'string' ||
-      !name.startsWith(`${group}: `) ||
-      typeof t.hovertemplate !== 'string' ||
-      !CATEGORY_HOVER.test(t.hovertemplate)
-    ) {
-      return t;
-    }
-    if (!cache.has(group)) cache.set(group, coloursFor(group));
-    const colour = cache.get(group)?.[name.slice(group.length + 2)];
-    if (!colour) return t;
-    return { ...t, marker: { ...((t.marker as Record<string, unknown>) ?? {}), color: colour } };
-  });
-}
