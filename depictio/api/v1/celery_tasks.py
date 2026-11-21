@@ -688,6 +688,22 @@ def build_figure_preview(payload: dict) -> dict:
         except Exception as exc:  # a style never costs the figure
             logger.warning(f"celery_tasks.build_figure_preview: figure style skipped: {exc}")
 
+        # The automatic marks (``annotations``), declared or by figure type, on
+        # the styled figure: the hidden note reads what the style folded. Code
+        # figures carry no annotations (validated away) and get none.
+        if mode != "code":
+            from depictio.api.v1.services.figure.annotations import apply_annotations
+
+            try:
+                fig_dict = apply_annotations(
+                    fig_dict,
+                    metadata.get("annotations"),
+                    figure_style=style.get("figure_style"),
+                    theme=theme,
+                )
+            except Exception as exc:  # a mark never costs the figure
+                logger.warning(f"celery_tasks.build_figure_preview: annotations skipped: {exc}")
+
     if isinstance(fig_dict, dict) and "layout" in fig_dict:
         fig_dict["layout"].setdefault("uirevision", "persistent")
 

@@ -178,6 +178,18 @@ def _figure_payload(df, render, theme: str = "light") -> dict[str, Any]:
         figure = apply_figure_style(figure, "default", theme=_normalise_theme(theme))
     except Exception:  # noqa: BLE001 -- a style never costs the preview its figure
         figure = fig.to_plotly_json()
+    # The automatic marks (``annotations``), declared or by figure type, like a
+    # dashboard tile draws them. A code render cannot declare them and gets
+    # none, as in the API worker.
+    if not render.code:
+        from depictio.api.v1.services.figure.annotations import apply_annotations
+
+        try:
+            figure = apply_annotations(
+                figure, render.annotations, figure_style="default", theme=_normalise_theme(theme)
+            )
+        except Exception:  # noqa: BLE001 -- a mark never costs the preview its figure
+            pass
     return {
         "figure": figure,
         "metadata": {"visu_type": render.visu_type or "code", "filter_applied": False},

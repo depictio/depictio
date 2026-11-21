@@ -333,6 +333,14 @@ def _fold_tail(traces: list[dict], layout: dict, mode: str) -> None:
         kept = [n for n in listed if n in keep]
         folded = [n for n in listed if n not in keep]
 
+        # How many series the look folded, for the figure's hidden-note mark
+        # (``annotations.hidden_note``): the note reads this after the style.
+        if folded:
+            meta = layout.get("meta")
+            meta = dict(meta) if isinstance(meta, dict) else {}
+            meta["depictio_folded"] = int(meta.get("depictio_folded") or 0) + len(folded)
+            layout["meta"] = meta
+
         # A palette cycled past its slots gives two kept series one colour;
         # the kept ones then take the figure's own colorway's slots, in order
         # (the default palette only when the layout carries none).

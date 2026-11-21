@@ -118,6 +118,8 @@ async function buildTypedConfigFromRender(
       ...(!render.code && render.reference_lines?.length
         ? { reference_lines: render.reference_lines }
         : {}),
+      // Its automatic marks block, when the catalog declares one.
+      ...(!render.code && render.annotations ? { annotations: render.annotations } : {}),
     };
   }
   if (render.component === 'card') {
