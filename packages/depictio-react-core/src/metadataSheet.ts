@@ -38,7 +38,7 @@ function headersFor(tableColumns: string[], labels: AnnotationColumn[]): string[
 /** A column Depictio adds at ingest (`depictio_run_id`, `aggregation_time`):
  *  not the source sheet's, so it stays out of a sheet meant to go back there. */
 function addedAtIngest(name: string): boolean {
-  return name.startsWith('depictio_') || name === 'aggregation_time';
+  return name.startsWith('depictio_') || name === 'aggregation_time' || name === 'join_timestamp';
 }
 
 export function buildMetadataSheet(

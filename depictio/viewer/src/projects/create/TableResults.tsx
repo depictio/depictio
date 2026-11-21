@@ -23,6 +23,8 @@ interface TableResultsProps {
   /** The project exists: open it. Null while it is not known yet. */
   onOpen: (() => void) | null;
   working: boolean;
+  /** Shown between the results and "Open project" (e.g. "Link your tables"). */
+  children?: React.ReactNode;
 }
 
 export const TableResults: React.FC<TableResultsProps> = ({
@@ -31,6 +33,7 @@ export const TableResults: React.FC<TableResultsProps> = ({
   error,
   onOpen,
   working,
+  children,
 }) => {
   const failed = rows.filter((r) => r.status === 'failed').length;
   return (
@@ -92,6 +95,7 @@ export const TableResults: React.FC<TableResultsProps> = ({
           {error}
         </Alert>
       )}
+      {children}
       {!working && onOpen && (
         <Group justify="flex-end">
           <Button onClick={onOpen} data-testid="create-results-open-project">

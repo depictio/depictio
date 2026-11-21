@@ -68,6 +68,7 @@ def _run(action, user, project, groups=()):
         patch(f"{MODULE}.get_user_group_ids", return_value=list(groups)),
         patch(f"{MODULE}._cleanup_s3_delta_table", new=AsyncMock()),
         patch(f"{MODULE}._delete_orphan_links_for_dc", return_value=0),
+        patch(f"{MODULE}.deltatables_collection", MagicMock()),
     ):
         if action == "rename":
             coro = utils._update_data_collection_name(str(DC_ID), "new", user)

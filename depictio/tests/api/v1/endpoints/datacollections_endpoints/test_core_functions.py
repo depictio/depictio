@@ -383,6 +383,9 @@ class TestDeleteDataCollectionById:
             patch(
                 "depictio.api.v1.endpoints.datacollections_endpoints.utils.projects_collection"
             ) as mock_collection,
+            patch(
+                "depictio.api.v1.endpoints.datacollections_endpoints.utils.deltatables_collection"
+            ) as mock_deltatables,
         ):
             # Setup mocks
             mock_cleanup.return_value = None
@@ -403,6 +406,10 @@ class TestDeleteDataCollectionById:
             # Verify correct database operations were called
             mock_collection.find_one.assert_called_once()
             mock_collection.update_one.assert_called_once()
+            # Its aggregation record goes with it
+            mock_deltatables.delete_many.assert_called_once_with(
+                {"data_collection_id": ObjectId(str(dc_to_delete.id))}
+            )
 
     @pytest.mark.asyncio
     async def test_delete_invalid_object_id(self):

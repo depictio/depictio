@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Badge,
   Button,
   Collapse,
   Group,
+  Modal,
   Paper,
   ScrollArea,
   SegmentedControl,
@@ -23,19 +24,23 @@ import { notifications } from '@mantine/notifications';
 import { Network, Table2 } from 'lucide-react';
 
 import {
+  deleteProjectJoin,
   deleteProjectLink,
   listLinkResolvers,
+  listProjectJoins,
   listProjectLinks,
   updateProjectLink,
   useBrandAccents,
   useIsStaticBundle,
 } from 'depictio-react-core';
-import type { DCLink, ResolverInfo } from 'depictio-react-core';
+import type { DCLink, ProjectJoinEntry, ResolverInfo } from 'depictio-react-core';
 
 import { STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
 import { DcTypeIcon } from '../dcTypeIcon';
 import ConnectionsMap from './ConnectionsMap';
 import type { ProjectJoin } from './ConnectionsMap';
+import JoinCreateModal from './JoinCreateModal';
+import { joinDashboardsSentence, readableApiError } from './joinForm';
 import LinkEditModal from './LinkEditModal';
 import { LinkMappingModal } from './LinkMappingInspector';
 
@@ -51,6 +56,9 @@ interface LinksSectionProps {
   /** Demo / public mode: still render the buttons so the affordance stays
    *  visible, but disable their action paths. */
   canMutate: boolean;
+  /** Why `canMutate` is false: a public/demo deployment, a published (locked)
+   *  project, or the user's role (a viewer, a non-member). Picks the tooltip. */
+  blockedReason?: 'demo' | 'locked' | 'permission';
   /** Lifts links state to the parent. */
   onLinksChange?: (links: DCLink[]) => void;
   /** The project's joins, drawn beside the links in Glass's map view. */
@@ -59,6 +67,9 @@ interface LinksSectionProps {
   reloadKey?: number;
   /** Open a collection picked on the map in the page's collection viewer. */
   onOpenDc?: (dcId: string) => void;
+  /** Called after a join was created or deleted, so the page can re-read the
+   *  project (the joined table appears in the collections and on the map). */
+  onJoinsChange?: () => void;
 }
 
 /** Sortable column header for the links table. */
@@ -96,10 +107,12 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   projectId,
   dataCollections,
   canMutate,
+  blockedReason = 'permission',
   onLinksChange,
   joins = [],
   reloadKey = 0,
   onOpenDc,
+  onJoinsChange,
 }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
@@ -114,6 +127,13 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   const [modalOpened, setModalOpened] = useState(false);
   const [editing, setEditing] = useState<DCLink | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Table joins (a join of two tables, stored as its own `joined_<name>` table).
+  const [joinEntries, setJoinEntries] = useState<ProjectJoinEntry[]>([]);
+  const [canEditJoins, setCanEditJoins] = useState(false);
+  const [joinsRefreshKey, setJoinsRefreshKey] = useState(0);
+  const [joinModalOpened, setJoinModalOpened] = useState(false);
+  const [joinToDelete, setJoinToDelete] = useState<ProjectJoinEntry | null>(null);
+  const [deletingJoin, setDeletingJoin] = useState(false);
   // Bumped on every openCreate / openEdit so the modal re-mounts fresh.
   // Mantine searchable Selects sometimes retain their display text after a
   // programmatic `value=''` reset; remounting sidesteps that entirely and
@@ -123,8 +143,18 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   // Read-only mapping inspection, opened straight from a row's magnifier so
   // checking what a link resolves to doesn't mean entering the edit form.
   const [inspecting, setInspecting] = useState<DCLink | null>(null);
-  // Collapsed by default to keep the Overview tab compact.
-  const [opened, { toggle }] = useDisclosure(false);
+  // Collapsed by default to keep the Overview tab compact, but open when the
+  // project has joins: they are listed in here and would otherwise stay hidden.
+  const [opened, { toggle: toggleOpened, open }] = useDisclosure(false);
+  const userToggled = useRef(false);
+  const toggle = () => {
+    userToggled.current = true;
+    toggleOpened();
+  };
+  useEffect(() => {
+    if (joinEntries.length > 0 && !userToggled.current) open();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joinEntries.length]);
   const [filter, setFilter] = useState('');
   const [sortKey, setSortKey] = useState<'source' | 'target' | 'resolver'>('source');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -207,6 +237,23 @@ const LinksSection: React.FC<LinksSectionProps> = ({
       .finally(() => setLoading(false));
   }, [projectId, refreshKey, reloadKey, onLinksChange]);
 
+  // A static bundle has no server to list joins from.
+  useEffect(() => {
+    if (offline) return;
+    listProjectJoins(projectId)
+      .then((res) => {
+        setJoinEntries(res.joins);
+        setCanEditJoins(res.can_edit);
+      })
+      .catch((err: Error) => {
+        notifications.show({
+          color: 'red',
+          title: 'Failed to load joins',
+          message: err.message,
+        });
+      });
+  }, [projectId, offline, joinsRefreshKey, reloadKey]);
+
   // Resolvers list is roughly static; fetch once on mount.
   useEffect(() => {
     if (offline) return;
@@ -218,6 +265,33 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   }, [projectId, offline]);
 
   const refresh = () => setRefreshKey((k) => k + 1);
+  const refreshJoins = () => {
+    setJoinsRefreshKey((k) => k + 1);
+    onJoinsChange?.();
+  };
+
+  const handleDeleteJoin = async () => {
+    if (!joinToDelete) return;
+    setDeletingJoin(true);
+    try {
+      await deleteProjectJoin(projectId, joinToDelete.name);
+      notifications.show({
+        color: 'green',
+        title: 'Join deleted',
+        message: joinToDelete.name,
+      });
+      setJoinToDelete(null);
+      refreshJoins();
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Failed to delete join',
+        message: readableApiError(err, 'The join could not be deleted.'),
+      });
+    } finally {
+      setDeletingJoin(false);
+    }
+  };
 
   const handleDelete = async (link: DCLink) => {
     try {
@@ -273,7 +347,133 @@ const LinksSection: React.FC<LinksSectionProps> = ({
     setEditing(null);
   };
 
-  const disabledTip = canMutate ? undefined : 'Disabled in public/demo mode';
+  const disabledTip = canMutate
+    ? undefined
+    : blockedReason === 'demo'
+      ? 'Disabled in public/demo mode'
+      : blockedReason === 'locked'
+        ? 'This project is published and read-only.'
+        : 'Only project owners and editors can change links.';
+  const joinTip = canMutate
+    ? undefined
+    : blockedReason === 'permission'
+      ? 'Only project owners and editors can add joins.'
+      : disabledTip;
+
+  // The joined table is connected to the two tables it combines: drawn as an
+  // edge from each source to it, so the map does not list it as "not connected".
+  const mapJoins = useMemo<ProjectJoin[]>(
+    () => [
+      ...joins,
+      ...joinEntries.flatMap((j) =>
+        j.result_dc_id
+          ? [j.left_dc_id, j.right_dc_id]
+              .filter((id): id is string => !!id && id !== j.result_dc_id)
+              .map((id) => ({
+                left_dc: id,
+                right_dc: j.result_dc_id as string,
+                on_columns: j.on_columns,
+                how: j.how,
+                name: j.name,
+              }))
+          : [],
+      ),
+    ],
+    [joins, joinEntries],
+  );
+  const deleteResultTag = joinToDelete
+    ? joinToDelete.result_tag || joinToDelete.result_dc_tag || `joined_${joinToDelete.name}`
+    : '';
+  const deleteUsedBy = joinToDelete
+    ? joinDashboardsSentence(deleteResultTag, joinToDelete.dashboards)
+    : null;
+  const joinCountLabel = `${joinEntries.length} ${joinEntries.length === 1 ? 'join' : 'joins'}`;
+
+  const joinsList =
+    joinEntries.length > 0 ? (
+      <Stack gap="xs" pt="sm" data-testid="joins-list">
+        <Group gap="xs">
+          <Icon icon="mdi:table-merge-cells" width={18} />
+          <Title order={5}>Joins</Title>
+          <Badge variant="light" size="sm">
+            {joinEntries.length}
+          </Badge>
+        </Group>
+        <ScrollArea type="auto" offsetScrollbars>
+          <Table verticalSpacing="xs" striped highlightOnHover fz="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Name</Table.Th>
+                <Table.Th>Tables</Table.Th>
+                <Table.Th>On columns</Table.Th>
+                <Table.Th>Type</Table.Th>
+                <Table.Th>Rows</Table.Th>
+                <Table.Th>Result table</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {joinEntries.map((j) => (
+                <Table.Tr key={j.name} data-testid="join-row">
+                  <Table.Td>
+                    <Text fz="sm" fw={600}>
+                      {j.name}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                    <Text fz="xs" ff="monospace">
+                      {(j.left_tag || j.left_dc) + ' ⋈ ' + (j.right_tag || j.right_dc)}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text fz="xs" ff="monospace">
+                      {j.on_columns.join(', ')}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Badge size="sm" variant="light">
+                      {j.how}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>{j.row_count ?? '—'}</Table.Td>
+                  <Table.Td>
+                    <Group gap={6} wrap="nowrap">
+                      <Text fz="xs" ff="monospace">
+                        {j.result_tag || j.result_dc_tag || '—'}
+                      </Text>
+                      {j.last_error && (
+                        <Tooltip label={j.last_error} multiline w={320} withArrow>
+                          <Badge size="sm" color="red" variant="light">
+                            Not rebuilt
+                          </Badge>
+                        </Tooltip>
+                      )}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td>
+                    {!offline && canEditJoins && canMutate && (
+                      <Group gap={4} justify="flex-end" wrap="nowrap">
+                        <Tooltip label="Delete join" withArrow>
+                          <ActionIcon
+                            variant="subtle"
+                            color="red"
+                            onClick={() => setJoinToDelete(j)}
+                            aria-label={`Delete join ${j.name}`}
+                            data-testid="delete-join-btn"
+                          >
+                            <Icon icon="mdi:delete" width={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
+      </Stack>
+    ) : null;
 
   const linksTable = (
             <Stack gap="sm">
@@ -409,12 +609,29 @@ const LinksSection: React.FC<LinksSectionProps> = ({
           <Group gap="xs" wrap="nowrap">
             <Icon icon="mdi:link-variant" width={20} />
             <Title order={4}>Cross-DC links</Title>
-            <Badge variant="light" size="sm">
-              {links.length}
+            <Badge variant="light" size="sm" data-testid="links-section-count">
+              {joinEntries.length > 0
+                ? `${links.length} ${links.length === 1 ? 'link' : 'links'} · ${joinCountLabel}`
+                : links.length}
             </Badge>
           </Group>
         </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
+          <Tooltip
+            label={offline ? 'Not available in a static bundle' : joinTip}
+            disabled={canMutate && !offline}
+          >
+            <Button
+              color={accent.secondary}
+              data-testid="add-join-btn"
+              leftSection={<Icon icon="mdi:table-merge-cells" width={16} />}
+              onClick={() => setJoinModalOpened(true)}
+              disabled={!canMutate || offline}
+              size="xs"
+            >
+              Add join
+            </Button>
+          </Tooltip>
           {!offline && (
             <Tooltip label={disabledTip} disabled={canMutate}>
               <Button
@@ -441,7 +658,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
       </Group>
 
       <Collapse in={opened}>
-        {glass && (links.length > 0 || joins.length > 0) ? (
+        {glass && (links.length > 0 || mapJoins.length > 0) ? (
           <>
             <div className="cm-bar">
               <SegmentedControl
@@ -476,7 +693,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
               <ConnectionsMap
                 dataCollections={dataCollections}
                 links={links}
-                joins={joins}
+                joins={mapJoins}
                 canMutate={canMutate}
                 onInspect={offline ? undefined : setInspecting}
                 onEdit={offline ? undefined : openEdit}
@@ -503,10 +720,62 @@ const LinksSection: React.FC<LinksSectionProps> = ({
             {!loading && links.length > 0 && linksTable}
           </ScrollArea.Autosize>
         )}
+        {joinsList}
       </Collapse>
 
       {!offline && (
         <>
+          <JoinCreateModal
+            opened={joinModalOpened}
+            projectId={projectId}
+            dataCollections={dataCollections}
+            links={links}
+            existingJoinNames={joinEntries.map((j) => j.name)}
+            onClose={() => setJoinModalOpened(false)}
+            onCreated={refreshJoins}
+          />
+
+          <Modal
+            opened={!!joinToDelete}
+            onClose={deletingJoin ? () => {} : () => setJoinToDelete(null)}
+            title="Delete join"
+            centered
+            data-testid="delete-join-modal"
+          >
+            {joinToDelete && (
+              <Stack gap="md">
+                <Text size="sm">
+                  Delete join <b>{joinToDelete.name}</b>? Its table{' '}
+                  <b>{deleteResultTag}</b> is removed;{' '}
+                  <b>{joinToDelete.left_tag || joinToDelete.left_dc}</b> and{' '}
+                  <b>{joinToDelete.right_tag || joinToDelete.right_dc}</b> stay.
+                  {!deleteUsedBy && (
+                    <>
+                      {' '}Dashboards that use <b>{deleteResultTag}</b> will show no data.
+                    </>
+                  )}
+                </Text>
+                {deleteUsedBy && (
+                  <Text size="sm" c="red" data-testid="delete-join-dashboards">
+                    {deleteUsedBy}
+                  </Text>
+                )}
+                <Group justify="flex-end" gap="xs">
+                  <Button
+                    variant="default"
+                    onClick={() => setJoinToDelete(null)}
+                    disabled={deletingJoin}
+                  >
+                    Cancel
+                  </Button>
+                  <Button color="red" onClick={handleDeleteJoin} loading={deletingJoin}>
+                    Delete join
+                  </Button>
+                </Group>
+              </Stack>
+            )}
+          </Modal>
+
           <LinkMappingModal
             opened={!!inspecting}
             projectId={projectId}

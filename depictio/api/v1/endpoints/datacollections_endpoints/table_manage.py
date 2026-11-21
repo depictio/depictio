@@ -93,6 +93,13 @@ def _load_table_dc(data_collection_id: str, current_user) -> tuple[dict, dict]:
             status_code=400,
             detail=f"Data collection {data_collection_id} is type {dc_type!r}, expected 'table'.",
         )
+    if (dc_dict.get("config") or {}).get("source") == "joined":
+        # Rewritten from its sources on their next change: an upload here would
+        # be overwritten without a trace.
+        raise HTTPException(
+            status_code=409,
+            detail="This table is a join of two other tables: update those instead.",
+        )
     return project_doc, dc_dict
 
 
@@ -199,6 +206,7 @@ def _bump_table_dc_aggregation(
     trigger: str | None = None,
     delta_version: int | None = None,
     columns_specs: list | None = None,
+    provenance: dict | None = None,
 ) -> int:
     """Append a new Aggregation row + return the new aggregation_version.
 
@@ -206,6 +214,9 @@ def _bump_table_dc_aggregation(
     so render_multiqc / render_table cache keys (which salt with the latest
     aggregation_version) bump correctly. ``columns_specs`` is empty unless the
     caller changed the columns: readers then keep the latest entry that has some.
+    ``provenance`` is what a CLI writer observed about its commit
+    (``commit_provenance``): its digest, rows added and run tags are kept, as
+    the upsert route keeps them.
     """
     dc_oid = ObjectId(data_collection_id)
     query_dt = deltatables_collection.find_one({"data_collection_id": dc_oid})
@@ -242,6 +253,7 @@ def _bump_table_dc_aggregation(
             trigger=trigger,
             delta_version=delta_version,
             rows_total=combined_df.height,
+            **_provenance_fields(provenance),
         )
     )
 
@@ -256,6 +268,25 @@ def _bump_table_dc_aggregation(
         upsert=True,
     )
     return version
+
+
+def _provenance_fields(provenance: dict | None) -> dict[str, Any]:
+    """The commit facts of ``provenance`` an ``Aggregation`` records beyond the basics."""
+    if not provenance:
+        return {}
+    fields: dict[str, Any] = {
+        key: provenance[key]
+        for key in ("rows_added", "files_added", "content_digest", "ingestion_run_id")
+        if provenance.get(key) is not None
+    }
+    if provenance.get("run_tags"):
+        fields["run_tags"] = list(provenance["run_tags"])
+    timestamp = provenance.get("delta_commit_timestamp")
+    if timestamp:
+        fields["delta_commit_timestamp"] = (
+            datetime.fromisoformat(timestamp) if isinstance(timestamp, str) else timestamp
+        )
+    return fields
 
 
 def _invalidate_table_caches_for_dc(dc_id: str) -> None:
@@ -287,17 +318,21 @@ def commit_table_frame(
     write_mode: str,
     trigger: str | None = None,
     dc_for_specs: dict | None = None,
+    join_reports: list | None = None,
 ) -> tuple[int, int | None]:
     """Overwrite a Table DC's Delta table with ``frame`` and publish the change.
 
     The one write path of the table-management routes (append, replace, cell
-    edits): write a new Delta commit, record an aggregation entry (which
-    salts every DataFrame cache key with the new ``aggregation_version``), and
-    drop the cached frames. Returns ``(aggregation_version, delta_version)``.
+    edits, file merges, restored versions): write a new Delta commit, record an
+    aggregation entry (which salts every DataFrame cache key with the new
+    ``aggregation_version``), drop the cached frames, and rebuild the joins
+    that read this table. Returns ``(aggregation_version, delta_version)``.
 
     ``dc_for_specs``, the data collection document, also records the columns of
     the new table: without it the entry holds no specs and readers of the schema
-    (the dashboard builder) keep the previous columns.
+    (the dashboard builder) keep the previous columns. ``join_reports``, when
+    given, receives the rebuild report of each join that read the table, for
+    the caller to return (a join that could not follow is the reader's to know).
     """
     from deltalake import DeltaTable
 
@@ -327,7 +362,23 @@ def commit_table_frame(
         columns_specs=_columns_specs(data_collection_id, frame, dc_for_specs),
     )
     _invalidate_table_caches_for_dc(data_collection_id)
+    reports = _rebuild_joins_reading(data_collection_id, current_user)
+    if join_reports is not None:
+        join_reports.extend(reports)
     return new_version, delta_version
+
+
+def _rebuild_joins_reading(data_collection_id: str, current_user) -> list[dict]:
+    """Re-run the joins reading this table, so a joined table follows its sources.
+
+    Never raises: the table's own write already went through, and a join that
+    could not follow says so on the project (``last_error``) and in the
+    returned reports (``{join, status, error?, rows?}``), which the write
+    routes answer as ``joins``.
+    """
+    from depictio.api.v1.endpoints.joins_endpoints.service import rebuild_after_write
+
+    return rebuild_after_write(data_collection_id, current_user)
 
 
 def _columns_specs(data_collection_id: str, frame: pl.DataFrame, dc: dict | None) -> list | None:
@@ -532,27 +583,35 @@ def _write_table_upload(
     frames.extend(new_dfs)
     combined_df = _align_and_concat(frames)
 
+    joins: list[dict] = []
     new_version, _ = commit_table_frame(
         data_collection_id=data_collection_id,
         frame=combined_df,
         current_user=current_user,
         write_mode="append" if mode == "append" else "overwrite",
         trigger="ui",
+        join_reports=joins,
     )
 
     rows_added = combined_df.height - rows_before
     return {
         "success": True,
+        # Shown as is in the web UI: plain words, the counts that matter.
         "message": (
-            f"Table DC {mode}d ({len(new_dfs)} file(s) ingested, "
-            f"{rows_added} row(s) added, {combined_df.height} row(s) total). "
-            f"aggregation_version={new_version}."
+            f"Data replaced ({_rows(combined_df.height)})."
+            if mode == "replace"
+            else f"{_rows(rows_added)} added ({combined_df.height} in all)."
         ),
         "data_collection_id": data_collection_id,
         "rows_total": combined_df.height,
         "rows_added": rows_added,
         "aggregation_version": new_version,
+        "joins": joins,
     }
+
+
+def _rows(n: int) -> str:
+    return f"{n} row" if n == 1 else f"{n} rows"
 
 
 def append_table_uploads(
@@ -617,14 +676,13 @@ def clear_table_data(*, data_collection_id: str, current_user) -> dict:
     delete_result = deltatables_collection.delete_many({"data_collection_id": dc_oid})
     deleted_mongo = int(getattr(delete_result, "deleted_count", 0) or 0)
     _invalidate_table_caches_for_dc(data_collection_id)
+    joins = _rebuild_joins_reading(data_collection_id, current_user)
 
     return {
         "success": True,
-        "message": (
-            f"Table DC cleared ({deleted_s3_count} S3 object(s) removed, "
-            f"{deleted_mongo} aggregation doc(s) cleared)."
-        ),
+        "message": "All rows deleted.",
         "data_collection_id": data_collection_id,
         "deleted_s3_count": deleted_s3_count,
         "deleted_mongo_count": deleted_mongo,
+        "joins": joins,
     }

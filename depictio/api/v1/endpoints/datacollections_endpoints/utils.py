@@ -14,7 +14,7 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import projects_collection, tokens_collection
+from depictio.api.v1.db import deltatables_collection, projects_collection, tokens_collection
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
@@ -301,6 +301,15 @@ async def _delete_data_collection_by_id(data_collection_id: str, current_user) -
     # owner level, like deleting a dashboard or a project.
     project = _project_with_dc_access(data_collection_oid, current_user, "owner")
 
+    from depictio.api.v1.endpoints.joins_endpoints.service import join_producing, joins_reading
+
+    readers = joins_reading(project, data_collection_id)
+    if readers:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Join(s) {', '.join(readers)} read this table: delete them first.",
+        )
+
     # Remove the data collection from the project
     result = projects_collection.update_one(
         {"_id": project["_id"]},
@@ -310,11 +319,24 @@ async def _delete_data_collection_by_id(data_collection_id: str, current_user) -
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Data collection not found")
 
+    # A joined table deleted on its own takes its join along, or the next
+    # change of a source would write it back.
+    produced_by = join_producing(project, data_collection_id)
+    if produced_by:
+        projects_collection.update_one(
+            {"_id": project["_id"]}, {"$pull": {"joins": {"name": produced_by}}}
+        )
+
     links_pulled = _delete_orphan_links_for_dc(data_collection_id)
     if links_pulled:
         logger.info(
             f"Removed orphan cross-DC links from {links_pulled} project(s) after deleting DC {data_collection_id}"
         )
+
+    # Its aggregation record goes with it: a table created again under this id
+    # (a joined table, whose id follows the join's name) starts a history of
+    # its own instead of continuing the deleted one's.
+    deltatables_collection.delete_many({"data_collection_id": data_collection_oid})
 
     # Cleanup associated S3 data and Delta tables
     await _cleanup_s3_delta_table(data_collection_id)
@@ -350,6 +372,10 @@ async def _update_data_collection_name(
     # data collection or editing a dashboard.
     project = _project_with_dc_access(data_collection_oid, current_user, "editor")
 
+    from depictio.api.v1.endpoints.joins_endpoints.service import retarget_joins, sides_reading
+
+    join_sides = sides_reading(project, data_collection_id)
+
     # Update the data collection name in the project
     result = projects_collection.update_one(
         {"_id": project["_id"], "workflows.data_collections._id": data_collection_oid},
@@ -359,6 +385,7 @@ async def _update_data_collection_name(
 
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Data collection not found")
+    retarget_joins(project["_id"], data_collection_id, join_sides)
 
     return {"message": f"Data collection name updated to '{new_name}' successfully"}
 
@@ -474,6 +501,21 @@ async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
             f"Unexpected error during S3 cleanup for data collection {data_collection_id}: {e}"
         )
         # Don't fail the entire operation if S3 cleanup fails, just log the error
+    _forget_cached_reads(data_collection_id)
+
+
+def _forget_cached_reads(data_collection_id: str) -> None:
+    """Drop every cache of a deleted table: frames, option lists, open scans, schemas.
+
+    After its files are gone, so no read in between caches them again. A table
+    created later under the same id must not be answered from these.
+    """
+    try:
+        from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
+
+        invalidate_data_collection_cache(data_collection_id)
+    except Exception as exc:  # noqa: BLE001 - the cache keys also change with the record
+        logger.warning(f"Caches of deleted collection {data_collection_id} not dropped: {exc}")
 
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
