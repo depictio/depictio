@@ -5,7 +5,12 @@ import pytest
 from beanie import PydanticObjectId
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
-from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
+    SERVER_ONLY_S3_FIELDS,
+    _generate_agent_config,
+    cli_config_to_payload,
+)
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
@@ -74,3 +79,35 @@ class TestGenerateAgentConfig:
         # Test with None user - should raise ValueError or ValidationError
         with pytest.raises((ValueError, TypeError, pydantic.ValidationError)):
             await _generate_agent_config(None, token)
+
+
+@pytest.mark.asyncio
+class TestCliConfigPayload:
+    """The CLI.yaml payload carries only what a CLI reads."""
+
+    @beanie_setup(models=[TokenBeanie, UserBeanie])
+    async def test_server_only_s3_fields_left_out(self, generate_hashed_password):
+        user = UserBeanie(email="payload@example.com", password=generate_hashed_password("pw"))
+        await user.save()
+        token = TokenBeanie(
+            name="payload_token",
+            access_token="access",
+            expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
+            refresh_token="refresh",
+            refresh_expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
+            token_type="bearer",
+            user_id=PydanticObjectId(str(user.id)),
+            logged_in=True,
+        )
+        await token.save()
+
+        payload = cli_config_to_payload(await _generate_agent_config(user, token))
+
+        assert SERVER_ONLY_S3_FIELDS.isdisjoint(payload["s3_storage"])
+        # The secret is still delivered unmasked, the rest of s3_storage intact.
+        assert payload["s3_storage"]["root_password"] != "**********"
+        assert "bucket" in payload["s3_storage"]
+
+    def test_server_only_fields_exist_on_the_settings_model(self):
+        """A renamed or removed setting must be dropped from the list too."""
+        assert SERVER_ONLY_S3_FIELDS <= set(S3DepictioCLIConfig.model_fields)

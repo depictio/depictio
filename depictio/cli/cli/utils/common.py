@@ -11,6 +11,10 @@ import yaml
 from pydantic import ValidationError, validate_call
 from rich.markup import escape
 
+from depictio.cli.cli.utils.config_compat import (
+    strip_unknown_cli_config_keys,
+    warn_about_unknown_keys,
+)
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.server_target import (
     DEFAULT_TARGET_CLI_CONFIG,
@@ -117,20 +121,26 @@ def format_timestamp(timestamp: float) -> str:
 def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     """
     Validate the Depictio CLI configuration.
+
+    Keys this CLI's models do not know — a CLI.yaml written by a newer server —
+    are dropped first, with one warning naming them, so an older CLI keeps
+    working with the settings it does understand.
     """
+    cleaned, ignored = strip_unknown_cli_config_keys(depictio_cli_config)
+    warn_about_unknown_keys(ignored)
     # Map keys to match CLIConfig model expectations and create CLIConfig explicitly
     config = CLIConfig(
-        user=depictio_cli_config["user"],
-        api_base_url=depictio_cli_config.get("api_base_url", depictio_cli_config.get("base_url")),
-        s3_storage=depictio_cli_config.get("s3_storage", depictio_cli_config.get("s3")),
+        user=cleaned["user"],
+        api_base_url=cleaned.get("api_base_url", cleaned.get("base_url")),
+        s3_storage=cleaned.get("s3_storage", cleaned.get("s3")),
         # Previously dropped here, so an `instance_label` set in the YAML never
         # reached CLIConfig and the X-Depictio-CLI-Instance header was never sent
         # via this path — the admin monitoring UI showed hostnames only.
-        instance_label=depictio_cli_config.get("instance_label"),
+        instance_label=cleaned.get("instance_label"),
         # Dropped here too, so every s3:// source outside the instance's bucket
         # (another endpoint, e.g. Google Cloud Storage) was read from the
         # instance's own store instead.
-        remote_storage_options=depictio_cli_config.get("remote_storage_options"),
+        remote_storage_options=cleaned.get("remote_storage_options"),
     )
     # The URL and the user only: the configuration holds the access token, and
     # verbose logs of a pipeline run are archived.

@@ -1,12 +1,19 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import Group, TokenBase, UserBase
 from depictio.models.s3_access import ProjectS3Config
+
+# The CLI configuration models below ignore keys they do not know: a CLI.yaml
+# is written by the server it was downloaded from, which may be newer and carry
+# settings this CLI has never heard of (the CLI reports them, then carries on).
+# These were ``class ConfigDict:`` blocks, which pydantic v2 never reads, so
+# the models' effective behaviour (ignore) is now stated outright. Everything
+# that is NOT a CLI configuration model keeps ``extra="forbid"``.
 
 
 class TokenData(BaseModel):
@@ -14,8 +21,7 @@ class TokenData(BaseModel):
     access_token: str
     expire_datetime: str
 
-    class ConfigDict:
-        extra = "forbid"  # Reject unexpected fields
+    model_config = ConfigDict(extra="ignore")
 
     @field_validator("access_token")
     def validate_access_token(cls, v):
@@ -57,8 +63,7 @@ class UserCLIConfig(BaseModel):
     groups: list[Group]
     token: TokenData
 
-    class ConfigDict:
-        extra = "forbid"  # Reject unexpected fields
+    model_config = ConfigDict(extra="ignore")
 
     @field_validator("id")
     # turn the id into a string
@@ -78,6 +83,10 @@ class UserCLIConfig(BaseModel):
 
 
 class UserBaseCLIConfig(UserBase):
+    # Overrides MongoModel's extra="forbid": this is the ``user`` block of a
+    # CLI.yaml, which a newer server may extend with fields this CLI ignores.
+    model_config = ConfigDict(extra="ignore")
+
     token: TokenBase
 
 
@@ -94,8 +103,9 @@ class CLIConfig(BaseModel):
     # (RFC remote-data section 5.3). A dict in the polars spelling still loads.
     remote_storage_options: ProjectS3Config | None = None
 
-    class ConfigDict:
-        extra = "forbid"  # Reject unexpected fields
+    # A CLI.yaml from a newer server may carry whole settings this CLI does not
+    # know yet: ignored here, and reported by the CLI's loader.
+    model_config = ConfigDict(extra="ignore")
 
     @field_validator("api_base_url")
     def validate_api_base_url(cls, v):
