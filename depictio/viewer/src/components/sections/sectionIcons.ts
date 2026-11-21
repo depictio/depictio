@@ -72,6 +72,9 @@ export const SECTION_ICON_OPTIONS: IconOption[] = [
  */
 export const SECTION_COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'None' },
+  // The app's primary blue, which a dashboard palette never remaps: the hue of a
+  // tab that wears the brand rather than a palette slot.
+  { value: 'brandPrimary', label: 'Brand' },
   { value: 'gray', label: 'Gray' },
   { value: 'red', label: 'Red' },
   { value: 'pink', label: 'Pink' },
