@@ -466,7 +466,7 @@ main_dashboard:
     column_type: datetime
     display:
       title_size: md
-      custom_color: '#3F51B5'
+      custom_color: indigo
       icon_name: mdi:calendar-outline
     title_align: left
     placement: left
@@ -488,7 +488,7 @@ main_dashboard:
     column_type: object
     display:
       title_size: md
-      custom_color: '#3F51B5'
+      custom_color: indigo
       icon_name: mdi:map-marker-outline
     title_align: left
     placement: left
@@ -510,7 +510,7 @@ main_dashboard:
     column_type: float64
     display:
       title_size: md
-      custom_color: '#00BCD4'
+      custom_color: cyan
       icon_name: mdi:thermometer
     title_align: left
     placement: left
@@ -532,7 +532,7 @@ main_dashboard:
     column_type: float64
     display:
       title_size: md
-      custom_color: '#00BCD4'
+      custom_color: cyan
       icon_name: mdi:flash
     title_align: left
     placement: left
@@ -554,7 +554,7 @@ main_dashboard:
     column_type: float64
     display:
       title_size: md
-      custom_color: '#00BCD4'
+      custom_color: cyan
       icon_name: mdi:water-percent
     title_align: left
     placement: left
@@ -576,7 +576,7 @@ main_dashboard:
     column_type: float64
     display:
       title_size: md
-      custom_color: '#00BCD4'
+      custom_color: cyan
       icon_name: mdi:molecule
     title_align: left
     placement: left
@@ -608,15 +608,11 @@ main_dashboard:
     selection_column: sample
     placement: floating
     floating_initial_state: compact
-    dict_kwargs:
-      color_discrete_map:
-        Riverwater: '#348ABD'
-        Groundwater: '#45B8AC'
-        Sediment: '#8B5A2B'
-        Soil: '#E24A33'
     tag: map-ref-sampling-sites
     index: ref-sampling-sites
     title: Sampling sites
+  category_colors:
+    habitat: auto
 tabs:
 - title: Alpha Diversity
   subtitle: Within-sample richness, evenness, phylogenetic spread — rarefaction + per-group boxplots
@@ -1354,11 +1350,7 @@ tabs:
       color_intersections_by: set
       default_annotation_cols:
       - taxon
-      set_colors:
-        Riverwater: '#348ABD'
-        Groundwater: '#45B8AC'
-        Sediment: '#8B5A2B'
-        Soil: '#E24A33'
+      set_category_column: habitat
     section: Set overlap
     tag: advanced_viz-adv-upset-81bed0
     index: adv-upset
@@ -1683,12 +1675,6 @@ tabs:
           SRR10102392: Soil
           SRR10102393: Soil
           SRR10102394: Soil
-      col_annotation_colors:
-        habitat:
-          Riverwater: '#348ABD'
-          Groundwater: '#45B8AC'
-          Sediment: '#8B5A2B'
-          Soil: '#E24A33'
     section: Sample relationships
     tag: advanced_viz-ord-bray-curtis-f70a9e
     index: ord-bray-curtis
@@ -1744,12 +1730,6 @@ tabs:
           SRR10102392: Soil
           SRR10102393: Soil
           SRR10102394: Soil
-      col_annotation_colors:
-        habitat:
-          Riverwater: '#348ABD'
-          Groundwater: '#45B8AC'
-          Sediment: '#8B5A2B'
-          Soil: '#E24A33'
     section: Clustered abundance
     tag: advanced_viz-ord-complex-heatmap-92c52d
     index: ord-complex-heatmap
@@ -2764,11 +2744,11 @@ tabs:
     description: How many samples, from how many sites, over what period
   - name: Where & when
     icon: mdi:map-marker-outline
-    color: teal
+    color: blue
     description: The catchment, and the order the sites were visited in
   - name: Sampling design
     icon: mdi:chart-donut
-    color: violet
+    color: blue
     description: How the habitat groups are spread across sites
   - name: Run manifest
     icon: mdi:table
@@ -2802,8 +2782,8 @@ tabs:
     breakdown_col: habitat
     display:
       icon_name: mdi:flask
-      icon_color: '#45B8AC'
-      title_color: '#45B8AC'
+      icon_color: blue.4
+      title_color: blue.4
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -2827,8 +2807,8 @@ tabs:
     breakdown_col: habitat
     display:
       icon_name: mdi:earth
-      icon_color: '#984EA3'
-      title_color: '#984EA3'
+      icon_color: blue.6
+      title_color: blue.6
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -2852,8 +2832,8 @@ tabs:
     breakdown_col: city
     display:
       icon_name: mdi:map-marker-outline
-      icon_color: '#1976D2'
-      title_color: '#1976D2'
+      icon_color: blue.8
+      title_color: blue.8
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -2877,8 +2857,8 @@ tabs:
     trend_col: sampling_date
     display:
       icon_name: mdi:calendar-outline
-      icon_color: '#3F51B5'
-      title_color: '#3F51B5'
+      icon_color: blue.9
+      title_color: blue.9
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -2926,12 +2906,6 @@ tabs:
     selection_column: sample
     placement: grid
     section: Where & when
-    dict_kwargs:
-      color_discrete_map:
-        Riverwater: '#348ABD'
-        Groundwater: '#45B8AC'
-        Sediment: '#8B5A2B'
-        Soil: '#E24A33'
     tag: map-ref-campaign-grid
     index: ref-campaign-grid
     layout:
@@ -2944,7 +2918,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\ndf_modified = df.sort('sampling_date')\nfig = px.scatter(\n    df_modified.to_pandas(),\n    x='sampling_date', y='city', color=grp_col,\n    color_discrete_map=colors,\n    hover_name='sample',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Sampling date', yaxis_title=None, legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 8, 'r': 8, 'b': 40},\n)\n"
+    code_content: "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\ndf_modified = df.sort('sampling_date')\nfig = px.scatter(\n    df_modified.to_pandas(),\n    x='sampling_date', y='city', color=grp_col,\n    color_discrete_map=colors,\n    hover_name='sample',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Sampling date', yaxis_title=None, legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 8, 'r': 8, 'b': 40},\n)\n"
     title_size: sm
     title_align: left
     section: Where & when
@@ -2976,7 +2950,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\ndf_modified = df.group_by(list(dict.fromkeys(['city', grp_col]))).len().rename({'len': 'samples'}).sort('city')\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='city', y='samples', color=grp_col,\n    color_discrete_map=colors, barmode='stack',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Samples', legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 56, 'r': 16, 'b': 60},\n)\n"
+    code_content: "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\ndf_modified = df.group_by(list(dict.fromkeys(['city', grp_col]))).len().rename({'len': 'samples'}).sort('city')\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='city', y='samples', color=grp_col,\n    color_discrete_map=colors, barmode='stack',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Samples', legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 56, 'r': 16, 'b': 60},\n)\n"
     title_size: sm
     title_align: left
     section: Sampling design
@@ -3040,7 +3014,7 @@ tabs:
     description: How the habitat groups separate chemically
   - name: Diversity under the current environment
     icon: mdi:chart-bell-curve
-    color: orange
+    color: cyan
     description: What the environmental filters do to alpha diversity
   components:
   - component_type: text
@@ -3070,8 +3044,8 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:thermometer
-      icon_color: '#F68B33'
-      title_color: '#F68B33'
+      icon_color: cyan.4
+      title_color: cyan.4
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -3096,8 +3070,8 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:flash
-      icon_color: '#00BCD4'
-      title_color: '#00BCD4'
+      icon_color: cyan.6
+      title_color: cyan.6
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -3122,8 +3096,8 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:water-percent
-      icon_color: '#1976D2'
-      title_color: '#1976D2'
+      icon_color: cyan.8
+      title_color: cyan.8
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -3148,8 +3122,8 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:molecule
-      icon_color: '#8E44AD'
-      title_color: '#8E44AD'
+      icon_color: cyan.9
+      title_color: cyan.9
       title_font_size: xl
       value_font_size: xl
     title_size: sm
@@ -3183,7 +3157,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color=grp_col,\n    color_discrete_map=colors, hover_name='city', custom_data=['sample'],\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (°C)', yaxis_title='Conductivity (µS/cm)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
+    code_content: "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color=grp_col,\n    color_discrete_map=colors, hover_name='city', custom_data=['sample'],\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (°C)', yaxis_title='Conductivity (µS/cm)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
     title_size: sm
     title_align: left
     section: Profiles
@@ -3201,7 +3175,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='ctd_do_mg_l', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Dissolved O₂ (mg/L)', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
+    code_content: "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='ctd_do_mg_l', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Dissolved O₂ (mg/L)', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
     title_size: sm
     title_align: left
     section: Profiles
@@ -3217,7 +3191,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color=grp_col,\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n    custom_data=['sample'],\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
+    code_content: "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color=grp_col,\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n    custom_data=['sample'],\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
     title_size: sm
     title_align: left
     section: Profiles
@@ -3251,7 +3225,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='shannon', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Shannon index', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
+    code_content: "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='shannon', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Shannon index', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
     title_size: sm
     title_align: left
     section: Diversity under the current environment

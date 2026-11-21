@@ -24,11 +24,7 @@ main_dashboard:
   content_width_default: compact
   show_tab_header: false
   category_colors:
-    habitat:
-      Riverwater: '#348ABD'
-      Groundwater: '#45B8AC'
-      Sediment: '#8B5A2B'
-      Soil: '#E24A33'
+    habitat: auto
     Kingdom:
       '*': auto
       Bacteria: '#925FC4'
@@ -2807,11 +2803,11 @@ tabs:
     description: Samples by habitat, and the sites they came from
   - name: Where & when
     icon: mdi:map-marker-outline
-    color: teal
+    color: blue
     description: One marker per sample at its site; click one to filter every tab
   - name: Sampling design
     icon: mdi:chart-donut
-    color: violet
+    color: blue
     description: Samples per site by habitat; the design is unbalanced
   - name: Run manifest
     icon: mdi:table
@@ -2839,7 +2835,7 @@ tabs:
     breakdown_col: habitat
     display:
       icon_name: mdi:flask-outline
-      icon_color: blue
+      icon_color: blue.4
       caption: by habitat
     section: Campaign at a glance
     tag: am-ref-card-ref-campaign-samples
@@ -2861,7 +2857,7 @@ tabs:
     breakdown_col: city
     display:
       icon_name: mdi:map-marker-outline
-      icon_color: teal
+      icon_color: blue.6
       caption: samples per site
     section: Campaign at a glance
     tag: am-ref-card-ref-campaign-sites
@@ -2962,7 +2958,7 @@ tabs:
     description: Temperature against conductivity separates the habitats almost alone
   - name: Diversity under the current environment
     icon: mdi:chart-bell-curve
-    color: orange
+    color: cyan
     description: Shannon per sample; the sonde filters on the left narrow it too
   components:
   - component_type: text
@@ -2986,7 +2982,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:thermometer
-      icon_color: orange
+      icon_color: cyan.4
       caption: median, with its spread
     section: Sonde readings
     tag: am-ref-card-ref-env-temperature
@@ -3007,7 +3003,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:flash
-      icon_color: cyan
+      icon_color: cyan.6
       caption: median, with its distribution
     section: Sonde readings
     tag: am-ref-card-ref-env-conductivity
@@ -3029,7 +3025,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:water-percent
-      icon_color: blue
+      icon_color: cyan.8
       caption: median, with its spread
     section: Sonde readings
     tag: am-ref-card-ref-env-do
@@ -3050,7 +3046,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:molecule
-      icon_color: grape
+      icon_color: cyan.9
       caption: median, with its distribution
     section: Sonde readings
     tag: am-ref-card-ref-env-nitrate

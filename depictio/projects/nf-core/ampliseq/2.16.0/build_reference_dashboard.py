@@ -42,25 +42,6 @@ BASE_YAML = HERE / "dashboards" / "base.yaml"
 TEMPLATE_YAML = HERE / "template.yaml"
 OUT_YAML = HERE / "dashboards" / "reference_extended.yaml"
 
-# Habitat palette, shared by the map and every figure below so a colour means the
-# same thing across the whole dashboard.
-HABITAT_COLORS = {
-    "Riverwater": "#348ABD",
-    "Groundwater": "#45B8AC",
-    "Sediment": "#8B5A2B",
-    "Soil": "#E24A33",
-}
-
-TEAL, ORANGE, CYAN, PURPLE, BLUE, INDIGO = (
-    "#45B8AC",
-    "#F68B33",
-    "#00BCD4",
-    "#984EA3",
-    "#1976D2",
-    "#3F51B5",
-)
-BROWN, GRAPE = "#8B5A2B", "#8E44AD"
-
 _VAR = re.compile(r"\{([A-Z_][A-Z0-9_]*)\}")
 
 BANNER = """\
@@ -242,8 +223,19 @@ def code_figure(
     return comp
 
 
-def _colors_literal() -> str:
-    return repr(HABITAT_COLORS)
+def _group_colors(group_col: str) -> str:
+    """The code-figure preamble every demo figure shares (RULES.md, Colours).
+
+    Colours by Analysis mode's groups when there are some, else by the
+    pipeline's group column in the family's category colours. The figures name
+    their own `color`, so they take the pieces of `depictio_group_kwargs`
+    rather than spreading it.
+    """
+    return (
+        f"grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'\n"
+        "colors = depictio_group_kwargs.get('color_discrete_map') or "
+        f"depictio_category_colors.get('{group_col}') or {{}}\n"
+    )
 
 
 # --- the demo layer ----------------------------------------------------------
@@ -251,6 +243,10 @@ def _colors_literal() -> str:
 
 def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
     """Two more persistent filter sections and the floating map, on the main tab."""
+    # The base template of this version predates `category_colors`, so the demo
+    # layer declares it: `auto`, the palette every tile then agrees on.
+    main.setdefault("category_colors", {})[group_col] = "auto"
+
     main["filter_sections"].extend(
         [
             {
@@ -284,7 +280,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "datetime",
                 "Sampling date",
                 "mdi:calendar-outline",
-                INDIGO,
+                "indigo",
                 5,
                 3,
             ),
@@ -297,7 +293,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "object",
                 "Site",
                 "mdi:map-marker-outline",
-                INDIGO,
+                "indigo",
                 8,
                 3,
             ),
@@ -310,7 +306,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Temperature (°C)",
                 "mdi:thermometer",
-                CYAN,
+                "cyan",
                 11,
                 3,
             ),
@@ -323,7 +319,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Conductivity (µS/cm)",
                 "mdi:flash",
-                CYAN,
+                "cyan",
                 14,
                 3,
             ),
@@ -336,7 +332,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Dissolved O₂ (mg/L)",
                 "mdi:water-percent",
-                CYAN,
+                "cyan",
                 17,
                 3,
             ),
@@ -349,13 +345,14 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Nitrate (mg/L)",
                 "mdi:molecule",
-                CYAN,
+                "cyan",
                 20,
                 3,
             ),
             # `placement: floating` takes no layout entry at all (see
             # DashboardData.to_full), so the map claims no grid slot and reaches
-            # every tab of the family from the header.
+            # every tab of the family from the header. Its markers take the
+            # family's category colours, like every other habitat tile.
             {
                 "component_type": "map",
                 "workflow_tag": "ampliseq",
@@ -378,11 +375,6 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "selection_column": id_col,
                 "placement": "floating",
                 "floating_initial_state": "compact",
-                # Same habitat palette as every code-mode figure on the demo
-                # tabs. Without it render_map falls back to px.colors.qualitative
-                # .Plotly, so the two habitat legends on Sampling Campaign
-                # disagree with each other side by side.
-                "dict_kwargs": {"color_discrete_map": dict(HABITAT_COLORS)},
                 "tag": "map-ref-sampling-sites",
                 "index": "ref-sampling-sites",
                 "title": "Sampling sites",
@@ -392,7 +384,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
 
 
 def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order: int) -> dict:
-    colors = _colors_literal()
+    groups = _group_colors(group_col)
     return {
         "title": "Sampling Campaign",
         "subtitle": "Where and when the Ammer catchment was sampled",
@@ -416,13 +408,13 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
             {
                 "name": "Where & when",
                 "icon": "mdi:map-marker-outline",
-                "color": "teal",
+                "color": "blue",
                 "description": "The catchment, and the order the sites were visited in",
             },
             {
                 "name": "Sampling design",
                 "icon": "mdi:chart-donut",
-                "color": "violet",
+                "color": "blue",
                 "description": f"How the {group_display.lower()} groups are spread across sites",
             },
             {
@@ -456,7 +448,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "object",
                 "Samples",
                 "mdi:flask",
-                TEAL,
+                "blue.4",
                 0,
                 1,
                 extra={"secondary_layout": "top_n", "breakdown_col": group_col},
@@ -470,7 +462,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "object",
                 f"{group_display} groups",
                 "mdi:earth",
-                PURPLE,
+                "blue.6",
                 2,
                 1,
                 extra={"secondary_layout": "donut", "breakdown_col": group_col},
@@ -484,7 +476,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "object",
                 "Sites visited",
                 "mdi:map-marker-outline",
-                BLUE,
+                "blue.8",
                 4,
                 1,
                 extra={"secondary_layout": "composition", "breakdown_col": "city"},
@@ -500,7 +492,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "object",
                 "Sampling effort",
                 "mdi:calendar-outline",
-                INDIGO,
+                "blue.9",
                 6,
                 1,
                 extra={"secondary_layout": "trend", "trend_col": "sampling_date"},
@@ -534,7 +526,6 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "selection_column": id_col,
                 "placement": "grid",
                 "section": "Where & when",
-                "dict_kwargs": {"color_discrete_map": dict(HABITAT_COLORS)},
                 "tag": "map-ref-campaign-grid",
                 "index": "ref-campaign-grid",
                 "layout": {"x": 0, "y": 5, "w": 5, "h": 8},
@@ -546,13 +537,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "metadata",
                 "Visit order",
                 f"""
-colors = {colors}
-# Colour by the viewer's analysis groups when there are some, else by the
-# pipeline's own {group_display.lower()}. One grouping axis, and the groups
-# bring their own colours with them.
-grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
-colors = depictio_group_kwargs.get('color_discrete_map') or colors
-df_modified = df.sort('sampling_date')
+{groups}df_modified = df.sort('sampling_date')
 fig = px.scatter(
     df_modified.to_pandas(),
     x='sampling_date', y='city', color=grp_col,
@@ -589,13 +574,7 @@ fig.update_layout(
                 "metadata",
                 "Samples per site",
                 f"""
-colors = {colors}
-# Colour by the viewer's analysis groups when there are some, else by the
-# pipeline's own {group_display.lower()}. One grouping axis, and the groups
-# bring their own colours with them.
-grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
-colors = depictio_group_kwargs.get('color_discrete_map') or colors
-df_modified = df.group_by(list(dict.fromkeys(['city', grp_col]))).len().rename({{'len': 'samples'}}).sort('city')
+{groups}df_modified = df.group_by(list(dict.fromkeys(['city', grp_col]))).len().rename({{'len': 'samples'}}).sort('city')
 fig = px.bar(
     df_modified.to_pandas(),
     x='city', y='samples', color=grp_col,
@@ -642,7 +621,7 @@ fig.update_layout(
 
 
 def environment_tab(group_col: str, group_display: str, id_col: str, order: int) -> dict:
-    colors = _colors_literal()
+    groups = _group_colors(group_col)
     return {
         "title": "Environment (CTD)",
         "subtitle": "Sonde readings per sample, and the diversity they go with",
@@ -669,7 +648,7 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
             {
                 "name": "Diversity under the current environment",
                 "icon": "mdi:chart-bell-curve",
-                "color": "orange",
+                "color": "cyan",
                 "description": "What the environmental filters do to alpha diversity",
             },
         ],
@@ -697,7 +676,7 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                 "float64",
                 "Temperature (°C)",
                 "mdi:thermometer",
-                ORANGE,
+                "cyan.4",
                 0,
                 1,
                 extra={"aggregations": ["box_plot_stats"], "secondary_layout": "box_plot"},
@@ -711,7 +690,7 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                 "float64",
                 "Conductivity (µS/cm)",
                 "mdi:flash",
-                CYAN,
+                "cyan.6",
                 2,
                 1,
                 extra={"aggregations": ["box_plot_stats"], "secondary_layout": "box_plot"},
@@ -725,7 +704,7 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                 "float64",
                 "Dissolved O₂ (mg/L)",
                 "mdi:water-percent",
-                BLUE,
+                "cyan.8",
                 4,
                 1,
                 extra={"aggregations": ["box_plot_stats"], "secondary_layout": "box_plot"},
@@ -739,7 +718,7 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                 "float64",
                 "Nitrate (mg/L)",
                 "mdi:molecule",
-                GRAPE,
+                "cyan.9",
                 6,
                 1,
                 extra={"aggregations": ["box_plot_stats"], "secondary_layout": "box_plot"},
@@ -764,13 +743,7 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                 "metadata",
                 "Temperature × conductivity",
                 f"""
-colors = {colors}
-# Colour by the viewer's analysis groups when there are some, else by the
-# pipeline's own {group_display.lower()}. One grouping axis, and the groups
-# bring their own colours with them.
-grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
-colors = depictio_group_kwargs.get('color_discrete_map') or colors
-fig = px.scatter(
+{groups}fig = px.scatter(
     df.to_pandas(),
     x='ctd_temperature_c', y='ctd_conductivity_us_cm', color=grp_col,
     color_discrete_map=colors, hover_name='city', custom_data=['{id_col}'],
@@ -793,13 +766,7 @@ fig.update_layout(
                 "metadata",
                 "Dissolved oxygen",
                 f"""
-colors = {colors}
-# Colour by the viewer's analysis groups when there are some, else by the
-# pipeline's own {group_display.lower()}. One grouping axis, and the groups
-# bring their own colours with them.
-grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
-colors = depictio_group_kwargs.get('color_discrete_map') or colors
-fig = px.box(
+{groups}fig = px.box(
     df.to_pandas(),
     x=grp_col, y='ctd_do_mg_l', color=grp_col,
     color_discrete_map=colors, points='all',
@@ -820,13 +787,7 @@ fig.update_layout(
                 "metadata",
                 "Nitrate × dissolved carbon",
                 f"""
-colors = {colors}
-# Colour by the viewer's analysis groups when there are some, else by the
-# pipeline's own {group_display.lower()}. One grouping axis, and the groups
-# bring their own colours with them.
-grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
-colors = depictio_group_kwargs.get('color_discrete_map') or colors
-fig = px.scatter(
+{groups}fig = px.scatter(
     df.to_pandas(),
     x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color=grp_col,
     size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,
@@ -863,13 +824,7 @@ fig.update_layout(
                 "alpha_diversity_multi_canonical",
                 "Shannon diversity",
                 f"""
-colors = {colors}
-# Colour by the viewer's analysis groups when there are some, else by the
-# pipeline's own {group_display.lower()}. One grouping axis, and the groups
-# bring their own colours with them.
-grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
-colors = depictio_group_kwargs.get('color_discrete_map') or colors
-fig = px.box(
+{groups}fig = px.box(
     df.to_pandas(),
     x=grp_col, y='shannon', color=grp_col,
     color_discrete_map=colors, points='all',
@@ -912,30 +867,27 @@ def strip_sections(dashboard: dict[str, Any], names: tuple[str, ...]) -> None:
     print(f"  stripped {names}: {dropped} components removed")
 
 
-def set_upset_set_colors(dashboard: dict[str, Any], colors: dict[str, str]) -> None:
-    """Give every upset_plot an explicit set -> colour map.
+def set_upset_set_colors(dashboard: dict[str, Any], group_col: str) -> None:
+    """Point every upset_plot's set colours at the family's `category_colors`.
 
-    Without it `color_intersections_by: set` falls through to plotly-upset's
-    `self.color` default for every bar, which is #333333 — the whole plot
-    renders black. base.yaml cannot carry this map because its set names are
-    {GROUP_COL} values, unknown until a run is ingested; the reference run's
-    are the four habitats.
+    base.yaml leaves `color_intersections_by` on `degree` because in `set` mode
+    plotly-upset needs a set -> colour map or every bar falls back to a flat
+    dark grey and the whole plot renders black. The set names are the group
+    column's values, unknown until a run is ingested, so no map can be written
+    in a generic template; `set_category_column` names the column instead, and
+    the reference run's `category_colors: auto` colours the sets the way every
+    other habitat tile is coloured.
     """
     for tab in [dashboard["main_dashboard"], *dashboard.get("tabs", [])]:
         for comp in tab.get("components", []):
             cfg = comp.get("config") or {}
             if cfg.get("viz_kind") == "upset_plot":
-                cfg["set_colors"] = dict(colors)
-                # base.yaml leaves this on `degree` because a generic template
-                # cannot name its sets. Here they are the four habitats, so the
-                # UpSet can carry the same colours as every other habitat tile.
+                cfg["set_category_column"] = group_col
                 cfg["color_intersections_by"] = "set"
-                print(f"  set_colors on {comp.get('index', comp.get('tag'))}")
+                print(f"  set_category_column on {comp.get('index', comp.get('tag'))}")
 
 
-def annotate_heatmap_columns(
-    dashboard: dict[str, Any], group_col: str, id_col: str, colors: dict[str, str]
-) -> None:
+def annotate_heatmap_columns(dashboard: dict[str, Any], group_col: str, id_col: str) -> None:
     """Give every clustered heatmap a habitat strip above its columns.
 
     Both heatmaps have samples for columns, and until now nothing on either said
@@ -946,7 +898,9 @@ def annotate_heatmap_columns(
 
     base.yaml cannot carry this: `col_annotations` is a literal
     ``{column_label: category}`` map, so it names this run's samples. That is
-    exactly the kind of run-specific value the demo layer exists for.
+    exactly the kind of run-specific value the demo layer exists for. The
+    strip's colours come from the family's category colours, not an override:
+    a pinned map here would drift from the palette every other tile reads.
     """
     metadata = Path(__file__).parent / "input" / "Metadata_full.tsv"
     with metadata.open(encoding="utf-8") as handle:
@@ -961,10 +915,6 @@ def annotate_heatmap_columns(
             if cfg.get("viz_kind") != "complex_heatmap":
                 continue
             cfg["col_annotations"] = {group_col: dict(by_sample)}
-            # Same four hexes as every other habitat tile. Without the override
-            # the strip picks its own categorical palette and the dashboard
-            # shows two different colours for Riverwater on the same screen.
-            cfg["col_annotation_colors"] = {group_col: dict(colors)}
             print(f"  {group_col} column strip on {comp.get('index', comp.get('tag'))}")
 
 
@@ -1027,8 +977,8 @@ def build() -> dict[str, Any]:
     id_col = variables["METADATA_ID_COL"]
 
     strip_sections(dashboard, SINTAX_SECTIONS)
-    set_upset_set_colors(dashboard, HABITAT_COLORS)
-    annotate_heatmap_columns(dashboard, group_col, id_col, HABITAT_COLORS)
+    set_upset_set_colors(dashboard, group_col)
+    annotate_heatmap_columns(dashboard, group_col, id_col)
 
     main = dashboard["main_dashboard"]
     main["title"] = "nf-core/ampliseq"
