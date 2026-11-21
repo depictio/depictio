@@ -17,6 +17,7 @@ from depictio.cli.cli.utils.common import (
     say_local_server_running,
 )
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
+from depictio.cli.cli.utils.config_compat import check_server_version_of_config
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
@@ -385,6 +386,10 @@ def check(
                 user_info.append("Admin privileges: Yes")
             suffix = f" - {', '.join(user_info)}" if user_info else ""
             rich_print_checked_statement(f"Server accessible{suffix}", "success")
+            # The doctor is also where a version mismatch belongs: a CLI on
+            # another major.minor line than its server warns here. Never
+            # blocks, never fails the check.
+            check_server_version_of_config(config_path)
         else:
             report_login_failure(config_path, login_result, "Server check failed")
             failed = True

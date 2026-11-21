@@ -11,6 +11,13 @@ from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
 from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.models.utils import make_json_serializable
 
+#: S3 settings only the server reads. ``S3DepictioCLIConfig`` is shared by the
+#: server settings and the CLI, so a setting added for the server lands in every
+#: CLI.yaml unless it is listed here, and a CLI released before that setting
+#: rejects the whole file: a 1.21 CLI fails on ``s3_storage.browser_access``
+#: ("Extra inputs are not permitted") against a newer server.
+SERVER_ONLY_S3_FIELDS: frozenset[str] = frozenset({"browser_access"})
+
 
 def cli_config_to_payload(cli_config: CLIConfig) -> dict:
     """Serialize a CLIConfig for delivery to the CLI/agent.
@@ -22,8 +29,11 @@ def cli_config_to_payload(cli_config: CLIConfig) -> dict:
     writes. This helper is the single DELIBERATE disclosure point: the agent
     config is requested by an authenticated user and must carry the real
     secret to be usable.
+
+    Server-only S3 settings (``SERVER_ONLY_S3_FIELDS``) are left out, so a CLI
+    older than the server can still load the file.
     """
-    payload = cli_config.model_dump(mode="json")
+    payload = cli_config.model_dump(mode="json", exclude={"s3_storage": set(SERVER_ONLY_S3_FIELDS)})
     # aws_secret_access_key is the single accessor that unwraps the SecretStr.
     payload["s3_storage"]["root_password"] = cli_config.s3_storage.aws_secret_access_key
     return payload
