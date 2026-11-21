@@ -55,6 +55,9 @@ interface LinkEditModalProps {
   onClose: () => void;
   /** Fired after a successful save so the parent can refresh its link list. */
   onSaved: (link: DCLink) => void;
+  /** Stacking layer, for a dialog opened from inside another one (which must
+   *  open above it, not behind). Its dropdowns open one layer higher still. */
+  zIndex?: number;
 }
 
 const RESOLVER_FALLBACK: ResolverInfo[] = [
@@ -103,8 +106,10 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
   resolvers,
   onClose,
   onSaved,
+  zIndex,
 }) => {
   const accent = useBrandAccents();
+  const comboboxProps = zIndex != null ? { zIndex: zIndex + 1 } : undefined;
   const editing = !!link;
   const resolverList = resolvers.length ? resolvers : RESOLVER_FALLBACK;
 
@@ -368,6 +373,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
   return (
     <Modal
       opened={opened}
+      zIndex={zIndex}
       onClose={submitting ? () => {} : onClose}
       title={null}
       size="lg"
@@ -409,6 +415,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
             stayed at the label baseline, which looked misaligned. */}
         <Group grow align="flex-end">
           <Select
+            comboboxProps={comboboxProps}
             label="Source data collection"
             placeholder="Pick a table DC"
             data={sourceDcOptions}
@@ -429,6 +436,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
             nothingFoundMessage="No table data collections in this project."
           />
           <Select
+            comboboxProps={comboboxProps}
             label="Source column"
             placeholder={
               !sourceDcId
@@ -453,6 +461,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
         </Text>
 
         <Select
+          comboboxProps={comboboxProps}
           label="Target data collection"
           placeholder={!sourceDcId ? 'Pick a source DC first' : 'Select a DC'}
           data={targetDcOptions}
@@ -466,6 +475,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
         />
 
         <Select
+          comboboxProps={comboboxProps}
           label="Resolver"
           data={resolverOptions}
           value={resolver}

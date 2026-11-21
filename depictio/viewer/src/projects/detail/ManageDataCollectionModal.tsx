@@ -19,10 +19,11 @@ import {
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 
-import { appendMultiQCFiles, appendTableFiles, clearMultiQCDC, clearTableDC, fetchMultiQCByDataCollection, replaceMultiQCFiles, replaceTableFiles, type MultiQCReportSummary, useBrandAccents } from 'depictio-react-core';
+import { appendMultiQCFiles, appendTableFiles, clearMultiQCDC, clearTableDC, fetchMultiQCByDataCollection, listProjectJoins, replaceMultiQCFiles, replaceTableFiles, type MultiQCReportSummary, useBrandAccents, useIsStaticBundle } from 'depictio-react-core';
 
 import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
+import { clearJoinsWarning, joinRebuildNotice, joinsReadingTable, readableApiError } from './joinForm';
 
 const MAX_PER_FILE = 50 * 1024 * 1024;
 const MAX_TOTAL = 500 * 1024 * 1024;
@@ -32,6 +33,8 @@ type Tab = 'modify' | 'clear';
 
 interface ManageDataCollectionModalProps {
   opened: boolean;
+  /** Used to look up the joins that read this table (Clear warns about them). */
+  projectId?: string | null;
   dcId: string;
   dcName: string;
   /** Drives backend dispatch (MultiQC vs Table endpoints) and the dropzone
@@ -66,6 +69,7 @@ function extractFolderName(originalPath: string | undefined, idx: number): strin
 
 const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
   opened,
+  projectId,
   dcId,
   dcName,
   dcType,
@@ -79,6 +83,9 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
   const [confirmName, setConfirmName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What clearing does to the joins that read this table (null: none do).
+  const [joinsWarning, setJoinsWarning] = useState<string | null>(null);
+  const offline = useIsStaticBundle();
 
   // Clear-tab summary state — fetched lazily on first switch to the Clear tab.
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -146,6 +153,23 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
+  // The joins that read this table, for the Clear tab's warning.
+  useEffect(() => {
+    setJoinsWarning(null);
+    if (!opened || dcType !== 'table' || !projectId || offline) return undefined;
+    let live = true;
+    listProjectJoins(projectId)
+      .then((res) => {
+        if (live) setJoinsWarning(clearJoinsWarning(joinsReadingTable(res.joins, dcId)));
+      })
+      .catch(() => {
+        // No warning: the clear itself still reports what happened to the joins.
+      });
+    return () => {
+      live = false;
+    };
+  }, [opened, dcType, projectId, dcId, offline]);
+
   // Dropzone filter changes (different DC type) must drop stale files —
   // otherwise switching from a CSV DC to a parquet DC would carry CSVs over.
   useEffect(() => {
@@ -201,39 +225,50 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
     setSubmitting(true);
     try {
       if (tab === 'clear') {
+        let joins;
         if (dcType === 'multiqc') {
           await clearMultiQCDC(dcId, true);
         } else {
-          await clearTableDC(dcId);
+          joins = (await clearTableDC(dcId)).joins;
         }
+        const notice = joinRebuildNotice(`All data for "${dcName}" deleted.`, joins);
         notifications.show({
-          color: 'green',
+          color: notice.color ?? 'green',
           title: 'Data collection cleared',
-          message: `All data for "${dcName}" deleted.`,
+          message: notice.message,
+          ...(notice.color ? { autoClose: 10000 } : {}),
         });
       } else if (replaceAll) {
         const fn = dcType === 'multiqc' ? replaceMultiQCFiles : replaceTableFiles;
         const result = await fn(dcId, files);
+        const notice = joinRebuildNotice(
+          result.message || 'Replace complete.',
+          'joins' in result ? result.joins : undefined,
+        );
         notifications.show({
-          color: 'green',
+          color: notice.color ?? 'green',
           title: 'Data collection replaced',
-          message: result.message || 'Replace complete.',
-          autoClose: 6000,
+          message: notice.message,
+          autoClose: notice.color ? 10000 : 6000,
         });
       } else {
         const fn = dcType === 'multiqc' ? appendMultiQCFiles : appendTableFiles;
         const result = await fn(dcId, files);
+        const notice = joinRebuildNotice(
+          result.message || 'Append complete.',
+          'joins' in result ? result.joins : undefined,
+        );
         notifications.show({
-          color: 'green',
+          color: notice.color ?? 'green',
           title: 'Data collection updated',
-          message: result.message || 'Append complete.',
-          autoClose: 6000,
+          message: notice.message,
+          autoClose: notice.color ? 10000 : 6000,
         });
       }
       onSuccess();
       onClose();
     } catch (err) {
-      setError((err as Error).message || 'Failed to apply changes.');
+      setError(readableApiError(err, 'Failed to apply changes.'));
     } finally {
       setSubmitting(false);
     }
@@ -400,6 +435,17 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
                 This will permanently delete all reports and ingested data. The DC itself, its
                 name, and any links pointing to it will be preserved. This action cannot be undone.
               </Alert>
+
+              {joinsWarning && (
+                <Alert
+                  color="yellow"
+                  variant="light"
+                  icon={<Icon icon="mdi:table-merge-cells" width={18} />}
+                  data-testid="manage-dc-joins-warning"
+                >
+                  {joinsWarning}
+                </Alert>
+              )}
 
               {dcType === 'multiqc' && (
                 <>

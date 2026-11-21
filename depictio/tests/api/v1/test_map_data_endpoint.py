@@ -84,6 +84,8 @@ class _Ctx:
             # Link resolution needs a project + DB; the map's own filters pass
             # straight through in every case exercised here.
             patch.object(routes, "_resolve_link_filters_cached", lambda **kw: kw["filters"]),
+            # The collection is in its project (a deleted one is a 410, tested apart).
+            patch.object(routes, "_require_live_data_collection", lambda *a, **k: None),
         ]
         for p in self._patches:
             p.start()

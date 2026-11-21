@@ -748,12 +748,14 @@ def apply_cell_edits(
                 "row_count": frame.height,
             }
 
+        joins: list[dict] = []
         aggregation_version, new_delta_version = commit_table_frame(
             data_collection_id=data_collection_id,
             frame=updated,
             current_user=current_user,
             write_mode="overwrite",
             trigger="ui",
+            join_reports=joins,
         )
 
     return {
@@ -763,6 +765,7 @@ def apply_cell_edits(
         "delta_version": new_delta_version,
         "aggregation_version": aggregation_version,
         "row_count": updated.height,
+        "joins": joins,
     }
 
 
@@ -809,6 +812,7 @@ def restore_table_version(
                 },
             ) from exc
 
+        joins: list[dict] = []
         aggregation_version, new_delta_version = commit_table_frame(
             data_collection_id=data_collection_id,
             frame=frame,
@@ -816,6 +820,7 @@ def restore_table_version(
             write_mode="overwrite",
             trigger="ui",
             dc_for_specs=dc,
+            join_reports=joins,
         )
 
     logger.info(
@@ -829,4 +834,5 @@ def restore_table_version(
         "delta_version": new_delta_version,
         "aggregation_version": aggregation_version,
         "row_count": frame.height,
+        "joins": joins,
     }

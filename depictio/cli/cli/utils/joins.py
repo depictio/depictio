@@ -9,6 +9,8 @@ This module provides functionality for:
 - Persisting joined tables to S3 as Delta tables
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 
 import polars as pl
@@ -39,6 +41,7 @@ from depictio.models.models.joins import (
     JoinDefinition,
     JoinPreviewResult,
     JoinValidationResult,
+    stable_join_result_id,
 )
 from depictio.models.models.projects import Project
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
@@ -376,6 +379,51 @@ def execute_join(
     right_df = right_result["data"]
     assert isinstance(right_df, pl.DataFrame)
 
+    return join_frames(
+        join_def, left_df, right_df, left_dc, right_dc, apply_granularity=apply_granularity
+    )
+
+
+def _right_renames(left_columns: list[str], right_columns: list[str], keys: list[str]) -> dict:
+    """``{column: new name}`` for the right table's non-key columns the left one has too.
+
+    Both copies are kept: the right one as ``<column>_right`` (``_right`` again
+    while that name is taken), so no value is lost to a name clash.
+    """
+    taken = set(left_columns) | set(right_columns)
+    renames: dict[str, str] = {}
+    for column in right_columns:
+        if column in keys or column not in left_columns:
+            continue
+        new = f"{column}_right"
+        while new in taken:
+            new = f"{new}_right"
+        taken.add(new)
+        renames[column] = new
+    return renames
+
+
+#: The polars ``how`` of each join type (polars calls an outer join "full").
+_POLARS_HOW = {"outer": "full"}
+
+
+def join_frames(
+    join_def: JoinDefinition,
+    left_df: pl.DataFrame,
+    right_df: pl.DataFrame,
+    left_dc: DataCollection,
+    right_dc: DataCollection,
+    apply_granularity: bool = True,
+) -> tuple[pl.DataFrame, dict]:
+    """Join two loaded tables as ``join_def`` says (see :func:`execute_join`).
+
+    The result has one column per key, whatever the join type, then the left
+    table's columns in its order, then the right table's. A non-key column of
+    both tables is kept twice, the right copy renamed (``metadata
+    ["renamed_right_columns"]``). The right table's bookkeeping columns go when
+    the left has them, and its run id always goes when runs are not matched: a
+    joined row carries its left row's run.
+    """
     logger.info(f"Left DataFrame shape: {left_df.shape}")
     logger.info(f"Right DataFrame shape: {right_df.shape}")
 
@@ -386,7 +434,11 @@ def execute_join(
     left_metatype = left_dc.config.metatype if left_dc.config else None
     right_metatype = right_dc.config.metatype if right_dc.config else None
 
-    if "depictio_run_id" in left_df.columns and "depictio_run_id" in right_df.columns:
+    if (
+        join_def.match_run_ids
+        and "depictio_run_id" in left_df.columns
+        and "depictio_run_id" in right_df.columns
+    ):
         # Skip auto-add if either side is a Metadata table
         if left_metatype == "Metadata" or right_metatype == "Metadata":
             logger.info(
@@ -442,20 +494,36 @@ def execute_join(
     # Normalize join column types
     left_df, right_df = normalize_join_column_types(left_df, right_df, join_columns)
 
-    # Remove duplicated columns (except join columns) from right DataFrame
-    # to avoid suffix issues
-    right_cols_to_keep = [
-        col for col in right_df.columns if col not in left_df.columns or col in join_columns
+    # The right table's bookkeeping: dropped when the left has its own, and its
+    # run id always when runs are not matched, so the joined rows' runs are the
+    # left table's (and the joined table follows the left one in What's new).
+    bookkeeping = ("depictio_run_id", "aggregation_time", JOIN_TIMESTAMP_COLUMN)
+    right_drop = [
+        col
+        for col in bookkeeping
+        if col in right_df.columns
+        and col not in join_columns
+        and (col in left_df.columns or (col == "depictio_run_id" and not join_def.match_run_ids))
     ]
-    right_df = right_df.select(right_cols_to_keep)
+    right_df = right_df.drop(right_drop)
+    renamed = _right_renames(left_df.columns, right_df.columns, join_columns)
+    if renamed:
+        right_df = right_df.rename(renamed)
+    metadata["renamed_right_columns"] = renamed
 
-    # Execute the join
-    logger.info(f"Executing {join_def.how} join on columns: {join_columns}")
+    # Execute the join: one column per key for every join type (coalesce)
+    how = str(getattr(join_def.how, "value", join_def.how))
+    logger.info(f"Executing {how} join on columns: {join_columns}")
     joined_df = left_df.join(
         right_df,
         on=join_columns,
-        how=join_def.how,  # Already a string with use_enum_values=True
+        how=_POLARS_HOW.get(how, how),  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        coalesce=True,
     )
+    # The left table's columns in its order, then the right table's additions
+    # (a right join would otherwise put the key among the right's columns).
+    order = [c for c in left_df.columns if c in joined_df.columns]
+    joined_df = joined_df.select(order + [c for c in joined_df.columns if c not in order])
 
     logger.info(f"Joined DataFrame shape: {joined_df.shape}")
     metadata["joined_rows"] = joined_df.shape[0]
@@ -589,13 +657,16 @@ def preview_join(
 def _holds_same_rows(stored: pl.DataFrame, joined: pl.DataFrame) -> bool:
     """Whether a persisted join already holds exactly the rows of ``joined``.
 
-    ``join_timestamp`` is left out and row order is ignored, since a join keeps
-    none. Any schema difference counts as a change: a false "changed" costs one
-    commit, a false "unchanged" would hide a real one.
+    ``join_timestamp`` is left out, and row and column order are ignored: a join
+    keeps no row order, and its columns move when an input's do (a table
+    appended to in the web UI loses its ``depictio_run_id``, so the right
+    table's comes last). Any other schema difference counts as a change: a false
+    "changed" costs one commit, a false "unchanged" would hide a real one.
     """
     stored = stored.drop(JOIN_TIMESTAMP_COLUMN, strict=False)
-    if stored.schema != joined.schema or stored.height != joined.height:
+    if dict(stored.schema) != dict(joined.schema) or stored.height != joined.height:
         return False
+    joined = joined.select(stored.columns)
     return stored.hash_rows().sort().equals(joined.hash_rows().sort())
 
 
@@ -619,6 +690,77 @@ def _server_records_version(dc_id: str, delta_version: int, CLI_config: CLIConfi
     return bool(aggregations) and aggregations[-1].get("delta_version") == delta_version
 
 
+@dataclass(frozen=True)
+class JoinPersistHooks:
+    """How :func:`persist_joined_table` reaches the server, once the table is written.
+
+    The CLI goes over HTTP with its token (:func:`http_persist_hooks`, the
+    default). The API runs these helpers in-process and passes its own: it has
+    checked the caller's role already, and an HTTP round trip into itself would
+    meet owner-only routes (``/projects/update``, ``/deltatables/upsert``) that
+    refuse an editor.
+
+    - ``records_version(dc_id, delta_version)``: whether the server's latest
+      aggregation of ``dc_id`` is that Delta version.
+    - ``sync_project(project, join_def)``: store the join's results (and the
+      joined collection, when new). A failure is reported, not raised.
+    - ``register(dc_id, location, size_bytes, provenance, frame)``: record the
+      new commit; raises on failure.
+    """
+
+    records_version: Callable[[str, int], bool]
+    sync_project: Callable[[Project, JoinDefinition], None]
+    register: Callable[[str, str, int, dict, pl.DataFrame], None]
+
+
+def http_persist_hooks(CLI_config: CLIConfig) -> JoinPersistHooks:
+    """The CLI's hooks: the API over HTTP, signed with ``CLI_config``'s token."""
+    from depictio.cli.cli.utils.api_calls import (
+        api_sync_project_config_to_server,
+        api_upsert_deltatable,
+    )
+    from depictio.models.utils import convert_model_to_dict
+
+    def sync_project(project: Project, join_def: JoinDefinition) -> None:
+        api_sync_project_config_to_server(
+            CLI_config=CLI_config, ProjectConfig=convert_model_to_dict(project), update=True
+        )
+
+    def register(
+        dc_id: str, location: str, size_bytes: int, provenance: dict, frame: pl.DataFrame
+    ) -> None:
+        response = api_upsert_deltatable(
+            data_collection_id=dc_id,
+            delta_table_location=location,
+            CLI_config=CLI_config,
+            update=True,
+            deltatable_size_bytes=size_bytes,
+            delta_provenance=provenance,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+
+    return JoinPersistHooks(
+        records_version=lambda dc_id, version: _server_records_version(dc_id, version, CLI_config),
+        sync_project=sync_project,
+        register=register,
+    )
+
+
+def _existing_joined_dc(project: Project, join_def: JoinDefinition):
+    """The id of the project's ``joined_<name>`` collection, preferring the join's workflow."""
+    tag = f"joined_{join_def.name}"
+    found = [
+        (workflow.name == join_def.workflow_name, dc.id)
+        for workflow in project.workflows
+        for dc in workflow.data_collections
+        if dc.data_collection_tag == tag and dc.id
+    ]
+    if not found:
+        return None
+    return sorted(found, key=lambda item: not item[0])[0][1]
+
+
 def persist_joined_table(
     join_def: JoinDefinition,
     joined_df: pl.DataFrame,
@@ -626,6 +768,9 @@ def persist_joined_table(
     CLI_config: CLIConfig,
     metadata: dict,
     overwrite: bool = False,
+    *,
+    hooks: JoinPersistHooks | None = None,
+    trigger: str | None = None,
 ) -> dict:
     """
     Persist a joined DataFrame as a Delta table and update join definition with results.
@@ -653,20 +798,23 @@ def persist_joined_table(
         CLI_config: CLI configuration
         metadata: Join metadata from execute_join
         overwrite: Whether to overwrite existing table
+        hooks: How to reach the server (see :class:`JoinPersistHooks`); over
+            HTTP with ``CLI_config``'s token when omitted
+        trigger: What caused this run (``ui`` for a rebuild after a web edit),
+            stamped on the commit and its registration
 
     Returns:
         Result dict with success/error status
     """
-    from depictio.cli.cli.utils.api_calls import (
-        api_sync_project_config_to_server,
-        api_upsert_deltatable,
-    )
     from depictio.models.models.base import PyObjectId
-    from depictio.models.utils import convert_model_to_dict
+
+    if hooks is None:
+        hooks = http_persist_hooks(CLI_config)
 
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
 
-    # Step 1: Determine DC ID - prioritize YAML id, then result_dc_id, then generate new
+    # Step 1: Determine DC ID - YAML id, then result_dc_id, then the joined
+    # collection the project already has, then one derived from project and name
     if join_def.id:
         # Use stable ID from YAML configuration (preferred)
         dc_id = join_def.id
@@ -677,8 +825,18 @@ def persist_joined_table(
         dc_id = join_def.result_dc_id
         logger.info(f"Reusing existing DC ID for join '{join_def.name}': {dc_id}")
         console.print(f"  [cyan]→ Reusing existing DataCollection ID: {dc_id}[/cyan]")
+    elif (existing := _existing_joined_dc(project, join_def)) is not None:
+        # A definition read from YAML carries no result id: the joined collection
+        # of an earlier run (an --attach-run, say) is the one to write again.
+        dc_id = existing
+        logger.info(f"Reusing joined collection of '{join_def.name}': {dc_id}")
+        console.print(f"  [cyan]→ Reusing the joined collection: {dc_id}[/cyan]")
+    elif getattr(project, "id", None):
+        # First run without a YAML id: an id every later run derives again.
+        dc_id = stable_join_result_id(project.id, join_def.name)
+        logger.info(f"Derived DC ID for join '{join_def.name}': {dc_id}")
+        console.print(f"  [cyan]→ DataCollection ID derived from project and join: {dc_id}[/cyan]")
     else:
-        # Generate new ID (first execution without YAML id)
         dc_id = PyObjectId()
         logger.info(f"Generated new DC ID for join '{join_def.name}': {dc_id}")
         console.print(f"  [yellow]⚠ Generated new DataCollection ID: {dc_id}[/yellow]")
@@ -705,7 +863,7 @@ def persist_joined_table(
     stored_df = existing_result.get("data")
     if isinstance(stored_df, pl.DataFrame) and _holds_same_rows(stored_df, joined_df):
         head = read_delta_commit_info(destination_prefix, storage_options)
-        if head is not None and _server_records_version(str(dc_id), head.version, CLI_config):
+        if head is not None and hooks.records_version(str(dc_id), head.version):
             unchanged_at = head.version
 
     run_tags = sorted(frame_run_tags(joined_df))
@@ -736,6 +894,8 @@ def persist_joined_table(
                 write_mode="overwrite",
                 run_tags=run_tags,
                 row_count=joined_df.height,
+                trigger=trigger,
+                project_id=str(project.id) if getattr(project, "id", None) else None,
                 cli_version=cli_version(),
                 user_email=getattr(CLI_config.user, "email", None),
             ),
@@ -811,10 +971,7 @@ def persist_joined_table(
     # Step 7: Sync updated project to MongoDB (with updated join_def)
     try:
         console.print("  [cyan]→ Syncing project with updated join results to MongoDB[/cyan]")
-        project_dict = convert_model_to_dict(project)
-        api_sync_project_config_to_server(
-            CLI_config=CLI_config, ProjectConfig=project_dict, update=True
-        )
+        hooks.sync_project(project, join_def)
         console.print("  [green]✓ Project updated in MongoDB with join results[/green]")
         logger.info(f"Successfully synced project with updated join '{join_def.name}'")
     except Exception as e:
@@ -827,16 +984,10 @@ def persist_joined_table(
     if write_result is not None:
         try:
             console.print("  [cyan]→ Registering Delta table location in MongoDB[/cyan]")
-            response = api_upsert_deltatable(
-                data_collection_id=str(dc_id),
-                delta_table_location=destination_prefix,
-                CLI_config=CLI_config,
-                update=True,
-                deltatable_size_bytes=size_bytes,
-                delta_provenance=commit_provenance(write_result, run_tags=run_tags),
-            )
-            if response.status_code != 200:
-                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            provenance = commit_provenance(write_result, run_tags=run_tags)
+            if trigger:
+                provenance["trigger"] = trigger
+            hooks.register(str(dc_id), destination_prefix, size_bytes, provenance, joined_df)
             console.print("  [green]✓ Delta table location registered in MongoDB[/green]")
             logger.info(f"Successfully registered Delta location for join '{join_def.name}'")
         except Exception as e:

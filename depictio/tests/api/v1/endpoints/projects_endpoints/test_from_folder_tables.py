@@ -6,6 +6,7 @@ mongomock, the S3 listing is the shared CLI stub, and the scan/process helper
 """
 
 import asyncio
+from datetime import datetime
 from unittest.mock import patch
 
 import mongomock
@@ -64,7 +65,7 @@ def db(monkeypatch, admin):
                 "token_type": "bearer",
                 "name": "n",
                 "token_lifetime": "long-lived",
-                "expire_datetime": "2999-01-01 00:00:00",
+                "expire_datetime": datetime(2999, 1, 1),
                 "refresh_expire_datetime": "2999-01-01 00:00:00",
                 "created_at": "2024-01-01 00:00:00",
             }

@@ -72,6 +72,7 @@ import type {
   TableMergeReport,
 } from 'depictio-react-core';
 
+import { joinRebuildNotice } from '../../projects/detail/joinForm';
 import TableMergePanel from '../../projects/detail/TableMergePanel';
 // The drop overlay is the table editor's, so both drops look the same.
 import '../../projects/detail/TableEditor.css';
@@ -948,10 +949,11 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     if (!table?.edit || cellEdits.size === 0) return;
     setCellSave({ busy: true, error: null, stale: false });
     try {
-      await patchTableCells(table.dcId, table.edit.deltaVersion, [...cellEdits.values()]);
+      const saved = await patchTableCells(table.dcId, table.edit.deltaVersion, [...cellEdits.values()]);
       const n = cellEdits.size;
       setCellSave({ busy: false, error: null, stale: false });
-      notifications.show({ color: 'teal', message: `${n} change${n === 1 ? '' : 's'} saved to the table.` });
+      const notice = joinRebuildNotice(`${n} change${n === 1 ? '' : 's'} saved to the table.`, saved?.joins);
+      notifications.show({ color: notice.color ?? 'teal', message: notice.message });
       await afterWrite();
     } catch (err) {
       const stale = err instanceof TableEditError && err.code === 'stale_version';
@@ -1011,7 +1013,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     if (!file) return;
     setSaving({ ...saving, busy: true });
     try {
-      await mergeTableFile(choice.dcId, file, {
+      const applied = await mergeTableFile(choice.dcId, file, {
         mode: saving.report.mode,
         key: saving.report.key,
         baseVersion: saving.report.delta_version,
@@ -1020,7 +1022,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       const name = bound?.columns.find((c) => c.id === saving.columnId)?.name ?? 'The labels';
       removeLabelColumn(saving.columnId);
       setSaving(null);
-      notifications.show({ color: 'teal', message: `"${name}" is now a column of the table.` });
+      const notice = joinRebuildNotice(`"${name}" is now a column of the table.`, applied?.joins);
+      notifications.show({ color: notice.color ?? 'teal', message: notice.message });
       await afterWrite();
     } catch (err) {
       const stale = err instanceof TableEditError && err.code === 'stale_version';
@@ -1116,14 +1119,15 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     const report = importing.tableReport;
     setImporting({ ...cur, tableApplying: true });
     try {
-      await mergeTableFile(choice.dcId, cur.file, {
+      const applied = await mergeTableFile(choice.dcId, cur.file, {
         mode: report.mode,
         key: report.key,
         baseVersion: report.delta_version,
         dryRun: false,
       });
       setImporting(null);
-      notifications.show({ color: 'teal', message: `${cur.file.name} applied to the table.` });
+      const notice = joinRebuildNotice(`${cur.file.name} applied to the table.`, applied?.joins);
+      notifications.show({ color: notice.color ?? 'teal', message: notice.message });
       await afterWrite();
     } catch (err) {
       setImporting({

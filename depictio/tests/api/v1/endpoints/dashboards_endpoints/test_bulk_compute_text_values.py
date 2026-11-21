@@ -80,6 +80,9 @@ def _dashboard(database, components) -> ObjectId:
     database["projects"].insert_one(
         {
             "_id": project_id,
+            # The collection the values read is in the project (a card on a
+            # collection that is not says so instead of computing).
+            "workflows": [{"_id": WF, "data_collections": [{"_id": REL_DC}]}],
             "template_origin": {
                 "run_provenance": [
                     {"source": "software_versions", "key": "dada_ref_taxonomy", "value": "v0"},

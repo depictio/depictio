@@ -41,6 +41,7 @@ from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_rout
 from depictio.api.v1.endpoints.groups_endpoints.routes import groups_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.jobs_endpoints.routes import jobs_endpoint_router
+from depictio.api.v1.endpoints.joins_endpoints.routes import joins_endpoint_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
 from depictio.api.v1.endpoints.migrate_endpoints.inbound_routes import inbound_router
 from depictio.api.v1.endpoints.migrate_endpoints.invites_routes import invites_router
@@ -96,6 +97,11 @@ router.include_router(
     links_endpoint_router,
     prefix="/links",
     tags=["DC Links"],
+)
+router.include_router(
+    joins_endpoint_router,
+    prefix="/joins",
+    tags=["Joins"],
 )
 router.include_router(
     files_endpoint_router,

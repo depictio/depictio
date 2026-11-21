@@ -69,6 +69,7 @@ import {
   fetchIngestionReport,
   fetchVizSuggestions,
   listLinkResolvers,
+  listProjectJoins,
   renameDataCollection,
   useBrandAccents,
   useIsStaticBundle,
@@ -94,6 +95,7 @@ import {
   DcLinksTable,
   DcSuggestedCharts,
   SortableTh,
+  SYSTEM_COLUMNS,
   userColumns,
   dcColumns,
   dcOrigin,
@@ -105,6 +107,13 @@ import {
 } from './DcViewerParts';
 import type { DcLinkRow, DetailItem, Fact } from './DcViewerParts';
 import type { ProjectJoin } from './ConnectionsMap';
+import {
+  deleteJoinedTableNotice,
+  deleteJoinsBlock,
+  joinRebuildNotice,
+  joinsReadingTable,
+  readableApiError,
+} from './joinForm';
 import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
@@ -548,7 +557,7 @@ const ProjectDetailApp: React.FC<{ embed?: ProjectDetailEmbed }> = ({ embed }) =
   // for a <Loader/>, and section-local state would reset to collapsed.
   const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(true);
 
-  const { user, isPublicMode, loading: userLoading } = useCurrentUser();
+  const { user, isPublicMode, isDemoMode, loading: userLoading } = useCurrentUser();
   const projectId = embed?.projectId ?? readProjectIdFromPath();
   // "Changed since your last visit" and the Activity timeline (#1397): inert
   // unless the server turns the feature on.
@@ -640,6 +649,14 @@ const ProjectDetailApp: React.FC<{ embed?: ProjectDetailEmbed }> = ({ embed }) =
   // Refresh and export are refused to non-admins on a public/demo deployment.
   // Whether this is one is unknown until the auth status lands, so both stay
   // gated until then rather than being enabled for a moment.
+  // Why a user who cannot change the project cannot: a public/demo deployment
+  // (guests are temporary accounts), a published lock, or simply their role.
+  const blockedReason: 'demo' | 'locked' | 'permission' =
+    isDemoMode || (isPublicMode && !!user?.is_temporary)
+      ? 'demo'
+      : project?.published_lock
+        ? 'locked'
+        : 'permission';
   const publicModeReason = userLoading
     ? 'Checking what you can change in this project...'
     : isPublicMode && !user?.is_admin
@@ -765,15 +782,18 @@ const ProjectDetailApp: React.FC<{ embed?: ProjectDetailEmbed }> = ({ embed }) =
     const total = dataCollections.length;
     let aggregate = 0;
     let metadata = 0;
+    let joined = 0;
     let totalBytes = 0;
     dataCollections.forEach((dc) => {
       const raw = (dc.config?.metatype as string | undefined) || '';
       const lc = raw.toLowerCase();
-      if (lc.startsWith('aggregat')) aggregate += 1;
+      // A table made by a join is its own kind, not an "Aggregate".
+      if (isJoinedDc(dc)) joined += 1;
+      else if (lc.startsWith('aggregat')) aggregate += 1;
       else if (lc.startsWith('metadat')) metadata += 1;
       totalBytes += getDcSizeBytes(dc);
     });
-    return { total, aggregate, metadata, totalBytes };
+    return { total, aggregate, metadata, joined, totalBytes };
   }, [dataCollections]);
 
   const body = (
@@ -856,9 +876,11 @@ const ProjectDetailApp: React.FC<{ embed?: ProjectDetailEmbed }> = ({ embed }) =
                     type: (d.config?.type as string | undefined) || 'unknown',
                   }))}
                   canMutate={canMutate}
+                  blockedReason={blockedReason}
                   onLinksChange={setProjectLinks}
                   reloadKey={linksReload}
                   onOpenDc={openDc}
+                  onJoinsChange={refreshQuietly}
                   joins={
                     ((project as Record<string, unknown>).joins as ProjectJoin[] | undefined) || []
                   }
@@ -1146,6 +1168,7 @@ const ProjectDetailApp: React.FC<{ embed?: ProjectDetailEmbed }> = ({ embed }) =
         }}
       />
       <DeleteDataCollectionModal
+        projectId={projectId}
         target={deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onSuccess={() => {
@@ -1159,6 +1182,7 @@ const ProjectDetailApp: React.FC<{ embed?: ProjectDetailEmbed }> = ({ embed }) =
       {manageTarget && (
         <ManageDataCollectionModal
           opened={!!manageTarget}
+          projectId={projectId}
           dcId={(manageTarget._id ?? manageTarget.id) as string}
           dcName={manageTarget.data_collection_tag || 'data collection'}
           dcType={
@@ -1454,19 +1478,51 @@ const RenameDataCollectionModal: React.FC<{
   );
 };
 
+/** The grid's column count, said as the Columns panel counts: the table's own
+ *  columns, then those Depictio adds (shown in the grid, listed apart there). */
+function gridColumnsLabel(total: number, columns: readonly string[]): string {
+  const added = columns.filter((c) => SYSTEM_COLUMNS.has(c)).length;
+  const own = Math.max(0, total - added);
+  const label = `${own} ${own === 1 ? 'column' : 'columns'}`;
+  return added > 0 ? `${label}, plus ${added} added by Depictio` : label;
+}
+
 const DeleteDataCollectionModal: React.FC<{
+  projectId?: string | null;
   target: DataCollectionShape | null;
   onClose: () => void;
   onSuccess: () => void;
-}> = ({ target, onClose, onSuccess }) => {
+}> = ({ projectId, target, onClose, onSuccess }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sentence naming the joins that read this table (they must go first).
+  const [joinsBlock, setJoinsBlock] = useState<string | null>(null);
+  // Sentence saying the join producing this table goes with it.
+  const [producerNotice, setProducerNotice] = useState<string | null>(null);
+  const offline = useIsStaticBundle();
 
   useEffect(() => {
     if (!target) return;
     setError(null);
     setSubmitting(false);
-  }, [target]);
+    setJoinsBlock(null);
+    setProducerNotice(null);
+    if (!projectId || offline) return undefined;
+    let live = true;
+    const id = (target._id ?? target.id) as string;
+    listProjectJoins(projectId)
+      .then((res) => {
+        if (!live) return;
+        setJoinsBlock(deleteJoinsBlock(joinsReadingTable(res.joins, id)));
+        setProducerNotice(deleteJoinedTableNotice(res.joins, id));
+      })
+      .catch(() => {
+        // The server refuses the delete itself and says why.
+      });
+    return () => {
+      live = false;
+    };
+  }, [target, projectId, offline]);
 
   const handleSubmit = async () => {
     if (!target) return;
@@ -1483,7 +1539,7 @@ const DeleteDataCollectionModal: React.FC<{
       });
       onSuccess();
     } catch (err) {
-      setError((err as Error).message || 'Failed to delete.');
+      setError(readableApiError(err, 'Failed to delete.'));
     } finally {
       setSubmitting(false);
     }
@@ -1512,6 +1568,16 @@ const DeleteDataCollectionModal: React.FC<{
           data left to show. Your original file or folder is not touched. This
           cannot be undone.
         </Alert>
+        {producerNotice && (
+          <Alert color="yellow" variant="light" data-testid="delete-dc-join-too">
+            {producerNotice}
+          </Alert>
+        )}
+        {joinsBlock && (
+          <Alert color="yellow" variant="light" data-testid="delete-dc-joins-block">
+            {joinsBlock}
+          </Alert>
+        )}
         {error && (
           <Alert color="red" variant="light">
             {error}
@@ -1521,7 +1587,7 @@ const DeleteDataCollectionModal: React.FC<{
           <Button variant="default" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button color="red" onClick={handleSubmit} loading={submitting}>
+          <Button color="red" onClick={handleSubmit} loading={submitting} disabled={!!joinsBlock}>
             Delete
           </Button>
         </Group>
@@ -1601,6 +1667,7 @@ interface DcStats {
   total: number;
   aggregate: number;
   metadata: number;
+  joined: number;
   totalBytes: number;
 }
 
@@ -1942,6 +2009,9 @@ const DataCollectionsManagerSection: React.FC<{
                   primaryDual={[
                     { count: stats.aggregate, label: 'Aggregate', color: 'var(--gl-accent)' },
                     { count: stats.metadata, label: 'Metadata', color: 'var(--gl-faint)' },
+                    ...(stats.joined > 0
+                      ? [{ count: stats.joined, label: 'Joined', color: 'var(--gl-muted)' }]
+                      : []),
                   ]}
                 />
                 <StatCard
@@ -1961,6 +2031,7 @@ const DataCollectionsManagerSection: React.FC<{
                   <span className="pd-count">{n}</span>
                 </Group>
                 <DataCollectionsTable
+          joins={projectJoinSources(project)}
           pipelineDcIds={pipelineDcIds}
                   dataCollections={dataCollections}
                   selectedDcId={selectedDcId}
@@ -2046,6 +2117,9 @@ const DataCollectionsManagerSection: React.FC<{
           primaryDual={[
             { count: stats.aggregate, label: 'Aggregate', color: AGGREGATE_COLOR },
             { count: stats.metadata, label: 'Metadata', color: METADATA_COLOR },
+            ...(stats.joined > 0
+              ? [{ count: stats.joined, label: 'Joined', color: 'var(--mantine-color-teal-6)' }]
+              : []),
           ]}
         />
         <StatCard
@@ -2070,6 +2144,7 @@ const DataCollectionsManagerSection: React.FC<{
           </Badge>
         </Group>
         <DataCollectionsTable
+          joins={projectJoinSources(project)}
           pipelineDcIds={pipelineDcIds}
           dataCollections={dataCollections}
           selectedDcId={selectedDcId}
@@ -2160,7 +2235,31 @@ type DcSortKey = 'tag' | 'type' | 'size' | 'updated';
 
 /** Sortable + filterable table of a project's data collections. Replaces the
  *  former card list; row click selects the DC (drives the detail viewer). */
+/** The part of a project join that names what a joined table is made of. */
+interface JoinSource {
+  result_dc_id?: unknown;
+  left_dc?: string;
+  right_dc?: string;
+}
+
+const projectJoinSources = (project: ProjectListEntry): JoinSource[] =>
+  ((project as Record<string, unknown>).joins as JoinSource[] | undefined) || [];
+
+/** A table built by a join (`config.source === 'joined'`): the computed table,
+ *  not a file's data. */
+const isJoinedDc = (dc: DataCollectionShape): boolean =>
+  (dc.config as Record<string, unknown> | undefined)?.source === 'joined';
+
+/** "Join of <left> and <right>", from the join whose result is this table. */
+const joinedTooltip = (dc: DataCollectionShape, joins: JoinSource[]): string => {
+  const id = String(dc._id ?? dc.id);
+  const j = joins.find((x) => x.result_dc_id != null && String(x.result_dc_id) === id);
+  return j?.left_dc && j?.right_dc ? `Join of ${j.left_dc} and ${j.right_dc}` : 'Joined table';
+};
+
 const DataCollectionsTable: React.FC<{
+  /** The project's joins, to say what a joined table is made of. */
+  joins: JoinSource[];
   pipelineDcIds: Set<string>;
   dataCollections: DataCollectionShape[];
   selectedDcId: string | null;
@@ -2170,6 +2269,7 @@ const DataCollectionsTable: React.FC<{
   onDelete: (dc: DataCollectionShape) => void;
   onManage?: (dc: DataCollectionShape) => void;
 }> = ({
+  joins,
   pipelineDcIds,
   dataCollections,
   selectedDcId,
@@ -2304,6 +2404,7 @@ const DataCollectionsTable: React.FC<{
             const isSelected = id === selectedDcId;
             const type = (dc.config?.type as string | undefined) || 'unknown';
             const isMultiQC = type.toLowerCase() === 'multiqc';
+            const joined = isJoinedDc(dc);
             const sizeBytes = getDcSizeBytes(dc);
             // The two axes come from their own modules, so the row, the DC
             // viewer and the ingestion report name a collection the same way.
@@ -2329,7 +2430,16 @@ const DataCollectionsTable: React.FC<{
                       identically wherever it is shown. Geomap sits beside the
                       type, never in place of it, since the collection is still
                       a table and still binds to every table component. */}
-                  <DcTypeBadges dc={dc} size="xs" />
+                  <Group gap={4} wrap="wrap">
+                    <DcTypeBadges dc={dc} size="xs" />
+                    {joined && (
+                      <Tooltip label={joinedTooltip(dc, joins)} withArrow>
+                        <Badge size="xs" variant="light" color="grape" data-testid="dc-joined-badge">
+                          joined
+                        </Badge>
+                      </Tooltip>
+                    )}
+                  </Group>
                 </Table.Td>
                 <Table.Td>
                   <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
@@ -2365,21 +2475,32 @@ const DataCollectionsTable: React.FC<{
                   ) : (
                     <Group gap={2} wrap="nowrap" justify="flex-end">
                       {onManage && (
-                        <ActionIcon
-                          data-testid="manage-dc-btn"
-                          variant="subtle"
-                          color={glass ? 'gray' : accent.secondary}
-                          size="sm"
-                          disabled={!canMutate}
-                          onClick={guard(() => onManage(dc))}
-                          title={
-                            canMutate
-                              ? 'Manage data (append / replace / clear)'
-                              : 'Owner permission required'
-                          }
+                        <Tooltip
+                          label="Computed from its sources: update those instead."
+                          disabled={!joined}
+                          withArrow
                         >
-                          <Icon icon="mdi:database-cog-outline" width={16} />
-                        </ActionIcon>
+                          {/* A wrapper keeps the tooltip alive on a disabled button. */}
+                          <span>
+                            <ActionIcon
+                              data-testid="manage-dc-btn"
+                              variant="subtle"
+                              color={glass ? 'gray' : accent.secondary}
+                              size="sm"
+                              disabled={!canMutate || joined}
+                              onClick={guard(() => onManage(dc))}
+                              title={
+                                joined
+                                  ? undefined
+                                  : canMutate
+                                    ? 'Manage data (append / replace / clear)'
+                                    : 'Owner permission required'
+                              }
+                            >
+                              <Icon icon="mdi:database-cog-outline" width={16} />
+                            </ActionIcon>
+                          </span>
+                        </Tooltip>
                       )}
                       <ActionIcon
                         variant="subtle"
@@ -3755,7 +3876,7 @@ const DataPreviewPanel: React.FC<{
       <Group gap="sm" justify="space-between" wrap="wrap">
         <Text size="xs" c="dimmed">
           Showing {rows.length} of {preview.total_rows ?? rows.length} rows ·{' '}
-          {preview.total_columns ?? columns.length} columns
+          {gridColumnsLabel(preview.total_columns ?? columns.length, columns)}
           {offline ? ' in this file (those the dashboard reads)' : ''}
         </Text>
         {showVersionPicker && (
@@ -3847,10 +3968,15 @@ const RestoreVersionButton: React.FC<{
     setBusy(true);
     try {
       const result = await restoreTableVersion(dcId, version, baseVersion);
+      const notice = joinRebuildNotice(
+        `Saved as v${result.delta_version ?? '?'}; the versions in between stay in the history.`,
+        result.joins,
+      );
       notifications.show({
-        color: 'teal',
+        color: notice.color ?? 'teal',
         title: `v${version} restored`,
-        message: `Saved as v${result.delta_version ?? '?'}; the versions in between stay in the history.`,
+        message: notice.message,
+        ...(notice.color ? { autoClose: 10000 } : {}),
       });
       setOpened(false);
       control.onRestored();

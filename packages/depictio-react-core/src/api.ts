@@ -334,6 +334,13 @@ export function apiErrorCode(err: unknown): string | null {
  *  report, or an `HTTPException(detail={detail, code})`), else the raw JSON. */
 function detailMessage(detail: unknown): string {
   if (typeof detail === 'string') return detail;
+  // FastAPI validation errors: a list of {loc, msg, ...}.
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (typeof (d as { msg?: unknown })?.msg === 'string' ? (d as { msg: string }).msg : null))
+      .filter((m): m is string => !!m);
+    if (msgs.length > 0) return msgs.join('; ');
+  }
   const structured = detail as { message?: unknown; detail?: unknown } | null;
   if (typeof structured?.message === 'string') return structured.message;
   if (typeof structured?.detail === 'string') return structured.detail;
@@ -369,6 +376,14 @@ export interface DataVersionGoneDetail {
  *  than the live component does (HTTP 409 on a `definition_version` render). */
 export const DEFINITION_COLLECTION_CHANGED_MESSAGE =
   'This component read a different data collection in that version, so it cannot be drawn from it.';
+
+/** `code` of the 410 a render answers when the data collection the component
+ *  reads no longer exists (deleted, e.g. with the join that produced it). */
+export const DATA_COLLECTION_DELETED_CODE = 'data_collection_deleted';
+
+/** Shown on the tile when the server sends no wording of its own. */
+export const DATA_COLLECTION_DELETED_MESSAGE =
+  'The data collection this component reads was deleted.';
 
 /**
  * Does this failure mean "the data version you asked for is gone"?
@@ -406,9 +421,17 @@ async function throwRenderError(
   prefix: string,
   dataVersions?: Record<string, unknown>,
 ): Promise<never> {
-  const detail = await readErrorDetail(res);
+  const { detail, code } = await readErrorBody(res);
   if (res.status === 409) {
     throw new HttpError(DEFINITION_COLLECTION_CHANGED_MESSAGE, 409, detail);
+  }
+  if (code === DATA_COLLECTION_DELETED_CODE || res.status === 410) {
+    throw new ApiDetailError(
+      detail ?? DATA_COLLECTION_DELETED_MESSAGE,
+      res.status,
+      code ?? DATA_COLLECTION_DELETED_CODE,
+      detail,
+    );
   }
   if (isStaleDataVersionDetail(res.status, detail)) {
     const asOf = dataVersions?.as_of_version;
@@ -7931,7 +7954,7 @@ export async function deleteDataCollection(dcId: string): Promise<void> {
   const res = await authFetch(`${API_BASE}/datacollections/${dcId}`, {
     method: 'DELETE',
   });
-  if (!res.ok) await throwHttpError(res, 'Failed to delete data collection');
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete data collection');
 }
 
 // ── Editing a table a user added ─────────────────────────────────────────
@@ -8006,6 +8029,8 @@ export interface TableEditResult {
   delta_version: number;
   aggregation_version: number | null;
   row_count: number;
+  /** What happened to each join that reads this table (empty when none does). */
+  joins?: JoinRebuildOutcome[];
 }
 
 /** A refused table edit. `code` is `stale_version` (409, someone else saved
@@ -8123,6 +8148,7 @@ export interface TableRestoreResult {
   restored_version: number;
   delta_version: number | null;
   row_count: number;
+  joins?: JoinRebuildOutcome[];
 }
 
 /** Bring past version `version` back as a new version of the table. Throws `TableEditError`. */
@@ -8177,6 +8203,8 @@ export interface TableMergeReport {
   changed: { row: number; column: string }[];
   columns: TableMergeColumn[];
   rows: Record<string, unknown>[];
+  /** Set on an apply: what happened to each join that reads this table. */
+  joins?: JoinRebuildOutcome[];
 }
 
 /** Preview (`dryRun`, the default) or apply a file on a table. Throws `TableEditError`. */
@@ -9903,6 +9931,166 @@ export async function deleteProjectLink(projectId: string, linkId: string): Prom
   if (!res.ok) await throwHttpDetailError(res, 'Failed to delete link');
 }
 
+// ── Table joins (a join of two table DCs, stored as `joined_<name>`) ────────
+
+export type JoinType = 'left' | 'inner' | 'outer' | 'right';
+
+export interface ProjectJoinEntry {
+  name: string;
+  left_dc: string;
+  right_dc: string;
+  on_columns: string[];
+  how: JoinType;
+  description?: string | null;
+  /** Ids are null when a side of the join is gone. */
+  left_dc_id: string | null;
+  right_dc_id: string | null;
+  left_tag: string | null;
+  right_tag: string | null;
+  result_dc_id: string | null;
+  result_tag: string | null;
+  result_dc_tag: string | null;
+  row_count: number | null;
+  column_count: number | null;
+  executed_at: string | null;
+  /** Set when the last rebuild failed; the joined table is then stale. */
+  last_error: string | null;
+  last_checked_at: string | null;
+  /** Dashboards with a component reading the joined table. */
+  dashboards?: JoinDashboardRef[];
+}
+
+export interface JoinDashboardRef {
+  id: string;
+  title: string;
+}
+
+/** What a table write did to one join that reads the written table. */
+export interface JoinRebuildOutcome {
+  join: string | null;
+  status: 'rebuilt' | 'unchanged' | 'failed';
+  error?: string;
+  rows?: number;
+  data_collection_id?: string | null;
+  /** It had failed before and follows its sources again. */
+  recovered?: boolean;
+}
+
+export interface ProjectJoinsResponse {
+  joins: ProjectJoinEntry[];
+  can_edit: boolean;
+}
+
+export interface JoinInput {
+  name: string;
+  left_dc_id: string;
+  right_dc_id: string;
+  /** Empty = let the server suggest (preview only; create needs columns). */
+  on_columns: string[];
+  how: JoinType;
+}
+
+export interface JoinSideSummary {
+  data_collection_id: string;
+  tag: string;
+  rows: number;
+  columns: string[];
+  unmatched_rows: number;
+  unmatched_sample: string[];
+}
+
+export interface JoinRenamedColumn {
+  column: string;
+  renamed_to: string;
+}
+
+export interface JoinPreview {
+  name: string;
+  name_problem: string | null;
+  result_tag: string | null;
+  how: JoinType;
+  on_columns: string[];
+  suggested_on_columns: string[];
+  shared_columns: string[];
+  left: JoinSideSummary;
+  right: JoinSideSummary;
+  matched_keys: number;
+  joined_rows: number;
+  joined_columns: string[];
+  sample_rows: Record<string, unknown>[];
+  warnings: string[];
+  /** Non-key columns in both tables: the right table's copy is kept as `<col>_right`. */
+  renamed_columns?: JoinRenamedColumn[];
+}
+
+export interface CreateJoinResult {
+  success: boolean;
+  join: ProjectJoinEntry;
+  data_collection_id: string;
+  data_collection_tag: string;
+  rows: number;
+  columns: string[];
+  delta_version: number | string | null;
+}
+
+export interface DeleteJoinResult {
+  success: boolean;
+  name: string;
+  data_collection_id: string | null;
+}
+
+// Errors carry `detail: {code, message}`: `throwHttpDetailError` reduces that
+// to the message (readable as is) and exposes the code through
+// `apiErrorCode(err)` (no_shared_column, name_taken, join_in_use, ...).
+
+export async function listProjectJoins(projectId: string): Promise<ProjectJoinsResponse> {
+  const res = await authFetch(`${API_BASE}/joins/${projectId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list joins');
+  const body = await res.json();
+  return {
+    joins: (body?.joins ?? []) as ProjectJoinEntry[],
+    can_edit: Boolean(body?.can_edit),
+  };
+}
+
+export async function previewProjectJoin(
+  projectId: string,
+  input: JoinInput,
+  signal?: AbortSignal,
+): Promise<JoinPreview> {
+  const res = await authFetch(`${API_BASE}/joins/${projectId}/preview`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the join');
+  return (await res.json()) as JoinPreview;
+}
+
+export async function createProjectJoin(
+  projectId: string,
+  input: JoinInput,
+): Promise<CreateJoinResult> {
+  const res = await authFetch(`${API_BASE}/joins/${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create the join');
+  return (await res.json()) as CreateJoinResult;
+}
+
+export async function deleteProjectJoin(
+  projectId: string,
+  joinName: string,
+): Promise<DeleteJoinResult> {
+  const res = await authFetch(
+    `${API_BASE}/joins/${projectId}/${encodeURIComponent(joinName)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete the join');
+  return (await res.json()) as DeleteJoinResult;
+}
+
 // Static label/description so the dropdown stays readable even when the
 // backend returns the bare-name list shape from
 // /links/{project_id}/resolvers (response_model=list[str]). Without this,
@@ -10187,6 +10375,7 @@ export interface TableMutationResult {
   rows_total?: number;
   rows_added?: number;
   aggregation_version?: number;
+  joins?: JoinRebuildOutcome[];
 }
 
 async function postTableUpload(url: string, files: File[]): Promise<TableMutationResult> {

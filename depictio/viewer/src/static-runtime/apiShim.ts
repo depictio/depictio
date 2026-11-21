@@ -70,6 +70,8 @@ import type {
   JBrowseGeneHit,
   PersistentSection,
   PreviewResult,
+  ProjectJoinEntry,
+  ProjectJoinsResponse,
   ProjectListEntry,
   ResolverInfo,
   ResolvedGroupsResult,
@@ -400,6 +402,45 @@ export async function listLinkResolvers(_projectId: string): Promise<ResolverInf
 /** A link's resolved mapping is computed on the server from its value
  *  mappings, which a bundle does not carry. */
 export const fetchLinkMappingPreview = refuse(`Link mappings are ${READ_ONLY}.`);
+
+/** The links section's joins table: the summary's join facts, without the
+ *  ids, row counts and dashboards a bundle does not carry (their columns
+ *  read "—"). */
+export async function listProjectJoins(_projectId: string): Promise<ProjectJoinsResponse> {
+  const joins = rawBundle().project?.joins ?? [];
+  return {
+    joins: joins.map(
+      (j): ProjectJoinEntry => ({
+        name: j.name ?? '',
+        left_dc: j.left_dc,
+        right_dc: j.right_dc,
+        on_columns: j.on_columns,
+        how: (j.how ?? 'left') as ProjectJoinEntry['how'],
+        description: j.description ?? null,
+        left_dc_id: null,
+        right_dc_id: null,
+        left_tag: j.left_dc,
+        right_tag: j.right_dc,
+        result_dc_id: null,
+        result_tag: null,
+        result_dc_tag: null,
+        row_count: null,
+        column_count: null,
+        executed_at: null,
+        last_error: null,
+        last_checked_at: null,
+      }),
+    ),
+    can_edit: false,
+  };
+}
+
+// The joins' write paths: the server computes and stores the joined table.
+// The create modal is not offered in a bundle (`useIsStaticBundle`); these
+// refuse all the same, without a request.
+export const previewProjectJoin = refuse(`Editing the project is ${READ_ONLY}.`);
+export const createProjectJoin = refuse(`Editing the project is ${READ_ONLY}.`);
+export const deleteProjectJoin = refuse(`Editing the project is ${READ_ONLY}.`);
 
 /** A MultiQC collection's reports and samples are read from object storage;
  *  the viewer shows the collection's facts instead in a bundle. */

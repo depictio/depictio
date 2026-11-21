@@ -795,6 +795,11 @@ export {
   fetchLinkSuggestions,
   fetchMultiQCSampleMappings,
   fetchLinkMappingPreview,
+  // Table joins
+  listProjectJoins,
+  previewProjectJoin,
+  createProjectJoin,
+  deleteProjectJoin,
   // Funnel filtering (issue #939)
   fetchFunnelValues,
   fetchNotebookPreflight,
@@ -1391,6 +1396,18 @@ export type {
   ResolverInfo,
   LinkMappingPreviewRow,
   LinkMappingPreviewResponse,
+  // Table join types
+  JoinType,
+  ProjectJoinEntry,
+  ProjectJoinsResponse,
+  JoinInput,
+  JoinSideSummary,
+  JoinPreview,
+  CreateJoinResult,
+  DeleteJoinResult,
+  JoinDashboardRef,
+  JoinRebuildOutcome,
+  JoinRenamedColumn,
   // Funnel filtering types (issue #939)
   FunnelTargetResult,
   FunnelStage,

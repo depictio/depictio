@@ -6,11 +6,23 @@ Joins are defined at the project level (top-level `joins:` key) and specify how
 data collections should be combined, including handling granularity mismatches.
 """
 
+import hashlib
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from depictio.models.models.base import MongoModel, PyObjectId
+
+
+def stable_join_result_id(project_id: object, name: str) -> PyObjectId:
+    """The id of join ``name``'s table in project ``project_id``, the same every time.
+
+    A join defined without an ``id`` still writes to one table, however often it
+    runs (each ``depictio ingest --attach-run``, each re-creation in the web UI),
+    so dashboards reading that table keep reading it.
+    """
+    digest = hashlib.sha256(f"depictio-join:{project_id}:{name}".encode()).hexdigest()
+    return PyObjectId(digest[:24])
 
 
 class JoinType(str, Enum):
@@ -178,6 +190,16 @@ class JoinDefinition(BaseModel):
     persist: bool = Field(
         default=True,
         description="Whether to persist the joined result as a Delta table",
+    )
+
+    # Whether depictio_run_id joins the keys when both tables carry it
+    match_run_ids: bool = Field(
+        default=True,
+        description=(
+            "Also join on depictio_run_id when both tables carry it, so rows of one run "
+            "only meet rows of the same run. Off for joins made in the web UI: a table "
+            "added from a file carries a run id of its own, which matches no other table"
+        ),
     )
 
     # Workflow scope - if specified, restricts join to this workflow

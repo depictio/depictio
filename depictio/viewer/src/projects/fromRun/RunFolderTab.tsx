@@ -36,6 +36,7 @@ import {
   createProjectFromRun,
   defaultVersionFor,
   EMPTY_RUN_STORAGE_FIELDS,
+  fetchLinkSuggestions,
   findRunPipeline,
   groupRunTemplates,
   inspectFolder,
@@ -66,6 +67,7 @@ import { useStepSettling } from '../hooks/useStepSettling';
 import { FolderTablesFound } from '../create/FolderTablesFound';
 import { TableChip } from './browser/FolderDetailPane';
 import { TableResults } from '../create/TableResults';
+import { LinkSuggestions } from '../create/LinkSuggestions';
 import type { TableResultRow } from '../create/TableResults';
 import { baseName, classifyTableName, stemOf } from '../create/tableFiles';
 import { plural } from './plural';
@@ -234,6 +236,11 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [tableRows, setTableRows] = useState<TableResultRow[]>([]);
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [createdTableId, setCreatedTableId] = useState<string | null>(null);
+  /** Tables made that share values: "Link your tables" shows before the project opens. */
+  const [linkStep, setLinkStep] = useState<{
+    uploads: TableUploadOutcome[];
+    extraTableIds: string[];
+  } | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
   /** How the reader chose to read the folder (see `ReadLevelChoice`); null:
    *  the best fit. A level that no longer fits falls back to it. */
@@ -876,6 +883,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setError(null);
     setTableError(null);
     setCreatedProjectId(null);
+    setLinkStep(null);
     const pending: TableResultRow[] = [
       ...folderTables.map((n) => ({ key: n, label: n, status: 'pending' as const })),
       ...localFiles.map((f, i) => ({
@@ -903,6 +911,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
 
       let folderRows: TableResultRow[] = [];
       let firstTableId: string | null = null;
+      const extraTableIds: string[] = [];
       if (location && folderTables.length > 0) {
         const report = await addTablesFromFolder(projectId, {
           location,
@@ -914,6 +923,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           const made = report.created.find((c) => c.path === n);
           if (made && made.status === 'ingested') {
             firstTableId = firstTableId ?? made.data_collection_id ?? null;
+            if (made.data_collection_id) extraTableIds.push(made.data_collection_id);
             return { key: n, label: n, status: 'created' };
           }
           return {
@@ -950,6 +960,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         const made = await urlTable.submit(projectId);
         urlOk = Boolean(made && !made.error);
         firstTableId = firstTableId ?? made?.dataCollectionId ?? null;
+        if (made?.dataCollectionId && !made.error) extraTableIds.push(made.dataCollectionId);
         setTableRows((prev) =>
           prev.map((r) =>
             r.key === 'url'
@@ -961,7 +972,21 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       setCreatedTableId(firstTableId);
       const allCreated =
         folderRows.every((r) => r.status === 'created') && uploads.every((u) => !u.error) && urlOk;
-      if (allCreated) onProjectReady?.(projectId, tablesName, firstTableId);
+      if (!allCreated) return;
+      // Two tables or more that share values: offer to link them, as Add data
+      // does, before opening the project (a join later starts from the link).
+      const madeIds = [
+        ...extraTableIds,
+        ...uploads.filter((u) => u.dataCollectionId).map((u) => u.dataCollectionId as string),
+      ];
+      if (madeIds.length >= 2) {
+        const found = await fetchLinkSuggestions(projectId, madeIds).catch(() => []);
+        if (found.length > 0) {
+          setLinkStep({ uploads, extraTableIds });
+          return;
+        }
+      }
+      onProjectReady?.(projectId, tablesName, firstTableId);
     } catch (err) {
       setTableError((err as Error).message || 'Failed to create the project.');
       setTableRows((prev) =>
@@ -1392,7 +1417,17 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                   ? () => onProjectReady(createdProjectId, tablesName, createdTableId)
                   : null
               }
-            />
+            >
+              {linkStep && createdProjectId && (
+                <LinkSuggestions
+                  projectId={createdProjectId}
+                  uploads={linkStep.uploads}
+                  extraTableIds={linkStep.extraTableIds}
+                  ready
+                  testId="create-section-links"
+                />
+              )}
+            </TableResults>
           ) : (
           <RunCreateStep
             report={preview}
