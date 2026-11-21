@@ -102,7 +102,9 @@ def _save_private_key(private_key: Any, path: str) -> None:
     """
     # Cast to the specific type that has private_bytes method
     key = cast(RSAPrivateKey, private_key)
-    with open(path, "wb") as f:
+    # Private key material: create with owner-only permissions (0600).
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
         f.write(
             key.private_bytes(
                 encoding=serialization.Encoding.PEM,
@@ -390,8 +392,9 @@ def import_keys(
         private_key_path, public_key_path, keys_dir
     )
 
-    # Write private key
-    with open(private_key_path, "wb") as f:
+    # Write private key with owner-only permissions (0600)
+    fd = os.open(private_key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
         f.write(private_key_content.encode("utf-8"))
 
     # Write public key

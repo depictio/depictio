@@ -12,6 +12,7 @@ No S3/MinIO or API is needed: the file listing and boto3 are mocked.
 """
 
 import io
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -186,6 +187,12 @@ class TestServerContext:
         self, tmp_path, monkeypatch, cli_config, s3_client
     ):
         monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        # The server's own temp dir is readable by design (uploads land there);
+        # pytest's tmp_path sits inside it, so the server gets its own to keep
+        # the tree below genuinely outside every readable folder.
+        server_tmp = tmp_path / "server-tmp"
+        server_tmp.mkdir()
+        monkeypatch.setattr(tempfile, "tempdir", str(server_tmp))
         tree = tmp_path / "tree.nwk"
         tree.write_text("(a,b);")
         _registered(monkeypatch, str(tree))

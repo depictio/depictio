@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -143,6 +144,45 @@ def regular_user():
         is_active=True,
         is_verified=True,
     )
+
+
+class TestS3ConfigLogRedaction:
+    """S3BackupStrategyManager logs its S3 config dicts at init — the
+    credentials in them must never reach the logs."""
+
+    SOURCE_CONFIG = {
+        "bucket": "data",
+        "endpoint_url": "http://minio:9000",
+        "aws_access_key_id": "AKIAEXAMPLEKEY",
+        "aws_secret_access_key": "top-secret-value",
+        "region_name": "us-east-1",
+    }
+
+    def test_redact_s3_config_masks_credentials(self):
+        from depictio.api.v1.backup_strategy_manager import _redact_s3_config
+
+        config = dict(self.SOURCE_CONFIG)
+        redacted = _redact_s3_config(config)
+
+        assert redacted["aws_access_key_id"] == "***"
+        assert redacted["aws_secret_access_key"] == "***"
+        # Non-secret fields stay readable.
+        assert redacted["endpoint_url"] == "http://minio:9000"
+        assert redacted["bucket"] == "data"
+        # The caller's dict is not mutated.
+        assert config["aws_secret_access_key"] == "top-secret-value"
+
+    def test_init_log_never_contains_credentials(self, caplog):
+        from depictio.api.v1.backup_strategy_manager import S3BackupStrategyManager
+
+        # The "depictio" logger defaults to ERROR; capture INFO records from it.
+        with caplog.at_level(logging.INFO, logger="depictio"):
+            S3BackupStrategyManager(dict(self.SOURCE_CONFIG))
+
+        assert "AKIAEXAMPLEKEY" not in caplog.text
+        assert "top-secret-value" not in caplog.text
+        # The masked form is logged instead, so operators still see the config.
+        assert "'***'" in caplog.text
 
 
 class TestBackupEndpoints:

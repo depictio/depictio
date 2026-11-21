@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import json
 import os
 from datetime import datetime, timedelta
 from typing import Annotated, Any
@@ -19,7 +20,7 @@ from fastapi import (
     status,
 )
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -99,17 +100,80 @@ def _is_valid_internal_api_key(api_key: str | None) -> bool:
     return hmac.compare_digest(api_key, expected)
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
+# Routes a user flagged ``must_change_password`` may still reach: their own
+# identity (so the UI can render the change-password form), the password
+# change itself, and logout. Everything else answers 403 until the person
+# replaces the password someone else chose for them.
+_MUST_CHANGE_PASSWORD_EXEMPT_PATHS = (
+    "/auth/me",
+    "/auth/me/optional",
+    "/auth/edit_password",
+    "/auth/logout",
+)
+
+_MUST_CHANGE_PASSWORD_ERROR = "Change your password first."
+
+
+def _must_change_password_exempt(request: Request | None) -> bool:
+    """True when the request targets a route exempt from the password-change gate.
+
+    Matched on the concrete URL path (the suffixes are plain, unparameterized
+    routes). ``scope["route"].path`` is unreliable across FastAPI internals:
+    depending on how the router was assembled it can be the bare "/me" or the
+    full "/depictio/api/v1/auth/me", so it is only a fallback.
+    """
+    if request is None:
+        return False
+    path = getattr(getattr(request, "url", None), "path", None)
+    if not path:
+        route = getattr(request, "scope", {}).get("route")
+        path = getattr(route, "path", None)
+    if not path:
+        return False
+    return any(path.endswith(suffix) for suffix in _MUST_CHANGE_PASSWORD_EXEMPT_PATHS)
+
+
+async def _request_proves_public_access_code(request: Request | None) -> bool:
+    """Check the request's access code exactly like ``create_temporary_user``.
+
+    The code travels in the JSON body field ``access_code``, the same way
+    POST /auth/public/create_temporary_user reads it. A request with no body
+    (any GET, an empty POST) or a non-JSON body proves nothing.
+    """
+    if request is None:
+        return False
+    candidate = None
+    try:
+        body = await request.body()
+    except Exception:  # noqa: BLE001 - an unreadable body proves nothing
+        return False
+    if body:
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            candidate = payload.get("access_code")
+    return bool(settings.auth.verify_public_access_code(candidate))
+
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    request: Request = None,  # type: ignore[assignment]
+) -> User:
     """Get the currently authenticated user from the JWT token.
 
     Args:
         token: JWT access token from the Authorization header.
+        request: The incoming request, used to exempt the routes a user
+            flagged ``must_change_password`` still needs.
 
     Returns:
         The authenticated User object.
 
     Raises:
         HTTPException: 401 if token is invalid or user not found.
+        HTTPException: 403 if the user must change their password first.
     """
     if token is None:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -118,11 +182,17 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # Enforced here, once, for every authenticated route rather than per
+    # endpoint. Login still succeeds so the UI can show the change form.
+    if getattr(user, "must_change_password", False) and not _must_change_password_exempt(request):
+        raise HTTPException(status_code=403, detail=_MUST_CHANGE_PASSWORD_ERROR)
+
     return user
 
 
 async def get_user_or_anonymous(
     token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+    request: Request = None,  # type: ignore[assignment]
 ) -> User:
     """Get the authenticated user or anonymous user if unauthenticated mode is enabled.
 
@@ -130,6 +200,7 @@ async def get_user_or_anonymous(
     and unauthenticated mode is enabled, returns the anonymous user.
 
     Args:
+        request: The incoming request, used for the public access-code check.
         token: Optional JWT access token from the Authorization header.
 
     Returns:
@@ -141,13 +212,25 @@ async def get_user_or_anonymous(
     # First try to authenticate with token if provided
     if token is not None:
         try:
-            return await get_current_user(token)
-        except HTTPException:
+            return await get_current_user(token, request)
+        except HTTPException as exc:
+            # The password-change gate is not a fallback candidate: a user
+            # flagged ``must_change_password`` must not slip into the
+            # anonymous identity (an admin in single-user mode).
+            if exc.status_code == 403:
+                raise
             # Token is invalid, fall through to anonymous user logic if in unauthenticated mode
             pass
 
     # If no token provided or token is invalid, check if public/single-user mode allows anonymous access
     if settings.auth.is_public_mode or settings.auth.is_single_user_mode:
+        # A code-gated public deployment must not hand the anonymous identity
+        # to a request that has not proved the shared code — the same check
+        # POST /auth/public/create_temporary_user applies.
+        if settings.auth.is_public_access_code_required and not (
+            await _request_proves_public_access_code(request)
+        ):
+            raise HTTPException(status_code=401, detail="Invalid token")
         anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         if anon:
             return anon
@@ -426,6 +509,10 @@ async def refresh_token_browser(request: dict) -> dict:
         raise HTTPException(401, "Invalid refresh token")
 
     user = await UserBeanie.find_one({"_id": token_doc.user_id})
+    # A person the admin signed in with a shared password refreshes nothing
+    # until they have chosen their own (mirrors the get_current_user gate).
+    if getattr(user, "must_change_password", False):
+        raise HTTPException(status_code=403, detail=_MUST_CHANGE_PASSWORD_ERROR)
     token_data = TokenData(name=token_doc.name, sub=user.id)
     new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
 
@@ -1454,16 +1541,40 @@ async def generate_agent_config_endpoint(
     return cli_config_to_payload(depictio_agent_config)
 
 
-@auth_endpoint_router.get("/list_tokens", response_model=list[TokenBeanie], include_in_schema=True)
+class TokenMetadata(BaseModel):
+    """Metadata-only view of a token for GET /auth/list_tokens.
+
+    SECURITY: access_token and refresh_token must never travel back in a
+    listing response. Callers (UI management page, CLI) only read id/name/
+    lifetime/expiry fields. ``_id`` keeps the key both callers already read.
+    """
+
+    model_config = {"populate_by_name": True}
+
+    id: str = Field(alias="_id")
+    name: str | None = None
+    token_type: str = "bearer"
+    token_lifetime: str = "short-lived"
+    expire_datetime: str
+    refresh_expire_datetime: str
+    user_id: str
+    created_at: str
+    logged_in: bool = False
+
+
+@auth_endpoint_router.get(
+    "/list_tokens", response_model=list[TokenMetadata], include_in_schema=True
+)
 async def list_tokens_(
     current_user: UserBase = Depends(get_current_user),
     token_lifetime: str | None = None,
 ):
+    """List the current user's tokens. Metadata only: never token values."""
     cli_configs = await _list_tokens(
         user_id=current_user.id,
         token_lifetime=token_lifetime,
     )
-    return cli_configs
+    return [TokenMetadata.model_validate(t.model_dump()) for t in cli_configs]
 
 
 @auth_endpoint_router.get("/list", response_model=list[UserBaseUI], include_in_schema=True)

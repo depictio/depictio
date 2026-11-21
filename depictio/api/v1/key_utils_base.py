@@ -32,7 +32,9 @@ def _load_or_generate_api_internal_key(
             return key
     else:
         key = _generate_api_internal_key()
-        with open(key_path, "w") as f:
+        # Secret key material: create with owner-only permissions (0600).
+        fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
             f.write(key)
         return key
 

@@ -71,12 +71,14 @@ def validate_workflow_and_collection(
     #     {"_id": workflow_oid, "permissions.owners._id": user_oid},
     # )
 
-    if not permissions:
+    if permissions is None:
         # Only the raw user_id string reaches this helper, so wrap it in a shim
         # for the query builder.
         access_user = SimpleNamespace(id=user_oid, is_admin=False, is_anonymous=False)
         permissions = build_access_query(access_user, "viewer", get_user_group_ids(user_oid))
 
+    # An explicit permissions dict of {} means "no filtering" (sysadmin) —
+    # it must not fall through to the default viewer query above.
     query = {
         "_id": ObjectId(workflow_id),
         **permissions,

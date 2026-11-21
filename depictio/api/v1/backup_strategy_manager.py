@@ -23,6 +23,18 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.models.s3_utils import delete_keys
 
+# Keys of an S3 config that must never reach the logs.
+_S3_SECRET_KEYS = ("aws_access_key_id", "aws_secret_access_key")
+
+
+def _redact_s3_config(config: dict) -> dict:
+    """Copy of an S3 config safe to log: credentials masked with '***'."""
+    redacted = dict(config)
+    for key in _S3_SECRET_KEYS:
+        if key in redacted:
+            redacted[key] = "***"
+    return redacted
+
 
 class S3BackupStrategyManager:
     """
@@ -43,7 +55,9 @@ class S3BackupStrategyManager:
         self.backup_config = settings.backup
 
         # Initialize source S3 client
-        logger.info(f"Initializing source S3 client with config: {source_s3_config}")
+        logger.info(
+            f"Initializing source S3 client with config: {_redact_s3_config(source_s3_config)}"
+        )
         self.source_client = boto3.client(
             "s3",
             endpoint_url=source_s3_config.get("endpoint_url"),
@@ -57,7 +71,9 @@ class S3BackupStrategyManager:
         self.backup_s3_client = None
         if self.backup_config.backup_s3_config:
             backup_config = self.backup_config.backup_s3_config
-            logger.info(f"Initializing backup S3 client with config: {backup_config}")
+            logger.info(
+                f"Initializing backup S3 client with config: {_redact_s3_config(backup_config)}"
+            )
             self.backup_s3_client = boto3.client("s3", **backup_config)
 
     async def backup_deltatable_data(

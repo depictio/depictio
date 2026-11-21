@@ -6,7 +6,7 @@ import pymongo
 from bson import ObjectId
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
-from depictio.api.v1.configs.logging_init import format_pydantic, logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
 from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
 from depictio.models.models.projects import ProjectResponse
@@ -128,8 +128,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
         s3_storage=settings.s3,
     )
 
-    logger.debug(f"CLI config: {format_pydantic(cli_config)}")
-    logger.debug(f"CLI Config model dump: {cli_config.model_dump()}")
+    # SECURITY: never log the CLI config — it holds the admin access token.
 
     wf = project.workflows[0]
     dc_id = str(project.workflows[0].data_collections[0].id)

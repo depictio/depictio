@@ -299,6 +299,7 @@ class TestCheckPassword:
         # Create a mock user with a password
         mock_user = MagicMock()
         mock_user.password = "hashed_password"
+        mock_user.is_anonymous = False
 
         # Configure mocks
         self.mock_fetch_user.return_value = mock_user
@@ -322,6 +323,7 @@ class TestCheckPassword:
         # Create a mock user with a password
         mock_user = MagicMock()
         mock_user.password = "hashed_password"
+        mock_user.is_anonymous = False
 
         # Configure mocks
         self.mock_fetch_user.return_value = mock_user

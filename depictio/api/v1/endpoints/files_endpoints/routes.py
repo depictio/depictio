@@ -67,8 +67,20 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
             detail="Current user not found.",
         )
 
+    # SECURITY: a File record is a claim on a data collection, so upserting
+    # one is writing into the project that holds the collection. Without this
+    # check any authenticated caller could drop file records into another
+    # user's data collection (e.g. make a dashboard read their rows). The
+    # same caller-keyed predicate as delete_batch: editors and owners of the
+    # project, admins through build_access_query's empty predicate.
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     for dc_id in {str(f.data_collection_id) for f in payload.files}:
         assert_dc_project_unlocked(dc_id)
+        if not _can_edit_data_collection(ObjectId(dc_id), current_user, group_ids):
+            raise HTTPException(
+                status_code=403,
+                detail="You may only register files in data collections you may edit.",
+            )
 
     operations = []
     for file in payload.files:
@@ -194,6 +206,30 @@ def _can_read_data_collection(
             {
                 "workflows.data_collections._id": data_collection_id,
                 **build_access_query(user, "viewer", group_ids),
+            },
+            {"_id": 1},
+        )
+        is not None
+    )
+
+
+def _can_edit_data_collection(
+    data_collection_id: ObjectId, user: Any, group_ids: list[ObjectId] | None = None
+) -> bool:
+    """Whether the user may edit the project holding ``data_collection_id``.
+
+    Editor level (so owners too), direct or through a group; admins pass
+    through ``build_access_query``'s empty predicate. Upserting a file record
+    writes into the collection's project, so viewer-level access is not
+    enough. A collection no project holds answers False: fail closed.
+    """
+    from depictio.api.v1.db import projects_collection
+
+    return (
+        projects_collection.find_one(
+            {
+                "workflows.data_collections._id": data_collection_id,
+                **build_access_query(user, "editor", group_ids),
             },
             {"_id": 1},
         )

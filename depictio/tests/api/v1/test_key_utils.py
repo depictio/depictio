@@ -1,5 +1,6 @@
 import os
 import shutil
+import stat
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -268,3 +269,69 @@ class TestCryptoUtils:
         pub_key = load_public_key(new_pub_path)
         assert isinstance(priv_key, RSAPrivateKey)
         assert isinstance(pub_key, RSAPublicKey)
+
+
+class TestPrivateKeyFilePermissions:
+    """Private key files must be created owner-only (0600), never world-readable."""
+
+    def test_save_private_key_creates_owner_only_file(self, tmp_path):
+        """_save_private_key must create the file with mode 0600."""
+        key = _generate_rsa_private_key()
+        path = tmp_path / "private_key.pem"
+        _save_private_key(key, str(path))
+        assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+    def test_generate_keys_private_key_is_owner_only(self, tmp_path):
+        """generate_keys must persist the private key with mode 0600."""
+        priv_path = str(tmp_path / "private.pem")
+        pub_path = str(tmp_path / "public.pem")
+        generate_keys(private_key_path=priv_path, public_key_path=pub_path, algorithm="RS256")
+
+        assert stat.S_IMODE(os.stat(priv_path).st_mode) == 0o600
+        # The public key is not secret and must remain readable by the owner.
+        assert os.stat(pub_path).st_mode & stat.S_IRUSR
+
+    def test_import_keys_private_key_is_owner_only(self, tmp_path):
+        """import_keys must write the private key with mode 0600."""
+        orig_priv_path = str(tmp_path / "original_private.pem")
+        orig_pub_path = str(tmp_path / "original_public.pem")
+        generate_keys(
+            private_key_path=orig_priv_path, public_key_path=orig_pub_path, algorithm="RS256"
+        )
+        with open(orig_priv_path) as f:
+            priv_content = f.read()
+        with open(orig_pub_path) as f:
+            pub_content = f.read()
+
+        new_priv_path = str(tmp_path / "new_private.pem")
+        new_pub_path = str(tmp_path / "new_public.pem")
+        import_keys(
+            private_key_content=priv_content,
+            public_key_content=pub_content,
+            private_key_path=new_priv_path,
+            public_key_path=new_pub_path,
+        )
+
+        assert stat.S_IMODE(os.stat(new_priv_path).st_mode) == 0o600
+
+
+class TestInternalApiKeyFilePermissions:
+    """The API internal key file must be created owner-only (0600)."""
+
+    def test_api_internal_key_file_is_owner_only(self, tmp_path):
+        from depictio.api.v1.key_utils_base import _load_or_generate_api_internal_key
+
+        # _generate_api_internal_key caches the key in the environment; keep
+        # the change local so other tests see the original state.
+        saved = os.environ.pop("DEPICTIO_INTERNAL_API_KEY", None)
+        try:
+            key = _load_or_generate_api_internal_key(keys_dir=tmp_path)
+        finally:
+            os.environ.pop("DEPICTIO_INTERNAL_API_KEY", None)
+            if saved is not None:
+                os.environ["DEPICTIO_INTERNAL_API_KEY"] = saved
+
+        key_path = tmp_path / "api_internal_key.pem"
+        assert key_path.exists()
+        assert key  # the key itself is still returned
+        assert stat.S_IMODE(os.stat(key_path).st_mode) == 0o600

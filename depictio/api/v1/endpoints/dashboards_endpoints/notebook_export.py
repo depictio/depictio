@@ -202,6 +202,8 @@ def _favicon_data_uri() -> str | None:
 _STATIC_ASSETS = Path(__file__).resolve().parents[3] / "static_assets"
 #: A text tile's header logo is inlined up to this size; past it the tile shows its title.
 _MAX_TEXT_LOGO_BYTES = 1024 * 1024
+#: A brand logo fetched from an external URL is capped the same way.
+_MAX_BRAND_LOGO_BYTES = 1024 * 1024
 _IMAGE_MAGIC: tuple[tuple[bytes, str], ...] = (
     (b"\x89PNG\r\n\x1a\n", "image/png"),
     (b"\xff\xd8\xff", "image/jpeg"),
@@ -345,11 +347,21 @@ def _resolve_export_brand(
             if stored:
                 logo_data_uri = _data_uri(*stored)
             elif theme.logo_url.startswith("http"):
-                import httpx
+                # An external CDN link goes through the same SSRF gateway as
+                # the text-tile logos: allowlist, internal-address refusal,
+                # size cap — and the bytes must look like an image.
+                from depictio.api.v1.remote_fetch import fetch_validated_bytes
 
-                resp = httpx.get(theme.logo_url, timeout=5.0)
-                resp.raise_for_status()
-                logo_data_uri = _data_uri(resp.content, resp.headers.get("content-type"))
+                try:
+                    data = fetch_validated_bytes(
+                        theme.logo_url, max_bytes=_MAX_BRAND_LOGO_BYTES, timeout=10
+                    )
+                except Exception as exc:  # refused or unreachable: no logo
+                    logger.warning(f"notebook export: brand logo not fetched: {exc}")
+                else:
+                    mime = _image_mime(data)
+                    if mime:
+                        logo_data_uri = _data_uri(data, mime)
         elif not theme or theme.logo_mode == "inherit":
             content = _DEFAULT_LOGO_PATH.read_bytes()
             logo_data_uri = _data_uri(content, "image/svg+xml")
