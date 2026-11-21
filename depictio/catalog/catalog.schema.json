@@ -256,6 +256,70 @@
       "title": "ChangelogEntry",
       "type": "object"
     },
+    "FigureAnnotations": {
+      "additionalProperties": false,
+      "description": "The automatic marks a figure draws on itself, declared rather than drawn.\n\nWith no block at all, each mark is automatic by figure type (bar labels on\nup to 12 unstacked bars, n under box and violin plots, cell values up to 400\ncells, a note when categories are folded). Once a block is given, it lists\nthe marks to draw: a field left out is off, so `annotations: {}` draws none.",
+      "properties": {
+        "bar_labels": {
+          "anyOf": [
+            {
+              "enum": [
+                "value",
+                "percent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Label every bar with its value, or its share of the total (`percent`).",
+          "title": "Bar Labels"
+        },
+        "group_n": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Write the number of rows behind each group (its `n`), beside the group's name or in its legend entry.",
+          "title": "Group N"
+        },
+        "cell_values": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Print each cell's value inside it (a heatmap's or matrix's cells).",
+          "title": "Cell Values"
+        },
+        "hidden_note": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A note saying what the figure does not show (folded categories, sampled points).",
+          "title": "Hidden Note"
+        }
+      },
+      "title": "FigureAnnotations",
+      "type": "object"
+    },
     "ReferenceLine": {
       "additionalProperties": false,
       "description": "A guide line on a UI figure: a fixed value, or a statistic of the data on show.\n\n``value`` draws the line where the author says; ``stat`` draws it at the\nmedian (mean, p75..p99) of ``column`` over the filtered rows, computed by\nthe server figure builder and labelled as such (\"median of this table\"),\nwhich is how RULES.md \u00a717 lets a data-defined reference onto a plot.\nExactly one of the two.",
@@ -328,6 +392,19 @@
           "default": null,
           "description": "Text naming the line on the plot. Unset names the statistic (`median of this table`) or writes `y = value`",
           "title": "Label"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the line's value comes from: a tool's default, a paper, the data on show. Shown in the line's label and hover, so a reader can tell an authored threshold from a data-defined one.",
+          "title": "Source"
         }
       },
       "required": [
@@ -565,6 +642,17 @@
           },
           "title": "Reference Lines",
           "type": "array"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FigureAnnotations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "column": {
           "anyOf": [

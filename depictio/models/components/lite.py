@@ -175,6 +175,12 @@ class ReferenceLine(BaseModel):
         description="Text naming the line on the plot. Unset names the statistic "
         "(`median of this table`) or writes `y = value`",
     )
+    source: str | None = Field(
+        default=None,
+        description="Where the line's value comes from: a tool's default, a paper, "
+        "the data on show. Shown in the line's label and hover, so a reader can "
+        "tell an authored threshold from a data-defined one.",
+    )
 
     @model_validator(mode="after")
     def _value_or_stat(self) -> "ReferenceLine":
@@ -183,6 +189,37 @@ class ReferenceLine(BaseModel):
         if self.stat is not None and not self.column:
             raise ValueError("a reference line with `stat` needs the `column` it is computed over")
         return self
+
+
+class FigureAnnotations(BaseModel):
+    """The automatic marks a figure draws on itself, declared rather than drawn.
+
+    With no block at all, each mark is automatic by figure type (bar labels on
+    up to 12 unstacked bars, n under box and violin plots, cell values up to 400
+    cells, a note when categories are folded). Once a block is given, it lists
+    the marks to draw: a field left out is off, so `annotations: {}` draws none.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    bar_labels: Literal["value", "percent"] | None = Field(
+        default=None,
+        description="Label every bar with its value, or its share of the total (`percent`).",
+    )
+    group_n: bool | None = Field(
+        default=None,
+        description="Write the number of rows behind each group (its `n`), beside "
+        "the group's name or in its legend entry.",
+    )
+    cell_values: bool | None = Field(
+        default=None,
+        description="Print each cell's value inside it (a heatmap's or matrix's cells).",
+    )
+    hidden_note: bool | None = Field(
+        default=None,
+        description="A note saying what the figure does not show (folded categories, "
+        "sampled points).",
+    )
 
 
 class FigureLiteComponent(BaseLiteComponent):
@@ -295,6 +332,13 @@ class FigureLiteComponent(BaseLiteComponent):
         "statistic of the rows on show, computed server-side after the filters and named "
         "as such on the plot (`median of this table`).",
     )
+    annotations: FigureAnnotations | None = Field(
+        default=None,
+        description="The automatic marks the figure draws on itself, declared rather "
+        "than drawn: `{bar_labels: value|percent, group_n: true, cell_values: false, "
+        "hidden_note: true}`. Unset means each mark is automatic by figure type; a "
+        "given block draws only the marks it turns on (`{}` draws none).",
+    )
 
     @model_validator(mode="after")
     def validate_figure_constraints(self) -> "FigureLiteComponent":
@@ -316,6 +360,9 @@ class FigureLiteComponent(BaseLiteComponent):
 
         if self.reference_lines and self.mode != "ui":
             raise ValueError("reference_lines are drawn on UI-mode figures only")
+
+        if self.annotations is not None and self.mode != "ui":
+            raise ValueError("annotations are drawn on UI-mode figures only")
 
         return self
 

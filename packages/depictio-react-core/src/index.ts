@@ -868,6 +868,7 @@ export type {
   VizSuggestionsResponse,
   CatalogRender,
   FigureReferenceLine,
+  FigureAnnotations,
   CatalogOutputMatch,
   CatalogModule,
   CatalogComposeResponse,

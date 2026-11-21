@@ -10582,6 +10582,20 @@ export interface FigureReferenceLine {
   stat?: ReferenceStat | null;
   column?: string | null;
   label?: string | null;
+  /** Where the line's value comes from (tool default, paper, data-defined);
+   *  shown in the line's label and hover. */
+  source?: string | null;
+}
+
+/** The automatic marks a figure draws on itself, declared rather than drawn.
+ *  No block: each mark is automatic by figure type. A given block draws only
+ *  the marks it turns on, so `{}` draws none.
+ *  Mirrors `FigureAnnotations` in depictio/models/components/lite.py. */
+export interface FigureAnnotations {
+  bar_labels?: 'value' | 'percent' | null;
+  group_n?: boolean | null;
+  cell_values?: boolean | null;
+  hidden_note?: boolean | null;
 }
 
 export interface CatalogRender {
@@ -10601,6 +10615,10 @@ export interface CatalogRender {
   /** figure (UI mode): guide lines, fixed or at a statistic of the rows on
    *  show. Mirrors `ReferenceLine` in depictio/models/components/lite.py. */
   reference_lines?: FigureReferenceLine[];
+  /** figure (UI mode): the automatic marks the figure draws on itself (bar
+   *  labels, per-group counts...). Mirrors `FigureAnnotations` in
+   *  depictio/models/components/lite.py. */
+  annotations?: FigureAnnotations | null;
   column?: string;
   aggregation?: string;
   /** card only: the secondary-metric strip. `aggregations` drives the stats
