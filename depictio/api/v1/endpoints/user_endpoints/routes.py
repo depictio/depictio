@@ -1088,6 +1088,14 @@ async def register(
         logger.warning(f"Registration rejected for {registration.email}: {internal_reason}")
         raise HTTPException(status_code=400, detail=_REGISTER_GENERIC_ERROR)
 
+    # SECURITY: the helper returns the created ``UserBeanie`` under ``user``.
+    # Serialize it to a JSON-mode dict before it reaches the response — the
+    # ``User`` model serializer drops the bcrypt hash there — so the hash never
+    # travels back to the client that just chose the password.
+    created_user = result.get("user")
+    if isinstance(created_user, UserBeanie):
+        result["user"] = created_user.model_dump(mode="json")
+
     return result
 
 

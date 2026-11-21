@@ -2,7 +2,16 @@ from datetime import datetime
 from typing import Any
 
 from beanie import Document, PydanticObjectId
-from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    SerializationInfo,
+    field_serializer,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 from pymongo import IndexModel
 
 # from depictio.models.models.s3 import S3DepictioCLIConfig
@@ -320,6 +329,24 @@ class UserBaseUI(UserBase):
 
 class User(UserBaseUI):
     password: str
+
+    @model_serializer(mode="wrap")
+    def _serialize_without_password(self, handler, info: SerializationInfo):
+        """Never let the bcrypt hash leave the process through JSON.
+
+        Every path that turns a user into an API response serializes in JSON
+        mode — FastAPI response models (``FieldInfo.serialize``), FastAPI's
+        ``jsonable_encoder`` (``model_dump(mode="json")``), and the app's
+        ``CustomJSONResponse`` — so the hash is dropped from any response,
+        however deeply the ``User`` is nested. Python-mode dumps
+        (``model_dump()``) and Beanie's own BSON encoder — which iterates the
+        model's fields directly and never runs pydantic serializers — keep it,
+        so password checks (login, edit_password) and DB saves still work.
+        """
+        data = handler(self)
+        if info.mode == "json" and isinstance(data, dict):
+            data.pop("password", None)
+        return data
 
     @field_validator("password", mode="before")
     def hash_password(cls, v):
