@@ -4,7 +4,10 @@ With local folders on (server context, single-user mode, ``DEPICTIO_LOCAL_DATA_R
 a run folder is the user's, but what it links to is not necessarily data: a
 symlink out of the allowed roots, into a hidden folder or into a folder Depictio
 keeps for itself is skipped by the scan, refused at read time, and invisible to
-the data root the recipes read through. With local folders off nothing changes.
+the data root the recipes read through. With local folders off a server still
+refuses a local path a user registered: only the bundled reference projects and
+the server's own temp dir (uploads land there) are readable then. The CLI reads
+its user's laptop unconfined.
 """
 
 import os
@@ -186,6 +189,54 @@ def test_read_single_file_lazy_fails_on_a_refused_file(local_on):
         deltatables.read_single_file_lazy(file_info, "csv", {})
 
 
-def test_without_local_folders_the_read_is_unchanged(run_folder):
+def test_without_local_folders_a_registered_local_path_is_refused(run_folder):
+    """A shared server with no local folders still never opens a registered path.
+
+    A File record is only a path, and it may name any file the server process
+    can read — its own keys included — so the read gate holds even where the
+    local-data policy is off: only the bundled projects, the server's temp dir
+    and the policy (``depictio local``) are ever readable.
+    """
+    stolen = str(run_folder.outside / "stolen.csv")
+    with pytest.raises(LocalPathRefused) as exc:
+        deltatables._lazy_scan_path(stolen, "csv", {})
+    assert exc.value.code == "local_path_outside"
+
+
+def test_without_local_folders_a_bundled_project_file_is_read(run_folder):
+    """The bundled reference projects ship their data in the package: they read
+    whatever the local-data policy says, and they are what a demo boot needs."""
+    from depictio.api.v1.configs.settings_models import BUNDLED_PROJECTS_DIR
+
+    bundled = sorted(BUNDLED_PROJECTS_DIR.glob("init/*/data/**/*.csv"))
+    assert bundled, "no bundled reference data to read"
+    frame = deltatables._lazy_scan_path(str(bundled[0]), "csv", {})
+    assert frame.collect().height >= 1
+
+
+def test_without_local_folders_the_servers_temp_dir_is_read(run_folder):
+    """A server reads a file it wrote itself: uploads land in its temp dir."""
+    upload = run_folder.server_tmp / "depictio_upload_x" / "table.csv"
+    upload.parent.mkdir()
+    upload.write_text("a,b\n1,2\n")
+    assert deltatables._lazy_scan_path(str(upload), "csv", {}).collect().height == 1
+
+
+def test_the_cli_context_is_not_confined(run_folder, monkeypatch):
+    """The CLI reads the user's own laptop, policy or none."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")
     stolen = str(run_folder.outside / "stolen.csv")
     assert deltatables._lazy_scan_path(stolen, "csv", {}).collect().height == 1
+
+
+def test_without_local_folders_the_rest_of_the_temp_dir_is_refused(run_folder):
+    """Only the server's own ``depictio_*`` upload folders: other files of the temp
+    dir (a copied admin configuration, another process's output) stay closed."""
+    loose = run_folder.server_tmp / "admin_config.yaml"
+    loose.write_text("a,b\n1,2\n")
+    other = run_folder.server_tmp / "someone_else" / "table.csv"
+    other.parent.mkdir()
+    other.write_text("a,b\n1,2\n")
+    for path in (loose, other):
+        with pytest.raises(LocalPathRefused):
+            deltatables._lazy_scan_path(str(path), "csv", {})

@@ -18,6 +18,7 @@ from unittest.mock import patch
 import pytest
 from bson import ObjectId
 from fastapi import UploadFile
+from starlette.requests import Request
 
 from depictio.api.v1.endpoints.migrate_endpoints import routes
 from depictio.api.v1.endpoints.migrate_endpoints.routes import MigrateExportRequest
@@ -31,6 +32,24 @@ def _admin(email="admin@target.org"):
     u = UserBase(id=ObjectId(), email=email)
     u.is_admin = True
     return u
+
+
+def _json_request(payload: dict) -> Request:
+    """A POST Request whose body is ``payload``, for calling the route directly."""
+    body = json.dumps(payload).encode()
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "method": "POST",
+        "headers": [(b"content-type", b"application/json")],
+        "path": "/depictio/api/v1/migrate/import-project",
+        "query_string": b"",
+    }
+    return Request(scope, receive)
 
 
 @pytest.fixture
@@ -210,8 +229,9 @@ def test_cli_json_import_rewrites_bucket_and_records_cli_hop(
             "migrate_metadata": json.loads(zf.read("migrate_metadata.json")),
         }
     monkeypatch.setattr(routes.settings.s3, "bucket", "tgt-bucket")
-    req = routes.MigrateImportRequest(bundle=bundle)
-    result = asyncio.run(routes.import_project(req, current_user=_admin()))
+    result = asyncio.run(
+        routes.import_project(_json_request({"bundle": bundle}), current_user=_admin())
+    )
     assert result.success
     project = target_db.projects_collection.find_one({"_id": ids["project_id"]})
     assert project["provenance"]["imported_from"][-1]["via"] == "cli"

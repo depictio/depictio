@@ -149,7 +149,8 @@ async def create_initial_project_legacy(
 
     logger.debug(f"Project object after ID restoration: {format_pydantic(project)}")
     token = TokenBeanie(**token_payload["token"])  # type: ignore[missing-argument]
-    logger.debug(f"Token: {format_pydantic(token)}")
+    # SECURITY: log only token metadata — the token document holds secrets.
+    logger.debug(f"Token id: {token.id}, name: {token.name}")
 
     try:
         payload = await _helper_create_project_beanie(project, original_ids=original_ids)

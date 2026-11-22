@@ -11,7 +11,10 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.db_init import initialize_db
-from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_anonymous_user
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _create_anonymous_user,
+    _demote_anonymous_user_admin,
+)
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.models.s3_utils import S3_storage_checks
 
@@ -87,6 +90,12 @@ async def run_initialization(
                 f"Anonymous user record ready (single_user={settings.auth.is_single_user_mode}, "
                 f"public={settings.auth.is_public_mode}, admin={anon.is_admin})"
             )
+    elif not settings.auth.is_demo_mode:
+        # This instance no longer uses the anonymous fallback identity. One
+        # that used to (e.g. a former single-user deployment) may still hold an
+        # anonymous user with admin rights — demote it so the mode switch
+        # does not leave an admin account behind.
+        await _demote_anonymous_user_admin()
 
     logger.info("System initialization complete.")
     return init_data

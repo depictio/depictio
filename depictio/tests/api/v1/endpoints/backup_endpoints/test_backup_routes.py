@@ -1,5 +1,8 @@
 import json
+import logging
+import os
 import re
+import stat
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -143,6 +146,45 @@ def regular_user():
         is_active=True,
         is_verified=True,
     )
+
+
+class TestS3ConfigLogRedaction:
+    """S3BackupStrategyManager logs its S3 config dicts at init — the
+    credentials in them must never reach the logs."""
+
+    SOURCE_CONFIG = {
+        "bucket": "data",
+        "endpoint_url": "http://minio:9000",
+        "aws_access_key_id": "AKIAEXAMPLEKEY",
+        "aws_secret_access_key": "top-secret-value",
+        "region_name": "us-east-1",
+    }
+
+    def test_redact_s3_config_masks_credentials(self):
+        from depictio.api.v1.backup_strategy_manager import _redact_s3_config
+
+        config = dict(self.SOURCE_CONFIG)
+        redacted = _redact_s3_config(config)
+
+        assert redacted["aws_access_key_id"] == "***"
+        assert redacted["aws_secret_access_key"] == "***"
+        # Non-secret fields stay readable.
+        assert redacted["endpoint_url"] == "http://minio:9000"
+        assert redacted["bucket"] == "data"
+        # The caller's dict is not mutated.
+        assert config["aws_secret_access_key"] == "top-secret-value"
+
+    def test_init_log_never_contains_credentials(self, caplog):
+        from depictio.api.v1.backup_strategy_manager import S3BackupStrategyManager
+
+        # The "depictio" logger defaults to ERROR; capture INFO records from it.
+        with caplog.at_level(logging.INFO, logger="depictio"):
+            S3BackupStrategyManager(dict(self.SOURCE_CONFIG))
+
+        assert "AKIAEXAMPLEKEY" not in caplog.text
+        assert "top-secret-value" not in caplog.text
+        # The masked form is logged instead, so operators still see the config.
+        assert "'***'" in caplog.text
 
 
 class TestBackupEndpoints:
@@ -584,6 +626,58 @@ class TestBackupUpload:
         assert result["validation"]["valid"] is False
         assert result["validation"]["invalid_documents"] == 1
         assert (backup_dir / f"depictio_backup_{result['backup_id']}.json").exists()
+
+
+class TestBackupFilesAreOwnerOnly:
+    """A backup JSON holds every user record and project, so whatever the
+    umask says, the files on disk are readable by their owner alone."""
+
+    def _mode(self, path):
+        return stat.S_IMODE(os.stat(path).st_mode)
+
+    def test_write_backup_file_creates_owner_only_files(self, backup_settings, backup_dir):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import _write_backup_file
+
+        filename = _write_backup_file(
+            {"backup_metadata": {"backup_id": "20250101_010101"}, "data": {}}, "20250101_010101"
+        )
+
+        path = backup_dir / filename
+        assert self._mode(path) == 0o600
+        assert self._mode(f"{path}.sha256") == 0o600
+
+    def test_an_existing_world_readable_file_is_tightened_on_rewrite(
+        self, backup_settings, backup_dir
+    ):
+        """Rewriting must not keep a mode an earlier, looser write left behind."""
+        from depictio.api.v1.endpoints.backup_endpoints.routes import _write_backup_file
+
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stale = backup_dir / "depictio_backup_20250101_010101.json"
+        stale.write_text("{}")
+        os.chmod(stale, 0o644)
+
+        _write_backup_file({"backup_metadata": {}, "data": {}}, "20250101_010101")
+
+        assert self._mode(stale) == 0o600
+
+    def test_uploaded_backups_are_stored_owner_only(self, as_admin, backup_dir):
+        body = json.dumps(
+            {
+                "backup_metadata": {"backup_id": "20200101_000000"},
+                "data": EMPTY_DATA,
+            }
+        ).encode()
+
+        response = as_admin.post(
+            "/backup/upload", files={"file": ("backup.json", body, "application/json")}
+        )
+        assert response.status_code == 200
+        result = response.json()
+
+        stored = backup_dir / f"depictio_backup_{result['backup_id']}.json"
+        assert self._mode(stored) == 0o600
+        assert self._mode(f"{stored}.sha256") == 0o600
 
 
 class TestBackupListMetadata:

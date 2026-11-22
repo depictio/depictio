@@ -42,6 +42,9 @@ class TestGetCurrentUser:
         self.mock_token_find_one.return_value = mock_token
 
         self.mock_user = MagicMock(spec=UserBeanie)
+        # The current-user dependency gates on this flag; a spec'd mock would
+        # return a truthy MagicMock for it.
+        self.mock_user.must_change_password = False
         self.mock_user_get.return_value = self.mock_user
 
         # Test data
@@ -203,6 +206,9 @@ class TestGetUserOrAnonymous:
         # Mock settings
         self.settings_patcher = patch("depictio.api.v1.endpoints.user_endpoints.routes.settings")
         self.mock_settings = self.settings_patcher.start()
+        # A MagicMock attribute is truthy, which would turn on the public
+        # access-code gate; these tests exercise the mode fallback only.
+        self.mock_settings.auth.is_public_access_code_required = False
 
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -221,7 +227,7 @@ class TestGetUserOrAnonymous:
         result = await get_user_or_anonymous(token="valid_token")
 
         # Assert
-        self.mock_get_current_user.assert_called_once_with("valid_token")
+        self.mock_get_current_user.assert_called_once_with("valid_token", None)
         assert result == mock_user
         # Anonymous user lookup should not be called
         self.mock_user_find_one.assert_not_called()
@@ -244,7 +250,7 @@ class TestGetUserOrAnonymous:
         result = await get_user_or_anonymous(token="invalid_token")
 
         # Assert
-        self.mock_get_current_user.assert_called_once_with("invalid_token")
+        self.mock_get_current_user.assert_called_once_with("invalid_token", None)
         self.mock_user_find_one.assert_called_once_with({"email": "anon@depictio.io"})
         assert result == mock_anonymous_user
 

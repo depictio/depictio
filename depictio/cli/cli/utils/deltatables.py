@@ -11,7 +11,7 @@ import polars as pl
 from pydantic import validate_call
 from rich.markup import escape
 
-from depictio.api.v1.configs.settings_models import local_data_policy, server_may_read_local_file
+from depictio.api.v1.configs.settings_models import server_may_read_local_file
 from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     bounded_download,
@@ -259,19 +259,25 @@ def _lazy_scan_path(
 ) -> pl.LazyFrame:
     """Format dispatch shared by local paths and downloaded remote files.
 
-    On a server reading its own disk (``depictio local``), a path the
-    local-data policy does not allow is refused here, at read time, whatever
+    In server context a local path is refused here, at read time, unless the
+    server may read it (see ``server_may_read_local_file``), whatever
     registered it: a File record is only a path, and the scan that wrote it may
-    have run under another policy, or none. ``confine=False`` is for a file this
-    process just wrote itself (a remote download's temp file).
+    have run on a user's laptop, or under another policy, or none. Without this
+    a registered path would let a user make the server open any file its
+    process can read. The CLI context is never confined: it reads the user's
+    own machine. ``confine=False`` is for a file this process just wrote itself
+    (a remote download's temp file).
     """
-    if confine:
-        policy = local_data_policy()
-        if policy is not None and not policy.allows_read(str(file_path)):
-            raise LocalPathRefused(
-                f"'{file_path}' is outside the folders this server may read.",
-                "local_path_outside",
-            )
+    if (
+        confine
+        and is_server_context()
+        and not is_remote_url(str(file_path))
+        and not server_may_read_local_file(str(file_path))
+    ):
+        raise LocalPathRefused(
+            f"'{file_path}' is outside the folders this server may read.",
+            "local_path_outside",
+        )
     if file_format in ["csv", "tsv", "txt"]:
         if _reads_as_records(file_path, polars_kwargs):
             with open(file_path, "rb") as handle:

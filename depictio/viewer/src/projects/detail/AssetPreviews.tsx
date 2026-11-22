@@ -25,9 +25,11 @@ import {
   fetchDataCollectionPreview,
   fetchGeojson,
   fetchTracksPreview,
+  imageS3Path,
   imageServeUrl,
   JBrowseRenderer,
   PhylogeneticRenderer,
+  signServeImageUrls,
 } from 'depictio-react-core';
 import type { GeoJsonCollection, GeoJsonFeature, PreviewResult } from 'depictio-react-core';
 import Plot from 'react-plotly.js';
@@ -130,6 +132,30 @@ export const ImagesPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
   const imageColumn = props?.image_column as string | undefined;
   const baseFolder = (props?.s3_base_folder as string | undefined) ?? '';
   const { data, error, loading } = useLoaded(dcIdOf(dc), loadImages);
+  // serve/image requires a signature for images outside public projects, and
+  // the preview <img> tags cannot authenticate: mint them once the rows land.
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setSignedUrls({});
+    if (!data) return;
+    const imageColumn_ = imageColumn ?? '';
+    const fullPaths = (data.rows ?? [])
+      .map((row) => imageS3Path(baseFolder, String(row[imageColumn_] ?? '')))
+      .filter((p): p is string => p !== null);
+    let cancelled = false;
+    signServeImageUrls([...new Set(fullPaths)])
+      .then((urls) => {
+        if (!cancelled) setSignedUrls(urls);
+      })
+      .catch(() => {
+        /* plain URLs still cover public projects */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, baseFolder, imageColumn]);
 
   if (loading) return <Loading />;
   if (error) return <Notice color="red">Failed to load preview: {error}</Notice>;
@@ -146,13 +172,11 @@ export const ImagesPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
         </Text>
       )}
       <SimpleGrid cols={{ base: 2, sm: 4, md: 6 }} spacing="sm">
-        {paths.map((path) => (
-          <ImageThumb
-            key={path}
-            url={imageServeUrl(baseFolder, path)}
-            name={path.split('/').pop() || path}
-          />
-        ))}
+        {paths.map((path) => {
+          const full = imageS3Path(baseFolder, path);
+          const url = (full && signedUrls[full]) || imageServeUrl(baseFolder, path);
+          return <ImageThumb key={path} url={url} name={path.split('/').pop() || path} />;
+        })}
       </SimpleGrid>
     </Stack>
   );

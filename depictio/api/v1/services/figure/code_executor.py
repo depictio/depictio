@@ -66,6 +66,65 @@ def _allowed_module_ids() -> frozenset[int]:
 # Built once at import; the module objects are process-stable.
 _ALLOWED_MODULE_IDS = _allowed_module_ids()
 
+
+def _shared_module_object_ids() -> frozenset[int]:
+    """Identity set of the module-level objects every render in this process shares.
+
+    The module globals carry whole libraries, and their direct attributes
+    include mutable state: the palette lists under ``px.colors`` (plain lists)
+    and classes like ``pl.Config``. A code figure that appended to a palette
+    or called ``pl.Config.set_tbl_rows(...)`` would patch them for every
+    later figure rendered by the same worker. Collect these objects once so
+    the getattr guard can refuse mutating method calls on them; objects a
+    figure builds itself (a palette copied with ``list(...)``) are not here
+    and stay fully writable.
+    """
+    shared: set[int] = set()
+
+    def _add_module(mod: types.ModuleType) -> None:
+        if id(mod) in shared:
+            return
+        shared.add(id(mod))
+        for attr in dir(mod):
+            try:
+                child = getattr(mod, attr)
+            except Exception:
+                continue
+            if isinstance(child, types.ModuleType):
+                _add_module(child)
+            elif isinstance(child, (list, dict, set, type)):
+                shared.add(id(child))
+
+    # The palette tree recurses (px.colors.qualitative.Plotly etc.).
+    _add_module(px.colors)
+    _add_module(np.random)
+    # The library globals themselves: only their direct attributes (classes
+    # like pl.Config, go.Figure and module-level containers) — recursion here
+    # would walk every submodule of pandas/numpy.
+    for mod in (px, pl, pd, np, go):
+        shared.add(id(mod))
+        for attr in dir(mod):
+            try:
+                child = getattr(mod, attr)
+            except Exception:
+                continue
+            if isinstance(child, (list, dict, set, type)):
+                shared.add(id(child))
+    return frozenset(shared)
+
+
+# Built once at import; the module objects and their attributes are process-stable.
+_SHARED_MODULE_OBJECT_IDS = _shared_module_object_ids()
+
+# Method calls that would mutate the shared objects above. Reads keep
+# working — a figure may still use a palette as a colour list — it just
+# cannot call a mutator on it. `set_` covers pl.Config.set_*; `pd.set_option`
+# and friends are already in _DENY_NAMES.
+_MUTATING_METHOD_NAMES = frozenset(
+    {"append", "extend", "insert", "pop", "clear", "update", "remove"}
+)
+_MUTATING_NAME_PREFIXES = ("set_",)
+
 # I/O and escape names denied on ANY object. This is the FIRST of two layers:
 # it is the only one that reaches polars/numpy I/O, whose work happens in Rust/C
 # and never raises a Python ``sys.audit`` event the hook below could see. The
@@ -161,20 +220,31 @@ def safe_getattr(obj, name, default=None, getattr=getattr):
 
     Built on RestrictedPython's ``safer_getattr`` — which keeps the underscore
     rule, the ``str.format`` / ``string.Formatter`` escape block and the frame
-    introspection block — then adds two Depictio rules so a figure that only
+    introspection block — then adds three Depictio rules so a figure that only
     needs to read ``df`` and build a Plotly chart cannot read or write server
-    files or reach arbitrary code:
+    files, reach arbitrary code, or patch state the whole process shares:
 
     * **name rule** — an I/O or dynamic-execution name (``read_*`` / ``scan_*`` /
       ``write_*`` / ``sink_*`` prefixes, or one of ``_DENY_NAMES``) is refused on
       any object, before the attribute is even fetched;
     * **module rule** — an attribute whose value is a module is refused unless it
       is on ``_ALLOWED_MODULE_IDS``, which stops ``pd.io.common.os`` and every
-      other walk off a module global.
+      other walk off a module global;
+    * **mutation rule** — a mutator name (``append`` / ``extend`` / ``insert`` /
+      ``pop`` / ``clear`` / ``update`` / ``remove`` / ``set_*``) is refused on
+      the shared module-level objects of ``_SHARED_MODULE_OBJECT_IDS``, so a
+      figure cannot extend a palette or reconfigure ``pl.Config`` for every
+      later render in the process. Its own objects are untouched.
     """
     if isinstance(name, str):
         if name in _DENY_NAMES or name.startswith(_DENY_NAME_PREFIXES):
             raise AttributeError(f'access to "{name}" is not allowed in a code figure')
+        if (name in _MUTATING_METHOD_NAMES or name.startswith(_MUTATING_NAME_PREFIXES)) and id(
+            obj
+        ) in _SHARED_MODULE_OBJECT_IDS:
+            raise AttributeError(
+                f'access to "{name}" on a shared module object is not allowed in a code figure'
+            )
     value = safer_getattr(obj, name, default)
     if isinstance(value, types.ModuleType) and id(value) not in _ALLOWED_MODULE_IDS:
         mod_name = getattr(value, "__name__", name)
@@ -452,6 +522,132 @@ def _install_audit_hook_once() -> None:
 _install_audit_hook_once()
 
 
+# ---------------------------------------------------------------------------
+# Memory cap: how much new address space user code may take.
+#
+# The execs below run with RLIMIT_AS lowered for their duration, then restored.
+# The limit is *current usage + configured budget*, not an absolute value:
+# the process already carries the Python runtime, the plotting libraries and
+# the server-side frame, and allocators reserve far more address space than
+# they touch (so an absolute limit below the current footprint either fails
+# to apply or would refuse every allocation). Capping the growth is what
+# stops runaway user code (`np.ones(10**10)`) from draining worker memory.
+#
+# On the shipped Celery worker the pool is prefork, so this runs in a forked
+# child; on the inline path (offload off) it runs in the API process, but the
+# limit is scoped to the exec and restored in a `finally`, so the endpoint
+# keeps its own allocations afterwards.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_MAX_MEMORY_MB = 1024
+
+
+def _code_mode_max_memory_mb() -> int:
+    """Budget for user-code allocations, from ``DEPICTIO_CODE_MODE_MAX_MEMORY_MB``."""
+    raw = os.environ.get("DEPICTIO_CODE_MODE_MAX_MEMORY_MB", "").strip()
+    if not raw:
+        return _DEFAULT_MAX_MEMORY_MB
+    try:
+        mb = int(raw)
+    except ValueError:
+        logger.warning(
+            f"code_executor: invalid DEPICTIO_CODE_MODE_MAX_MEMORY_MB {raw!r}, using default"
+        )
+        return _DEFAULT_MAX_MEMORY_MB
+    return mb if mb > 0 else _DEFAULT_MAX_MEMORY_MB
+
+
+def _current_address_space_bytes() -> int | None:
+    """The process's current virtual size, or None when it cannot be read."""
+    try:
+        # Linux: field 23 (vsize) of /proc/self/stat, already in bytes.
+        with open("/proc/self/stat", "rb") as fh:
+            return int(fh.read().rsplit(b")", 1)[-1].split()[20])
+    except Exception:
+        pass
+    try:
+        import psutil
+
+        return int(psutil.Process().memory_info().vms)
+    except Exception:
+        return None
+
+
+#: Set by ``enable_memory_cap`` in Celery prefork children only. RLIMIT_AS is
+#: per process: in a process that runs several code figures at once (the API's
+#: inline fallback, a threads pool) one run's cap would squeeze the others, and
+#: overlapping caps could restore each other's lowered limit.
+_memory_cap_enabled = False
+
+
+def enable_memory_cap() -> None:
+    """Turn the per-run memory cap on for this process (one task at a time)."""
+    global _memory_cap_enabled
+    _memory_cap_enabled = True
+
+
+class _MemoryCap:
+    """Lower RLIMIT_AS around an exec; restore it however the exec ends.
+
+    Only in a process that runs one task at a time (see ``enable_memory_cap``).
+    Skip (and say so once) when the limit cannot be applied — no
+    ``resource`` module (Windows), or no readable address-space usage — so a
+    platform quirk never turns into every code figure failing.
+    """
+
+    _warned = False
+
+    def __enter__(self):
+        if not _memory_cap_enabled:
+            self._capped = False
+            return self
+        try:
+            import resource
+        except ImportError:  # Windows, Pyodide
+            self._skip("the resource module is unavailable on this platform")
+            return self
+        if not hasattr(resource, "RLIMIT_AS"):
+            self._skip("RLIMIT_AS is unavailable on this platform")
+            return self
+        budget = _code_mode_max_memory_mb() * 1024 * 1024
+        current = _current_address_space_bytes()
+        if current is None:
+            self._skip("cannot read the current address-space usage")
+            return self
+        try:
+            self._old = resource.getrlimit(resource.RLIMIT_AS)
+            soft, hard = self._old
+            new_soft = current + budget
+            if hard != resource.RLIM_INFINITY:
+                new_soft = min(new_soft, hard)
+                if new_soft < current:
+                    # The hard limit already sits below the current footprint;
+                    # nothing to tighten.
+                    self._skip("hard RLIMIT_AS already caps this process")
+                    return self
+            resource.setrlimit(resource.RLIMIT_AS, (new_soft, hard))
+            self._capped = True
+        except (OSError, ValueError) as exc:
+            self._skip(f"setrlimit failed ({exc})")
+        return self
+
+    def _skip(self, reason: str) -> None:
+        self._capped = False
+        if not _MemoryCap._warned:
+            _MemoryCap._warned = True
+            logger.warning(f"code_executor: memory cap not applied: {reason}")
+
+    def __exit__(self, *exc_info) -> None:
+        if not getattr(self, "_capped", False):
+            return
+        import resource
+
+        try:
+            resource.setrlimit(resource.RLIMIT_AS, self._old)
+        except (OSError, ValueError) as exc:
+            logger.error(f"code_executor: could not restore RLIMIT_AS: {exc}")
+
+
 class SimpleCodeExecutor:
     """
     Simplified secure code executor using RestrictedPython.
@@ -602,11 +798,14 @@ class SimpleCodeExecutor:
                 # duration of this exec, then disarmed in the finally (so the
                 # except handler's traceback formatting, which reads source
                 # files, is never caught by it).
-                _token = _IN_CODE_FIGURE.set(True)
-                try:
-                    exec(preprocessing_bytecode, execution_globals, execution_locals)
-                finally:
-                    _IN_CODE_FIGURE.reset(_token)
+                # Memory cap outside the armed region: entering it reads
+                # /proc, which the audit hook would refuse.
+                with _MemoryCap():
+                    _token = _IN_CODE_FIGURE.set(True)
+                    try:
+                        exec(preprocessing_bytecode, execution_globals, execution_locals)
+                    finally:
+                        _IN_CODE_FIGURE.reset(_token)
 
                 # Verify the preprocessing actually produced something. The
                 # check used to demand a name starting with "df", which is a
@@ -632,11 +831,12 @@ class SimpleCodeExecutor:
 
             # Execute figure generation (execution_locals already contains
             # df_modified if created). Audit hook armed for this exec only.
-            _token = _IN_CODE_FIGURE.set(True)
-            try:
-                exec(figure_bytecode, execution_globals, execution_locals)
-            finally:
-                _IN_CODE_FIGURE.reset(_token)
+            with _MemoryCap():
+                _token = _IN_CODE_FIGURE.set(True)
+                try:
+                    exec(figure_bytecode, execution_globals, execution_locals)
+                finally:
+                    _IN_CODE_FIGURE.reset(_token)
 
             # Look for the figure result
             fig = execution_locals.get("fig")
@@ -712,11 +912,14 @@ class SimpleCodeExecutor:
                 )
 
             # Execute preprocessing — audit hook armed for this exec only.
-            _token = _IN_CODE_FIGURE.set(True)
-            try:
-                exec(preprocessing_bytecode, execution_globals, execution_locals)
-            finally:
-                _IN_CODE_FIGURE.reset(_token)
+            # Memory cap outside the armed region: entering it reads /proc,
+            # which the audit hook would refuse.
+            with _MemoryCap():
+                _token = _IN_CODE_FIGURE.set(True)
+                try:
+                    exec(preprocessing_bytecode, execution_globals, execution_locals)
+                finally:
+                    _IN_CODE_FIGURE.reset(_token)
 
             # Verify df_modified was created
             if "df_modified" not in execution_locals:

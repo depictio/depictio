@@ -1379,17 +1379,26 @@ BUNDLED_PROJECTS_DIR: Path = Path(__file__).parents[3] / "projects"
 def server_may_read_local_file(path: str) -> bool:
     """Whether the server may open a local path a user registered, as is.
 
-    Below the bundled reference projects, or wherever the local-data policy
-    lets the server read (``depictio local``). Anywhere else the path is only
-    a string from a project's configuration or a CLI scan, and opening it would
-    hand back whatever the server process can read, its own keys included.
+    Below the bundled reference projects, inside one of the server's own
+    ``depictio_*`` upload folders of the temporary directory (uploads are
+    written and scanned there, whatever the local-data policy), or wherever
+    that policy lets the server read (``depictio local``). Not the rest of the
+    temporary directory: other processes leave files there, configurations
+    with credentials among them. Anywhere else the path is only a string from
+    a project's configuration or a CLI scan, and opening it would hand back
+    whatever the server process can read, its own keys included.
     """
     if not isinstance(path, str) or "\x00" in path or not os.path.isabs(path):
         return False
     real = os.path.realpath(path)
     bundled = os.path.realpath(BUNDLED_PROJECTS_DIR)
-    if real == bundled or real.startswith(bundled + os.sep):
+    if real.startswith(bundled + os.sep):
         return True
+    tmp = os.path.realpath(tempfile.gettempdir())
+    if real.startswith(tmp + os.sep):
+        parts = os.path.relpath(real, tmp).split(os.sep)
+        if len(parts) >= 2 and parts[0].startswith("depictio_"):
+            return True
     policy = local_data_policy()
     return policy is not None and policy.allows_read(path)
 
@@ -2051,6 +2060,14 @@ class MigrationConfig(BaseSettings):
         ),
     )
     max_bundle_bytes: int = Field(default=10 * 1024**3, ge=1)
+    max_import_body_bytes: int = Field(
+        default=50 * 1024**2,
+        ge=1,
+        description=(
+            "Cap on the JSON body POST /migrate/import-project accepts; larger"
+            " bodies answer 413 before they are parsed"
+        ),
+    )
     staging_prefix: str = Field(default="_migration_staging")
     pending_ttl_days: int = Field(default=14, ge=1)
     spool_dir: Optional[str] = Field(default=None)

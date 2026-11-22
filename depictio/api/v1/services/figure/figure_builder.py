@@ -420,12 +420,18 @@ def code_sets_template(code: str) -> bool:
     return False
 
 
+# What a viewer sees when a code figure fails. The full message (executor
+# output, traceback tail) goes to the logs and to editors only.
+CODE_ERROR_GENERIC_MESSAGE = "This figure's code failed."
+
+
 def process_code_mode_figure(
     code_content: str,
     df: Any,
     current_theme: str,
     task_id: str,
     extra_globals: dict[str, Any] | None = None,
+    error_detail: bool = True,
 ) -> tuple[bool, go.Figure | None, str | None]:
     """
     Process a figure in code mode by executing user-provided code.
@@ -437,6 +443,9 @@ def process_code_mode_figure(
         task_id: Task ID for logging
         extra_globals: Extra names to bind in the sandbox, e.g. the grouping
             kwargs a code figure spreads to honour the Colour/Split toggle
+        error_detail: Whether the caller may see the failure detail. An
+            editor keeps the executor message; a viewer or anonymous visitor
+            gets the generic message, with no traceback lines or paths.
 
     Returns:
         Tuple of (success, figure, visu_type):
@@ -458,6 +467,8 @@ def process_code_mode_figure(
 
     if not success:
         logger.error(f"[{task_id}] Code execution failed: {message}")
+        if not error_detail:
+            return False, create_error_figure(CODE_ERROR_GENERIC_MESSAGE, current_theme), None
         return False, create_error_figure(f"Code execution error: {message}", current_theme), None
 
     detected_visu_type = extract_visualization_type_from_code(code_content)

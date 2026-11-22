@@ -102,15 +102,19 @@ def test_the_invite_never_makes_the_project_public(world):
     assert _project(world)["is_public"] is False
 
 
-def test_owner_is_the_requester_when_they_have_an_account(world):
+def test_an_account_under_the_requesters_email_is_not_made_owner_automatically(world):
+    """The claimed email is not proof of control: the invite creator keeps the
+    project and the address is parked until that person signs in."""
     owner = ObjectId()
     world.db.users_collection.insert_one({"_id": owner, "email": "Author@Source.org"})
     _, code = make_invite()
     out = push(world.payload, source_for(code), email="AUTHOR@source.ORG")
     project = _project(world)
-    assert [o["_id"] for o in project["permissions"]["owners"]] == [owner]
-    assert "pending_owner_email" not in project
-    assert _request(world, out["request_id"])["result"]["owner_id"] == str(owner)
+    assert [str(o["_id"]) for o in project["permissions"]["owners"]] == [ADMIN_ID]
+    assert project["pending_owner_email"] == "author@source.org"
+    result = _request(world, out["request_id"])["result"]
+    assert result["owner_id"] == ADMIN_ID
+    assert result["pending_owner_email"] == "author@source.org"
 
 
 def test_an_unknown_requester_is_parked_on_the_invite_creator(world):

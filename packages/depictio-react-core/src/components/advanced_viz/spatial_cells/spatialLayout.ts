@@ -335,20 +335,33 @@ export function fillUrlTemplate(template: string, sample: string | null): string
 }
 
 /**
- * The serve URL of an Image DC row, mirroring `buildImageUrl` in
+ * The full S3 path of an Image DC row, mirroring `buildImageUrl` in
  * ImageRenderer.tsx: the DC's `s3_base_folder` joined to the row's relative
- * path (minus a leading copy of the folder's last segment), served by the
- * public `/files/serve/image` endpoint, which Plotly's `<image>` element can
- * load without an auth header.
+ * path (minus a leading copy of the folder's last segment). Null when the
+ * value is already a URL (an http preview, a data URI) or there is no base
+ * folder to join it to.
  */
-export function imageServeUrl(s3BaseFolder: string, relativePath: string): string {
+export function imageS3Path(s3BaseFolder: string, relativePath: string): string | null {
   // Already a URL (an http preview, a data URI), or nothing to join it to.
-  if (/^(https?:|data:)/.test(relativePath) || !s3BaseFolder) return relativePath;
+  if (/^(https?:|data:)/.test(relativePath) || !s3BaseFolder) return null;
   const base = s3BaseFolder.replace(/\/+$/, '');
   const lastSegment = base.split('/').pop() || '';
   let rel = relativePath.replace(/^\/+/, '');
   if (lastSegment && rel.startsWith(`${lastSegment}/`)) rel = rel.slice(lastSegment.length + 1);
-  return `/depictio/api/v1/files/serve/image?s3_path=${encodeURIComponent(`${base}/${rel}`)}`;
+  return `${base}/${rel}`;
+}
+
+/**
+ * The serve URL of an Image DC row, mirroring `buildImageUrl` in
+ * ImageRenderer.tsx: the DC's `s3_base_folder` joined to the row's relative
+ * path, served by the `/files/serve/image` endpoint, which Plotly's `<image>`
+ * element can load without an auth header. Values that are already URLs pass
+ * through unchanged.
+ */
+export function imageServeUrl(s3BaseFolder: string, relativePath: string): string {
+  const full = imageS3Path(s3BaseFolder, relativePath);
+  if (full === null) return relativePath;
+  return `/depictio/api/v1/files/serve/image?s3_path=${encodeURIComponent(full)}`;
 }
 
 /** A number for a hover line: integers as they are, others to 4 significant

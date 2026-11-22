@@ -175,7 +175,11 @@ services:
     image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.22.2}
     container_name: depictio-viewer
     ports:
-      - 5080:8080
+      # Loopback-only by default: this quick start runs in single-user mode,
+      # where whoever reaches the port is the admin, and the viewer also proxies
+      # the API. Set DEPICTIO_BIND_ADDRESS=0.0.0.0 only for a multi-user
+      # deployment (DEPICTIO_AUTH_SINGLE_USER_MODE=false), ideally behind TLS.
+      - "${DEPICTIO_BIND_ADDRESS:-127.0.0.1}:5080:8080"
     environment:
       # S3 origin (scheme://host[:port]) the browser reads genome_view file
       # tracks from, added to the CSP connect-src. Defaults to the public S3

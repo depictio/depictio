@@ -36,23 +36,34 @@ def _get_redis_client() -> Any:
     return get_shared_redis_client()
 
 
-def enforce_rate_limit(request: Request, endpoint: str) -> None:
+def _client_ip(request: Request) -> str:
+    # Prefer X-Real-IP forwarded by the nginx reverse-proxy over the raw TCP
+    # connection source, which would be the nginx pod IP in k8s (causing all
+    # visitors to share one rate-limit bucket).
+    return (
+        request.headers.get("x-real-ip")
+        or (request.client.host if request.client else None)
+        or "unknown"
+    )
+
+
+def _window_key(endpoint: str, scope: str) -> str:
+    window_id = int(time.time()) // _RATE_WINDOW_SECS
+    return f"depictio:ratelimit:{endpoint}:{scope}:{window_id}"
+
+
+def enforce_rate_limit(
+    request: Request, endpoint: str, *, max_calls: int = _RATE_MAX_CALLS
+) -> None:
     """Rate-limit ``endpoint`` per client IP using a Redis fixed window.
 
-    Allows up to ``_RATE_MAX_CALLS`` calls per ``_RATE_WINDOW_SECS`` window per
+    Allows up to ``max_calls`` calls per ``_RATE_WINDOW_SECS`` window per
     ``(client_ip, endpoint)``. Raises HTTP 429 when exceeded.
 
     FAIL-OPEN: any Redis error (unreachable, timeout) allows the request through
     so an outage cannot lock everyone out of auth.
     """
-    # Prefer X-Real-IP forwarded by the nginx reverse-proxy over the raw TCP
-    # connection source, which would be the nginx pod IP in k8s (causing all
-    # visitors to share one rate-limit bucket).
-    client_ip = (
-        request.headers.get("x-real-ip")
-        or (request.client.host if request.client else None)
-        or "unknown"
-    )
+    client_ip = _client_ip(request)
     client = _get_redis_client()
     if client is None:
         # Fail open — Redis unavailable.
@@ -60,8 +71,7 @@ def enforce_rate_limit(request: Request, endpoint: str) -> None:
 
     # Bucket the window so the key naturally rolls over; INCR then EXPIRE makes
     # the first hit in a window set the TTL.
-    window_id = int(time.time()) // _RATE_WINDOW_SECS
-    key = f"depictio:ratelimit:{endpoint}:{client_ip}:{window_id}"
+    key = _window_key(endpoint, client_ip)
 
     try:
         count = client.incr(key)
@@ -73,7 +83,7 @@ def enforce_rate_limit(request: Request, endpoint: str) -> None:
         logger.warning(f"Auth rate limiter Redis error ({e}); allowing request (fail-open).")
         return
 
-    if int(count) > _RATE_MAX_CALLS:
+    if int(count) > max_calls:
         logger.warning(
             f"Rate limit exceeded for {endpoint} from {client_ip} "
             f"({count} calls in {_RATE_WINDOW_SECS}s window)."
@@ -82,3 +92,57 @@ def enforce_rate_limit(request: Request, endpoint: str) -> None:
             status_code=429,
             detail="Too many authentication requests; please wait before retrying.",
         )
+
+
+# ---------------------------------------------------------------------------
+# Failure-only limits, for a shared secret such as the public access code.
+#
+# Counting every call would lock out a room of people behind one NAT who all
+# type the right code at once; counting only wrong answers slows a guesser
+# down without that. The instance-wide bucket also slows a guesser spread over
+# many addresses. Same fixed windows and the same fail-open rule as above.
+# ---------------------------------------------------------------------------
+
+
+def _failure_counts(client: Any, endpoint: str, client_ip: str) -> tuple[int, int]:
+    per_ip = client.get(_window_key(endpoint, client_ip))
+    overall = client.get(_window_key(endpoint, "*"))
+    return int(per_ip or 0), int(overall or 0)
+
+
+def enforce_failure_limit(
+    request: Request, endpoint: str, *, max_per_ip: int, max_overall: int
+) -> None:
+    """Refuse with 429 while this IP, or the whole instance, has failed too often."""
+    client = _get_redis_client()
+    if client is None:
+        return
+    client_ip = _client_ip(request)
+    try:
+        per_ip, overall = _failure_counts(client, endpoint, client_ip)
+    except Exception as e:
+        logger.warning(f"Auth rate limiter Redis error ({e}); allowing request (fail-open).")
+        return
+    if per_ip >= max_per_ip or overall >= max_overall:
+        logger.warning(
+            f"Failure limit reached for {endpoint} from {client_ip} "
+            f"({per_ip} from this address, {overall} in all, in {_RATE_WINDOW_SECS}s)."
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed attempts; please wait a minute before retrying.",
+        )
+
+
+def record_failure(request: Request, endpoint: str) -> None:
+    """Count one failed attempt for this IP and for the whole instance."""
+    client = _get_redis_client()
+    if client is None:
+        return
+    try:
+        for scope in (_client_ip(request), "*"):
+            key = _window_key(endpoint, scope)
+            if client.incr(key) == 1:
+                client.expire(key, _RATE_WINDOW_SECS)
+    except Exception as e:
+        logger.warning(f"Auth rate limiter Redis error ({e}); failure not counted.")

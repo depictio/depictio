@@ -6,7 +6,10 @@ network (loopback, cloud metadata, the LAN). Targets declared in the
 environment are trusted by the operator and skip the guard; the others must be
 https and resolve to public addresses, unless their host is explicitly
 allowlisted. The check runs again before every call, not only when the target
-is saved, because a DNS record can change between the two (rebinding).
+is saved, because a DNS record can change between the two (rebinding). The
+check gives a clear early error; the enforcement is at connect time, where
+``pinned_http`` validates the addresses again and dials the one it validated
+(guarded targets on a direct connection only, see :func:`_pinned_transport`).
 
 A third kind is the *ad-hoc destination*: a project owner types a URL and an
 invite code (never stored). Its host must end with one of
@@ -32,6 +35,7 @@ import httpx
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.services.pinned_http import AddressRejected, pinned_transport, proxy_applies
 
 PAIRING_HEADER = "X-Depictio-Pairing-Key"
 INVITE_HEADER = "X-Depictio-Invite-Code"
@@ -195,6 +199,27 @@ def _redirect_detail(response: httpx.Response) -> str:
     return detail[:_MAX_DETAIL_CHARS]
 
 
+def _pinned_transport(target: ResolvedTarget) -> httpx.HTTPTransport | None:
+    """A transport pinned to validated addresses, or ``None`` for a plain client.
+
+    Trusted targets and allowlisted hosts skip the address checks in
+    :func:`check_target_url`, so they skip pinning too. When an environment
+    proxy carries the request, the proxy resolves the name (a transport would
+    also switch httpx's env proxies off), so the plain client is kept and only
+    the pre-check applies.
+    """
+    if target.trusted:
+        return None
+    try:
+        host = (urlsplit(target.url.strip()).hostname or "").lower()
+    except ValueError:  # the guard refuses it before any call
+        return None
+    allowlist = {h.strip().lower() for h in settings.migration.ui_target_host_allowlist}
+    if host in allowlist or proxy_applies(target.url):
+        return None
+    return pinned_transport(_blocked_reason, verify=True)
+
+
 class TargetClient:
     """Calls the ``/migrate/inbound`` API of one paired instance."""
 
@@ -203,6 +228,8 @@ class TargetClient:
         self._base = target.url.rstrip("/") + "/depictio/api/v1/migrate/inbound"
         timeout = float(settings.migration.http_timeout_s)
         self._timeout = timeout
+        if transport is None:
+            transport = _pinned_transport(target)
         self._client = httpx.Client(
             timeout=timeout, follow_redirects=False, verify=True, transport=transport
         )
@@ -247,6 +274,8 @@ class TargetClient:
                     raise RemoteError(502, _redirect_detail(response))
         except RemoteError:
             raise
+        except AddressRejected as exc:  # rebinding caught at connect: same error as the check
+            raise RemoteError(400, f"Target host {exc.host!r} resolves to a {exc.reason}") from exc
         except httpx.HTTPError as exc:
             logger.warning("migrate push: target %s unreachable: %s", self._target.name, type(exc))
             raise RemoteError(502, f"Could not reach the target ({type(exc).__name__})") from exc

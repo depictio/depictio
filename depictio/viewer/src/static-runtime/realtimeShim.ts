@@ -30,6 +30,11 @@ const STATIC_RESULT: StaticRealtimeResult = {
   acknowledgePending: () => {},
 };
 
+/** A static bundle has no server to stream events from. */
+export function realtimeAvailable(): Promise<boolean> {
+  return Promise.resolve(false);
+}
+
 export function useDataCollectionUpdates(
   _dashboardId?: string | null,
   _opts?: Record<string, unknown>,

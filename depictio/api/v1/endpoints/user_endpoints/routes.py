@@ -1,6 +1,9 @@
 import asyncio
+import hashlib
 import hmac
+import json
 import os
+import secrets
 from datetime import datetime, timedelta
 from typing import Annotated, Any
 
@@ -19,7 +22,7 @@ from fastapi import (
     status,
 )
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -52,8 +55,13 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _provision_user,
     _purge_expired_tokens,
     _redeem_magic_link_ticket,
+    _token_fingerprint,
 )
-from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import (
+    enforce_failure_limit,
+    enforce_rate_limit,
+    record_failure,
+)
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
 )
@@ -99,17 +107,80 @@ def _is_valid_internal_api_key(api_key: str | None) -> bool:
     return hmac.compare_digest(api_key, expected)
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
+# Routes a user flagged ``must_change_password`` may still reach: their own
+# identity (so the UI can render the change-password form), the password
+# change itself, and logout. Everything else answers 403 until the person
+# replaces the password someone else chose for them.
+_MUST_CHANGE_PASSWORD_EXEMPT_PATHS = (
+    "/auth/me",
+    "/auth/me/optional",
+    "/auth/edit_password",
+    "/auth/logout",
+)
+
+_MUST_CHANGE_PASSWORD_ERROR = "Change your password first."
+
+
+def _must_change_password_exempt(request: Request | None) -> bool:
+    """True when the request targets a route exempt from the password-change gate.
+
+    Matched on the concrete URL path (the suffixes are plain, unparameterized
+    routes). ``scope["route"].path`` is unreliable across FastAPI internals:
+    depending on how the router was assembled it can be the bare "/me" or the
+    full "/depictio/api/v1/auth/me", so it is only a fallback.
+    """
+    if request is None:
+        return False
+    path = getattr(getattr(request, "url", None), "path", None)
+    if not path:
+        route = getattr(request, "scope", {}).get("route")
+        path = getattr(route, "path", None)
+    if not path:
+        return False
+    return any(path.endswith(suffix) for suffix in _MUST_CHANGE_PASSWORD_EXEMPT_PATHS)
+
+
+async def _request_proves_public_access_code(request: Request | None) -> bool:
+    """Check the request's access code exactly like ``create_temporary_user``.
+
+    The code travels in the JSON body field ``access_code``, the same way
+    POST /auth/public/create_temporary_user reads it. A request with no body
+    (any GET, an empty POST) or a non-JSON body proves nothing.
+    """
+    if request is None:
+        return False
+    candidate = None
+    try:
+        body = await request.body()
+    except Exception:  # noqa: BLE001 - an unreadable body proves nothing
+        return False
+    if body:
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            candidate = payload.get("access_code")
+    return bool(settings.auth.verify_public_access_code(candidate))
+
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    request: Request = None,  # type: ignore[assignment]
+) -> User:
     """Get the currently authenticated user from the JWT token.
 
     Args:
         token: JWT access token from the Authorization header.
+        request: The incoming request, used to exempt the routes a user
+            flagged ``must_change_password`` still needs.
 
     Returns:
         The authenticated User object.
 
     Raises:
         HTTPException: 401 if token is invalid or user not found.
+        HTTPException: 403 if the user must change their password first.
     """
     if token is None:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -118,11 +189,17 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # Enforced here, once, for every authenticated route rather than per
+    # endpoint. Login still succeeds so the UI can show the change form.
+    if getattr(user, "must_change_password", False) and not _must_change_password_exempt(request):
+        raise HTTPException(status_code=403, detail=_MUST_CHANGE_PASSWORD_ERROR)
+
     return user
 
 
 async def get_user_or_anonymous(
     token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+    request: Request = None,  # type: ignore[assignment]
 ) -> User:
     """Get the authenticated user or anonymous user if unauthenticated mode is enabled.
 
@@ -130,6 +207,7 @@ async def get_user_or_anonymous(
     and unauthenticated mode is enabled, returns the anonymous user.
 
     Args:
+        request: The incoming request, used for the public access-code check.
         token: Optional JWT access token from the Authorization header.
 
     Returns:
@@ -141,13 +219,25 @@ async def get_user_or_anonymous(
     # First try to authenticate with token if provided
     if token is not None:
         try:
-            return await get_current_user(token)
-        except HTTPException:
+            return await get_current_user(token, request)
+        except HTTPException as exc:
+            # The password-change gate is not a fallback candidate: a user
+            # flagged ``must_change_password`` must not slip into the
+            # anonymous identity (an admin in single-user mode).
+            if exc.status_code == 403:
+                raise
             # Token is invalid, fall through to anonymous user logic if in unauthenticated mode
             pass
 
     # If no token provided or token is invalid, check if public/single-user mode allows anonymous access
     if settings.auth.is_public_mode or settings.auth.is_single_user_mode:
+        # A code-gated public deployment must not hand the anonymous identity
+        # to a request that has not proved the shared code — the same check
+        # POST /auth/public/create_temporary_user applies.
+        if settings.auth.is_public_access_code_required and not (
+            await _request_proves_public_access_code(request)
+        ):
+            raise HTTPException(status_code=401, detail="Invalid token")
         anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         if anon:
             return anon
@@ -390,47 +480,101 @@ async def exchange_magic_link(request: _ExchangeMagicLinkRequest) -> dict:
     return await _redeem_magic_link_ticket(request.ticket)
 
 
-@auth_endpoint_router.post("/refresh", include_in_schema=True)
-async def refresh_token_browser(request: dict) -> dict:
-    """Browser-safe refresh: uses the refresh token as the only credential.
+#: How long a just-rotated refresh token still answers a second presentation
+#: (two tabs refreshing at once). Past it, the same token means reuse.
+_REFRESH_GRACE_SECONDS = 30
 
-    Mirrors ``/auth/refresh_token`` but without the internal-api-key
-    requirement so SPAs (the React viewer) can call it directly. The refresh
-    token itself is treated as the authenticating secret.
+
+def _sha256_hex(value: str) -> str:
+    """Hex sha256 of a token, for storing and matching refresh-token hashes."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+async def _refresh_session(refresh_token: str) -> dict:
+    """Refresh a session, rotating its tokens. Shared by both refresh routes.
+
+    On a successful refresh the refresh token itself is rotated: the document
+    keeps only the *hash* of the token that was retired, plus when it was
+    rotated. Presenting that retired token again is either a second tab racing
+    the same refresh (inside the grace window — it gets the current pair back,
+    no new rotation) or reuse of a consumed token, which means it leaked: the
+    whole token document (the session) is deleted and the request gets 401.
 
     Args:
-        request: Dict containing 'refresh_token' key.
+        refresh_token: The refresh token presented by the client.
 
     Returns:
-        Dict with new access_token and expire_datetime.
+        Dict with the new access_token, refresh_token and their expiry
+        timestamps.
 
     Raises:
-        HTTPException: 401 if refresh token is invalid or expired.
+        HTTPException: 401 if the refresh token is invalid, expired or reused.
+        HTTPException: 403 if the user must change their password first.
     """
-    refresh_token = request.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(status_code=400, detail="Missing refresh_token")
-
-    # TODO(PR2): refresh-token rotation + reuse detection. Currently the refresh
-    # token is long-lived and reusable: each refresh re-issues an access token
-    # but leaves the same refresh_token valid, so a leaked refresh token grants
-    # indefinite access with no way to detect replay. PR2 should rotate the
-    # refresh token on every use, invalidate the old one, and flag/revoke the
-    # token family if a consumed refresh token is presented again. Also harden
-    # permanent ("long-lived") tokens here. Explicitly deferred — do not
-    # implement in this PR.
+    now = datetime.now()
     token_doc = await TokenBeanie.find_one(
-        {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": datetime.now()}}
+        {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": now}}
     )
-    if not token_doc:
-        raise HTTPException(401, "Invalid refresh token")
+
+    within_grace = False
+    if token_doc is None:
+        # Not the current refresh token: either the one retired moments ago,
+        # or a consumed one replayed.
+        rotated = await TokenBeanie.find_one(
+            {"previous_refresh_token_hash": _sha256_hex(refresh_token)}
+        )
+        if rotated is None:
+            raise HTTPException(401, "Invalid refresh token")
+        if (
+            rotated.previous_refresh_rotated_at is not None
+            and now - rotated.previous_refresh_rotated_at
+            <= timedelta(seconds=_REFRESH_GRACE_SECONDS)
+            and rotated.refresh_expire_datetime > now
+        ):
+            token_doc = rotated
+            within_grace = True
+        else:
+            logger.warning(
+                "Refresh-token reuse detected [%s]; revoking the whole session",
+                _token_fingerprint(refresh_token),
+            )
+            await rotated.delete()
+            raise HTTPException(401, "Invalid refresh token")
 
     user = await UserBeanie.find_one({"_id": token_doc.user_id})
+    # A person the admin signed in with a shared password refreshes nothing
+    # until they have chosen their own (mirrors the get_current_user gate).
+    if getattr(user, "must_change_password", False):
+        raise HTTPException(status_code=403, detail=_MUST_CHANGE_PASSWORD_ERROR)
+
+    if within_grace:
+        # A racing tab gets back the pair the first refresh minted, unchanged.
+        return {
+            "access_token": token_doc.access_token,
+            "expire_datetime": token_doc.expire_datetime,
+            "refresh_token": token_doc.refresh_token,
+            "refresh_expire_datetime": token_doc.refresh_expire_datetime,
+            "token_type": "bearer",
+        }
+
     token_data = TokenData(name=token_doc.name, sub=user.id)
     new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
+    # A fresh opaque refresh secret. Refresh tokens are only ever compared as
+    # strings (never decoded), so a random value both stays unique across
+    # same-second rotations — a JWT minted in the same second as the one it
+    # retires would be byte-identical — and leaks no claims.
+    new_refresh_token = secrets.token_urlsafe(48)
+    # The new refresh token inherits the session's expiry: rotation must not
+    # turn a 7-day sign-in into a session that never ends.
+    expire_refresh = token_doc.refresh_expire_datetime
 
+    # Keep only the hash of the token being retired — its plaintext dies here.
+    token_doc.previous_refresh_token_hash = _sha256_hex(refresh_token)
+    token_doc.previous_refresh_rotated_at = now
     token_doc.access_token = new_access_token
     token_doc.expire_datetime = expire_datetime
+    token_doc.refresh_token = new_refresh_token
+    token_doc.refresh_expire_datetime = expire_refresh
     await token_doc.save()
 
     # Keep an active public/demo visitor authorized for the duration of their session.
@@ -438,9 +582,38 @@ async def refresh_token_browser(request: dict) -> dict:
 
     return {
         "access_token": new_access_token,
-        "expire_datetime": token_doc.expire_datetime,
+        "expire_datetime": expire_datetime,
+        "refresh_token": new_refresh_token,
+        "refresh_expire_datetime": expire_refresh,
         "token_type": "bearer",
     }
+
+
+@auth_endpoint_router.post("/refresh", include_in_schema=True)
+async def refresh_token_browser(request: dict) -> dict:
+    """Browser-safe refresh: uses the refresh token as the only credential.
+
+    Mirrors ``/auth/refresh_token`` but without the internal-api-key
+    requirement so SPAs (the React viewer) can call it directly. The refresh
+    token itself is treated as the authenticating secret, and is rotated on
+    every successful refresh — the response carries the new pair.
+
+    Args:
+        request: Dict containing 'refresh_token' key.
+
+    Returns:
+        Dict with the new access_token and refresh_token (plus their expiry
+        timestamps).
+
+    Raises:
+        HTTPException: 400 if no refresh_token was sent.
+        HTTPException: 401 if refresh token is invalid, expired or reused.
+        HTTPException: 403 if the user must change their password first.
+    """
+    refresh_token = request.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Missing refresh_token")
+    return await _refresh_session(refresh_token)
 
 
 @auth_endpoint_router.post("/refresh_token", include_in_schema=True, deprecated=True)
@@ -458,36 +631,43 @@ async def refresh_token_endpoint(
         api_key: Internal API key for authentication.
 
     Returns:
-        Dict with new access_token and expire_datetime.
+        Dict with the new access_token and refresh_token (plus their expiry
+        timestamps), exactly like /auth/refresh.
 
     Raises:
         HTTPException: 403 if API key is invalid.
-        HTTPException: 401 if refresh token is invalid or expired.
+        HTTPException: 401 if refresh token is invalid, expired or reused.
     """
     logger.warning("DEPRECATED endpoint auth/refresh_token called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     refresh_token = request.get("refresh_token")
-    token_doc = await TokenBeanie.find_one(
-        {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": datetime.now()}}
-    )
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Missing refresh_token")
+    return await _refresh_session(refresh_token)
 
-    if not token_doc:
-        raise HTTPException(401, "Invalid refresh token")
 
-    user = await UserBeanie.find_one({"_id": token_doc.user_id})
-    token_data = TokenData(name=token_doc.name, sub=user.id)
-    new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
+@auth_endpoint_router.post("/logout", include_in_schema=True)
+async def logout(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    current_user: UserBeanie = Depends(get_current_user),
+) -> dict:
+    """Revoke the caller's session server-side.
 
-    token_doc.access_token = new_access_token
-    token_doc.expire_datetime = expire_datetime
-    await token_doc.save()
+    Deletes the token document the bearer access token resolves to, so the
+    session's refresh token dies with it: a copy of the browser's localStorage
+    (or a stolen refresh token) can no longer revive the session. Clients
+    call this best-effort while signing out and clear their local copy
+    regardless of the outcome.
 
-    # Keep an active public/demo visitor authorized for the duration of their session.
-    await _rearm_temporary_user_expiry(user)
-
-    return {"access_token": new_access_token, "expire_datetime": token_doc.expire_datetime}
+    Raises:
+        HTTPException: 401 if the bearer token does not authenticate.
+    """
+    token_doc = await TokenBeanie.find_one({"access_token": token})
+    if token_doc is not None:
+        await token_doc.delete()
+    return {"success": True}
 
 
 @auth_endpoint_router.get("/fetch_user/from_token", include_in_schema=True)
@@ -713,6 +893,9 @@ async def get_current_user_info_optional(
         ),
         "is_dev_mode": is_dev_mode,
         "walkthrough_disabled": walkthrough_disabled,
+        # Whether the realtime WebSocket exists at all: without it the viewer
+        # would retry a handshake the server answers with 403, forever.
+        "events_enabled": settings.events.enabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
         # Sign-in buttons, one per enabled OIDC provider (id + label only; the
         # same list as GET /auth/oidc/providers, here to save a round-trip).
@@ -950,6 +1133,13 @@ async def cleanup_expired_temporary_users_endpoint(
 # ---------------------------------------------------------------------------
 
 
+#: Per address and per minute. A classroom behind one NAT signs in at once.
+_GUEST_SESSIONS_PER_MINUTE = 60
+#: Wrong access codes per minute, per address and for the whole instance.
+_ACCESS_CODE_FAILURES_PER_IP = 10
+_ACCESS_CODE_FAILURES_OVERALL = 100
+
+
 @auth_endpoint_router.post("/public/create_temporary_user", include_in_schema=True)
 async def create_temporary_user_public(request: Request, body: dict | None = Body(None)) -> dict:
     """Create a temporary user for the React /auth SPA in public mode.
@@ -970,11 +1160,23 @@ async def create_temporary_user_public(request: Request, body: dict | None = Bod
             detail="Temporary users only available in public mode",
         )
 
-    # Rate-limited before the code check so the shared secret cannot be
-    # brute-forced any faster than any other credential on this endpoint.
-    enforce_rate_limit(request, "public/create_temporary_user")
+    # Sessions are minted for anyone who passes, so the overall cap is wide
+    # enough for a room behind one NAT. Guessing the code is what is slowed
+    # down: wrong codes are counted per address and for the whole instance,
+    # and checked before the code is compared.
+    enforce_rate_limit(
+        request, "public/create_temporary_user", max_calls=_GUEST_SESSIONS_PER_MINUTE
+    )
+    if settings.auth.is_public_access_code_required:
+        enforce_failure_limit(
+            request,
+            "public/access_code_failures",
+            max_per_ip=_ACCESS_CODE_FAILURES_PER_IP,
+            max_overall=_ACCESS_CODE_FAILURES_OVERALL,
+        )
 
     if not settings.auth.verify_public_access_code((body or {}).get("access_code")):
+        record_failure(request, "public/access_code_failures")
         logger.warning("Public access code rejected for temporary-user request")
         raise HTTPException(status_code=403, detail="Invalid access code.")
 
@@ -1462,16 +1664,40 @@ async def generate_agent_config_endpoint(
     return cli_config_to_payload(depictio_agent_config)
 
 
-@auth_endpoint_router.get("/list_tokens", response_model=list[TokenBeanie], include_in_schema=True)
+class TokenMetadata(BaseModel):
+    """Metadata-only view of a token for GET /auth/list_tokens.
+
+    SECURITY: access_token and refresh_token must never travel back in a
+    listing response. Callers (UI management page, CLI) only read id/name/
+    lifetime/expiry fields. ``_id`` keeps the key both callers already read.
+    """
+
+    model_config = {"populate_by_name": True}
+
+    id: str = Field(alias="_id")
+    name: str | None = None
+    token_type: str = "bearer"
+    token_lifetime: str = "short-lived"
+    expire_datetime: str
+    refresh_expire_datetime: str
+    user_id: str
+    created_at: str
+    logged_in: bool = False
+
+
+@auth_endpoint_router.get(
+    "/list_tokens", response_model=list[TokenMetadata], include_in_schema=True
+)
 async def list_tokens_(
     current_user: UserBase = Depends(get_current_user),
     token_lifetime: str | None = None,
 ):
+    """List the current user's tokens. Metadata only: never token values."""
     cli_configs = await _list_tokens(
         user_id=current_user.id,
         token_lifetime=token_lifetime,
     )
-    return cli_configs
+    return [TokenMetadata.model_validate(t.model_dump()) for t in cli_configs]
 
 
 @auth_endpoint_router.get("/list", response_model=list[UserBaseUI], include_in_schema=True)

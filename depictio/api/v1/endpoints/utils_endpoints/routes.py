@@ -651,9 +651,17 @@ async def check_service_readiness(
     return False
 
 
+def _strip_query_string(url: str) -> str:
+    """Drop the query string from a URL: it can carry credentials."""
+    return url.split("?", 1)[0]
+
+
 async def capture_network_activity(page, duration_ms: int = 5000):
     """
     Capture network activity for debugging slow page loads.
+
+    URLs are stored without their query string — request parameters can
+    carry tokens, and these entries end up in the logs below.
     """
     network_logs = []
 
@@ -661,7 +669,7 @@ async def capture_network_activity(page, duration_ms: int = 5000):
         network_logs.append(
             {
                 "type": "request",
-                "url": request.url,
+                "url": _strip_query_string(request.url),
                 "method": request.method,
                 "timestamp": datetime.now().isoformat(),
             }
@@ -671,7 +679,7 @@ async def capture_network_activity(page, duration_ms: int = 5000):
         network_logs.append(
             {
                 "type": "response",
-                "url": response.url,
+                "url": _strip_query_string(response.url),
                 "status": response.status,
                 "timestamp": datetime.now().isoformat(),
             }

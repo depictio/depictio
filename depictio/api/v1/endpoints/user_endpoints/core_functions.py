@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 import time
 from datetime import datetime, timedelta
 from typing import Any
@@ -102,6 +103,23 @@ async def _create_anonymous_user() -> UserBeanie:
             f"(single_user_mode={settings.auth.is_single_user_mode})"
         )
     return payload["user"] if payload else None  # type: ignore[invalid-return-type]
+
+
+async def _demote_anonymous_user_admin() -> bool:
+    """Strip admin rights from a leftover anonymous user; True when changed.
+
+    Called at startup when the instance no longer needs the anonymous user
+    (multi-user mode). A deployment that once ran in single-user mode keeps
+    its anonymous user with ``is_admin=True`` in the database; after the mode
+    switch that account must not stay admin.
+    """
+    user = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+    if not user or not user.is_admin:
+        return False
+    user.is_admin = False
+    await user.save()
+    logger.info("Demoted the leftover anonymous user to non-admin (multi-user mode).")
+    return True
 
 
 async def _create_temporary_user(
@@ -762,8 +780,14 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
 
 @validate_call(validate_return=True)
 def _verify_password(stored_hash: str, password: str) -> bool:
-    """Verify the password against the stored hash."""
-    return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+    """Verify the password against the stored hash.
+
+    An unusable stored value (not a valid bcrypt hash) verifies nothing.
+    """
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 @validate_call(validate_return=True)
@@ -777,11 +801,20 @@ async def _check_password(email: str, password: str) -> bool:
 
     Returns:
         bool: True if the password matches, False otherwise.
+
+    Security rules:
+        - An empty password never authenticates. Legacy passwordless accounts
+          were created with ``bcrypt("")`` stored, so an empty string would
+          otherwise sign in as any of them.
+        - The anonymous user never authenticates by password: it has no usable
+          password (see ``_create_user_in_db``).
     """
     user = await _async_fetch_user_from_email(email)
-    if user and _verify_password(user.password, password):
-        return True
-    return False
+    if not user:
+        return False
+    if not password or getattr(user, "is_anonymous", False):
+        return False
+    return _verify_password(user.password, password)
 
 
 @validate_call(validate_return=True)
@@ -828,7 +861,14 @@ async def _create_user_in_db(
             "user": existing_user,
         }
 
-    hashed_password = _hash_password(password)
+    if password:
+        hashed_password = _hash_password(password)
+    else:
+        # Passwordless account (anonymous user, pipeline-provisioned user).
+        # Store the hash of a random secret nobody knows rather than
+        # ``bcrypt("")`` — an account with no password must not be one empty
+        # string away from signing in.
+        hashed_password = _hash_password(secrets.token_urlsafe(32))
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     user_beanie = UserBeanie(

@@ -292,15 +292,15 @@ def _import(
             if report.errors:
                 raise ImportFailed("bundle no longer validates: " + "; ".join(report.errors[:5]))
 
-            # Owner: the requester when they have an account here, else the
-            # approving admin until the requester's email signs in.
+            # Owner: always the approving admin. The requester's claimed email
+            # is not proof they control it, so an account existing here under
+            # that address is never handed the project; the address is parked
+            # and ownership moves at a verified sign-in instead
+            # (projects_endpoints/pending_owner.py).
             requester_email = (request_doc.get("requester") or {}).get("email")
-            requester = find_user_by_email(requester_email)
             approver_id = ObjectId(str(_get(approver, "id")))
-            owner_id = requester["_id"] if requester else approver_id
-            pending_owner_email = (
-                None if requester or not requester_email else requester_email.strip().lower()
-            )
+            owner_id = approver_id
+            pending_owner_email = requester_email.strip().lower() if requester_email else None
 
             # Data first, documents last (see module docstring).
             if transfer_mode == "server_side_copy":
@@ -334,11 +334,13 @@ def _import(
                 migration_request_id=str(request_id),
                 via="push",
             )
+            users = list(db.users_collection.find({}, {"_id": 1, "email": 1}))
             prepared = project_bundle.prepare_docs_for_import(
                 opened.data,
                 owner_id=owner_id,
-                owner_email=requester["email"] if requester else _get(approver, "email"),
-                existing_user_ids={str(u["_id"]) for u in db.users_collection.find({}, {"_id": 1})},
+                owner_email=_get(approver, "email"),
+                existing_user_ids={str(u["_id"]) for u in users},
+                user_emails={str(u["_id"]): u.get("email") for u in users},
                 force_remap=True,
                 strip_shares=True,
                 source_bucket=project_bundle._source_bucket(opened.metadata, opened.data),

@@ -6,7 +6,7 @@ Integrated with FastAPI backend for dashboard component generation.
 from typing import Any
 
 from celery import Celery
-from celery.signals import task_failure
+from celery.signals import task_failure, worker_process_init
 
 from depictio.api.v1.configs.config import settings
 
@@ -62,6 +62,15 @@ celery_app.conf.update(
 # interactive worker, which is sized for short dashboard callbacks. The
 # ingestion worker passes them as CLI flags instead, so the two pools stay
 # independently tunable.
+
+
+@worker_process_init.connect
+def _enable_code_mode_memory_cap(**_kwargs: Any) -> None:
+    """A prefork child runs one task at a time: the per-run memory cap of
+    figure code is safe there (it is per process), and only there."""
+    from depictio.api.v1.services.figure.code_executor import enable_memory_cap
+
+    enable_memory_cap()
 
 
 # Health check task for monitoring

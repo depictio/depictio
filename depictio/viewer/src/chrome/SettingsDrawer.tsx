@@ -24,6 +24,7 @@ import {
   useBrandScopeAttributes,
   useIsStaticBundle,
   useResolvedBrandTheme,
+  useSignedDashboardLogoUrl,
   Z_LAYERS,
   type AnalysisState,
   type BrandTheme,
@@ -423,6 +424,8 @@ const LogoBlock: React.FC<{
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const mode: LogoMode = theme.logo_mode ?? (theme.logo_url ? 'custom' : 'inherit');
+  // The preview <img> cannot authenticate: resolve the stored URL's signature.
+  const signedLogoUrl = useSignedDashboardLogoUrl(theme.logo_url);
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
@@ -493,7 +496,7 @@ const LogoBlock: React.FC<{
           )}
           {theme.logo_url && (
             <img
-              src={theme.logo_url}
+              src={signedLogoUrl ?? theme.logo_url}
               alt="Dashboard logo"
               style={{ height: 40, maxWidth: 220, objectFit: 'contain', alignSelf: 'center' }}
             />

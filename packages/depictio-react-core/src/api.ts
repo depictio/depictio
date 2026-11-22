@@ -71,15 +71,22 @@ function redirectToAuth(): void {
   window.location.replace('/auth');
 }
 
-/** Trade a refresh token for a new access token via the public `/auth/refresh`
+/** Trade a refresh token for a new token pair via the public `/auth/refresh`
  *  endpoint (no api-key required — the refresh token is itself the credential).
- *  Mirrors the Dash-side ``refresh_access_token`` helper.
  *
- *  Returns the updated access_token + expire_datetime, or null on failure
- *  (expired / invalidated refresh token, server error, etc.). */
+ *  The server rotates the refresh token on every refresh, so the response
+ *  carries a new refresh_token + refresh_expire_datetime alongside the new
+ *  access_token + expire_datetime. Those two refresh fields are optional
+ *  here so an older or mocked backend that only mints the access token
+ *  keeps working (the stored refresh token is then simply left as is).
+ *
+ *  Returns the updated pair, or null on failure (expired / invalidated /
+ *  reused refresh token, server error, etc.). */
 async function refreshAccessToken(refreshToken: string): Promise<{
   access_token: string;
   expire_datetime: string;
+  refresh_token?: string;
+  refresh_expire_datetime?: string;
 } | null> {
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
@@ -88,7 +95,12 @@ async function refreshAccessToken(refreshToken: string): Promise<{
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { access_token: string; expire_datetime: string };
+    const body = (await res.json()) as {
+      access_token: string;
+      expire_datetime: string;
+      refresh_token?: string;
+      refresh_expire_datetime?: string;
+    };
     return body;
   } catch {
     return null;
@@ -103,21 +115,26 @@ let pendingRefresh: Promise<string | null> | null = null;
 /** Incremented by ``clearSession``. A refresh started before a logout must not
  *  write its result back afterwards.
  *
- *  Logout is client-side only: the refresh token stays valid server-side for 7
- *  days, so a late write does not just restore stale bytes, it restores a
- *  *working* session and the user is silently signed back in. The window is
- *  real because every authenticated request now refreshes through here, and a
+ *  Logout also revokes server-side now (POST /auth/logout), but the revoke is
+ *  best-effort: a late write does not just restore stale bytes, it can restore
+ *  a *working* session and silently sign the user back in. The window is
+ *  real because every authenticated request refreshes through here, and a
  *  page like /profile has several in flight at the moment the button is
  *  clicked. Writers capture the epoch before awaiting and drop their result if
  *  it moved. */
 let sessionEpoch = 0;
 
-/** Persist a refreshed token, unless the session was cleared while we awaited.
- *  Returns false when the write was dropped. */
+/** Persist a refreshed token pair, unless the session was cleared while we
+ *  awaited. Returns false when the write was dropped. */
 function persistRefreshedSession(
   epoch: number,
   base: Record<string, unknown> | null,
-  refreshed: { access_token: string; expire_datetime: string },
+  refreshed: {
+    access_token: string;
+    expire_datetime: string;
+    refresh_token?: string;
+    refresh_expire_datetime?: string;
+  },
 ): boolean {
   if (epoch !== sessionEpoch) return false;
   try {
@@ -2880,6 +2897,64 @@ export async function fetchImagePaths(
   return (await res.json()) as ImageGridResponse;
 }
 
+/** Exchange S3 image paths for short-lived signed serve/image URLs.
+ *
+ *  `<img>` tags cannot send the Authorization header, so serve/image requires
+ *  a signature for anything a public project does not cover; this is where the
+ *  viewer gets one, one request per batch. Paths the caller cannot read are
+ *  absent from the response — callers keep the unsigned URL, which still works
+ *  for public projects and degrades to the broken-image placeholder otherwise.
+ *  Fails soft: any error returns an empty map. */
+export async function signServeImageUrls(
+  s3Paths: string[],
+): Promise<Record<string, string>> {
+  const unique = [...new Set(s3Paths)].filter(Boolean);
+  if (unique.length === 0) return {};
+  try {
+    const res = await authFetch(`${API_BASE}/files/serve/image/sign`, {
+      method: 'POST',
+      body: JSON.stringify({ s3_paths: unique }),
+    });
+    if (!res.ok) return {};
+    const data = (await res.json()) as { urls?: Record<string, string> };
+    return data.urls ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** Exchange dashboard ids for short-lived signed logo URLs.
+ *
+ *  The stored logo URLs are unsigned (they live in the document and must
+ *  survive round-trips); a bare `<img>` cannot authenticate, so brand logo
+ *  slots resolve their dashboard-layer URL through this before rendering.
+ *  Fails soft like `signServeImageUrls`. */
+export async function signDashboardLogoUrls(
+  dashboardIds: string[],
+): Promise<Record<string, string>> {
+  const unique = [...new Set(dashboardIds)].filter(Boolean);
+  if (unique.length === 0) return {};
+  try {
+    const res = await authFetch(`${API_BASE}/dashboards/logo/sign`, {
+      method: 'POST',
+      body: JSON.stringify({ dashboard_ids: unique }),
+    });
+    if (!res.ok) return {};
+    const data = (await res.json()) as { urls?: Record<string, string> };
+    return data.urls ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** The dashboard id a stored dashboard-logo URL points at, or null when the
+ *  URL is not one (instance logos, data URIs, offline blobs). */
+export function dashboardLogoIdFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const match = /\/dashboards\/logo\/([^/?#]+)/.exec(url);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 /** Server-rendered Plotly map (px.scatter_map / density_map / choropleth_map). */
 export async function renderMap(
   dashboardId: string,
@@ -4740,6 +4815,9 @@ export interface AuthStatusResponse {
   is_dev_mode?: boolean;
   /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
   walkthrough_disabled?: boolean;
+  /** Realtime events (DEPICTIO_EVENTS_ENABLED): false means the server has no
+   *  WebSocket route. Older backends omit it — treat absent as "try". */
+  events_enabled?: boolean;
   /** TTL of a temporary public-mode user. */
   temporary_user_expiry_hours?: number;
   /** Sub-hour component of the temporary-user TTL. */
@@ -4963,14 +5041,39 @@ export function persistSession(session: SessionPayload): void {
   announceSessionChange();
 }
 
+/** Revoke the stored session server-side, best-effort. Never awaited and
+ *  never thrown from: sign-out must proceed even when the network (or the
+ *  API) is down. `keepalive` lets the request survive the navigation to
+ *  /auth that typically follows a sign-out. */
+function revokeSessionServerSide(): void {
+  if (typeof window === 'undefined') return;
+  let access: string | null = null;
+  try {
+    const session = readStoredSession();
+    access = typeof session?.access_token === 'string' ? session.access_token : null;
+  } catch {
+    // ignore — unreadable storage: nothing to revoke
+  }
+  if (!access) return;
+  void fetch(`${API_BASE}/auth/logout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${access}` },
+    keepalive: true,
+  }).catch(() => {
+    // best-effort: the client-side copy is cleared regardless
+  });
+}
+
 /** Clear the persisted session — used for logout.
  *
- *  Also invalidates any refresh already in flight. Logout only removes the
- *  client's copy of the credential (there is no server-side revocation), so a
- *  refresh that resolved after this point would write back a *working* session
- *  and sign the user straight back in. */
+ *  Also invalidates any refresh already in flight. Logout revokes the
+ *  session server-side (POST /auth/logout deletes the token document, killing
+ *  the refresh token with it), but that call is best-effort and this side
+ *  clears the client's copy unconditionally. A refresh that resolved after
+ *  this point must still never write back — the epoch check below drops it. */
 export function clearSession(): void {
   sessionEpoch += 1;
+  revokeSessionServerSide();
   try {
     localStorage.removeItem(SESSION_KEY);
   } catch {
@@ -4989,11 +5092,15 @@ function announceSessionChange(): void {
   window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
 }
 
-/** Who is signed in, as an opaque id: the refresh token, which stays the same
- *  while the access token is renewed and changes on a login or a logout.
- *  Null when nobody is. */
+/** Who is signed in, as an opaque id. Null when nobody is.
+ *
+ *  Prefers the user id: the refresh token used to be stable for the life of
+ *  a session, but it now rotates on every refresh, so keying the identity on
+ *  it would report a "new session" roughly hourly. A session record without
+ *  a user_id falls back to the old refresh-token behaviour. */
 export function currentSessionId(): string | null {
   const session = readStoredSession();
+  if (typeof session?.user_id === 'string' && session.user_id) return `user:${session.user_id}`;
   if (typeof session?.refresh_token === 'string') return session.refresh_token;
   return typeof session?.access_token === 'string' ? session.access_token : null;
 }

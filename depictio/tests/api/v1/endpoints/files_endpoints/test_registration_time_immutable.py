@@ -24,10 +24,14 @@ import asyncio
 from typing import Any
 from unittest.mock import patch
 
+import mongomock
+
 from depictio.api.v1.endpoints.files_endpoints import routes
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.files import File
 from depictio.models.models.users import Permission, UserBase
+
+DC = PyObjectId()
 
 
 def _make_file(location: str = "/data/sample.csv") -> File:
@@ -37,7 +41,7 @@ def _make_file(location: str = "/data/sample.csv") -> File:
         filename=location.rsplit("/", 1)[-1],
         creation_time="2026-01-01 00:00:00",
         modification_time="2026-01-01 00:00:00",
-        data_collection_id=PyObjectId(),
+        data_collection_id=DC,
         file_hash="a" * 64,
         filesize=123,
         permissions=Permission(owners=[owner]),
@@ -51,7 +55,11 @@ class _FakeBulkResult:
 
 
 def _capture_operations(update: bool) -> list[Any]:
-    """Run the upsert endpoint and return the pymongo operations it built."""
+    """Run the upsert endpoint and return the pymongo operations it built.
+
+    The project gate is answered by an in-memory projects collection holding a
+    project that contains the DC and has the caller as its owner.
+    """
     captured: list[Any] = []
 
     def fake_bulk_write(operations, ordered=True):  # noqa: ANN001, ARG001
@@ -60,8 +68,19 @@ def _capture_operations(update: bool) -> list[Any]:
 
     payload = routes.UpsertFilesBatchRequest(files=[_make_file()], update=update)
     user = UserBase(id=PyObjectId(), email="caller@example.com")
+    projects = mongomock.MongoClient()["t"]["projects"]
+    projects.insert_one(
+        {
+            "_id": PyObjectId(),
+            "workflows": [{"data_collections": [{"_id": DC}]}],
+            "permissions": {"owners": [{"_id": user.id}], "editors": [], "viewers": []},
+        }
+    )
 
-    with patch.object(routes.files_collection, "bulk_write", side_effect=fake_bulk_write):
+    with (
+        patch("depictio.api.v1.db.projects_collection", projects),
+        patch.object(routes.files_collection, "bulk_write", side_effect=fake_bulk_write),
+    ):
         asyncio.run(routes.create_file(payload, current_user=user))
 
     assert captured, "endpoint built no write operations"

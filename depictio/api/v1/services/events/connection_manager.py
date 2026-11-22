@@ -151,6 +151,7 @@ class ConnectionManager:
         websocket: WebSocket,
         dashboard_id: str | None = None,
         user_id: str | None = None,
+        accepted: bool = False,
     ) -> str:
         """
         Accept and register a new WebSocket connection.
@@ -159,11 +160,15 @@ class ConnectionManager:
             websocket: The WebSocket connection
             dashboard_id: Optional dashboard to subscribe to
             user_id: Optional user ID for the connection
+            accepted: Skip the ASGI accept when the caller already accepted
+                the socket (e.g. to run the first-message auth handshake) —
+                a second accept would break the WS protocol.
 
         Returns:
             client_id: Unique identifier for this connection
         """
-        await websocket.accept()
+        if not accepted:
+            await websocket.accept()
 
         client_id = str(uuid.uuid4())
         self._connections[client_id] = websocket

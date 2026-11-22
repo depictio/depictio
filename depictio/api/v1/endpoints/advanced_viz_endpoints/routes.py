@@ -65,6 +65,23 @@ def _assert_dc_access(data_collection_id: ObjectId, current_user) -> None:
         )
 
 
+def _assert_payload_dc_access(payload: dict, current_user) -> None:
+    """Viewer-level access gate on the caller-supplied ``payload["dc_id"]``.
+
+    Same contract as ``POST /advanced_viz/data``: the dc id is untrusted, so
+    every ``compute_*`` dispatcher checks it before any cache read or task
+    dispatch. Raises the same 400 as the dispatchers for missing ids, so it
+    can run first without changing error precedence for legitimate callers.
+    """
+    if not payload.get("wf_id") or not payload.get("dc_id"):
+        raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
+    try:
+        dc_oid = ObjectId(str(payload["dc_id"]))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}")
+    _assert_dc_access(dc_oid, current_user)
+
+
 def _resolve_link_filters_for_dc(
     filters: list[dict],
     wf_id: str,
@@ -1198,6 +1215,8 @@ def dispatch_compute_embedding(
     return its result immediately. Otherwise enqueue the task and return a
     ``job_id`` the frontend can poll via ``GET /compute_embedding/{job_id}``.
     """
+    _assert_payload_dc_access(payload, current_user)
+
     import time
     from datetime import datetime, timezone
 
@@ -1356,6 +1375,8 @@ def dispatch_compute_complex_heatmap(
     """Dispatch a ComplexHeatmap Celery task. Same dispatch + poll +
     cache contract as ``compute_embedding`` — different task name and
     namespace under the same ``compute_results`` collection."""
+    _assert_payload_dc_access(payload, current_user)
+
     import time
     from datetime import datetime, timezone
 
@@ -1498,6 +1519,8 @@ def dispatch_compute_upset(
 ) -> dict[str, Any]:
     """Dispatch an UpSet-plot Celery task. Same dispatch + poll + cache
     contract as ``compute_complex_heatmap`` (cache namespace = upset_plot)."""
+    _assert_payload_dc_access(payload, current_user)
+
     import time
     from datetime import datetime, timezone
 
@@ -1756,6 +1779,8 @@ def dispatch_compute_coverage_track(
     access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Dispatch a coverage-track aggregation Celery task."""
+    _assert_payload_dc_access(payload, current_user)
+
     from depictio.api.v1.celery_tasks import compute_coverage_track as compute_task
 
     _apply_link_filters_to_payload(payload, access_token, "coverage_track")
@@ -1785,6 +1810,8 @@ def dispatch_compute_contact_map(
     whose bins-per-pixel is closest to the target for the span the client says
     it is showing.
     """
+    _assert_payload_dc_access(payload, current_user)
+
     from depictio.api.v1.celery_tasks import compute_contact_map as compute_task
 
     _apply_link_filters_to_payload(payload, access_token, "contact_map")
@@ -1807,6 +1834,8 @@ def dispatch_compute_sankey(
     access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Dispatch a Sankey / categorical-flow Celery task."""
+    _assert_payload_dc_access(payload, current_user)
+
     from depictio.api.v1.celery_tasks import compute_sankey as compute_task
 
     _apply_link_filters_to_payload(payload, access_token, "sankey")
@@ -1859,6 +1888,8 @@ def dispatch_compute_group_compare(
     tunable pick their own cache entry, and re-running the identical
     comparison is free.
     """
+    _assert_payload_dc_access(payload, current_user)
+
     from depictio.api.v1.celery_tasks import compute_group_compare as compute_task
 
     payload["group_a"] = _group_selector(payload.get("group_a"), "a")

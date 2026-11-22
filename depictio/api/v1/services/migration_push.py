@@ -89,18 +89,20 @@ def build_project_bundle_file(
     transfer_mode: TransferMode = "inline",
     dry_run: bool = False,
     target_s3_config: dict | None = None,
+    keep_emails_for: set[str] | None = None,
 ) -> BuiltBundle:
     """Write the project's bundle ZIP to a temp file and describe it.
 
     ``inline`` carries the objects in ``s3_data/``. ``server_side_copy`` carries
     only a manifest (key, size, etag): the target copies from the shared S3.
     ``target_s3_config`` is the CLI's direct S3-to-S3 copy (``export_project``
-    only). Raises ``project_bundle.BundleTooLarge`` and ``BundleListingError``;
-    the caller owns the returned file and must delete it.
+    only). ``keep_emails_for`` restricts which users' emails travel (a
+    non-admin export). Raises ``project_bundle.BundleTooLarge`` and
+    ``BundleListingError``; the caller owns the returned file and must delete it.
     """
     routes = _routes()
     scope = project_bundle.resolve_project_scope(project)
-    data = project_bundle.collect_bundle_docs(project, scope, mode)  # type: ignore[arg-type]
+    data = project_bundle.collect_bundle_docs(project, scope, mode, keep_emails_for=keep_emails_for)  # type: ignore[arg-type]
     logger.info(
         "migrate export: project=%s workflow_ids=%d dc_ids=%d",
         str(scope.project_id),

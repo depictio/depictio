@@ -69,7 +69,7 @@ def world():
         patch.object(fig_routes, "offload_or_run", _stub_build),
         patch.object(settings.auth, "single_user_mode", False),
     ):
-        owner, viewer, outsider = _user(), _user(), _user()
+        owner, viewer, outsider, editor = _user(), _user(), _user(), _user()
         private_id, public_id = ObjectId(), ObjectId()
         database["projects"].insert_many(
             [
@@ -79,7 +79,7 @@ def world():
                     "workflows": [{"_id": WF, "data_collections": [{"_id": DC}]}],
                     "permissions": {
                         "owners": [{"_id": owner.id}],
-                        "editors": [],
+                        "editors": [{"_id": editor.id}],
                         "viewers": [{"_id": viewer.id}],
                     },
                 },
@@ -91,6 +91,7 @@ def world():
             public_id=public_id,
             owner=owner,
             viewer=viewer,
+            editor=editor,
             outsider=outsider,
             anonymous=_user(anonymous=True),
         )
@@ -212,3 +213,115 @@ def test_dashboard_id_requires_read_permission(world):
         # The viewer can read the DC's own project, but not the unrelated
         # dashboard whose brand it asked to apply.
         assert _status(world.viewer, dashboard_id=str(dash_id)) == 403
+
+
+# --- code mode: code in the request body is editor-only ---------------------
+#
+# The preview body carries no component id, so its `code_content` cannot be
+# matched against stored code: it is arbitrary code and runs for editors
+# only. Viewers and anonymous visitors render stored code through
+# `/dashboards/render_figure/{id}/{cid}`, which ignores request-supplied code.
+
+
+def _code_metadata(wf_id=WF, dc_id=DC, code="fig = px.scatter(df.to_pandas(), x='x', y='y')"):
+    return _metadata(wf_id=wf_id, dc_id=dc_id, mode="code", code_content=code)
+
+
+def test_viewer_cannot_run_code_in_a_preview(world):
+    assert _status(world.viewer, metadata=_code_metadata()) == 403
+
+
+def test_anonymous_cannot_run_code_on_a_public_project(world):
+    pub_wf, pub_dc = ObjectId(), ObjectId()
+    world.db["projects"].insert_one(
+        {
+            "_id": world.public_id,
+            "is_public": True,
+            "workflows": [{"_id": pub_wf, "data_collections": [{"_id": pub_dc}]}],
+            "permissions": {"owners": [], "editors": [], "viewers": []},
+        }
+    )
+    # Read access alone (public project) is not enough to run code.
+    assert _status(world.anonymous, metadata=_code_metadata(pub_wf, pub_dc)) == 403
+
+
+def test_editor_can_run_code_in_a_preview(world):
+    result = _preview(world.editor, metadata=_code_metadata())
+    assert "figure" in result
+
+
+def test_admin_can_run_code_in_a_preview(world):
+    result = _preview(_user(admin=True), metadata=_code_metadata())
+    assert "figure" in result
+
+
+def test_blank_code_is_not_arbitrary_code(world):
+    """mode=code with no code passes the gate; there is nothing to run."""
+    result = _preview(world.viewer, metadata=_code_metadata(code="   "))
+    assert "figure" in result
+
+
+def test_editor_preview_carries_code_error_detail(world):
+    captured = {}
+
+    async def _capture(task, args, *, offload, label):
+        captured["payload"] = args[0]
+        return {"figure": {"data": [], "layout": {}}, "metadata": {}}
+
+    with patch.object(fig_routes, "offload_or_run", _capture):
+        _preview(world.editor, metadata=_code_metadata())
+    assert captured["payload"]["code_error_detail"] is True
+
+
+def test_viewer_preview_carries_no_code_error_detail(world):
+    captured = {}
+
+    async def _capture(task, args, *, offload, label):
+        captured["payload"] = args[0]
+        return {"figure": {"data": [], "layout": {}}, "metadata": {}}
+
+    with patch.object(fig_routes, "offload_or_run", _capture):
+        _preview(world.viewer)  # UI mode
+    assert captured["payload"]["code_error_detail"] is False
+
+
+# --- /figure/analyze_code: signed-in only, size-capped ----------------------
+
+
+def _analyze(user, code="fig = px.bar(df, x='a', y='b')"):
+    return asyncio.run(
+        fig_routes.analyze_code(response=Response(), request={"code": code}, current_user=user)
+    )
+
+
+def test_anonymous_cannot_analyze_code(world):
+    with pytest.raises(HTTPException) as exc:
+        _analyze(world.anonymous)
+    assert exc.value.status_code == 401
+
+
+def test_anonymous_admin_still_analyzes_code(world):
+    """Single-user mode keeps working: there the anonymous user is admin."""
+
+    async def _stub(task, args, *, offload, label):
+        assert args[0]  # the code reached the task
+        return {"is_valid": True}
+
+    with patch.object(fig_routes, "offload_or_run", _stub):
+        assert _analyze(_user(admin=True, anonymous=True))["is_valid"] is True
+
+
+def test_signed_in_user_can_analyze_code(world):
+    async def _stub(task, args, *, offload, label):
+        assert args[0] == "fig = px.bar(df, x='a', y='b')"
+        return {"is_valid": True}
+
+    with patch.object(fig_routes, "offload_or_run", _stub):
+        assert _analyze(world.viewer)["is_valid"] is True
+
+
+def test_oversized_code_is_refused(world):
+    # "x = 1\n" * 40_000 is 240 kB, over the 100 kB cap.
+    with pytest.raises(HTTPException) as exc:
+        _analyze(world.viewer, code="x = 1\n" * 40_000)
+    assert exc.value.status_code == 413

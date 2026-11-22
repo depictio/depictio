@@ -257,6 +257,8 @@ EXEMPT: dict[tuple[str, str], str] = {
     (_DASH, "bulk_get_component_data_endpoint"): _READ,
     (_DASH, "bulk_compute_cards"): _READ,
     (_DASH, "render_figure_endpoint"): _READ,
+    (_DASH, "sign_dashboard_logos"): _READ,
+    ("files_endpoints.routes", "sign_serve_images"): _READ,
     (_DASH, "render_table_endpoint"): _READ,
     (_DASH, "render_image_paths_endpoint"): _READ,
     (_DASH, "render_map_endpoint"): _READ,

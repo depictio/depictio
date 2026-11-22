@@ -247,7 +247,10 @@ class TestReaderOptions:
         template = build_template(
             project(self._table(comment_prefix="#", null_values=["NA"], decimal_comma=True))
         )
-        frame = _lazy_scan_path(str(path), "csv", _properties(template)["polars_kwargs"]).collect()
+        # A test file in the temp dir, read as the CLI would (unconfined).
+        frame = _lazy_scan_path(
+            str(path), "csv", _properties(template)["polars_kwargs"], confine=False
+        ).collect()
         assert frame.columns == ["sample", "value"]
         assert frame["value"].to_list() == [1.5, None]
         assert frame["value"].dtype == pl.Float64

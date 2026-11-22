@@ -36,19 +36,23 @@ def _staged(world):
     ]
 
 
-def test_approve_with_an_existing_owner_by_email_case_insensitive(world):
+def test_an_account_under_the_requesters_email_is_not_made_owner_automatically(world):
+    """The claimed email is not proof of control: the approver owns the project
+    and the address is parked until that person signs in (pending_owner.py)."""
     owner = ObjectId()
     world.db.users_collection.insert_one({"_id": owner, "email": "Author@Source.org"})
     out = push(world.payload, world.source, email="AUTHOR@source.ORG")
-    result = approve(out["request_id"], admin())
+    boss = admin()
+    result = approve(out["request_id"], boss)
     assert result["status"] == "importing"
 
     doc = _request(world, out["request_id"])
     assert doc["status"] == "imported", doc.get("result")
     project = _project(world)
-    assert [o["_id"] for o in project["permissions"]["owners"]] == [owner]
-    assert "pending_owner_email" not in project
-    assert doc["result"]["owner_id"] == str(owner) and doc["result"]["pending_owner_email"] is None
+    assert [o["_id"] for o in project["permissions"]["owners"]] == [boss.id]
+    assert project["pending_owner_email"] == "author@source.org"
+    assert doc["result"]["owner_id"] == str(boss.id)
+    assert doc["result"]["pending_owner_email"] == "author@source.org"
     # Data landed under the target bucket; the staged bundle is gone.
     assert world.s3.buckets["tgt-bucket"][f"{world.ids['table_dc']}/part-0.parquet"] == b"rows"
     assert _staged(world) == []

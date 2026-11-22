@@ -120,6 +120,8 @@ def build_figure_preview(payload: dict) -> dict:
             "hide_legend": bool,
           },
           "category_colors": {column: {value: colour}},  # optional
+          "code_error_detail": bool,   # optional; editor may see the failure
+                                        # detail, viewer gets the generic message
           "delta_version": <int|None>   # optional; pin the read to a past
                                         # Delta commit (data time travel)
         }
@@ -157,6 +159,10 @@ def build_figure_preview(payload: dict) -> dict:
     dict_kwargs = metadata.get("dict_kwargs") or {}
     mode = metadata.get("mode", "ui")
     code_content = metadata.get("code_content", "")
+    # Whether the caller may see a code failure's detail (executor message,
+    # traceback tail). Set by the endpoints from the caller's project role;
+    # defaults to True so legacy/internal payload builders keep their behaviour.
+    code_error_detail = bool(payload.get("code_error_detail", True))
     selection_enabled = bool(metadata.get("selection_enabled", False))
     selection_column = metadata.get("selection_column")
 
@@ -540,6 +546,9 @@ def build_figure_preview(payload: dict) -> dict:
             extra_globals=code_group_globals(
                 code_group_kwargs, code_group_by, payload.get("category_colors")
             ),
+            # Editors keep the executor message; viewers/anonymous get the
+            # generic figure, with no traceback lines or paths.
+            error_detail=code_error_detail,
         )
         if not ok:
             # `process_code_mode_figure` returns `(False, error_fig, None)` when
@@ -550,20 +559,29 @@ def build_figure_preview(payload: dict) -> dict:
             # normal figure, so the user sees what went wrong.
             if fig is None:
                 raise RuntimeError("Code-mode figure failed: no code provided.")
-            # Pull the human-readable error out of the annotation the helper
-            # embedded so the React Code-mode Status alert can flip to red
-            # with the actual message instead of falsely claiming success.
-            try:
-                annotations = fig.layout.annotations or ()
-                for ann in annotations:
-                    text = getattr(ann, "text", "") or ""
-                    if "Code execution error" in text:
-                        code_error = text.split("Code execution error:", 1)[-1].strip()
-                        break
-                if not code_error and annotations:
-                    code_error = str(annotations[0].text)
-            except Exception:
-                code_error = "Code execution failed."
+            if not code_error_detail:
+                # No detail for this caller: the figure annotation already
+                # carries the generic message; the alert must not differ.
+                from depictio.api.v1.services.figure.figure_builder import (
+                    CODE_ERROR_GENERIC_MESSAGE,
+                )
+
+                code_error = CODE_ERROR_GENERIC_MESSAGE
+            else:
+                # Pull the human-readable error out of the annotation the helper
+                # embedded so the React Code-mode Status alert can flip to red
+                # with the actual message instead of falsely claiming success.
+                try:
+                    annotations = fig.layout.annotations or ()
+                    for ann in annotations:
+                        text = getattr(ann, "text", "") or ""
+                        if "Code execution error" in text:
+                            code_error = text.split("Code execution error:", 1)[-1].strip()
+                            break
+                    if not code_error and annotations:
+                        code_error = str(annotations[0].text)
+                except Exception:
+                    code_error = "Code execution failed."
             logger.info(
                 f"celery_tasks.build_figure_preview: code-mode execution failed: {code_error}"
             )

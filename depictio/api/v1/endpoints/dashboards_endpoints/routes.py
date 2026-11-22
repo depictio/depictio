@@ -14,7 +14,7 @@ from uuid import UUID
 
 import yaml
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
@@ -48,6 +48,7 @@ from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_cascade import (
     delete_filter_states_for_dashboards,
 )
+from depictio.api.v1.endpoints.files_endpoints.routes import optional_media_viewer
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
     assert_dashboard_creation_allowed,
     assert_dashboard_unlocked,
@@ -64,10 +65,12 @@ from depictio.api.v1.permissions import (
     has_permission,
     resolve_effective_role,
 )
+from depictio.api.v1.services import signed_media
 from depictio.api.v1.services.branding import (
     LOGO_CACHE_CONTROL,
     dashboard_logo_key,
     delete_logo_asset,
+    logo_asset_url,
     read_logo_asset,
     store_logo_asset,
     validate_logo_upload,
@@ -94,6 +97,7 @@ from depictio.api.v1.services.figure.figure_builder import (
 )
 from depictio.api.v1.services.figure.style_presets import figure_style_payload
 from depictio.api.v1.services.multiqc.dc_lookup import report_set_digest
+from depictio.api.v1.services.signed_media import SCOPE_DASHBOARD_LOGO
 from depictio.models.components.category_palette import assign_category_colors
 from depictio.models.components.constants import FLOATING_ADVANCED_VIZ_KINDS
 from depictio.models.components.lite import (
@@ -1205,6 +1209,10 @@ async def save_dashboard(
     # `template_origin` is provenance the template import writes; a client that
     # never loaded it would blank it, and one that did could forge it.
     save_payload.pop("template_origin", None)
+    # Logo URLs round-trip signed (GET answers carry exp/sig for the <img>
+    # tags); stored, the signature would expire. Keep the stable unsigned URL.
+    if save_payload.get("brand_theme"):
+        _strip_logo_signatures(save_payload["brand_theme"])
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -1423,6 +1431,24 @@ def _require_dashboard_content_editor(dashboard_id: PyObjectId, current_user: Us
     return dashboard
 
 
+def _strip_logo_signatures(brand_theme: dict | None) -> dict | None:
+    """Drop the short-lived ``exp``/``sig`` params from a brand theme's logo URLs.
+
+    GET answers carry a signed logo URL (an ``<img>`` tag cannot authenticate),
+    and the editor round-trips what it loaded back through ``/save`` and
+    ``/appearance``: storing it would freeze an expired signature into the
+    document. The stored URL stays unsigned; every render mints a fresh
+    signature client-side.
+    """
+    if not brand_theme:
+        return brand_theme
+    for field in ("logo_url", "logo_url_dark"):
+        url = brand_theme.get(field)
+        if url:
+            brand_theme[field] = signed_media.strip_signature(url)
+    return brand_theme
+
+
 @dashboards_endpoint_router.patch("/appearance/{dashboard_id}")
 async def update_dashboard_appearance(
     dashboard_id: PyObjectId,
@@ -1440,6 +1466,7 @@ async def update_dashboard_appearance(
     _require_dashboard_content_editor(dashboard_id, current_user)
 
     payload = brand_theme.model_dump(exclude_none=True)
+    _strip_logo_signatures(payload)
     update = {"$set": {"brand_theme": payload}} if payload else {"$unset": {"brand_theme": ""}}
     # Before the write, as for every route that bypasses `/save`: on a family
     # with no history, the look being replaced would otherwise be the one state
@@ -1493,17 +1520,41 @@ async def upload_dashboard_logo(
     logger.info(f"Dashboard {dashboard_id} logo updated ({len(content)} bytes)")
     # No version capture: the bytes live in `branding_assets`, which no snapshot
     # holds, and the next capture of the family absorbs the URL change.
-    return {"logo_url": logo_url}
+    # Signed for the <img> preview: the caller's session rides the fetch, not
+    # the image tag. The document keeps the unsigned URL.
+    return {
+        "logo_url": signed_media.append_signature(logo_url, SCOPE_DASHBOARD_LOGO, str(dashboard_id))
+    }
 
 
 @dashboards_endpoint_router.get("/logo/{dashboard_id}")
-async def get_dashboard_logo(dashboard_id: PyObjectId):
+async def get_dashboard_logo(
+    dashboard_id: PyObjectId,
+    exp: str | None = Query(None, description="Expiry of the URL signature (unix seconds)"),
+    sig: str | None = Query(None, description="HMAC over the dashboard id and expiry"),
+    current_user: User | None = Depends(optional_media_viewer),
+):
     """Serve a dashboard's stored logo.
 
-    Unauthenticated, matching what `/static/dashboard_logos` served before the
-    bytes moved into MongoDB: the image is one an editor deliberately put on a
-    dashboard, and gating it would break the public/demo viewer.
+    Previously unauthenticated (matching `/static/dashboard_logos`): the image
+    is one an editor deliberately put on a dashboard, so anyone could read it
+    for any dashboard, private ones included. Now a caller needs viewer access
+    to the dashboard's project, or a valid short-lived signature (minted by
+    ``POST /dashboards/logo/sign``, since ``<img>`` tags cannot send an
+    Authorization header). Anonymous callers are served only when the project
+    is public, which keeps the public/demo viewer working.
     """
+    if not signed_media.verify(SCOPE_DASHBOARD_LOGO, str(dashboard_id), exp, sig):
+        if current_user is None:
+            raise HTTPException(status_code=401, detail="Authentication required.")
+        dashboard = dashboards_collection.find_one(
+            {"dashboard_id": dashboard_id}, {"project_id": 1}
+        )
+        if not dashboard or not dashboard.get("project_id"):
+            raise HTTPException(status_code=404, detail="No logo stored for this dashboard.")
+        if not check_project_permission(dashboard["project_id"], current_user, "viewer"):
+            raise HTTPException(status_code=403, detail="No access to this dashboard logo.")
+
     asset = read_logo_asset(dashboard_logo_key(dashboard_id))
     if asset is None:
         raise HTTPException(status_code=404, detail="No logo stored for this dashboard.")
@@ -1513,6 +1564,41 @@ async def get_dashboard_logo(dashboard_id: PyObjectId):
         media_type=content_type,
         headers={"Cache-Control": LOGO_CACHE_CONTROL},
     )
+
+
+@dashboards_endpoint_router.post("/logo/sign")
+async def sign_dashboard_logos(
+    payload: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Signed logo URLs for a batch of dashboards.
+
+    ``<img>`` tags cannot carry the caller's Authorization header, so the
+    viewer swaps the stored logo URLs for signed ones here. Each dashboard is
+    authorized like reading it (viewer on its project); denied ids are omitted.
+    """
+    dashboard_ids = (payload or {}).get("dashboard_ids")
+    if not isinstance(dashboard_ids, list) or len(dashboard_ids) > 100:
+        raise HTTPException(status_code=400, detail="dashboard_ids list required (max 100).")
+    urls: dict[str, str] = {}
+    for raw in dict.fromkeys(str(d) for d in dashboard_ids if d):
+        try:
+            dashboard_oid = PyObjectId(raw)
+        except Exception:
+            continue
+        dashboard = dashboards_collection.find_one(
+            {"dashboard_id": dashboard_oid}, {"project_id": 1}
+        )
+        if not dashboard or not dashboard.get("project_id"):
+            continue
+        if not check_project_permission(dashboard["project_id"], current_user, "viewer"):
+            continue
+        key = dashboard_logo_key(dashboard_oid)
+        query = signed_media.signed_query(SCOPE_DASHBOARD_LOGO, str(dashboard_oid))
+        # Same version-aware prefix `logo_asset_url` builds the stored URLs with.
+        base_url = logo_asset_url(key).split("?")[0]
+        urls[raw] = f"{base_url}?{query}"
+    return {"urls": urls, "expires_in": signed_media.MEDIA_URL_TTL_SECONDS}
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
@@ -4168,6 +4254,10 @@ async def render_figure_endpoint(
         "theme": theme,
         "delta_version": pins.for_dc(str(dc_id)),
         "full_load": full_load,
+        # Whether the caller may see a code failure's detail: editors keep the
+        # executor message; a viewer or anonymous visitor gets the generic
+        # message, with no traceback lines or paths.
+        "code_error_detail": check_project_permission(project_id, current_user, "editor"),
         # The figure's own style, else its section's; a highlight drawing this
         # figure on another tab asks for its own through `style`.
         "style": figure_style_payload(component, dashboard_data, request.get("style")),

@@ -8,6 +8,7 @@ import {
   fetchDataCollectionConfig,
   fetchPolarsSchema,
   InteractiveFilter,
+  signServeImageUrls,
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
@@ -57,6 +58,7 @@ import {
   groupRowsBySample,
   heightForFrames,
   imageFrame,
+  imageS3Path,
   imageServeUrl,
   padFrame,
   pickMarker,
@@ -137,6 +139,9 @@ interface Underlay {
   source: string;
   width: number;
   height: number;
+  /** The row's full S3 path, when the source is a serve/image URL: the key
+   *  the signed-URL exchange maps back to. */
+  fullS3Path?: string;
 }
 
 // `KIND_SAMPLING_POLICY` carries `spatial_cells: "hash"`: a uniform subset of a
@@ -375,13 +380,32 @@ const SpatialCellsRenderer: React.FC<Props> = ({
         const width = toNumber(res.rows[widthKey]?.[i]);
         const height = toNumber(res.rows[heightKey]?.[i]);
         if (typeof path !== 'string' || !width || !height) continue;
+        const full = imageS3Path(base, path);
         out.set(String(res.rows[sampleKey]?.[i] ?? ''), {
           source: imageServeUrl(base, path),
           width,
           height,
+          fullS3Path: full ?? undefined,
         });
       }
-      if (!cancelled) setUnderlays(out);
+      if (cancelled) return;
+      setUnderlays(out);
+      // serve/image no longer serves private projects to bare `<img>`/Plotly
+      // image elements, which cannot authenticate: swap the joined paths for
+      // signed URLs. A failed exchange is silent — the plain URLs still cover
+      // public projects.
+      const joined = [...new Set(
+        [...out.values()].map((u) => u.fullS3Path).filter((p): p is string => !!p),
+      )];
+      signServeImageUrls(joined).then((urls) => {
+        if (cancelled || Object.keys(urls).length === 0) return;
+        const signed = new Map<string, Underlay>();
+        for (const [sample, u] of out) {
+          const replacement = u.fullS3Path ? urls[u.fullS3Path] : undefined;
+          signed.set(sample, replacement ? { ...u, source: replacement } : u);
+        }
+        setUnderlays(signed);
+      });
     })().catch((err: unknown) => {
       // No underlay is a smaller picture, not a broken tile.
       console.warn('spatial_cells: image underlay unavailable', err);

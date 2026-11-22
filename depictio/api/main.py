@@ -249,6 +249,30 @@ class EmbedPreflightMiddleware(BaseHTTPMiddleware):
 app.add_middleware(cast(Any, EmbedPreflightMiddleware))
 
 
+# Single-user mode signs everyone in as the admin: say so in the log as soon
+# as a request arrives for an address other than this machine.
+if settings.auth.is_single_user_mode:
+    from depictio.api.v1.single_user_exposure import SingleUserExposureWarning
+
+    app.add_middleware(cast(Any, SingleUserExposureWarning))
+
+
+# The failure limit still lets through thousands of guesses a day, so a short
+# public access code can be found by trying. Say so (never the code itself).
+# Logged as an error: the default log level (ERROR) would hide a warning.
+from depictio.api.v1.configs.logging_init import logger as _depictio_logger  # noqa: E402
+
+_PUBLIC_ACCESS_CODE_MIN_LENGTH = 12
+if settings.auth.is_public_access_code_required:
+    _code = settings.auth.public_access_code
+    if _code is not None and len(_code.get_secret_value()) < _PUBLIC_ACCESS_CODE_MIN_LENGTH:
+        _depictio_logger.error(
+            f"Security: DEPICTIO_AUTH_PUBLIC_ACCESS_CODE is shorter than "
+            f"{_PUBLIC_ACCESS_CODE_MIN_LENGTH} characters, which makes it guessable. "
+            "Use a longer one, e.g. `openssl rand -base64 12`."
+        )
+
+
 # Local folders are a single-user feature: on a shared server, reading the
 # server's own disk for whoever asks is never right, so the roots are ignored.
 if settings.local_data.root_list and not settings.auth.is_single_user_mode:

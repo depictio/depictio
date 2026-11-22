@@ -155,6 +155,11 @@ async def delete_datacollection(
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
+    # Deletion cannot be undone, so require owner level (direct or via a
+    # group), like utils._delete_data_collection_by_id. build_access_query
+    # returns {} for admins — an empty filter, not "no filter supplied".
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)  # type: ignore[union-attr]
+    permissions = build_access_query(current_user, "owner", group_ids)
     (
         workflow_oid,
         data_collection_oid,
@@ -166,6 +171,7 @@ async def delete_datacollection(
         current_user.id,  # type: ignore[possibly-unbound-attribute]
         workflow_id,
         data_collection_id,
+        permissions=permissions,
     )
     assert_dc_project_unlocked(data_collection_id)
     assert_workflow_project_unlocked(workflow_id)

@@ -503,3 +503,171 @@ def test_flag_is_cleared_after_failure():
     )
     assert not ok
     assert ce._IN_CODE_FIGURE.get() is False
+
+
+# --- shared module state: mutator calls are refused --------------------------
+#
+# The palette lists under `px.colors` and the `pl.Config` class are shared by
+# every render in the process. A figure that appended to a palette or called
+# `pl.Config.set_tbl_rows(...)` patched them for every later figure on the
+# same worker. Reads and private copies keep working.
+
+
+def test_palette_append_is_denied_and_the_palette_untouched():
+    import plotly.express as px
+
+    before = len(px.colors.qualitative.Plotly)
+    code = "px.colors.qualitative.Plotly.append('hotpink')\n" + FIG
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert not ok
+    assert "append" in message
+    assert len(px.colors.qualitative.Plotly) == before
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "px.colors.qualitative.Plotly.extend(['hotpink'])",
+        "px.colors.qualitative.Plotly.insert(0, 'hotpink')",
+        "px.colors.qualitative.Plotly.pop()",
+        "px.colors.qualitative.Plotly.clear()",
+        "px.colors.qualitative.Plotly.update(['hotpink'])",
+        "px.colors.qualitative.Plotly.remove('#636EFA')",
+    ],
+)
+def test_palette_mutator_family_is_denied(call):
+    ok, _, message = SimpleCodeExecutor().execute_code(f"{call}\n{FIG}", _frame())
+    assert not ok
+    assert "shared module object" in message
+
+
+def test_pl_config_setters_are_denied():
+    code = "pl.Config.set_tbl_rows(99)\n" + FIG
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert not ok
+    assert "set_tbl_rows" in message
+    assert "shared module object" in message
+
+
+def test_a_copied_palette_stays_writable():
+    """`list(...)` makes a private palette: mutating it is the figure's business."""
+    code = (
+        "pal = list(px.colors.qualitative.Plotly)\n"
+        "pal.append('hotpink')\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y', color_discrete_sequence=pal)"
+    )
+    ok, fig, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
+    assert fig is not None
+
+
+def test_a_rebound_palette_stays_writable():
+    """`scale = palette + [...]` rebinding (the += path) keeps its copy private."""
+    code = (
+        "scale = px.colors.qualitative.Plotly\n"
+        "scale = scale + ['hotpink']\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y', color_discrete_sequence=scale)"
+    )
+    ok, fig, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
+    assert fig is not None
+
+
+# --- memory cap --------------------------------------------------------------
+#
+# User code runs with RLIMIT_AS lowered to current usage + the configured
+# budget (default 1 GiB, env DEPICTIO_CODE_MODE_MAX_MEMORY_MB), restored after.
+# Only in a Celery prefork child (enable_memory_cap); the tests act as one.
+
+
+@pytest.fixture
+def prefork_child(monkeypatch):
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    monkeypatch.setattr(ce, "_memory_cap_enabled", True)
+
+
+def test_no_cap_outside_a_prefork_child(monkeypatch):
+    """The API process and a threads pool run several figures at once: no cap."""
+    import resource
+
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    monkeypatch.setattr(ce, "_memory_cap_enabled", False)
+    before = resource.getrlimit(resource.RLIMIT_AS)
+    with ce._MemoryCap():
+        assert resource.getrlimit(resource.RLIMIT_AS) == before
+
+
+def test_no_resource_module_runs_code_uncapped(monkeypatch):
+    """Pyodide and Windows have no ``resource`` module: figures still run."""
+    import sys
+
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    monkeypatch.setattr(ce, "_memory_cap_enabled", True)
+    monkeypatch.setitem(sys.modules, "resource", None)
+    with ce._MemoryCap() as cap:
+        assert cap._capped is False
+
+
+def test_no_cap_outside_a_prefork_child_needs_no_resource_module(monkeypatch):
+    """Outside a prefork child the ``resource`` module is never imported."""
+    import sys
+
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    monkeypatch.setattr(ce, "_memory_cap_enabled", False)
+    monkeypatch.setitem(sys.modules, "resource", None)
+    with ce._MemoryCap() as cap:
+        assert cap._capped is False
+
+
+def test_linux_address_space_is_read_in_bytes(monkeypatch):
+    """/proc/self/stat's vsize is already in bytes (no kB conversion)."""
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    stat = b"1 (python) S " + b" ".join(b"0" for _ in range(19)) + b" 123456789 0 0"
+    monkeypatch.setattr("builtins.open", lambda *a, **k: __import__("io").BytesIO(stat))
+    assert ce._current_address_space_bytes() == 123456789
+
+
+@pytest.mark.usefixtures("prefork_child")
+def test_runaway_allocation_is_stopped():
+    """A multi-GB list blows the budget and fails the figure, not the process."""
+    code = "big = [0.0] * 400_000_000\n" + FIG
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert not ok
+    assert "MemoryError" in message
+
+
+def test_rlimit_is_restored_after_a_run():
+    import resource
+
+    before = resource.getrlimit(resource.RLIMIT_AS)
+    ok, _, _ = SimpleCodeExecutor().execute_code(FIG, _frame())
+    assert ok
+    assert resource.getrlimit(resource.RLIMIT_AS) == before
+
+
+@pytest.mark.usefixtures("prefork_child")
+def test_rlimit_is_restored_after_a_failure():
+    import resource
+
+    before = resource.getrlimit(resource.RLIMIT_AS)
+    ok, _, _ = SimpleCodeExecutor().execute_code("big = [0.0] * 400_000_000\n" + FIG, _frame())
+    assert not ok
+    assert resource.getrlimit(resource.RLIMIT_AS) == before
+
+
+def test_invalid_cap_setting_falls_back_to_the_default(monkeypatch):
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    monkeypatch.setenv("DEPICTIO_CODE_MODE_MAX_MEMORY_MB", "not-a-number")
+    assert ce._code_mode_max_memory_mb() == 1024
+    monkeypatch.setenv("DEPICTIO_CODE_MODE_MAX_MEMORY_MB", "0")
+    assert ce._code_mode_max_memory_mb() == 1024
+    monkeypatch.delenv("DEPICTIO_CODE_MODE_MAX_MEMORY_MB")
+    assert ce._code_mode_max_memory_mb() == 1024
+    monkeypatch.setenv("DEPICTIO_CODE_MODE_MAX_MEMORY_MB", "2048")
+    assert ce._code_mode_max_memory_mb() == 2048
