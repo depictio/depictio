@@ -25,7 +25,28 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-import { ensureFreshAccessToken } from './api';
+import { ensureFreshAccessToken, fetchAuthStatus } from './api';
+
+let realtimeAvailablePromise: Promise<boolean> | null = null;
+
+/** Whether this server has the realtime WebSocket (DEPICTIO_EVENTS_ENABLED).
+ *  Asked once per page: with events off the route does not exist and every
+ *  handshake is refused, so the hooks below would retry it every 30 s for as
+ *  long as the page stays open. An older backend that does not say, or a
+ *  failed probe, reads as "available" — the previous behaviour. */
+export function realtimeAvailable(): Promise<boolean> {
+  if (!realtimeAvailablePromise) {
+    realtimeAvailablePromise = fetchAuthStatus()
+      .then((status) => status.events_enabled !== false)
+      .catch(() => true);
+  }
+  return realtimeAvailablePromise;
+}
+
+/** Test hook: forget the cached answer. */
+export function resetRealtimeAvailableForTests(): void {
+  realtimeAvailablePromise = null;
+}
 
 export type RealtimeStatus = 'connecting' | 'connected' | 'disconnected';
 
@@ -168,6 +189,11 @@ export function useDataCollectionUpdates(
     let disposed = false;
 
     const connect = async () => {
+      if (disposed) return;
+      if (!(await realtimeAvailable())) {
+        if (!disposed) setStatus('disconnected');
+        return;
+      }
       if (disposed) return;
       const token = await ensureFreshAccessToken();
       // Re-check: the effect can be torn down while the refresh is in flight.
@@ -329,6 +355,11 @@ export function useMonitoringEvents(
     let disposed = false;
 
     const connect = async () => {
+      if (disposed) return;
+      if (!(await realtimeAvailable())) {
+        if (!disposed) setStatus('disconnected');
+        return;
+      }
       if (disposed) return;
       const token = await ensureFreshAccessToken();
       // Re-check: the effect can be torn down while the refresh is in flight.

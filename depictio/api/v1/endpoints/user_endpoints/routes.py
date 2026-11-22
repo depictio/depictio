@@ -889,6 +889,9 @@ async def get_current_user_info_optional(
         ),
         "is_dev_mode": is_dev_mode,
         "walkthrough_disabled": walkthrough_disabled,
+        # Whether the realtime WebSocket exists at all: without it the viewer
+        # would retry a handshake the server answers with 403, forever.
+        "events_enabled": settings.events.enabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
         # Sign-in buttons, one per enabled OIDC provider (id + label only; the
         # same list as GET /auth/oidc/providers, here to save a round-trip).

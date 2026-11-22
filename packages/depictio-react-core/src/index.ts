@@ -1086,7 +1086,12 @@ export { renderDefinitionKey } from './renderKey';
 export type { DataVersionPins, DataVersionState } from './dataVersions';
 
 // Real-time event subscription (WebSocket /events/ws)
-export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
+export {
+  useDataCollectionUpdates,
+  useMonitoringEvents,
+  ADMIN_MONITORING_CHANNEL,
+  realtimeAvailable,
+} from './realtime';
 export type {
   RealtimeStatus,
   RealtimeMode,

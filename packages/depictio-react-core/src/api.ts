@@ -4792,6 +4792,9 @@ export interface AuthStatusResponse {
   is_dev_mode?: boolean;
   /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
   walkthrough_disabled?: boolean;
+  /** Realtime events (DEPICTIO_EVENTS_ENABLED): false means the server has no
+   *  WebSocket route. Older backends omit it — treat absent as "try". */
+  events_enabled?: boolean;
   /** TTL of a temporary public-mode user. */
   temporary_user_expiry_hours?: number;
   /** Sub-hour component of the temporary-user TTL. */

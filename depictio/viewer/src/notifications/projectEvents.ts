@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef } from 'react';
 
-import { fetchChangesInbox } from 'depictio-react-core';
+import { fetchChangesInbox, realtimeAvailable } from 'depictio-react-core';
 
 /** `localStorage` key the shared session lives under (see react-core `api.ts`). */
 const SESSION_KEY = 'local-store';
@@ -84,6 +84,9 @@ export function useProjectIngestionEvents(
     };
 
     async function connect() {
+      if (disposed) return;
+      // Events off on this server: no WebSocket route to retry against.
+      if (!(await realtimeAvailable())) return;
       if (disposed) return;
       // A reconnect may come long after the last request refreshed the token,
       // and a socket cannot refresh it: any authenticated call does.
