@@ -51,6 +51,7 @@ import {
   nfCoreLabel,
   useCatalogPaper,
 } from './shared';
+import { CategoryTag } from './shared';
 import type { CatalogGlobal, FixturePreview, OutputEntry, OutputInfo } from './shared';
 import ChunkErrorBoundary from './ChunkErrorBoundary';
 import { ModuleHistoryModal, useModuleHistory } from './ModuleVersions';
@@ -270,7 +271,9 @@ const OutputView: React.FC<{
   /** Owning tool id — the first half of the `use:` handle. Not on OutputEntry
    *  (an output is listed under its tool), so the gallery passes it down. */
   toolId?: string;
-}> = ({ entry, onBack, theme, renderId, tileHeight, variant = 'page', toolId }) => {
+  /** The owning tool's category (`stage`), shown next to the title. */
+  toolStage?: string | null;
+}> = ({ entry, onBack, theme, renderId, tileHeight, variant = 'page', toolId, toolStage }) => {
   const out = entry.output;
   // The owning tool, for its history across releases (site build only): the index
   // names it on the output (`tool_id`), an older one only by listing.
@@ -411,37 +414,44 @@ const OutputView: React.FC<{
           ) : (
             <Image src={logoFor(theme)} h={24} w="auto" fit="contain" />
           )}
-          <Text size="sm" fw={600} className="cp-out-title" style={{ flexShrink: 0 }}>
-            {out.name || out.id}
-          </Text>
-          <Code fz={10} className="cp-out-id" style={{ flexShrink: 0 }}>
-            {out.id}
-          </Code>
-          <VersionChip
-            out={out}
-            toolId={ownerId}
-            renderVersion={(active as Record<string, unknown> | undefined)?._version as
-              | string
-              | undefined}
-            renderLabel={
-              (active as Record<string, unknown> | undefined)?.title
-                ? `“${String((active as Record<string, unknown>).title)}”`
-                : undefined
-            }
-            history={
-              historyState?.history
-                ? {
-                    count: historyState.history.versions.length,
-                    onOpen: () => setHistoryOpen(true),
-                  }
-                : undefined
-            }
-          />
-          {out.description ? (
-            <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
-              {out.description}
-            </Text>
-          ) : null}
+          <Box style={{ minWidth: 0 }}>
+            <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+              <Text size="sm" fw={700} className="cp-out-title" truncate>
+                {out.name || out.id}
+              </Text>
+              {toolStage !== undefined ? <CategoryTag stage={toolStage} /> : null}
+            </Group>
+            <Group gap={8} wrap="nowrap" mt={3} className="cp-out-meta" style={{ minWidth: 0 }}>
+              <Code fz={10} className="cp-out-id" style={{ flexShrink: 0 }}>
+                {out.id}
+              </Code>
+              <VersionChip
+                out={out}
+                toolId={ownerId}
+                renderVersion={(active as Record<string, unknown> | undefined)?._version as
+                  | string
+                  | undefined}
+                renderLabel={
+                  (active as Record<string, unknown> | undefined)?.title
+                    ? `“${String((active as Record<string, unknown>).title)}”`
+                    : undefined
+                }
+                history={
+                  historyState?.history
+                    ? {
+                        count: historyState.history.versions.length,
+                        onOpen: () => setHistoryOpen(true),
+                      }
+                    : undefined
+                }
+              />
+              {out.description ? (
+                <Text size="xs" c="dimmed" truncate style={{ minWidth: 0 }}>
+                  {out.description}
+                </Text>
+              ) : null}
+            </Group>
+          </Box>
         </Group>
 
         <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>

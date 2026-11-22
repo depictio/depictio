@@ -6,7 +6,7 @@
 # masked FASTA are not read. Parsing lives in depictio/recipes/lib/repeatmasker_tbl.py.
 id: repeatmasker
 name: RepeatMasker
-version: "1.1.0"
+version: "1.1.1"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/repeatmasker/repeatmasker
 homepage: https://www.repeatmasker.org
 biotools_url: https://bio.tools/repeatmasker
@@ -15,4 +15,4 @@ description: >-
   against a repeat library, and masks them.
 edam_topics:
   - http://edamontology.org/topic_0157 # Sequence composition, complexity and repeats
-stage: annotation
+stage: genome_annotation

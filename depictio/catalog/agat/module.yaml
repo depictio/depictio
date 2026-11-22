@@ -8,9 +8,12 @@
 # genes, lengths).
 id: agat
 name: AGAT
-version: "1.1.0"
+version: "1.1.1"
 # What changed in each revision, newest first (SCHEMA.md "Versions").
 changelog:
+  - version: "1.1.1"
+    changes:
+      - "Category (stage) is now genome_annotation."
   - version: "1.1.0"
     changes:
       - "agat_statistics: one panel per metric with its own axis, instead of one bar per annotation summing unlike metrics; a Metric selector."
@@ -27,4 +30,4 @@ description: >-
   numbers of a GFF per feature type.
 edam_topics:
   - http://edamontology.org/topic_0219 # Data submission, annotation and curation
-stage: annotation
+stage: genome_annotation

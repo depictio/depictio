@@ -7,124 +7,124 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "3.0.0",
-      "content_hash": "fbaa533d8eafda7df4963714530016ba0ce02758968fd1e51e07ac7895793db5",
+      "version": "3.0.1",
+      "content_hash": "05d27ae32eb71d891261240e038f788edba4b41e0bea5eda6d24e0c1babf2aae",
       "catalog": {
         "adapterremoval": "1.1.0",
-        "agat": "1.1.0",
-        "ampcombi": "1.2.0",
+        "agat": "1.1.1",
+        "ampcombi": "1.2.1",
         "anota2seq": "1.2.0",
         "arriba": "1.1.0",
         "ascat": "1.1.0",
-        "assemblyscan": "1.1.0",
-        "ataqv": "1.2.0",
+        "assemblyscan": "1.1.1",
+        "ataqv": "1.2.1",
         "bambu": "1.1.0",
         "bcftools": "1.1.0",
         "bcl2fastq": "1.1.0",
         "bclconvert": "1.1.0",
         "bedtools": "1.1.0",
-        "bismark": "1.1.0",
+        "bismark": "1.1.1",
         "bowtie2": "1.1.0",
-        "busco": "2.1.0",
-        "cellbender": "1.1.0",
-        "cellranger": "1.2.0",
-        "checkm2": "1.2.0",
-        "checkv": "1.1.0",
-        "cmaple": "1.1.0",
+        "busco": "2.1.1",
+        "cellbender": "1.1.1",
+        "cellranger": "1.2.1",
+        "checkm2": "1.2.1",
+        "checkv": "1.1.1",
+        "cmaple": "1.1.1",
         "cnvkit": "1.1.0",
-        "combgc": "1.1.0",
+        "combgc": "1.1.1",
         "controlfreec": "1.1.0",
-        "cooler": "1.1.0",
-        "cooltools": "1.1.0",
+        "cooler": "1.1.1",
+        "cooltools": "1.1.1",
         "crisprseq": "1.1.0",
         "ctatsplicing": "1.1.0",
-        "cuppa": "1.1.0",
-        "cutandrun": "1.1.0",
+        "cuppa": "1.1.1",
+        "cutandrun": "1.1.1",
         "damageprofiler": "1.1.0",
-        "dbcan": "1.1.0",
-        "deeptools": "1.1.0",
+        "dbcan": "1.1.1",
+        "deeptools": "1.1.1",
         "deseq2": "1.1.0",
         "dexseq": "1.2.0",
         "edger": "1.1.0",
         "enchantr": "1.1.0",
         "endorspy": "1.1.0",
         "epitopeprediction": "2.1.0",
-        "famsa": "1.1.0",
-        "fcsadaptor": "1.1.0",
-        "fcsgx": "1.1.0",
-        "funcscan": "1.2.0",
+        "famsa": "1.1.1",
+        "fcsadaptor": "1.1.1",
+        "fcsgx": "1.1.1",
+        "funcscan": "1.2.1",
         "fusioncatcher": "1.1.0",
         "fusioninspector": "1.1.0",
         "fusionreport": "1.1.0",
-        "genomescope": "1.1.0",
+        "genomescope": "1.1.1",
         "gsea": "1.1.0",
         "gtdbtk": "1.1.0",
-        "gtf": "1.1.0",
-        "hamronization": "1.1.0",
+        "gtf": "1.1.1",
+        "hamronization": "1.1.1",
         "happy": "1.1.0",
-        "hicexplorer": "1.1.0",
-        "hicpro": "1.1.0",
-        "hmf_bamtools": "1.1.0",
-        "hmmer": "1.2.0",
-        "homer": "1.1.0",
+        "hicexplorer": "1.1.1",
+        "hicpro": "1.1.1",
+        "hmf_bamtools": "1.1.1",
+        "hmmer": "1.2.1",
+        "homer": "1.1.1",
         "interop": "1.1.0",
-        "interproscan": "1.1.0",
+        "interproscan": "1.1.1",
         "isoseq": "1.1.0",
         "ivar": "1.1.0",
-        "jellyfish": "1.1.0",
+        "jellyfish": "1.1.1",
         "kallisto": "1.1.0",
         "last": "1.1.0",
         "lilac": "1.1.0",
         "linx": "1.1.0",
-        "macs2": "1.1.0",
-        "mag": "1.2.0",
-        "mcquant": "1.1.0",
+        "macs2": "1.1.1",
+        "mag": "1.2.1",
+        "mcquant": "1.1.1",
         "melon": "1.1.0",
-        "merqury": "1.1.0",
+        "merqury": "1.1.1",
         "metaphlan": "1.1.0",
         "mhcquant": "1.1.0",
         "mirdeep2": "1.1.0",
-        "mirtop": "1.1.0",
+        "mirtop": "1.1.1",
         "mosdepth": "1.2.0",
         "multiqc": "1.1.0",
         "nanoplot": "1.1.0",
         "neo": "1.1.0",
-        "nextclade": "1.1.0",
+        "nextclade": "1.1.1",
         "nonpareil": "1.1.0",
         "openms": "1.1.0",
         "optitype": "1.1.0",
-        "orthofinder": "1.1.0",
-        "pangolin": "1.1.0",
+        "orthofinder": "1.1.1",
+        "pangolin": "1.1.1",
         "pbccs": "1.1.0",
         "picard": "1.2.0",
         "preseq": "1.1.0",
-        "prokka": "1.2.0",
-        "proteinannotator": "1.2.0",
-        "proteinfamilies": "1.1.0",
-        "proteinfold": "1.1.0",
+        "prokka": "1.2.1",
+        "proteinannotator": "1.2.1",
+        "proteinfamilies": "1.1.1",
+        "proteinfold": "1.1.1",
         "purple": "1.1.0",
-        "qcatch": "1.1.0",
+        "qcatch": "1.1.1",
         "qiime2": "2.1.0",
         "qsee": "1.1.0",
         "qualimap": "1.1.0",
-        "quast": "1.1.0",
-        "repeatmasker": "1.1.0",
-        "ribocode": "1.1.0",
-        "ribotish": "1.1.0",
+        "quast": "1.1.1",
+        "repeatmasker": "1.1.1",
+        "ribocode": "1.1.1",
+        "ribotish": "1.1.1",
         "ribowaltz": "1.1.0",
         "rmats": "1.2.0",
         "rseqc": "1.1.0",
         "rtgtools": "1.1.0",
-        "s4pred": "1.1.0",
+        "s4pred": "1.1.1",
         "salmon": "1.1.0",
         "samtools": "1.2.0",
-        "seacr": "1.1.0",
+        "seacr": "1.1.1",
         "seqfu": "1.1.0",
         "seqkit": "1.1.0",
-        "seqtk": "1.1.0",
+        "seqtk": "1.1.1",
         "sidle": "1.1.0",
-        "sigs": "1.1.0",
-        "simpleaf": "1.1.0",
+        "sigs": "1.1.1",
+        "simpleaf": "1.1.1",
         "snpeff": "1.1.0",
         "sompy": "1.1.0",
         "stableexpression": "1.1.0",
@@ -134,14 +134,14 @@
         "suppa": "1.2.0",
         "svanalyzer": "1.1.0",
         "sylph": "1.1.0",
-        "tama": "1.1.0",
+        "tama": "1.1.1",
         "taxpasta": "1.1.0",
-        "tiara": "1.1.0",
-        "tidk": "1.1.0",
+        "tiara": "1.1.1",
+        "tidk": "1.1.1",
         "truvari": "1.1.0",
         "vcf": "1.1.0",
         "vcftools": "1.1.0",
-        "viralmetagenome": "1.1.0",
+        "viralmetagenome": "1.1.1",
         "vsearch": "1.1.0",
         "wittyer": "2.0.0"
       }
@@ -208,52 +208,52 @@
       }
     },
     "nf-core/atacseq/1.2.2": {
-      "version": "3.1.0",
-      "content_hash": "93e69d04723f13452616438f2e33ce025a85d7280a79bda94b56c44abce22963",
+      "version": "3.1.1",
+      "content_hash": "5f10d67d41137b8b88116998bd388992e87e96eb28177f13129c3ab53ee3c04c",
       "catalog": {
-        "ataqv": "1.2.0",
-        "deeptools": "1.1.0",
+        "ataqv": "1.2.1",
+        "deeptools": "1.1.1",
         "deseq2": "1.1.0",
-        "homer": "1.1.0",
-        "macs2": "1.1.0",
+        "homer": "1.1.1",
+        "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "preseq": "1.1.0"
       }
     },
     "nf-core/atacseq/2.1.2": {
-      "version": "5.0.0",
-      "content_hash": "322eb42dc2facb6b73d7e0cd34f60cbb5fa6500f312f9c5d83d659492ab6fadd",
+      "version": "5.0.1",
+      "content_hash": "0424b8cb2feb88de8785ede7d9aa1cb55e13c1fd1ea6504bbbede4c7721af0ef",
       "catalog": {
-        "ataqv": "1.2.0",
-        "deeptools": "1.1.0",
+        "ataqv": "1.2.1",
+        "deeptools": "1.1.1",
         "deseq2": "1.1.0",
-        "homer": "1.1.0",
-        "macs2": "1.1.0",
+        "homer": "1.1.1",
+        "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "picard": "1.2.0",
         "preseq": "1.1.0"
       }
     },
     "nf-core/chipseq/1.2.0": {
-      "version": "2.2.0",
-      "content_hash": "049dd45a1324c2a9cf6d6677ec8b00c6da416cc247c584871e8e6518bf7c04fc",
+      "version": "2.2.1",
+      "content_hash": "420b08d5a65d7b6aa4e150f6386217396d156149085c2911032ab60795077596",
       "catalog": {
-        "deeptools": "1.1.0",
+        "deeptools": "1.1.1",
         "deseq2": "1.1.0",
-        "homer": "1.1.0",
-        "macs2": "1.1.0",
+        "homer": "1.1.1",
+        "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "preseq": "1.1.0"
       }
     },
     "nf-core/chipseq/2.1.0": {
-      "version": "5.0.0",
-      "content_hash": "fb9ca1b09bf01eda3db1546cb9526f3bcaa48ca95a60897f36e41128e00e79e4",
+      "version": "5.0.1",
+      "content_hash": "a56c556850a718ad68cfe969bd34d4e858f1436491c44239a4ad87bcbeeb1739",
       "catalog": {
-        "deeptools": "1.1.0",
+        "deeptools": "1.1.1",
         "deseq2": "1.1.0",
-        "homer": "1.1.0",
-        "macs2": "1.1.0",
+        "homer": "1.1.1",
+        "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "picard": "1.2.0",
         "preseq": "1.1.0"
@@ -267,29 +267,29 @@
       }
     },
     "nf-core/cutandrun/3.1": {
-      "version": "3.0.0",
-      "content_hash": "326ad4bd3ea7e1f70e60eeaeec3596242efec09766b5e0ab55d2944f1ad310cc",
+      "version": "3.0.1",
+      "content_hash": "504632b72a6a3c63f72d81d9628ea8a147e9405dd1ff3f7d9d5fd9df9b1d13eb",
       "catalog": {
         "bowtie2": "1.1.0",
-        "cutandrun": "1.1.0",
-        "deeptools": "1.1.0",
-        "macs2": "1.1.0",
+        "cutandrun": "1.1.1",
+        "deeptools": "1.1.1",
+        "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "samtools": "1.2.0",
-        "seacr": "1.1.0"
+        "seacr": "1.1.1"
       }
     },
     "nf-core/cutandrun/3.2.2": {
-      "version": "3.0.0",
-      "content_hash": "e02f1ec71665226bbb383a452e7e867fa6550b46b577b50bc488b3f941e47f81",
+      "version": "3.0.1",
+      "content_hash": "27b8fd44540f80f5408e4bc71533e77a2258a8bf888943b75be5ba29064e36b2",
       "catalog": {
         "bowtie2": "1.1.0",
-        "cutandrun": "1.1.0",
-        "deeptools": "1.1.0",
-        "macs2": "1.1.0",
+        "cutandrun": "1.1.1",
+        "deeptools": "1.1.1",
+        "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "samtools": "1.2.0",
-        "seacr": "1.1.0"
+        "seacr": "1.1.1"
       }
     },
     "nf-core/demultiplex/1.8.0": {
@@ -353,62 +353,62 @@
       }
     },
     "nf-core/funcscan/4.0.0": {
-      "version": "2.2.0",
-      "content_hash": "82f23a7a21046051d51abc04630511a5358d6bc3cc9b9ae6eaef311b84981223",
+      "version": "2.2.1",
+      "content_hash": "0131d7d3c7f9c87a7eb27a9bb2bd22e253cbb19359e0ddc1643e5e62af627162",
       "catalog": {
-        "ampcombi": "1.2.0",
-        "combgc": "1.1.0",
-        "dbcan": "1.1.0",
-        "funcscan": "1.2.0",
-        "hamronization": "1.1.0"
+        "ampcombi": "1.2.1",
+        "combgc": "1.1.1",
+        "dbcan": "1.1.1",
+        "funcscan": "1.2.1",
+        "hamronization": "1.1.1"
       }
     },
     "nf-core/genomeassembler/2.0.0": {
-      "version": "2.0.0",
-      "content_hash": "f2d1bafa4bb47f57805ac7682949a721d88c55eb4e62933d8ac3a7a69201ed94",
+      "version": "2.0.1",
+      "content_hash": "586554e82caa9d7f65372756d83fe44cb54c1940de736868638490704a57ca83",
       "catalog": {
-        "busco": "2.1.0",
-        "genomescope": "1.1.0",
-        "jellyfish": "1.1.0",
-        "merqury": "1.1.0",
-        "quast": "1.1.0"
+        "busco": "2.1.1",
+        "genomescope": "1.1.1",
+        "jellyfish": "1.1.1",
+        "merqury": "1.1.1",
+        "quast": "1.1.1"
       }
     },
     "nf-core/genomeqc/1.0.1": {
-      "version": "2.1.0",
-      "content_hash": "7d01c06e1bdfb052446772741b4c700eb43ac284af7819400c07aa5dd803cd5a",
+      "version": "2.1.1",
+      "content_hash": "3f31f8eed04dbc5dfa46a4282bc8e274518d69b1c042c79e8ddfe6966aeb9806",
       "catalog": {
-        "agat": "1.1.0",
-        "busco": "2.1.0",
-        "fcsadaptor": "1.1.0",
-        "fcsgx": "1.1.0",
+        "agat": "1.1.1",
+        "busco": "2.1.1",
+        "fcsadaptor": "1.1.1",
+        "fcsgx": "1.1.1",
         "multiqc": "1.1.0",
-        "orthofinder": "1.1.0",
-        "quast": "1.1.0",
-        "repeatmasker": "1.1.0",
-        "tiara": "1.1.0",
-        "tidk": "1.1.0"
+        "orthofinder": "1.1.1",
+        "quast": "1.1.1",
+        "repeatmasker": "1.1.1",
+        "tiara": "1.1.1",
+        "tidk": "1.1.1"
       }
     },
     "nf-core/hic/2.0.0": {
-      "version": "1.1.0",
-      "content_hash": "229045e8747edb32e6996376577647dfc7ec4101847f995f4493202435ba0f11",
+      "version": "1.1.1",
+      "content_hash": "9a9a17387e6e74dd9c6f82107850ff143f5f4421fc5bb8c10247834531a29cd1",
       "catalog": {
-        "cooler": "1.1.0",
-        "cooltools": "1.1.0",
-        "hicexplorer": "1.1.0",
-        "hicpro": "1.1.0",
+        "cooler": "1.1.1",
+        "cooltools": "1.1.1",
+        "hicexplorer": "1.1.1",
+        "hicpro": "1.1.1",
         "multiqc": "1.1.0"
       }
     },
     "nf-core/hic/2.1.0": {
-      "version": "1.1.0",
-      "content_hash": "d70a81a3aa37b0f70fbe4060830fd74e63b80e7d8326363729d9e50bacc75b93",
+      "version": "1.1.1",
+      "content_hash": "4514448f3f8076c4ff4ac1bd93c09ce638dbfdd9974b80f36acff522d5b5f8d7",
       "catalog": {
-        "cooler": "1.1.0",
-        "cooltools": "1.1.0",
-        "hicexplorer": "1.1.0",
-        "hicpro": "1.1.0",
+        "cooler": "1.1.1",
+        "cooltools": "1.1.1",
+        "hicexplorer": "1.1.1",
+        "hicpro": "1.1.1",
         "multiqc": "1.1.0"
       }
     },
@@ -421,39 +421,39 @@
       }
     },
     "nf-core/isoseq/3.0.1": {
-      "version": "1.1.0",
-      "content_hash": "5e47ecc5c18d1f1eca9c4204707095139de14a6f1ddc10192ffeafe59ddd8c4a",
+      "version": "1.1.1",
+      "content_hash": "34499b5c42c5efe01c015895a1fe8aa848f4b1be16d9ce9b700a160bf0dcdc55",
       "catalog": {
         "isoseq": "1.1.0",
         "multiqc": "1.1.0",
         "pbccs": "1.1.0",
-        "tama": "1.1.0"
+        "tama": "1.1.1"
       }
     },
     "nf-core/mag/5.5.0": {
-      "version": "2.1.0",
-      "content_hash": "259be5cd3dfcdc89059cc3ead0f9b5005f7f60d63181e94145315683b4353dc3",
+      "version": "2.1.1",
+      "content_hash": "40464483f4c22a58c90b737a8b82c818c1693042fc46c83bf8b3df5229491a20",
       "catalog": {
-        "checkm2": "1.2.0",
+        "checkm2": "1.2.1",
         "gtdbtk": "1.1.0",
-        "mag": "1.2.0",
+        "mag": "1.2.1",
         "multiqc": "1.1.0",
-        "prokka": "1.2.0",
-        "quast": "1.1.0"
+        "prokka": "1.2.1",
+        "quast": "1.1.1"
       }
     },
     "nf-core/mcmicro/2.0.0": {
-      "version": "1.2.0",
-      "content_hash": "3120bc9d7ddd12e64bfb68c9bc22e6f536f7fbf1d0a7a7ef674f471e249e78ce",
+      "version": "1.2.1",
+      "content_hash": "f36ab3e815b7236ed904249f8ff28d0fdda6a9549be08dc9f4d68d67e9231fd2",
       "catalog": {
-        "mcquant": "1.1.0"
+        "mcquant": "1.1.1"
       }
     },
     "nf-core/methylseq/2.3.0": {
-      "version": "2.0.0",
-      "content_hash": "384dcf427c44ec2cbbaa6434c509605ee0e05e5afd5c0fbfe06e388be0c6c855",
+      "version": "2.0.1",
+      "content_hash": "5c3952ac17078def35b0ea05747fcb120157b1dd39368d73175f6dd71103e3f8",
       "catalog": {
-        "bismark": "1.1.0",
+        "bismark": "1.1.1",
         "multiqc": "1.1.0",
         "qualimap": "1.1.0"
       }
@@ -477,13 +477,13 @@
       }
     },
     "nf-core/nanoseq/3.0.0": {
-      "version": "3.1.0",
-      "content_hash": "91f07bc7138fb8d440afdb7249544280badaff22ba665127873e7ace0528a1ac",
+      "version": "3.1.1",
+      "content_hash": "06b144f80718fc8bb5f50f6c9565cf8b8f3afcd6c339086ea9b37d1ee6c90c6a",
       "catalog": {
         "bambu": "1.1.0",
         "deseq2": "1.1.0",
         "dexseq": "1.2.0",
-        "gtf": "1.1.0",
+        "gtf": "1.1.1",
         "multiqc": "1.1.0",
         "nanoplot": "1.1.0",
         "samtools": "1.2.0"
@@ -498,67 +498,67 @@
       }
     },
     "nf-core/oncoanalyser/3.0.0": {
-      "version": "2.4.0",
-      "content_hash": "53d06cc5e09bd84418f93c513bf37c6b2b4159af3247d7c2d101f81fdb2ff64d",
+      "version": "2.4.1",
+      "content_hash": "9ec3326c4f7a10de1ae1b1f6d625720ab41cee2859ffc656bbc7f8a22b40f2f5",
       "catalog": {
-        "chord": "1.1.0",
-        "cuppa": "1.1.0",
-        "hmf_bamtools": "1.1.0",
+        "chord": "1.1.1",
+        "cuppa": "1.1.1",
+        "hmf_bamtools": "1.1.1",
         "lilac": "1.1.0",
         "linx": "1.1.0",
         "neo": "1.1.0",
         "purple": "1.1.0",
         "qsee": "1.1.0",
-        "sigs": "1.1.0",
-        "teal": "1.1.0"
+        "sigs": "1.1.1",
+        "teal": "1.1.1"
       }
     },
     "nf-core/pairgenomealign/3.0.4": {
-      "version": "1.3.0",
-      "content_hash": "8afc4c0611fec303a0532e6b0d8f915ba42104694794367941d11f69ecbc84a7",
+      "version": "1.3.1",
+      "content_hash": "3b6b835915465c1e0581d001b82936785315bfdb251238b4b5dee875dc29f985",
       "catalog": {
-        "assemblyscan": "1.1.0",
+        "assemblyscan": "1.1.1",
         "last": "1.1.0",
-        "seqtk": "1.1.0"
+        "seqtk": "1.1.1"
       }
     },
     "nf-core/proteinannotator/1.1.0": {
-      "version": "2.2.0",
-      "content_hash": "1f496f1445c693d2359c1e472c499eab51431b2dace76854787280e3bb7071f2",
+      "version": "2.2.1",
+      "content_hash": "295ac4a1537616e0b785c0ad9e64805602f23f9ae3a1ce64b9613b24a4ef724a",
       "catalog": {
-        "hmmer": "1.2.0",
-        "interproscan": "1.1.0",
-        "proteinannotator": "1.2.0",
-        "s4pred": "1.1.0",
+        "hmmer": "1.2.1",
+        "interproscan": "1.1.1",
+        "proteinannotator": "1.2.1",
+        "s4pred": "1.1.1",
         "seqfu": "1.1.0",
         "seqkit": "1.1.0"
       }
     },
     "nf-core/proteinfamilies/2.5.0": {
-      "version": "2.0.0",
-      "content_hash": "6cb091d450fd324035bcfac9ec9b1bc5fe6b3c2e9aaa3b598fda430b0399ef45",
+      "version": "2.0.1",
+      "content_hash": "3217b4536f7cab729b16051cfa0b004cebb5d72b806672976c6ab615a4c0828a",
       "catalog": {
-        "famsa": "1.1.0",
-        "hmmer": "1.2.0",
-        "proteinfamilies": "1.1.0",
+        "famsa": "1.1.1",
+        "hmmer": "1.2.1",
+        "proteinfamilies": "1.1.1",
         "seqfu": "1.1.0"
       }
     },
     "nf-core/proteinfamilies/2.6.0": {
-      "version": "2.0.0",
-      "content_hash": "d461ca306dcf699116d5dcb79128ed89e5ab7d4917b3a826ff10eeaf6ba3726f",
+      "version": "2.0.1",
+      "content_hash": "5800c8be77288e9c0c9c5abcfb9b926015bae1bfcb112824b1325013d60ec54e",
       "catalog": {
-        "famsa": "1.1.0",
-        "hmmer": "1.2.0",
-        "proteinfamilies": "1.1.0",
+        "famsa": "1.1.1",
+        "hmmer": "1.2.1",
+        "proteinfamilies": "1.1.1",
         "seqfu": "1.1.0"
       }
     },
     "nf-core/proteinfold/2.1.0": {
-      "version": "1.2.0",
-      "content_hash": "525bcdefa881b6bd4fcc2fc2262074ded5ec691867ed8fbc0d117af7eaa39414",
+      "version": "1.2.1",
+      "content_hash": "31e814c9636a35f0d8ce65da0f994753a6627ebb3e67a0b7ad7beca4522a9df2",
       "catalog": {
-        "proteinfold": "1.1.0"
+        "proteinfold": "1.1.1"
       }
     },
     "nf-core/quantms/1.1.1": {
@@ -578,13 +578,13 @@
       }
     },
     "nf-core/riboseq/2.0.0": {
-      "version": "3.1.0",
-      "content_hash": "bf47ed739cac47ad48eaa5429e5590f642182988ae72f762bb15e04cbde85875",
+      "version": "3.1.1",
+      "content_hash": "cfe68fb38f6ac7bd17efe969d7724f7e39e6aa36e00893c86f93b560512372e9",
       "catalog": {
         "anota2seq": "1.2.0",
         "multiqc": "1.1.0",
-        "ribocode": "1.1.0",
-        "ribotish": "1.1.0",
+        "ribocode": "1.1.1",
+        "ribotish": "1.1.1",
         "ribowaltz": "1.1.0",
         "salmon": "1.1.0"
       }
@@ -695,23 +695,23 @@
       }
     },
     "nf-core/scrnaseq/4.2.0": {
-      "version": "3.0.0",
-      "content_hash": "343297adb08f938c6c8e541077356588d5c775c379780572de0784a39bf77262",
+      "version": "3.0.1",
+      "content_hash": "ee4df5db38d413f788bc7f6225d5866900b24103a0f037156d3d7624e27a6b3f",
       "catalog": {
-        "cellbender": "1.1.0",
-        "cellranger": "1.2.0",
+        "cellbender": "1.1.1",
+        "cellranger": "1.2.1",
         "kallisto": "1.1.0",
         "multiqc": "1.1.0",
-        "qcatch": "1.1.0",
-        "simpleaf": "1.1.0"
+        "qcatch": "1.1.1",
+        "simpleaf": "1.1.1"
       }
     },
     "nf-core/smrnaseq/2.4.1": {
-      "version": "2.0.0",
-      "content_hash": "a838fe13afe9f2a24d19525e549c5485fa199608c591efb685340175934c380e",
+      "version": "2.0.1",
+      "content_hash": "265de198bfb390f5d48e4383918e07bcee7517fda3d4f0b8679de96e25960dfd",
       "catalog": {
         "mirdeep2": "1.1.0",
-        "mirtop": "1.1.0",
+        "mirtop": "1.1.1",
         "multiqc": "1.1.0"
       }
     },
@@ -808,25 +808,25 @@
       }
     },
     "nf-core/viralmetagenome/1.2.0": {
-      "version": "1.4.0",
-      "content_hash": "3dd4e5c0d69997bf842bf375ac8e8ed2b98a6565134144284a26c2f6ce7b61ef",
+      "version": "1.4.1",
+      "content_hash": "a82b98e0ac39045e247aa3e282575595bac15956263f5d8ba28cb8c5448fdedf",
       "catalog": {
-        "checkv": "1.1.0",
+        "checkv": "1.1.1",
         "ivar": "1.1.0",
         "mosdepth": "1.2.0",
         "multiqc": "1.1.0",
-        "viralmetagenome": "1.1.0"
+        "viralmetagenome": "1.1.1"
       }
     },
     "nf-core/viralrecon/3.0.0": {
-      "version": "2.4.0",
-      "content_hash": "3624244c9c689f121e1669766b5cb0c91c10dc56e0bec0c830db61fda14bc9e6",
+      "version": "2.4.1",
+      "content_hash": "e0997e69af73982c01052cb993154a37f853e2c999c9289c27bdcb810c4ac7f1",
       "catalog": {
         "ivar": "1.1.0",
         "mosdepth": "1.2.0",
         "multiqc": "1.1.0",
-        "nextclade": "1.1.0",
-        "pangolin": "1.1.0"
+        "nextclade": "1.1.1",
+        "pangolin": "1.1.1"
       }
     }
   }

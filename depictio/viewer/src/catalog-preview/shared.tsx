@@ -42,19 +42,43 @@ export const metaFor = (t: string) => {
   return { name: visual.label, color: visual.color, icon: visual.icon };
 };
 
-/** Colored depictio-style component-type badge. */
-export const TypeBadge: React.FC<{ type: string; size?: string }> = ({ type, size = 'sm' }) => {
+/** A component type as a tag: its glyph in the type's colour, its name, and
+ *  an optional count. The same tag in the filter bar (pressable, `active`) and
+ *  on a card, so a filter reads exactly like what it filters. */
+import multiqcIcon from './logos/multiqc_icon.svg';
+
+export const TypeBadge: React.FC<{
+  type: string;
+  size?: string;
+  count?: number;
+  active?: boolean;
+  onClick?: () => void;
+}> = ({ type, count, active, onClick }) => {
   const meta = metaFor(type);
+  const ink =
+    type === 'multiqc'
+      ? 'var(--mantine-color-gray-6)'
+      : meta.color.startsWith('#')
+        ? meta.color
+        : `var(--mantine-color-${meta.color}-6)`;
+  const Tag = onClick ? 'button' : 'span';
   return (
-    <Badge
-      color={meta.color}
-      variant="light"
-      radius="sm"
-      size={size}
-      leftSection={<Icon icon={meta.icon} width={13} />}
+    <Tag
+      type={onClick ? 'button' : undefined}
+      className="cp-type-tag"
+      data-active={active || undefined}
+      aria-pressed={onClick ? Boolean(active) : undefined}
+      onClick={onClick}
+      style={{ ['--tag-ink' as string]: ink }}
     >
-      {meta.name}
-    </Badge>
+      {type === 'multiqc' ? (
+        <img src={multiqcIcon} alt="" width={13} height={13} />
+      ) : (
+        <Icon icon={meta.icon} width={13} aria-hidden />
+      )}
+      <span>{meta.name}</span>
+      {count !== undefined && <b>{count}</b>}
+    </Tag>
   );
 };
 
@@ -209,6 +233,8 @@ export interface ToolEntry {
   nf_core_url?: string | null;
   biotools_url?: string | null;
   edam_topics?: string[];
+  /** Analysis family (`module.yaml` `stage`). */
+  stage?: string | null;
   outputs: OutputEntry[];
 }
 
@@ -234,3 +260,52 @@ export const allRendersYaml = (renders: Record<string, unknown>[]): string =>
     .map((r) => r._yaml as string | undefined)
     .filter(Boolean)
     .join('\n');
+
+/** Tool categories: `Stage` in depictio/models/components/advanced_viz/catalog.py,
+ *  in its order and with its labels (the same titles a composed dashboard's tabs carry). */
+export const CATEGORIES: { id: string; label: string; icon: string; color: string }[] = [
+  { id: 'qc', label: 'Quality control & preprocessing', icon: 'mdi:check-decagram', color: 'teal' },
+  { id: 'alignment', label: 'Alignment & coverage', icon: 'mdi:align-horizontal-left', color: 'blue' },
+  { id: 'assembly', label: 'Genome assembly & quality', icon: 'mdi:puzzle-outline', color: 'lime' },
+  { id: 'quantification', label: 'Expression quantification', icon: 'mdi:chart-bar', color: 'cyan' },
+  { id: 'single_cell', label: 'Single-cell & spatial', icon: 'mdi:circle-multiple-outline', color: 'grape' },
+  { id: 'differential', label: 'Differential analysis & enrichment', icon: 'mdi:scale-balance', color: 'orange' },
+  { id: 'variants', label: 'Variants & copy number', icon: 'mdi:dna', color: 'red' },
+  { id: 'tumour_profiling', label: 'Tumour profiling', icon: 'mdi:microscope', color: 'pink' },
+  { id: 'fusions', label: 'Fusions & rearrangements', icon: 'mdi:set-merge', color: 'pink' },
+  { id: 'epigenomics', label: 'Epigenomics & chromatin', icon: 'mdi:chart-bell-curve', color: 'violet' },
+  { id: 'taxonomy', label: 'Taxonomy & phylogeny', icon: 'mdi:bacteria-outline', color: 'green' },
+  { id: 'genome_annotation', label: 'Genome & transcript annotation', icon: 'mdi:file-tree-outline', color: 'indigo' },
+  { id: 'functional_annotation', label: 'Functional & protein annotation', icon: 'mdi:file-document-outline', color: 'violet' },
+  { id: 'immune', label: 'Immunology', icon: 'mdi:account-group-outline', color: 'indigo' },
+  { id: 'benchmarking', label: 'Benchmarking', icon: 'mdi:shield-check-outline', color: 'yellow' },
+  { id: 'other', label: 'Other results', icon: 'mdi:folder-outline', color: 'gray' },
+];
+export const categoryOf = (t: { stage?: string | null }) =>
+  CATEGORIES.find((c) => c.id === (t.stage || 'other')) ?? CATEGORIES[CATEGORIES.length - 1];
+
+/** A tool's category, in the type tag's shape but square-cornered, so the two
+ *  never read as the same kind of thing. */
+export const CategoryTag: React.FC<{ stage?: string | null; onClick?: () => void; compact?: boolean; count?: number }> = ({
+  stage,
+  onClick,
+  compact,
+  count,
+}) => {
+  const c = categoryOf({ stage });
+  const Tag = onClick ? 'button' : 'span';
+  return (
+    <Tag
+      type={onClick ? 'button' : undefined}
+      className="cp-type-tag cp-cat-tag"
+      data-compact={compact || undefined}
+      onClick={onClick}
+      title={`Category: ${c.label}`}
+      style={{ ['--tag-ink' as string]: `var(--mantine-color-${c.color}-6)` }}
+    >
+      <Icon icon={c.icon} width={13} aria-hidden />
+      {compact ? null : <span>{c.label}</span>}
+      {count !== undefined && <b>{count}</b>}
+    </Tag>
+  );
+};

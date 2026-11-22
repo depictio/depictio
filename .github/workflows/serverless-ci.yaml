@@ -147,9 +147,13 @@ jobs:
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-static/static-genome.html 5662310 static-runtime+jbrowse
 
+      # The catalog preview inlines the landing page's tool logos, pipeline
+      # logos and viz thumbnails: 126 webp files, 1.1 MB, already compressed so
+      # they add their full size to the gzip. Measured 5.26 MB (4.15 MB before
+      # the landing page); budget = measured + 0.3 MB.
       - name: Byte budget — catalog preview
         working-directory: depictio/viewer
-        run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 4718592 catalog-preview
+        run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 5830082 catalog-preview
 
       # The Python-runtime demo (Pyodide, RFC §13.6) is built by producer B,
       # not injected from a committed manifest: it inlines ~70 MB of Pyodide

@@ -2,9 +2,9 @@
 # suite also produces motif tables that will land next to it.
 id: homer
 name: HOMER
-version: "1.1.0"
+version: "1.1.1"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/homer/annotatepeaks
 biotools_url: https://bio.tools/homer # from nf-core meta.yml identifier
 description: Suite of tools for motif discovery and next-generation sequencing analysis.
 homepage: http://homer.ucsd.edu/homer/
-stage: peaks
+stage: epigenomics

@@ -105,12 +105,12 @@ def test_one_walk_finds_what_match_run_dir_finds(run):
 def test_tabs_follow_the_pipeline_stages(conformance):
     assert conformance.tabs == [
         "Overview",
-        "Quality control",
+        "Quality control & preprocessing",
         "Alignment & coverage",
-        "Quantification",
-        "Taxonomy & diversity",
-        # TEAL and CHORD (stage "other") come last, before MultiQC.
-        "Other results",
+        "Expression quantification",
+        # TEAL and CHORD: telomere length and HRD, stage "tumour_profiling".
+        "Tumour profiling",
+        "Taxonomy & phylogeny",
         "MultiQC",
     ]
 

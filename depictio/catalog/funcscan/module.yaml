@@ -6,7 +6,7 @@
 # them, so `source_url` points at the pipeline instead of `nf_core_url`.
 id: funcscan
 name: nf-core/funcscan
-version: "1.2.0"
+version: "1.2.1"
 description: >-
   Run-level joins across the four nf-core/funcscan screens: a per-sample
   screening hub (ARG, AMP, BGC and CAZyme headline counts), a per-contig
@@ -18,4 +18,4 @@ source_url: https://github.com/nf-core/funcscan
 edam_topics:
   - http://edamontology.org/topic_3174 # Metagenomics
   - http://edamontology.org/topic_0080 # Sequence analysis
-stage: annotation
+stage: functional_annotation
