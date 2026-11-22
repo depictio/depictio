@@ -73,6 +73,7 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -116,6 +117,7 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -176,7 +178,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:bacteria-outline",
-      "icon_color": "teal",
+      "icon_color": "teal.4",
       "caption": "split by kingdom",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -226,7 +228,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:family-tree",
-      "icon_color": "cyan",
+      "icon_color": "teal.6",
       "caption": "the richest samples",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -276,7 +278,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:sitemap",
-      "icon_color": "blue",
+      "icon_color": "teal.8",
       "caption": "the richest, by Habitat",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -326,7 +328,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:graph-outline",
-      "icon_color": "indigo",
+      "icon_color": "teal.9",
       "caption": "the richest phyla",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -355,7 +357,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "The eight most abundant phyla of each group, the rest folded into Other.",
+      "description": "Which phyla make up each group? One bar per Habitat group, split into the shares of the eight most abundant phyla of the samples in view, with the rest folded into Other (grey). Every bar is scaled to 100%.\nHow to read: a block that is long in one bar and short in another is a phylum that differs between groups. Read the lengths and not the colours when two groups look alike. Open [Differential Abundance](tab:Differential Abundance) to test which differences hold.\nNote: pooling the samples of a group hides how much they vary, and the per-sample bars below show it. The phylum colours are the same as on the per-sample bars and the tree.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/rel_abundance",
@@ -407,6 +409,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "How does the community of each sample break down? One bar per sample, split into the shares of the eight most abundant taxa at the chosen rank (phylum at first), with the rest folded into Other (grey). A strip above the bars marks the Habitat of each sample.\nHow to read: samples with a similar stack share a community, and a sample whose stack differs from the rest of its group stands out. Sort the samples by one taxon to see its share change across them. A large Unclassified or Other block means the reference database named little at that rank.\nLines and annotations: Other (grey) is the sum of all taxa below the top eight. When the Zoom switch crops the value axis, it starts above 0, the cut is marked `//` on the axis and a caption names where the axis starts. No reference line is drawn.\nNote: switch Zoom off to see the full bars.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/stacked_taxonomy",
@@ -418,14 +421,16 @@
         "description": "Long-format stacked-taxonomy abundance (sample \u00d7 rank \u00d7 taxon) fanned in from the per-rank QIIME2 rel-table-{2..6}.tsv collapses, with a derived Kingdom level."
       },
       "section": "Composition",
-      "viz_kind": "stacked_taxonomy",
+      "viz_kind": "stacked_bar",
       "config": {
         "controls_placement": "popover",
-        "viz_kind": "stacked_taxonomy",
+        "viz_kind": "stacked_bar",
         "sample_id_col": "sample_id",
         "taxon_col": "taxon",
         "rank_col": "rank",
         "abundance_col": "abundance",
+        "value_cols": null,
+        "value_labels": null,
         "default_rank": "Phylum",
         "top_n": 8,
         "sort_by": "abundance",
@@ -439,8 +444,19 @@
         ],
         "taxon_palette": null,
         "sample_sort": "input",
+        "sort_category": null,
+        "group_col": null,
+        "y_zoom": "auto",
+        "orientation": "v",
+        "value_title": "Relative abundance",
         "show_legend": true,
-        "log_y": false
+        "log_y": false,
+        "hidden_controls": null,
+        "rank_label": "Taxonomic rank",
+        "x_title": null,
+        "legend_pos": "right",
+        "selection_enabled": false,
+        "selection_column": null
       },
       "wf_tag": "nextflow/ampliseq"
     },
@@ -469,6 +485,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "What is the community made of, from kingdom down to class? Each ring is a rank (kingdom inside, then phylum, then class) and each arc is a taxon, its angle proportional to its relative abundance summed over the samples in view. Click an arc to zoom into it.\nHow to read: a wide arc is a dominant taxon, and many thin arcs under one phylum mean a diverse phylum. Hover an arc for its share of the whole and of its parent. Each sample weighs the same, since its abundances are relative.\nNote: no minimum arc share hides the rare taxa here, so the long tail of thin arcs can be hard to read; hover to read them.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/sunburst_taxonomy",
@@ -492,9 +509,9 @@
         "abundance_col": "abundance",
         "category_palette": null,
         "start_rank": null,
-        "colour_by_rank": null,
+        "colour_by_rank": "Phylum",
         "max_depth": 3,
-        "palette": "tab10",
+        "palette": "default",
         "show_counts": true,
         "min_percent": 0
       },
@@ -525,6 +542,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Which phyla do the groups share, and which belong to one group only? Each column of dots is a combination of groups, the bar above it counts the phyla found in exactly those groups, and the bars at the left give each group's total. Bars of a single group take that group's colour.\nHow to read: a tall bar for all groups together is the shared core, and tall single-group bars are phyla specific to one group. Few shared phyla means very different communities. An annotation track under the bars breaks each combination down by kingdom and phylum.\nLines and annotations: no reference line is drawn. Bars are sorted by size, largest first, and every combination of at least one phylum is shown.\nSource: Lex et al. 2014 (UpSet), https://doi.org/10.1109/TVCG.2014.2346248\nNote: a phylum counts as present in a group when its relative abundance is above 0.1% in at least one sample of that group. This presence level is set by the dashboard's recipe to drop noise and is not a published cut-off.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Set overlap",
@@ -548,6 +566,7 @@
         "color_intersections_by": "set",
         "set_colors": null,
         "default_annotation_cols": [
+          "Kingdom",
           "Phylum"
         ],
         "show_values": false,
@@ -583,6 +602,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "What is the abundance of each phylum in each sample? One row per sample and phylum with its relative abundance, its lineage and the sample metadata.\nHow to read: filter on Kingdom or Phylum and sort on the abundance to find the dominant phylum of a sample. The shares of one sample add up to 1 before any filter.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/rel_abundance",
@@ -601,6 +621,7 @@
       "compact": false,
       "row_selection_enabled": true,
       "row_selection_column": "taxonomy",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/ampliseq"
     }
   ],
@@ -721,7 +742,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 5,
+      "h": 8,
       "static": false,
       "resizeHandles": [
         "se",
@@ -852,8 +873,10 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
+  "shared_labels": [],
   "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
@@ -890,11 +913,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 12:18:23",
+  "creation_time": "2026-11-22 20:39:25",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -912,5 +938,7 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Community & Diversity"
+  "published_lock": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Community & Diversity",
+  "template_origin": null
 }

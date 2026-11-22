@@ -170,7 +170,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:flask-outline",
-      "icon_color": "violet",
+      "icon_color": "pink.4",
       "caption": "one point each, by Habitat",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -220,7 +220,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:sigma",
-      "icon_color": "pink",
+      "icon_color": "pink.8",
       "caption": "share of the Bray-Curtis variation",
       "format": "percent",
       "wf_tag": "nextflow/ampliseq"
@@ -250,6 +250,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Which samples have similar communities, and do the groups separate? Each point is one sample, placed so that the closer two points sit, the more alike their Bray-Curtis profiles, and coloured by Habitat. The axes are the first two principal coordinates, PCo1 and PCo2.\nHow to read: points of one colour that sit together and apart from the others mean the grouping shapes the community, while mixed colours mean it does not. An isolated point is a sample unlike the rest, worth checking in the sample sheet. Draw a lasso around points to turn them into an analysis group for the other tiles.\nLines and annotations: no reference line is drawn. The axes carry no units and the share of variation each holds is not printed. Filled density contours and a centroid per group can be switched on in the controls and are off at first.\nSource: Bray and Curtis 1957, https://doi.org/10.2307/1942268\nNote: the distances are computed by this dashboard from the phylum-level relative abundance table, not read from the QIIME 2 beta-diversity output, so they can differ from the pipeline's own matrices.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/embedding",
@@ -280,12 +281,12 @@
         "pcoa_distance": "bray_curtis",
         "axis_prefix": "PCo",
         "show_density": false,
-        "point_size": 10,
-        "marker_outline_width": 1.5,
-        "plot_style": "default",
+        "point_size": null,
+        "marker_outline_width": null,
+        "plot_style": "lines",
         "default_color_by": null,
         "show_centroids": false,
-        "marker_outline": false,
+        "marker_outline": null,
         "legend_pos": "right",
         "ncontours": 14,
         "density_opacity": 0.45,
@@ -322,6 +323,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "How different is every pair of samples? Each cell is the Bray-Curtis dissimilarity between the sample of its row and the sample of its column, from 0 for identical profiles to 1 for none shared. Rows and columns are reordered by hierarchical clustering so that similar samples sit together.\nHow to read: pale blocks along the diagonal are groups of similar samples, and dark cells mark the pairs that differ most. The dendrograms show how the clusters nest. Compare the clusters with the groups in the PCoA beside it.\nLines and annotations: the dendrograms above and to the left join the most similar samples first, using Ward linkage on the Euclidean distance between matrix rows. The colour runs from pale (small distance) to dark blue (large distance). No cut-off is drawn.\nSources: Bray and Curtis 1957, https://doi.org/10.2307/1942268; Ward 1963, https://doi.org/10.1080/01621459.1963.10500845\nNote: the distances are computed by this dashboard from the phylum-level relative abundance table, so they can differ from the QIIME 2 matrices of the pipeline.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/distance_heatmap",
@@ -358,7 +360,9 @@
         "cluster_method": "ward",
         "cluster_metric": "euclidean",
         "normalize": "none",
-        "colorscale": "Blues"
+        "colorscale": "Blues",
+        "min_cell_px": null,
+        "max_rows": null
       },
       "wf_tag": "nextflow/ampliseq"
     },
@@ -387,6 +391,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Which phyla rise and fall together across the samples? Each row is a phylum and each column a sample, and the colour is the relative abundance of the phylum in that sample, standardised within its row. A coloured strip marks the kingdom of each phylum.\nHow to read: red cells mean the phylum is more abundant in that sample than in the others, blue cells less. Columns that cluster together share a community profile, and rows that cluster together vary together. Open [Community & Diversity](tab:Community & Diversity) for the absolute shares.\nLines and annotations: each row is a z-score (its mean subtracted, divided by its standard deviation), so colour compares samples within one phylum and not phyla with each other. The dendrograms use Ward linkage on the Euclidean distance. The scale is diverging, from blue (low) through white to red (high), and no cut-off is drawn.\nSource: Ward 1963, https://doi.org/10.1080/01621459.1963.10500845",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/abundance_heatmap",
@@ -425,7 +430,9 @@
         "cluster_method": "ward",
         "cluster_metric": "euclidean",
         "normalize": "row_z",
-        "colorscale": null
+        "colorscale": null,
+        "min_cell_px": null,
+        "max_rows": null
       },
       "wf_tag": "nextflow/ampliseq"
     }
@@ -603,6 +610,7 @@
   "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
+  "shared_labels": [],
   "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
@@ -646,7 +654,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-28 15:04:07",
+  "creation_time": "2026-11-22 20:39:25",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -664,5 +672,7 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Ordination & Clustering"
+  "published_lock": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Ordination & Clustering",
+  "template_origin": null
 }

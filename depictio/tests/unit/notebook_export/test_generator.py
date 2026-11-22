@@ -739,9 +739,10 @@ def test_the_overview_holds_everything_the_live_overview_shows(ampliseq_tabs):
     assert overview == [
         "Overview",
         "ov-hero",
-        "ov-about",
+        "ov-study",
         "ov-run",
         "ov-steps",
+        "ov-about",
         "ref-sampling-sites",
         "Key figures",
         "ov-kf-samples",
@@ -756,4 +757,7 @@ def test_the_overview_holds_everything_the_live_overview_shows(ampliseq_tabs):
         "ov-tree",
         "How to read this dashboard",
         "ov-how-to-read",
+        # Pinned to the Overview too (nf-core RULES, #1306).
+        "Sample sheet",
+        "sample-sheet",
     ]

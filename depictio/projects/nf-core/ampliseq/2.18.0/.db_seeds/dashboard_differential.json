@@ -73,6 +73,7 @@
       "group": "Call scope",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "red",
@@ -116,6 +117,7 @@
       "group": "Call scope",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -159,6 +161,7 @@
       "group": "Call scope",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -202,6 +205,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "red",
@@ -262,7 +266,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:bacteria-outline",
-      "icon_color": "cyan",
+      "icon_color": "red.4",
       "caption": "split by kingdom",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -320,7 +324,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:check-decagram",
-      "icon_color": "red",
+      "icon_color": "red.6",
       "caption": "q < 0.05, by contrast",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -378,7 +382,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:arrow-up-bold-outline",
-      "icon_color": "pink",
+      "icon_color": "red.8",
       "caption": "calls, by contrast",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -436,7 +440,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:arrow-down-bold-outline",
-      "icon_color": "blue",
+      "icon_color": "red.9",
       "caption": "calls, by contrast",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -465,6 +469,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Which taxa differ between groups, by how much and how surely? Each point is one taxon in one contrast, with the log fold change on the x axis (right means more abundant than in the reference group) and the significance, as -log10 of the ANCOM-BC q-value, on y. Pink points are up and blue points down when they count as a hit, and the View switch adds an MA and a QQ plot.\nHow to read: pink or blue points in the upper corners are the calls to follow up, and grey points are not significant or change too little. A point high on the plot but near zero on x is significant yet a small change, so read both axes. Pick a contrast in the filter first, then open the results table below for the exact values.\nLines and annotations: the volcano draws dotted vertical lines at log fold change -1 and +1 and a dotted horizontal line at q = 0.05 on the -log10 scale; a point must clear both to be a hit, and the six strongest are labelled. The MA view draws dotted horizontal lines at -1 and +1, and the QQ view a dashed diagonal (the expected spread under no differences), a grey 95% envelope around it and the inflation factor lambda in the corner. The 0.05 is the significance level ampliseq passes to ANCOM-BC, and the effect cut-off of 1 is ampliseq's own default (ancombc_effect_size).\nSources: ANCOM-BC, Lin and Peddada 2020, https://doi.org/10.1038/s41467-020-17041-7; ampliseq ANCOM-BC settings, https://github.com/nf-core/ampliseq/blob/2.18.0/conf/modules.config; effect size threshold of 1 (ancombc_effect_size) and significance threshold of 0.05 (ancombc_significance), the defaults in the pipeline's https://github.com/nf-core/ampliseq/blob/2.18.0/nextflow_schema.json\nNote: the q-values use QIIME 2's documented default adjustment, Holm, which ampliseq leaves unchanged. ANCOM-BC drops taxa seen in fewer than 10% of the samples and samples under 500 reads before testing, and assumes that fewer than about 25% of the taxa differ between groups.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/volcano",
@@ -484,7 +489,15 @@
         "effect_size_col": "lfc",
         "significance_col": "q_val",
         "label_col": "Phylum",
+        "hover_col": null,
         "category_col": "contrast",
+        "hover_category": false,
+        "reference": null,
+        "contrast_prefix": null,
+        "contrast_separator": null,
+        "group_symbols": null,
+        "marker_cols": null,
+        "marker_by": "__default__",
         "significance_is_neg_log10": false,
         "significance_threshold": 0.05,
         "effect_threshold": 1,
@@ -492,6 +505,7 @@
         "show_labels": true,
         "effect_label": "Log fold change",
         "significance_label": "-log10 q-value",
+        "intensity_label": null,
         "avg_log_intensity_col": null,
         "log2_fold_change_col": null,
         "fold_change_threshold": 1,
@@ -537,6 +551,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Which taxa change most in each contrast? One horizontal bar per taxon, showing its log fold change, for the 15 taxa with the largest absolute change in each contrast. Pink bars are more abundant in the contrast's group than in its reference group, blue bars less.\nHow to read: solid bars clear the significance cut-off and hatched bars do not, so only solid bars are calls. Long solid bars at either end are the taxa to check first. A panel of hatched bars means large changes without statistical support.\nLines and annotations: a line at zero separates higher from lower abundance. Solid against hatched applies the q-value cut-off of 0.05, the level ampliseq passes to ANCOM-BC, and no other cut-off line is drawn. Bar labels are the taxon names, cut at 24 characters (hover for the whole name).\nSources: ANCOM-BC, Lin and Peddada 2020, https://doi.org/10.1038/s41467-020-17041-7; ampliseq ANCOM-BC settings, https://github.com/nf-core/ampliseq/blob/2.18.0/conf/modules.config\nNote: only the 15 largest effects of each contrast are shown (Top-N), so a significant taxon with a modest change can be missing; the results table lists them all.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/da_barplot",
@@ -555,11 +570,18 @@
         "feature_id_col": "id",
         "contrast_col": "contrast",
         "lfc_col": "lfc",
+        "effect_label": "Log fold change",
         "significance_col": "q_val",
         "label_col": "Phylum",
+        "hover_col": null,
+        "hover_category": false,
         "significance_threshold": 0.05,
         "top_n": 15,
-        "contrast_view": "all"
+        "contrast_view": "all",
+        "reference": null,
+        "contrast_prefix": null,
+        "contrast_separator": null,
+        "group_colors": null
       },
       "wf_tag": "nextflow/ampliseq"
     },
@@ -588,6 +610,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "What are the exact ANCOM-BC results? One row per taxon and contrast with the log fold change (lfc), its standard error (se), the W statistic, the p-value (p_val) and the adjusted q-value (q_val).\nHow to read: filter on a contrast first, then sort on q_val; a q_val below 0.05 with a large lfc is a call worth following. Pick a row to open its full record beside the table.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/ancombc",
@@ -606,6 +629,7 @@
       "compact": false,
       "row_selection_enabled": true,
       "row_selection_column": "id",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -633,6 +657,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "What is the full test of one taxon? The record shows the taxon picked in the results table in two blocks: Test (contrast, log fold change, standard error, W statistic, p-value and adjusted p-value) and Lineage (kingdom, phylum and full lineage).\nHow to read: the card waits for a pick, so click a row of the results table. Compare the adjusted p-value with the 0.05 level of the run, and read the log fold change together with its standard error.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Taxon detail",
@@ -669,7 +694,9 @@
         "selection_source": "any",
         "linked_component": "diff-table-results",
         "max_fields": 40,
-        "default_record": null
+        "default_record": null,
+        "default_record_by": null,
+        "default_record_ascending": false
       },
       "wf_tag": "nextflow/ampliseq"
     }
@@ -891,8 +918,10 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
+  "shared_labels": [],
   "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
@@ -929,11 +958,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 12:18:23",
+  "creation_time": "2026-11-22 20:39:25",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -951,5 +983,7 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Differential Abundance"
+  "published_lock": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Differential Abundance",
+  "template_origin": null
 }
