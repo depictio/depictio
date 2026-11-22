@@ -109,6 +109,13 @@ class TokenBase(MongoModel):
     created_at: datetime = Field(default_factory=datetime.now)
     model_config = {"arbitrary_types_allowed": True}
     logged_in: bool = False
+    # Refresh-token rotation bookkeeping (see /auth/refresh): the refresh token
+    # that was valid *before* the last rotation, stored hashed only, plus when
+    # it was rotated. Presenting it again inside the grace window is a second
+    # tab racing the same refresh; past the window it is reuse and the whole
+    # session is revoked.
+    previous_refresh_token_hash: str | None = None
+    previous_refresh_rotated_at: datetime | None = None
 
     # Field serializers for Pydantic v2
     @field_serializer("id")

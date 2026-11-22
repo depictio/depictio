@@ -236,7 +236,7 @@ class TestAuthenticationBypass:
                 result = await get_user_or_anonymous(token="test_token")
 
                 assert result == mock_user
-                mock_get_current.assert_called_once_with("test_token")
+                mock_get_current.assert_called_once_with("test_token", None)
 
     @beanie_setup(models=[UserBeanie])
     async def test_get_user_or_anonymous_unauthenticated_mode(self):
@@ -254,6 +254,7 @@ class TestAuthenticationBypass:
 
         mock_settings = MagicMock()
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.anonymous_user_email = "anon@test.com"
 
@@ -278,6 +279,7 @@ class TestDisabledFeatures:
         mock_settings = MagicMock()
         mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
 
         registration = RequestUserRegistration(email="test@example.com", password="password123")
         # The mode check fires before rate limiting, so the request mock is never
@@ -334,6 +336,7 @@ class TestPublicModeAdminBypass:
 
         mock_settings = MagicMock()
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         with patch("depictio.api.v1.endpoints.projects_endpoints.routes.settings", mock_settings):
             with pytest.raises(HTTPException) as exc_info:
                 await create_project(project=MagicMock(), current_user=user_factory())
@@ -351,6 +354,7 @@ class TestPublicModeAdminBypass:
 
         mock_settings = MagicMock()
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         with (
             patch(
                 "depictio.api.v1.endpoints.projects_endpoints.routes.settings",
@@ -395,6 +399,7 @@ class TestPublicModeAdminBypass:
 
         mock_settings = MagicMock()
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
             with pytest.raises(HTTPException) as exc_info:
                 await create_my_token(
@@ -416,6 +421,7 @@ class TestPublicModeAdminBypass:
 
         mock_settings = MagicMock()
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         admin = self._admin()
         admin.id = ObjectId()  # TokenData(sub=...) validates ObjectId-shape
         sentinel_token = MagicMock(name="created-token")
@@ -451,6 +457,7 @@ class TestPublicModeAdminBypass:
 
         mock_settings = MagicMock()
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         mock_settings.auth.is_demo_mode = False
         with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
             with pytest.raises(HTTPException) as exc_info:
@@ -483,6 +490,7 @@ class TestPublicModeAdminBypass:
 
         mock_settings = MagicMock()
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         mock_settings.auth.is_demo_mode = True
         admin = self._admin()
         with (
@@ -555,6 +563,7 @@ class TestInitializationProcess:
         mock_settings.auth.requires_anonymous_user = True  # Triggers anonymous user creation
         mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_public_access_code_required = False
         mock_settings.s3 = MagicMock()
         mock_settings.mongodb = MagicMock()
         mock_settings.mongodb.wipe = False

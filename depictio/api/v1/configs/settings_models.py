@@ -2060,6 +2060,14 @@ class MigrationConfig(BaseSettings):
         ),
     )
     max_bundle_bytes: int = Field(default=10 * 1024**3, ge=1)
+    max_import_body_bytes: int = Field(
+        default=50 * 1024**2,
+        ge=1,
+        description=(
+            "Cap on the JSON body POST /migrate/import-project accepts; larger"
+            " bodies answer 413 before they are parsed"
+        ),
+    )
     staging_prefix: str = Field(default="_migration_staging")
     pending_ttl_days: int = Field(default=14, ge=1)
     spool_dir: Optional[str] = Field(default=None)

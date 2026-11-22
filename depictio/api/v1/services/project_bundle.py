@@ -213,9 +213,18 @@ def dc_ids_query(dc_ids: Iterable[ObjectId]) -> dict[str, Any]:
 
 
 def collect_bundle_docs(
-    project_doc: dict[str, Any], scope: ProjectScope, mode: BundleMode
+    project_doc: dict[str, Any],
+    scope: ProjectScope,
+    mode: BundleMode,
+    *,
+    keep_emails_for: set[str] | None = None,
 ) -> dict[str, list[dict]]:
-    """The Mongo documents of one project, as raw dicts, per bundle section."""
+    """The Mongo documents of one project, as raw dicts, per bundle section.
+
+    ``keep_emails_for`` is the set of user ids whose emails may travel: a
+    non-admin export drops every other user's email (ids are kept), an admin's
+    keeps them all (``None``).
+    """
     cols = _collections()
     data: dict[str, list[dict]] = {}
     if mode in ("all", "metadata"):
@@ -245,6 +254,76 @@ def collect_bundle_docs(
         # Threads hold their annotations; author ids are kept as recorded (the
         # email shows who wrote it, on any instance).
         data["comment_threads"] = list(cols["comment_threads"].find({"project_id": str(pid)}))
+    if keep_emails_for is not None:
+        data = scrub_export_emails(data, keep_emails_for)
+    return data
+
+
+def _scrub_user_entry(entry: Any, keep_for: set[str]) -> Any:
+    """Drop one permission entry's email when its id is not in ``keep_for``."""
+    if not isinstance(entry, dict) or "email" not in entry:
+        return entry
+    entry_id = str(entry.get("_id") or entry.get("id") or "")
+    if entry_id and entry_id in keep_for:
+        return entry
+    return {k: v for k, v in entry.items() if k != "email"}
+
+
+def _scrub_author(author: Any, keep_for: set[str]) -> Any:
+    """Drop one comment author's email when their user id is not in ``keep_for``."""
+    if not isinstance(author, dict) or "email" not in author:
+        return author
+    user_id = str(author.get("user_id") or "")
+    if user_id and user_id in keep_for:
+        return author
+    return {k: v for k, v in author.items() if k != "email"}
+
+
+def _scrub_thread_emails(thread: dict[str, Any], keep_for: set[str]) -> None:
+    thread["created_by"] = _scrub_author(thread.get("created_by"), keep_for)
+    comments = []
+    for comment in thread.get("comments") or []:
+        if isinstance(comment, dict):
+            comment = dict(comment)
+            comment["author"] = _scrub_author(comment.get("author"), keep_for)
+        comments.append(comment)
+    thread["comments"] = comments
+
+
+def _scrub_permissions_in(value: Any, keep_for: set[str]) -> None:
+    """Drop other users' emails from every permissions block in ``value``, in place.
+
+    Documents nest them (a project embeds workflows and data collections, each
+    carrying its own ``permissions``), so the walk is recursive.
+    """
+    if isinstance(value, dict):
+        perms = value.get("permissions")
+        if isinstance(perms, dict):
+            for key in ("owners", "editors", "viewers"):
+                entries = perms.get(key)
+                if isinstance(entries, list):
+                    perms[key] = [_scrub_user_entry(e, keep_for) for e in entries]
+        for child in value.values():
+            _scrub_permissions_in(child, keep_for)
+    elif isinstance(value, list):
+        for child in value:
+            _scrub_permissions_in(child, keep_for)
+
+
+def scrub_export_emails(data: dict[str, list[dict]], keep_for: set[str]) -> dict[str, list[dict]]:
+    """Remove emails belonging to other users from bundle sections (ids are kept).
+
+    Permission entries and comment authors. An import remaps what it must
+    anyway, and a bundle an editor exported should not carry the project's
+    whole directory.
+    """
+    for section, docs in data.items():
+        for doc in docs:
+            if not isinstance(doc, dict):
+                continue
+            if section == "comment_threads":
+                _scrub_thread_emails(doc, keep_for)
+            _scrub_permissions_in(doc, keep_for)
     return data
 
 
@@ -558,6 +637,11 @@ class BundleReport(BaseModel):
     dashboards_added: list[str] = []
     dashboards_replaced: list[str] = []
     dashboards_removed: list[str] = []
+    #: S3 keys that sit outside the project's own prefixes.
+    stray_s3_keys: list[str] = []
+    #: Dashboard refs the bundle claims that a dashboard this import does not
+    #: replace already holds here. Refused on every path (409 on the admin import).
+    dashboard_id_conflicts: list[str] = []
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -795,6 +879,7 @@ def validate_bundle(
 
     # S3 keys confined to the project's own prefixes.
     stray = [k for k in keys if not scope.owns_key(k)]
+    report.stray_s3_keys = stray
     if stray:
         msg = f"{len(stray)} S3 object(s) outside the project's prefixes (first: {stray[0]})"
         (report.errors if strict else report.warnings).append(msg)
@@ -862,6 +947,27 @@ def validate_bundle(
         ):
             if str(doc.get("project_id")) != str(pid):
                 report.errors.append(f"dashboard id {doc['_id']} belongs to another project here")
+    # The ref a dashboard goes by in URLs, logo keys and comment anchors is kept
+    # by an import, so it must not collide with a dashboard this import does not
+    # replace: two dashboards would share one id and its logo binding.
+    bundle_dash_refs = {r for r in map(_dashboard_ref, data.get("dashboards") or []) if r}
+    ref_oids = [ObjectId(r) for r in bundle_dash_refs if ObjectId.is_valid(r)]
+    # `dashboard_id` is stored as either ObjectId or string; match both forms.
+    ref_query: dict[str, Any] = {
+        "$or": [
+            {"dashboard_id": {"$in": sorted(bundle_dash_refs) + ref_oids}},
+            {"_id": {"$in": ref_oids}},
+        ]
+    }
+    for doc in cols["dashboards"].find(ref_query, {"_id": 1, "dashboard_id": 1}):
+        if str(doc["_id"]) in bundle_dash_ids:
+            continue  # this import replaces it
+        ref = str(doc.get("dashboard_id") or doc["_id"])
+        if ref in bundle_dash_refs:
+            report.dashboard_id_conflicts.append(ref)
+            report.errors.append(
+                f"dashboard id {ref} is already used by a dashboard this bundle does not replace"
+            )
     report.errors.extend(compatibility_errors(data.get("dashboards") or []))
     thread_ids = [i for i in (_doc_id(d) for d in data.get("comment_threads") or []) if i]
     if thread_ids:
@@ -873,7 +979,6 @@ def validate_bundle(
     for doc in data.get("comment_threads") or []:
         if str(doc.get("project_id")) != str(pid):
             report.errors.append(f"comment thread {doc.get('_id')} belongs to another project")
-    bundle_dash_refs = {r for r in map(_dashboard_ref, data.get("dashboards") or []) if r}
     for doc in data.get("branding_assets") or []:
         key = str(doc.get("_id") or doc.get("id") or "")
         if key.removeprefix("dashboard-") not in bundle_dash_refs or not key.startswith(
@@ -996,6 +1101,18 @@ def _owner_entry(
     return entry
 
 
+def _backfill_local_email(entry: Any, user_emails: dict[str, str] | None) -> Any:
+    """Give a permission entry its email back from this instance's user record.
+
+    A bundle exported by a non-admin carries no other users' emails; an entry
+    kept because its user exists here is completed with the local address.
+    """
+    if not user_emails or not isinstance(entry, dict) or "email" in entry:
+        return entry
+    local = user_emails.get(str(entry.get("_id") or entry.get("id") or ""))
+    return {**entry, "email": local} if local else entry
+
+
 def _remap_permissions(
     permissions: Any,
     *,
@@ -1004,6 +1121,7 @@ def _remap_permissions(
     existing_user_ids: set[str] | None,
     force_remap: bool,
     strip_shares: bool,
+    user_emails: dict[str, str] | None = None,
 ) -> tuple[Any, int]:
     """Owners remapped to this instance; returns (permissions, shares dropped)."""
     if not isinstance(permissions, dict):
@@ -1021,7 +1139,7 @@ def _remap_permissions(
             if all(str(o.get("_id")) != str(owner_id) for o in new_owners):
                 new_owners.append(entry)
         else:
-            new_owners.append(owner)
+            new_owners.append(_backfill_local_email(owner, user_emails))
     if not new_owners:
         new_owners = [_owner_entry(owner_id, owner_email, None)]
     perms["owners"] = new_owners
@@ -1032,6 +1150,11 @@ def _remap_permissions(
             if isinstance(value, list):
                 dropped += len([v for v in value if v != "*"])
                 perms[key] = [v for v in value if v == "*"] if key == "viewers" else []
+    else:
+        for key in ("editors", "viewers"):
+            entries = perms.get(key)
+            if isinstance(entries, list):
+                perms[key] = [_backfill_local_email(e, user_emails) for e in entries]
     return perms, dropped
 
 
@@ -1051,6 +1174,7 @@ def prepare_docs_for_import(
     owner_id: ObjectId,
     owner_email: str | None = None,
     existing_user_ids: set[str] | None = None,
+    user_emails: dict[str, str] | None = None,
     force_remap: bool = False,
     strip_shares: bool = False,
     source_bucket: str | None,
@@ -1097,6 +1221,7 @@ def prepare_docs_for_import(
                     existing_user_ids=existing_user_ids,
                     force_remap=force_remap,
                     strip_shares=strip_shares,
+                    user_emails=user_emails,
                 )
                 shares_dropped += dropped
             if section == "projects":
@@ -1318,6 +1443,7 @@ __all__ = [
     "prepare_docs_for_import",
     "resolve_project_scope",
     "restore_s3_entries",
+    "scrub_export_emails",
     "spool_file",
     "validate_bundle",
     "write_bundle_zip",

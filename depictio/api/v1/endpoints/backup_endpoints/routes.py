@@ -157,6 +157,17 @@ def _verify_backup_integrity(backup_path: str, allow_unverified: bool) -> None:
         )
 
 
+def _open_owner_only(path: str):
+    """Open a file for writing, created with owner-only permissions (0600).
+
+    A backup holds every user record and project, so it must never be
+    readable by the group or others, however permissive the umask is.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
+    return os.fdopen(fd, "w")
+
+
 def _write_backup_file(backup_payload: dict, backup_id: str) -> str:
     """Write a backup payload and its SHA-256 sidecar; return the filename.
 
@@ -170,14 +181,14 @@ def _write_backup_file(backup_payload: dict, backup_id: str) -> str:
     backup_filename = f"depictio_backup_{backup_id}.json"
     backup_path = os.path.join(backup_dir, backup_filename)
 
-    with open(backup_path, "w") as backup_file:
+    with _open_owner_only(backup_path) as backup_file:
         json.dump(backup_payload, backup_file, indent=2, default=str)
 
     # Integrity: store a SHA-256 sidecar so restores can verify the backup
     # file has not been tampered with or truncated. The sidecar is written
     # after the backup file so the digest reflects the final contents.
     backup_checksum = _compute_file_sha256(backup_path)
-    with open(f"{backup_path}.sha256", "w") as checksum_file:
+    with _open_owner_only(f"{backup_path}.sha256") as checksum_file:
         checksum_file.write(f"{backup_checksum}  {backup_filename}\n")
 
     return backup_filename
@@ -1272,13 +1283,13 @@ async def upload_backup(
         backup_filename = f"depictio_backup_{backup_id}.json"
         backup_path = _resolve_backup_path(backup_dir, backup_id)
 
-        with open(backup_path, "w") as backup_file:
+        with _open_owner_only(backup_path) as backup_file:
             json.dump(payload, backup_file, indent=2, default=str)
 
         # Same sidecar convention as /create; computed over the re-serialized
         # file so the checksum always matches what is on disk.
         backup_checksum = _compute_file_sha256(backup_path)
-        with open(f"{backup_path}.sha256", "w") as checksum_file:
+        with _open_owner_only(f"{backup_path}.sha256") as checksum_file:
             checksum_file.write(f"{backup_checksum}  {backup_filename}\n")
 
         logger.info(

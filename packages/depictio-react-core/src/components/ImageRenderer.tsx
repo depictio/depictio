@@ -22,6 +22,7 @@ import {
   fetchImagePaths,
   ImageGridResponse,
   InteractiveFilter,
+  signServeImageUrls,
   StoredMetadata,
 } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
@@ -97,6 +98,11 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
       : 50;
 
   const [response, setResponse] = useState<ImageGridResponse | null>(null);
+  // Signed serve URLs for the fetched rows, keyed by full S3 path: `<img>`
+  // cannot authenticate, so private projects' thumbnails need the short-lived
+  // signature the API mints. Public projects (and offline bundles) keep
+  // working through the plain URLs.
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalSrc, setModalSrc] = useState<string | null>(null);
@@ -161,10 +167,30 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
     }
     setLoading(true);
     setError(null);
+    setSignedUrls({});
     fetchImagePaths(dashboardId, metadata.index, maxImages, filtersForFetch, sortBy, sortDir, versionBody)
       .then((res) => {
         if (cancelled) return;
         setResponse(res);
+        // Join every row's image value to its full S3 path exactly as
+        // ``buildImageUrl`` does below, then swap the plain serve URLs for
+        // signed ones. A failed exchange is silent: the plain URLs still
+        // cover public projects.
+        const base = s3BaseFolder.replace(/\/+$/, '');
+        const lastSegment = base.split('/').pop() || '';
+        const fullPaths: string[] = [];
+        for (const row of res.rows ?? []) {
+          const rel = String(row[imageColumn] ?? '');
+          if (!rel || /^(blob|data|https?):/.test(rel)) continue;
+          let stripped = rel.replace(/^\/+/, '');
+          if (lastSegment && stripped.startsWith(`${lastSegment}/`)) {
+            stripped = stripped.slice(lastSegment.length + 1);
+          }
+          fullPaths.push(`${base}/${stripped}`);
+        }
+        signServeImageUrls(fullPaths).then((urls) => {
+          if (!cancelled) setSignedUrls(urls);
+        });
       })
       .catch((err: Error) => {
         if (cancelled) return;
@@ -212,6 +238,10 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
       rel = rel.slice(lastSegment.length + 1);
     }
     const fullS3Path = `${base}/${rel}`;
+    // The signed URL the exchange returned, when the image is not covered by a
+    // public project (whose plain URL serves without credentials).
+    const signed = signedUrls[fullS3Path];
+    if (signed) return signed;
     return `/depictio/api/v1/files/serve/image?s3_path=${encodeURIComponent(fullS3Path)}`;
   };
 
@@ -258,7 +288,7 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, maxImages, s3BaseFolder, imageColumn, rowIdColumn]);
+  }, [rows, maxImages, s3BaseFolder, imageColumn, rowIdColumn, signedUrls]);
 
   const totalRowsCount = rows ? rows.length : 0;
 

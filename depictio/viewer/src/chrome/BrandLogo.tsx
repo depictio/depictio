@@ -1,7 +1,7 @@
 import React from 'react';
 import { useComputedColorScheme } from '@mantine/core';
 
-import { resolveBrandLogo, type BrandTheme } from 'depictio-react-core';
+import { resolveBrandLogo, type BrandTheme, useSignedDashboardLogoUrl } from 'depictio-react-core';
 
 import { useBranding } from '../branding';
 import DepictioWordmark from './DepictioWordmark';
@@ -69,11 +69,16 @@ export default function BrandLogo({
     }
   }
 
+  // A dashboard's stored logo URL loads from a bare <img> only with the
+  // short-lived signature the API mints (an <img> cannot authenticate); other
+  // sources pass through unchanged.
+  const signedSrc = useSignedDashboardLogoUrl(src);
+
   if (stopped) return null;
-  if (!src && fallback === 'none') return null;
+  if (!signedSrc && fallback === 'none') return null;
 
   const alt = instance?.app_name ?? 'depictio';
-  if (!src) {
+  if (!signedSrc) {
     return (
       <DepictioWordmark
         width={width}
@@ -89,7 +94,7 @@ export default function BrandLogo({
 
   return (
     <img
-      src={src}
+      src={signedSrc}
       alt={alt}
       data-testid={testId}
       style={{

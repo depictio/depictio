@@ -6,7 +6,7 @@
  * events (`/depictio/api/v1/events/ws`), checking the reader's viewer
  * permission on the project. One socket carries every project the reader
  * follows. Connection handling mirrors `realtime.ts` in depictio-react-core
- * (JWT in the query string, capped exponential backoff), which cannot be
+ * (first-message auth, capped exponential backoff), which cannot be
  * extended from here.
  */
 import { useEffect, useRef } from 'react';
@@ -43,15 +43,15 @@ function storedAccessToken(): string | null {
   }
 }
 
-function webSocketUrl(token: string | null): string {
+function webSocketUrl(): string {
   const { protocol, hostname, port } = window.location;
   const scheme = protocol === 'https:' ? 'wss:' : 'ws:';
   // Same dev convenience as realtime.ts: the legacy front end on 5080 maps to
   // the API on 8058.
   const apiPort = port === '5080' ? '8058' : port;
   const suffix = apiPort && apiPort !== '80' && apiPort !== '443' ? `:${apiPort}` : '';
-  const query = token ? `?token=${encodeURIComponent(token)}` : '';
-  return `${scheme}//${hostname}${suffix}/depictio/api/v1/events/ws${query}`;
+  // No credential in the URL — the JWT travels as the first WebSocket message.
+  return `${scheme}//${hostname}${suffix}/depictio/api/v1/events/ws`;
 }
 
 /**
@@ -90,13 +90,16 @@ export function useProjectIngestionEvents(
       if (attempts > 0) await fetchChangesInbox().catch(() => undefined);
       if (disposed) return;
       try {
-        ws = new WebSocket(webSocketUrl(storedAccessToken()));
+        ws = new WebSocket(webSocketUrl());
       } catch {
         scheduleReconnect();
         return;
       }
       ws.onopen = () => {
         attempts = 0;
+        // First-message auth: keeps the JWT out of the URL. Anonymous mode
+        // ignores it server-side.
+        ws?.send(JSON.stringify({ type: 'auth', token: storedAccessToken() }));
         for (const id of ids) {
           ws?.send(JSON.stringify({ type: 'subscribe', dashboard_id: projectChannel(id) }));
         }

@@ -6,8 +6,10 @@
  *   ``depictio/dash/layouts/realtime_callbacks.py`` (callbacks)
  *   ``depictio/api/v1/endpoints/events_endpoints/routes.py`` (backend)
  *
- * Subscribes to ``/depictio/api/v1/events/ws?token=…&dashboard_id=…`` and
- * exposes connection state + the most recent ``data_collection_updated``
+ * Subscribes to ``/depictio/api/v1/events/ws?dashboard_id=…`` and
+ * authenticates with a first message (``{type: 'auth', token: …}``) so the
+ * JWT never travels in the URL. Exposes connection state + the most recent
+ * ``data_collection_updated``
  * event. The viewer uses this to surface a "Data updated" notification
  * (manual mode) or to silently re-fire ``bulkComputeCards`` (auto mode).
  *
@@ -105,8 +107,9 @@ interface UseDataCollectionUpdatesResult {
 /** Build the ``ws[s]://…/depictio/api/v1/events/ws`` URL from the current
  *  page's location. Mirrors the port-resolution dance in
  *  ``depictio/dash/layouts/realtime_callbacks.py:register_websocket_url_callback``
- *  (HTTPS → wss; dev's Dash port 5080 maps to API port 8058). */
-function buildWebSocketUrl(token: string | null, dashboardId: string): string {
+ *  (HTTPS → wss; dev's Dash port 5080 maps to API port 8058). No credential
+ *  goes in the URL — auth travels as the first WebSocket message. */
+function buildWebSocketUrl(dashboardId: string): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const hostname = window.location.hostname;
   let port: string | null = window.location.port || null;
@@ -120,17 +123,14 @@ function buildWebSocketUrl(token: string | null, dashboardId: string): string {
   if (window.location.protocol === 'http:' && (port === '80' || port === '')) port = null;
 
   const portSuffix = port ? `:${port}` : '';
-  const params = new URLSearchParams();
-  if (token) params.set('token', token);
-  params.set('dashboard_id', dashboardId);
-  return `${proto}//${hostname}${portSuffix}/depictio/api/v1/events/ws?${params.toString()}`;
+  return `${proto}//${hostname}${portSuffix}/depictio/api/v1/events/ws?dashboard_id=${encodeURIComponent(dashboardId)}`;
 }
 
-// A WebSocket carries its credential in the URL, so these two connect paths
-// cannot ride `authFetch`. They resolve the token through
-// `ensureFreshAccessToken` instead, which matters most here: a dashboard left
-// open past the access token's 1 h life reconnects on its own, and would
-// otherwise reconnect with a token the backend has already stopped accepting.
+// A WebSocket cannot ride `authFetch`, so these two connect paths resolve the
+// token through `ensureFreshAccessToken` and send it as the first message.
+// That matters most here: a dashboard left open past the access token's 1 h
+// life reconnects on its own, and would otherwise reconnect with a token the
+// backend has already stopped accepting.
 
 /** Subscribe to dashboard-scoped backend events. The hook owns one WebSocket
  *  for the current dashboard, reconnects with capped exponential backoff,
@@ -172,7 +172,7 @@ export function useDataCollectionUpdates(
       const token = await ensureFreshAccessToken();
       // Re-check: the effect can be torn down while the refresh is in flight.
       if (disposed) return;
-      const url = buildWebSocketUrl(token, dashboardId);
+      const url = buildWebSocketUrl(dashboardId);
       setStatus('connecting');
 
       let ws: WebSocket;
@@ -191,10 +191,13 @@ export function useDataCollectionUpdates(
         if (disposed) return;
         reconnectAttempts.current = 0;
         setStatus('connected');
-        // Belt-and-braces: the URL already carries dashboard_id, but the
-        // backend also accepts an explicit subscribe message. Keeps state
-        // consistent if the connection_manager API ever changes.
         try {
+          // First-message auth: keeps the JWT out of the URL (proxy access
+          // logs, browser history). Anonymous mode just ignores it server-side.
+          ws.send(JSON.stringify({ type: 'auth', token }));
+          // Belt-and-braces: the URL already carries dashboard_id, but the
+          // backend also accepts an explicit subscribe message. Keeps state
+          // consistent if the connection_manager API ever changes.
           ws.send(JSON.stringify({ type: 'subscribe', dashboard_id: dashboardId }));
         } catch {
           // ignore
@@ -296,7 +299,7 @@ interface UseMonitoringEventsOptions {
 /**
  * Subscribe to the admin monitoring channel for live task/ingestion status
  * pushes. Mirrors {@link useDataCollectionUpdates} (same socket URL builder,
- * JWT-in-query auth, capped-backoff reconnect) but targets the
+ * first-message auth, capped-backoff reconnect) but targets the
  * ``__admin_monitoring__`` pseudo-dashboard the backend gates on ``is_admin``.
  *
  * If real-time events are disabled server-side the socket simply never delivers
@@ -330,7 +333,7 @@ export function useMonitoringEvents(
       const token = await ensureFreshAccessToken();
       // Re-check: the effect can be torn down while the refresh is in flight.
       if (disposed) return;
-      const url = buildWebSocketUrl(token, ADMIN_MONITORING_CHANNEL);
+      const url = buildWebSocketUrl(ADMIN_MONITORING_CHANNEL);
       setStatus('connecting');
 
       let ws: WebSocket;
@@ -348,6 +351,9 @@ export function useMonitoringEvents(
         reconnectAttempts.current = 0;
         setStatus('connected');
         try {
+          // First-message auth: keeps the JWT out of the URL. See
+          // useDataCollectionUpdates for the anonymous-mode note.
+          ws.send(JSON.stringify({ type: 'auth', token }));
           ws.send(JSON.stringify({ type: 'subscribe', dashboard_id: ADMIN_MONITORING_CHANNEL }));
         } catch {
           // ignore

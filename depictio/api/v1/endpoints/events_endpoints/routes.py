@@ -5,6 +5,7 @@ Provides WebSocket endpoint for dashboard real-time updates with JWT authenticat
 """
 
 import asyncio
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -18,6 +19,12 @@ from depictio.api.v1.services.events import connection_manager, event_service
 from depictio.models.models.users import User
 
 events_router = APIRouter()
+
+# Seconds the server waits for the first {"type": "auth", ...} message before
+# rejecting an unauthenticated connection.
+WS_AUTH_TIMEOUT_SECONDS = 5.0
+# Application close code for a failed first-message auth handshake.
+WS_AUTH_CLOSE_CODE = 4401
 
 
 async def _resolve_websocket_user(token: str | None) -> User | None:
@@ -34,6 +41,30 @@ async def _resolve_websocket_user(token: str | None) -> User | None:
     except Exception as e:
         logger.debug(f"WebSocket token verification failed: {e}")
         return None
+
+
+async def _receive_auth_token(websocket: WebSocket) -> str | None:
+    """Wait briefly for the first client message and extract the auth token.
+
+    Returns the token string when the first message is
+    ``{"type": "auth", "token": "..."}``, otherwise ``None`` (timeout, a
+    non-JSON message, or a different message type). The token value is never
+    logged. A client disconnect propagates to the caller.
+    """
+    try:
+        data = await asyncio.wait_for(websocket.receive_json(), timeout=WS_AUTH_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        logger.debug("WebSocket auth: no auth message within the timeout")
+        return None
+    except json.JSONDecodeError:
+        logger.debug("WebSocket auth: first message was not valid JSON")
+        return None
+    if isinstance(data, dict) and data.get("type") == "auth":
+        token = data.get("token")
+        if isinstance(token, str) and token:
+            return token
+    logger.debug("WebSocket auth: first message was not an auth message")
+    return None
 
 
 PROJECT_CHANNEL_PREFIX = "project:"
@@ -142,7 +173,9 @@ def _user_can_access_dashboard(user: User | None, dashboard_id: str) -> bool:
 @events_router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str | None = Query(default=None, description="JWT access token"),
+    token: str | None = Query(
+        default=None, description="JWT access token (deprecated: use first-message auth)"
+    ),
     dashboard_id: str | None = Query(default=None, description="Dashboard ID to subscribe to"),
 ):
     """
@@ -152,8 +185,16 @@ async def websocket_endpoint(
     The server will automatically detect which dashboards are affected
     and send notifications to connected clients.
 
+    Authentication: the client connects without a token and sends
+    ``{"type": "auth", "token": "<jwt>"}`` as its first message; the server
+    waits up to ``WS_AUTH_TIMEOUT_SECONDS`` and otherwise closes with code
+    4401. When authentication is required and no valid token arrives, the
+    connection is refused. In public / single-user mode anonymous
+    connections are allowed, as before.
+
     Query Parameters:
-        token: JWT access token for authentication
+        token: JWT access token — deprecated, kept for one release for older
+            clients; never logged. Prefer the first-message auth.
         dashboard_id: Dashboard ID to subscribe to for updates
 
     Message Types Received:
@@ -164,8 +205,9 @@ async def websocket_endpoint(
     Example JavaScript:
         ```javascript
         const ws = new WebSocket(
-            `ws://localhost:8058/depictio/api/v1/events/ws?token=${jwt}&dashboard_id=${dashboardId}`
+            `ws://localhost:8058/depictio/api/v1/events/ws?dashboard_id=${dashboardId}`
         );
+        ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: jwt }));
         ws.onmessage = (e) => {
             const data = JSON.parse(e.data);
             if (data.event_type === 'data_collection_updated') {
@@ -178,21 +220,39 @@ async def websocket_endpoint(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Events disabled")
         return
 
-    # Verify token (optional - allows unauthenticated connections if auth mode allows).
-    # TODO(PR2 cookie migration): replace the token-in-query-string scheme with
-    # cookie/subprotocol-based WebSocket auth. Query-string tokens leak into proxy
-    # access logs and browser history. The full migration (and dropping the `token`
-    # query param) is explicitly deferred to PR2.
-    user = await _resolve_websocket_user(token)
-    user_id = str(user.id) if user else None
-
-    if user is None and not settings.auth.requires_anonymous_user:
-        # Require authentication unless single-user / public / unauthenticated mode
-        # is enabled (mirrors the HTTP `get_user_or_anonymous` fallback).
-        await websocket.close(
-            code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required"
+    user: User | None = None
+    if token:
+        # Query-string tokens leak into proxy access logs and browser history.
+        # Accepted for one more release for older clients; the value itself is
+        # never logged.
+        logger.warning(
+            "WebSocket auth via ?token= is deprecated; send "
+            '{"type": "auth", "token": ...} as the first message instead'
         )
-        return
+        user = await _resolve_websocket_user(token)
+
+    accepted = False
+    if user is None:
+        # Accept, then wait briefly for the first-message auth handshake before
+        # subscribing. Read it in every mode: in public / single-user mode a
+        # signed-in visitor must still be recognised, or they would be treated
+        # as anonymous and lose their private dashboards' events.
+        await websocket.accept()
+        accepted = True
+        try:
+            auth_token = await _receive_auth_token(websocket)
+        except WebSocketDisconnect:
+            return
+        if auth_token:
+            user = await _resolve_websocket_user(auth_token)
+        if user is None and not settings.auth.requires_anonymous_user:
+            try:
+                await websocket.close(code=WS_AUTH_CLOSE_CODE, reason="Authentication required")
+            except WebSocketDisconnect:
+                pass
+            return
+
+    user_id = str(user.id) if user else None
 
     # Gate the initial query-param subscription: connection_manager.connect()
     # auto-subscribes to `dashboard_id`, so it must pass the same ownership check
@@ -203,11 +263,13 @@ async def websocket_endpoint(
         )
         dashboard_id = None
 
-    # Accept connection and register with connection manager
+    # Accept connection (unless already accepted for the auth handshake) and
+    # register with connection manager
     client_id = await connection_manager.connect(
         websocket=websocket,
         dashboard_id=dashboard_id,
         user_id=user_id,
+        accepted=accepted,
     )
 
     try:

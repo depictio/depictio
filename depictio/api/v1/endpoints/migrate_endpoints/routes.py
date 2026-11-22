@@ -7,6 +7,7 @@ and imports it into the target instance via upsert (never wipes other projects).
 """
 
 import hashlib
+import json
 import os
 from collections.abc import Callable
 from typing import Any, Literal
@@ -15,9 +16,9 @@ from urllib.parse import quote, urlsplit
 import boto3
 from botocore.exceptions import ClientError
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from starlette.background import BackgroundTask
 
 from depictio.api.v1.configs.config import settings
@@ -34,7 +35,11 @@ from depictio.api.v1.endpoints.projects_endpoints.publish_lock import LOCKED_DET
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
-from depictio.api.v1.permissions import build_access_query, get_user_group_ids
+from depictio.api.v1.permissions import (
+    build_access_query,
+    get_user_group_ids,
+    has_permission,
+)
 from depictio.api.v1.services import project_bundle
 from depictio.api.v1.services.migration_push import BundleListingError, build_project_bundle_file
 from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
@@ -399,13 +404,12 @@ async def export_project(
     a target S3 store (modes all / files).
 
     Access rules:
-    - Admins can export any project, in every mode.
-    - In public/demo mode the anonymous and temporary visitors are non-admin,
-      so they're allowed to export too — but only projects they can actually
-      read (public projects or ones shared with them), never arbitrary private
-      projects. Uses ``get_user_or_anonymous`` so tokenless public-mode
-      visitors resolve to the anonymous user instead of 401-ing.
+    - Admins can export any project, in every mode, with every user's emails.
     - On standard (non-public) instances export stays admin-only.
+    - In public/demo mode owners and editors of the project may export it.
+      Viewers and anonymous visitors are refused with 403 (a bundle is a full
+      copy of a project's data, more than reading the dashboards grants).
+    - A non-admin's export carries no other user's emails (ids are kept).
 
     Non-admin callers may not supply ``target_s3_config``: that triggers the
     server-to-server S3 copy path (an exfiltration vector gated by
@@ -416,14 +420,13 @@ async def export_project(
     use does not grow with the project's data. Data above
     ``DEPICTIO_MIGRATION_MAX_BUNDLE_BYTES`` is refused with a 413.
     """
-    if not current_user.is_admin:
-        if not settings.auth.is_public_mode:
-            raise HTTPException(status_code=403, detail="Only administrators can export projects")
-        if request.target_s3_config:
-            raise HTTPException(
-                status_code=403,
-                detail="Non-admin users cannot specify a target S3 config for export",
-            )
+    if not current_user.is_admin and not settings.auth.is_public_mode:
+        raise HTTPException(status_code=403, detail="Only administrators can export projects")
+    if not current_user.is_admin and request.target_s3_config:
+        raise HTTPException(
+            status_code=403,
+            detail="Non-admin users cannot specify a target S3 config for export",
+        )
 
     # Resolve project (permission-scoped for non-admin callers)
     query: dict[str, Any]
@@ -434,17 +437,20 @@ async def export_project(
     else:
         raise HTTPException(status_code=400, detail="Provide project_id or project_name")
 
+    group_ids: list[ObjectId] | None = None
     if not current_user.is_admin:
         # Mirror _async_get_project_from_id: a non-admin may only reach projects
         # they own/edit/view or that are explicitly public.
-        query.update(
-            build_access_query(current_user, "viewer", get_user_group_ids(current_user.id))
-        )
+        group_ids = get_user_group_ids(current_user.id)
+        query.update(build_access_query(current_user, "viewer", group_ids))
 
     project = projects_collection.find_one(query)
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if not current_user.is_admin and not has_permission(project, current_user, "editor", group_ids):
+        raise HTTPException(status_code=403, detail="Only owners and editors can export a project")
 
     try:
         built = build_project_bundle_file(
@@ -452,6 +458,7 @@ async def export_project(
             mode=request.mode,
             dry_run=request.dry_run,
             target_s3_config=request.target_s3_config,
+            keep_emails_for=None if current_user.is_admin else {str(current_user.id)},
         )
     except project_bundle.BundleTooLarge as e:
         raise HTTPException(status_code=413, detail=str(e))
@@ -485,17 +492,43 @@ def _run_import(
     via: Literal["cli", "zip"],
     bundle_sha256: str | None = None,
     write_s3: Callable[[], None] | None = None,
+    strict_s3: bool = False,
 ) -> MigrateImportResponse:
     """Validate, prepare and apply one bundle (the admin import paths).
 
     ``write_s3`` restores the bundle's inline data; it runs after every check
-    and before any Mongo write, and raises to abort the import.
+    and before any Mongo write, and raises to abort the import. ``strict_s3``
+    (the ZIP path) turns S3 keys outside the imported project's prefixes into
+    a refusal; the CLI path copies S3 server side, so there are no keys to
+    check.
     """
     report = project_bundle.validate_bundle(metadata, data, s3_keys, strict=False)
+    if report.dashboard_id_conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Bundle refused",
+                "errors": [
+                    f"dashboard id {r} is already used by a dashboard this bundle does not replace"
+                    for r in report.dashboard_id_conflicts[:20]
+                ],
+            },
+        )
     if report.errors:
         raise HTTPException(
             status_code=400,
             detail={"message": "Bundle refused", "errors": report.errors[:20]},
+        )
+    if strict_s3 and report.stray_s3_keys:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Bundle refused",
+                "errors": [
+                    f"{len(report.stray_s3_keys)} S3 object(s) outside the imported project's "
+                    f"prefixes (first: {report.stray_s3_keys[0]})"
+                ],
+            },
         )
 
     if report.existing_locked:
@@ -533,11 +566,13 @@ def _run_import(
         bundle_sha256=bundle_sha256,
         via=via,
     )
+    users = list(users_collection.find({}, {"_id": 1, "email": 1}))
     prepared = project_bundle.prepare_docs_for_import(
         data,
         owner_id=ObjectId(str(owner_id)),
         owner_email=getattr(current_user, "email", None) if not owner_user_id else None,
-        existing_user_ids={str(u["_id"]) for u in users_collection.find({}, {"_id": 1})},
+        existing_user_ids={str(u["_id"]) for u in users},
+        user_emails={str(u["_id"]): u.get("email") for u in users},
         force_remap=force_owner_remap,
         source_bucket=project_bundle._source_bucket(metadata, data),
         target_bucket=settings.s3.bucket,
@@ -587,9 +622,18 @@ def _run_import(
     )
 
 
+#: Default cap on the JSON body POST /migrate/import-project accepts
+#: (``DEPICTIO_MIGRATION_MAX_IMPORT_BODY_BYTES``).
+DEFAULT_MAX_IMPORT_BODY_BYTES = 50 * 1024**2
+
+
+def _max_import_body_bytes() -> int:
+    return _migration_setting("max_import_body_bytes", DEFAULT_MAX_IMPORT_BODY_BYTES)
+
+
 @migrate_endpoint_router.post("/import-project", response_model=MigrateImportResponse)
 async def import_project(
-    request: MigrateImportRequest,
+    raw_request: Request,
     current_user: User = Depends(get_user_or_anonymous),
 ) -> MigrateImportResponse:
     """
@@ -601,9 +645,37 @@ async def import_project(
     the specified owner_user_id). ``s3://`` locations are rewritten to this
     instance's bucket. Each dashboard family records the state the import
     replaces, then an ``import`` version.
+
+    The body is read with a cap (``DEPICTIO_MIGRATION_MAX_IMPORT_BODY_BYTES``,
+    50 MB by default): a bundle JSON the CLI sends can be large, but it is
+    bounded, and anything above the cap answers 413 before it is parsed.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only administrators can import projects")
+
+    cap = _max_import_body_bytes()
+    declared = raw_request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > cap:
+        raise HTTPException(
+            status_code=413,
+            detail=f"The import body is over the {cap} byte limit",
+        )
+    body = bytearray()
+    async for chunk in raw_request.stream():
+        body.extend(chunk)
+        if len(body) > cap:
+            raise HTTPException(
+                status_code=413,
+                detail=f"The import body is over the {cap} byte limit",
+            )
+    try:
+        payload = json.loads(bytes(body))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="The import body is not valid JSON")
+    try:
+        request = MigrateImportRequest.model_validate(payload)
+    except ValidationError:
+        raise HTTPException(status_code=400, detail="Invalid import request")
 
     bundle = request.bundle
     if "data" not in bundle or not isinstance(bundle["data"], dict):
@@ -630,6 +702,17 @@ def _hash_upload(fileobj: Any) -> str:
         digest.update(chunk)
     fileobj.seek(0)
     return digest.hexdigest()
+
+
+def _bundle_s3_scope(data: dict[str, list[dict]]) -> project_bundle.ProjectScope | None:
+    """The bundled project's S3 scope, or None when the bundle has no project."""
+    projects = data.get("projects") or []
+    if len(projects) != 1:
+        return None
+    try:
+        return project_bundle.resolve_project_scope(projects[0])
+    except ValueError:
+        return None
 
 
 @migrate_endpoint_router.post("/import-project-zip", response_model=MigrateImportResponse)
@@ -666,8 +749,16 @@ async def import_project_zip(
     def write_s3() -> None:
         if not opened.s3_entries:
             return
+        # Only keys the imported project owns may land in object storage; the
+        # strict validation refuses strays, this is the second fence.
+        scope = _bundle_s3_scope(opened.data)
+        if scope is None:
+            raise HTTPException(
+                status_code=502,
+                detail="The bundle carries data files but no project to own them",
+            )
         uploaded, failures = project_bundle.restore_s3_entries(
-            opened, _instance_s3_client(), settings.s3.bucket
+            opened, _instance_s3_client(), settings.s3.bucket, allowed=scope.owns_key
         )
         logger.info("Migrate import: restored %d S3 objects to the S3 store", uploaded)
         # Abort before touching Mongo. Importing the metadata of a project
@@ -697,6 +788,7 @@ async def import_project_zip(
             via="zip",
             bundle_sha256=sha256,
             write_s3=write_s3,
+            strict_s3=True,
         )
     finally:
         opened.close()

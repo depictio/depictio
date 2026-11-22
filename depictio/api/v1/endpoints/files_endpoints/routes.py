@@ -15,9 +15,15 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_dc_project_unlocked
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+    get_user_or_anonymous,
+    oauth2_scheme_optional,
+)
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.services import signed_media
+from depictio.api.v1.services.signed_media import SCOPE_SERVE_IMAGE
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.data_collections_types.indexed_file import (
     DEFAULT_INDEX_SUFFIX,
@@ -378,21 +384,113 @@ def _validate_image_path(key: str) -> bool:
     return any(lower_key.endswith(ext) for ext in SUPPORTED_IMAGE_EXTENSIONS)
 
 
+# ---------------------------------------------------------------------------
+# serve/image access control
+# ---------------------------------------------------------------------------
+
+
+async def optional_media_viewer(
+    token: str | None = Depends(oauth2_scheme_optional),
+    request: Request = None,  # type: ignore[assignment]
+) -> Any | None:
+    """The caller as a User, or None when unauthenticated.
+
+    Unlike ``get_user_or_anonymous`` this never raises for a missing or invalid
+    token: the media routes resolve callers from a signed URL first, and a
+    request without one is treated as unauthenticated (denied unless the image
+    belongs to a public project).
+    """
+    try:
+        return await get_user_or_anonymous(token, request)
+    except HTTPException:
+        return None
+
+
+def _image_dc_project_candidates() -> list[tuple[list[tuple[str, str]], dict]]:
+    """Projects whose data collections name an S3 base folder, with prefixes.
+
+    Returns one ``(prefixes, project)`` per project: ``prefixes`` is the list of
+    ``(bucket, key-prefix)`` pairs every image-like DC of that project covers.
+    Data collections live embedded under ``workflows``, so the image key is
+    tied to a project by prefix rather than by an exact document lookup.
+    """
+    from depictio.api.v1.db import projects_collection
+
+    out: list[tuple[list[tuple[str, str]], dict]] = []
+    for project in projects_collection.find(
+        {
+            "workflows.data_collections.config.dc_specific_properties.s3_base_folder": {
+                "$exists": True
+            }
+        },
+        {"is_public": 1, "permissions": 1, "workflows": 1},
+    ):
+        prefixes: list[tuple[str, str]] = []
+        for wf in project.get("workflows") or []:
+            for dc in wf.get("data_collections") or []:
+                base = ((dc.get("config") or {}).get("dc_specific_properties") or {}).get(
+                    "s3_base_folder"
+                )
+                if not base:
+                    continue
+                try:
+                    dc_bucket, dc_key = _parse_s3_path(str(base))
+                except ValueError:
+                    continue
+                prefixes.append((dc_bucket, dc_key.rstrip("/") + "/"))
+        if prefixes:
+            out.append((prefixes, project))
+    return out
+
+
+def _covering_image_projects(bucket: str, key: str, candidates: list[tuple]) -> list[dict]:
+    """Candidate projects whose base folder covers the requested key."""
+    return [
+        project
+        for prefixes, project in candidates
+        if any(dc_bucket == bucket and key.startswith(prefix) for dc_bucket, prefix in prefixes)
+    ]
+
+
+def _caller_can_read_image_projects(projects: list[dict], current_user: Any | None) -> bool:
+    """Viewer access on any covering project (public floor included)."""
+    if not projects or current_user is None:
+        return False
+    if current_user.is_admin:
+        return True
+    group_ids = get_user_group_ids(current_user.id)
+    return any(has_permission(p, current_user, "viewer", group_ids) for p in projects)
+
+
+def signed_serve_image_url(s3_path: str) -> str:
+    """A serve/image URL for ``s3_path``, signed instead of session-gated.
+
+    ``s3_path`` must already have passed the bucket lock and path validation.
+    """
+    bucket, key = _parse_s3_path(s3_path)
+    query = signed_media.signed_query(SCOPE_SERVE_IMAGE, key)
+    return f"{API_PREFIX}/files/serve/image?s3_path={quote(s3_path, safe='')}&{query}"
+
+
 @files_endpoint_router.get("/serve/image")
 async def serve_image(
     s3_path: str = Query(
         ..., description="Full S3 path to the image (e.g., s3://bucket/path/image.png)"
     ),
+    exp: str | None = Query(None, description="Expiry of the URL signature (unix seconds)"),
+    sig: str | None = Query(None, description="HMAC over the object key and expiry"),
+    current_user: Any | None = Depends(optional_media_viewer),
 ):
     """
     Serve images from S3 via streaming.
 
-    NOTE: Currently PUBLIC to allow HTML <img> tags to load images. Access is
-    bucket-locked to the configured S3 bucket and the key is
+    Access is bucket-locked to the configured S3 bucket and the key is
     traversal-hardened, so this endpoint can only stream objects from
-    Depictio's own bucket.
-    TODO: Presigned, time-limited URLs remain future work for per-object
-    access control.
+    Depictio's own bucket. A caller must either present a valid short-lived
+    signature (minted by ``POST /files/serve/image/sign``, since ``<img>`` tags
+    cannot send an Authorization header) or hold viewer access to a project
+    whose image data collection covers the key. Anonymous callers are served
+    only when that project is public.
     """
     decoded_path = unquote(s3_path)
 
@@ -411,6 +509,16 @@ async def serve_image(
     if not _validate_image_path(key):
         logger.warning(f"Invalid image path rejected: {key}")
         raise HTTPException(status_code=400, detail="Invalid image path or unsupported format")
+
+    # SECURITY: private projects' images are no longer served to anyone who
+    # asks. A signature minted for this exact key replaces the session check;
+    # otherwise the caller needs viewer access (or a public project).
+    authorized = signed_media.verify(SCOPE_SERVE_IMAGE, key, exp, sig)
+    if not authorized:
+        covering = _covering_image_projects(bucket, key, _image_dc_project_candidates())
+        if not _caller_can_read_image_projects(covering, current_user):
+            logger.warning(f"Denied image request for {bucket}/{key}")
+            raise HTTPException(status_code=403, detail="No access to this image")
 
     try:
         response = s3_client.get_object(Bucket=bucket, Key=key)
@@ -440,6 +548,42 @@ async def serve_image(
         # exception details (which may include S3 internals) to the client.
         logger.error(f"Error serving image {bucket}/{key}: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving image")
+
+
+class SignServeImagesRequest(BaseModel):
+    s3_paths: list[str] = Field(..., max_length=500)
+
+
+@files_endpoint_router.post("/serve/image/sign")
+async def sign_serve_images(
+    payload: SignServeImagesRequest,
+    current_user: Any = Depends(get_user_or_anonymous),
+):
+    """Exchange S3 image paths for short-lived signed serve/image URLs.
+
+    ``<img>`` tags cannot carry the caller's Authorization header, so the
+    viewer swaps the paths it got from the listing endpoints for signed URLs
+    here, one request for a whole gallery. Every path is authorized like a
+    direct serve/image read; paths the caller may not read are omitted from the
+    answer, so the client falls back to its placeholder instead of a 403 per
+    thumbnail.
+    """
+    candidates: list[tuple] | None = None
+    urls: dict[str, str] = {}
+    for raw in dict.fromkeys(payload.s3_paths):
+        try:
+            bucket, key = _parse_s3_path(raw)
+        except ValueError:
+            continue
+        if bucket != settings.s3.bucket or not _validate_image_path(key):
+            continue
+        if candidates is None:
+            candidates = _image_dc_project_candidates()
+        covering = _covering_image_projects(bucket, key, candidates)
+        if not _caller_can_read_image_projects(covering, current_user):
+            continue
+        urls[raw] = signed_serve_image_url(raw)
+    return {"urls": urls, "expires_in": signed_media.MEDIA_URL_TTL_SECONDS}
 
 
 # ---------------------------------------------------------------------------

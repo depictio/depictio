@@ -33,8 +33,11 @@ logger = logging.getLogger(__name__)
 
 figure_endpoint_router = APIRouter()
 
+# Size cap for /figure/analyze_code input: 100 kB.
+ANALYZE_CODE_MAX_BYTES = 100_000
 
-def _authorize_preview_dc(wf_id, dc_id, current_user: User) -> None:
+
+def _authorize_preview_dc(wf_id, dc_id, current_user: User):
     """Require read permission on the project that owns ``wf_id``/``dc_id``.
 
     The preview endpoint takes an in-flight ``metadata`` dict straight from the
@@ -47,7 +50,7 @@ def _authorize_preview_dc(wf_id, dc_id, current_user: User) -> None:
 
     Raises 404 when the workflow/DC pair resolves to no project (don't leak the
     existence of collections the caller can't see) and 403 when the caller has
-    no read access to the project that owns it.
+    no read access to the project that owns it. Returns the owning project id.
     """
     from bson import ObjectId
 
@@ -68,6 +71,7 @@ def _authorize_preview_dc(wf_id, dc_id, current_user: User) -> None:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
     if not check_project_permission(project["_id"], current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
+    return project["_id"]
 
 
 @figure_endpoint_router.get("/visualizations")
@@ -182,8 +186,34 @@ async def preview_figure(
 
     # Permission gate — before any data is loaded or any user code runs. The
     # caller must have read access to the project that owns this workflow/DC.
-    _authorize_preview_dc(wf_id, dc_id, current_user)
+    project_id = _authorize_preview_dc(wf_id, dc_id, current_user)
+
+    # The code-figure lock (if on) refuses first — it is a cheap, in-process
+    # check on the request body itself.
     refuse_new_figure_code(metadata, current_user)
+
+    # Code sent in the request is not the code stored on a saved component, so
+    # it can only run for callers who may edit the project. A viewer or an
+    # anonymous visitor may only run stored code, which the render endpoint
+    # serves from the dashboard component (it ignores request-supplied code).
+    # This preview body carries no component id, so code mode is editor-only
+    # here; the saved-figure render path stays open at viewer level.
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    has_code = (
+        metadata.get("mode") == "code"
+        and isinstance(metadata.get("code_content"), str)
+        and bool(metadata.get("code_content").strip())
+    )
+    is_editor = check_project_permission(project_id, current_user, "editor")
+    if has_code and not is_editor:
+        raise HTTPException(
+            status_code=403,
+            detail="Running figure code requires editor rights on this project.",
+        )
+    # Editors keep code failure detail; viewers and anonymous visitors get a
+    # generic message with no traceback lines or paths.
+    code_error_detail = is_editor
 
     # The DC's Delta location is authoritative in Mongo (resolved by the worker
     # from dc_id). A client-supplied ``dc_config.delta_location`` would let an
@@ -257,6 +287,9 @@ async def preview_figure(
         # The style the saved figure will take: its own, else its section's on
         # the dashboard it is previewed for.
         "style": figure_style_payload(metadata, dashboard_doc, request.get("style")),
+        # Whether the caller may see code failure detail (editor) or only the
+        # generic message (viewer / anonymous).
+        "code_error_detail": code_error_detail,
     }
     if category_colors:
         payload["category_colors"] = category_colors
@@ -286,9 +319,21 @@ async def analyze_code(
     ``depictio.dash.modules.figure_component.code_mode``. Used by the React
     builder when toggling code↔UI mode so the UI tab can be re-populated.
 
+    Anonymous visitors get no analysis (the builder is an editor flow), and the
+    code size is capped so the endpoint cannot be used to burn worker CPU on
+    megabytes of input.
+
     Offloaded to Celery on the same flag as `/preview`.
     """
+    if current_user.is_anonymous and not current_user.is_admin:
+        # Single-user mode keeps working: there the anonymous user is admin.
+        raise HTTPException(status_code=401, detail="Sign in to analyze figure code.")
+
     code = (request.get("code") or "").strip()
+    if len(code.encode("utf-8")) > ANALYZE_CODE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413, detail=f"Code exceeds the {ANALYZE_CODE_MAX_BYTES // 1000} kB limit."
+        )
     offload = settings.celery.offload_preview
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
     return await offload_or_run(

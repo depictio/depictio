@@ -75,7 +75,7 @@ export { default as FigureRenderer } from './components/FigureRenderer';
 export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as PhylogeneticRenderer } from './components/advanced_viz/PhylogeneticRenderer';
-export { imageServeUrl } from './components/advanced_viz/spatial_cells/spatialLayout';
+export { imageS3Path, imageServeUrl } from './components/advanced_viz/spatial_cells/spatialLayout';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
 export {
@@ -493,7 +493,11 @@ export {
   reviewCommentThread,
   deleteCommentThread,
   fetchPublishedAnnotations,
+  signServeImageUrls,
+  signDashboardLogoUrls,
+  dashboardLogoIdFromUrl,
 } from './api';
+export { useSignedDashboardLogoUrl } from './useSignedDashboardLogoUrl';
 export type {
   CommentThreadStatus,
   CommentViewState,

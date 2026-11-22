@@ -88,6 +88,38 @@ def test_dashboard_id_owned_by_another_project_here_is_refused(bundle, target_db
     assert any("dashboard id" in e for e in report.errors)
 
 
+def test_a_dashboard_ref_held_by_a_dashboard_the_bundle_does_not_replace_is_a_conflict(
+    bundle, target_db
+):
+    """URLs, logo keys and comment anchors go by ``dashboard_id``, so a ref
+    another dashboard here already holds is refused even when the ``_id``s
+    differ (a visitor's copy of the same tab, say)."""
+    metadata, data, ids = bundle
+    target_db.dashboards_collection.insert_one(
+        {"_id": ObjectId(), "dashboard_id": ids["main_dash"], "project_id": ObjectId()}
+    )
+    report = project_bundle.validate_bundle(metadata, data, [], strict=False)
+    assert report.dashboard_id_conflicts == [str(ids["main_dash"])]
+    assert any("already used" in e for e in report.errors)
+
+
+def test_a_dashboard_the_bundle_replaces_frees_its_own_ref(bundle, target_db):
+    metadata, data, ids = bundle
+    target_db.dashboards_collection.insert_one(
+        {"_id": ids["main_dash"], "dashboard_id": ids["main_dash"], "project_id": ids["project_id"]}
+    )
+    report = project_bundle.validate_bundle(metadata, data, [], strict=False)
+    assert report.dashboard_id_conflicts == []
+    assert report.ok, report.errors
+
+
+def test_stray_s3_keys_are_listed_in_the_report(bundle, target_db):
+    metadata, data, _ = bundle
+    keys = ["someone-else/secret.parquet", f"{bundle[2]['table_dc']}/part-0.parquet"]
+    report = project_bundle.validate_bundle(metadata, data, keys, strict=False)
+    assert report.stray_s3_keys == ["someone-else/secret.parquet"]
+
+
 def test_existing_project_of_same_lineage_is_a_re_push(bundle, target_db):
     metadata, data, ids = bundle
     target_db.projects_collection.insert_one(

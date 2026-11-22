@@ -737,6 +737,19 @@ export async function fetchImagePaths(_dashboardId: string, componentId: string)
   } as never;
 }
 
+/** A bundle's gallery ships its thumbnails as `inline:` blobs, so nothing here
+ *  reads serve/image and no signature is needed: the exchange answers empty
+ *  and the renderers keep their (already loadable) URLs. */
+export async function signServeImageUrls(_s3Paths: string[]): Promise<Record<string, string>> {
+  return {};
+}
+
+/** Same for brand logos: offline, a relative `/dashboards/logo/...` URL cannot
+ *  load either way, and the signature exchange has no API to talk to. */
+export async function signDashboardLogoUrls(_dashboardIds: string[]): Promise<Record<string, string>> {
+  return {};
+}
+
 export async function fetchJBrowseSession(_dashboardId: string, componentId: string) {
   return frozenPayload(componentId, 'jbrowse') as never;
 }
