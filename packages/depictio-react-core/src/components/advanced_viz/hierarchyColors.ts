@@ -33,12 +33,17 @@ export function mixHex(a: string, b: string, t: number): string {
     .join('')}`;
 }
 
-const UNASSIGNED = new Set(['', 'unclassified', 'unassigned', 'unknown', 'other', 'none', 'na', 'n/a', 'nan', '-', '—']);
-
-/** Whether a value names no group: "Unclassified", "Other (12)", an empty rank. */
+/** Whether a value names no group: a reserved value of the shared palette ("Others",
+ *  "Undetermined", an empty rank), "Unclassified Bacteria", "Other (12)", or a dash. */
 export function isUnassigned(label: string | null | undefined): boolean {
   const l = String(label ?? '').trim().toLowerCase();
-  return UNASSIGNED.has(l) || l.startsWith('unclassified') || /^other\b/.test(l);
+  return (
+    reservedKind(l) !== null ||
+    l === '-' ||
+    l === '—' ||
+    l.startsWith('unclassified') ||
+    /^others?\b/.test(l)
+  );
 }
 
 /** The grey of a remainder, on either surface (the palette's `unclassified` grey). */

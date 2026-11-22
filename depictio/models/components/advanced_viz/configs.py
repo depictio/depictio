@@ -1052,9 +1052,9 @@ class ComplexHeatmapConfig(_BaseVizConfig):
         description=(
             "Optional per-annotation colour overrides for the column-annotation "
             "track. Shape: ``{annotation_name: {category_value: hex}}``. When "
-            "unset the server picks colours from a Dark2 palette (chosen to "
-            "contrast with the row-track's Set2 pastels so the two tracks "
-            "read as distinct families). Use to pin domain palettes (e.g. "
+            "unset the server picks colours from the shared depictio palette, "
+            "minus the hues at the ends of the heatmap's colour scale. Use to "
+            "pin domain palettes (e.g. "
             "habitat → Set1) across PCoA + UpSet + heatmap. Applies to both "
             "``col_annotations`` and ``col_annotation_cols`` strips."
         ),

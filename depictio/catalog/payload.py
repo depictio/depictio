@@ -166,7 +166,9 @@ def _figure_payload(df, render, theme: str = "light") -> dict[str, Any]:
             )
 
             lines = normalise_reference_lines(render.reference_lines)
-            apply_reference_lines(fig, resolve_reference_lines(lines, df))
+            apply_reference_lines(
+                fig, resolve_reference_lines(lines, df), theme=_normalise_theme(theme)
+            )
 
     _apply_template(fig, theme)
     # The preview draws like a dashboard tile does: the default (overview) style,

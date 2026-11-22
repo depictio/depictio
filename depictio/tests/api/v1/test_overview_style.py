@@ -149,6 +149,23 @@ def test_numeric_and_date_looking_categories_keep_their_order():
     assert "categoryorder" not in apply_overview(fig, theme="light")["layout"]["xaxis"]
 
 
+@pytest.mark.parametrize(
+    "cats",
+    [
+        ("chr1", "chr2", "chr10", "chrX", "chrM"),
+        ("1", "2", "X", "Y", "MT"),
+        ("0-10", "10-20", "20-50"),
+        ("1 kb", "5 kb", "10 kb"),
+        ("<1", "1-5", ">5"),
+        ("Jan", "Feb", "Mar"),
+        ("Q1", "Q2", "Q3", "Q4"),
+    ],
+)
+def test_categories_with_an_order_of_their_own_are_not_sorted(cats):
+    fig = _bar_by_x(cats=cats)
+    assert "categoryorder" not in apply_overview(fig, theme="light")["layout"]["xaxis"]
+
+
 def test_numeric_x_bars_are_not_sorted():
     fig = _bar_stack(["g1"])
     fig["data"][0]["x"] = [1, 2]

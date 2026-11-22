@@ -6,7 +6,7 @@
 
 import type { InteractiveFilter } from '../../../api';
 import { stableColorMap } from '../../../colors';
-import type { OverflowMode } from '../../../palettes';
+import type { ColorScheme, OverflowMode } from '../../../palettes';
 import { sampleColorscale } from '../../../utils/colorScale';
 import { filtersExcludingOwnResidue } from '../../../selection';
 import { residueKey, toOneLetter, type StructureResidue } from './structureText';
@@ -513,6 +513,8 @@ export function buildColouring(
     valueScale?: string | null;
     /** What categories past the palette's last slot get (`plotOverflow(theme)`). */
     overflow?: OverflowMode | null;
+    /** Light or dark: picks the grey of reserved values (`NA`, `Other`). */
+    scheme?: ColorScheme;
   },
 ): Colouring {
   const { residues, rows, palette, neutral, uniform } = args;
@@ -532,7 +534,7 @@ export function buildColouring(
     }
     case 'chain': {
       const chains = Array.from(new Set(residues.map((r) => r.chain || '-')));
-      const map = stableColorMap(chains, palette, null, undefined, args.overflow);
+      const map = stableColorMap(chains, palette, null, args.scheme, args.overflow);
       return {
         colourOf: (c) => map.get(c || '-'),
         legend: chains.length > 1 ? swatchLegend('Chain', map) : null,
@@ -589,7 +591,7 @@ export function buildColouring(
         rows.map((r) => r.category),
         palette,
         null,
-        undefined,
+        args.scheme,
         args.overflow,
       );
       return {

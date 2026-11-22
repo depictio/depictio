@@ -35,6 +35,9 @@ _MAX_AUTO_CELLS = 400
 _WHITE_INK = "#ffffff"
 
 _HEX_COLOUR = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_RGB_COLOUR = re.compile(
+    r"^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*[\d.]+\s*)?\)$"
+)
 
 # Bytes per element of the dtypes Plotly 6 serialises numpy arrays to.
 _DTYPES = {"f8", "f4", "i1", "i2", "i4", "i8", "u1", "u2", "u4", "u8"}
@@ -288,18 +291,40 @@ def _scale_stops(trace: dict, layout: dict) -> list[str]:
         axis = layout.get(str(ref)) if isinstance(ref, str) else None
         raw = axis.get("colorscale") if isinstance(axis, dict) else None
     if isinstance(raw, str):
-        # A named scale: resolve it through plotly's own table.
+        # A named scale: resolve it through plotly's own table, whatever its case.
         from plotly.colors import PLOTLY_SCALES
 
-        raw = PLOTLY_SCALES.get(raw)
+        by_name = {name.lower(): scale for name, scale in PLOTLY_SCALES.items()}
+        raw = by_name.get(raw.lower())
     stops: list[str] = []
     if isinstance(raw, (list, tuple)):
         for stop in raw:
             if isinstance(stop, (list, tuple)) and len(stop) == 2:
-                colour = stop[1]
-                if isinstance(colour, str) and _HEX_COLOUR.match(colour.strip()):
-                    stops.append(colour.strip())
+                colour = _as_hex(stop[1])
+                if colour:
+                    stops.append(colour)
     return stops
+
+
+def _as_hex(colour: Any) -> str | None:
+    """``#rrggbb`` for a ``#rgb`` / ``#rrggbb`` / ``rgb()`` / ``rgba()`` colour, else None.
+
+    Plotly's own scales are ``rgb(...)`` strings; a short hex would break the
+    contrast maths, which reads six digits.
+    """
+    if not isinstance(colour, str):
+        return None
+    text = colour.strip()
+    if _HEX_COLOUR.match(text):
+        digits = text[1:]
+        if len(digits) == 3:
+            digits = "".join(c * 2 for c in digits)
+        return f"#{digits.lower()}"
+    match = _RGB_COLOUR.match(text)
+    if not match:
+        return None
+    channels = [max(0, min(255, round(float(c)))) for c in match.groups()]
+    return "#" + "".join(f"{c:02x}" for c in channels)
 
 
 def _cell_ink(stops: list[str], mode: str) -> str:

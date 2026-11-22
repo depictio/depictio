@@ -33,6 +33,7 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { DE_TIER_COLOURS } from './deTierColours';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import {
   classifyTiers,
@@ -132,11 +133,7 @@ interface Props {
 }
 
 /** Tier colours, kept out of the builders so all three views share one scheme. */
-const TIER_COLOURS: Record<DeTier, string> = {
-  UP: '#e64980',
-  DN: '#1c7ed6',
-  NS: 'rgba(160,160,160,0.55)',
-};
+const TIER_COLOURS: Record<DeTier, string> = DE_TIER_COLOURS;
 
 interface MarkerPlan {
   /** The shape of a point; undefined leaves the tier's own (triangles by direction). */

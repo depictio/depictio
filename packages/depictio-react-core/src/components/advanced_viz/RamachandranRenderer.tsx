@@ -315,8 +315,9 @@ const RamachandranRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       categorical: colours.categorical,
       valueScale: 'Viridis',
       overflow: plotOverflow(theme),
+      scheme: colorScheme === 'dark' ? 'dark' : 'light',
     }),
-    [colours, plotColours, theme],
+    [colours, plotColours, theme, colorScheme],
   );
 
   const built = useMemo(

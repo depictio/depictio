@@ -14,7 +14,7 @@
  */
 
 import { stableColorMap } from '../../../colors';
-import type { OverflowMode } from '../../../palettes';
+import type { ColorScheme, OverflowMode } from '../../../palettes';
 import {
   PLDDT_BANDS,
   plddtBand,
@@ -96,6 +96,8 @@ export interface FigureTheme {
   valueScale?: string;
   /** What categorical values past the palette's last slot get (`plotOverflow(theme)`). */
   overflow?: OverflowMode;
+  /** Light or dark: picks the grey of reserved values (`NA`, `Other`). */
+  scheme?: ColorScheme;
 }
 
 /** A residue range to emphasise; `chain` null means any chain. */
@@ -308,7 +310,7 @@ function groupPoints(args: FigureArgs): Grouping {
     case 'category': {
       const universe =
         args.categoryUniverse ?? points.map((p) => p.category).filter((c): c is string => c !== null);
-      const colours = stableColorMap(universe, theme.categorical, null, undefined, theme.overflow);
+      const colours = stableColorMap(universe, theme.categorical, null, theme.scheme, theme.overflow);
       const buckets = bucket(points, (p) => p.category ?? 'none');
       const groups: Group[] = [];
       for (const label of colours.universe) {
@@ -329,7 +331,7 @@ function groupPoints(args: FigureArgs): Grouping {
     }
     case 'chain': {
       const chains = Array.from(new Set(points.map((p) => p.chain || '-')));
-      const colours = stableColorMap(chains, theme.categorical, null, undefined, theme.overflow);
+      const colours = stableColorMap(chains, theme.categorical, null, theme.scheme, theme.overflow);
       const buckets = bucket(points, (p) => p.chain || '-');
       const groups: Group[] = [];
       for (const label of colours.universe) {

@@ -468,9 +468,11 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         categoryLabel: config.category_col,
         valueScale: colourScale,
         overflow: plotOverflow(theme),
+        scheme: isDark ? 'dark' : 'light',
       }),
     [
       colourMode,
+      isDark,
       colourScale,
       theme,
       residues,

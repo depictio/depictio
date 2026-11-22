@@ -34,6 +34,12 @@ describe('isUnassigned', () => {
     ]);
     expect(['Bacteria', 'Otherwise', 'uncultured'].map(isUnassigned)).toEqual([false, false, false]);
   });
+
+  it('reads the shared reserved values, as Python does', () => {
+    expect(['Others', 'Rest', 'Undetermined', 'null', '-'].map(isUnassigned)).toEqual([
+      true, true, true, true, true,
+    ]);
+  });
 });
 
 describe('remainderColour', () => {

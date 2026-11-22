@@ -2,8 +2,8 @@
  * Recolouring the categorical annotation strips of a plotly-complexheatmap
  * figure.
  *
- * The server builds the figure and picks each strip's colours from its own
- * palettes (Set2 beside the rows, Dark2 above the columns), so a condition
+ * The server builds the figure and picks each strip's colours from the shared
+ * palette (minus the hues at the ends of the heatmap's scale), so a condition
  * pinned in the dashboard's `category_colors` came out in a colour no other
  * tile drew it in. The strips are recoloured here, once the figure is back,
  * rather than by sending the colours with the request: the figure is cached

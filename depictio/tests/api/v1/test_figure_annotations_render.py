@@ -151,6 +151,21 @@ def test_cell_values_print_the_cell_and_pick_the_readable_ink():
     assert trace["textfont"]["color"] in candidates
 
 
+def test_cell_ink_reads_rgb_short_hex_and_named_scales():
+    from depictio.api.v1.services.figure.annotations import _scale_stops
+
+    rgb = [[0, "rgb(103,0,31)"], [0.5, "rgba(247, 247, 247, 1)"], [1, "rgb(5,48,97)"]]
+    assert _scale_stops({"colorscale": rgb}, {}) == ["#67001f", "#f7f7f7", "#053061"]
+    assert _scale_stops({"colorscale": [[0, "#fff"], [1, "#000"]]}, {}) == ["#ffffff", "#000000"]
+    assert len(_scale_stops({"colorscale": "rdbu"}, {})) > 2
+
+
+def test_cell_values_on_a_short_hex_scale_keep_their_marks():
+    fig = px.imshow([[1.0, 2], [3, 4]], color_continuous_scale=["#fff", "#000"])
+    out = apply_annotations(_styled(fig), None, figure_style="default", theme="light")
+    assert out["data"][0]["texttemplate"] == "%{z:.2~f}"
+
+
 def test_declared_cell_values_ignore_the_cell_budget():
     z = [[float(i * j) for j in range(25)] for i in range(25)]  # 625 cells
     fig = px.imshow(z)

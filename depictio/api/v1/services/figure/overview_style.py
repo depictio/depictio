@@ -58,6 +58,23 @@ _LINE_SYMBOL = re.compile(r"^(line-|asterisk|hash|y-)|-thin|-open")
 _ORDINAL = re.compile(
     r"^\s*[-+]?[\d.,]+\s*%?\s*$|^\s*\d{4}([-/]\d{1,2}([-/]\d{1,2})?)?([ T][\d:.]+)?\s*$"
 )
+# Labels whose order is the data's own too: chromosomes (chr1..chr22, X, Y, M),
+# bins and ranges (0-10, <1, >5, 10+), quantities with a unit (1 kb), months,
+# quarters and weekdays. A total sort would scramble a karyotype or a histogram.
+_MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec"
+_ORDERED = re.compile(
+    r"^\s*(?:"
+    r"(?:chr)?(?:\d+|x|y|m|mt|w|z)"
+    r"|[<>≤≥]=?\s*[\d.,]+\s*[a-zµ%]{0,3}"
+    r"|[\d.,]+\s*[-–]\s*[\d.,]+\s*[a-zµ%]{0,3}"
+    r"|[\d.,]+\s*\+"
+    r"|[\d.,]+\s*[a-zµ%]{1,3}"
+    rf"|(?:{_MONTHS})[a-z]*\.?"
+    r"|q[1-4]"
+    r"|(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?"
+    r")\s*$",
+    re.IGNORECASE,
+)
 
 _DTYPES = {"f8", "f4", "i1", "i2", "i4", "i8", "u1", "u2", "u4", "u8"}
 
@@ -237,8 +254,8 @@ def _is_category_strings(values: Any) -> bool:
     strings = [v for v in items if v is not None]
     if not strings or not all(isinstance(v, str) for v in strings):
         return False
-    # Numbers, years and dates are an order of their own.
-    return not all(_ORDINAL.match(v) for v in strings)
+    # Numbers, years, dates, chromosomes, bins, months: an order of their own.
+    return not all(_ORDINAL.match(v) or _ORDERED.match(v) for v in strings)
 
 
 def _equal_totals(traces: list[dict], axis_key: str) -> bool:

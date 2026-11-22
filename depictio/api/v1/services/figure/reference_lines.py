@@ -71,6 +71,9 @@ def resolve_reference_lines(lines: list[dict[str, Any]], frame: Any) -> list[dic
             label = label or reference_label(str(line["stat"]))
         else:
             label = label or f"{line['axis']} = {float(value):g}"
+        if line.get("source"):
+            # RULES.md §17: a reader can tell an authored threshold from the data's.
+            label = f"{label} ({line['source']})"
         out.append({"axis": line["axis"], "value": float(value), "label": label})
     return out
 

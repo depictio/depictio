@@ -386,6 +386,23 @@ def test_figure_reference_lines_are_drawn_and_named() -> None:
     assert {"median of this table", "cut-off"} <= texts
 
 
+def test_a_line_source_is_named_in_its_label() -> None:
+    """RULES.md §17: where a threshold comes from is on the plot, not only in YAML."""
+    from depictio.api.v1.services.figure.reference_lines import resolve_reference_lines
+
+    resolved = resolve_reference_lines(
+        [
+            {"axis": "y", "value": 30.0, "label": "Q30", "source": "Illumina spec"},
+            {"axis": "y", "value": 0.5, "source": "FastQC default"},
+        ],
+        None,
+    )
+    assert [r["label"] for r in resolved] == [
+        "Q30 (Illumina spec)",
+        "y = 0.5 (FastQC default)",
+    ]
+
+
 def test_figure_dict_path_keeps_existing_shapes() -> None:
     from depictio.api.v1.services.figure.reference_lines import apply_reference_lines
 
