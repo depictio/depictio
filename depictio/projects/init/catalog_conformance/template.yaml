@@ -15,7 +15,7 @@
 template:
   template_id: init/catalog_conformance
   description: Every catalog output, staged from the catalog's own fixtures
-  version: 3.0.1
+  version: 3.0.2
   variables:
   - name: DATA_ROOT
     description: Project directory holding the recipe seeds and the run tree

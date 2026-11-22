@@ -139,8 +139,8 @@
       "content_hash": "8a30c9b9510faca30ecd07e4a2d5a6cf0b7dddf713045fcf2cc9778e4c4109e2"
     },
     "deseq2": {
-      "version": "1.1.0",
-      "content_hash": "9a55949923f8f5391e6e962e16e35d30e644dbd818ca1535b7e5ea2e61897b4a"
+      "version": "1.1.1",
+      "content_hash": "cc95907685686e3da4d64d3d788d19c007d44a372014a4222ec80b61d07f7f25"
     },
     "dexseq": {
       "version": "1.2.0",
@@ -303,8 +303,8 @@
       "content_hash": "456b99e9bcc488069b0d4160c81276e2789b68966a6c72e46b48ecc0631dceac"
     },
     "mirtop": {
-      "version": "1.1.1",
-      "content_hash": "663cf386783bb27399314d17a007a0b573ac2dc16d35d686dd55ff9bd93fec6d"
+      "version": "1.2.0",
+      "content_hash": "086114f220f910708d7467e26218b6b665ed87fa91c6553febe7c734f08ffa98"
     },
     "mosdepth": {
       "version": "1.2.0",
@@ -383,8 +383,8 @@
       "content_hash": "72a0d4cdb23c8752ec1ca60bfbaca6b60e1f6b8ef3de87be9883630a7808c82e"
     },
     "qiime2": {
-      "version": "2.1.0",
-      "content_hash": "5fc9f48261466dbe66fde28567c636481e93a0cce70fad3310139193a15ccbe9"
+      "version": "2.1.1",
+      "content_hash": "10556ccee96c397bce74a17ada3354c9203a0879b67a9c960a4c10c1a3c7447b"
     },
     "qsee": {
       "version": "1.1.0",
@@ -431,8 +431,8 @@
       "content_hash": "eb2c2a61a85df876e776852ce29335748c819363cbe467ddadd432cbcdf318d9"
     },
     "salmon": {
-      "version": "1.1.0",
-      "content_hash": "57699ccdedbc2e1dd924225400ee4a1aaca0f1350e480aac974b9fba6059bc16"
+      "version": "1.1.1",
+      "content_hash": "b7d9db44ea6713a2f193346ab2dd87a66ef7186b0693e9732e21d79773e88172"
     },
     "samtools": {
       "version": "1.2.0",
@@ -507,8 +507,8 @@
       "content_hash": "9ddf26a9a2a8413e10f8bc54d3c4dcd18a33ecd9aca2a63f559fb6c529a9c4f5"
     },
     "taxpasta": {
-      "version": "1.1.0",
-      "content_hash": "36b6e722d036ead3603cd33fd5830d577456918da31bbf2140d09e88b56746c7"
+      "version": "1.1.1",
+      "content_hash": "d7c094abb0319d65d340374b5009993f9a4ed81d9a9609cf073ca85fa5074865"
     },
     "teal": {
       "version": "1.1.1",
