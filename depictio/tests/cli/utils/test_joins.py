@@ -20,6 +20,7 @@ from bson import ObjectId
 from depictio.cli.cli.utils.delta_versioning import list_delta_versions, read_delta_commit_info
 from depictio.cli.cli.utils.deltatables import read_delta_table, write_delta_table
 from depictio.cli.cli.utils.joins import (
+    JoinPersistHooks,
     apply_aggregation,
     execute_join,
     find_data_collection_by_tag,
@@ -976,6 +977,16 @@ class TestPersistJoinedTable:
         assert commit.custom_metadata["depictio.data_collection_tag"] == "joined_complete"
         assert commit.custom_metadata["depictio.row_count"] == "2"
 
+    def test_an_emptied_join_is_a_new_version_of_no_rows(self, setup):
+        server = _FakeServer()
+        self.persist(setup, self.joined([10, 20]), server)
+        result = self.persist(setup, self.joined([10]).clear(), server)
+
+        assert result["result"] == "success"
+        assert result["rows"] == 0
+        assert self.history(setup) == [0, 1]
+        assert server.upserts[-1]["delta_provenance"]["rows_total"] == 0
+
     def test_unchanged_rows_write_nothing(self, setup):
         server = _FakeServer()
         first = self.joined([10, 20, 30])
@@ -998,3 +1009,334 @@ class TestPersistJoinedTable:
 
         assert result["unchanged"] is False
         assert [u["delta_provenance"]["delta_version"] for u in server.upserts] == [0, 1]
+
+
+class TestPersistJoinedTableWithHooks:
+    """The API runs the persist in-process with its own hooks: no HTTP call is made."""
+
+    JOIN_ID = TestPersistJoinedTable.JOIN_ID
+    setup = TestPersistJoinedTable.setup
+    joined = staticmethod(TestPersistJoinedTable.joined)
+    commits = TestPersistJoinedTable.commits
+    history = TestPersistJoinedTable.history
+
+    @staticmethod
+    def hooks(records_version: bool = False) -> JoinPersistHooks:
+        return JoinPersistHooks(
+            records_version=MagicMock(return_value=records_version),
+            sync_project=MagicMock(),
+            register=MagicMock(),
+        )
+
+    def persist_with(self, setup, joined_df: pl.DataFrame, hooks: JoinPersistHooks, **kwargs):
+        tmp_path, project, join_def, cli_config = setup
+
+        def local(path: str) -> str:
+            return str(tmp_path / path.rsplit("/", 1)[-1])
+
+        with (
+            patch(
+                "depictio.cli.cli.utils.joins.read_delta_table",
+                side_effect=lambda path, opts: read_delta_table(local(path), opts),
+            ),
+            patch(
+                "depictio.cli.cli.utils.joins.write_delta_table",
+                side_effect=lambda destination_file, **kw: write_delta_table(
+                    destination_file=local(destination_file), **kw
+                ),
+            ),
+            patch(
+                "depictio.cli.cli.utils.joins.read_delta_commit_info",
+                side_effect=lambda path, opts: read_delta_commit_info(local(path), opts),
+            ),
+            patch("depictio.cli.cli.utils.api_calls.api_sync_project_config_to_server") as sync,
+            patch("depictio.cli.cli.utils.api_calls.api_upsert_deltatable") as upsert,
+            patch("depictio.cli.cli.utils.api_calls.api_get_deltatable_by_dc_id") as get,
+        ):
+            result = persist_joined_table(
+                join_def,
+                joined_df,
+                project,
+                cli_config,
+                metadata={},
+                overwrite=True,
+                hooks=hooks,
+                **kwargs,
+            )
+        # Never the HTTP API when hooks are given.
+        sync.assert_not_called()
+        upsert.assert_not_called()
+        get.assert_not_called()
+        return result
+
+    def test_the_hooks_register_sync_and_are_asked_for_the_version(self, setup):
+        _, project, join_def, _ = setup
+        hooks = self.hooks()
+
+        # Persisting twice: the second finds the rows it wrote and asks the server about them.
+        first = self.persist_with(setup, self.joined([10, 20, 30]), hooks, trigger="ui")
+        assert first["result"] == "success"
+        assert first["unchanged"] is False
+        hooks.sync_project.assert_called_once_with(project, join_def)
+        hooks.register.assert_called_once()
+        dc_id, location, size_bytes, provenance, frame = hooks.register.call_args.args
+        assert dc_id == self.JOIN_ID == first["dc_id"]
+        assert location.endswith(f"/{self.JOIN_ID}")
+        assert size_bytes > 0
+        assert provenance["delta_version"] == 0
+        assert provenance["rows_total"] == 3
+        assert provenance["write_mode"] == "overwrite"
+        assert provenance["trigger"] == "ui"
+        assert frame.height == 3 and "join_timestamp" in frame.columns
+        # The first write had nothing stored yet: the server is not asked about a version.
+        hooks.records_version.assert_not_called()
+
+        hooks.records_version.return_value = True
+        second = self.persist_with(setup, self.joined([10, 20, 30]).reverse(), hooks, trigger="ui")
+
+        hooks.records_version.assert_called_once_with(self.JOIN_ID, 0)
+        assert second["unchanged"] is True and second["delta_version"] == 0
+        assert hooks.register.call_count == 1  # nothing new to register
+        assert self.history(setup) == [0]
+
+    def test_a_version_the_hooks_do_not_know_is_written_and_registered_again(self, setup):
+        hooks = self.hooks(records_version=False)
+        rows = self.joined([10, 20, 30])
+        self.persist_with(setup, rows, hooks)
+        result = self.persist_with(setup, rows, hooks)
+
+        assert result["unchanged"] is False
+        assert hooks.register.call_count == 2
+        assert [c.args[3]["delta_version"] for c in hooks.register.call_args_list] == [0, 1]
+
+    def test_the_trigger_is_stamped_on_the_commit(self, setup):
+        self.persist_with(setup, self.joined([10, 20]), self.hooks(), trigger="ui")
+        (commit,) = self.commits(setup)
+        assert commit.custom_metadata["depictio.trigger"] == "ui"
+
+    def test_without_a_trigger_none_is_stamped(self, setup):
+        hooks = self.hooks()
+        self.persist_with(setup, self.joined([10, 20]), hooks)
+        (commit,) = self.commits(setup)
+        assert "depictio.trigger" not in commit.custom_metadata
+        assert "trigger" not in hooks.register.call_args.args[3]
+
+    def test_a_register_that_raises_is_a_failed_join(self, setup):
+        hooks = self.hooks()
+        hooks.register.side_effect = RuntimeError("mongo is down")
+
+        result = self.persist_with(setup, self.joined([10, 20, 30]), hooks)
+
+        assert result["result"] == "error"
+        assert "registering it failed: mongo is down" in result["message"]
+
+    def test_a_sync_that_raises_is_reported_not_raised(self, setup):
+        hooks = self.hooks()
+        hooks.sync_project.side_effect = RuntimeError("project not saved")
+
+        result = self.persist_with(setup, self.joined([10, 20, 30]), hooks)
+
+        assert result["result"] == "success"
+        hooks.register.assert_called_once()
+
+    def test_the_joined_collection_is_added_to_the_projects_workflow_before_the_sync(self, setup):
+        _, project, join_def, _ = setup
+        seen = {}
+
+        def sync(project_, join_def_):
+            seen["dcs"] = [dc.data_collection_tag for dc in project_.workflows[0].data_collections]
+            seen["result"] = (join_def_.result_dc_id, join_def_.row_count)
+
+        hooks = self.hooks()
+        hooks.sync_project.side_effect = sync
+        self.persist_with(setup, self.joined([10, 20, 30]), hooks)
+
+        assert "joined_complete" in seen["dcs"]
+        assert seen["result"] == (ObjectId(self.JOIN_ID), 3)
+
+
+class TestMatchRunIds:
+    """``match_run_ids=False`` keeps ``depictio_run_id`` out of the join keys."""
+
+    @pytest.fixture
+    def frames(self):
+        left = pl.DataFrame(
+            {"id": [1, 2, 3], "name": ["A", "B", "C"], "depictio_run_id": ["left-scan"] * 3}
+        )
+        right = pl.DataFrame(
+            {"id": [1, 2, 4], "score": [10, 20, 40], "depictio_run_id": ["right-scan"] * 3}
+        )
+        return left, right
+
+    def run(self, frames, mock_project, mock_cli_config, **fields):
+        join_def = JoinDefinition(
+            name="j", left_dc="left_table", right_dc="right_table", on_columns=["id"], **fields
+        )
+        with patch("depictio.cli.cli.utils.joins.read_delta_table") as read:
+            read.side_effect = [delta_success(frames[0]), delta_success(frames[1])]
+            return execute_join(join_def, mock_project, mock_cli_config, apply_granularity=False)
+
+    def test_the_default_matches_run_ids_as_before(self):
+        assert (
+            JoinDefinition(name="j", left_dc="a", right_dc="b", on_columns=["id"]).match_run_ids
+            is True
+        )
+
+    def test_run_ids_are_added_to_the_keys_by_default(self, frames, mock_project, mock_cli_config):
+        result, metadata = self.run(frames, mock_project, mock_cli_config, how="inner")
+        assert metadata["join_columns"] == ["id", "depictio_run_id"]
+        assert result.height == 0  # the two tables' run ids never agree
+
+    def test_off_they_are_not(self, frames, mock_project, mock_cli_config):
+        result, metadata = self.run(
+            frames, mock_project, mock_cli_config, how="inner", match_run_ids=False
+        )
+        assert metadata["join_columns"] == ["id"]
+        assert result.sort("id")["id"].to_list() == [1, 2]
+        assert result.sort("id")["score"].to_list() == [10, 20]
+        # The left run id stays; the right one is a duplicate column and is dropped.
+        assert result["depictio_run_id"].unique().to_list() == ["left-scan"]
+
+    def test_off_a_left_join_keeps_every_left_row_with_its_partner(
+        self, frames, mock_project, mock_cli_config
+    ):
+        result, _ = self.run(frames, mock_project, mock_cli_config, how="left", match_run_ids=False)
+        assert result.sort("id")["score"].to_list() == [10, 20, None]
+
+    def test_off_a_key_already_naming_run_ids_is_left_as_given(
+        self, frames, mock_project, mock_cli_config
+    ):
+        join_def = JoinDefinition(
+            name="j",
+            left_dc="left_table",
+            right_dc="right_table",
+            on_columns=["id", "depictio_run_id"],
+            how="left",
+            match_run_ids=False,
+        )
+        with patch("depictio.cli.cli.utils.joins.read_delta_table") as read:
+            read.side_effect = [delta_success(frames[0]), delta_success(frames[1])]
+            _, metadata = execute_join(
+                join_def, mock_project, mock_cli_config, apply_granularity=False
+            )
+        assert metadata["join_columns"] == ["id", "depictio_run_id"]
+
+
+class TestJoinFrames:
+    """The joined columns, whatever the join type: one per key, nothing lost."""
+
+    LEFT = pl.DataFrame({"id": [1, 2], "note": ["L1", "L2"], "depictio_run_id": ["run_l", "run_l"]})
+    RIGHT = pl.DataFrame(
+        {"id": [2, 3], "note": ["R2", "R3"], "depictio_run_id": ["run_r", "run_r"]}
+    )
+
+    @staticmethod
+    def join(how: str, left: pl.DataFrame, right: pl.DataFrame, match_run_ids: bool = False):
+        from depictio.cli.cli.utils.joins import join_frames
+
+        join_def = JoinDefinition(
+            name="j",
+            left_dc="left_table",
+            right_dc="right_table",
+            on_columns=["id"],
+            how=how,
+            match_run_ids=match_run_ids,
+        )
+        return join_frames(join_def, left, right, make_dc("left_table"), make_dc("right_table"))
+
+    @pytest.mark.parametrize("how", ["left", "inner", "outer", "right"])
+    def test_one_key_column_first_and_the_right_copy_renamed(self, how):
+        joined, metadata = self.join(how, self.LEFT, self.RIGHT)
+        assert joined.columns == ["id", "note", "depictio_run_id", "note_right"]
+        assert joined["id"].null_count() == 0
+        assert metadata["renamed_right_columns"] == {"note": "note_right"}
+
+    def test_an_outer_join_keeps_every_key_once(self):
+        joined, _ = self.join("outer", self.LEFT, self.RIGHT)
+        assert sorted(joined["id"].to_list()) == [1, 2, 3]
+
+    def test_a_joined_row_carries_the_left_rows_run_only(self):
+        joined, _ = self.join("outer", self.LEFT, self.RIGHT)
+        assert set(joined["depictio_run_id"].to_list()) == {"run_l", None}
+        # Even when the left table has no run at all.
+        joined, _ = self.join("left", self.LEFT.drop("depictio_run_id"), self.RIGHT)
+        assert "depictio_run_id" not in joined.columns
+
+    def test_a_cli_join_still_takes_the_right_run_when_the_left_has_none(self):
+        joined, _ = self.join(
+            "left", self.LEFT.drop("depictio_run_id"), self.RIGHT, match_run_ids=True
+        )
+        assert joined["depictio_run_id"].to_list() == [None, "run_r"]
+
+    def test_a_taken_suffix_is_not_overwritten(self):
+        left = self.LEFT.with_columns(pl.lit("x").alias("note_right"))
+        joined, metadata = self.join("left", left, self.RIGHT)
+        assert metadata["renamed_right_columns"] == {"note": "note_right_right"}
+        assert joined["note_right"].to_list() == ["x", "x"]
+
+
+class TestJoinWithoutYamlId:
+    """``depictio ingest --attach-run`` re-reads a YAML join with no ``id`` each time:
+    every run must write the same joined collection, not add another."""
+
+    @staticmethod
+    def fresh_join() -> JoinDefinition:
+        return JoinDefinition(
+            name="complete",
+            left_dc="left_table",
+            right_dc="right_table",
+            on_columns=["id"],
+            how="inner",
+            persist=True,
+            workflow_name="wf",
+        )
+
+    @staticmethod
+    def yaml_project() -> Project:
+        workflow = make_workflow("wf", [make_dc("left_table"), make_dc("right_table")])
+        project = make_project(workflows=[workflow])
+        project.id = ObjectId("6a0000000000000000000001")
+        return project
+
+    def run(self, tmp_path, cli_config, project, server) -> tuple[dict, Project]:
+        join_def = self.fresh_join()
+        result = TestPersistJoinedTable.persist(
+            None,  # type: ignore[arg-type]
+            (tmp_path, project, join_def, cli_config),
+            TestPersistJoinedTable.joined([1, 2]),
+            server,
+        )
+        return result, project
+
+    @staticmethod
+    def joined_dcs(project: Project) -> list[str]:
+        return [
+            str(dc.id)
+            for wf in project.workflows
+            for dc in wf.data_collections
+            if dc.data_collection_tag == "joined_complete"
+        ]
+
+    def test_each_attach_writes_the_same_collection(self, tmp_path, mock_cli_config):
+        from depictio.models.models.joins import stable_join_result_id
+
+        server = _FakeServer()
+        first, p1 = self.run(tmp_path, mock_cli_config, self.yaml_project(), server)
+        second, p2 = self.run(tmp_path, mock_cli_config, self.yaml_project(), server)
+
+        expected = str(stable_join_result_id(ObjectId("6a0000000000000000000001"), "complete"))
+        assert first["dc_id"] == second["dc_id"] == expected
+        assert self.joined_dcs(p1) == self.joined_dcs(p2) == [expected]
+        assert second["unchanged"] is True  # same rows: no second version
+
+    def test_the_joined_collection_already_in_the_project_is_reused(
+        self, tmp_path, mock_cli_config
+    ):
+        project = self.yaml_project()
+        earlier = ObjectId()
+        project.workflows[0].data_collections.append(make_dc("joined_complete", earlier))
+
+        result, project = self.run(tmp_path, mock_cli_config, project, _FakeServer())
+
+        assert result["dc_id"] == str(earlier)
+        assert self.joined_dcs(project) == [str(earlier)]

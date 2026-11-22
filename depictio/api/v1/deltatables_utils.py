@@ -671,6 +671,12 @@ def _get_aggregation_version(data_collection_id_str: str) -> str | None:
     dataframe cache leaves the other workers still pointing at the old key,
     so we discriminate the keys by version instead.
 
+    The id of the table's record is part of the salt: a table deleted and
+    created again under the same id (a join re-created under its name) starts
+    its counter again at 1, and a key of the version alone served the first
+    table's cached scan, whose files were gone. A new record has a new id, so
+    every worker reads the new table, whether the invalidation reached it or not.
+
     Returns ``None`` on lookup failure so callers can fall back to unsalted
     keys (preserves prior behavior on errors).
     """
@@ -684,7 +690,9 @@ def _get_aggregation_version(data_collection_id_str: str) -> str | None:
         agg_list = (dt or {}).get("aggregation") or []
         if not agg_list:
             return None
-        return str(agg_list[-1].get("aggregation_version") or "")
+        version = str(agg_list[-1].get("aggregation_version") or "")
+        record = (dt or {}).get("_id")
+        return f"{version}.{record}" if record is not None else version
     except Exception as e:
         logger.debug(f"_get_aggregation_version({data_collection_id_str}) failed: {e}")
         return None
@@ -2446,6 +2454,10 @@ def invalidate_data_collection_cache(data_collection_id: str) -> int:
     endpoints continue to read the stale DataFrame after the CLI rewrites the
     delta. Called from the realtime event path so that a re-fetch after a
     ``data_collection_updated`` event sees the newly written delta rows.
+
+    The collection's open scans and schemas go too: they are keyed by location
+    (or id) and version, and a table deleted then created again under the same
+    id restarts its version, so a kept scan pointed at deleted files.
     """
     global _total_memory_usage
 
@@ -2455,6 +2467,12 @@ def invalidate_data_collection_cache(data_collection_id: str) -> int:
         if meta is not None:
             _total_memory_usage = max(0, _total_memory_usage - int(meta.get("size_bytes", 0)))
         _dataframe_memory_cache.pop(key, None)
+
+    with _BASE_SCAN_LOCK:
+        for key in [k for k in list(_BASE_SCAN_CACHE) if data_collection_id in k[0]]:
+            _BASE_SCAN_CACHE.pop(key, None)
+    for key in [k for k in list(_DELTA_SCHEMA_CACHE) if k[0] == data_collection_id]:
+        _DELTA_SCHEMA_CACHE.pop(key, None)
 
     redis_dropped = 0
     try:

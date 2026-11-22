@@ -367,6 +367,72 @@ def _render_component(
     )
 
 
+DATA_COLLECTION_DELETED_CODE = "data_collection_deleted"
+DATA_COLLECTION_DELETED_MESSAGE = "The data collection this component reads was deleted."
+
+
+def _require_live_data_collection(project_id: Any, dc_id: Any) -> None:
+    """410 when the data collection a component reads is no longer in its project.
+
+    Deleting a data collection (directly, or as a side effect such as removing the
+    join that produced it) leaves the dashboards that read it untouched. A render
+    then went on to look for the collection's Delta table and failed deep inside
+    the loader, which surfaced as an opaque 500 on the tile. One indexed lookup
+    on the project catches it up front and gives the tile a sentence to show,
+    with a stable ``code`` the viewer maps on.
+
+    A malformed id is left to the render's own handling, so behaviour for any
+    collection that still exists is unchanged.
+    """
+    try:
+        project_oid = ObjectId(str(project_id))
+        dc_oid = ObjectId(str(dc_id))
+    except Exception:  # noqa: BLE001 — not an ObjectId: not this check's call
+        return
+    if projects_collection.find_one(
+        {"_id": project_oid, "workflows.data_collections._id": dc_oid}, {"_id": 1}
+    ):
+        return
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": DATA_COLLECTION_DELETED_CODE,
+            "message": DATA_COLLECTION_DELETED_MESSAGE,
+        },
+    )
+
+
+#: Under ``secondary_values[<card>]``: why a card has no value, for the card to say.
+CARD_UNAVAILABLE_KEY = "__unavailable__"
+
+
+def _cards_reading_deleted_collections(project_id: Any, cards: list[dict]) -> set[str]:
+    """Indexes of the cards whose data collection is no longer in the project.
+
+    One project lookup for every card, like ``_require_live_data_collection``
+    for one component. Empty when the project cannot be read: the cards are
+    then computed as before and fail, or not, on their own.
+    """
+    try:
+        project = projects_collection.find_one(
+            {"_id": ObjectId(str(project_id))}, {"workflows.data_collections._id": 1}
+        )
+    except Exception:  # noqa: BLE001 - not an ObjectId: not this check's call
+        return set()
+    if not project:
+        return set()
+    live = {
+        str(dc.get("_id"))
+        for workflow in project.get("workflows") or []
+        for dc in workflow.get("data_collections") or []
+    }
+    return {
+        str(card.get("index"))
+        for card in cards
+        if card.get("dc_id") and str(card.get("dc_id")) not in live
+    }
+
+
 def _ensure_baseline_quietly(
     dashboard_id: PyObjectId | ObjectId | str,
     current_user: Any,
@@ -2774,6 +2840,7 @@ def _component_context(
     dc_id = component.get("dc_id")
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+    _require_live_data_collection(project_id, dc_id)
 
     merged_filters = _resolve_link_filters_cached(
         filters=filters,
@@ -3090,12 +3157,22 @@ def bulk_compute_cards(
     texts = _texts_to_compute(dashboard_data, request, requested_ids)
     cards = cards + [vc for text in texts for vc in _text_value_cards(text)]
 
+    # A card reading a deleted collection (its join or its table removed) is
+    # not computed: it says why it has no value, as a figure does (410).
+    gone = _cards_reading_deleted_collections(project_id, cards)
+    if gone:
+        cards = [m for m in cards if str(m.get("index")) not in gone]
+
     if not cards and not texts:
         empty: dict[str, Any] = {
-            "values": {idx: None for idx in definition_errors},
+            "values": {idx: None for idx in [*definition_errors, *gone]},
             "filter_applied": bool(filters),
             "filter_count": len(filters),
         }
+        if gone:
+            empty["secondary_values"] = {
+                idx: {CARD_UNAVAILABLE_KEY: DATA_COLLECTION_DELETED_MESSAGE} for idx in gone
+            }
         if definition_errors:
             empty["definition_errors"] = definition_errors
         return empty
@@ -3705,6 +3782,12 @@ def bulk_compute_cards(
             folded[f"param:{key}"] = run_params.get(key)
         values[text_idx] = folded
 
+    # A text tile's value (``<text>::<name>``) is folded above and stays null.
+    for idx in gone:
+        if "::" not in idx:
+            values[idx] = None
+            secondary_values[idx] = {CARD_UNAVAILABLE_KEY: DATA_COLLECTION_DELETED_MESSAGE}
+
     result: dict[str, Any] = {
         "values": values,
         "secondary_values": secondary_values,
@@ -4001,6 +4084,7 @@ async def render_figure_endpoint(
     dc_id = component.get("dc_id")
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+    _require_live_data_collection(project_id, dc_id)
 
     # Off the event loop. This endpoint is ``async def``, and link resolution is
     # fully synchronous — a pymongo ``find_one`` plus, when links apply, an HTTP
@@ -4204,6 +4288,7 @@ def render_table_endpoint(
     dc_id = component.get("dc_id")
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+    _require_live_data_collection(project_id, dc_id)
 
     # One pin for every read below — schema, total, sorted page, natural page.
     # Each of them used to be a separate way to answer a pinned request with
@@ -4476,6 +4561,7 @@ def render_image_paths_endpoint(
     image_column = component.get("image_column")
     if not (wf_id and dc_id and image_column):
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id/image_column.")
+    _require_live_data_collection(project_id, dc_id)
 
     merged_filters = _resolve_link_filters_cached(
         filters=filters,

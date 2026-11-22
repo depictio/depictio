@@ -235,6 +235,9 @@ GUARDED: set[tuple[str, str]] = {
     (_LINKS, "create_link"),
     (_LINKS, "update_link"),
     (_LINKS, "delete_link"),
+    # joins: a join adds a table collection to the project, and deleting one removes it
+    ("joins_endpoints.routes", "create_project_join"),
+    ("joins_endpoints.routes", "delete_project_join"),
     (_WF, "create_workflow"),
     (_WF, "update_workflow"),
     (_WF, "delete_workflow"),
@@ -304,6 +307,7 @@ EXEMPT: dict[tuple[str, str], str] = {
     (_DT, "get_preview_filtered"): _READ,
     (_MQC, "multiqc_preview"): _READ,
     (_LINKS, "resolve_link"): _READ,
+    ("joins_endpoints.routes", "preview_project_join"): _READ,
     (_WF, "compare_models_endpoint"): _READ,
     (_MIG, "export_project"): "reads the project into a bundle",
     ("migrate_endpoints.targets_routes", "create_target"): (

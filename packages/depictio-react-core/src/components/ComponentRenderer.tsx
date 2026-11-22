@@ -935,7 +935,14 @@ const CardRenderer: React.FC<{
   // header tooltip, and switching the card back to another style restores it.
   const stripFitsVariant =
     variant !== 'compact' || compactKeepsStrip(metadata.secondary_layout as string | undefined);
-  const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent && stripFitsVariant;
+  // Why the card has no value, when the server knows (its data collection was
+  // deleted): said on the description line, in place of the aggregation.
+  const unavailable =
+    typeof secondaryValues?.['__unavailable__'] === 'string'
+      ? (secondaryValues['__unavailable__'] as string)
+      : null;
+  const showSecondaryMetrics =
+    !unavailable && !groupCompareRich && hasSecondaryContent && stripFitsVariant;
   // The compact one-line header (value beside the title) buys height for a
   // group-comparison strip, which stacks a row per group and would otherwise
   // not fit. A plain secondary view — a box plot, a donut, a top-N list — is a
@@ -1066,7 +1073,7 @@ const CardRenderer: React.FC<{
         // strip below.
         // An author's caption takes the description line; the aggregation it
         // displaces is still one hover away on the header.
-        aggregation_description={compactHeader ? undefined : caption || aggDesc}
+        aggregation_description={unavailable ?? (compactHeader ? undefined : caption || aggDesc)}
         inline_header={compactHeader}
         header_tooltip={headerTooltip}
         filter_applied={filterApplied}

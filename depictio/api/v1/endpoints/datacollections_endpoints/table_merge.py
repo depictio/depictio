@@ -330,6 +330,7 @@ def merge_table_file(
 
         report_version = current
         aggregation_version = None
+        joins: list[dict] = []
         if not dry_run:
             if plan.reason:
                 raise _refuse(422, "nothing_to_apply", plan.reason)
@@ -340,6 +341,7 @@ def merge_table_file(
                 write_mode="overwrite",
                 trigger="ui",
                 dc_for_specs=dc,
+                join_reports=joins,
             )
             report_version = written if written is not None else current
 
@@ -363,6 +365,7 @@ def merge_table_file(
         "key_candidates": candidates,
         "delta_version": report_version,
         "aggregation_version": aggregation_version,
+        "joins": joins,
         "table_rows": table.height,
         "file_rows": incoming.height,
         "row_count": plan.frame.height,

@@ -205,8 +205,8 @@ export const CopyId: React.FC<{ id: string }> = ({ id }) => (
   </CopyButton>
 );
 
-/** Columns Depictio adds to every table it ingests. */
-export const SYSTEM_COLUMNS = new Set(['depictio_run_id', 'aggregation_time']);
+/** Columns Depictio adds to every table it ingests (and `join_timestamp` to a joined table). */
+export const SYSTEM_COLUMNS = new Set(['depictio_run_id', 'aggregation_time', 'join_timestamp']);
 
 export const userColumns = (columns: ColumnSpec[]) => columns.filter((c) => !SYSTEM_COLUMNS.has(c.name));
 
@@ -234,6 +234,10 @@ function columnKind(type: string | null): [string, string] {
 const TH = (props: React.ComponentProps<typeof Table.Th>) => (
   <Table.Th fz="xs" fw={600} c="dimmed" style={{ whiteSpace: 'nowrap' }} {...props} />
 );
+
+/** "a", "a and b", "a, b and c". */
+const listInWords = (names: string[]): string =>
+  names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 
 export const DcColumnsTable: React.FC<{ columns: ColumnSpec[]; rows: number | null }> = ({ columns, rows }) => {
   const shown = userColumns(columns);
@@ -300,7 +304,7 @@ export const DcColumnsTable: React.FC<{ columns: ColumnSpec[]; rows: number | nu
       </Table.ScrollContainer>
       {system.length > 0 && (
         <Text size="xs" c="dimmed">
-          {`Depictio also adds ${system.map((c) => c.name).join(' and ')} to every row.`}
+          {`Depictio also adds ${listInWords(system.map((c) => c.name))} to every row.`}
         </Text>
       )}
     </Stack>

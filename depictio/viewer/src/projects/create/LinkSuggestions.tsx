@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActionIcon, Badge, Button, Collapse, Group, Loader, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchLinkSuggestions, fetchProject, listLinkResolvers } from 'depictio-react-core';
+import { Z_LAYERS, fetchLinkSuggestions, fetchProject, listLinkResolvers } from 'depictio-react-core';
 import type { LinkSuggestion, ResolverInfo } from 'depictio-react-core';
 
 import { useListingAccents } from '../../lib/useListingAccents';
@@ -28,10 +28,12 @@ const keyOf = (s: LinkSuggestion) => `${s.source_dc_id}:${s.target_dc_id}`;
 export const LinkSuggestions: React.FC<{
   projectId: string;
   uploads: TableUploadOutcome[];
+  /** Tables made otherwise (from a folder, a URL), already known to be tables. */
+  extraTableIds?: string[];
   /** Every upload and ingestion is over: the collections can be read. */
   ready: boolean;
   testId: string;
-}> = ({ projectId, uploads, ready, testId }) => {
+}> = ({ projectId, uploads, extraTableIds, ready, testId }) => {
   const accent = useListingAccents('projects');
   const [tableIds, setTableIds] = useState<string[] | null>(null);
   const [suggestions, setSuggestions] = useState<LinkSuggestion[] | null>(null);
@@ -50,12 +52,12 @@ export const LinkSuggestions: React.FC<{
     Promise.all(added.map((u) => identifyFile(u.file))).then((guesses) => {
       if (cancelled) return;
       const ids = added.filter((_, i) => guesses[i].kind === 'table');
-      setTableIds(ids.map((u) => u.dataCollectionId as string));
+      setTableIds([...(extraTableIds ?? []), ...ids.map((u) => u.dataCollectionId as string)]);
     });
     return () => {
       cancelled = true;
     };
-  }, [ready, uploads]);
+  }, [ready, uploads, extraTableIds]);
 
   useEffect(() => {
     if (!tableIds || tableIds.length === 0) return;
@@ -179,6 +181,9 @@ export const LinkSuggestions: React.FC<{
         </Stack>
       </SourceSection>
       <LinkEditModal
+        // Always shown inside a dialog (Create, Add data, a run's results):
+        // the form opens above it, where it can be seen and used.
+        zIndex={Z_LAYERS.nestedOverlay}
         opened={draft !== null}
         projectId={projectId}
         link={null}

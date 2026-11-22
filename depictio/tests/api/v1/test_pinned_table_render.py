@@ -150,6 +150,8 @@ def cache(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "check_project_permission", lambda *a, **k: True)
     monkeypatch.setattr(routes, "_resolve_link_filters_cached", lambda **kw: kw["filters"])
     monkeypatch.setattr(version_store, "get_version", lambda vid: versions.get(vid))
+    # The collection is in its project (a deleted one is a 410, tested apart).
+    monkeypatch.setattr(routes, "_require_live_data_collection", lambda *a, **k: None)
 
     deltatables_utils.clear_memory_cache()
     deltatables_utils._DELTA_SCHEMA_CACHE.clear()

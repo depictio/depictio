@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -90,7 +91,10 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
         return {"success": False, "message": "No admin user found in the database"}
 
     # Get the admin token
-    token = tokens_collection.find_one({"user_id": admin_user["_id"]})
+    token = tokens_collection.find_one(
+        {"user_id": admin_user["_id"], "expire_datetime": {"$gt": datetime.now()}},
+        sort=[("expire_datetime", -1)],
+    )
     if not token:
         logger.error(f"No token found for admin user {admin_user['email']}")
         return {

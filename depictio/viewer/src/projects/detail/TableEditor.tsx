@@ -34,6 +34,7 @@ import type {
 } from 'depictio-react-core';
 
 import { useGlassPages } from '../../chrome/variants/glass/pages';
+import { joinRebuildNotice } from './joinForm';
 import TableMergePanel from './TableMergePanel';
 import './TableEditor.css';
 
@@ -280,13 +281,18 @@ const TableEditor: React.FC<{
     setProblem(null);
     try {
       const { report, file } = merge;
-      await mergeTableFile(dcId, file, {
+      const result = await mergeTableFile(dcId, file, {
         mode: report.mode,
         key: report.key,
         baseVersion: report.delta_version,
         dryRun: false,
       });
-      notifications.show({ color: 'green', message: `Table updated from ${file.name}.` });
+      const notice = joinRebuildNotice(`Table updated from ${file.name}.`, result?.joins);
+      notifications.show({
+        color: notice.color ?? 'green',
+        message: notice.message,
+        ...(notice.color ? { autoClose: 10000 } : {}),
+      });
       await load();
       onSaved();
     } catch (err) {
@@ -347,12 +353,16 @@ const TableEditor: React.FC<{
     }));
     try {
       const result = await patchTableCells(dcId, table.delta_version, edits);
+      const notice = joinRebuildNotice(
+        result.changed_cells === 0
+          ? 'Nothing changed.'
+          : `Saved ${result.changed_cells} cell${result.changed_cells === 1 ? '' : 's'}.`,
+        result.joins,
+      );
       notifications.show({
-        color: 'green',
-        message:
-          result.changed_cells === 0
-            ? 'Nothing changed.'
-            : `Saved ${result.changed_cells} cell${result.changed_cells === 1 ? '' : 's'}.`,
+        color: notice.color ?? 'green',
+        message: notice.message,
+        ...(notice.color ? { autoClose: 10000 } : {}),
       });
       await load();
       onSaved();

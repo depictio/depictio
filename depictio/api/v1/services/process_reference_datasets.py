@@ -292,7 +292,10 @@ async def process_all_reference_datasets() -> None:
             logger.error("No admin user found")
             return
 
-        token = tokens_collection.find_one({"user_id": admin_user["_id"]})
+        token = tokens_collection.find_one(
+            {"user_id": admin_user["_id"], "expire_datetime": {"$gt": datetime.now()}},
+            sort=[("expire_datetime", -1)],
+        )
         if not token:
             logger.error("No token found for admin user")
             return

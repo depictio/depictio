@@ -21,6 +21,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints import table_edit, tabl
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
     datacollections_endpoint_router,
 )
+from depictio.api.v1.endpoints.joins_endpoints import service as joins_service
 from depictio.api.v1.endpoints.projects_endpoints import publish_lock
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.users import UserBase
@@ -125,6 +126,8 @@ def env(tmp_path):
     )
     with (
         patch.object(table_edit, "projects_collection", e.db["projects"]),
+        # Every write ends by looking for joins that read the table (none here).
+        patch.object(joins_service, "projects_collection", e.db["projects"]),
         patch.object(table_edit, "_delta_location_for", lambda _dc: e.location),
         patch.object(table_manage, "_delta_location_for", lambda _dc: e.location),
         patch.object(table_edit, "polars_s3_config", {}),
