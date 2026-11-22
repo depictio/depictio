@@ -598,10 +598,13 @@ class _MemoryCap:
     _warned = False
 
     def __enter__(self):
-        import resource
-
         if not _memory_cap_enabled:
             self._capped = False
+            return self
+        try:
+            import resource
+        except ImportError:  # Windows, Pyodide
+            self._skip("the resource module is unavailable on this platform")
             return self
         if not hasattr(resource, "RLIMIT_AS"):
             self._skip("RLIMIT_AS is unavailable on this platform")

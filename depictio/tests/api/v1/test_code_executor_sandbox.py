@@ -599,6 +599,30 @@ def test_no_cap_outside_a_prefork_child(monkeypatch):
         assert resource.getrlimit(resource.RLIMIT_AS) == before
 
 
+def test_no_resource_module_runs_code_uncapped(monkeypatch):
+    """Pyodide and Windows have no ``resource`` module: figures still run."""
+    import sys
+
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    monkeypatch.setattr(ce, "_memory_cap_enabled", True)
+    monkeypatch.setitem(sys.modules, "resource", None)
+    with ce._MemoryCap() as cap:
+        assert cap._capped is False
+
+
+def test_no_cap_outside_a_prefork_child_needs_no_resource_module(monkeypatch):
+    """Outside a prefork child the ``resource`` module is never imported."""
+    import sys
+
+    from depictio.api.v1.services.figure import code_executor as ce
+
+    monkeypatch.setattr(ce, "_memory_cap_enabled", False)
+    monkeypatch.setitem(sys.modules, "resource", None)
+    with ce._MemoryCap() as cap:
+        assert cap._capped is False
+
+
 def test_linux_address_space_is_read_in_bytes(monkeypatch):
     """/proc/self/stat's vsize is already in bytes (no kB conversion)."""
     from depictio.api.v1.services.figure import code_executor as ce
