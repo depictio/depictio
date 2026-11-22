@@ -517,13 +517,25 @@ test.describe("catalog modules are usable on a dashboard", () => {
     );
 
     // Programmatic login only seeds storage — the SPA reads it on first load.
+    // Seed once per tab, as fixtures/auth.ts does: refresh tokens rotate, so
+    // putting the first login's refresh token back on every navigation would
+    // replay a retired token, and the server revokes a session whose retired
+    // token comes back.
     await page.addInitScript(
       (t) => {
+        const MARKER = "e2e-catalog-seeded-refresh";
+        try {
+          if (window.sessionStorage.getItem(MARKER) === t.refresh_token) return;
+          window.sessionStorage.setItem(MARKER, t.refresh_token);
+        } catch {
+          // Blocked sessionStorage: seed on every navigation.
+        }
         window.localStorage.setItem(
           "local-store",
           JSON.stringify({
             access_token: t.access_token,
             refresh_token: t.refresh_token,
+            ...(t.expire_datetime ? { expire_datetime: t.expire_datetime } : {}),
             logged_in: true,
             user_id: t.user_id,
             email: t.email ?? "",
