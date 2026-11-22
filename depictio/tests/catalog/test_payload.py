@@ -467,3 +467,14 @@ def test_a_tied_card_mode_is_the_smallest_value_as_on_the_server() -> None:
     df = pl.DataFrame({"g": ["novel", "known", "novel", "known", None, None, None]})
     assert {_aggregate(df, "g", "mode") for _ in range(20)} == {"known"}
     assert df["g"].to_pandas().mode().iloc[0] == "known"
+
+
+def test_a_marked_figure_ships_the_patch_that_takes_its_marks_off() -> None:
+    """The preview's "Automatic marks" switch: the figure keeps its marks, and
+    `marks_off` names what to drop. A figure without marks carries none."""
+    payload = build_payload(_get_output("bclconvert_lane_summary"), "light")
+    figures = payload["data"]["figures"].values()
+    marked = [f for f in figures if "marks_off" in f]
+    assert marked, "no figure of this output carries marks"
+    for f in marked:
+        assert f["marks_off"]["data"] or f["marks_off"]["layout"]

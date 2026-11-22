@@ -27,6 +27,7 @@ import {
   Paper,
   Popover,
   Stack,
+  Switch,
   Text,
   ThemeIcon,
   Title,
@@ -57,6 +58,7 @@ import ChunkErrorBoundary from './ChunkErrorBoundary';
 import { ModuleHistoryModal, useModuleHistory } from './ModuleVersions';
 import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 import CatalogHeader from './CatalogHeader';
+import { figureHasMarks, setPreviewMarks, usePreviewMarks } from '../offline/previewMarks';
 import VersionChip from './VersionChip';
 
 const DASHBOARD_ID = 'catalog-preview';
@@ -291,6 +293,7 @@ const OutputView: React.FC<{
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
+  const marksOn = usePreviewMarks();
 
   useEffect(() => {
     bulkComputeCards(DASHBOARD_ID, []).then((r) => {
@@ -310,7 +313,8 @@ const OutputView: React.FC<{
       );
     }
     return (
-      <CellBoundary label={String(m.component_type)}>
+      // Keyed on the marks switch: the figure fetches again, with or without them.
+      <CellBoundary key={`${m.index}:${marksOn}`} label={String(m.component_type)}>
         <ChunkErrorBoundary>
           <ComponentRenderer
             metadata={m}
@@ -455,6 +459,21 @@ const OutputView: React.FC<{
         </Group>
 
         <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
+          {figureHasMarks(active?.index) ? (
+            <Tooltip
+              label="Bar values, group sizes, cell values and the note on what is not shown, drawn like a dashboard tile"
+              withArrow
+              multiline
+              w={260}
+            >
+              <Switch
+                size="xs"
+                label="Automatic marks"
+                checked={marksOn}
+                onChange={(e) => setPreviewMarks(e.currentTarget.checked)}
+              />
+            </Tooltip>
+          ) : null}
           <Popover position="bottom-end" withArrow shadow="md" width={400}>
             <Popover.Target>
               <Tooltip label="Details" withArrow>

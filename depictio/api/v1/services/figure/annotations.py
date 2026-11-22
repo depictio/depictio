@@ -404,3 +404,37 @@ def apply_annotations(
     out["layout"] = layout
     out["data"] = traces
     return out
+
+
+def marks_off_patch(marked: dict, plain: dict) -> dict | None:
+    """What turns ``marked`` back into ``plain``: ``None`` when they are the same.
+
+    The catalog preview ships the marked figure and this patch, so its
+    "Automatic marks" switch can drop the marks without a second figure.
+    ``{"data": [{"i": n, "set": {...}, "unset": [...]}], "layout": {"set", "unset"}}``,
+    top-level keys only (a mark replaces a key whole: ``textfont``, ``xaxis``,
+    ``annotations``). Applied by ``applyMarksOff`` in depictio-react-core.
+    """
+
+    def diff(after: dict, before: dict) -> dict:
+        changed = {k: v for k, v in before.items() if after.get(k, _MISSING) != v}
+        gone = [k for k in after if k not in before]
+        out: dict[str, Any] = {}
+        if changed:
+            out["set"] = changed
+        if gone:
+            out["unset"] = gone
+        return out
+
+    data: list[dict[str, Any]] = []
+    for i, (after, before) in enumerate(zip(marked.get("data") or [], plain.get("data") or [])):
+        entry = diff(after, before)
+        if entry:
+            data.append({"i": i, **entry})
+    layout = diff(marked.get("layout") or {}, plain.get("layout") or {})
+    if not data and not layout:
+        return None
+    return {"data": data, "layout": layout}
+
+
+_MISSING = object()

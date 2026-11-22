@@ -209,3 +209,51 @@ def test_apply_annotations_never_mutates_its_input():
     out = apply_annotations(figure, None, figure_style="default", theme="light")
     assert figure == before
     assert out is not figure
+
+
+# ---------------------------------------------------------------------------
+# marks_off patch (the catalog preview's "Automatic marks" switch)
+
+
+def _apply_patch(figure: dict, patch: dict) -> dict:
+    """The TypeScript `applyMarksOff`, for the round trip."""
+    out = copy.deepcopy(figure)
+    for entry in patch.get("data", []):
+        trace = out["data"][entry["i"]]
+        trace.update(entry.get("set", {}))
+        for key in entry.get("unset", []):
+            trace.pop(key, None)
+    layout = out.setdefault("layout", {})
+    layout.update(patch.get("layout", {}).get("set", {}))
+    for key in patch.get("layout", {}).get("unset", []):
+        layout.pop(key, None)
+    return out
+
+
+def test_marks_off_patch_restores_the_unmarked_figure():
+    from depictio.api.v1.services.figure.annotations import marks_off_patch
+
+    fig = px.box(pd.DataFrame({"g": list("aab"), "v": [1, 2, 3]}), x="g", y="v")
+    plain = _styled(fig)
+    marked = apply_annotations(plain, {"group_n": True}, figure_style="default", theme="light")
+    patch = marks_off_patch(marked, plain)
+    assert patch is not None
+    assert _apply_patch(marked, patch) == plain
+
+
+def test_marks_off_patch_restores_bar_labels_and_percent_customdata():
+    from depictio.api.v1.services.figure.annotations import marks_off_patch
+
+    fig = px.bar(pd.DataFrame({"cat": list("abc"), "v": [3, 2, 1]}), x="cat", y="v")
+    plain = _styled(fig)
+    marked = apply_annotations(
+        plain, {"bar_labels": "percent"}, figure_style="default", theme="light"
+    )
+    assert _apply_patch(marked, marks_off_patch(marked, plain)) == plain
+
+
+def test_no_marks_no_patch():
+    from depictio.api.v1.services.figure.annotations import marks_off_patch
+
+    plain = _styled(px.scatter(pd.DataFrame({"x": [1, 2], "y": [3, 4]}), x="x", y="y"))
+    assert marks_off_patch(plain, copy.deepcopy(plain)) is None

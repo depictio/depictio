@@ -181,19 +181,26 @@ def _figure_payload(df, render, theme: str = "light") -> dict[str, Any]:
     # The automatic marks (``annotations``), declared or by figure type, like a
     # dashboard tile draws them. A code render cannot declare them and gets
     # none, as in the API worker.
+    marks_off = None
     if not render.code:
-        from depictio.api.v1.services.figure.annotations import apply_annotations
+        from depictio.api.v1.services.figure.annotations import apply_annotations, marks_off_patch
 
         try:
+            plain = figure
             figure = apply_annotations(
-                figure, render.annotations, figure_style="default", theme=_normalise_theme(theme)
+                plain, render.annotations, figure_style="default", theme=_normalise_theme(theme)
             )
+            # What the preview's "Automatic marks" switch takes off again.
+            marks_off = marks_off_patch(figure, plain)
         except Exception:  # noqa: BLE001 -- a mark never costs the preview its figure
             pass
-    return {
+    payload: dict[str, Any] = {
         "figure": figure,
         "metadata": {"visu_type": render.visu_type or "code", "filter_applied": False},
     }
+    if marks_off is not None:
+        payload["marks_off"] = marks_off
+    return payload
 
 
 # ---------------------------------------------------------------------------

@@ -108,6 +108,8 @@ export {
 export type { ParsedPalette } from './paletteColor';
 export { TabColorContext, tabHueHex, useTabHue } from './tabColor';
 export { tintSingleSeries } from './figureTint';
+export { applyMarksOff } from './figureMarks';
+export type { MarksOffPatch } from './figureMarks';
 export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
 export { GenomeBrowserTargetContext, useGenomeBrowserTarget } from './components/jbrowse/browserTarget';
