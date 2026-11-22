@@ -110,3 +110,19 @@ class TestCatalogRender:
     def test_refuses_annotations_on_code_mode(self):
         with pytest.raises(ValidationError, match="UI-mode"):
             Render(component="figure", code="fig = px.scatter()", annotations={})
+
+    def test_a_fixed_reference_line_needs_a_source(self):
+        with pytest.raises(ValidationError, match="source"):
+            Render(
+                component="figure", visu_type="bar", reference_lines=[{"axis": "y", "value": 30}]
+            )
+
+    def test_a_sourced_or_data_defined_reference_line_is_accepted(self):
+        Render(
+            component="figure",
+            visu_type="bar",
+            reference_lines=[
+                {"axis": "y", "value": 30, "source": "FastQC default"},
+                {"axis": "y", "stat": "median", "column": "depth"},
+            ],
+        )

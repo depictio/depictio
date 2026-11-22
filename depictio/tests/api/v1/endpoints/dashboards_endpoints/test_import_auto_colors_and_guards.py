@@ -247,6 +247,17 @@ class TestResolveAutoCategoryColors:
             ranked = dash_routes._ranked_column_values(str(ObjectId()), "Phylum", "rel_abundance")
         assert ranked == ["c", "a", "b"]
 
+    def test_an_auto_column_avoids_colours_other_columns_pin(self, project_id, column_data):
+        dashboard = {
+            "category_colors": {"habitat": {"*": "auto"}, "Kingdom": {"B": P[0]}},
+            "stored_metadata": [],
+        }
+        dash_routes._resolve_auto_category_colors(dashboard, project_id)
+        assert dashboard["category_colors"] == {
+            "habitat": {"lake": P[1], "soil": P[2]},
+            "Kingdom": {"B": P[0]},
+        }
+
     def test_a_column_no_table_holds_is_dropped(self, project_id, column_data):
         dashboard = {
             "category_colors": {"nowhere": {"*": "auto", "x": "#000000"}},

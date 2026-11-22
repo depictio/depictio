@@ -8390,13 +8390,20 @@ def _resolve_auto_category_colors(
     the template's pins first, `previous` (the column's colours on the dashboard
     this import replaces) next, palette slots for the rest. `auto:<column>`
     hands the slots out largest first, by that column's sum, and stops when they
-    run out. A column no collection of the project holds is dropped, pins
-    included: nothing on the dashboard can be drawn by it. The stored map never
+    run out. Slots another column pins go last (`avoid`), so two columns drawn
+    side by side (Kingdom and Phylum in a sunburst) do not share a hue. A column
+    no collection of the project holds is dropped, pins included: nothing on the
+    dashboard can be drawn by it. The stored map never
     keeps a `"*"`.
     """
     colors = dashboard_dict.get("category_colors")
     if not isinstance(colors, dict):
         return
+    explicit: dict[str, set[str]] = {
+        column: {v for k, v in mapping.items() if k != AUTO_CATEGORY_KEY and isinstance(v, str)}
+        for column, mapping in colors.items()
+        if isinstance(mapping, dict)
+    }
     resolved: dict[str, dict[str, str]] = {}
     for column, mapping in colors.items():
         if parse_auto_category_spec(mapping)[0]:
@@ -8424,6 +8431,7 @@ def _resolve_auto_category_colors(
             pinned,
             before if isinstance(before, dict) else None,
             ranked=rank_by is not None,
+            avoid=[c for other, pins in explicit.items() if other != column for c in pins],
         )
         if colours:
             resolved[column] = colours

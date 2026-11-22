@@ -597,6 +597,12 @@ class Render(BaseModel):
             raise ValueError(f"figure fields are only valid for component=figure, not {c}")
         if self.reference_lines and not self.visu_type:
             raise ValueError("'reference_lines' are drawn on UI-mode figures (visu_type) only")
+        if any(line.value is not None and not line.source for line in self.reference_lines):
+            # RULES.md §17: a fixed threshold cites where it comes from, or is a `stat`.
+            raise ValueError(
+                "a reference line at a fixed 'value' needs a 'source' (a tool default, a "
+                "paper); use 'stat' for a data-defined line"
+            )
         if self.annotations is not None and not self.visu_type:
             raise ValueError("'annotations' are drawn on UI-mode figures (visu_type) only")
         forbidden = _FORBIDDEN_FIGURE_KWARGS & set(self.dict_kwargs)

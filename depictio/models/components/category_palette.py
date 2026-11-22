@@ -44,6 +44,7 @@ def assign_category_colors(
     pinned: Mapping[str, str] | None = None,
     previous: Mapping[str, str] | None = None,
     ranked: bool = False,
+    avoid: Iterable[str] | None = None,
 ) -> dict[str, str]:
     """A colour for every value of a column, from its data.
 
@@ -56,6 +57,10 @@ def assign_category_colors(
         ranked: `values` come largest first (`auto:<column>`). Slots then follow
             that order, and when they run out the largest values keep theirs
             and the rest get none, where unranked values would all get none.
+        avoid: Colours other columns of the dashboard pin. Their slots go
+            last, so a column's first value is not drawn in the hue another
+            column gave one of its own (Bacteria's violet on the top phylum);
+            a previous colour among them is given up.
 
     Returns:
         ``{value: colour}``. Each value takes, in order of precedence, its
@@ -77,14 +82,17 @@ def assign_category_colors(
     else:
         ordered = sorted({str(v) for v in values}, key=natural_sort_key)
 
+    avoided = {c.lower() for c in avoid or ()}
     fixed: dict[str, str] = {}
     for value in ordered:
-        colour = pinned.get(value) or previous.get(value)
+        before = previous.get(value)
+        colour = pinned.get(value) or (before if (before or "").lower() not in avoided else None)
         if colour:
             fixed[value] = colour
 
     used = {c.lower() for c in fixed.values()} | {c.lower() for c in pinned.values()}
     free = [c for c in CATEGORY_PALETTE if c.lower() not in used]
+    free.sort(key=lambda c: c.lower() in avoided)
     unassigned = [v for v in ordered if v not in fixed and palettes.reserved_kind(v) is None]
     fits = ranked or len(unassigned) <= len(free)
     generated = dict(zip(unassigned, free)) if fits else {}

@@ -115,6 +115,34 @@ class TestAssignCategoryColors:
         assert colours == {"control": P[0], "Other": "#868e96"}
 
 
+class TestAvoidOtherColumnsPins:
+    """A colour another column pins goes last: Bacteria's violet is not the top phylum's."""
+
+    def test_slots_another_column_pins_come_last(self):
+        out = assign_category_colors(["a", "b"], avoid=[P[0], P[2]])
+        assert out == {"a": P[1], "b": P[3]}
+
+    def test_an_avoided_slot_is_still_used_when_the_rest_run_out(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[P[0]], ranked=True)
+        assert list(out.values()) == [*P[1:], P[0]]
+
+    def test_unranked_values_still_fit_on_the_whole_palette(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[P[0]])
+        assert sorted(out.values()) == sorted(P)
+
+    def test_avoid_is_case_insensitive(self):
+        assert assign_category_colors(["a"], avoid=[P[0].lower()]) == {"a": P[1]}
+
+    def test_a_previous_colour_another_column_pins_is_given_up(self):
+        out = assign_category_colors(["a", "b"], previous={"a": P[0], "b": P[4]}, avoid=[P[0]])
+        assert out == {"a": P[1], "b": P[4]}
+
+    def test_an_own_pin_wins_over_avoid(self):
+        assert assign_category_colors(["a"], pinned={"a": P[0]}, avoid=[P[0]]) == {"a": P[0]}
+
+
 class TestLiteCategoryColorsAuto:
     def test_a_bare_auto_is_the_star_map(self):
         lite = DashboardDataLite(title="T", category_colors={"condition": "auto"})
