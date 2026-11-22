@@ -57,7 +57,11 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _redeem_magic_link_ticket,
     _token_fingerprint,
 )
-from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import (
+    enforce_failure_limit,
+    enforce_rate_limit,
+    record_failure,
+)
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
 )
@@ -1129,6 +1133,13 @@ async def cleanup_expired_temporary_users_endpoint(
 # ---------------------------------------------------------------------------
 
 
+#: Per address and per minute. A classroom behind one NAT signs in at once.
+_GUEST_SESSIONS_PER_MINUTE = 60
+#: Wrong access codes per minute, per address and for the whole instance.
+_ACCESS_CODE_FAILURES_PER_IP = 10
+_ACCESS_CODE_FAILURES_OVERALL = 100
+
+
 @auth_endpoint_router.post("/public/create_temporary_user", include_in_schema=True)
 async def create_temporary_user_public(request: Request, body: dict | None = Body(None)) -> dict:
     """Create a temporary user for the React /auth SPA in public mode.
@@ -1149,11 +1160,23 @@ async def create_temporary_user_public(request: Request, body: dict | None = Bod
             detail="Temporary users only available in public mode",
         )
 
-    # Rate-limited before the code check so the shared secret cannot be
-    # brute-forced any faster than any other credential on this endpoint.
-    enforce_rate_limit(request, "public/create_temporary_user")
+    # Sessions are minted for anyone who passes, so the overall cap is wide
+    # enough for a room behind one NAT. Guessing the code is what is slowed
+    # down: wrong codes are counted per address and for the whole instance,
+    # and checked before the code is compared.
+    enforce_rate_limit(
+        request, "public/create_temporary_user", max_calls=_GUEST_SESSIONS_PER_MINUTE
+    )
+    if settings.auth.is_public_access_code_required:
+        enforce_failure_limit(
+            request,
+            "public/access_code_failures",
+            max_per_ip=_ACCESS_CODE_FAILURES_PER_IP,
+            max_overall=_ACCESS_CODE_FAILURES_OVERALL,
+        )
 
     if not settings.auth.verify_public_access_code((body or {}).get("access_code")):
+        record_failure(request, "public/access_code_failures")
         logger.warning("Public access code rejected for temporary-user request")
         raise HTTPException(status_code=403, detail="Invalid access code.")
 

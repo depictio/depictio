@@ -23,15 +23,20 @@ CLI context (``DEPICTIO_CONTEXT=CLI``) reads directly, since loopback and
 intranet hosts are the user's own, but reuses the same redirect and size caps
 through the ``direct_*`` counterparts at the bottom of this module.
 
-Known residual risk (documented in the RFC): DNS rebinding between the check
-and the fetch. Hardened deployments should run allowlist-only.
+DNS rebinding between the check and the fetch is closed for direct
+connections: the client dials through ``services.pinned_http``, which resolves
+the host again at connect time, applies the same address rule and connects to
+the address it validated. Two cases keep a plain client, and only the
+pre-check: an allowlist is set (every host reached is then listed, and listed
+hosts skip the address rule anyway), or an environment proxy carries the
+request (the proxy resolves the name).
 """
 
 import ipaddress
 import os
 import socket
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack, contextmanager
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -42,6 +47,7 @@ import httpx
 # ``depictio.api.v1.configs.config`` here would run full Settings validation
 # (and mint JWT keys) in the CLI process and in unit tests.
 from depictio.api.v1.configs.settings_models import RemoteConfig, S3DepictioCLIConfig
+from depictio.api.v1.services.pinned_http import AddressRejected, pinned_transport, proxy_applies
 from depictio.models import s3_access
 from depictio.models.logging import logger
 
@@ -197,6 +203,24 @@ def _resolve_addresses(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6
     return addresses
 
 
+def _non_public_reason(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> str | None:
+    """The gateway's address rule, shared by the pre-check and the pinned connect."""
+    if (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_multicast
+        or address.is_unspecified
+    ):
+        return "non-public address"
+    return None
+
+
+def _rejected_address_message(host: str, reason: str) -> str:
+    return f"Host '{host}' resolves to a {reason} and was rejected."
+
+
 def validate_remote_url(url: str, policy: RemoteConfig | None = None) -> None:
     """Validate a user-supplied URL before any fetch. Raises ``RemoteURLRejected``.
 
@@ -233,25 +257,36 @@ def validate_remote_url(url: str, policy: RemoteConfig | None = None) -> None:
         raise RemoteURLRejected(f"Host '{host}' is not in the administrator allowlist.")
 
     for address in _resolve_addresses(host):
-        if (
-            address.is_private
-            or address.is_loopback
-            or address.is_link_local
-            or address.is_reserved
-            or address.is_multicast
-            or address.is_unspecified
-        ):
-            raise RemoteURLRejected(
-                f"Host '{host}' resolves to a non-public address and was rejected."
-            )
+        reason = _non_public_reason(address)
+        if reason:
+            raise RemoteURLRejected(_rejected_address_message(host, reason))
+
+
+def _gateway_client(url: str, timeout_s: float, policy: RemoteConfig) -> httpx.Client:
+    """Client for one hop to ``url`` (already validated).
+
+    Pinned to the addresses it validates at connect time, unless an allowlist
+    is set (listed hosts skip the address rule) or an environment proxy carries
+    the request: passing ``transport=`` would switch httpx's env proxies off,
+    and the proxy resolves the name, so the plain client is kept there.
+    """
+    if _split_hosts(policy.url_allowlist) or proxy_applies(url):
+        return httpx.Client(timeout=timeout_s, follow_redirects=False)
+    transport = pinned_transport(_non_public_reason)
+    return httpx.Client(timeout=timeout_s, follow_redirects=False, transport=transport)
 
 
 def _follow_redirects(
-    client: httpx.Client, url: str, method: str, policy: RemoteConfig
+    open_client: Callable[[str], httpx.Client], url: str, method: str, policy: RemoteConfig
 ) -> httpx.Response:
-    """Follow up to ``policy.max_redirects`` hops manually, re-validating each."""
+    """Follow up to ``policy.max_redirects`` hops manually, re-validating each.
+
+    ``open_client(url)`` gives the client for each hop: a redirect may cross
+    from a proxied host to a direct one, and the pinning choice is per host.
+    """
     current = url
     for _ in range(policy.max_redirects + 1):
+        client = open_client(current)
         request = client.build_request(method, current)
         response = client.send(request, stream=True)
         if response.is_redirect:
@@ -288,8 +323,15 @@ def open_validated_stream(
     if urlparse(url).scheme.lower() == "s3":
         raise RemoteURLRejected("s3:// URLs are read through the object store, not over HTTP.")
     timeout_s = policy.timeout_s if timeout is None else timeout
-    with httpx.Client(timeout=timeout_s, follow_redirects=False) as client:
-        response = _follow_redirects(client, url, method, policy)
+    with ExitStack() as clients:
+
+        def open_client(hop_url: str) -> httpx.Client:
+            return clients.enter_context(_gateway_client(hop_url, timeout_s, policy))
+
+        try:
+            response = _follow_redirects(open_client, url, method, policy)
+        except AddressRejected as exc:  # rebinding caught at connect: same error as the check
+            raise RemoteURLRejected(_rejected_address_message(exc.host, exc.reason)) from exc
         try:
             yield response
         finally:

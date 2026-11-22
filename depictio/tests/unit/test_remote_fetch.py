@@ -379,7 +379,17 @@ class TestOpenValidatedStream:
             return real_resolve(host)
 
         monkeypatch.setattr(remote_fetch, "_resolve_addresses", fake_resolve)
-        with pytest.raises(RemoteURLRejected, match="non-public address"):
+        # The connect-time check resolves on its own: let it dial the loopback
+        # test server too, so the refusal comes from the redirect hop.
+        real_reason = remote_fetch._non_public_reason
+
+        def reason_except_test_server(address):
+            if address == ipaddress.ip_address("127.0.0.1"):
+                return None
+            return real_reason(address)
+
+        monkeypatch.setattr(remote_fetch, "_non_public_reason", reason_except_test_server)
+        with pytest.raises(RemoteURLRejected, match="Host '10.0.0.1' resolves to a non-public"):
             with open_validated_stream(f"{http_server}/redirect-evil", timeout=5):
                 pass
 
