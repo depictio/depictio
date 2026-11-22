@@ -327,3 +327,109 @@ class TestTheProjectLock:
         assert held == [True]
         with ProjectLock() as next_one:
             next_one.acquire(lock_file)
+
+
+class TestVersionCheckWiring:
+    """Step 1 compares the CLI's version with the server's before anything else
+    runs: a CLI on another major.minor line warns once, and the run carries on."""
+
+    _VALID_CONFIG = {
+        "api_base_url": "http://127.0.0.1:8058",
+        "user": {
+            "email": "admin@example.com",
+            "is_admin": True,
+            "id": "507f1f77bcf86cd799439011",
+            "token": {
+                "user_id": "507f1f77bcf86cd799439011",
+                "access_token": "access-token-example",
+                "refresh_token": "refresh-token-example",
+                "token_type": "bearer",
+                "token_lifetime": "short-lived",
+                "expire_datetime": "2099-12-31T23:59:59",
+                "refresh_expire_datetime": "2099-12-31T23:59:59",
+                "name": "test_token",
+                "created_at": "2025-06-30T18:00:00",
+                "logged_in": False,
+            },
+        },
+        "s3_storage": {
+            "service_name": "localhost",
+            "service_port": 9000,
+            "external_host": "localhost",
+            "external_port": 9000,
+            "external_protocol": "http",
+            "root_user": "depictio",
+            "root_password": "s3-password-example",
+            "bucket": "depictio-bucket",
+        },
+    }
+
+    def _ingest_args(self, data_root, config):
+        return [
+            "ingest",
+            "--server",
+            str(config),
+            "--template",
+            "nf-core/ampliseq/2.16.0",
+            str(data_root),
+            "--skip",
+            "s3-check",
+        ]
+
+    def _config_file(self, tmp_path):
+        import yaml
+
+        from depictio.cli.cli.utils import config_compat
+
+        config = tmp_path / "CLI.yaml"
+        config.write_text(yaml.safe_dump(self._VALID_CONFIG))
+        config_compat._warned.clear()
+        return config
+
+    def test_an_older_cli_warns_before_the_run_proceeds(
+        self, app, runner, data_root, make_harness, tmp_path
+    ):
+        from depictio.cli.cli.utils import config_compat
+
+        config = self._config_file(tmp_path)
+        harness = make_harness(data_root, remote_locations=[])
+        with (
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": True}),
+            ),
+            patch("depictio.cli.cli.utils.config_compat.cli_version", return_value="1.21.0"),
+            patch(
+                "depictio.cli.cli.utils.config_compat.fetch_server_version",
+                return_value="1.22.2",
+            ),
+        ):
+            result = _invoke(app, runner, harness, self._ingest_args(data_root, config))
+        config_compat._warned.clear()
+
+        assert result.exit_code == 0, result.output
+        assert 'uv tool install "depictio==1.22.*"' in normalize(result.output)
+        harness.sync.assert_called_once()
+
+    def test_the_same_minor_stays_silent(self, app, runner, data_root, make_harness, tmp_path):
+        from depictio.cli.cli.utils import config_compat
+
+        config = self._config_file(tmp_path)
+        harness = make_harness(data_root, remote_locations=[])
+        with (
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": True}),
+            ),
+            patch("depictio.cli.cli.utils.config_compat.cli_version", return_value="1.22.0"),
+            patch(
+                "depictio.cli.cli.utils.config_compat.fetch_server_version",
+                return_value="1.22.2",
+            ),
+        ):
+            result = _invoke(app, runner, harness, self._ingest_args(data_root, config))
+        config_compat._warned.clear()
+
+        assert result.exit_code == 0, result.output
+        assert "uv tool install" not in normalize(result.output)
+        harness.sync.assert_called_once()

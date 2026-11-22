@@ -30,6 +30,7 @@ from depictio.cli.cli.utils.common import (
     say_local_server_running,
 )
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
+from depictio.cli.cli.utils.config_compat import check_server_version_of_config
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.image_upload import (
     image_collections_to_upload,
@@ -1981,6 +1982,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             # host's 404 or a proxy's 502 is not its fault.
             if login.get("success"):
                 rich_print_checked_statement("Server accessibility check passed", "success")
+                # Before anything else talks to the server: a CLI on another
+                # major.minor line than this server warns once. Never blocks.
+                check_server_version_of_config(CLI_config_path)
                 success_count += 1
                 _rec("server_check", "success", "server reachable")
             else:

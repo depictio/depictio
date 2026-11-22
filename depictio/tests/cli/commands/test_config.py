@@ -9,6 +9,7 @@ import typer
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.config import app
+from depictio.cli.cli.utils import config_compat
 
 
 class TestConfigCommands:
@@ -164,6 +165,132 @@ class TestConfigCommands:
             with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
                 result = command.run("check", cli_config=cli_config_path)
             assert result.exit_code == 0, result.output
+
+        def test_warns_when_the_cli_is_older_than_the_server(self, runner, tmp_path):
+            """The doctor compares CLI and server versions; here it mocks only
+            the HTTP call to the version endpoint."""
+            import yaml
+
+            from depictio.cli.cli.utils import config_compat
+
+            config = tmp_path / "CLI.yaml"
+            config.write_text(
+                yaml.safe_dump(
+                    {
+                        "api_base_url": "http://127.0.0.1:8058",
+                        "user": {
+                            "email": "admin@example.com",
+                            "is_admin": True,
+                            "id": "507f1f77bcf86cd799439011",
+                            "token": {
+                                "user_id": "507f1f77bcf86cd799439011",
+                                "access_token": "access-token-example",
+                                "refresh_token": "refresh-token-example",
+                                "token_type": "bearer",
+                                "token_lifetime": "short-lived",
+                                "expire_datetime": "2099-12-31T23:59:59",
+                                "refresh_expire_datetime": "2099-12-31T23:59:59",
+                                "name": "test_token",
+                                "created_at": "2025-06-30T18:00:00",
+                                "logged_in": False,
+                            },
+                        },
+                        "s3_storage": {
+                            "service_name": "localhost",
+                            "service_port": 9000,
+                            "external_host": "localhost",
+                            "external_port": 9000,
+                            "external_protocol": "http",
+                            "root_user": "depictio",
+                            "root_password": "s3-password-example",
+                            "bucket": "depictio-bucket",
+                        },
+                    }
+                )
+            )
+            config_compat._warned.clear()
+            with (
+                patch(
+                    "depictio.cli.cli.commands.config.api_login",
+                    return_value={"success": True, "email": "a@b.co"},
+                ),
+                patch("depictio.cli.cli.commands.config.load_depictio_config"),
+                patch("depictio.cli.cli.commands.config.S3_storage_checks"),
+                patch(
+                    "depictio.cli.cli.utils.config_compat.cli_version",
+                    return_value="1.21.0",
+                ),
+                patch(
+                    "depictio.cli.cli.utils.config_compat.fetch_server_version",
+                    return_value="1.22.2",
+                ),
+            ):
+                result = runner.invoke(app, ["check", "--server", str(config)])
+            config_compat._warned.clear()
+
+            assert result.exit_code == 0, result.output
+            out = " ".join(result.output.split())
+            assert 'uv tool install "depictio==1.22.*"' in out
+            assert "1.21.0" in out and "1.22.2" in out
+
+        def test_the_version_check_never_fails_the_doctor(self, runner, tmp_path):
+            """An unreachable version endpoint, a dev CLI: at most a debug log."""
+            import yaml
+
+            config = tmp_path / "CLI.yaml"
+            config.write_text(
+                yaml.safe_dump(
+                    {
+                        "api_base_url": "http://127.0.0.1:8058",
+                        "user": {
+                            "email": "admin@example.com",
+                            "is_admin": True,
+                            "id": "507f1f77bcf86cd799439011",
+                            "token": {
+                                "user_id": "507f1f77bcf86cd799439011",
+                                "access_token": "access-token-example",
+                                "refresh_token": "refresh-token-example",
+                                "token_type": "bearer",
+                                "token_lifetime": "short-lived",
+                                "expire_datetime": "2099-12-31T23:59:59",
+                                "refresh_expire_datetime": "2099-12-31T23:59:59",
+                                "name": "test_token",
+                                "created_at": "2025-06-30T18:00:00",
+                                "logged_in": False,
+                            },
+                        },
+                        "s3_storage": {
+                            "service_name": "localhost",
+                            "service_port": 9000,
+                            "external_host": "localhost",
+                            "external_port": 9000,
+                            "external_protocol": "http",
+                            "root_user": "depictio",
+                            "root_password": "s3-password-example",
+                            "bucket": "depictio-bucket",
+                        },
+                    }
+                )
+            )
+            config_compat._warned.clear()
+            with (
+                patch(
+                    "depictio.cli.cli.commands.config.api_login",
+                    return_value={"success": True, "email": "a@b.co"},
+                ),
+                patch("depictio.cli.cli.commands.config.load_depictio_config"),
+                patch("depictio.cli.cli.commands.config.S3_storage_checks"),
+                patch("depictio.cli.cli.utils.config_compat.cli_version", return_value="dev"),
+                patch(
+                    "depictio.cli.cli.utils.config_compat.fetch_server_version",
+                    return_value=None,
+                ),
+            ):
+                result = runner.invoke(app, ["check", "--server", str(config)])
+            config_compat._warned.clear()
+
+            assert result.exit_code == 0, result.output
+            assert "uv tool install" not in result.output
 
         def test_a_failed_s3_check_fails_the_command(self, command, cli_config_path, login):
             """It used to report the failure and exit 0, so a script gating on it passed."""
