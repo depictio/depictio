@@ -374,3 +374,44 @@ export function hitsFirst(scores: readonly number[], tiers: readonly DeTier[]): 
   const anyHit = tiers.some((t) => t !== 'NS');
   return scores.map((s, i) => (anyHit && tiers[i] === 'NS' ? Number.NEGATIVE_INFINITY : s));
 }
+
+/**
+ * Vertical offsets (pixels, negative = up) for point labels, staggered so
+ * labels of neighbouring points do not print over each other. Plotly places
+ * annotations without avoiding collisions; two hits a tenth of a fold change
+ * apart printed their Ensembl ids on one line.
+ *
+ * Labels are placed left to right. A label collides with an earlier one when
+ * they are closer than `xSpan` along x (data units, about a label's width) and
+ * their text, at the point's height plus the offset, is less than a label
+ * apart; it then steps up a row until it is free. `yUnitsPerPx` converts the
+ * pixel offsets to data units (y range over the plot's height). Deterministic,
+ * so a re-render keeps the layout.
+ */
+export function staggerLabelOffsets(
+  points: readonly { x: number; y: number }[],
+  xSpan: number,
+  yUnitsPerPx: number,
+  base = -16,
+  step = -14,
+  labelPx = 14,
+): number[] {
+  const order = points.map((_, i) => i).sort((a, b) => points[a].x - points[b].x);
+  const offsets: number[] = new Array(points.length).fill(base);
+  const labelY = (i: number, offset: number) => points[i].y - offset * yUnitsPerPx;
+  const gap = labelPx * yUnitsPerPx;
+  order.forEach((i, k) => {
+    const near = order
+      .slice(0, k)
+      .filter((j) => points[i].x - points[j].x <= xSpan)
+      .map((j) => labelY(j, offsets[j]));
+    let offset = base;
+    for (let tries = 0; tries < 8; tries += 1) {
+      const y = labelY(i, offset);
+      if (!near.some((other) => Math.abs(other - y) < gap)) break;
+      offset += step;
+    }
+    offsets[i] = offset;
+  });
+  return offsets;
+}

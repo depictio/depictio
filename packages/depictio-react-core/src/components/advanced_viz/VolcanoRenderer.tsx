@@ -52,6 +52,7 @@ import {
   hitsFirst,
   rankTopN,
   resolveDeView,
+  staggerLabelOffsets,
   volcanoSignificance,
   significancePredicate,
   tierCounts,
@@ -241,6 +242,9 @@ function tierMarker(
 /** The significance and effect cut-offs are reference lines: drawn as every
  *  reference line is (`referenceGuide`), not as a faint grey dotted rule. */
 const guideLine = (isDark: boolean) => referenceGuide(isDark ? 'dark' : 'light').line;
+
+/** The plot area's usual height, to turn label offsets into data units. */
+const PLOT_HEIGHT_PX = 300;
 
 const VIEW_LABELS: Record<DeView, string> = { volcano: 'Volcano', ma: 'MA', qq: 'QQ' };
 
@@ -1144,31 +1148,34 @@ function buildVolcano(input: {
   );
   const matchedIdx = matchSearch(ids, labels, input.search);
 
-  const annotations = input.showLabels
+  // Labelled rows, then a stagger so close neighbours do not overprint: a
+  // label is about a seventh of the x range wide.
+  const labelled = input.showLabels
     ? xs
-        .map((x, i) => {
-          const y = ys[i];
-          if (y == null) return null;
-          if (!(matchedIdx ? matchedIdx.has(i) : topIdx.has(i))) return null;
-          // Place each label slightly above its point with a thin connector
-          // arrow. This keeps the (x, y) anchor on the point while moving the
-          // text bounding box up by 16px, far cleaner when several top-N
-          // labels cluster near the same effect/significance corner.
-          return {
-            x,
-            y,
-            text: String(labels[i] ?? ids[i] ?? ''),
-            showarrow: true,
-            arrowhead: 0,
-            arrowwidth: 0.6,
-            arrowcolor: 'rgba(120,120,120,0.6)',
-            ax: 0,
-            ay: -16,
-            font: { size: LABEL_FONT_SIZE },
-          };
-        })
-        .filter(Boolean)
+        .map((x, i) => ({ x, y: ys[i], i }))
+        .filter(
+          (p): p is { x: number; y: number; i: number } =>
+            p.y != null && Number.isFinite(p.x) && (matchedIdx ? matchedIdx.has(p.i) : topIdx.has(p.i)),
+        )
     : [];
+  const finiteXs = xs.filter((v) => Number.isFinite(v));
+  const finiteYs = ys.filter((v): v is number => v != null);
+  const span = (v: number[]) => (v.length ? Math.max(...v) - Math.min(...v) : 1) || 1;
+  const offsets = staggerLabelOffsets(labelled, span(finiteXs) / 7, span(finiteYs) / PLOT_HEIGHT_PX);
+  const annotations = labelled.map(({ x, y, i }, k) => ({
+    // Each label sits above its point with a thin connector, so the anchor
+    // stays on the point while the text moves up out of the cluster.
+    x,
+    y,
+    text: String(labels[i] ?? ids[i] ?? ''),
+    showarrow: true,
+    arrowhead: 0,
+    arrowwidth: 0.6,
+    arrowcolor: 'rgba(120,120,120,0.6)',
+    ax: 0,
+    ay: offsets[k],
+    font: { size: LABEL_FONT_SIZE },
+  }));
 
   return {
     tiers,
@@ -1282,20 +1289,32 @@ function buildMa(input: {
   );
   const matchedIdx = matchSearch(ids, labels, input.search);
 
-  const annotations = input.showLabels
+  // As the volcano: labels above their points, staggered between neighbours.
+  const labelled = input.showLabels
     ? xs
-        .map((x, i) => {
-          if (!(matchedIdx ? matchedIdx.has(i) : topIdx.has(i))) return null;
-          return {
-            x,
-            y: ys[i],
-            text: String(labels[i] ?? ids[i] ?? ''),
-            showarrow: false,
-            font: { size: LABEL_FONT_SIZE },
-          };
-        })
-        .filter(Boolean)
+        .map((x, i) => ({ x, y: ys[i], i }))
+        .filter(
+          (p) =>
+            Number.isFinite(p.x) && Number.isFinite(p.y) && (matchedIdx ? matchedIdx.has(p.i) : topIdx.has(p.i)),
+        )
     : [];
+  const span = (v: number[]) => {
+    const f = v.filter((n) => Number.isFinite(n));
+    return (f.length ? Math.max(...f) - Math.min(...f) : 1) || 1;
+  };
+  const offsets = staggerLabelOffsets(labelled, span(xs) / 7, span(ys) / PLOT_HEIGHT_PX);
+  const annotations = labelled.map(({ x, y, i }, k) => ({
+    x,
+    y,
+    text: String(labels[i] ?? ids[i] ?? ''),
+    showarrow: true,
+    arrowhead: 0,
+    arrowwidth: 0.6,
+    arrowcolor: 'rgba(120,120,120,0.6)',
+    ax: 0,
+    ay: offsets[k],
+    font: { size: LABEL_FONT_SIZE },
+  }));
 
   return {
     tiers,
