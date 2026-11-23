@@ -122,6 +122,8 @@ export function tintSingleSeries(
   const lay = layout ?? {};
   const unchanged: TintedFigure = { data: traces, layout: lay, tinted: false };
   if (!hue || traces.length === 0) return unchanged;
+  const sides = referenceSides(lay);
+  if (sides) return retintReferenceSides(traces, lay, sides, hue);
   if (lay.coloraxis) return unchanged;
   const defaults = defaultColours(lay);
   const readings = traces.map((t) => readTrace(t, defaults));
@@ -135,4 +137,54 @@ export function tintSingleSeries(
     layout: { ...lay, colorway: [hue] },
     tinted: true,
   };
+}
+
+/** Alpha of the "at or below" side in a tab's hue: the hue over the surface, lighter. */
+export const REFERENCE_TINT_ALPHA = 0.45;
+
+/** The two colours the overview look gave the sides of a reference line, if it did. */
+function referenceSides(layout: Json): { above: string; below: string } | null {
+  const sides = asRecord(asRecord(layout.meta)?.depictio_reference_sides);
+  const above = norm(sides?.above);
+  const below = norm(sides?.below);
+  return above && below ? { above, below } : null;
+}
+
+/** The "at or below" colour of a reference line drawn in `hue`. */
+export function referenceTint(hue: string): string {
+  return withAlpha(hue, REFERENCE_TINT_ALPHA);
+}
+
+/** `#rrggbb` at `alpha`, as `rgba()`; anything else is returned as it came. */
+function withAlpha(colour: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(colour.trim());
+  if (!m) return colour;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+/**
+ * A figure coloured by its side of a reference line (the overview look's rule
+ * a): both sides move to the tab's hue, the "at or below" one as its tint, so
+ * the reading survives and the tab keeps its colour.
+ */
+function retintReferenceSides(
+  traces: unknown[],
+  layout: Json,
+  sides: { above: string; below: string },
+  hue: string,
+): TintedFigure {
+  const tint = referenceTint(hue);
+  const swap = (c: unknown): unknown => {
+    const n = norm(c);
+    return n === sides.above ? hue : n === sides.below ? tint : c;
+  };
+  const data = traces.map((trace) => {
+    const t = asRecord(trace);
+    const marker = asRecord(t?.marker);
+    if (!t || !marker) return trace;
+    const color = Array.isArray(marker.color) ? marker.color.map(swap) : swap(marker.color);
+    return { ...t, marker: { ...marker, color } };
+  });
+  return { data, layout, tinted: true };
 }

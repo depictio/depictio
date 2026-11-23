@@ -128,4 +128,20 @@ describe('tabHueHex', () => {
     expect(tabHueHex(theme, null, false)).toBeUndefined();
     expect(tabHueHex(theme, 'nope', false)).toBeUndefined();
   });
+
+  it('moves both sides of a reference line to the tab hue, the lower one as its tint', () => {
+    const layout = { meta: { depictio_reference_sides: { above: '#925FC4', below: '#C2A1E8' } } };
+    const data = [
+      { type: 'bar', x: ['a', 'b', 'c'], y: [3, 1, 2], marker: { color: ['#925FC4', '#C2A1E8', '#925fc4'] } },
+      { type: 'scatter', x: [null], y: [null], legendgroup: '__reference__above', marker: { color: '#925FC4' } },
+      { type: 'scatter', x: [null], y: [null], legendgroup: '__reference__below', marker: { color: '#C2A1E8' } },
+    ];
+    const out = tintSingleSeries(data, layout, HUE);
+    const tint = 'rgba(12,166,120,0.45)';
+    expect(out.tinted).toBe(true);
+    expect((out.data[0] as any).marker.color).toEqual([HUE, tint, HUE]);
+    expect((out.data[1] as any).marker.color).toBe(HUE);
+    expect((out.data[2] as any).marker.color).toBe(tint);
+    expect(data[0].marker.color[0]).toBe('#925FC4');
+  });
 });

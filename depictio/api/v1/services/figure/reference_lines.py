@@ -145,11 +145,22 @@ def apply_reference_lines(fig: Any, resolved: list[dict[str, Any]], theme: str =
                     "font": {"size": 10, "color": colour},
                 }
             )
+    # The lines on record for the overview look, which colours bars and points
+    # by their side of a lone line (``overview_style._colour_by_reference``).
+    record = [
+        {"axis": line["axis"], "value": line["value"], "label": line["label"]} for line in resolved
+    ]
     if isinstance(fig, dict):
         layout = fig.setdefault("layout", {})
+        meta = layout.get("meta")
+        layout["meta"] = {**(meta if isinstance(meta, dict) else {}), "depictio_reference": record}
         layout["shapes"] = [*(layout.get("shapes") or []), *shapes]
         layout["annotations"] = [*(layout.get("annotations") or []), *annotations]
         return fig
+    meta = fig.layout.meta
+    fig.update_layout(
+        meta={**(meta if isinstance(meta, dict) else {}), "depictio_reference": record}
+    )
     # A built figure takes plotly's own helpers, which repeat the line on every
     # facet panel (the dict path above spans the first axis pair only).
     style = {"line_color": colour, "line_width": 1, "line_dash": "dash"}

@@ -1298,6 +1298,7 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
             meta["_error"] = str(exc)
         renders.append(meta)
 
+    _share_figure_colours(output, renders, data)
     return {
         "output": _output_info(output, tool, df),
         "fixturePreview": _fixture_preview(df) if df is not None else None,
@@ -1305,6 +1306,40 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
         "renders": renders,
         "data": data,
     }
+
+
+def _share_figure_colours(output: Any, renders: list[dict[str, Any]], data: dict[str, Any]) -> None:
+    """Give a card's breakdown the colours the output's figures draw its values in.
+
+    A dashboard pins a column's colours once (``category_colors``) and every
+    tile reads them, so a sample is one colour on the histogram and on the
+    card's top-N strip. A catalog output has no dashboard: its card would draw
+    every row in its own accent beside a figure that colours them. The colours
+    a UI figure gave its traces, by the column it colours by, travel on the
+    card's metadata (``_category_colors``) instead.
+    """
+    by_column: dict[str, dict[str, str]] = {}
+    for render, meta in zip(output.renders_as, renders, strict=False):
+        column = (getattr(render, "dict_kwargs", None) or {}).get("color")
+        figure = (data.get("figures") or {}).get(meta.get("index"), {}).get("figure")
+        if render.component != "figure" or not isinstance(column, str) or not figure:
+            continue
+        colours = by_column.setdefault(column, {})
+        for trace in figure.get("data") or []:
+            name = trace.get("name")
+            colour = (trace.get("marker") or {}).get("color")
+            legendgroup = str(trace.get("legendgroup") or "")
+            # Folded traces share the "Other" grey: a colour of the fold, not of the value.
+            if (
+                isinstance(name, str)
+                and isinstance(colour, str)
+                and not legendgroup.startswith("__")
+            ):
+                colours.setdefault(name, colour)
+    for meta in renders:
+        column = meta.get("breakdown_col")
+        if meta.get("component_type") == "card" and by_column.get(column):
+            meta["_category_colors"] = {column: by_column[column]}
 
 
 # ---------------------------------------------------------------------------

@@ -520,3 +520,113 @@ def test_full_stack_is_not_resorted():
     }
     out = apply_overview(fig)
     assert "categoryorder" not in (out["layout"].get("yaxis") or {})
+
+
+# ---------------------------------------------------------------------------
+# a. colour against the reference
+
+
+def _with_reference(fig, value, axis="y", label="median of this table"):
+    fig["layout"]["meta"] = {"depictio_reference": [{"axis": axis, "value": value, "label": label}]}
+    return fig
+
+
+def _keys(fig):
+    return [t for t in fig["data"] if str(t.get("legendgroup") or "").startswith("__reference__")]
+
+
+def test_bars_that_repeat_their_axis_take_their_side_of_the_reference():
+    fig = apply_overview(_with_reference(_bar_by_x(), 1.5))
+    bars = [t for t in fig["data"] if t["type"] == "bar"]
+    above, below = PALETTE[0], fig["layout"]["meta"]["depictio_reference_sides"]["below"]
+    assert [t["marker"]["color"] for t in bars] == [below, above, above]
+    assert all(t["showlegend"] is False for t in bars)
+    assert [k["name"] for k in _keys(fig)] == [
+        "Above the median of this table",
+        "At or below the median of this table",
+    ]
+    assert above.lower() != below.lower()
+
+
+def test_a_single_series_is_coloured_point_by_point():
+    fig = _scatter(4)
+    fig = apply_overview(_with_reference(fig, 1, label="y = 1"))
+    colours = fig["data"][0]["marker"]["color"]
+    assert colours[2] == colours[3] == PALETTE[0]
+    assert colours[0] == colours[1] != PALETTE[0]
+    assert [k["name"] for k in _keys(fig)] == ["Above y = 1", "At or below y = 1"]
+
+
+def test_only_the_sides_present_get_a_legend_entry():
+    fig = apply_overview(_with_reference(_bar_by_x(), 0))
+    assert [k["name"] for k in _keys(fig)] == ["Above the median of this table"]
+
+
+def test_a_reference_across_the_category_axis_colours_nothing():
+    fig = apply_overview(_with_reference(_bar_by_x(), 1.5, axis="x"))
+    # no colour against the line: one hue, as before
+    assert {t["marker"]["color"] for t in fig["data"]} == {PALETTE[0]}
+    assert not _keys(fig)
+
+
+def test_a_real_grouping_keeps_its_colours_against_a_reference():
+    fig = apply_overview(_with_reference(_bar_stack(["g1", "g2"]), 0.5))
+    assert [t["marker"]["color"] for t in fig["data"]] == PALETTE[:2]
+    assert not _keys(fig)
+
+
+def test_pinned_categories_keep_their_colours_against_a_reference():
+    fig = apply_overview(
+        _with_reference(_bar_by_x(), 1.5),
+        category_colors={"sample": {"a": "#111111", "b": "#222222", "c": "#333333"}},
+    )
+    assert not _keys(fig)
+
+
+def test_the_legend_keys_change_no_axis_chrome():
+    fig = apply_overview(_with_reference(_bar_by_x(), 1.5))
+    assert fig["layout"]["xaxis"]["showgrid"] is False
+
+
+def test_facets_keep_the_colour_that_ties_a_category_across_panels():
+    fig = _bar_by_x()
+    extra = copy.deepcopy(fig["data"])
+    for trace in extra:
+        trace.update(xaxis="x2", yaxis="y2", showlegend=False)
+    fig["data"] += extra
+    out = apply_overview(fig)
+    assert [t["marker"]["color"] for t in out["data"][:3]] == PALETTE[:3]
+    assert any(t.get("showlegend") is not False for t in out["data"])
+
+
+def test_the_order_px_writes_for_colour_by_x_does_not_stop_the_sort():
+    fig = _with_reference(_bar_by_x(("a", "b", "c")), 1.5)
+    fig["layout"]["xaxis"].update(categoryorder="array", categoryarray=["a", "b", "c"])
+    fig["layout"]["legend"] = {"title": {"text": "sample"}}
+    out = apply_overview(fig)
+    assert out["layout"]["xaxis"]["categoryorder"] == "total descending"
+    assert out["layout"]["legend"]["title"]["text"] == ""
+
+
+def test_an_order_the_author_gave_survives_colour_by_x():
+    fig = _bar_by_x(("a", "b", "c"))
+    fig["layout"]["xaxis"].update(categoryorder="array", categoryarray=["c", "a", "b"])
+    out = apply_overview(fig)
+    assert out["layout"]["xaxis"]["categoryarray"] == ["c", "a", "b"]
+
+
+def test_a_legend_key_sits_on_a_category_so_the_bar_axis_stays_categorical():
+    fig = {
+        "data": [
+            {
+                "type": "bar",
+                "name": "",
+                "x": ["a", "b"],
+                "y": [1, 3],
+                "marker": {"color": PALETTE[0]},
+            }
+        ],
+        "layout": {},
+    }
+    out = apply_overview(_with_reference(fig, 2))
+    assert all(k["x"] == ["a"] and k["y"] == [None] for k in _keys(out))

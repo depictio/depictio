@@ -4,9 +4,14 @@ A figure is drawn for a reader scanning a dashboard, not for the person who
 built it, so the overview look applies a few rules to the finished, serialised
 figure (after the theme and brand templates, like every style preset):
 
-a. *One hue.* Where colour only repeats the axis (px ``color=x``: every trace
-   holds one category and is named after it), the traces take one colour and
-   lose their legend.
+a. *Colour against the reference, else one hue.* Where colour only names the
+   bar or the point it sits on (px ``color=x``: every trace holds one category
+   or one point and is named after it; or a single series), the colour is
+   spent on something to read: with one reference line on the value axis
+   (``reference_lines``), each bar or point takes the figure's hue above the
+   line and a tint of it at or below, under a two-entry legend. With no line,
+   repeated bars take one colour and lose their legend. A faceted figure is
+   left alone: its colour is the key that ties a category across panels.
 b. *Sorted bars.* A categorical bar axis with no order of its own is ordered by
    total, the biggest first (on top for horizontal bars).
 c. *Remainder last, long tails folded.* Traces named Other / Unclassified / NA
@@ -41,8 +46,12 @@ import numpy as np
 
 from depictio.cli.cli.utils.mantine_templates import FONT_FAMILY as STOCK_FONT_FAMILY
 from depictio.models import palettes
+from depictio.models.palettes import ui_hues
+from depictio.models.palettes.cvd import contrast_ratio
 
 OTHER_LEGENDGROUP = "__other__"
+# The legend-only traces that name the two sides of a reference line.
+REFERENCE_LEGENDGROUP = "__reference__"
 
 _BAR_LIKE = frozenset({"bar", "box", "violin"})
 _SCATTER = frozenset({"scatter", "scattergl"})
@@ -208,8 +217,18 @@ def _first_colorway(layout: dict, mode: str) -> str:
     return colorway[0] if colorway else palettes.categorical(None, mode)[0]
 
 
+def _is_key(trace: dict) -> bool:
+    """A legend-only trace this look added: it draws nothing and sizes nothing."""
+    return str(trace.get("legendgroup") or "").startswith(REFERENCE_LEGENDGROUP)
+
+
+def _faceted(traces: list[dict]) -> bool:
+    """Traces spread over more than one pair of axes (facet panels)."""
+    return len({(t.get("xaxis") or "x", t.get("yaxis") or "y") for t in traces}) > 1
+
+
 # ---------------------------------------------------------------------------
-# a. one hue
+# a. colour against the reference, else one hue
 
 
 def _colour_repeats_axis(trace: dict) -> bool:
@@ -223,6 +242,195 @@ def _colour_repeats_axis(trace: dict) -> bool:
     return len(distinct) == 1 and name in distinct
 
 
+def _pinned(traces: list[dict], category_colors: dict[str, dict[str, str]] | None) -> bool:
+    """The dashboard colours these trace names everywhere (``category_colors``):
+    the colour is then an identity shared with the other tiles, not a repeat."""
+    names = {str(t.get("name")) for t in traces}
+    return any(names <= set(m) for m in (category_colors or {}).values() if isinstance(m, dict))
+
+
+def _drop_px_order(bars: list[dict], layout: dict) -> None:
+    """Forget the category order px writes for ``color=x``: the traces' own order.
+
+    That order is no author's choice, so the bars may be sorted (rule b). An
+    order the author gave (``category_orders``) differs from it and stays.
+    """
+    for key in {_axis_key("y" if _horizontal(t) else "x", t) for t in bars}:
+        raw = layout.get(key)
+        axis = raw if isinstance(raw, dict) else {}
+        drawn = [
+            str((t.get("y" if _horizontal(t) else "x") or [None])[0])
+            for t in bars
+            if _axis_key("y" if _horizontal(t) else "x", t) == key
+        ]
+        if (
+            axis.get("categoryorder") == "array"
+            and [str(c) for c in axis.get("categoryarray") or []] == drawn
+        ):
+            layout[key] = {
+                k: v for k, v in axis.items() if k not in ("categoryorder", "categoryarray")
+            }
+
+
+def _reference_line(layout: dict) -> dict | None:
+    """The figure's one reference line (``apply_reference_lines`` records it), or None."""
+    meta = layout.get("meta")
+    lines = meta.get("depictio_reference") if isinstance(meta, dict) else None
+    usable = [
+        line
+        for line in (lines if isinstance(lines, list) else [])
+        if isinstance(line, dict)
+        and line.get("axis") in ("x", "y")
+        and isinstance(line.get("value"), (int, float))
+        and not isinstance(line.get("value"), bool)
+    ]
+    return usable[0] if len(usable) == 1 else None
+
+
+def _no_colour_array(trace: dict) -> bool:
+    marker = trace.get("marker")
+    colour = marker.get("color") if isinstance(marker, dict) else None
+    return not isinstance(colour, (list, tuple, dict))
+
+
+def _identity_traces(traces: list[dict]) -> tuple[list[dict], str] | None:
+    """The traces whose colour names nothing but the bar or point itself.
+
+    ``(traces, "bar" | "point")``: bars that repeat their axis (px ``color=x``)
+    or a single uncoloured bar series; markers one point per trace, named
+    after it (px ``color=<row id>``), or a single uncoloured marker series.
+    """
+    if not traces:
+        return None
+    kinds = {_kind(t) for t in traces}
+    if kinds == {"bar"}:
+        if len(traces) >= 2 and all(_colour_repeats_axis(t) for t in traces):
+            return traces, "bar"
+        if len(traces) == 1 and _no_colour_array(traces[0]):
+            return traces, "bar"
+        return None
+    if kinds <= _SCATTER and len(_marker_traces(traces)) == len(traces):
+        if len(traces) >= 2 and all(_n_points(t) == 1 and _named(t) for t in traces):
+            return traces, "point"
+        if len(traces) == 1 and _no_colour_array(traces[0]):
+            return traces, "point"
+    return None
+
+
+def _reference_tint(hue: str, mode: str) -> str:
+    """A lighter (dark mode: deeper) twin of ``hue``, still readable on the surface."""
+    adjust = palettes.style()["reference_tint"][mode]
+    surface = palettes.chrome(mode)["surface"]
+    floor = float(palettes.load()["thresholds"]["min_contrast"][mode])
+    try:
+        tint = ui_hues.adjusted(hue, adjust)
+        if contrast_ratio(tint, surface) < floor:
+            # A pale hue (an orange tab): the tint goes the other way.
+            tint = ui_hues.adjusted(
+                hue, {k: -float(v) if k == "dL" else v for k, v in adjust.items()}
+            )
+    except (ValueError, TypeError, IndexError):
+        return palettes.semantic("other", mode)
+    return tint
+
+
+def _side_name(label: Any, above: bool) -> str:
+    text = str(label or "the reference")
+    if re.match(r"^[a-z]+ of ", text):  # "median of this table"
+        text = f"the {text}"
+    return f"{'Above' if above else 'At or below'} {text}"
+
+
+def _colour_by_reference(
+    traces: list[dict],
+    layout: dict,
+    mode: str,
+    category_colors: dict[str, dict[str, str]] | None,
+) -> bool:
+    """Colour bars and points by their side of the figure's one reference line.
+
+    True when it did; the traces then hide from the legend, which names the two
+    sides instead. Neither side is called good: a median is no verdict (RULES §17).
+    """
+    line = _reference_line(layout)
+    found = _identity_traces(traces) if line is not None else None
+    if found is None or _faceted(traces) or _pinned(traces, category_colors):
+        return False
+    group, shape = found
+    if shape == "bar":
+        value_axis = {"x" if _horizontal(t) else "y" for t in group}
+        if value_axis != {line["axis"]}:
+            return False
+    reference = float(line["value"])
+    if shape == "bar" and len(group) > 1:
+        _drop_px_order(group, layout)
+    # The legend names the sides now, not the column px titled it after.
+    legend = _sub(layout, "legend")
+    if isinstance(legend.get("title"), dict) or legend.get("title") is None:
+        legend["title"] = {**(legend.get("title") or {}), "text": ""}
+    hue = _first_colorway(layout, mode)
+    tint = _reference_tint(hue, mode)
+
+    sides: set[bool] = set()
+    for trace in group:
+        values = _values(trace.get(line["axis"]))
+        if values is None:
+            return False
+        above = []
+        for v in list(values):
+            try:
+                above.append(float(v) > reference)
+            except (TypeError, ValueError):
+                above.append(None)
+        sides |= {a for a in above if a is not None}
+        colours = [
+            palettes.semantic("na", mode) if a is None else hue if a else tint for a in above
+        ]
+        marker = _sub(trace, "marker")
+        marker["color"] = colours[0] if len(colours) == 1 else colours
+        if shape == "point":
+            marker.setdefault("line", {"width": 0.5, "color": palettes.chrome(mode)["surface"]})
+        trace["showlegend"] = False
+
+    # The two colours, for the viewer to redraw in a tab's hue (``figureTint.ts``).
+    meta = layout.get("meta")
+    layout["meta"] = {
+        **(meta if isinstance(meta, dict) else {}),
+        "depictio_reference_sides": {"above": hue, "below": tint},
+    }
+    first = group[0]
+    # A key drawn first would type its axes: on a bar figure it sits on a real
+    # category (with no value), so the category axis stays a category axis.
+    key_xy: dict[str, list] = {"x": [None], "y": [None]}
+    if shape == "bar":
+        letter = "y" if _horizontal(first) else "x"
+        categories = first.get(letter)
+        if isinstance(categories, (list, tuple)) and categories:
+            key_xy[letter] = [categories[0]]
+    for above in (True, False):
+        if above not in sides:
+            continue
+        traces.append(
+            {
+                "type": "scatter",
+                "mode": "markers",
+                **key_xy,
+                "xaxis": first.get("xaxis") or "x",
+                "yaxis": first.get("yaxis") or "y",
+                "name": _side_name(line.get("label"), above),
+                "legendgroup": f"{REFERENCE_LEGENDGROUP}{'above' if above else 'below'}",
+                "showlegend": True,
+                "hoverinfo": "skip",
+                "marker": {
+                    "color": hue if above else tint,
+                    "size": 10,
+                    "symbol": "square" if shape == "bar" else "circle",
+                },
+            }
+        )
+    return True
+
+
 def _single_hue(
     traces: list[dict],
     layout: dict,
@@ -232,11 +440,11 @@ def _single_hue(
     bar_like = [t for t in traces if _kind(t) in _BAR_LIKE]
     if len(bar_like) < 2 or not all(_colour_repeats_axis(t) for t in bar_like):
         return
-    # The dashboard colours these categories everywhere (``category_colors``):
-    # the colour is then an identity shared with the other tiles, not a repeat.
-    names = {str(t.get("name")) for t in bar_like}
-    if any(names <= set(m) for m in (category_colors or {}).values() if isinstance(m, dict)):
+    # Facet panels: the colour is the key that ties a category across panels,
+    # whose axes may not even name it.
+    if _faceted(traces) or _pinned(bar_like, category_colors):
         return
+    _drop_px_order(bar_like, layout)
     hue = _first_colorway(layout, mode)
     for trace in bar_like:
         _set_colour(trace, hue)
@@ -388,6 +596,7 @@ def _fold_tail(traces: list[dict], layout: dict, mode: str) -> None:
 
 def _axis_orientation(traces: list[dict]) -> str | None:
     """``v`` / ``h`` when the value axis is y / x (bars, boxes, violins), else None."""
+    traces = [t for t in traces if not _is_key(t)]
     kinds = {_kind(t) for t in traces}
     if kinds & (_SCATTER | {"histogram"}):
         return None
@@ -442,7 +651,7 @@ def _light_chrome(
 def _marker_traces(traces: Iterable[dict]) -> list[dict]:
     out = []
     for trace in traces:
-        if _kind(trace) not in _SCATTER:
+        if _kind(trace) not in _SCATTER or _is_key(trace):
             continue
         mode = trace.get("mode") or "markers"
         if "markers" not in mode or "lines" in mode:
@@ -498,7 +707,8 @@ def apply_overview(
     # and the data arrays, most of the payload, are shared.
     traces = [dict(t) for t in (figure.get("data") or []) if isinstance(t, dict)]
 
-    _single_hue(traces, layout, mode, category_colors)
+    if not _colour_by_reference(traces, layout, mode, category_colors):
+        _single_hue(traces, layout, mode, category_colors)
     _sort_bars(traces, layout)
     traces = _remainder_last(traces, mode)
     _fold_tail(traces, layout, mode)

@@ -52,6 +52,7 @@ import {
 } from './referenceStats';
 import { extentFraction, labelPlacement } from './scatterLabels';
 import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
+import { referenceTint } from '../../figureTint';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { applyHighlight, highlightLayout } from './highlight/highlightTraces';
 import { isAdditiveClick, selectionFromClick } from './highlight/highlightModel';
@@ -510,6 +511,17 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         : markerSize;
     };
     const highlightedCount = highlighted ? points.filter(highlighted).length : null;
+    // Which side of the reference each point is on, for the colour.
+    const sideOf = densityView ? null : highlightPredicate(refLine, refValue, 'above');
+    // A colour column with one value per point (a report id) names nothing the
+    // label and hover do not already say, unless the dashboard pins its values.
+    const colourValues = points.map((p) => String(p.colour ?? ''));
+    const identityOnly =
+      !!config.color_col &&
+      !numericColour &&
+      points.length > 1 &&
+      new Set(colourValues).size === points.length &&
+      !(pinnedColours && colourValues.every((v) => v in pinnedColours));
 
     const markerCommon = {
       opacity,
@@ -581,6 +593,34 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
             showlegend: false,
           });
         }
+      }
+    } else if (sideOf && (!config.color_col || identityOnly)) {
+      // Colour that would only name each point (or no colour at all) is spent
+      // on the reference instead: the hue above the line, its tint at or
+      // below, as the overview look does on server figures. Neither side is
+      // called good: a median is no verdict.
+      const tint = referenceTint(palette[0]);
+      const sideName = (above: boolean) =>
+        `${above ? 'Above' : 'At or below'} ${refLabel ? (/^[a-z]+ of /.test(refLabel) ? `the ${refLabel}` : refLabel) : 'the reference'}`;
+      for (const above of [true, false]) {
+        const group = points.filter((p) => sideOf(p) === above);
+        if (group.length === 0) continue;
+        data.push({
+          type: 'scattergl' as const,
+          mode: 'markers' as const,
+          name: sideName(above),
+          x: group.map((p) => p.x),
+          y: group.map((p) => p.y),
+          text: group.map((p) => p.label),
+          customdata: group.map((p) => [p.key]),
+          marker: {
+            ...markerCommon,
+            opacity: pointOpacity(group),
+            color: above ? palette[0] : tint,
+            size: pointSize(group),
+          },
+          hovertemplate: `%{text}<br>${hoverTail}`,
+        });
       }
     } else if (config.color_col && numericColour) {
       // `customdata` is one array per point: slot 0 is the selection key.

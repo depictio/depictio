@@ -334,6 +334,12 @@ A KPI strip is four different readings, not four numbers in one style:
   data column (a single series, a sorted bar, a histogram) draw in that hue. Data colours
   (`category_colors`, `color_scale`, verdict colours such as pass/fail) are never replaced by
   the tab hue: a sample or a model class keeps its colour on every tab.
+- A figure with one reference line on its value axis (`reference_lines`, a scatter_xy
+  `reference_line`) whose colour would only name each bar or point (`color` equal to the
+  axis, one row per colour, or no colour) is coloured by its side of the line: the hue above,
+  its tint at or below, with a two-entry legend. The default style does it; do not add
+  `color: sample` to a per-sample bar to get colour. A median is no verdict, so neither side
+  is called good; a group colour or `category_colors` wins over it.
 - A distribution drawn per library or per sample (a box, a violin, a bar per library) colours
   by the group (`{GROUP_COL}`, or the hub's design column such as `antibody` or `condition`),
   not by the tab hue: the reader compares groups, and one colour hides them. The tab hue is for

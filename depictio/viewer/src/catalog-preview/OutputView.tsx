@@ -34,7 +34,8 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
+import { CategoryColorsContext, ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
+import type { CategoryColorSource } from 'depictio-react-core';
 import type { CatalogRender, StoredMetadata } from 'depictio-react-core';
 import { buildTileSnippet } from '../catalog-shared/tileSnippet';
 import {
@@ -60,6 +61,16 @@ import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 import CatalogHeader from './CatalogHeader';
 import { figureHasMarks, setPreviewMarks, usePreviewMarks } from '../offline/previewMarks';
 import VersionChip from './VersionChip';
+
+
+/** The colours the output's figures give a card's breakdown values (`_category_colors`,
+ *  from the payload), as the dashboard a card normally reads them from. */
+function cardColourSource(rec: Record<string, unknown>): CategoryColorSource | null {
+  const colours = rec._category_colors;
+  return colours && typeof colours === 'object'
+    ? { category_colors: colours as CategoryColorSource['category_colors'] }
+    : null;
+}
 
 const DASHBOARD_ID = 'catalog-preview';
 
@@ -316,14 +327,16 @@ const OutputView: React.FC<{
       // Keyed on the marks switch: the figure fetches again, with or without them.
       <CellBoundary key={`${m.index}:${marksOn}`} label={String(m.component_type)}>
         <ChunkErrorBoundary>
-          <ComponentRenderer
-            metadata={m}
-            filters={[]}
-            dashboardId={DASHBOARD_ID}
-            cardValue={cardValues[m.index]}
-            cardSecondaryValues={cardSecondary[m.index]}
-            cardLoading={false}
-          />
+          <CategoryColorsContext.Provider value={cardColourSource(rec)}>
+            <ComponentRenderer
+              metadata={m}
+              filters={[]}
+              dashboardId={DASHBOARD_ID}
+              cardValue={cardValues[m.index]}
+              cardSecondaryValues={cardSecondary[m.index]}
+              cardLoading={false}
+            />
+          </CategoryColorsContext.Provider>
         </ChunkErrorBoundary>
       </CellBoundary>
     );
