@@ -779,3 +779,18 @@ def test_preview_files_answer_cors_so_quarto_s_module_scripts_load(ctx) -> None:
     assert headers["Access-Control-Allow-Origin"] == "*"
     assert "max-age" in headers["Cache-Control"]
     assert nbx._preview_headers()["Cache-Control"] == "no-store"
+
+
+def test_a_text_tile_is_named_by_its_heading_or_first_words():
+    """The editor names a title-less text tile from its body, never by its id."""
+    from depictio.api.v1.endpoints.dashboards_endpoints.notebook_export import _text_label
+
+    assert _text_label("### The run\n- ![](icon:mdi:dna) **Pipeline** x") == "The run"
+    assert (
+        _text_label("![](icon:mdi:flask) **Samples** {{n}} in the [sheet](section:S)")
+        == "Samples in the sheet"
+    )
+    assert _text_label("one two three four five six seven eight nine") == (
+        "one two three four five six seven eight …"
+    )
+    assert _text_label(None) == ""

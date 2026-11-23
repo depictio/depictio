@@ -1180,6 +1180,22 @@ def _cover_defaults_for(plan: ExportPlan) -> ReportCoverDefaults:
     )
 
 
+_MD_NOISE = re.compile(r"!\[[^\]]*\]\([^)]*\)|\{\{[^}]*\}\}|[#*_`>|\[\]]|\([^)]*\)")
+
+
+def _text_label(body: object, words: int = 8) -> str:
+    """A text tile's name in the editor: its first heading, else its first
+    words, without markdown, icons or live values."""
+    if not isinstance(body, str):
+        return ""
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    heading = next((ln for ln in lines if ln.startswith("#")), None)
+    text = heading or " ".join(lines)
+    out = " ".join(_MD_NOISE.sub(" ", text).replace("- ", " ").split())
+    parts = out.split(" ")
+    return " ".join(parts[:words]) + (" …" if len(parts) > words else "")
+
+
 @dashboards_endpoint_router.get(
     "/notebook_export/{dashboard_id}/outline", response_model=ReportOutline
 )
@@ -1269,9 +1285,14 @@ def notebook_export_outline(
             ReportOutlineEntry(
                 kind="component",
                 tab_id=current.tab_id,
-                # A highlight without a title of its own reads as the figure it shows.
+                # A highlight without a title of its own reads as the figure it
+                # shows, a text tile as its heading or first words.
                 title=str(
-                    meta.get("title") or entry.unit.meta.get("title") or meta.get("index") or ""
+                    meta.get("title")
+                    or entry.unit.meta.get("title")
+                    or _text_label(meta.get("body"))
+                    or meta.get("index")
+                    or ""
                 ),
                 component_id=str(meta.get("index") or ""),
                 component_type=str(meta.get("component_type") or "") or None,

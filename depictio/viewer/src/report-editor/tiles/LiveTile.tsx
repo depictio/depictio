@@ -11,6 +11,7 @@ import {
   DataVersionProvider,
   TRACKED_LOAD_TYPES,
   groupsRenderPayload,
+  hasLiveValues,
   resolveGroupRender,
   useDashboardLoadSummary,
 } from 'depictio-react-core';
@@ -136,7 +137,9 @@ const LiveTile: React.FC<LiveTileProps> = ({ tabId, metadata, state, onStatus })
     [pinKey],
   );
 
-  const isCard = metadata.component_type === 'card';
+  // Cards, and text tiles with live values (`{{name}}`), take their values
+  // from the tab's bulk compute, as on the dashboard.
+  const isCard = metadata.component_type === 'card' || hasLiveValues(metadata);
   const [card, setCard] = useState<CardValue | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const settled = useRef(false);
