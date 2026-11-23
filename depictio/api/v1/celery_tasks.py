@@ -2275,6 +2275,14 @@ def _upset_result_from_frame(
                 ]
 
             annotations_spec = {}
+            # Every strip's pins, and the sets' colours: a strip's free values
+            # draw from what is left, so the Phylum strip's tail never wears
+            # the Kingdom strip's violet or a set's colour on the same tile.
+            tile_held = {
+                c.lower()
+                for other in annotation_cols
+                for c in pins_for_column(category_colors, other).values()
+            } | {c.lower() for c in (set_colors or {}).values() if isinstance(c, str)}
             for col in annotation_cols:
                 if col not in pdf.columns:
                     continue
@@ -2307,11 +2315,8 @@ def _upset_result_from_frame(
                     # Past the free slots a legend of near-identical greys says
                     # nothing: fold the tail into one "Other" before the library
                     # builds the track, so the strip and legend show the same set.
-                    pin_used = {c.lower() for c in pins.values()}
-                    slots = min(
-                        _UPSET_MAX_FREE_CATEGORIES,
-                        len([c for c in _ANNOTATION_PALETTE if c.lower() not in pin_used]),
-                    )
+                    free_palette = [c for c in _ANNOTATION_PALETTE if c.lower() not in tile_held]
+                    slots = min(_UPSET_MAX_FREE_CATEGORIES, len(free_palette))
                     cats, folded = _fold_tail_categories(cats, pins, slots)
                     if folded:
                         pdf[col] = pdf[col].map(
@@ -2330,7 +2335,10 @@ def _upset_result_from_frame(
                     # can't change shape or palette as filters narrow the data.
                     spec["type"] = "categorical"
                     spec["colors"] = palettes.assign_colors(
-                        cats, pinned=pins, palette=_ANNOTATION_PALETTE, ranked=True
+                        cats,
+                        pinned=pins,
+                        palette=free_palette or [palettes.semantic("other")],
+                        ranked=True,
                     )
                 annotations_spec[col] = spec
         else:

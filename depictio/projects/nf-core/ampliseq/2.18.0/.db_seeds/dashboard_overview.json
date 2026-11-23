@@ -1792,12 +1792,6 @@
     }
   ],
   "category_colors": {
-    "habitat": {
-      "Groundwater": "#F68B33",
-      "Riverwater": "#37ADA1",
-      "Sediment": "#F288C0",
-      "Soil": "#6495ED"
-    },
     "Kingdom": {
       "Archaea": "#EBD244",
       "Bacteria": "#925FC4",
@@ -1809,11 +1803,17 @@
       "Unclassified": "#868e96",
       "Bacteroidota": "#F288C0",
       "Desulfobacterota": "#6495ED",
-      "Actinomycetota": "#925FC4",
-      "Verrucomicrobiota": "#6EC863",
-      "Thermoproteota": "#EBD244",
-      "Chloroflexota": "#E53935",
+      "Actinomycetota": "#6EC863",
+      "Verrucomicrobiota": "#632F90",
+      "Thermoproteota": "#B69F00",
+      "Chloroflexota": "#A2000E",
       "Other": "#adb5bd"
+    },
+    "habitat": {
+      "Groundwater": "#B85E00",
+      "Riverwater": "#007A70",
+      "Sediment": "#BB578E",
+      "Soil": "#3664B7"
     }
   },
   "funnel_filtering": true,
@@ -1867,7 +1867,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-11-22 20:39:25",
+  "creation_time": "2026-11-23 08:29:42",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"

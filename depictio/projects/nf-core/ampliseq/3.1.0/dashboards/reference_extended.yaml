@@ -24,7 +24,6 @@ main_dashboard:
   content_width_default: compact
   show_tab_header: false
   category_colors:
-    habitat: auto
     Kingdom:
       '*': auto
       Bacteria: '#925FC4'
@@ -34,6 +33,7 @@ main_dashboard:
       '*': auto:rel_abundance
       Other: '#adb5bd'
       Unclassified: '#868e96'
+    habitat: auto
   filter_sections:
   - name: Sample filters
     icon: mdi:filter-variant

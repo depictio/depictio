@@ -350,6 +350,11 @@ A KPI strip is four different readings, not four numbers in one style:
     `"*": "auto:<abundance column>"`: the import ranks the values by that column's sum and
     gives the 8 largest the palette, largest first. Plain `auto` colours none of them past 8.
     Pin `Other` and `Unclassified` grey beside it.
+  - Auto columns resolve in the order they are declared. Each avoids the colours of the
+    columns a component of the family draws beside it (pins, and what earlier auto columns
+    took), taking the palette's darker twins when the palette runs out; columns that never
+    meet keep the whole palette. Declare the column whose values matter most first: taxa
+    before the group column, so a composition bar never draws a group and a phylum alike.
 - No per-figure colour map (`color_discrete_map`, `set_colors`, `col_annotation_colors`) for a
   column `category_colors` already covers. UI figures, advanced viz, maps and filter chips all
   read it.

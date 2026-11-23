@@ -22,7 +22,6 @@ main_dashboard:
   # Declared once here, read by every tab of the family: figures, advanced viz
   # and filter chips all colour a value the same way.
   category_colors:
-    '{GROUP_COL}': auto
     Kingdom:
       '*': auto
       Bacteria: '#925FC4'
@@ -35,6 +34,10 @@ main_dashboard:
       '*': 'auto:rel_abundance'
       Other: '#adb5bd'
       Unclassified: '#868e96'
+    # After the taxa: auto columns resolve in this order, each avoiding the
+    # colours the earlier ones took, so the groups take the palette's darker
+    # twins and a composition bar never draws a group and a phylum alike.
+    '{GROUP_COL}': auto
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. Bound
   # to the metadata DC, the source of every sample link in template.yaml. A run
   # without --metadata prunes it, and each tab keeps its own filters.

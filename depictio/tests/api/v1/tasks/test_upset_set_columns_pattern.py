@@ -185,3 +185,30 @@ def test_annotation_pins_win_and_match_the_column_case_insensitively() -> None:
     frame = _phylum_frame({"A": 2, "B": 9, "C": 5})
     result = _annotated(frame, category_colors={"Phylum": {"A": "#123456"}})
     assert _track_colours(result)["A"] == "#123456"
+
+
+def test_a_strip_never_draws_another_strips_pinned_colour() -> None:
+    from depictio.models.palette_tracks import track_palette
+
+    palette = track_palette("sets")
+    kingdom_pin = palette[0]
+    frame = _phylum_frame({"A": 9, "B": 5, "C": 2}).with_columns(
+        pl.lit("Bacteria").alias("kingdom")
+    )
+    result = _upset_result_from_frame(
+        frame,
+        set_columns=["S1", "S2", "S3"],
+        sort_by="cardinality",
+        sort_order="descending",
+        min_size=1,
+        max_degree=None,
+        show_set_sizes=True,
+        show_values=False,
+        color_intersections_by="none",
+        set_colors=None,
+        annotation_cols=["kingdom", "phylum"],
+        category_colors={"kingdom": {"Bacteria": kingdom_pin}},
+    )
+    phylum = _track_colours(result)
+    assert phylum
+    assert kingdom_pin.lower() not in {c.lower() for c in phylum.values()}

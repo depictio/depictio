@@ -9,7 +9,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { brandColorway, defaultCategorical, plotOverflow, TAB10_CLASSIC } from '../../colors';
-import { assignColors } from '../../palettes';
+import { assignColors, semanticColor } from '../../palettes';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { abundanceRanked, isUnassigned, ringColour, surfaceColour, unassignedGrey } from './hierarchyColors';
@@ -275,9 +275,21 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       }
     }
     const colourUniverse = abundanceRanked(weight, colourRankUniverse);
+    // A ring above wears its column's pins (Bacteria's violet): the colour-by
+    // values left without a pin draw from the rest, or the tail's grey, never
+    // a hue the ring inside them already means.
+    const heldAbove = new Set(
+      visibleRanks
+        .slice(0, localColourIdx)
+        .flatMap((col) => Object.values(pinnedPalette(categorySource, null, col) ?? {}))
+        .map((c) => c.toLowerCase()),
+    );
+    const freePalette = (paletteArr as readonly string[]).filter(
+      (c) => !heldAbove.has(c.toLowerCase()),
+    );
     const colourMap = assignColors(colourUniverse, {
       pinned,
-      palette: paletteArr as readonly string[],
+      palette: freePalette.length ? freePalette : [semanticColor('other', isDark ? 'dark' : 'light')],
       scheme: isDark ? 'dark' : 'light',
       ranked: true,
       overflow: plotOverflow(theme),

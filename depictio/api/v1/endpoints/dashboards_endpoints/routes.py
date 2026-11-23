@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable, Collection, Iterator
+from collections.abc import Callable, Collection, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -98,7 +98,8 @@ from depictio.api.v1.services.figure.figure_builder import (
 from depictio.api.v1.services.figure.style_presets import figure_style_payload
 from depictio.api.v1.services.multiqc.dc_lookup import report_set_digest
 from depictio.api.v1.services.signed_media import SCOPE_DASHBOARD_LOGO
-from depictio.models.components.category_palette import assign_category_colors
+from depictio.models import palettes
+from depictio.models.components.category_palette import CATEGORY_PALETTE, assign_category_colors
 from depictio.models.components.constants import FLOATING_ADVANCED_VIZ_KINDS
 from depictio.models.components.lite import (
     TEXT_ONLY_AGGREGATIONS,
@@ -8380,8 +8381,42 @@ def _ranked_column_values(dc_id: str, column: str, rank_by: str) -> list[str] | 
     return frame[column].to_list()
 
 
+def _columns_named_in(node: Any, columns: set[str], found: set[str]) -> set[str]:
+    """The `columns` a component's config names anywhere, as a whole string value."""
+    if isinstance(node, str):
+        if node in columns:
+            found.add(node)
+    elif isinstance(node, dict):
+        for value in node.values():
+            _columns_named_in(value, columns, found)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            _columns_named_in(value, columns, found)
+    return found
+
+
+def _codisplayed_columns(columns: Iterable[str], components: Iterable[Any]) -> dict[str, set[str]]:
+    """For each column, the other columns some component draws beside it.
+
+    A component that names two coloured columns (a composition bar split by
+    habitat and stacked by phylum, a sunburst from kingdom to phylum, an UpSet
+    with a kingdom strip) shows both palettes at once; two columns no component
+    shares never meet, so they may reuse each other's colours.
+    """
+    wanted = set(columns)
+    beside: dict[str, set[str]] = {column: set() for column in wanted}
+    for component in components:
+        named = _columns_named_in(component, wanted, set())
+        for column in named:
+            beside[column] |= named - {column}
+    return beside
+
+
 def _resolve_auto_category_colors(
-    dashboard_dict: dict, project_id: Any, previous: dict | None = None
+    dashboard_dict: dict,
+    project_id: Any,
+    previous: dict | None = None,
+    components: Iterable[Any] | None = None,
 ) -> None:
     """Replace `category_colors`' `"*": "auto"` by a colour per value of the data, in place.
 
@@ -8390,8 +8425,13 @@ def _resolve_auto_category_colors(
     the template's pins first, `previous` (the column's colours on the dashboard
     this import replaces) next, palette slots for the rest. `auto:<column>`
     hands the slots out largest first, by that column's sum, and stops when they
-    run out. Slots another column pins go last (`avoid`), so two columns drawn
-    side by side (Kingdom and Phylum in a sunburst) do not share a hue. A column
+    run out. Auto columns resolve in the order the dashboard declares them, and
+    each avoids (`avoid`) the colours of the columns some component draws beside
+    it (`components`, the family's; the dashboard's own by default): their pins,
+    and what the earlier auto ones took. Two columns drawn side by side (Kingdom
+    and Phylum in a sunburst, habitat and Phylum in a composition bar) then do not
+    share a hue: the first declared gets the palette, later ones its darker twins.
+    Columns that never meet keep the whole palette. A column
     no collection of the project holds is dropped, pins included: nothing on the
     dashboard can be drawn by it. The stored map never
     keeps a `"*"`.
@@ -8404,7 +8444,12 @@ def _resolve_auto_category_colors(
         for column, mapping in colors.items()
         if isinstance(mapping, dict)
     }
+    beside = _codisplayed_columns(
+        colors,
+        dashboard_dict.get("stored_metadata") or [] if components is None else components,
+    )
     resolved: dict[str, dict[str, str]] = {}
+    claimed: dict[str, list[str]] = {}
     for column, mapping in colors.items():
         if parse_auto_category_spec(mapping)[0]:
             mapping = {AUTO_CATEGORY_KEY: mapping}
@@ -8431,10 +8476,22 @@ def _resolve_auto_category_colors(
             pinned,
             before if isinstance(before, dict) else None,
             ranked=rank_by is not None,
-            avoid=[c for other, pins in explicit.items() if other != column for c in pins],
+            avoid=[
+                c
+                for other in beside.get(column, ())
+                for c in (*explicit.get(other, ()), *claimed.get(other, ()))
+            ],
         )
         if colours:
             resolved[column] = colours
+            # What the column draws: a ranked column folds every value past the
+            # palette's size into Other, so the colours its folded values keep
+            # from earlier imports (a phylum of an earlier run) bind nothing.
+            drawn = set(pinned)
+            if rank_by:
+                ranked_free = [v for v in values or [] if palettes.reserved_kind(v) is None]
+                drawn |= set(ranked_free[: len(CATEGORY_PALETTE)])
+            claimed[column] = [c for v, c in colours.items() if not rank_by or v in drawn]
     dashboard_dict["category_colors"] = resolved or None
 
 
@@ -8645,7 +8702,13 @@ def _gained_category_colors(
         "category_colors": json.loads(json.dumps(colour_spec)),
         "stored_metadata": existing.get("stored_metadata") or [],
     }
-    _resolve_auto_category_colors(probe, project_id, current)
+    family_id = _family_main_id(existing)
+    family = dashboards_collection.find(
+        {"$or": [{"dashboard_id": family_id}, {"parent_dashboard_id": family_id}]},
+        {"stored_metadata": 1},
+    )
+    components = [c for doc in family for c in doc.get("stored_metadata") or []]
+    _resolve_auto_category_colors(probe, project_id, current, components=components)
     # The stored map wins value by value: a resolve only ever adds.
     merged = _layered_category_colors(probe.get("category_colors"), current)
     return merged if merged != current else None
@@ -8854,7 +8917,13 @@ def _import_multi_tab_dashboard(
     # Colours of the dashboard this one replaces carry over (the template's pins
     # win), so a refresh keeps every auto value's colour.
     _resolve_auto_category_colors(
-        main_dashboard_dict, project_id, (existing_main or {}).get("category_colors")
+        main_dashboard_dict,
+        project_id,
+        (existing_main or {}).get("category_colors"),
+        components=[
+            *(main_dashboard_dict.get("stored_metadata") or []),
+            *(c for tab in tabs_data or [] for c in (tab or {}).get("components") or []),
+        ],
     )
 
     # Validate and insert/update main dashboard

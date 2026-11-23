@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from depictio.models.components.category_palette import (
     CATEGORY_PALETTE,
+    CATEGORY_SHADES,
     assign_category_colors,
     natural_sort_key,
 )
@@ -21,6 +22,7 @@ from depictio.models.models.dashboards import (
 )
 
 P = CATEGORY_PALETTE
+S = CATEGORY_SHADES
 
 
 class TestAssignCategoryColors:
@@ -122,15 +124,40 @@ class TestAvoidOtherColumnsPins:
         out = assign_category_colors(["a", "b"], avoid=[P[0], P[2]])
         assert out == {"a": P[1], "b": P[3]}
 
-    def test_an_avoided_slot_is_still_used_when_the_rest_run_out(self):
+    def test_darker_twins_come_before_an_avoided_slot(self):
         values = [f"v{i}" for i in range(len(P))]
         out = assign_category_colors(values, avoid=[P[0]], ranked=True)
-        assert list(out.values()) == [*P[1:], P[0]]
+        assert list(out.values()) == [*P[1:], S[0]]
 
-    def test_unranked_values_still_fit_on_the_whole_palette(self):
+    def test_an_avoided_slot_is_still_used_when_twins_run_out(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[*P[1:], *S], ranked=True)
+        assert list(out.values()) == [P[0], *P[1:]]
+
+    def test_a_ranked_column_colours_only_its_largest_values(self):
+        values = [f"v{i:02d}" for i in range(len(P) + 3)]
+        previous = {v: S[i] for i, v in enumerate(values[: len(P)])}
+        out = assign_category_colors(values, previous=previous, ranked=True)
+        assert set(out) == set(values[: len(P)])
+
+    def test_twins_do_not_raise_how_many_values_get_a_slot(self):
+        values = [f"v{i:02d}" for i in range(len(P) + 1)]
+        assert len(assign_category_colors(values, ranked=True)) == len(P)
+        assert assign_category_colors(values) == {}
+
+    def test_twins_of_other_columns_hues_come_first(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[P[2], P[5]], ranked=True)
+        assert list(out.values()) == [P[0], P[1], P[3], P[4], P[6], P[7], S[2], S[5]]
+
+    def test_twins_are_distinct_from_the_palette(self):
+        assert len(S) == len(P)
+        assert not {c.lower() for c in S} & {c.lower() for c in P}
+
+    def test_unranked_values_still_fit_a_slot_each(self):
         values = [f"v{i}" for i in range(len(P))]
         out = assign_category_colors(values, avoid=[P[0]])
-        assert sorted(out.values()) == sorted(P)
+        assert sorted(out.values()) == sorted([*P[1:], S[0]])
 
     def test_avoid_is_case_insensitive(self):
         assert assign_category_colors(["a"], avoid=[P[0].lower()]) == {"a": P[1]}
