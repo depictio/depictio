@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
+  Box,
   Button,
-  Card,
   Group,
   Loader,
   NumberInput,
@@ -13,14 +13,19 @@ import {
   Table,
   Text,
   Title,
+  DEFAULT_THEME,
   useComputedColorScheme,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { Icon } from '@iconify/react';
 import Plot from 'react-plotly.js';
+import { DepictioCard } from 'depictio-components';
 import {
+  CARD_FRAME,
+  FigureHeader,
   fetchUsageCsv,
   fetchUsageReport,
+  figurePlotConfig,
   type UsageGranularity,
   type UsageQuery,
   type UsageReport,
@@ -39,30 +44,30 @@ import { mantinePlotlyTemplate } from '../static-runtime/mantinePlotlyTemplate';
 const DEFAULT_PERIODS: Record<UsageGranularity, number> = { day: 30, week: 12, month: 12, year: 5 };
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-type KpiDef = { key: string; label: string; suffix?: string };
+type KpiDef = { key: string; label: string; icon: string; color: string; suffix?: string };
 
 const KPIS: Record<UsageReport['mode'], KpiDef[]> = {
   multi_user: [
-    { key: 'active_users', label: 'Active users' },
-    { key: 'logins', label: 'Logins' },
-    { key: 'signups', label: 'New accounts' },
-    { key: 'returning_users_pct', label: 'Returning users', suffix: '%' },
-    { key: 'dashboard_views', label: 'Dashboard views' },
-    { key: 'visitors', label: 'Browsers' },
+    { key: 'active_users', label: 'Active users', icon: 'mdi:account-group', color: 'blue' },
+    { key: 'logins', label: 'Logins', icon: 'mdi:login', color: 'teal' },
+    { key: 'signups', label: 'New accounts', icon: 'mdi:account-plus', color: 'grape' },
+    { key: 'returning_users_pct', label: 'Returning users', suffix: '%', icon: 'mdi:account-convert', color: 'orange' },
+    { key: 'dashboard_views', label: 'Dashboard views', icon: 'mdi:view-dashboard', color: 'indigo' },
+    { key: 'visitors', label: 'Browsers', icon: 'mdi:web', color: 'cyan' },
   ],
   public: [
-    { key: 'visitors', label: 'Visitors' },
-    { key: 'unique_ips', label: 'Unique IPs' },
-    { key: 'pageviews', label: 'Page views' },
-    { key: 'dashboard_views', label: 'Dashboard views' },
-    { key: 'countries', label: 'Countries' },
-    { key: 'logins', label: 'Sign-ins' },
+    { key: 'visitors', label: 'Visitors', icon: 'mdi:web', color: 'cyan' },
+    { key: 'unique_ips', label: 'Unique IPs', icon: 'mdi:ip-network', color: 'violet' },
+    { key: 'pageviews', label: 'Page views', icon: 'mdi:eye', color: 'green' },
+    { key: 'dashboard_views', label: 'Dashboard views', icon: 'mdi:view-dashboard', color: 'indigo' },
+    { key: 'countries', label: 'Countries', icon: 'mdi:earth', color: 'pink' },
+    { key: 'logins', label: 'Sign-ins', icon: 'mdi:login', color: 'teal' },
   ],
   single_user: [
-    { key: 'pageviews', label: 'Page views' },
-    { key: 'dashboard_views', label: 'Dashboard views' },
-    { key: 'visitors', label: 'Browsers' },
-    { key: 'logins', label: 'Sessions opened' },
+    { key: 'pageviews', label: 'Page views', icon: 'mdi:eye', color: 'green' },
+    { key: 'dashboard_views', label: 'Dashboard views', icon: 'mdi:view-dashboard', color: 'indigo' },
+    { key: 'visitors', label: 'Browsers', icon: 'mdi:web', color: 'cyan' },
+    { key: 'logins', label: 'Sessions opened', icon: 'mdi:login', color: 'teal' },
   ],
 };
 
@@ -78,55 +83,63 @@ const countryName = (code: string) => regionNames?.of(code) ?? code;
 function fmtPeriod(iso: string, g: UsageGranularity): string {
   const d = new Date(`${iso}Z`);
   if (g === 'year') return String(d.getUTCFullYear());
-  if (g === 'month') return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  if (g === 'month')
+    return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit', timeZone: 'UTC' });
   return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' });
 }
 
 const toIsoDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-const Kpi: React.FC<{ label: string; current: number; previous: number; suffix?: string }> = ({
-  label,
+/** A metric tile: the dashboards' own card, with the previous period beneath. */
+const Kpi: React.FC<{ def: KpiDef; current: number; previous: number }> = ({
+  def,
   current,
   previous,
-  suffix,
 }) => {
   const delta = previous ? Math.round(((current - previous) / previous) * 100) : null;
+  let trend = `previous period: ${previous.toLocaleString()}`;
+  if (def.suffix) trend = 'of active users, seen before this range';
+  else if (delta !== null)
+    trend = `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% vs previous (${previous.toLocaleString()})`;
   return (
-    <Card withBorder radius="md" p="sm">
-      <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-        {label}
-      </Text>
-      <Group gap="xs" align="baseline">
-        <Text fz={26} fw={700}>
-          {current.toLocaleString()}
-          {suffix}
-        </Text>
-        {delta !== null && !suffix && (
-          <Text size="xs" fw={600} c={delta >= 0 ? 'teal' : 'red'}>
-            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}%
-          </Text>
-        )}
-      </Group>
-      {!suffix && (
-        <Text size="xs" c="dimmed">
-          previous period: {previous.toLocaleString()}
-        </Text>
-      )}
-    </Card>
+    <Box h={118}>
+      <DepictioCard
+        title={def.label}
+        value={`${current.toLocaleString()}${def.suffix ?? ''}`}
+        icon_name={def.icon}
+        icon_color={def.color}
+        icon_style="watermark"
+        title_font_size="sm"
+        value_font_size="xl"
+        aggregation_description={trend}
+      />
+    </Box>
   );
 };
 
+/** A figure/table tile: the metric card's frame + the dashboards' minimal figure header. */
+const Tile: React.FC<{
+  title: string;
+  subtitle?: string;
+  icon: string;
+  color?: string;
+  children: React.ReactNode;
+}> = ({ title, subtitle, icon, color, children }) => (
+  <Box style={CARD_FRAME} p="sm">
+    <FigureHeader title={title} subtitle={subtitle} icon={icon} iconColor={color} />
+    {children}
+  </Box>
+);
+
 const MiniTable: React.FC<{
   title: string;
+  icon: string;
   rows: Array<Record<string, string | number>>;
   columns: Array<{ key: string; label: string; render?: (v: string | number) => React.ReactNode }>;
   empty?: string;
-}> = ({ title, rows, columns, empty = 'No data for this period.' }) => (
-  <Card withBorder radius="md" p="sm">
-    <Text size="sm" fw={600} mb={6}>
-      {title}
-    </Text>
+}> = ({ title, icon, rows, columns, empty = 'No data for this period.' }) => (
+  <Tile title={title} icon={icon} color="gray">
     {rows.length === 0 ? (
       <Text size="xs" c="dimmed">
         {empty}
@@ -151,12 +164,23 @@ const MiniTable: React.FC<{
         </Table.Tbody>
       </Table>
     )}
-  </Card>
+  </Tile>
 );
 
 export const UsagePane: React.FC = () => {
   const scheme = useComputedColorScheme('light');
   const template = useMemo(() => mantinePlotlyTemplate(scheme), [scheme]);
+  // One hue, from the body colour up to the brand blue: a heatmap of counts
+  // reads as "more", never as a diverging scale.
+  const heatScale = useMemo((): Array<[number, string]> => {
+    const blue = DEFAULT_THEME.colors.blue;
+    const low = scheme === 'dark' ? DEFAULT_THEME.colors.dark[6] : blue[0];
+    return [
+      [0, low],
+      [0.5, blue[scheme === 'dark' ? 7 : 3]],
+      [1, blue[scheme === 'dark' ? 4 : 7]],
+    ];
+  }, [scheme]);
   const [granularity, setGranularity] = useState<UsageGranularity>('month');
   const [periods, setPeriods] = useState<number>(DEFAULT_PERIODS.month);
   const [range, setRange] = useState<[Date | null, Date | null]>([null, null]);
@@ -207,7 +231,7 @@ export const UsagePane: React.FC = () => {
     plot_bgcolor: 'rgba(0,0,0,0)',
     ...extra,
   });
-  const plotConfig = { displayModeBar: false, responsive: true };
+  const plotConfig = figurePlotConfig('minimal');
   const b = report?.breakdowns ?? {};
 
   return (
@@ -291,8 +315,7 @@ export const UsagePane: React.FC = () => {
             {KPIS[report.mode].map((k) => (
               <Kpi
                 key={k.key}
-                label={k.label}
-                suffix={k.suffix}
+                def={k}
                 current={report.kpis[k.key]?.current ?? 0}
                 previous={report.kpis[k.key]?.previous ?? 0}
               />
@@ -307,10 +330,12 @@ export const UsagePane: React.FC = () => {
           </Group>
 
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
-            <Card withBorder radius="md" p="sm">
-              <Text size="sm" fw={600}>
-                Activity
-              </Text>
+            <Tile
+              title="Activity"
+              subtitle={isPublic ? 'visitors, sign-ins, dashboard views' : 'active users, logins, dashboard views'}
+              icon="mdi:chart-timeline-variant"
+              color="blue"
+            >
               <Plot
                 style={{ width: '100%' }}
                 useResizeHandler
@@ -330,11 +355,13 @@ export const UsagePane: React.FC = () => {
                   },
                 ]}
               />
-            </Card>
-            <Card withBorder radius="md" p="sm">
-              <Text size="sm" fw={600}>
-                {isPublic ? 'New vs returning visitors' : 'New vs returning users'}
-              </Text>
+            </Tile>
+            <Tile
+              title={isPublic ? 'New vs returning visitors' : 'New vs returning users'}
+              subtitle="first seen in the period, or seen before"
+              icon="mdi:account-convert"
+              color="orange"
+            >
               <Plot
                 style={{ width: '100%' }}
                 useResizeHandler
@@ -343,20 +370,46 @@ export const UsagePane: React.FC = () => {
                 data={
                   isPublic
                     ? [
-                        { type: 'bar', name: 'New', x, y: report.series.map((p) => p.new_visitors) },
-                        { type: 'bar', name: 'Returning', x, y: report.series.map((p) => p.returning_visitors) },
+                        {
+                          type: 'bar',
+                          name: 'New',
+                          x,
+                          y: report.series.map((p) => p.new_visitors),
+                          marker: { color: DEFAULT_THEME.colors.teal[6] },
+                        },
+                        {
+                          type: 'bar',
+                          name: 'Returning',
+                          x,
+                          y: report.series.map((p) => p.returning_visitors),
+                          marker: { color: DEFAULT_THEME.colors.blue[6] },
+                        },
                       ]
                     : [
-                        { type: 'bar', name: 'New', x, y: report.series.map((p) => p.new_users) },
-                        { type: 'bar', name: 'Returning', x, y: report.series.map((p) => p.returning_users) },
+                        {
+                          type: 'bar',
+                          name: 'New',
+                          x,
+                          y: report.series.map((p) => p.new_users),
+                          marker: { color: DEFAULT_THEME.colors.teal[6] },
+                        },
+                        {
+                          type: 'bar',
+                          name: 'Returning',
+                          x,
+                          y: report.series.map((p) => p.returning_users),
+                          marker: { color: DEFAULT_THEME.colors.blue[6] },
+                        },
                       ]
                 }
               />
-            </Card>
-            <Card withBorder radius="md" p="sm">
-              <Text size="sm" fw={600}>
-                Content created
-              </Text>
+            </Tile>
+            <Tile
+              title="Content created"
+              subtitle="accounts, projects, dashboards, ingestions"
+              icon="mdi:folder-plus"
+              color="grape"
+            >
               <Plot
                 style={{ width: '100%' }}
                 useResizeHandler
@@ -369,11 +422,13 @@ export const UsagePane: React.FC = () => {
                   { type: 'bar', name: 'Ingestions', x, y: report.series.map((p) => p.ingestions) },
                 ]}
               />
-            </Card>
-            <Card withBorder radius="md" p="sm">
-              <Text size="sm" fw={600}>
-                When (page views, weekday × hour UTC)
-              </Text>
+            </Tile>
+            <Tile
+              title="When"
+              subtitle="page views, weekday × hour (UTC)"
+              icon="mdi:calendar-clock"
+              color="teal"
+            >
               <Plot
                 style={{ width: '100%' }}
                 useResizeHandler
@@ -386,17 +441,17 @@ export const UsagePane: React.FC = () => {
                     y: WEEKDAYS,
                     x: Array.from({ length: 24 }, (_, h) => `${h}h`),
                     showscale: false,
+                    colorscale: heatScale,
+                    xgap: 2,
+                    ygap: 2,
                   },
                 ]}
               />
-            </Card>
+            </Tile>
           </SimpleGrid>
 
           {report.geoip_available && (
-            <Card withBorder radius="md" p="sm">
-              <Text size="sm" fw={600}>
-                Visitors by country
-              </Text>
+            <Tile title="Visitors by country" icon="mdi:earth" color="pink">
               <Plot
                 style={{ width: '100%' }}
                 useResizeHandler
@@ -410,18 +465,21 @@ export const UsagePane: React.FC = () => {
                   {
                     type: 'choropleth',
                     locationmode: 'country names',
+                    colorscale: heatScale,
+                    marker: { line: { width: 0.5, color: 'rgba(128,128,128,0.4)' } },
                     locations: (b.countries ?? []).map((c) => countryName(String(c.country))),
                     z: (b.countries ?? []).map((c) => Number(c.visitors)),
                     showscale: false,
                   },
                 ]}
               />
-            </Card>
+            </Tile>
           )}
 
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
             <MiniTable
               title="Top dashboards"
+              icon="mdi:view-dashboard"
               rows={b.top_dashboards ?? []}
               columns={[
                 {
@@ -436,6 +494,7 @@ export const UsagePane: React.FC = () => {
             />
             <MiniTable
               title="Top projects"
+              icon="mdi:folder"
               rows={b.top_projects ?? []}
               columns={[
                 { key: 'name', label: 'Project' },
@@ -444,6 +503,7 @@ export const UsagePane: React.FC = () => {
             />
             <MiniTable
               title="Login methods"
+              icon="mdi:login"
               rows={b.login_methods ?? []}
               columns={[
                 { key: 'method', label: 'Method' },
@@ -453,6 +513,7 @@ export const UsagePane: React.FC = () => {
             {report.geoip_available && (
               <MiniTable
                 title="Countries"
+                icon="mdi:flag"
                 rows={b.countries ?? []}
                 columns={[
                   { key: 'country', label: 'Country', render: (v) => countryName(String(v)) },
@@ -463,6 +524,7 @@ export const UsagePane: React.FC = () => {
             {report.geoip_available && (
               <MiniTable
                 title="Cities"
+                icon="mdi:city"
                 rows={b.cities ?? []}
                 columns={[
                   { key: 'city', label: 'City' },
@@ -473,6 +535,7 @@ export const UsagePane: React.FC = () => {
             )}
             <MiniTable
               title="Browsers"
+              icon="mdi:web"
               rows={b.browsers ?? []}
               columns={[
                 { key: 'name', label: 'Browser' },
@@ -481,6 +544,7 @@ export const UsagePane: React.FC = () => {
             />
             <MiniTable
               title="Operating systems"
+              icon="mdi:monitor"
               rows={b.os ?? []}
               columns={[
                 { key: 'name', label: 'OS' },
@@ -489,6 +553,7 @@ export const UsagePane: React.FC = () => {
             />
             <MiniTable
               title="Devices"
+              icon="mdi:cellphone-link"
               rows={b.devices ?? []}
               columns={[
                 { key: 'name', label: 'Device' },
@@ -497,6 +562,7 @@ export const UsagePane: React.FC = () => {
             />
             <MiniTable
               title="Languages"
+              icon="mdi:translate"
               rows={b.languages ?? []}
               columns={[
                 { key: 'name', label: 'Language' },
@@ -505,6 +571,7 @@ export const UsagePane: React.FC = () => {
             />
             <MiniTable
               title="Referrers"
+              icon="mdi:link-variant"
               rows={b.referrers ?? []}
               columns={[
                 { key: 'domain', label: 'Domain' },
@@ -513,6 +580,7 @@ export const UsagePane: React.FC = () => {
             />
             <MiniTable
               title="Browsers per address (shared NAT)"
+              icon="mdi:lan"
               rows={b.visitors_per_ip ?? []}
               empty="No address seen yet."
               columns={[
