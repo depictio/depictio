@@ -1571,6 +1571,11 @@ export async function startNotebookRender(): Promise<never> {
 export async function startReportPreview(): Promise<never> {
   throw new Error(`Exporting is ${READ_ONLY}.`);
 }
+// The report layer is the server's, and editing it needs the server: a bundle
+// refuses, so the viewer offers no "Customise report" in it.
+export async function fetchReportLayer(): Promise<never> {
+  throw new Error(`Editing the report is ${READ_ONLY}.`);
+}
 export async function fetchNotebookRenderStatus(): Promise<never> {
   throw new Error(`Exporting is ${READ_ONLY}.`);
 }
