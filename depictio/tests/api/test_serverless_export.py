@@ -880,7 +880,7 @@ def offline_stack(monkeypatch: pytest.MonkeyPatch) -> dict[str, list]:
     # are covered in tests/unit/serverless/test_links_producers.py.)
     _register_collections(monkeypatch, [_dashboard_doc()], locations=locations)
 
-    def fake_schema(workflow_id, data_collection_id, init_data):
+    def fake_schema(workflow_id, data_collection_id, init_data, **kw):
         dc = str(data_collection_id)
         assert init_data[dc]["delta_location"] == locations[dc]
         return dict(frames[dc].schema)
@@ -2217,7 +2217,7 @@ def size_stack(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     frames = {str(oid): _sized_frame(i) for i, oid in enumerate(SIZE_DC_OIDS)}
     loaded: list[str] = []
 
-    def fake_schema(workflow_id, data_collection_id, init_data):
+    def fake_schema(workflow_id, data_collection_id, init_data, **kw):
         return dict(frames[str(data_collection_id)].schema)
 
     def fake_load(workflow_id, data_collection_id, metadata=None, select_columns=None, **kw):

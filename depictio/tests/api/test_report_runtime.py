@@ -22,9 +22,16 @@ from bson import ObjectId
 
 from depictio.models.models.analysis_state import AnalysisState, NotebookExportRequest
 from depictio.serverless import combined, report
-from depictio.serverless.producer_a import ExportUser, ProducerAError, export_manifest
+from depictio.serverless.producer_a import (
+    ExportUser,
+    ProducerAError,
+    VersionPinsError,
+    export_manifest,
+)
 from depictio.tests.api.test_serverless_export import (  # noqa: F401 (fixture)
+    AV_DC_OID,
     DASHBOARD_OID,
+    DC2_OID,
     DC_OID,
     PROJECT_OID,
     _dashboard_doc,
@@ -115,20 +122,6 @@ def test_no_user_is_never_read_as_the_admin():
         report.build_report_manifest(str(DASHBOARD_OID), None, _state())
 
 
-@pytest.mark.parametrize(
-    "extra,needle",
-    [
-        ({"pins": {"as_of_version": "v1"}}, "pinned"),
-        ({"pins": {"data_versions": {str(DC_OID): 2}}}, "pinned"),
-    ],
-)
-def test_a_state_the_page_cannot_reproduce_is_refused(extra, needle):
-    state = _state(**extra)
-    assert needle in (report.ineligibility(state) or "")
-    with pytest.raises(report.ReportRuntimeRefused):
-        report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
-
-
 GROUPED = {
     "groups": [
         {
@@ -167,6 +160,44 @@ def test_the_report_manifest_carries_the_groups_colour_by_and_split():
     # a plain state carries none
     plain = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, _state())
     assert plain.initial_grouping is None
+
+
+@pytest.mark.usefixtures("offline_stack")
+def test_a_pinned_state_is_eligible_and_the_manifest_names_the_version(monkeypatch):
+    """A pinned export is NOT refused: the manifest ships the pinned version's
+    data and definitions and says which version it froze on."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    version_id = "507f1f77bcf86cd799439011"
+    stamps = [
+        {"dc_id": str(dc), "version_kind": "delta", "delta_version": 0}
+        for dc in (DC_OID, DC2_OID, AV_DC_OID)
+    ]
+    monkeypatch.setattr(
+        version_store,
+        "dashboard_versions_collection",
+        _FakeCollection(
+            [
+                {
+                    "version_id": version_id,
+                    "family_id": str(DASHBOARD_OID),
+                    "seq": 2,
+                    "label": "v2",
+                    "created_at": None,
+                    "data_collections": stamps,
+                    "tabs": [],
+                }
+            ]
+        ),
+    )
+    state = _state(pins={"as_of_version": version_id})
+    assert report.ineligibility(state) is None
+    manifest = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
+    assert manifest.pinned_version is not None
+    assert manifest.pinned_version.version_id == version_id
+    assert manifest.pinned_version.seq == 2
+    assert manifest.pinned_version.label == "v2"
+    assert manifest.pinned_version.unresolved == []
 
 
 def test_a_plain_state_is_eligible_and_group_filters_never_ride_along():
@@ -250,9 +281,8 @@ def test_only_an_owner_gets_the_runtime(gate):
     assert "owners" in (ep._runtime_refusal(DASHBOARD_OID, _state(), user) or "")
     gate.add(str(user.id))
     assert ep._runtime_refusal(DASHBOARD_OID, _state(), user) is None
-    assert "pinned" in (
-        ep._runtime_refusal(DASHBOARD_OID, _state(pins={"as_of_version": "v"}), user) or ""
-    )
+    # A pinned state is reproducible now: the manifest ships the pinned data.
+    assert ep._runtime_refusal(DASHBOARD_OID, _state(pins={"as_of_version": "v"}), user) is None
 
 
 def test_a_runtime_that_is_not_built_is_a_refusal_of_its_own(gate, built_runtime):
@@ -334,13 +364,15 @@ def test_the_manifest_route_queues_a_job_for_an_owner(monkeypatch):
             str(DASHBOARD_OID), _request(), current_user=ExportUser(id=ObjectId())
         )
     assert denied.value.status_code == 404
-    with pytest.raises(HTTPException) as refused:
-        routes.post_report_manifest(
-            str(DASHBOARD_OID),
-            NotebookExportRequest(state=_state(pins={"as_of_version": "v1"})),
-            current_user=owner,
-        )
-    assert refused.value.status_code == 409
+    # A pinned state queues too: the manifest ships the pinned version's data
+    # (the state rides along in the job's runtime argument).
+    out = routes.post_report_manifest(
+        str(DASHBOARD_OID),
+        NotebookExportRequest(state=_state(pins={"as_of_version": "v1"})),
+        current_user=owner,
+    )
+    assert out["status"] == "queued"
+    assert queued["kwargs"]["runtime"]["state"]["pins"]["as_of_version"] == "v1"
 
 
 def test_the_manifest_poll_answers_the_job(monkeypatch):
@@ -367,7 +399,8 @@ def test_the_manifest_poll_answers_the_job(monkeypatch):
     assert other.value.status_code == 404
     # A refusal answers as the route would have.
     for exc, status in (
-        (report.ReportRuntimeRefused("pinned"), 409),
+        (report.ReportRuntimeRefused("selection groups"), 409),
+        (VersionPinsError("Version v1 no longer exists."), 400),
         (ProducerAError("permission denied"), 404),
         (RuntimeError("boom"), 500),
     ):

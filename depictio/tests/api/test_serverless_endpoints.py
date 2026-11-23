@@ -683,27 +683,24 @@ def test_dispatch_with_a_state_carries_it_to_the_worker(
     assert jobs.docs[body["job_id"]]["status"] == "pending"
 
 
-def test_dispatch_with_an_ineligible_state_is_409_without_dispatching(
+def test_dispatch_with_a_pinned_grouped_state_queues_it(
     client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
 ):
-    """A state the runtime cannot reproduce (pinned data) is a 409 with the
-    reason, and nothing is enqueued."""
-    from depictio.serverless import report
-
+    """Pins, selection groups and colour-by are all reproduced offline now: the
+    state is accepted and travels to the worker whole."""
     _patch_project(monkeypatch, [OWNER_OID])
     task = _FakeTask()
     monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
     _as_user(client, owner)
-    state = _export_state(pins={"as_of_version": "v-old"})
-    reason = report.ineligibility(AnalysisState.model_validate(state))
-    assert reason and "pinned data" in reason  # what the detail answers
+    state = _export_state(pins={"as_of_version": "v-old"}, color_by={"kind": "groups"})
 
     resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}", json={"state": state})
 
-    assert resp.status_code == 409
-    assert "pinned data" in resp.json()["detail"]
-    assert task.calls == []
-    assert jobs.docs == {}
+    assert resp.status_code == 200
+    [payload] = task.calls[0]
+    sent = AnalysisState.model_validate(payload["state"])
+    assert sent.pins.as_of_version == "v-old"
+    assert sent.color_by.kind == "groups"
 
 
 def test_dispatch_anonymous_on_a_public_project_is_404(

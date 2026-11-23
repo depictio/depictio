@@ -533,7 +533,7 @@ def producer_a_env(monkeypatch: pytest.MonkeyPatch):
         ),
     )
 
-    def fake_schema(workflow_id, data_collection_id, init_data):
+    def fake_schema(workflow_id, data_collection_id, init_data, **kw):
         return dict(FRAMES[str(data_collection_id)].schema)
 
     loads: list[tuple[str, tuple[str, ...] | None]] = []
@@ -684,7 +684,9 @@ def test_producer_a_drops_a_table_over_the_pair_cap(producer_a_env, monkeypatch)
     from depictio.serverless import producer_a as pa
 
     big = [f"v{i}" for i in range(pa.LINK_TABLE_MAX_PAIRS + 1)]
-    monkeypatch.setattr(pa, "_link_source_column_values", lambda dc_id, wf_id, column: big)
+    monkeypatch.setattr(
+        pa, "_link_source_column_values", lambda dc_id, wf_id, column, delta_version=None: big
+    )
 
     # A direct resolver: one target value per source value, so pairs == values.
     links = [link for link in _links() if link["_id"] != LINK_SRC_B_OID]

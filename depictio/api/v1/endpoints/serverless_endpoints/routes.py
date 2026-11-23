@@ -616,9 +616,14 @@ def get_report_runtime(
 
 
 #: What a failed manifest job answers, by the exception the worker raised.
+#: ``VersionPinsError`` (a stale or foreign version id in the state's pins)
+#: must sit before its parent class: the match is by exact name, and a pinned
+#: read that cannot be honoured is a caller error (400, the same detail the
+#: render endpoints answer), not a "dashboard not found".
 _MANIFEST_REFUSALS: tuple[tuple[str, int], ...] = (
     ("ReportRuntimeRefused", 409),
     ("BundleTooLargeError", 413),
+    ("VersionPinsError", 400),
     ("ProducerAError", 404),
 )
 
@@ -634,10 +639,12 @@ def post_report_manifest(
 
     The manifest a static export would bundle — same producer, same owner gate
     (404 on a denial, as ``/export-static``), same size ceilings (413) — with
-    ``initial_filters`` set to the state's filters. 409 for a state the
-    in-page runtime cannot reproduce (pinned data, selection groups): the
-    report then keeps every tile's own output. As long as a static export's
-    build (it runs the same computes), so it runs on a worker, like the build.
+    ``initial_filters`` set to the state's filters. A pinned state ships the
+    pinned version's data and definitions, named in the manifest's
+    ``pinned_version``. 409 for a state the in-page runtime cannot reproduce
+    (selection groups): the report then keeps every tile's own output. As long
+    as a static export's build (it runs the same computes), so it runs on a
+    worker, like the build.
     """
     from depictio.api.celery_app import build_report_manifest_job
     from depictio.serverless import report

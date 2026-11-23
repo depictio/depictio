@@ -516,6 +516,31 @@ export interface BundleManifest {
    * delete groups without any of it being saved. Absent/null: no group.
    */
   initial_grouping?: InitialGrouping | null;
+  /**
+   * The dashboard version this bundle froze on, when the exported state's pins
+   * named one (as_of_version / definition_version); null or absent for a bundle
+   * of the live dashboard. `unresolved` collections read current data.
+   */
+  pinned_version?: PinnedVersion | null;
+}
+
+/** A collection a pinned export left live, and why (data_versions' reason). */
+export interface PinnedCollection {
+  dc_id: string;
+  reason: string;
+}
+
+/** The dashboard version a pinned export froze on. */
+export interface PinnedVersion {
+  version_id: string;
+  /** The version's timeline number. */
+  seq?: number | null;
+  /** Its saved name, when it has one. */
+  label?: string | null;
+  /** ISO 8601 timestamp of the version save. */
+  created_at?: string | null;
+  /** Collections the version could not pin, reading current data. */
+  unresolved: PinnedCollection[];
 }
 
 /** The manifest's sampling ceilings, with server defaults for older bundles. */

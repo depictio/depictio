@@ -1131,6 +1131,88 @@
       "title": "OrPred",
       "type": "object"
     },
+    "PinnedCollection": {
+      "additionalProperties": false,
+      "description": "A collection a pinned export left live, and why.\n\nThe reason is the resolver's own (``data_versions.py``): ``not_in_version``\nfor a collection added after the version was taken, or the stamp's recorded\nreason for one the version could not pin.",
+      "properties": {
+        "dc_id": {
+          "title": "Dc Id",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dc_id",
+        "reason"
+      ],
+      "title": "PinnedCollection",
+      "type": "object"
+    },
+    "PinnedVersion": {
+      "additionalProperties": false,
+      "description": "The dashboard version a pinned export froze on.\n\nFilled only when the exported state's pins name a version\n(``as_of_version`` / ``definition_version``); a bundle of the live\ndashboard leaves it null. ``unresolved`` says which collections stayed\nlive anyway, so a reader is never shown a past version's label over data\nthe version could not pin.",
+      "properties": {
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601 timestamp of the version save",
+          "title": "Created At"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Its saved name, when it has one",
+          "title": "Label"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The version's timeline number",
+          "title": "Seq"
+        },
+        "unresolved": {
+          "description": "Collections the version could not pin, reading current data",
+          "items": {
+            "$ref": "#/$defs/PinnedCollection"
+          },
+          "title": "Unresolved",
+          "type": "array"
+        },
+        "version_id": {
+          "title": "Version Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id"
+      ],
+      "title": "PinnedVersion",
+      "type": "object"
+    },
     "Producer": {
       "description": "Which producer built the bundle (RFC \u00a73.3).",
       "enum": [
@@ -2537,6 +2619,18 @@
       "description": "indexed_file dc_id -> the objects shipped for it (structures, PAE matrices), read at export from the collection's storage under a stated cap",
       "title": "Objects",
       "type": "object"
+    },
+    "pinned_version": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PinnedVersion"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The dashboard version this bundle froze on, when the exported state's pins named one; null for a bundle of the live dashboard. Its `unresolved` collections read current data \u2014 the bundle never claims a version's label for data that version could not pin"
     },
     "producer": {
       "$ref": "#/$defs/Producer"

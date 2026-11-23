@@ -46,6 +46,7 @@ import { installInlineMultiqcLogos } from '../chrome/multiqcLogo';
 import { installOfflineGenomeAssets } from './genomeAssets';
 import { BundleProjectPageContext, type BundleProjectPage } from '../chrome/bundlePage';
 import ProjectPage from './ProjectPage';
+import PinnedVersionBanner from './PinnedVersionBanner';
 import type { DashboardController } from 'depictio-static-core';
 
 /** What a host page may ask of a mounted App (the combined file's dashboard
@@ -100,7 +101,9 @@ const StaticRuntime: React.FC<{
   project: { name: string } | null;
   requests: { listen: (fn: TabListener) => () => void };
   announce: (id: string) => void;
-}> = ({ project, requests, announce }) => {
+  /** Set on a pinned export: the version banner sits above the app. */
+  banner?: React.ReactNode;
+}> = ({ project, requests, announce, banner }) => {
   const [tabId, setTabId] = React.useState(() => currentTabId());
   const [projectOpen, setProjectOpen] = React.useState(false);
   // `setActiveTab` has already run inside the interceptor by the time this
@@ -146,6 +149,7 @@ const StaticRuntime: React.FC<{
   );
   return (
     <BundleProjectPageContext.Provider value={projectPage}>
+      {banner}
       <App key={tabId} />
     </BundleProjectPageContext.Provider>
   );
@@ -232,7 +236,16 @@ export function bootApp(options: BootAppOptions = {}): void {
             tiers={manifest.tiers as StaticTierMap}
             exportedState={(manifest.initial_filters ?? []).length > 0}
           >
-            <StaticRuntime project={project} requests={requests} announce={announce} />
+            <StaticRuntime
+              project={project}
+              requests={requests}
+              announce={announce}
+              banner={
+                manifest.pinned_version ? (
+                  <PinnedVersionBanner pinned={manifest.pinned_version} project={manifest.project} />
+                ) : null
+              }
+            />
           </StaticBadgeProvider>
         </DatesProvider>
       </MantineProvider>

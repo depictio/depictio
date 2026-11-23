@@ -175,7 +175,7 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     monkeypatch.setattr(
         dtu_mod,
         "schema_deltatable_lite",
-        lambda workflow_id, data_collection_id, init_data: dict(_frame().schema),
+        lambda workflow_id, data_collection_id, init_data, **kw: dict(_frame().schema),
     )
     monkeypatch.setattr(
         dtu_mod,
@@ -373,7 +373,7 @@ def test_no_data_bundled_when_no_code_figure_binds(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(
         dtu_mod,
         "schema_deltatable_lite",
-        lambda workflow_id, data_collection_id, init_data: dict(_frame().schema),
+        lambda workflow_id, data_collection_id, init_data, **kw: dict(_frame().schema),
     )
     monkeypatch.setattr(
         dtu_mod,

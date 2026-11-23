@@ -918,6 +918,44 @@ class InitialGrouping(BaseModel):
         return bool(self.groups) or self.color_by.kind != "none"
 
 
+class PinnedCollection(BaseModel):
+    """A collection a pinned export left live, and why.
+
+    The reason is the resolver's own (``data_versions.py``): ``not_in_version``
+    for a collection added after the version was taken, or the stamp's recorded
+    reason for one the version could not pin.
+    """
+
+    dc_id: str
+    reason: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PinnedVersion(BaseModel):
+    """The dashboard version a pinned export froze on.
+
+    Filled only when the exported state's pins name a version
+    (``as_of_version`` / ``definition_version``); a bundle of the live
+    dashboard leaves it null. ``unresolved`` says which collections stayed
+    live anyway, so a reader is never shown a past version's label over data
+    the version could not pin.
+    """
+
+    version_id: str
+    seq: int | None = Field(default=None, description="The version's timeline number")
+    label: str | None = Field(default=None, description="Its saved name, when it has one")
+    created_at: str | None = Field(
+        default=None, description="ISO 8601 timestamp of the version save"
+    )
+    unresolved: list[PinnedCollection] = Field(
+        default_factory=list,
+        description="Collections the version could not pin, reading current data",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class BundleManifest(BaseModel):
     """The serverless bundle contract (RFC §3.1). manifest_version 1."""
 
@@ -1026,6 +1064,15 @@ class BundleManifest(BaseModel):
             "A report (the Quarto export's host of the runtime) sets it to the exported "
             "analysis state and opens on exactly that (empty = no filter); a bundle leaves "
             "it empty and opens on the dashboard's own defaults"
+        ),
+    )
+    pinned_version: PinnedVersion | None = Field(
+        default=None,
+        description=(
+            "The dashboard version this bundle froze on, when the exported state's pins "
+            "named one; null for a bundle of the live dashboard. Its `unresolved` "
+            "collections read current data — the bundle never claims a version's label "
+            "for data that version could not pin"
         ),
     )
 

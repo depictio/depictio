@@ -27,8 +27,10 @@ the runtime recolours and splits the figures it draws, and derives the filters
 of the groups that are filtering from the groups themselves.
 
 A state the runtime cannot reproduce in the page is not embedded at all
-(:func:`ineligibility`): pinned data or definitions (the manifest holds current
-data). Those reports keep every tile's own output, as before.
+(:func:`ineligibility`). Nothing is refused today: a pinned state ships the
+pinned version's data and definitions (named in ``pinned_version``), and
+selection groups, colour-by and split ride in ``initial_grouping``. The hook
+stays, so a future state field the runtime cannot draw is refused in one place.
 """
 
 from __future__ import annotations
@@ -62,12 +64,13 @@ def runtime_dir() -> Path:
 
 
 def ineligibility(state: AnalysisState) -> str | None:
-    """Why the runtime cannot open on ``state``, or ``None`` when it can."""
-    if state.pins.active:
-        return (
-            "the export reads pinned data or definitions; the in-page runtime carries the "
-            "current data only"
-        )
+    """Why the runtime cannot open on ``state``, or ``None`` when it can.
+
+    Every state the viewer builds is reproduced today: pinned data and
+    definitions ship in the manifest (``pinned_version``), and selection
+    groups, colour-by and split in ``initial_grouping``.
+    """
+    del state  # nothing left to refuse; see the module docstring
     return None
 
 
