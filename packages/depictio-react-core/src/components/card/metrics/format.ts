@@ -272,3 +272,12 @@ export function breakdownSegmentColor(
   if (kind) return semanticColor(kind, scheme);
   return fallback ?? rankTint(accent, rank);
 }
+
+/** A column name as a reader would write it: `total_read_pairs` → `Total read
+ *  pairs`. Names already holding spaces or capitals are the author's own and
+ *  pass through unchanged. */
+export function readableColumn(name: string): string {
+  if (/\s|[A-Z]/.test(name)) return name;
+  const words = name.replace(/[_-]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : name;
+}

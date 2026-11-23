@@ -6,8 +6,10 @@ import { useBreakdownColour } from './useBreakdownColour';
 import { METRIC, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 import type { BreakdownPayload } from './types';
 
-/** Width reserved for the value name, so every bar starts at the same x. */
-const LABEL_W = 62;
+/** Narrowest name column, so short names still line their bars up. */
+const LABEL_MIN = 62;
+/** Widest share of the row a name may take before the bar gets too short. */
+const LABEL_MAX = '45%';
 /** Narrowest bar still visible — a 0.2% category should not vanish entirely. */
 const MIN_BAR_PCT = 1.5;
 
@@ -57,6 +59,12 @@ const TopNMetric: React.FC<{
       ? (Math.abs(Number(row.count) || 0) / maxAbs) * 100
       : 0;
 
+  // One width for every row, so every bar starts at the same x: the longest
+  // name's, capped, so "not significant" or a sample id reads whole instead of
+  // being cut to its first word. The row tooltip still names a capped one.
+  const longest = Math.max(0, ...payload.top.map((r) => String(r.name).length));
+  const labelWidth = `clamp(${LABEL_MIN}px, ${longest + 1}ch, ${LABEL_MAX})`;
+
   return (
     <MetricStrip gap={METRIC.rowGap} mt={10} ariaLabel={`Top values of ${payload.column}`}>
       {payload.top.map((row, idx) => (
@@ -94,7 +102,7 @@ const TopNMetric: React.FC<{
           styles={{ tooltip: { padding: '6px 8px' } }}
         >
           <Group gap={6} wrap="nowrap" align="center" style={{ cursor: 'help', minWidth: 0 }}>
-            <Box style={{ width: LABEL_W, flexShrink: 0 }}>
+            <Box style={{ width: labelWidth, flexShrink: 0, minWidth: 0 }}>
               <MetricCaption dimmed={false}>{row.name}</MetricCaption>
             </Box>
             <Box

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Box, Group, Stack } from '@mantine/core';
+import { Box, Stack } from '@mantine/core';
 
-import { compactNumber, hexWithAlpha, percent } from './format';
+import { compactNumber, hexWithAlpha, percent, readableColumn } from './format';
 import {
   METRIC,
   MetricCaption,
@@ -12,9 +12,10 @@ import {
 } from './tokens';
 import type { AttritionPayload } from './types';
 
-/** Width reserved for the stage name beside each bar. Fixed so the bars all
- *  start and end at the same x, which is what makes the funnel readable. */
-const LABEL_W = 62;
+/** Most of the strip the stage names may take. The names sit in one grid
+ *  column sized to the longest, so every bar starts and ends at the same x,
+ *  which is what makes the funnel readable; past this a name wraps. */
+const LABEL_MAX = '45%';
 
 /**
  * ``attrition`` — retention across an ordered sequence of stages.
@@ -48,7 +49,7 @@ const AttritionMetric: React.FC<{
       {stages.map((stage) => (
         <TooltipStat
           key={stage.name}
-          label={stage.name}
+          label={readableColumn(stage.name)}
           value={`${compactNumber(stage.value)} (${percent(stage.share)})${
             stage.step_share !== null && stage.step_share < 1
               ? ` −${percent(1 - stage.step_share)}`
@@ -66,32 +67,41 @@ const AttritionMetric: React.FC<{
 
   return (
     <MetricStrip tooltip={tooltip} gap={2} ariaLabel="Stage retention">
-      {stages.map((stage, idx) => (
-        <Group key={stage.name} gap={5} wrap="nowrap" style={{ minWidth: 0 }}>
-          <Box
-            style={{
-              flex: 1,
-              minWidth: 0,
-              height: METRIC.rowMeterHeight,
-              borderRadius: 3,
-              overflow: 'hidden',
-              background: METRIC.track,
-            }}
-          >
+      <Box
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `minmax(0, 1fr) fit-content(${LABEL_MAX})`,
+          columnGap: 6,
+          rowGap: 2,
+          alignItems: 'center',
+        }}
+      >
+        {stages.map((stage, idx) => (
+          <React.Fragment key={stage.name}>
             <Box
               style={{
-                width: `${Math.max(0, Math.min(100, stage.share * 100))}%`,
-                height: '100%',
-                background: hexWithAlpha(color, Math.max(0.35, 0.85 - idx * 0.12)),
-                transition: 'width 200ms ease-out',
+                minWidth: 0,
+                height: METRIC.rowMeterHeight,
+                borderRadius: 3,
+                overflow: 'hidden',
+                background: METRIC.track,
               }}
-            />
-          </Box>
-          <Box style={{ width: LABEL_W, flexShrink: 0 }}>
-            <MetricCaption>{stage.name}</MetricCaption>
-          </Box>
-        </Group>
-      ))}
+            >
+              <Box
+                style={{
+                  width: `${Math.max(0, Math.min(100, stage.share * 100))}%`,
+                  height: '100%',
+                  background: hexWithAlpha(color, Math.max(0.35, 0.85 - idx * 0.12)),
+                  transition: 'width 200ms ease-out',
+                }}
+              />
+            </Box>
+            <Box style={{ minWidth: 0, lineHeight: 1.15 }}>
+              <MetricCaption wrap>{readableColumn(stage.name)}</MetricCaption>
+            </Box>
+          </React.Fragment>
+        ))}
+      </Box>
       <MetricCaption strong>
         {percent(payload.retained)} retained ·{' '}
         {compactNumber(stages[stages.length - 1]?.value ?? 0)} of{' '}

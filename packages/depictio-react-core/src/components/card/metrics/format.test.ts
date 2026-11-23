@@ -10,6 +10,7 @@ import {
   hexWithAlpha,
   breakdownSegmentColor,
   rankTint,
+  readableColumn,
 } from './format';
 import { semanticColor } from '../../../palettes';
 import { thresholdCaption } from './Threshold';
@@ -215,5 +216,17 @@ describe('breakdownSegmentColor', () => {
     expect(breakdownSegmentColor('Unclassified', 2, '#228be6', pins)).toBe(semanticColor('unclassified', 'light'));
     expect(breakdownSegmentColor('NA', 2, '#228be6', null, 'dark')).toBe(semanticColor('na', 'dark'));
     expect(breakdownSegmentColor('Other', 2, '#228be6', pins)).toBe('#ff0000');
+  });
+});
+
+describe('readableColumn', () => {
+  it('spells a snake_case column as words', () => {
+    expect(readableColumn('total_read_pairs')).toBe('Total read pairs');
+    expect(readableColumn('reads-mapped')).toBe('Reads mapped');
+  });
+
+  it('leaves a name the author already wrote for readers', () => {
+    expect(readableColumn('Reads mapped')).toBe('Reads mapped');
+    expect(readableColumn('QC_pass')).toBe('QC_pass');
   });
 });
