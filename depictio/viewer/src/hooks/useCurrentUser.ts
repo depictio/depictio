@@ -28,6 +28,8 @@ export interface CurrentUser {
   is_admin: boolean;
   /** A public-mode guest (a temporary account), as opposed to a signed-in user. */
   is_temporary?: boolean;
+  /** Someone chose this account's credentials (see `AuthStatusResponse`). */
+  credentials_claimed?: boolean;
 }
 
 export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
@@ -45,6 +47,9 @@ export interface UseCurrentUserResult {
   isDemoMode: boolean;
   /** Enabled OpenID Connect providers a visitor can sign in with. */
   ssoProviders: SsoProvider[];
+  /** Public mode offers guests an "Admin sign-in" link to the password form
+   *  (`DEPICTIO_AUTH_PUBLIC_ADMIN_SIGN_IN`). */
+  publicAdminSignIn: boolean;
   /** True when the server is in development mode (DEPICTIO_DEV_MODE=true).
    *  Used to suppress the walkthrough during local dev — devs hot-reload
    *  constantly and don't need the tour relaunching on every version bump. */
@@ -94,6 +99,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
+  const [publicAdminSignIn, setPublicAdminSignIn] = useState<boolean>(false);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
   const [walkthroughDisabled, setWalkthroughDisabled] = useState<boolean>(false);
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
@@ -119,6 +125,7 @@ export function useCurrentUser(): UseCurrentUserResult {
         setIsPublicMode(Boolean(data.is_public_mode));
         setIsDemoMode(Boolean(data.is_demo_mode));
         setSsoProviders(data.sso_providers ?? []);
+        setPublicAdminSignIn(Boolean(data.public_admin_sign_in));
         setIsDevMode(Boolean(data.is_dev_mode));
         setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
@@ -147,6 +154,7 @@ export function useCurrentUser(): UseCurrentUserResult {
                 email: u.email,
                 is_admin: Boolean(u.is_admin),
                 is_temporary: Boolean(u.is_temporary),
+                credentials_claimed: Boolean(u.credentials_claimed),
               }
             : null,
         );
@@ -170,6 +178,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     isPublicMode,
     isDemoMode,
     ssoProviders,
+    publicAdminSignIn,
     isDevMode,
     walkthroughDisabled,
     isSingleUserMode,

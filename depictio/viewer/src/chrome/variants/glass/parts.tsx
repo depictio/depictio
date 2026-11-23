@@ -327,8 +327,8 @@ const ProfileTileLive: React.FC = () => {
   const who = useAccountIdentity();
   if (who.signIn) {
     return (
-      <Tooltip label="Sign in" withArrow>
-        <a href={SIGN_IN_PATH} onClick={rememberHere} className="hy-avatar" aria-label="Sign in">
+      <Tooltip label={who.signInLabel} withArrow>
+        <a href={SIGN_IN_PATH} onClick={rememberHere} className="hy-avatar" aria-label={who.signInLabel}>
           <LogIn size={18} strokeWidth={1.9} aria-hidden />
         </a>
       </Tooltip>
@@ -355,7 +355,7 @@ const ProfileRowsLive: React.FC = () => {
     return (
       <a href={SIGN_IN_PATH} onClick={rememberHere} className="hy-sheet-link">
         <LogIn size={18} strokeWidth={STROKE} aria-hidden />
-        <span>Sign in</span>
+        <span>{who.signInLabel}</span>
       </a>
     );
   }

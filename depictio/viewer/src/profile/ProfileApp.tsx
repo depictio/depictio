@@ -59,6 +59,7 @@ import ChangesSincePref from '../changes/ChangesSincePref';
 import { usePageTitle } from '../branding';
 import { resetCoach, setTipsOff, useCoachState, useTourLauncher } from '../coach';
 import { squareDownscale } from './avatarImage';
+import AdminCredentialsForm from './AdminCredentialsForm';
 import PasswordForm from './PasswordForm';
 
 const SIDEBAR_KEY = 'profile-sidebar-collapsed';
@@ -117,13 +118,17 @@ function actionStates(status: AuthStatusResponse | null): {
   const isPublic = Boolean(status?.is_public_mode);
   const isSingle = Boolean(status?.is_single_user_mode);
   const isDemo = Boolean(status?.is_demo_mode);
+  // A signed-in admin of a public instance has a real password: the one the
+  // sign-in form took. Guests (temporary accounts) do not.
+  const publicAdmin =
+    (isPublic || isDemo) && Boolean(status?.user?.is_admin) && !status?.user?.is_temporary;
   return {
     logoutReason:
       isPublic || isSingle
         ? 'There is no sign-in to end in public or single-user mode.'
         : null,
     passwordReason:
-      isSingle || isPublic || isDemo
+      (isSingle || isPublic || isDemo) && !publicAdmin
         ? 'The password cannot be changed in single-user, public or demo mode.'
         : null,
   };
@@ -304,6 +309,15 @@ const ProfileApp: React.FC = () => {
     syncMyAvatar(info?.updated_at ?? null);
   }, []);
 
+  // The account keeps its id: refresh the email shown and mark it claimed, so
+  // the next change asks for the password just chosen.
+  const handleAdminCredentialsSaved = useCallback((email: string) => {
+    setStatus((prev) =>
+      prev?.user ? { ...prev, user: { ...prev.user, email, credentials_claimed: true } } : prev,
+    );
+    setUser((prev) => (prev ? { ...prev, email } : prev));
+  }, []);
+
   const body = loading ? (
     <Center mih={300}>
       <Loader />
@@ -368,15 +382,33 @@ const ProfileApp: React.FC = () => {
           />
         </SettingsSection>
 
-        <SettingsSection
-          value="password"
-          icon="mdi:lock-outline"
-          title="Password"
-          subtitle="Change the password you sign in with"
-          testId={sectionTestId('password')}
-        >
-          <PasswordForm disabledReason={states.passwordReason} />
-        </SettingsSection>
+        {status?.is_single_user_mode && status.user ? (
+          // Single-user mode: nobody signs in, so the section names the
+          // credentials that will work if the instance goes public.
+          <SettingsSection
+            value="password"
+            icon="mdi:shield-account-outline"
+            title="Admin email and password"
+            subtitle="What signs you in if this instance goes public"
+            testId={sectionTestId('password')}
+          >
+            <AdminCredentialsForm
+              email={status.user.email}
+              claimed={Boolean(status.user.credentials_claimed)}
+              onSaved={handleAdminCredentialsSaved}
+            />
+          </SettingsSection>
+        ) : (
+          <SettingsSection
+            value="password"
+            icon="mdi:lock-outline"
+            title="Password"
+            subtitle="Change the password you sign in with"
+            testId={sectionTestId('password')}
+          >
+            <PasswordForm disabledReason={states.passwordReason} />
+          </SettingsSection>
+        )}
 
         <SettingsSection
           value="cli-agents"

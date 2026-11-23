@@ -47,7 +47,7 @@ import PoweredBy from '../../../PoweredBy';
 import { useBrandLogoMode } from '../../../useBrandLogoMode';
 import { useAppNavEntries, type SidebarSection } from '../../../AppSidebar';
 import { useColorScheme } from '../../../../hooks/useColorScheme';
-import { SIGN_IN_PATH, rememberHere } from '../../../../auth/guestSignIn';
+import { ADMIN_SIGN_IN_LABEL, SIGN_IN_PATH, rememberHere } from '../../../../auth/guestSignIn';
 import { useCurrentUser } from '../../../../hooks/useCurrentUser';
 import { useGuestSignIn } from '../../../../hooks/useGuestSignIn';
 import { AvatarPicture, useAccountIdentity } from '../../../account';
@@ -210,8 +210,8 @@ export const ProfileKey: React.FC = () => {
   if (who.loading) return <span className="gp-avatar gp-avatar--idle" aria-hidden />;
   if (who.signIn) {
     return (
-      <Tooltip label="Sign in" withArrow>
-        <a href={SIGN_IN_PATH} onClick={rememberHere} className="gp-avatar" aria-label="Sign in">
+      <Tooltip label={who.signInLabel} withArrow>
+        <a href={SIGN_IN_PATH} onClick={rememberHere} className="gp-avatar" aria-label={who.signInLabel}>
           <LogIn size={18} strokeWidth={1.9} aria-hidden />
         </a>
       </Tooltip>
@@ -330,11 +330,11 @@ const StatusFoot: React.FC<{ open: boolean }> = ({ open }) => {
           </button>
         )}
       </ServerInfoPopover>
-      {mode && open && guest.available ? (
+      {mode && open && (guest.available || guest.adminAvailable) ? (
         // A guest on a public instance: the mode line is also the way to sign in.
         <a href={SIGN_IN_PATH} onClick={rememberHere} className="gp-mode gp-mode--link" data-testid="gp-mode-sign-in">
           <ModeIcon size={14} strokeWidth={STROKE} aria-hidden />
-          {mode} · Sign in
+          {mode} · {guest.available ? 'Sign in' : ADMIN_SIGN_IN_LABEL}
         </a>
       ) : (
         mode &&

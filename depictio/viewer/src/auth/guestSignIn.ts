@@ -33,6 +33,34 @@ interface GuestSignInState {
   providers: SsoProvider[];
 }
 
+interface AdminSignInState extends GuestSignInState {
+  /** `public_admin_sign_in` from the server. */
+  adminSignIn: boolean;
+}
+
+/**
+ * Whether a guest should be offered the password form as an "Admin sign-in"
+ * link: a public instance (not the demo) with no identity provider, where the
+ * deployment kept the link on. Only admins can sign in with a password there,
+ * so this is a door for the instance's admins, not an invitation to guests:
+ * the prompts aimed at guests (comments, the tour, Account settings) keep
+ * following `canGuestSignIn`. With a provider, the ordinary "Sign in" already
+ * leads to the same form.
+ */
+export function canAdminSignIn(s: AdminSignInState): boolean {
+  return (
+    !s.loading &&
+    s.isPublicMode &&
+    !s.isDemoMode &&
+    s.isGuest &&
+    s.adminSignIn &&
+    s.providers.length === 0
+  );
+}
+
+/** The words on a guest's sign-in entry. */
+export const ADMIN_SIGN_IN_LABEL = 'Admin sign-in';
+
 /**
  * Whether a guest should be offered a way to sign in: a public instance (not
  * the read-only demo) that has an identity provider to sign in with. A public

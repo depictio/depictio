@@ -782,6 +782,7 @@ export {
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
+  setAdminCredentials,
   adminCreateUser,
   fetchMyAvatarBlob,
   uploadMyAvatar,

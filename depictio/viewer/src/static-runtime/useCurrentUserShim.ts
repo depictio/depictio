@@ -20,6 +20,7 @@ const STATIC_RESULT: UseCurrentUserResult = {
   isDemoMode: false,
   // No sign-in inside a bundle.
   ssoProviders: [],
+  publicAdminSignIn: false,
   isDevMode: false,
   walkthroughDisabled: true,
   isSingleUserMode: false,
