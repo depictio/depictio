@@ -1077,3 +1077,12 @@ def test_roc_curve_that_barely_sweeps_has_no_auc():
 
     assert _auc([0.957749, 0.957693], [0.9996, 0.9996]) is None
     assert _auc([0.0, 1.0], [1.0, 1.0]) == 1.0
+
+
+def test_volcano_keeps_an_underflowed_padj_as_a_call():
+    from depictio.api.v1.services.advanced_viz.kinds.volcano import volcano_significance
+
+    ys = volcano_significance([0.0, 1e-10, 0.5, None], False)
+    assert ys[0] is not None and ys[0] > ys[1]
+    assert ys[3] is None
+    assert volcano_significance([float("inf"), 4.0], True)[0] == 4.0 * 1.05

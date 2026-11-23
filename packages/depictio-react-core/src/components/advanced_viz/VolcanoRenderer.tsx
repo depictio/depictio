@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_PALETTE_ID, PALETTES, PLOT_CHROME } from '../../palettes.generated';
+import { referenceGuide } from '../../palettes';
 import {
   Badge,
   Box,
@@ -48,8 +49,10 @@ import {
   offeredDeViews,
   qqConfidenceBand,
   qqSeries,
+  hitsFirst,
   rankTopN,
   resolveDeView,
+  volcanoSignificance,
   significancePredicate,
   tierCounts,
   type DeTier,
@@ -235,7 +238,9 @@ function tierMarker(
   };
 }
 
-const DOTTED_GUIDE = { dash: 'dot' as const, color: 'rgba(128,128,128,0.6)', width: 1 };
+/** The significance and effect cut-offs are reference lines: drawn as every
+ *  reference line is (`referenceGuide`), not as a faint grey dotted rule. */
+const guideLine = (isDark: boolean) => referenceGuide(isDark ? 'dark' : 'light').line;
 
 const VIEW_LABELS: Record<DeView, string> = { volcano: 'Volcano', ma: 'MA', qq: 'QQ' };
 
@@ -1118,9 +1123,7 @@ function buildVolcano(input: {
   glGranted: boolean;
 }): BuiltFigure {
   const { xs, sigRaw, ids, labels, hovers, isNegLog10 } = input;
-  const ys = isNegLog10
-    ? sigRaw
-    : sigRaw.map((p) => (p == null || p <= 0 ? null : -Math.log10(p)));
+  const { ys, capped } = volcanoSignificance(sigRaw, isNegLog10);
   // The threshold is always a raw p / padj cutoff (the control says so, and the
   // fetch's tail keeps rows past its -log10), whichever scale the column is on.
   const sigThresholdY = -Math.log10(input.sigThreshold);
@@ -1136,7 +1139,7 @@ function buildVolcano(input: {
 
   // Top-N label selection, by combined (|x| × y) so both axes matter.
   const topIdx = rankTopN(
-    xs.map((x, i) => (Math.abs(x) || 0) * (ys[i] ?? 0)),
+    hitsFirst(xs.map((x, i) => (Math.abs(x) || 0) * (ys[i] ?? 0)), tiers),
     input.topN,
   );
   const matchedIdx = matchSearch(ids, labels, input.search);
@@ -1188,13 +1191,14 @@ function buildVolcano(input: {
             hovers ? String(hovers[i] ?? '') : '',
             // The feature id: what the highlight joins on (slot 0 is the label).
             String(ids[i] ?? ''),
+            capped[i] ? '<br><i>underflowed to 0: drawn at the top</i>' : '',
           ]),
           hovertemplate:
             `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
             (hovers ? `<br>%{customdata[3]}` : '') +
             `<br>${input.effectTitle}: %{x:.3f}` +
             `<br>${input.sigTitle}: %{customdata[1]:.2e}` +
-            `<br>-log10(sig): %{y:.2f}` +
+            `<br>-log10(sig): %{y:.2f}%{customdata[5]}` +
             `<extra></extra>`,
           marker: tierMarker(tiers, input.isDark, input.hitSymbol),
         },
@@ -1218,9 +1222,9 @@ function buildVolcano(input: {
         },
       },
       shapes: [
-        { type: 'line' as const, x0: -input.effectThreshold, x1: -input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: DOTTED_GUIDE },
-        { type: 'line' as const, x0: input.effectThreshold, x1: input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: DOTTED_GUIDE },
-        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: sigThresholdY, y1: sigThresholdY, line: DOTTED_GUIDE },
+        { type: 'line' as const, x0: -input.effectThreshold, x1: -input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: guideLine(input.isDark) },
+        { type: 'line' as const, x0: input.effectThreshold, x1: input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: guideLine(input.isDark) },
+        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: sigThresholdY, y1: sigThresholdY, line: guideLine(input.isDark) },
       ],
       annotations,
       showlegend: false,
@@ -1268,11 +1272,12 @@ function buildMa(input: {
   );
 
   // Top-N by |fold change| × -log10(sig) when available, else by |FC| alone.
+  const sigY = hasSig ? volcanoSignificance(sigRaw, input.isNegLog10).ys : null;
   const topIdx = rankTopN(
-    ys.map((fc, i) => {
-      const sig = hasSig && sigRaw[i] > 0 ? -Math.log10(sigRaw[i]) : 1;
-      return Math.abs(fc || 0) * sig;
-    }),
+    hitsFirst(
+      ys.map((fc, i) => Math.abs(fc || 0) * (sigY?.[i] ?? 1)),
+      tiers,
+    ),
     input.topN,
   );
   const matchedIdx = matchSearch(ids, labels, input.search);
@@ -1338,8 +1343,8 @@ function buildMa(input: {
         zeroline: true,
       },
       shapes: [
-        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: input.fcThreshold, y1: input.fcThreshold, line: DOTTED_GUIDE },
-        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: -input.fcThreshold, y1: -input.fcThreshold, line: DOTTED_GUIDE },
+        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: input.fcThreshold, y1: input.fcThreshold, line: guideLine(input.isDark) },
+        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: -input.fcThreshold, y1: -input.fcThreshold, line: guideLine(input.isDark) },
       ],
       annotations,
       showlegend: false,

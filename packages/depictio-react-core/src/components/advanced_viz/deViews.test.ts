@@ -6,6 +6,8 @@ import {
   contrastLabel,
   contrastSides,
   genomicInflation,
+  hitsFirst,
+  volcanoSignificance,
   matchSearch,
   maTableOf,
   offeredDeViews,
@@ -224,5 +226,26 @@ describe('resolveEffectLabel', () => {
   it('leaves a label without the token, and an absent one, alone', () => {
     expect(resolveEffectLabel('Log fold change', ['x'], groups)).toBe('Log fold change');
     expect(resolveEffectLabel(null, ['x'], groups)).toBeUndefined();
+  });
+});
+
+describe('volcanoSignificance', () => {
+  it('keeps an underflowed padj on the plot, above every finite row', () => {
+    const { ys, capped } = volcanoSignificance([0, 1e-10, 0.5, null], false);
+    expect(capped).toEqual([true, false, false, false]);
+    expect(ys[0]).toBeGreaterThan(ys[1] as number);
+    expect(ys[3]).toBeNull();
+  });
+  it('reads an infinite -log10 column the same way', () => {
+    const { ys, capped } = volcanoSignificance([Number.POSITIVE_INFINITY, 4], true);
+    expect(capped[0]).toBe(true);
+    expect(ys[0]).toBeCloseTo(4.2);
+  });
+});
+
+describe('hitsFirst', () => {
+  it('labels calls before any non-significant row', () => {
+    expect(hitsFirst([9, 1], ['NS', 'UP'])).toEqual([Number.NEGATIVE_INFINITY, 1]);
+    expect(hitsFirst([9, 1], ['NS', 'NS'])).toEqual([9, 1]);
   });
 });

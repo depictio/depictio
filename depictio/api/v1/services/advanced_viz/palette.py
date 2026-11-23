@@ -51,8 +51,12 @@ def stable_color_map(
 def significance_colors(mode: str | None = "light") -> tuple[str, str, str]:
     """``(up, down, ns)`` colours shared by the volcano, MA and Manhattan kinds.
 
-    Up and down are the two ends of the default diverging ramp, ns the semantic
-    NA grey, so a hit reads the same in every differential-expression plot.
+    Up and down are the palette's ``direction`` colours, the viewer's too
+    (``DIRECTION_COLORS``), ns the semantic NA grey, so a hit reads the same in
+    every differential-expression plot, served or exported.
     """
-    ramp = palettes.diverging(None, mode)
-    return ramp[-1], ramp[0], palettes.semantic("na", mode)
+    return (
+        palettes.direction("up", mode),
+        palettes.direction("down", mode),
+        palettes.semantic("na", mode),
+    )

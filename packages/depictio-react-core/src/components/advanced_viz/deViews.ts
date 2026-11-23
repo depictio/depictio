@@ -336,3 +336,41 @@ export function resolveEffectLabel(
       : (groups.reference ?? '');
   return label.replace('{reference}', reference || 'the reference');
 }
+
+/**
+ * The volcano's y: -log10 of the significance, with underflowed rows kept.
+ *
+ * DESeq2 and edgeR report padj = 0 for their strongest calls (the value
+ * underflowed). -log10(0) is infinite, so those rows used to fall off the plot
+ * while the UP / DN counts still held them: the tile said "DN: 4" over four
+ * missing points. They are drawn just above the largest finite value instead,
+ * and `capped` marks them so the tooltip can say their position is a floor.
+ */
+export function volcanoSignificance(
+  significance: readonly (number | null | undefined)[],
+  isNegLog10: boolean,
+): { ys: (number | null)[]; capped: boolean[] } {
+  const capped = significance.map((v) =>
+    isNegLog10 ? v === Number.POSITIVE_INFINITY : v === 0,
+  );
+  const finite = significance.map((v) => {
+    if (v == null || !Number.isFinite(v)) return null;
+    if (isNegLog10) return v;
+    return v > 0 ? -Math.log10(v) : null;
+  });
+  const top = Math.max(0, ...finite.filter((v): v is number => v != null));
+  // A table of nothing but underflowed rows still needs a height: 300 is
+  // -log10 of the smallest p a double holds in normal range (about 1e-300).
+  const ceiling = top > 0 ? top * 1.05 : 300;
+  return { ys: finite.map((v, i) => (capped[i] ? ceiling : v)), capped };
+}
+
+/**
+ * Label scores restricted to the calls: when any row is UP or DN, a
+ * non-significant row is not labelled, however large its score. A label is a
+ * finding; naming a grey point beside unnamed hits says the opposite.
+ */
+export function hitsFirst(scores: readonly number[], tiers: readonly DeTier[]): number[] {
+  const anyHit = tiers.some((t) => t !== 'NS');
+  return scores.map((s, i) => (anyHit && tiers[i] === 'NS' ? Number.NEGATIVE_INFINITY : s));
+}
