@@ -104,6 +104,7 @@ from typing import Any
 import polars as pl
 from bson import ObjectId
 
+from depictio.models.models.analysis_state import AnalysisState
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.serverless import (
     BindingTable,
@@ -724,7 +725,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
                     ComponentTier.FROZEN,
                     TierReason.CODE_MODE,
                     f"code-mode figure not transpilable: {refusal}; frozen via the "
-                    "server figure pipeline (RestrictedPython) at the default filter state",
+                    "server figure pipeline (RestrictedPython) at the exported filter state",
                 )
             # The same two data-free bail-outs, read off the terminal ``px``
             # call rather than off stored_metadata: the code names its own
@@ -785,7 +786,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.IMAGE,
-            "export-time snapshot: the gallery's images at the default filter state, read "
+            "export-time snapshot: the gallery's images at the exported filter state, read "
             "from S3 at export and shipped as thumbnails (up to "
             f"{IMAGE_SNAPSHOT_MAX}, longest side {IMAGE_THUMB_PX} px, within the bundle's "
             "object cap); filters do not reach it",
@@ -796,7 +797,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
             TierReason.JBROWSE,
             "the genome browser renders offline from its session's files, shipped in the "
             "bundle within the genome-browser budget (sliced to the opening locus when too "
-            "big to ship whole), frozen at the default filter state; when nothing fits, the "
+            "big to ship whole), frozen at the exported filter state; when nothing fits, the "
             "bundle shows the export-time session instead: assembly, locus and track table",
         )
     if ctype == "advanced_viz":
@@ -828,7 +829,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
                 TierReason.UNSUPPORTED,
                 f"advanced_viz '{kind}' also reads a non-tabular tree data collection "
                 "(Newick), which one bundled table cannot carry — it stays frozen at "
-                "the default filter state (tree merged in) while the other data-path "
+                "the exported filter state (tree merged in) while the other data-path "
                 "kinds went live in phase 4",
             )
         if cap.tier == "omitted":
@@ -2662,7 +2663,7 @@ def apply_dc_outcomes(
             row.tier = ComponentTier.FROZEN
             row.reason = TierReason.UNSUPPORTED
             row.detail = (
-                "table references no bundled data collection; frozen at the default filter state"
+                "table references no bundled data collection; frozen at the exported filter state"
             )
 
 
@@ -2841,7 +2842,7 @@ def decide_figure(
         reason = TierReason.BINDING_MISS
         detail = (
             f"the bind-and-refill builder failed with an error rather than a verdict "
-            f"({binder_error}); frozen at the default filter state — this one is a bug to "
+            f"({binder_error}); frozen at the exported filter state — this one is a bug to "
             "report, not a property of the chart"
         )
     elif code_mode and refusal is not None:
@@ -3634,6 +3635,7 @@ def export_manifest(
     budget: ComputeBudget | None = None,
     decide_only: bool = False,
     python_runtime: str = "off",
+    state: AnalysisState | None = None,
 ) -> ExportResult:
     """Assemble and validate the full ``BundleManifest`` for a dashboard family.
 
@@ -3642,6 +3644,12 @@ def export_manifest(
     component-keyed merges across the family; data collections are bundled ONCE
     however many tabs read them, which is the whole point — six tabs over the
     same two tables used to mean six bundles each re-inlining both.
+
+    ``state`` is the analysis state the export was asked for: each tab's frozen
+    tiles are computed on the state's filters that target that tab's components
+    (:func:`interactive_defaults.filters_for_state`), so a frozen tile agrees
+    with the live ones the bundle or report opens on. ``None`` keeps the
+    pre-state contract: each tab's own interactive defaults.
 
     ``decide_only=True`` is the binding preflight (``export_static(check=True)``):
     the same body, run for its verdicts and stopped before it builds anything.
@@ -3733,15 +3741,17 @@ def export_manifest(
     )
     apply_dc_outcomes(items, tier_by_id, data_refs, dc_failures)
 
-    # Frozen tier: real endpoint bodies, at each tab's default filter state —
-    # its interactive defaults, the state the bundle's App opens the tab on
-    # (``withInteractiveDefaults``), so a frozen tile agrees with the live ones
-    # beside it until the reader changes a filter. Bindings (bind-and-refill,
-    # RFC §4) — and, for code-mode figures, the prologue IR the runtime replays
-    # first (RFC §7) — are filled per figure below.
-    from depictio.serverless.interactive_defaults import default_filters
+    # Frozen tier: real endpoint bodies, at each tab's opening filter state —
+    # the exported analysis state's filters that target the tab's components,
+    # or its interactive defaults when no state was sent (the state the
+    # bundle's App opens the tab on, ``withInteractiveDefaults``), so a frozen
+    # tile agrees with the live ones beside it until the reader changes a
+    # filter. Bindings (bind-and-refill, RFC §4) — and, for code-mode figures,
+    # the prologue IR the runtime replays first (RFC §7) — are filled per
+    # figure below.
+    from depictio.serverless.interactive_defaults import filters_for_state
 
-    state = _FreezeState(
+    freeze = _FreezeState(
         user=user,
         decide_only=decide_only,
         data_refs=data_refs,
@@ -3749,10 +3759,10 @@ def export_manifest(
         inline_blobs=inline_blobs,
         project_doc=project_doc,
         budget=budget,
-        tab_defaults={tab.id: default_filters(tab.components) for tab in tabs},
+        tab_defaults={tab.id: filters_for_state(tab.components, state) for tab in tabs},
     )
-    frozen, bindings, prologues = state.frozen, state.bindings, state.prologues
-    object_budget = state.object_budget
+    frozen, bindings, prologues = freeze.frozen, freeze.bindings, freeze.prologues
+    object_budget = freeze.object_budget
 
     # Cards freeze per tab: bulk_compute_cards resolves component ids against
     # ONE dashboard document, so a family needs one call per tab. A card's tier
@@ -3771,7 +3781,7 @@ def export_manifest(
                 continue
             try:
                 for idx, payload in _freeze_cards(
-                    ObjectId(tab.id), cards, user, state.tab_defaults[tab.id]
+                    ObjectId(tab.id), cards, user, freeze.tab_defaults[tab.id]
                 ).items():
                     frozen[idx] = FrozenPayload(kind="card", payload=payload)
             except Exception as exc:
@@ -3783,8 +3793,8 @@ def export_manifest(
                 )
 
     for tab, comp, component_id in items:
-        _freeze_component(state, tab, comp, component_id, tier_by_id[component_id])
-    jbrowse_tiles = state.jbrowse_tiles
+        _freeze_component(freeze, tab, comp, component_id, tier_by_id[component_id])
+    jbrowse_tiles = freeze.jbrowse_tiles
 
     python_components, python_info = settle_python_jobs(
         items, tier_by_id, bindings, data_refs, python_candidates, python_runtime, decide_only
@@ -3917,8 +3927,8 @@ def export_manifest(
         len(tier_rows),
         len(data_refs),
         _mb(bundle_size.data_bytes),
-        state.computes_frozen,
-        state.computes_skipped,
+        freeze.computes_frozen,
+        freeze.computes_skipped,
         budget.spent,
         budget.total,
     )
@@ -4570,6 +4580,7 @@ def export_static(
     single_tab: bool = False,
     bind: bool = True,
     python_runtime: str = "off",
+    state: AnalysisState | None = None,
 ) -> ExportResult:
     """End-to-end: dashboard in Mongo → self-contained HTML at ``out_path``.
 
@@ -4608,6 +4619,14 @@ def export_static(
             embedding — ``on`` forces it, ``off`` leaves it out (those tiles
             stay frozen). See ``serverless/pyodide/plan.py``. The library
             default is ``off``, so nothing downloads unless a caller asks.
+        state: The analysis state the export was asked for: the frozen tiles
+            are computed on its filters (per tab, the entries targeting that
+            tab's components; ``None`` keeps the tab's interactive defaults)
+            and the manifest's ``initial_filters`` is set to the state's
+            filters, so the bundle opens on the exported view. A state the
+            runtime cannot reproduce is the caller's to refuse
+            (``report.ineligibility``); the export itself applies the filters
+            it is handed.
     """
     if python_runtime not in ("auto", "on", "off"):
         raise ProducerAError(f"python_runtime must be auto, on or off, got {python_runtime!r}")
@@ -4624,6 +4643,7 @@ def export_static(
             single_tab=single_tab,
             decide_only=True,
             python_runtime=python_runtime,
+            state=state,
         )
 
     if check:
@@ -4655,9 +4675,18 @@ def export_static(
         raise ProducerAError("out_path is required unless check=True")
 
     result = export_manifest(
-        dashboard_id, export_user, single_tab=single_tab, python_runtime=python_runtime
+        dashboard_id,
+        export_user,
+        single_tab=single_tab,
+        python_runtime=python_runtime,
+        state=state,
     )
     assert result.manifest is not None
+    if state is not None:
+        # The bundle opens on the exported view, as a report's runtime does.
+        from depictio.serverless import report
+
+        result.manifest.initial_filters = report.initial_filters(state)
     html = render_bundle_html(result.manifest)
     # Last ceiling check, and the only one taken on the whole file (RFC §8.1).
     _refuse_oversized_render(html, result.size)

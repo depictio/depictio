@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from depictio.models.models.analysis_state import AnalysisState
 
 _RANGE_TYPES = frozenset({"RangeSlider", "DateRangePicker", "DatePicker"})
 _LIST_TYPES = frozenset({"Select", "MultiSelect"})
@@ -127,3 +130,35 @@ def default_filters(components: list[dict[str, Any]]) -> list[dict[str, Any]]:
         entry["metadata"] = metadata
         out.append(entry)
     return out
+
+
+def filters_for_state(
+    components: list[dict[str, Any]], state: AnalysisState | None
+) -> list[dict[str, Any]]:
+    """The filter state a tab's tiles freeze at under an exported ``AnalysisState``.
+
+    ``None`` is the pre-state contract: the tab's own interactive defaults
+    (:func:`default_filters`). With a state, an entry the state holds for one
+    of ``components`` wins (it is the value the viewer showed when the export
+    was asked for), an interactive component the state does not mention keeps
+    its declared default, and a state entry naming no component here is
+    dropped: another tab's, or a component this tab no longer has. Selection
+    group projections never ride along (``report.ineligibility`` refuses them
+    before an export gets this far, and the runtime would not apply them).
+    """
+    if state is None:
+        return default_filters(components)
+    known = {str(comp.get("index") or "") for comp in components}
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in state.filters_as_payload():
+        index = str(entry.get("index") or "")
+        if entry.get("source") == "group_filter" or index not in known:
+            continue
+        out.append(entry)
+        seen.add(index)
+    # The declared defaults fill in what the state does not cover, exactly as
+    # ``withInteractiveDefaults`` fills an empty filter store.
+    return out + default_filters(
+        [comp for comp in components if str(comp.get("index") or "") not in seen]
+    )

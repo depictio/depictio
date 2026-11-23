@@ -8997,10 +8997,20 @@ export async function preflightStaticExport(
 export async function dispatchStaticExport(
   dashboardId: string,
   pythonRuntime: PythonRuntimeMode = 'auto',
+  /** An `AnalysisState` (see `analysisState.ts`). */
+  state: unknown = null,
 ): Promise<StaticExportJob> {
+  // With a state, the bundle's frozen tiles are computed at that view and the
+  // bundle opens on it; without one, at the dashboard's interactive defaults.
   const res = await authFetch(
     `${API_BASE}/serverless/export-static/${dashboardId}?python_runtime=${pythonRuntime}`,
-    { method: 'POST' },
+    state
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state }),
+        }
+      : { method: 'POST' },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to dispatch static export');
   return res.json();

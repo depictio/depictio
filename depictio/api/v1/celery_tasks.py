@@ -3621,8 +3621,10 @@ def export_static_bundle(payload: dict) -> dict:
 
     Args:
         payload: ``{"job_id", "dashboard_id", "user": {"id", "email", "is_admin",
-            "is_anonymous"}, "single_tab"?, "python_runtime"?}`` —
+            "is_anonymous"}, "single_tab"?, "python_runtime"?, "state"?}``,
             JSON-serializable throughout. The job id is part of the S3 key.
+            ``state`` is the exported analysis state, when the dispatch was
+            sent one: the tiles freeze on it and the bundle opens on it.
 
     Returns:
         ``{"s3_key", "bucket", "size_bytes", "built_at", "tab_count"}``.
@@ -3655,6 +3657,11 @@ def export_static_bundle(payload: dict) -> dict:
         logger.warning(f"static export retention: prune failed: {exc}")
 
     started = time.monotonic()
+    analysis_state = None
+    if payload.get("state"):
+        from depictio.models.models.analysis_state import AnalysisState
+
+        analysis_state = AnalysisState.model_validate(payload["state"])
     with tempfile.TemporaryDirectory() as tmpdir:
         out = Path(tmpdir) / "bundle.html"
         result = producer_a.export_static(
@@ -3663,6 +3670,7 @@ def export_static_bundle(payload: dict) -> dict:
             user=export_user,
             single_tab=bool(payload.get("single_tab", False)),
             python_runtime=str(payload.get("python_runtime") or "off"),
+            state=analysis_state,
         )
         html_bytes = out.read_bytes()
 

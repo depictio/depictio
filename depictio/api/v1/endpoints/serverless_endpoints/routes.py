@@ -14,7 +14,9 @@ Five thin endpoints around ``depictio.serverless.producer_a.export_static``:
   accept this caller (the UI's button state); the same rule, no data read.
 * ``POST /export-static/{dashboard_id}`` — owner-gated; enqueues the build as a
   Celery task and returns a ``job_id``. The bundle carries the whole tab family,
-  entered on the requested tab.
+  entered on the requested tab. An optional ``{"state": AnalysisState}`` body
+  freezes the tiles on that view and opens the bundle on it (a state the runtime
+  cannot reproduce is a 409, nothing enqueued).
 * ``GET  /export-static/status/{job_id}`` — poll; settles pending jobs against
   their Celery result.
 * ``GET  /export-static/download/{job_id}`` — proxies the finished bundle out of
@@ -53,7 +55,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import static_exports_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
-from depictio.models.models.analysis_state import NotebookExportRequest
+from depictio.models.models.analysis_state import ExportStaticRequest, NotebookExportRequest
 from depictio.serverless.preflight import rows_for_tab, tier_counts
 from depictio.serverless.producer_a import (
     BYTES_PER_MB,
@@ -469,17 +471,32 @@ def can_export_static(
 def dispatch_export_static(
     dashboard_id: str,
     python_runtime: Literal["auto", "on", "off"] = DEFAULT_PYTHON_RUNTIME,
+    request: ExportStaticRequest | None = None,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Enqueue a static-bundle build; poll ``/export-static/status/{job_id}``.
 
     Owner-gated (RFC §8 — a bundle is bulk data exfiltration). Denials return 404
     rather than 403 so the endpoint cannot be used to enumerate dashboards.
+
+    An optional ``{"state": AnalysisState}`` body freezes the bundle's tiles on
+    the exported view and makes it open on it; a state the runtime cannot
+    reproduce is a 409 with the reason, before anything is enqueued. No body
+    (or a ``null`` state) keeps the dashboard's own interactive defaults.
     """
     denial = export_denial(dashboard_id, current_user, "owner")
     if denial is not None:
         logger.info(f"Static export refused for {dashboard_id}: {denial}")
         raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
+
+    state = request.state if request is not None else None
+    if state is not None:
+        from depictio.serverless import report
+
+        reason = report.ineligibility(state)
+        if reason:
+            logger.info(f"Static export refused for {dashboard_id}: {reason}")
+            raise HTTPException(status_code=409, detail=reason)
 
     job_id = uuid4().hex
     static_exports_collection.insert_one(
@@ -504,6 +521,8 @@ def dispatch_export_static(
         },
         "python_runtime": python_runtime,
     }
+    if state is not None:
+        payload["state"] = state.model_dump(mode="json")
     async_result = export_static_bundle_task.apply_async(args=[payload])
     static_exports_collection.update_one(
         {"_id": job_id}, {"$set": {"celery_task_id": async_result.id}}

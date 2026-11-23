@@ -103,7 +103,7 @@ def build_report_manifest(
     from depictio.serverless import producer_a
 
     result = producer_a.export_manifest(
-        str(dashboard_id), producer_a.resolve_user(user), python_runtime=python_runtime
+        str(dashboard_id), producer_a.resolve_user(user), python_runtime=python_runtime, state=state
     )
     assert result.manifest is not None
     return result.manifest.model_copy(update={"initial_filters": initial_filters(state)})

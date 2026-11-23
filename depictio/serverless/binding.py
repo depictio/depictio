@@ -339,7 +339,7 @@ def frozen_miss_detail(miss: BindingMiss | None, prefix: str = "") -> str:
     cannot word the same verdict differently. ``prefix`` is the only part that
     varies: a code-mode figure says how far it got before the binder refused it.
     """
-    return f"{prefix}{miss_detail(miss)}; frozen at the default filter state"
+    return f"{prefix}{miss_detail(miss)}; frozen at the exported filter state"
 
 
 def planned_figure_miss(component_meta: dict[str, Any]) -> BindingMiss | None:

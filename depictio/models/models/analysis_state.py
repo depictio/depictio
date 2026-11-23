@@ -220,6 +220,14 @@ class NotebookExportRequest(BaseModel):
     pdf_style: Literal["colour", "mono"] = "colour"
 
 
+class ExportStaticRequest(BaseModel):
+    """A static-bundle export's optional body: the view the bundle freezes on
+    and opens on. An absent body (or a ``None`` state) is the pre-state
+    contract: the dashboard's own interactive defaults."""
+
+    state: AnalysisState | None = None
+
+
 class NotebookPreflightComponent(BaseModel):
     index: str
     title: str | None = None

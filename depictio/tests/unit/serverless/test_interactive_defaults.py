@@ -6,7 +6,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from depictio.serverless.interactive_defaults import default_filter_value, default_filters
+from depictio.models.models.analysis_state import AnalysisState
+from depictio.serverless.interactive_defaults import (
+    default_filter_value,
+    default_filters,
+    filters_for_state,
+)
 
 
 def _control(index: str, kind: str, default_state: dict[str, Any] | None = None, **extra):
@@ -84,3 +89,74 @@ def test_one_entry_per_declared_default_in_the_viewers_shape():
     }
     assert out[1]["metadata"]["slider_mode"] == "gte"
     assert out[2]["metadata"]["case_sensitive"] is True
+
+
+# ---------------------------------------------------------------------------
+# Freezing at an exported analysis state
+# ---------------------------------------------------------------------------
+
+
+def _filter_entry(index: str, value: Any, **extra: Any) -> dict[str, Any]:
+    return {
+        "index": index,
+        "value": value,
+        "column_name": f"col_{index}",
+        "interactive_component_type": "MultiSelect",
+        "metadata": {"dc_id": "dc1", "column_name": f"col_{index}"},
+        **extra,
+    }
+
+
+def _state(*filters: dict[str, Any]) -> AnalysisState:
+    return AnalysisState.model_validate(
+        {"filters": list(filters), "context": {"dashboard_id": "dash-1"}}
+    )
+
+
+def test_no_state_is_the_declared_defaults():
+    components = [
+        _control("a", "Select", {"default_value": "Q10"}),
+        {"index": "b", "component_type": "card"},
+    ]
+    assert filters_for_state(components, None) == default_filters(components)
+
+
+def test_state_entries_win_and_the_rest_keeps_its_default():
+    components = [
+        _control("a", "Select", {"default_value": "Q10"}),
+        _control("b", "Select", {"default_value": "Q20"}),
+        {"index": "fig", "component_type": "figure", "dc_id": "dc1"},
+    ]
+    state = _state(_filter_entry("a", ["custom"]))
+    out = filters_for_state(components, state)
+    # The state's value for the control it mentions, the declared default for
+    # the one it does not, and nothing else (the entry naming no interactive
+    # component here is dropped with the card).
+    assert [(f["index"], f["value"]) for f in out] == [("a", ["custom"]), ("b", ["Q20"])]
+    # The state's entry travels whole, in the viewer's wire shape.
+    assert out[0] == _filter_entry("a", ["custom"])
+
+
+def test_a_state_entry_for_another_tab_does_not_reach_this_tab():
+    state = _state(_filter_entry("elsewhere", ["x"]))
+    assert filters_for_state([_control("a", "Select", {"default_value": "Q10"})], state) == (
+        default_filters([_control("a", "Select", {"default_value": "Q10"})])
+    )
+
+
+def test_group_filter_projections_never_ride_along():
+    group_projection = {
+        **_filter_entry("a", ["v"]),
+        "index": "__depictio_group__:dc1:col_a",
+        "source": "group_filter",
+    }
+    state = _state(group_projection, _filter_entry("a", ["v"]))
+    assert [f["index"] for f in filters_for_state([_control("a", "MultiSelect")], state)] == ["a"]
+
+
+def test_a_state_entry_for_a_chart_selection_targets_that_tab():
+    """A chart selection names its figure's index: it belongs to that tab's
+    freeze, and the render endpoints apply it like any other filter."""
+    state = _state(_filter_entry("fig", [3.5], source="scatter_selection"))
+    out = filters_for_state([{"index": "fig", "component_type": "figure", "dc_id": "dc1"}], state)
+    assert [f["index"] for f in out] == ["fig"]

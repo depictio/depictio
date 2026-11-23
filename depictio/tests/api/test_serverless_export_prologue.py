@@ -351,7 +351,7 @@ def test_analyzable_but_unbindable_code_figure_freezes_with_binding_miss(
     assert entry.reason is TierReason.BINDING_MISS
     # The detail names which bail-out fired, not a generic "no binding".
     assert entry.detail and entry.detail.startswith("code analyzed, but ")
-    assert "frozen at the default filter state" in entry.detail
+    assert "frozen at the exported filter state" in entry.detail
     assert "fig-miss" not in offline_export.bindings
     # No half-state: a figure that did not bind ships no IR either, only the
     # frozen payload the pipeline already produced.

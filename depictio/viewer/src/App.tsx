@@ -2368,6 +2368,7 @@ const App: React.FC = () => {
         onClose={closeExportStatic}
         dashboardId={dashboardId}
         dashboardTitle={dashboard?.title ?? null}
+        getAnalysisState={getAnalysisState}
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />

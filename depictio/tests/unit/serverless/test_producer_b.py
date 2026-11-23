@@ -347,7 +347,7 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     assert entry.reason is TierReason.TRENDLINE
     # The detail names the actual bail-out (build_binding's BindingMiss), so
     # assert the shared clause rather than one refusal's wording.
-    assert entry.detail and "frozen at the default filter state" in entry.detail
+    assert entry.detail and "frozen at the exported filter state" in entry.detail
     frozen = manifest.frozen["scatter-mass-flipper"]
     assert frozen.kind == "figure"
     assert frozen.filter_state == []  # default filter state

@@ -40,11 +40,11 @@ def _state(**extra: Any) -> AnalysisState:
         {
             "filters": [
                 {
-                    "index": "ms-1",
-                    "column_name": "species",
+                    "index": "filter-1",
+                    "column_name": "year",
                     "interactive_component_type": "MultiSelect",
-                    "value": ["Adelie"],
-                    "metadata": {"dc_id": str(DC_OID), "column_name": "species"},
+                    "value": [2021],
+                    "metadata": {"dc_id": str(DC_OID), "column_name": "year"},
                 }
             ],
             "context": {"dashboard_id": str(DASHBOARD_OID)},
@@ -72,7 +72,9 @@ def _comparable(dump: dict[str, Any]) -> dict[str, Any]:
 @pytest.mark.usefixtures("offline_stack")
 def test_the_report_manifest_is_producer_a_manifest():
     state = _state()
-    bundled = export_manifest(str(DASHBOARD_OID), ADMIN).manifest
+    # The report's build runs WITH the state, so its frozen tiles agree with
+    # the initial_filters the runtime opens on.
+    bundled = export_manifest(str(DASHBOARD_OID), ADMIN, state=state).manifest
     reported = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
     assert bundled is not None
     assert _comparable(reported.model_dump(mode="json")) == _comparable(
@@ -149,7 +151,7 @@ def test_a_plain_state_is_eligible_and_group_filters_never_ride_along():
     state.filters.append(
         state.filters[0].model_copy(update={"index": "__g__", "source": "group_filter"})
     )
-    assert [f["index"] for f in report.initial_filters(state)] == ["ms-1"]
+    assert [f["index"] for f in report.initial_filters(state)] == ["filter-1"]
 
 
 # ---------------------------------------------------------------------------
@@ -385,4 +387,4 @@ def test_the_manifest_job_stores_the_manifest_under_its_requester(monkeypatch):
     assert stored[out["key"]] == b'{"ok":true}'
     dashboard_id, export_user, state = seen["args"]
     assert dashboard_id == str(DASHBOARD_OID) and export_user.id == user["id"]
-    assert state.filters[0].index == "ms-1"
+    assert state.filters[0].index == "filter-1"

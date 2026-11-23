@@ -265,7 +265,7 @@ class ServerlessCapability:
 _LIVE = ServerlessCapability("live", "data")
 
 _CELERY_REASON = (
-    "computed on the server ({kind}); frozen at the export's default filter state, "
+    "computed on the server ({kind}); frozen at the exported filter state, "
     "so filters do not reach it"
 )
 _OBJECTS_REASON = (
@@ -334,7 +334,7 @@ SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
     "phylogenetic": ServerlessCapability(
         "frozen",
         "tree",
-        "also reads a Newick tree data collection; frozen at the export's default filter "
+        "also reads a Newick tree data collection; frozen at the exported filter "
         "state with the tree merged in",
     ),
     # Every step of a contact-map window (filter mask, sample, resolution
@@ -384,7 +384,7 @@ _SERVERLESS_ALIASES = {"upset": "upset_plot"}
 #: ``compute_method`` values an ``embedding`` dispatches to Celery with.
 EMBEDDING_COMPUTE_REASON = (
     "embedding computed on the server ({method}); the coordinates are frozen at the "
-    "export's default filter state, and the points the current filters exclude are "
+    "exported filter state, and the points the current filters exclude are "
     "dropped in the browser (matched on the sample column), so the layout is not "
     "recomputed"
 )

@@ -228,7 +228,10 @@ export function bootApp(options: BootAppOptions = {}): void {
       <MantineProvider theme={depictioTheme} defaultColorScheme={initialColorScheme()}>
         <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
           <Notifications position="bottom-right" />
-          <StaticBadgeProvider tiers={manifest.tiers as StaticTierMap}>
+          <StaticBadgeProvider
+            tiers={manifest.tiers as StaticTierMap}
+            exportedState={(manifest.initial_filters ?? []).length > 0}
+          >
             <StaticRuntime project={project} requests={requests} announce={announce} />
           </StaticBadgeProvider>
         </DatesProvider>

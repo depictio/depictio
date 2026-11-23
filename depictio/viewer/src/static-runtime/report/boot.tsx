@@ -174,7 +174,10 @@ export function bootReport(options: BootReportOptions = {}): BootedReport | null
       >
         <BrandingContext.Provider value={config.brand ?? null}>
           <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-            <StaticBadgeProvider tiers={manifest.tiers as StaticTierMap}>
+            <StaticBadgeProvider
+            tiers={manifest.tiers as StaticTierMap}
+            exportedState={(manifest.initial_filters ?? []).length > 0}
+          >
               <ReportRuntime
                 manifest={manifest}
                 tiles={tiles}

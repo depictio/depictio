@@ -1050,7 +1050,7 @@ def test_offline_export_tiers(offline_export: BundleManifest):
     # A whole-frame visu is a binding_miss until the caller maps the binder's
     # cause onto TierReason.WHOLE_FRAME_VIZ (build_binding_with_reason).
     assert tiers["fig-4"].reason in (TierReason.BINDING_MISS, TierReason.WHOLE_FRAME_VIZ)
-    assert tiers["fig-4"].detail and "frozen at the default filter state" in tiers["fig-4"].detail
+    assert tiers["fig-4"].detail and "frozen at the exported filter state" in tiers["fig-4"].detail
     # Sampled frozen code figure was refined to partial (FIGURE_MAX_POINTS).
     assert tiers["fig-3"].tier is ComponentTier.PARTIAL
     assert tiers["fig-3"].reason is TierReason.MAX_POINTS
@@ -1207,7 +1207,7 @@ def test_binding_preflight_decides_every_figure(offline_stack: dict[str, list]):
     # The whole-frame heatmap cannot bind; the reason is the binder's, not a plan.
     assert rows["fig-4"].tier is ComponentTier.FROZEN
     assert rows["fig-4"].reason in (TierReason.BINDING_MISS, TierReason.WHOLE_FRAME_VIZ)
-    assert rows["fig-4"].detail and "frozen at the default filter state" in rows["fig-4"].detail
+    assert rows["fig-4"].detail and "frozen at the exported filter state" in rows["fig-4"].detail
     # `sampled` is only knowable by building the figure the server would build.
     assert rows["fig-3"].tier is ComponentTier.PARTIAL
     assert rows["fig-3"].reason is TierReason.MAX_POINTS
@@ -1338,6 +1338,112 @@ def test_frozen_payloads_are_taken_at_the_tabs_interactive_defaults(
     ]
     assert narrowed == [("scatter", []), ("scatter", year), ("heatmap", year)]
     assert [[f["index"] for f in fm] for fm in seen["av"]] == [["filter-1"]]
+
+
+def test_an_export_with_a_state_freezes_its_tiles_on_that_state(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """An export asked with a state freezes its tiles on that state, not on the
+    dashboard's defaults: the state's filters that target each tab's components
+    reach every freeze path (cards, figures, advanced_viz), and the manifest
+    opens on them (``initial_filters``), so the bundle and a report of it show
+    the exported view. A state entry naming no component here (another tab's, or
+    a component the dashboard no longer has) still opens the bundle but never
+    reaches a freeze."""
+    from depictio.api.v1 import celery_tasks as celery_mod
+    from depictio.api.v1.endpoints.advanced_viz_endpoints import routes as av_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as routes_mod
+    from depictio.models.models.analysis_state import AnalysisState
+    from depictio.serverless import report
+
+    state = AnalysisState.model_validate(
+        {
+            "filters": [
+                {
+                    "index": "filter-1",
+                    "value": [2021],
+                    "column_name": "year",
+                    "interactive_component_type": "MultiSelect",
+                    "metadata": {"dc_id": str(DC_OID), "column_name": "year"},
+                },
+                {
+                    "index": "gone-1",
+                    "value": ["Adelie"],
+                    "column_name": "species",
+                    "interactive_component_type": "MultiSelect",
+                },
+            ],
+            "context": {"dashboard_id": str(DASHBOARD_OID)},
+        }
+    )
+
+    seen: dict[str, list] = {"cards": [], "figures": [], "av": []}
+
+    def cards(dashboard_id, request, current_user, access_token):
+        seen["cards"].append(request["filters"])
+        return {"values": {"card-1": 1.0}}
+
+    real_preview = celery_mod.build_figure_preview
+
+    def preview(payload):
+        seen["figures"].append((payload["metadata"]["visu_type"], payload["filter_metadata"]))
+        return real_preview({**payload, "filter_metadata": []})
+
+    real_av = av_mod.fetch_advanced_viz_data
+
+    def av(response, payload, current_user, access_token):
+        seen["av"].append(payload["filter_metadata"])
+        return real_av(response, {**payload, "filter_metadata": []}, current_user, access_token)
+
+    monkeypatch.setattr(routes_mod, "bulk_compute_cards", cards)
+    monkeypatch.setattr(celery_mod, "build_figure_preview", preview)
+    monkeypatch.setattr(av_mod, "fetch_advanced_viz_data", av)
+    monkeypatch.setattr(producer_a, "render_bundle_html", lambda manifest: "<html>ok</html>")
+
+    result = export_static(
+        str(DASHBOARD_OID),
+        out_path=tmp_path / "bundle.html",
+        user=ExportUser(id=ObjectId(), is_admin=True),
+        state=state,
+    )
+
+    manifest = result.manifest
+    assert manifest is not None
+    # The state's filter reached every freeze path; "gone-1" reached none.
+    (card_filters,) = seen["cards"]
+    assert [(f["index"], f["value"]) for f in card_filters] == [("filter-1", [2021])]
+    assert manifest.frozen["card-1"].payload["filter_applied"] is True
+    year = [{"interactive_component_type": "MultiSelect", "column_name": "year"}]
+    narrowed = [
+        (kind, [{k: f.get(k) for k in ("interactive_component_type", "column_name")} for f in fm])
+        for kind, fm in seen["figures"]
+    ]
+    assert narrowed == [("scatter", []), ("scatter", year), ("heatmap", year)]
+    assert [[f["index"] for f in fm] for fm in seen["av"]] == [["filter-1"]]
+    # And the bundle opens on the exported state, as a report's runtime does.
+    assert manifest.initial_filters == report.initial_filters(state)
+    assert (tmp_path / "bundle.html").read_text() == "<html>ok</html>"
+
+
+def test_an_export_without_a_state_keeps_the_pre_state_contract(
+    offline_stack: dict[str, list], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """No state sent: frozen tiles at the tab's declared defaults and an empty
+    ``initial_filters``, byte for byte the contract before states existed."""
+    monkeypatch.setattr(producer_a, "render_bundle_html", lambda manifest: "<html>ok</html>")
+
+    result = export_static(
+        str(DASHBOARD_OID),
+        out_path=tmp_path / "bundle.html",
+        user=ExportUser(id=ObjectId(), is_admin=True),
+    )
+
+    manifest = result.manifest
+    assert manifest is not None
+    assert manifest.initial_filters == []
+    # Nothing filters this dashboard's one interactive control (no default),
+    # so every freeze ran unfiltered.
+    assert manifest.frozen["card-1"].payload["filter_applied"] is False
 
 
 FOREIGN_DC_OID = ObjectId("746b0f3c1e4a2d7f8e5b9cff")  # another project's collection
