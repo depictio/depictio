@@ -1,6 +1,6 @@
 import React from 'react';
-import { ActionIcon, Alert, Badge, Button, Group, Loader, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
-import { CircleAlert, Eye, Link2, Link2Off, Moon, RefreshCw, Sun } from 'lucide-react';
+import { ActionIcon, Alert, Badge, Button, Code, Group, Loader, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
+import { CircleAlert, Eye, Info, Link2, Link2Off, Moon, RefreshCw, Sun } from 'lucide-react';
 
 import { STROKE } from '../chrome/variants/glass/icons';
 import type { PreviewScheme } from './previewProtocol';
@@ -21,12 +21,50 @@ interface PreviewPaneProps {
   /** The column and the frame scroll together. */
   syncScroll: boolean;
   onToggleSync: () => void;
+  /** Why this server cannot render the report (no Quarto, renders off), or
+   *  null when it can. The pane then explains instead of starting a job. */
+  unavailable?: string | null;
+}
+
+/** The part of a reason that is a command or a setting, shown as code. */
+function UnavailableNotice({ reason }: { reason: string }) {
+  const flag = /DEPICTIO_[A-Z_]+/.exec(reason)?.[0];
+  const pip = /pip install '[^']+'/.exec(reason)?.[0];
+  const text = reason.replace(/:?\s*pip install '[^']+'/, '').replace(/\s*\(DEPICTIO_[A-Z_]+\)/, '');
+  return (
+    <Alert
+      color="gray"
+      variant="light"
+      icon={<Info size={18} strokeWidth={STROKE} />}
+      title="No preview on this server"
+      w="100%"
+      h="fit-content"
+      data-testid="report-preview-unavailable"
+    >
+      <Stack gap="xs">
+        <Text size="sm">{text}</Text>
+        {pip && <Code block>{pip}</Code>}
+        {flag && <Code block>{`${flag}=true`}</Code>}
+        <Text size="sm" c="dimmed">
+          The structure on the left still works: captions, order and what goes in the report are
+          saved, and every download uses them.
+        </Text>
+      </Stack>
+    </Alert>
+  );
 }
 
 type ChipProps = Pick<PreviewPaneProps, 'job' | 'bridge'>;
 
 /** The status chip above the frame. */
-const StatusChip: React.FC<ChipProps> = ({ job, bridge }) => {
+const StatusChip: React.FC<ChipProps & { unavailable?: string | null }> = ({ job, bridge, unavailable }) => {
+  if (unavailable) {
+    return (
+      <Badge color="gray" variant="light">
+        Unavailable
+      </Badge>
+    );
+  }
   if (job.error) {
     return (
       <Badge color="red" variant="light" leftSection={<CircleAlert size={12} strokeWidth={STROKE} />}>
@@ -65,7 +103,7 @@ const StatusChip: React.FC<ChipProps> = ({ job, bridge }) => {
 
 /** The right half of the page: the real report, as a page on a stage, kept in
  *  step with the edits on the left and in the app's own colour scheme. */
-const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme, syncScroll, onToggleSync }) => (
+const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme, syncScroll, onToggleSync, unavailable }) => (
   <Stack gap={0} h="100%" style={{ minHeight: 0 }} data-testid="report-preview-pane">
     <div className="re-pv-bar">
       <span className="re-pv-name">
@@ -73,7 +111,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme, syncScro
         Preview
       </span>
       <span data-testid="report-preview-status">
-        <StatusChip job={job} bridge={bridge} />
+        <StatusChip job={job} bridge={bridge} unavailable={unavailable} />
       </span>
       <span className="re-top-grow" />
       <Tooltip
@@ -109,7 +147,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme, syncScro
         color="gray"
         leftSection={<RefreshCw size={14} strokeWidth={STROKE} />}
         onClick={job.rerun}
-        disabled={job.running}
+        disabled={job.running || Boolean(unavailable)}
         data-testid="report-preview-rerun"
       >
         Refresh data
@@ -117,13 +155,15 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme, syncScro
     </div>
 
     <div className="re-pv-stage">
-      {job.error && (
+      {unavailable && <UnavailableNotice reason={unavailable} />}
+
+      {!unavailable && job.error && (
         <Alert color="red" title="The preview failed" w="100%" h="fit-content">
           {job.error}
         </Alert>
       )}
 
-      {!job.previewUrl && !job.error && (
+      {!unavailable && !job.previewUrl && !job.error && (
         <div className="re-pv-page re-pv-wait">
           <Stack gap="sm" data-testid="report-preview-running">
             <Group gap="xs">

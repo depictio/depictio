@@ -25,8 +25,9 @@ export interface ReportLayerApi {
   /** Apply an edit. Every edit handler goes through here; it is the only way the
    *  layer is changed and the only thing that arms the autosave. */
   edit: (change: (layer: ReportLayer) => ReportLayer) => void;
-  /** Write any pending edit now. Resolves once nothing is pending. */
-  flush: () => Promise<void>;
+  /** Write any pending edit now. Resolves once nothing is pending: true when
+   *  the stored layer holds every edit, false after a failed or refused save. */
+  flush: () => Promise<boolean>;
   /** Drop local state and read the layer and the outline again. */
   reload: () => void;
 }
@@ -131,12 +132,11 @@ export function useReportLayer(dashboardId: string): ReportLayerApi {
       const current = layerRef.current;
       if (!current || conflictRef.current) return;
       userActedRef.current = true;
-      dirtyRef.current = true;
       const next = change(current);
-      if (next === current) {
-        dirtyRef.current = false;
-        return;
-      }
+      // A no-op (a card dropped on itself) leaves a pending save, or the retry
+      // a failed one asked for, as it was.
+      if (next === current) return;
+      dirtyRef.current = true;
       layerRef.current = next;
       setLayer(next);
       setSaveStatus('saving');
@@ -145,11 +145,47 @@ export function useReportLayer(dashboardId: string): ReportLayerApi {
     [schedule],
   );
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<boolean> => {
     clearTimer();
     await save();
     if (inflightRef.current) await inflightRef.current;
+    return !dirtyRef.current && !conflictRef.current;
   }, [save]);
+
+  // Leaving the page (the "Back to editor" link is a full navigation, or the
+  // tab closes) inside the debounce window would drop the last edit: it is
+  // sent then, as a request that outlives the page. A tab merely hidden saves
+  // the usual way. A page restored from the back/forward cache gets the new
+  // revision when the request answers, so its next save is no conflict.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const sendPending = () => {
+      const current = layerRef.current;
+      if (!current || !dirtyRef.current || !userActedRef.current || conflictRef.current) return;
+      clearTimer();
+      dirtyRef.current = false;
+      saveReportLayer(dashboardId, revisionRef.current, current, { keepalive: true })
+        .then((stored) => {
+          revisionRef.current = stored.revision;
+        })
+        .catch(() => {
+          dirtyRef.current = true;
+        });
+    };
+    const onHidden = () => {
+      if (document.visibilityState !== 'hidden' || !dirtyRef.current) return;
+      clearTimer();
+      void saveRef.current();
+    };
+    window.addEventListener('pagehide', sendPending);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', sendPending);
+      document.removeEventListener('visibilitychange', onHidden);
+      sendPending();
+    };
+  }, [dashboardId]);
 
   const load = useCallback(
     (signal: AbortSignal) => {

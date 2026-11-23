@@ -39,7 +39,7 @@ export function usePreviewJob(
   dashboardId: string,
   ready: boolean,
   stateKey: string,
-  beforeStart: () => Promise<void>,
+  beforeStart: () => Promise<unknown>,
 ): PreviewJobApi {
   const [job, setJob] = useState<NotebookRenderStatus | null>(null);
   const [starting, setStarting] = useState(false);

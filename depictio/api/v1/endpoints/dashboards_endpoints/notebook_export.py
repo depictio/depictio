@@ -1377,6 +1377,20 @@ def _cached_preview(
 #: injected into ``report.html`` only.
 PREVIEW_PATCH_SCRIPT = "__depictio_preview_patch.js"
 _PREVIEW_PATCH_TAG = f'<script src="{PREVIEW_PATCH_SCRIPT}"></script>'
+#: An in-memory ``localStorage``/``sessionStorage`` for the sandboxed frame.
+#: Its opaque origin makes the real ones throw on access, and Quarto's own
+#: scripts (``quarto.js``, ``tabsets.js``) read them unguarded: without the
+#: stand-in every preview page logs a dozen errors and those scripts stop
+#: half way. Set before any other script runs, and only where access throws.
+PREVIEW_STORAGE_SHIM = (
+    "<script>(function(){function mem(){var d={};return{getItem:function(k){"
+    "return Object.prototype.hasOwnProperty.call(d,k)?d[k]:null},setItem:function(k,v)"
+    "{d[k]=String(v)},removeItem:function(k){delete d[k]},clear:function(){d={}},"
+    "key:function(i){return Object.keys(d)[i]||null},get length(){return Object.keys(d)"
+    ".length}}}['localStorage','sessionStorage'].forEach(function(n){try{window[n]"
+    ".getItem('x')}catch(e){try{Object.defineProperty(window,n,{value:mem(),"
+    "configurable:true})}catch(e2){}}})})();</script>"
+)
 
 
 def preview_files_csp() -> str:
@@ -1428,7 +1442,8 @@ def _preview_relpath(token: str, path: str) -> str | None:
 
 
 def _inject_preview_patch(html: bytes) -> bytes:
-    """The patch script tag before ``</body>``, once, in the served report.
+    """The patch script tag before ``</body>``, once, in the served report, and
+    the storage stand-in at the top of ``<head>``.
 
     The editor's edits reach the preview through it; the report's own files
     are served untouched.
@@ -1436,7 +1451,11 @@ def _inject_preview_patch(html: bytes) -> bytes:
     idx = html.rfind(b"</body>")
     if idx == -1:
         return html
-    return html[:idx] + _PREVIEW_PATCH_TAG.encode("utf-8") + html[idx:]
+    html = html[:idx] + _PREVIEW_PATCH_TAG.encode("utf-8") + html[idx:]
+    head = re.search(rb"<head[^>]*>", html)
+    if head is None:
+        return html
+    return html[: head.end()] + PREVIEW_STORAGE_SHIM.encode("utf-8") + html[head.end() :]
 
 
 def _preview_headers(*, immutable: bool = False) -> dict[str, str]:

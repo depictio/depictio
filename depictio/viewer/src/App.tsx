@@ -140,6 +140,7 @@ import TabLinkProvider from './chrome/TabLinkProvider';
 import GenomeBrowserTargetProvider from './chrome/GenomeBrowserTargetProvider';
 import { combinedInitialFilters, useCombinedFilterSync } from './hooks/useCombinedFilterSync';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useReportEditable } from './hooks/useReportEditable';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
@@ -383,6 +384,12 @@ const App: React.FC = () => {
   // dashboard. House style is visible-but-disabled, which the Header's
   // existing tooltip already handles.
   const canEditNow = isOwner && !previewVersionId && !dashboard?.published_lock;
+  // The report is also open to the project's editors, which only the server
+  // knows: it is asked when ownership alone does not settle it.
+  const reportEditable = useReportEditable(
+    dashboardId,
+    !isOwner && !previewVersionId && !dashboard?.published_lock && Boolean(currentUser),
+  );
 
   // ---- Cross-tab components: validate the hydrated filters -----------------
   // Runs once the family's floating maps and persistent sections are known.
@@ -2352,7 +2359,7 @@ const App: React.FC = () => {
         }}
         getAnalysisState={getAnalysisState}
         previewing={Boolean(previewVersionId)}
-        canEditReport={canEditNow}
+        canEditReport={canEditNow || reportEditable}
         filters={
           remembering
             ? {

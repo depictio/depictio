@@ -226,7 +226,7 @@ export function stateFilters(state: AnalysisState | null): InteractiveFilter[] {
 
 /** Move a tile to row `to` of its tab. `section` is the section of the row it
  *  lands beside: a tile dropped among another section's rows joins that
- *  section, one dropped among its own keeps (or returns to) its own. */
+ *  section, one moved among its own keeps its section. */
 export function relocateTile(
   layer: ReportLayer,
   tab: TabView,
@@ -237,10 +237,11 @@ export function relocateTile(
   const moved = tab.tiles[from];
   if (!moved) return layer;
   const next = moveTile(layer, tab, from, to);
-  const target = section && section !== moved.entry.section ? section : null;
-  return (moved.sectionOverride || null) === target
-    ? next
-    : patchTile(next, moved.entry, { section: target });
+  // Rows of the section it already sits in: only the order changes, and an
+  // override it carries stays (the outline holds no natural section to tell
+  // an override from one, so it is never cleared by a mere reorder).
+  if ((section || null) === (moved.section || null)) return next;
+  return patchTile(next, moved.entry, { section: section || null });
 }
 
 /** The first words of a TipTap document, for a closed panel's one-line summary. */

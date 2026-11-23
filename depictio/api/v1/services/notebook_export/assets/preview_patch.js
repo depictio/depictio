@@ -420,9 +420,13 @@
     if (!focus || focus.tab_id == null || focus.component_id == null) { scrolledTo = null; return; }
     var ref = String(focus.tab_id) + ':' + String(focus.component_id), host = hostOf(ref);
     if (!host) return;
-    var block = blockOf(host);
-    block.style.outline = '2px solid currentColor';
-    block.style.outlineOffset = '2px';
+    // In a card strip the selected card alone, not the whole row.
+    var refs = refsOf(host), index = -1;
+    forEach(refs, function (r, i) { if (index < 0 && r.tab_id + ':' + r.component_id === ref) index = i; });
+    var block = (index >= 0 && subElementOf(host, index, refs.length)) || blockOf(host);
+    // The report's own accent, thin: the frame follows the report's palette.
+    block.style.outline = '2px solid var(--dpx-primary, currentColor)';
+    block.style.outlineOffset = '3px';
     focusBlock = block;
     if (scrolledTo === ref) return;
     scrolledTo = ref;

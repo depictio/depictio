@@ -27,7 +27,7 @@ export interface ExactPdfApi {
 export function useExactPdf(
   dashboardId: string,
   layer: ReportLayer | null,
-  flush: () => Promise<void>,
+  flush: () => Promise<boolean>,
 ): ExactPdfApi {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +41,10 @@ export function useExactPdf(
     const tab = window.open('', '_blank');
     void (async () => {
       try {
-        await flush();
+        // The PDF is drawn from the stored layer: not with edits it lacks.
+        if (!(await flush())) {
+          throw new Error('Your latest edits are not saved, so the PDF would miss them. Save them first.');
+        }
         let job = await startNotebookRender(dashboardId, layer.state, 'paper', {
           output: 'report',
           pdf: true,

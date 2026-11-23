@@ -1641,10 +1641,13 @@ export async function saveReportLayer(
   dashboardId: string,
   baseRevision: number,
   layer: ReportLayer,
+  /** `keepalive`: the request outlives the page (a save on leaving it). */
+  opts: { keepalive?: boolean } = {},
 ): Promise<ReportLayer> {
   const res = await authFetch(`${API_BASE}/dashboards/report_layer/${dashboardId}`, {
     method: 'PUT',
     body: JSON.stringify({ base_revision: baseRevision, layer }),
+    keepalive: opts.keepalive,
   });
   if (res.status === 409) {
     let detail: Partial<ReportLayerConflictDetail> = {};

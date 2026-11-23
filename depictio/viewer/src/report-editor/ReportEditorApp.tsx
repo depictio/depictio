@@ -153,7 +153,12 @@ const ReportEditorApp: React.FC = () => {
     [layer, outline, selected],
   );
 
-  const ready = Boolean(enabled && layer && outline && !api.loadError);
+  // A server that cannot render (no Quarto, renders off) says so in the
+  // outline: no job is started, the pane explains and Exact PDF is off.
+  const unavailable = outline && outline.preview_available === false
+    ? outline.preview_unavailable_reason || 'Reports cannot be rendered on this deployment.'
+    : null;
+  const ready = Boolean(enabled && layer && outline && !api.loadError && !unavailable);
   const stateKey = useMemo(() => JSON.stringify(layer?.state ?? null), [layer?.state]);
   const job = usePreviewJob(dashboardId, ready, stateKey, api.flush);
 
@@ -248,17 +253,21 @@ const ReportEditorApp: React.FC = () => {
             Reload
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="default"
-          leftSection={<FileDown size={17} strokeWidth={STROKE} />}
-          loading={pdf.busy}
-          disabled={!layer || conflict}
-          onClick={pdf.run}
-          data-testid="report-exact-pdf"
-        >
-          Exact PDF
-        </Button>
+        <Tooltip label={unavailable ?? 'The full render, with its PDF'} withArrow multiline maw={320}>
+          <span>
+            <Button
+              size="sm"
+              variant="default"
+              leftSection={<FileDown size={17} strokeWidth={STROKE} />}
+              loading={pdf.busy}
+              disabled={!layer || conflict || Boolean(unavailable)}
+              onClick={pdf.run}
+              data-testid="report-exact-pdf"
+            >
+              Exact PDF
+            </Button>
+          </span>
+        </Tooltip>
         <Tooltip label={dark ? 'Switch to light theme' : 'Switch to dark theme'} withArrow>
           <ActionIcon
             variant="subtle"
@@ -482,6 +491,7 @@ const ReportEditorApp: React.FC = () => {
               scheme={scheme}
               syncScroll={syncScroll}
               onToggleSync={() => setSyncScroll((on) => !on)}
+              unavailable={unavailable}
             />
           </div>
         </div>

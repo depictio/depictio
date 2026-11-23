@@ -751,6 +751,19 @@ def test_the_report_is_served_sandboxed_with_the_patch_injected(ctx) -> None:
     assert nbx.PREVIEW_PATCH_SCRIPT not in other.body.decode(), "only report.html is patched"
 
 
+def test_the_report_gets_a_storage_shim_before_any_script(ctx) -> None:
+    """The opaque origin makes ``window.localStorage`` throw, and Quarto's own
+    scripts read it unguarded: an in-memory stand-in is set first, at the top
+    of ``<head>``, so they run instead of throwing on every page."""
+    body = _served(_REPORT_TOKEN, "report.html").body.decode()
+    shim = body.find(nbx.PREVIEW_STORAGE_SHIM)
+    assert shim != -1
+    assert body.count(nbx.PREVIEW_STORAGE_SHIM) == 1
+    first_script = body.find("<script", shim + len(nbx.PREVIEW_STORAGE_SHIM))
+    assert shim < body.find("</head>")
+    assert first_script == -1 or shim < first_script
+
+
 def test_the_patch_script_is_served_from_the_assets(ctx) -> None:
     from depictio.api.v1.services.notebook_export import resources
 

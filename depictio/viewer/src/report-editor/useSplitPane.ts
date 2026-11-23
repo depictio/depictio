@@ -39,7 +39,10 @@ export function useSplitPane(bodyRef: RefObject<HTMLElement>) {
     (event: React.PointerEvent<HTMLElement>) => {
       const body = bodyRef.current;
       if (!body || event.button !== 0) return;
+      // No text selection while dragging; preventDefault also stops the
+      // handle taking focus, so it is given it, for the keys that follow.
       event.preventDefault();
+      event.currentTarget.focus();
       dragging.current = true;
       document.documentElement.classList.add('re-resizing');
       const rect = body.getBoundingClientRect();
