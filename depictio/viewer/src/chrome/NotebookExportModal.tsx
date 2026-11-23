@@ -63,6 +63,9 @@ interface NotebookExportModalProps {
   initialOutput?: ExportChoice;
   /** Opens the dashboard-only export (the static bundle's own modal). */
   onExportDashboardOnly?: () => void;
+  /** The reader may edit this dashboard's report: the link to the editor
+   *  shows only then (the editor answers 404 to anyone else). */
+  canEditReport?: boolean;
 }
 
 const STATUS_META: Record<NotebookInclusion, { label: string; color: string }> = {
@@ -116,8 +119,9 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   initialOutput = 'combined',
   combinedOffered = true,
   onExportDashboardOnly,
+  canEditReport = false,
 }) => {
-  const reportEditorEnabled = useReportEditorEnabled();
+  const reportEditorEnabled = useReportEditorEnabled() && canEditReport;
   const [state, setState] = useState<AnalysisState | null>(null);
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);

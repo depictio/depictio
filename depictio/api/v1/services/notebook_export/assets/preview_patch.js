@@ -71,7 +71,9 @@
 
   function refsOf(host) {
     var out = [];
-    forEach((host.getAttribute('data-depictio-tile') || host.getAttribute('data-depictio-prose') || '').trim().split(/\s+/), function (t) {
+    // A highlight draws another tab's figure (data-depictio-tile, what the
+    // runtime mounts) but is its own tile to the editor (data-depictio-ref).
+    forEach((host.getAttribute('data-depictio-ref') || host.getAttribute('data-depictio-tile') || host.getAttribute('data-depictio-prose') || '').trim().split(/\s+/), function (t) {
       var at = t.indexOf(':');
       if (at > 0 && at < t.length - 1) out.push({ tab_id: t.slice(0, at), component_id: t.slice(at + 1) });
     });
@@ -620,6 +622,9 @@
   }
 
   window.addEventListener('message', function (event) {
+    // Only the editor holding this frame speaks to it: never a window this
+    // report opened (a link's popup keeps its opener).
+    if (event.source !== window.parent) return;
     var msg = event.data;
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === APPLY) apply(msg.patch);

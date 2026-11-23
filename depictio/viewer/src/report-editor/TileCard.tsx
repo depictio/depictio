@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Box, Checkbox, Group, Paper, Text } from '@mantine/core';
+import { Badge, Box, Checkbox, Group, Paper, Text, UnstyledButton } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { TileView } from './model';
@@ -110,9 +110,22 @@ const TileCard: React.FC<TileCardProps> = ({
           data-testid="report-include-toggle"
         />
         <Icon icon={visual.icon} width={14} color={visual.color} style={{ flex: 'none' }} />
-        <Text size="xs" fw={500} truncate style={{ flex: 1, minWidth: 0 }} title={view.entry.title}>
-          {view.entry.title}
-        </Text>
+        {/* The keyboard way to the tile's settings: the card's own click is the
+            mouse's, and the thumbnail's keys enlarge it. */}
+        <UnstyledButton
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          aria-expanded={selected}
+          aria-label={`Settings for ${view.entry.title}`}
+          style={{ flex: 1, minWidth: 0, display: 'flex' }}
+          data-testid="report-tile-settings"
+        >
+          <Text size="xs" fw={500} truncate title={view.entry.title}>
+            {view.entry.title}
+          </Text>
+        </UnstyledButton>
         {!view.inReport && (
           <Badge size="xs" variant="outline" color="gray" style={{ flex: 'none' }}>
             Not in the report

@@ -441,6 +441,46 @@ def test_a_highlight_draws_its_figure_in_place(ampliseq_tabs):
     assert "*From the [Community &amp; Diversity](#tab-community-diversity) tab.*" in src
 
 
+def test_a_highlight_is_its_own_tile_in_the_report_layer(ampliseq_tabs):
+    """The report layer, the outline and the editor know a highlight by its own
+    (tab, index), not by the figure it draws: unticking it drops the highlight
+    and leaves that figure on its own tab, and the preview marks it with its
+    own ref while the runtime still mounts the figure."""
+    tabs = ampliseq_tabs
+    main = str(tabs[0]["dashboard_id"])
+    state = AnalysisState.model_validate({"context": {"dashboard_id": main}})
+
+    def plan(layer=None):
+        return ExportPlan(
+            tabs=tabs, project=None, state=state, dcs=[], stages=[], title="x", report_layer=layer
+        )
+
+    drawn = [
+        e
+        for e, _ in NotebookBuilder(plan()).entries()
+        if not isinstance(e, MarkdownUnit) and e.highlight is not None
+    ]
+    hl = drawn[0]
+    own_tab, own_index = hl.layer_key
+    assert own_index == hl.highlight["index"]
+    assert (own_tab, own_index) != (str(hl.unit.tab["dashboard_id"]), hl.unit.meta["index"])
+
+    src = generate_qmd(plan())
+    figure_ref = f"{hl.unit.tab['dashboard_id']}:{hl.unit.meta['index']}"
+    assert f'data-depictio-tile="{figure_ref}" data-depictio-ref="{own_tab}:{own_index}"' in src
+
+    layer = {"tiles": [{"tab_id": own_tab, "component_id": own_index, "in_report": False}]}
+    left = [e for e, _ in NotebookBuilder(plan(layer)).entries() if not isinstance(e, MarkdownUnit)]
+    assert own_index not in {e.highlight["index"] for e in left if e.highlight is not None}
+    # The figure itself stays on the tab it lives on.
+    assert any(
+        e.highlight is None
+        and e.unit.meta.get("index") == hl.unit.meta["index"]
+        and str(e.unit.tab["dashboard_id"]) == str(hl.unit.tab["dashboard_id"])
+        for e in left
+    )
+
+
 def test_an_unresolvable_highlight_stays_a_pointer():
     tab = {
         "dashboard_id": PENGUINS_DASHBOARD,

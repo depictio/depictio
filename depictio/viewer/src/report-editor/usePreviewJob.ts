@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchNotebookRenderStatus, startReportPreview } from 'depictio-react-core';
 import type { NotebookRenderStatus } from 'depictio-react-core';
 
+/** Consecutive failed polls before the job is reported lost. */
+const MAX_POLL_FAILURES = 5;
 const POLL_MS = 1000;
 /** A state change waits this long, so a burst of filter edits renders once. */
 const RESTART_DEBOUNCE_MS = 500;
@@ -103,11 +105,23 @@ export function usePreviewJob(
       () => setElapsed(Math.round((Date.now() - startedAtRef.current) / 1000)),
       1000,
     );
+    // A failed poll (a blip, a restart) is retried; only a run of them is an
+    // error, and the next answer clears it.
+    let failures = 0;
     const poll = window.setInterval(() => {
       fetchNotebookRenderStatus(jobId, controller.signal)
-        .then((next) => setJob((prev) => (prev && prev.job_id === next.job_id ? next : prev)))
+        .then((next) => {
+          failures = 0;
+          setError(null);
+          setJob((prev) => (prev && prev.job_id === next.job_id ? next : prev));
+        })
         .catch((err) => {
-          if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err));
+          if (controller.signal.aborted) return;
+          failures += 1;
+          if (failures < MAX_POLL_FAILURES) return;
+          window.clearInterval(poll);
+          window.clearInterval(tick);
+          setError(err instanceof Error ? err.message : String(err));
         });
     }, POLL_MS);
     return () => {

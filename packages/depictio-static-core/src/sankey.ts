@@ -147,8 +147,10 @@ export function sankeyFromColumns(
   // Node universe: one node per (step, value) pair, in step order. Sort
   // values within a step by chosen mode; total_flow falls back to
   // alphabetical when there are no links to rank from.
+  // The server task's default when a request names none.
+  const sortMode = req.sort_mode || 'total_flow';
   const stepValues = (stepCol: string): string[] => {
-    if (req.sort_mode === 'input') {
+    if (sortMode === 'input') {
       const seen = new Set<string>();
       const out: string[] = [];
       for (const i of sel) {
@@ -160,7 +162,7 @@ export function sankeyFromColumns(
       }
       return out;
     }
-    if (req.sort_mode === 'total_flow' && links.length > 0) {
+    if (sortMode === 'total_flow' && links.length > 0) {
       // total per label = outgoing + incoming sums for this step's links.
       const totals = new Map<string, number>();
       for (const l of links) {

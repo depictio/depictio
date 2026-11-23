@@ -47,21 +47,29 @@ COMBINED_KEY = "combined"
 # Set by the worker that renders a report: it embeds the runtime itself once
 # the render is done, so the document's last cell prints nothing.
 RUNTIME_DEFERRED_ENV = "DEPICTIO_REPORT_RUNTIME_DEFERRED"
+# A tile's own ref when it draws another component (a highlight), read by
+# the report editor's preview instead of the mounted ref.
+AS_REF_ATTR = "data-depictio-ref"
 
 
 def tile_ref(tab_id: str, index: str) -> str:
     return f"{tab_id}:{index}"
 
 
-def tile_open(refs: list[str]) -> str:
+def tile_open(refs: list[str], *, as_ref: str | None = None) -> str:
     """The fenced-div lines opening a tile placeholder and its fallback.
 
     Quarto (pandoc) turns ``::: {.cls key="v"}`` into ``<div class="cls"
     key="v">``, so the placeholder is plain markdown and the cells inside it
     stay ordinary cells: their output is the fallback.
+
+    ``as_ref``: the tile's own identity when it draws another component (a
+    highlight shows a figure of another tab): the runtime mounts ``refs``,
+    the report editor knows the tile by ``as_ref``.
     """
     value = escape(" ".join(refs), quote=True)
-    return f'::: {{.{TILE_CLASS} {TILE_ATTR}="{value}"}}\n::: {{.{FALLBACK_CLASS}}}'
+    own = f' {AS_REF_ATTR}="{escape(as_ref, quote=True)}"' if as_ref else ""
+    return f'::: {{.{TILE_CLASS} {TILE_ATTR}="{value}"{own}}}\n::: {{.{FALLBACK_CLASS}}}'
 
 
 def tile_close() -> str:

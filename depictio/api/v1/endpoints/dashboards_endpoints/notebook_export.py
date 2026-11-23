@@ -1261,18 +1261,18 @@ def notebook_export_outline(
         if current is None:  # a component before any tab: nothing to attach it to
             continue
         meta = entry.highlight if entry.highlight is not None else entry.unit.meta
-        # The layer's settings, by the generator's own lookup — a highlight
-        # is placed by the figure it shows, on the tab that figure lives on.
-        unit = entry.unit
-        tile = tiles.get(
-            (str(unit.tab.get("dashboard_id") or ""), str(unit.meta.get("index") or ""))
-        )
+        # The layer's settings, by the generator's own key: a highlight is its
+        # own tile there, even though it draws a figure of another tab.
+        tile = tiles.get(entry.layer_key)
         caption = meta.get("caption")
         current.entries.append(
             ReportOutlineEntry(
                 kind="component",
                 tab_id=current.tab_id,
-                title=str(meta.get("title") or meta.get("index") or ""),
+                # A highlight without a title of its own reads as the figure it shows.
+                title=str(
+                    meta.get("title") or entry.unit.meta.get("title") or meta.get("index") or ""
+                ),
                 component_id=str(meta.get("index") or ""),
                 component_type=str(meta.get("component_type") or "") or None,
                 caption=str(caption) if caption is not None else None,

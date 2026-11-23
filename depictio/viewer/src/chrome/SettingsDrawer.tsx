@@ -682,14 +682,16 @@ const ExportBlock: React.FC<{
   const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
   const showCustomise = reportEditorEnabled && Boolean(canEditReport) && Boolean(dashboardId);
 
-  // Render the editor's preview now, so it is ready when the page opens. A
-  // refusal changes nothing here: the editor starts its own render.
+  // Render the editor's preview when the reader heads for the button (hover
+  // or focus), so it is under way when the page opens; merely opening the
+  // section starts nothing. A refusal changes nothing here: the editor starts
+  // its own render.
   const prewarmedRef = useRef<string | null>(null);
-  useEffect(() => {
+  const prewarm = () => {
     if (!showCustomise || prewarmedRef.current === dashboardId) return;
     prewarmedRef.current = dashboardId;
     startReportPreview(dashboardId, { force: false }).catch(() => undefined);
-  }, [showCustomise, dashboardId]);
+  };
 
   // The combined file embeds the static runtime: without the static export
   // (switched off on this server) only the report and its source are offered.
@@ -703,6 +705,7 @@ const ExportBlock: React.FC<{
       dashboardTitle={dashboard?.title}
       getAnalysisState={getAnalysisState}
       combinedOffered={combinedOffered}
+      canEditReport={showCustomise}
       onExportDashboardOnly={
         staticExport?.allowed && !staticExport.previewing ? staticExport.onExportStatic : undefined
       }
@@ -719,6 +722,8 @@ const ExportBlock: React.FC<{
         <Button
           component="a"
           href={`/dashboard-report/${dashboardId}`}
+          onMouseEnter={prewarm}
+          onFocus={prewarm}
           size="sm"
           leftSection={<Icon icon="mdi:file-document-edit-outline" width={16} />}
           data-testid="export-customise-report"

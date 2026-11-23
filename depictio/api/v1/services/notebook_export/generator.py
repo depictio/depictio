@@ -444,6 +444,19 @@ class ComponentEntry:
     # A highlight drawn in place: the highlight's own metadata, while ``unit``
     # holds the figure it shows (its source tab and its own definition).
     highlight: dict[str, Any] | None = None
+    # That highlight's own (tab id, index): the tile the report layer and the
+    # editor know, while ``unit`` is what is drawn and mounted.
+    own_ref: tuple[str, str] | None = None
+
+    @property
+    def layer_key(self) -> tuple[str, str]:
+        """The (tab id, component id) the report layer keys this tile by."""
+        if self.own_ref is not None:
+            return self.own_ref
+        return (
+            str(self.unit.tab.get("dashboard_id") or ""),
+            str(self.unit.meta.get("index") or ""),
+        )
 
 
 _FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
@@ -601,11 +614,7 @@ class NotebookBuilder:
 
     def _layer_tile(self, entry: ComponentEntry) -> ReportTile | None:
         """The layer's placement of one tile, by (tab id, component id)."""
-        ref = (
-            str(entry.unit.tab.get("dashboard_id") or ""),
-            str(entry.unit.meta.get("index") or ""),
-        )
-        return self._tiles_by_ref.get(ref)
+        return self._tiles_by_ref.get(entry.layer_key)
 
     def _appendix_cut(self) -> int | None:
         """Where the appendix tabs start in the reading order, or ``None``.
@@ -789,10 +798,15 @@ class NotebookBuilder:
                 out.append((unit, current_tab))
                 continue
             highlight: dict[str, Any] | None = None
+            own_ref: tuple[str, str] | None = None
             if unit.meta.get("component_type") == "highlight":
                 source = self._highlight_source(unit.meta)
                 if source is not None:
                     highlight = unit.meta
+                    own_ref = (
+                        str(unit.tab.get("dashboard_id") or ""),
+                        str(unit.meta.get("index") or ""),
+                    )
                     unit = replace(source, section=unit.section, persistent=unit.persistent)
             meta = unit.meta
             verdict = classify(meta)
@@ -819,7 +833,7 @@ class NotebookBuilder:
                     )
             name = self._name_for(meta, verdict)
             cfg = self._tiles_by_ref.get(
-                (str(unit.tab.get("dashboard_id") or ""), str(meta.get("index") or ""))
+                own_ref or (str(unit.tab.get("dashboard_id") or ""), str(meta.get("index") or ""))
             )
             if cfg is not None and not cfg.in_report:
                 # The layer left the tile out of the report: it goes from the
@@ -828,7 +842,9 @@ class NotebookBuilder:
                 continue
             out.append(
                 (
-                    ComponentEntry(unit=unit, verdict=verdict, name=name, highlight=highlight),
+                    ComponentEntry(
+                        unit=unit, verdict=verdict, name=name, highlight=highlight, own_ref=own_ref
+                    ),
                     current_tab,
                 )
             )
@@ -2530,7 +2546,12 @@ def card_row(cards):
             # the note stay the document's. Text and highlight tiles stay
             # unwrapped: they are the narrative, and the runtime never mounts
             # them.
-            tile = [md_cell(tile_open([self._tile_ref(entry)])), tile, md_cell(tile_close())]
+            own = tile_ref(*entry.own_ref) if entry.own_ref is not None else None
+            tile = [
+                md_cell(tile_open([self._tile_ref(entry)], as_ref=own)),
+                tile,
+                md_cell(tile_close()),
+            ]
         elif meta.get("index"):
             # Prose gets its own marker, which the runtime never looks at, so
             # the editor's preview can still hide and move it (contract §2).
@@ -2538,7 +2559,7 @@ def card_row(cards):
             tile = [md_cell(f'::: {{data-depictio-prose="{ref}"}}'), tile, md_cell(DIV_CLOSE)]
         tiles = tile if isinstance(tile, list) else [tile]
         if meta.get("index"):
-            tiles = [md_cell(tile_anchors([self._tile_ref(entry)])), *tiles]
+            tiles = [md_cell(tile_anchors([tile_ref(*entry.layer_key)])), *tiles]
         if ctype == "text":
             surface = str(meta.get("surface") or "")
             if surface == "card":

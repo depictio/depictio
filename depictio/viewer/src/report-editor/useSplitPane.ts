@@ -35,6 +35,11 @@ export function useSplitPane(bodyRef: RefObject<HTMLElement>) {
     }
   }, [ratio]);
 
+  // The drag's window listeners, so a cancelled gesture or an unmount
+  // mid-drag removes them and the page-wide `re-resizing` flag.
+  const endDrag = useRef<(() => void) | null>(null);
+  useEffect(() => () => endDrag.current?.(), []);
+
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
       const body = bodyRef.current;
@@ -43,20 +48,27 @@ export function useSplitPane(bodyRef: RefObject<HTMLElement>) {
       // handle taking focus, so it is given it, for the keys that follow.
       event.preventDefault();
       event.currentTarget.focus();
+      endDrag.current?.();
       dragging.current = true;
       document.documentElement.classList.add('re-resizing');
       const rect = body.getBoundingClientRect();
       const move = (e: PointerEvent) => {
         if (dragging.current) setRatio(clamp((e.clientX - rect.left) / rect.width));
       };
-      const up = () => {
+      const end = () => {
         dragging.current = false;
         document.documentElement.classList.remove('re-resizing');
         window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointerup', end);
+        window.removeEventListener('pointercancel', end);
+        window.removeEventListener('blur', end);
+        endDrag.current = null;
       };
       window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+      window.addEventListener('blur', end);
+      endDrag.current = end;
     },
     [bodyRef],
   );

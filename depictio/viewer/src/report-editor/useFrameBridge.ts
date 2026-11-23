@@ -67,8 +67,14 @@ export function useFrameBridge(
     iframeRef.current?.contentWindow?.postMessage(message, '*');
   }, []);
 
+  // Loads of the current document. A second one means the frame left the
+  // preview (a link followed inside it): that page is not the report, so it
+  // is told nothing and heard no more, until the next preview is loaded.
+  const loadsRef = useRef(0);
+
   // A new document: wait for its "ready" again.
   useEffect(() => {
+    loadsRef.current = 0;
     setFrameReady(false);
     setLoaded(false);
     setUnresponsive(false);
@@ -77,7 +83,7 @@ export function useFrameBridge(
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const frame = iframeRef.current?.contentWindow;
-      if (!frame || event.source !== frame) return;
+      if (!frame || event.source !== frame || loadsRef.current > 1) return;
       const message = parseFrameMessage(event.data);
       if (!message) return;
       if (message.type === MSG.ready) {
@@ -124,7 +130,11 @@ export function useFrameBridge(
     return () => window.clearTimeout(timer);
   }, [loaded, frameReady]);
 
-  const onFrameLoad = useCallback(() => setLoaded(true), []);
+  const onFrameLoad = useCallback(() => {
+    loadsRef.current += 1;
+    if (loadsRef.current > 1) setFrameReady(false);
+    setLoaded(true);
+  }, []);
   const scrollFrameTo = useCallback(
     (tabId: string, componentId: string) =>
       post({ type: MSG.scrollTo, tab_id: tabId, component_id: componentId }),
