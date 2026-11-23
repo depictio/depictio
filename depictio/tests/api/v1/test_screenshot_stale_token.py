@@ -19,6 +19,7 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from depictio.api.v1.endpoints.user_endpoints import core_functions
 from depictio.api.v1.services import screenshot_service
 
 
@@ -84,7 +85,7 @@ class _FakeToken:
 
 
 def _stub_token_store(monkeypatch, tokens: list[_FakeToken]) -> None:
-    """Stub UserBeanie/TokenBeanie so the loader runs without MongoDB.
+    """Stub the default admin and TokenBeanie so the loader runs without MongoDB.
 
     `find(...).sort(...).to_list()` is reproduced verbatim: the service asks
     for newest-first and the ordering is what makes it prefer a live token
@@ -101,17 +102,15 @@ def _stub_token_store(monkeypatch, tokens: list[_FakeToken]) -> None:
         async def to_list(self):
             return tokens
 
-    class _UserBeanie:
-        @staticmethod
-        async def find_one(_query):
-            return _Admin()
+    async def _default_admin():
+        return _Admin()
 
     class _TokenBeanie:
         @staticmethod
         def find(_query):
             return _Query()
 
-    monkeypatch.setattr(screenshot_service, "UserBeanie", _UserBeanie)
+    monkeypatch.setattr(core_functions, "_default_admin", _default_admin)
     monkeypatch.setattr(screenshot_service, "TokenBeanie", _TokenBeanie)
 
 
