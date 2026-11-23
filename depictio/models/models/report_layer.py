@@ -1,0 +1,150 @@
+"""The report layer: a dashboard's own export notes, cover and layout (#1457).
+
+Notebook export renders a dashboard as a report. What that report says beyond
+the tiles — its introduction, its conclusion, its cover, which tiles belong in
+it and in which order — is authored once and kept on the dashboard as the
+*report layer*, so it survives exports, versions and restores like the rest of
+the dashboard's content.
+
+It lives on the main tab (like ``shared_labels``), is written by one route
+(``PUT /dashboards/report_layer/{id}``) and read by the notebook-export
+generator. ``intro`` and ``conclusion`` hold TipTap JSON (the viewer's rich
+text): a dict ``{"type": "doc", "content": [...]}``, kept as a plain dict so a
+change to TipTap's shape never makes an older dashboard unloadable. ``state``
+is the analysis state the report is drawn and exported at — the same
+``AnalysisState`` the export request carries — so a reader gets the report the
+author composed, not whatever filters their visit happens to hold.
+
+``revision`` is bumped by every write: the editor sends the revision it read
+back with its next save (``base_revision``), and a writer who read an older
+one is refused with 409, the stored layer and who last wrote it, instead of
+silently overwriting a colleague's text.
+"""
+
+from datetime import datetime
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from depictio.models.models.analysis_state import AnalysisState
+
+#: The report's look, where a style exists: the PDF prints in colour or mono
+#: (``pdf_style`` already means this to the export); ``None`` keeps the export
+#: request's own choice.
+ReportStyle = Literal["colour", "mono"]
+
+#: Page orientation the PDF gives one tile. ``auto`` keeps the page as it is.
+ReportOrientation = Literal["auto", "portrait", "landscape"]
+
+#: Where a tab's part sits in the report: the body, or after it as an appendix.
+ReportPlacement = Literal["body", "appendix"]
+
+
+class ReportCover(BaseModel):
+    """The title block. ``None`` values fall back to the export's own defaults
+    (dashboard title, project name, the project's owners, the export day)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    subtitle: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    date: str | None = None
+
+
+class ReportTile(BaseModel):
+    """One tile's place in the report.
+
+    ``tab_id`` + ``component_id`` name it (the tile's ``index``). Settings not
+    given keep the export's defaults, so a dashboard whose layer only asks one
+    tile to change still exports every other tile exactly as it did.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tab_id: str
+    component_id: str
+    # The tile's caption in the report, replacing its dashboard caption when
+    # not None (an empty string prints no caption).
+    caption: str | None = None
+    in_report: bool = True
+    in_pdf: bool = True
+    # Explicit position of the tile among the report's tiles; ``None`` keeps
+    # the dashboard's own reading order behind any ordered ones.
+    order: int | None = None
+    orientation: ReportOrientation = "auto"
+    # Another section of the report to move the tile into; ``None`` keeps it
+    # in its own.
+    section: str | None = None
+    page_break_before: bool = False
+
+
+class ReportTab(BaseModel):
+    """One tab's place in the report: its part's position, and whether the
+    body or the appendix (after the conclusion) carries it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tab_id: str
+    placement: ReportPlacement = "body"
+    order: int | None = None
+
+
+class ReportLayer(BaseModel):
+    """The whole layer, as stored on the main tab."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    intro: dict[str, Any] | None = None
+    conclusion: dict[str, Any] | None = None
+    cover: ReportCover | None = None
+    # The analysis state the report is drawn and exported at; ``None`` leaves
+    # the export's request state in charge.
+    state: AnalysisState | None = None
+    # Bumped by every write; the editor's optimistic-concurrency token.
+    revision: int = 0
+    style: ReportStyle | None = None
+    tiles: list[ReportTile] = Field(default_factory=list)
+    tabs: list[ReportTab] = Field(default_factory=list)
+    # The GET seeded this layer's intro from the dashboard's notes; nothing
+    # was written. The editor round-trips it so the generator can tell a real
+    # intro from the standing note.
+    seeded_from_notes: bool = False
+    # Who last wrote it, for a 409's "ask them before overwriting".
+    updated_by: Optional[str] = None
+    # Naive UTC (PyMongo stores and reads BSON dates as naive UTC).
+    updated_at: Optional[datetime] = None
+
+
+class ReportLayerPut(BaseModel):
+    """The PUT body: the layer to write, and the revision it was read at.
+
+    A ``base_revision`` that is not the stored layer's is refused with 409
+    (the stored layer and its author come back with it), so two writers cannot
+    overwrite each other's prose.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_revision: int = Field(default=0, ge=0)
+    layer: ReportLayer
+
+
+def seed_intro_from_notes(notes_content: str) -> dict[str, Any] | None:
+    """The dashboard's notes as a minimal TipTap document for the intro.
+
+    A GET with nothing stored shows the author's notes as a starting point for
+    the report's introduction (they wrote prose on the dashboard; the report
+    should not start from an empty page). One paragraph per non-empty line;
+    nothing is written — the editor saves it, or not. ``None`` when the notes
+    are empty.
+    """
+    paragraphs = []
+    for line in (notes_content or "").replace("\r\n", "\n").split("\n"):
+        text = line.strip()
+        if not text:
+            continue
+        paragraphs.append({"type": "paragraph", "content": [{"type": "text", "text": text}]})
+    if not paragraphs:
+        return None
+    return {"type": "doc", "content": paragraphs}

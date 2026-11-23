@@ -166,6 +166,44 @@ def figure_orientation(ratio: float | None, override: str = "auto") -> str:
     return "landscape" if ratio is not None and ratio > LANDSCAPE_FIGURE_RATIO else "portrait"
 
 
+#: The page orientation the report's author set for the current cell's tile
+#: (``set_page_orientation``); ``auto`` leaves it to ``figure_orientation`` and
+#: ``typst.table``'s own rules.
+_PAGE_ORIENTATION = {"value": "auto", "hooked": False}
+
+
+def _reset_page_orientation(*_args: Any) -> None:
+    _PAGE_ORIENTATION["value"] = "auto"
+
+
+def set_page_orientation(orientation: str = "auto") -> None:
+    """The PDF page orientation for this cell's figure or table.
+
+    A report's author can ask a tile for a portrait or a landscape page; the
+    export writes this call at the top of that tile's cell. Under IPython (the
+    kernel Quarto runs) the override ends with the cell, since outputs are
+    formatted before ``post_run_cell`` fires; elsewhere it holds until the next
+    call, like ``set_static_width``.
+    """
+    value = orientation if orientation in ("portrait", "landscape") else "auto"
+    _PAGE_ORIENTATION["value"] = value
+    if _PAGE_ORIENTATION["hooked"]:
+        return
+    try:
+        from IPython import get_ipython
+    except ImportError:  # pragma: no cover - IPython ships with every kernel
+        return
+    shell = get_ipython()
+    if shell is not None:
+        shell.events.register("post_run_cell", _reset_page_orientation)
+        _PAGE_ORIENTATION["hooked"] = True
+
+
+def page_orientation() -> str:
+    """The orientation ``set_page_orientation`` set for this cell."""
+    return str(_PAGE_ORIENTATION["value"])
+
+
 _BR_RE = re.compile(r"<br\s*/?>", re.I)
 _MARKUP_RE = re.compile(r"<[^>]+>")
 # Inter's average glyph is a little over half its size; a label's width in px
@@ -579,7 +617,7 @@ class TableView:
     def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
         bundle = {HTML_MIME: self._repr_html_(), PLAIN_MIME: repr(self.df)}
         if static_figures():
-            bundle[MARKDOWN_MIME] = _typst.table(self.df)
+            bundle[MARKDOWN_MIME] = _typst.table(self.df, orientation=page_orientation())
         return bundle
 
     def __repr__(self) -> str:
@@ -615,7 +653,7 @@ def figure_bundle(fig) -> dict[str, Any]:
             # typst carrying the dpx-wide mark, read by the preamble's show
             # rule. Portrait figures stay on the image path above. The
             # caption is the float's, so the block carries none.
-            orientation = figure_orientation(figure_ratio(fig))
+            orientation = figure_orientation(figure_ratio(fig), page_orientation())
             if orientation == "landscape":
                 typst = _typst.figure(png, orientation=orientation)
                 if typst:

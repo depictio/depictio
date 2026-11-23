@@ -3093,7 +3093,27 @@ class NotebookExportConfig(BaseSettings):
         description="Headless figure extractions one user may start in an hour (429 past it).",
     )
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_")
+    # The report layer editor: lets a dashboard carry its own export notes
+    # (intro, conclusion, cover, tile placement), written by its editors. A
+    # gate of its own so an operator can turn on notebook export (the reader
+    # side) without opening the editor (the authoring side) yet. It only acts
+    # when notebook export is on too: `enabled and report_editor`.
+    report_editor: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "DEPICTIO_REPORT_EDITOR_ENABLED", "DEPICTIO_NOTEBOOK_EXPORT_REPORT_EDITOR"
+        ),
+        description=(
+            "Expose the report layer editor: a dashboard carries its own versioned report "
+            "layer (intro, conclusion, cover, which tiles belong in the report and in which "
+            "order), written by `PUT /dashboards/report_layer/{id}`. Off by default while the "
+            "feature is finalised: the routes answer 404 and the viewer hides the editor "
+            "(`features.report_editor` in `/utils/server-info`). It only acts when `enabled` "
+            "is on too."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_", populate_by_name=True)
 
 
 class StaticExportConfig(BaseSettings):

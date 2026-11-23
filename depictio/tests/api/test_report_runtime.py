@@ -301,14 +301,18 @@ def test_render_embeds_by_default_and_the_download_does_not(gate):
 
     owner = ExportUser(id=ObjectId())
     gate.add(str(owner.id))
-    assert ep._embed_runtime(_request(), DASHBOARD_OID, owner, default=True) is True
-    assert ep._embed_runtime(_request(), DASHBOARD_OID, owner, default=False) is False
-    assert ep._embed_runtime(_request(embed_runtime=True), DASHBOARD_OID, owner, default=False)
-    assert not ep._embed_runtime(_request(embed_runtime=False), DASHBOARD_OID, owner, default=True)
+    assert ep._embed_runtime(_request(), DASHBOARD_OID, _state(), owner, default=True) is True
+    assert ep._embed_runtime(_request(), DASHBOARD_OID, _state(), owner, default=False) is False
+    assert ep._embed_runtime(
+        _request(embed_runtime=True), DASHBOARD_OID, _state(), owner, default=False
+    )
+    assert not ep._embed_runtime(
+        _request(embed_runtime=False), DASHBOARD_OID, _state(), owner, default=True
+    )
     # Asked for, but not an owner: the document is the plain notebook.
     stranger = ExportUser(id=ObjectId())
     assert not ep._embed_runtime(
-        _request(embed_runtime=True), DASHBOARD_OID, stranger, default=True
+        _request(embed_runtime=True), DASHBOARD_OID, _state(), stranger, default=True
     )
 
 

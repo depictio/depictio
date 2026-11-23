@@ -651,6 +651,10 @@ def post_report_manifest(
 
     if not current_user or not getattr(current_user, "id", None):
         raise HTTPException(status_code=401, detail="Sign in to build a report's manifest.")
+    if request.state is None:
+        # The export falls back to the report layer's state; the runtime's
+        # manifest has no such fallback — it opens on exactly one state.
+        raise HTTPException(status_code=422, detail="The state to open the runtime on is required.")
     reason = report.ineligibility(request.state)
     if reason:
         raise HTTPException(status_code=409, detail=reason)

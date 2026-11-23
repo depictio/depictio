@@ -174,6 +174,10 @@ async def server_info(
             "changes_since": settings.dashboard_versions.changes_since_enabled,
             "static_export": settings.static_export.enabled,
             "notebook_export": settings.notebook_export.enabled,
+            # The report layer's editor, which only exists when export does.
+            "report_editor": (
+                settings.notebook_export.enabled and settings.notebook_export.report_editor
+            ),
             "usage_stats": settings.usage_stats.enabled,
         },
     }

@@ -20,6 +20,7 @@ from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.annotation_routes import annotation_router
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_routes import filter_state_router
+from depictio.api.v1.endpoints.dashboards_endpoints.report_layer_routes import report_layer_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.shared_labels_routes import (
     shared_labels_router,
@@ -187,6 +188,14 @@ router.include_router(
 router.include_router(
     shared_labels_router,
     prefix="/dashboards/annotations",
+    tags=["Dashboards"],
+)
+
+# The report layer (#1457): own prefix, `/{id}` only, which no dashboards
+# route collides with.
+router.include_router(
+    report_layer_router,
+    prefix="/dashboards/report_layer",
     tags=["Dashboards"],
 )
 

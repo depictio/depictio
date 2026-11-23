@@ -38,6 +38,7 @@ from depictio.api.v1.services.notebook_export.generator import (
 )
 from depictio.api.v1.services.notebook_export.reading_order import filter_icon_id
 from depictio.models.models.analysis_state import (
+    AnalysisContext,
     AnalysisState,
     NotebookExportRequest,
     NotebookPreflight,
@@ -79,6 +80,9 @@ TAB_PROJECTION = {
         # The colour per category value code-mode figures read
         # (`depictio_category_colors`).
         "category_colors",
+        # The report layer (#1457): the export's own intro, conclusion, cover
+        # and tile/tab placement, stored on the main tab.
+        "report_layer",
     )
 }
 
@@ -86,6 +90,47 @@ TAB_PROJECTION = {
 def _require_enabled() -> None:
     if not settings.notebook_export.enabled:
         raise HTTPException(status_code=404, detail="Notebook export is disabled.")
+
+
+def _state_of_layer(main_tab: dict[str, Any]) -> AnalysisState | None:
+    """The report layer's state: the filters the report is drawn and exported
+    at, or ``None`` (the layer holds none, or one that does not validate)."""
+    layer = main_tab.get("report_layer")
+    raw_state = layer.get("state") if isinstance(layer, dict) else None
+    if not isinstance(raw_state, dict):
+        return None
+    try:
+        return AnalysisState.model_validate(raw_state)
+    except Exception:
+        return None
+
+
+def _resolved_request_state(
+    dashboard_id: PyObjectId, request: NotebookExportRequest
+) -> AnalysisState:
+    """The state an export is drawn at: the request's, else the report layer's
+    (the state the report is written for), else the dashboard's defaults.
+
+    The preflight, the document and the render must all agree on one state,
+    so every route resolves it once, up front — including the checks that run
+    before the plan is built.
+    """
+    if request.state is not None:
+        return request.state
+    doc = routes.dashboards_collection.find_one(
+        {"dashboard_id": ObjectId(str(dashboard_id))}, {"parent_dashboard_id": 1}
+    )
+    if doc:
+        # The projection leaves `dashboard_id` out: with no parent, the doc
+        # queried is the family's main tab itself.
+        family_id = doc.get("parent_dashboard_id") or dashboard_id
+        main_tab = routes.dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(str(family_id))}, {"report_layer": 1}
+        )
+        state = _state_of_layer(main_tab or {})
+        if state is not None:
+            return state
+    return AnalysisState(context=AnalysisContext(dashboard_id=str(dashboard_id)))
 
 
 def _order_active_filters(
@@ -566,7 +611,7 @@ def _resolve_export_pins(
 
 def build_export_plan(
     dashboard_id: PyObjectId,
-    state: AnalysisState,
+    state: AnalysisState | None,
     current_user: User,
     access_token: str | None,
     theme: str = "paper",
@@ -578,6 +623,12 @@ def build_export_plan(
     tabs = [convert_objectid_to_str(t) for t in raw_tabs]
     if not tabs:
         raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+    if state is None:
+        # No state in the request: the report layer's, the filters the report
+        # is written for, else the dashboard's defaults.
+        state = _state_of_layer(tabs[0]) or AnalysisState(
+            context=AnalysisContext(dashboard_id=str(dashboard_id))
+        )
     project_id = tabs[0].get("project_id")
     project_doc = None
     try:
@@ -705,6 +756,7 @@ def build_export_plan(
         tabs=tabs,
         project=project,
         state=state,
+        report_layer=(main.get("report_layer") or None),
         dcs=dcs,
         stages=stages,
         title=str(main.get("title") or "Dashboard"),
@@ -782,6 +834,7 @@ def _runtime_refusal(
 def _embed_runtime(
     request: NotebookExportRequest,
     dashboard_id: PyObjectId,
+    state: AnalysisState,
     current_user: User,
     *,
     default: bool,
@@ -789,7 +842,7 @@ def _embed_runtime(
     wanted = default if request.embed_runtime is None else request.embed_runtime
     if not wanted:
         return False
-    reason = _runtime_refusal(dashboard_id, request.state, current_user)
+    reason = _runtime_refusal(dashboard_id, state, current_user)
     if reason:
         logger.info(f"Notebook export {dashboard_id}: tiles stay the export's own ({reason})")
         return False
@@ -820,9 +873,10 @@ def notebook_export_preflight(
 ) -> NotebookPreflight:
     """What the export will contain: one verdict per tile, stage counts, warnings."""
     _require_enabled()
+    state = _resolved_request_state(dashboard_id, request)
     plan = build_export_plan(
         dashboard_id,
-        request.state,
+        state,
         current_user,
         access_token,
         theme=request.theme,
@@ -834,7 +888,7 @@ def notebook_export_preflight(
     preflight = NotebookBuilder(plan).preflight(
         render_available=settings.notebook_export.render_enabled
     )
-    reason = _combined_refusal(dashboard_id, request.state, current_user)
+    reason = _combined_refusal(dashboard_id, state, current_user)
     preflight.combined_available = reason is None
     preflight.combined_reason = reason
     return preflight
@@ -856,15 +910,16 @@ def notebook_export(
     from depictio.api.v1.services.notebook_export import store
 
     _require_enabled()
+    state = _resolved_request_state(dashboard_id, request)
     plan = build_export_plan(
         dashboard_id,
-        request.state,
+        state,
         current_user,
         access_token,
         theme=request.theme,
         # Off unless asked: the reader's own render fetches the manifest and the
         # runtime from this API, which only works for an owner with access.
-        embed_runtime=_embed_runtime(request, dashboard_id, current_user, default=False),
+        embed_runtime=_embed_runtime(request, dashboard_id, state, current_user, default=False),
         pdf=request.pdf,
         pdf_style=request.pdf_style,
     )
@@ -898,13 +953,15 @@ def _require_render_enabled() -> None:
 
 
 def _require_owner_for_authored_code(plan: ExportPlan, current_user: User) -> None:
-    """Only a project owner may render a dashboard that carries authored code.
+    """Only a project owner or editor may render a dashboard that carries
+    authored code (#1457).
 
     The render never runs a code-mode figure's Python itself (``author_code``
     is off for it: the figure is drawn through the API's sandbox, as the
     dashboard draws it). The gate stays as a second line: it rests on the
-    *project*'s owners, since anyone with viewer access can own a dashboard
-    document (by creating or duplicating one) and so write its code.
+    *project*'s owners and editors, since anyone with viewer access can own
+    a dashboard document (by creating or duplicating one) and so write its
+    code — a mere viewer who owns such a copy stays refused.
     """
     authored = [
         m
@@ -915,15 +972,15 @@ def _require_owner_for_authored_code(plan: ExportPlan, current_user: User) -> No
     if not authored or settings.auth.is_single_user_mode:
         return
     project_id = (plan.tabs[0] if plan.tabs else {}).get("project_id")
-    if project_id and routes.check_project_permission(project_id, current_user, "owner"):
+    if project_id and routes.check_project_permission(project_id, current_user, "editor"):
         return
     titles = ", ".join(sorted({str(m.get("title") or m.get("index")) for m in authored})[:3])
     raise HTTPException(
         status_code=403,
         detail=(
             f"This dashboard has {len(authored)} code-mode figure(s) ({titles}). Rendering it "
-            "as a report is limited to the project's owners; download the notebook and run it "
-            "yourself instead."
+            "as a report is limited to the project's owners and editors; download the notebook "
+            "and run it yourself instead."
         ),
     )
 
@@ -989,17 +1046,18 @@ def notebook_export_render(
     from depictio.serverless.report import user_payload
 
     combined = request.output == "combined"
+    state = _resolved_request_state(dashboard_id, request)
     if combined:
         # The user asked for the dashboard in the file: a report without it is
         # not what they asked for, so a refusal is an error, not a downgrade.
-        refusal = _combined_refusal(dashboard_id, request.state, current_user)
+        refusal = _combined_refusal(dashboard_id, state, current_user)
         if refusal:
             raise HTTPException(
                 status_code=409, detail=f"The report + dashboard file is unavailable: {refusal}."
             )
         embed_runtime = True
     else:
-        embed_runtime = _embed_runtime(request, dashboard_id, current_user, default=True)
+        embed_runtime = _embed_runtime(request, dashboard_id, state, current_user, default=True)
     user_id = str(current_user.id)
     limits = settings.notebook_export
     jobs.admit(
@@ -1011,7 +1069,7 @@ def notebook_export_render(
     )
     plan = build_export_plan(
         dashboard_id,
-        request.state,
+        state,
         current_user,
         access_token,
         theme=request.theme,
@@ -1048,7 +1106,8 @@ def notebook_export_render(
             "runtime": (
                 {
                     "dashboard_id": str(dashboard_id),
-                    "state": request.state.model_dump(mode="json"),
+                    # The resolved state: a request may leave it to the layer.
+                    "state": state.model_dump(mode="json"),
                     "user": user_payload(current_user),
                     # The look the document's own cell would pass (its brand
                     # primary and type), so both render paths match.

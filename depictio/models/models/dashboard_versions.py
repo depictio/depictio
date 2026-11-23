@@ -134,6 +134,13 @@ class TabSnapshot(BaseModel):
     # Label columns shared on the dashboard (main tab only, like the Guide):
     # what every reader sees as read-only groups. Plain dicts, as stored.
     shared_labels: list[dict[str, Any]] = Field(default_factory=list)
+    # The report layer (main tab only, like the Guide and the labels): the
+    # export's intro, conclusion, cover and tile placement. A plain dict, not
+    # a `ReportLayer`: dumping the model would add every unset key, and each
+    # key it gains later would then move the hash of every report-holding
+    # dashboard. The route validates every write, so a stored dict is well
+    # formed; restore writes it back exactly as the snapshot held it.
+    report_layer: Optional[dict[str, Any]] = None
     # Identity, not content: never hashed and never written onto a live tab.
     # Kept so a tab a restore recreates is still the one its YAML refreshes.
     source_key: Optional[str] = None

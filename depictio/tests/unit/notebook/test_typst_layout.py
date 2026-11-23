@@ -222,3 +222,20 @@ def test_a_heading_before_a_wide_float_moves_onto_its_landscape_page():
     styled = preamble.index('let key = if it.has("label")')
     assert skip > styled, "the skipping rule must come last to see the heading first"
     assert "dpx-heading-copy(prev)" in preamble
+
+
+def test_a_set_page_orientation_turns_a_narrow_table(monkeypatch):
+    """The report layer's per-tile override reaches the table's typst."""
+    from depictio.notebook import components
+
+    monkeypatch.setenv(components.STATIC_FIGURES_ENV, "1")
+    view = components.TableView(_frame(4))
+    portrait = view._repr_mimebundle_()[components.MARKDOWN_MIME]
+    assert "dpx-wide" not in portrait
+    try:
+        components.set_page_orientation("landscape")
+        landscape = view._repr_mimebundle_()[components.MARKDOWN_MIME]
+    finally:
+        components.set_page_orientation()
+    assert "dpx-wide" in landscape
+    assert components.page_orientation() == "auto"

@@ -50,6 +50,7 @@ from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
+from depictio.models.models.report_layer import ReportLayer
 from depictio.models.models.templates import DashboardTemplateOrigin
 from depictio.models.models.users import Permission
 
@@ -2565,6 +2566,12 @@ class DashboardData(MongoModel):
     # validates; typed loosely here so a stored ObjectId-looking value can
     # never make a dashboard unloadable.
     shared_labels: list[dict[str, Any]] = []
+    # The report layer: the dashboard's own export notes (intro, conclusion,
+    # cover, tile and tab placement). Read from the main tab for the whole
+    # family, and written only by `PUT /dashboards/report_layer/{id}` (never
+    # by `/save`). Typed on the main-tab write path: the route validates every
+    # write, so a stored layer is always a `ReportLayer`.
+    report_layer: ReportLayer | None = None
     # Dashboard-wide default for where advanced-viz tiles draw their controls.
     # `popover` for every dashboard saved before this existed, which is what
     # they already did; a tile's own `controls_placement` still wins.

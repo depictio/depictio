@@ -598,6 +598,21 @@ def test_render_stages_the_notebook_and_queues_the_job(patched_env):
     assert jobs.owned(status.job_id, str(ObjectId()), jobs.RENDER) is None
 
 
+def test_a_render_without_a_state_hands_the_worker_the_resolved_one(patched_env):
+    """A request may leave the state to the report layer (#1457): the runtime
+    the worker embeds opens on the state the document was built at, never on
+    a missing one."""
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+    a, b, c = _staging(staged, queued)
+    with a, b, c, patch.object(nbx, "_embed_runtime", lambda *args, **kwargs: True):
+        status = _render(None)
+
+    assert status.status == "queued"
+    runtime = queued["kwargs"]["runtime"]  # type: ignore[index]
+    assert runtime["state"]["context"]["dashboard_id"] == str(DASHBOARD_ID)
+
+
 def test_the_server_render_never_carries_the_author_s_code(patched_env):
     """The downloaded notebook keeps the code-mode figure's Python for its reader
     to run; the document the worker executes asks the API for that figure,
@@ -719,20 +734,56 @@ def test_a_render_job_of_another_user_is_not_found(patched_env):
 
 def test_a_non_owner_cannot_render_author_written_code(patched_env):
     """A code-mode figure is the author's Python: rendering it is the project
-    owners' call, not a dashboard owner's (a viewer can own a dashboard)."""
+    owners' and editors' call, not a dashboard owner's (a viewer can own a
+    dashboard document)."""
     routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
     with (
         patch.object(nbx.settings.notebook_export, "render_enabled", True),
         patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
         patch(
             f"{routes_mod}.check_project_permission",
-            lambda project_id, user, required="viewer": required != "owner",
+            lambda project_id, user, required="viewer": required != "editor",
         ),
     ):
         with pytest.raises(HTTPException) as exc:
             _render(_state(FILTERS))
     assert exc.value.status_code == 403
     assert "code-mode" in exc.value.detail
+
+
+def test_an_editor_can_render_author_written_code(patched_env):
+    """An editor of the project may render it (#1457): the report layer they
+    write reaches the same export as the owner's. A viewer stays refused —
+    even one who owns the dashboard document (its copy is theirs, its data
+    is not)."""
+    from types import SimpleNamespace
+
+    plan = SimpleNamespace(
+        tabs=[
+            {
+                "project_id": "p1",
+                "stored_metadata": [
+                    {"component_type": "figure", "mode": "code", "title": "F", "index": "c1"}
+                ],
+            }
+        ]
+    )
+    routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+    with (
+        patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
+        patch(
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": required in ("owner", "editor"),
+        ),
+    ):
+        nbx._require_owner_for_authored_code(plan, _RenderUser())  # type: ignore[arg-type]
+        with patch(
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": required == "owner",
+        ):
+            with pytest.raises(HTTPException) as exc:
+                nbx._require_owner_for_authored_code(plan, _RenderUser())  # type: ignore[arg-type]
+    assert exc.value.status_code == 403
 
 
 def test_a_definition_version_exports_the_components_as_that_version_defined_them():

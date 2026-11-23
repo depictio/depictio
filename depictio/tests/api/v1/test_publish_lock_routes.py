@@ -185,6 +185,8 @@ GUARDED: set[tuple[str, str]] = {
     (_DASH, "import_dashboard_from_json"),
     # labels shared on a dashboard are part of its content
     ("dashboards_endpoints.shared_labels_routes", "put_shared_labels"),
+    # the report layer (#1457): the export's intro, conclusion and placement
+    ("dashboards_endpoints.report_layer_routes", "put_report_layer"),
     # versions: rewriting a published dashboard from its history
     (_VER, "delete_dashboard_version"),
     (_VER, "restore_dashboard_version"),

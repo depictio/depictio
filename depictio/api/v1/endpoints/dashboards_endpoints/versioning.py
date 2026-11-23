@@ -237,6 +237,10 @@ def build_tab_snapshots(family_docs: list[dict[str, Any]]) -> list[TabSnapshot]:
                 brand_theme=_jsonify(doc.get("brand_theme")) or None,
                 # Read from the main tab for the whole family, as the viewer does.
                 shared_labels=_jsonify(doc.get("shared_labels") or []) if is_main_tab else [],
+                # The report layer, also a main-tab field: a child tab's own
+                # copy is never read, so recording it would only let an
+                # invisible field move the hash.
+                report_layer=_jsonify(doc.get("report_layer")) if is_main_tab else None,
                 source_key=doc.get("source_key"),
             )
         )

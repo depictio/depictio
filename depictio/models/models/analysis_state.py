@@ -193,7 +193,10 @@ NotebookTheme = Literal["paper", "classic"]
 class NotebookExportRequest(BaseModel):
     """The analysis state to export. The export is one Quarto document (``.qmd``)."""
 
-    state: AnalysisState
+    # ``None``: the export is drawn at the dashboard's report layer's state
+    # (#1457), the filters the report is written for — or its defaults when
+    # the layer holds none.
+    state: AnalysisState | None = None
     theme: NotebookTheme = "paper"
     # The report host of the static runtime: tiles drawn in the page by the
     # dashboard's own renderers, over the same manifest a static export
