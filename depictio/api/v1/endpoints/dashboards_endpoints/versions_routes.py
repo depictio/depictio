@@ -467,6 +467,31 @@ _RESTORABLE_FIELDS: tuple[str, ...] = tuple(
     name for name in TabSnapshot.model_fields if name not in TAB_IDENTITY_FIELDS
 )
 
+#: Snapshot fields restore writes back exactly as the snapshot holds them,
+#: never rehydrated. The report layer's ObjectId-looking strings (``updated_by``,
+#: its tab ids, TipTap text) are values, not ids: rehydrating them left a
+#: restored dashboard unloading with "Input should be a valid string".
+_AS_STORED_FIELDS: frozenset[str] = frozenset({"report_layer"})
+
+
+def _restored_report_layer(layer: Any, live_main: dict[str, Any]) -> Any:
+    """The snapshot's report layer as restore writes it onto the main tab.
+
+    As stored (see ``_AS_STORED_FIELDS``), with a revision past every revision
+    an editor can have read: the PUT's write is conditional on the stored
+    revision, so a restored layer at an old revision would let a stale editor
+    overwrite it. ``max`` keeps the bump monotonic even when the snapshot is
+    newer than the live layer.
+    """
+    if not isinstance(layer, dict):
+        return layer
+    live_layer = live_main.get("report_layer")
+    stored = int((live_layer or {}).get("revision") or 0) if isinstance(live_layer, dict) else 0
+    restored = int(layer.get("revision") or 0)
+    bumped = dict(layer)
+    bumped["revision"] = max(stored, restored) + 1
+    return bumped
+
 
 def _rehydrate_ids(value: Any) -> Any:
     """Undo the snapshot's ObjectId→str flattening before writing back.
@@ -546,8 +571,18 @@ async def restore_dashboard_version(
     for tab_id, tab in snapshot_by_id.items():
         live = live_by_id.get(tab_id)
         # Rehydrated, or the restored components carry string `dc_id`s and
-        # render no data (see `_rehydrate_ids`).
-        content = {f: _rehydrate_ids(tab[f]) for f in _RESTORABLE_FIELDS if f in tab}
+        # render no data (see `_rehydrate_ids`). The report layer is the
+        # exception: its ObjectId-looking strings are values, not ids.
+        content = {}
+        for field_name in _RESTORABLE_FIELDS:
+            if field_name not in tab:
+                continue
+            if field_name in _AS_STORED_FIELDS:
+                content[field_name] = tab[field_name]
+            else:
+                content[field_name] = _rehydrate_ids(tab[field_name])
+        if "report_layer" in content:
+            content["report_layer"] = _restored_report_layer(content["report_layer"], main)
         unset: dict[str, str] = {}
         if "brand_theme" in content:
             theme = versioning.restorable_brand_theme(

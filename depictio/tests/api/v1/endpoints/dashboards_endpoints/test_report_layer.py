@@ -391,6 +391,169 @@ def test_save_pops_the_layer_instead_of_overwriting_it(ctx) -> None:
     )
 
 
+def test_a_restore_writes_the_layer_as_stored_and_the_dashboard_loads(ctx) -> None:
+    """The layer's ObjectId-looking strings are values, not ids: a restore
+    writes them back as the strings they are, and the document loads."""
+    from depictio.models.models.dashboards import DashboardData
+
+    did = _make_dashboard(ctx)
+    # The fields a real dashboard always carries, so the restored document
+    # differs from a healthy one only where the bugs bite.
+    ctx["dashboards"].update_one(
+        {"_id": did},
+        {"$set": {"icon": "mdi:view-dashboard", "icon_color": "orange", "icon_variant": "filled"}},
+    )
+    _put_layer(
+        ctx["client"],
+        did,
+        {
+            "intro": _tip(f"Run {ObjectId()} finished early"),
+            "cover": {"title": "The report"},
+            "tiles": [{"tab_id": str(did), "component_id": "f1", "caption": "The tile"}],
+            "tabs": [{"tab_id": str(did), "placement": "appendix"}],
+            "state": {
+                "filters": [
+                    {
+                        "index": "f-species",
+                        "column_name": "species",
+                        "interactive_component_type": "MultiSelect",
+                        "value": ["Adelie"],
+                        "metadata": {"dc_id": "dc1"},
+                    }
+                ],
+                "context": {"dashboard_id": str(did)},
+            },
+        },
+    )
+    saved = ctx["dashboards"].find_one({"_id": did})["report_layer"]
+    # The stored layer's author and tab ids are 24-hex strings.
+    assert saved["updated_by"] == CALLER.id
+    assert saved["tiles"][0]["tab_id"] == str(did)
+
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"title": "Named"}})
+    record = ctx["versioning"].capture_dashboard_version(
+        did, kind="explicit", author=CALLER, now=BASE
+    )
+    assert record is not None
+    _put_layer(ctx["client"], did, {"intro": _tip("Overwritten")}, base_revision=1)
+
+    response = ctx["client"].post(
+        f"/depictio/api/v1/dashboards/versions/{record.version_id}/restore"
+    )
+    assert response.status_code == 200, response.text
+
+    restored_doc = ctx["dashboards"].find_one({"_id": did})
+    # The GET path loads the restored document, ObjectIds and all.
+    assert DashboardData.from_mongo(restored_doc) is not None
+    restored = restored_doc["report_layer"]
+    assert restored["updated_by"] == CALLER.id
+    assert restored["tiles"][0]["tab_id"] == str(did)
+    assert restored["state"]["context"]["dashboard_id"] == str(did)
+    # The layer is what was saved, at a revision past every one read before
+    # the restore (2 live, 1 in the version): max(2, 1) + 1.
+    assert restored == dict(saved, revision=3)
+
+
+def test_from_mongo_loads_a_layer_whose_values_are_objectids(ctx) -> None:
+    """A restore before the layer was kept as stored wrote ObjectIds into the
+    stored layer; those dashboards must load again, values back to strings."""
+    from depictio.models.models.dashboards import DashboardData
+
+    did = _make_dashboard(ctx)
+    broken_text = ObjectId()
+    ctx["dashboards"].update_one(
+        {"_id": did},
+        {
+            "$set": {
+                "report_layer": {
+                    "revision": 1,
+                    "updated_by": ObjectId(CALLER.id),
+                    "intro": {
+                        "type": "doc",
+                        "content": [{"type": "text", "text": broken_text}],
+                    },
+                    "tiles": [{"tab_id": ObjectId(str(did)), "component_id": "f1"}],
+                }
+            }
+        },
+    )
+
+    dashboard = DashboardData.from_mongo(ctx["dashboards"].find_one({"_id": did}))
+
+    assert dashboard.report_layer is not None
+    assert dashboard.report_layer.updated_by == CALLER.id
+    assert dashboard.report_layer.tiles[0].tab_id == str(did)
+    assert dashboard.report_layer.intro["content"][0]["text"] == str(broken_text)
+
+
+def test_a_write_landing_between_the_read_and_the_write_gets_409(ctx, monkeypatch) -> None:
+    """Two writers holding the same revision: the one whose write lands
+    mid-flight must not overwrite the other's text."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import report_layer_routes
+
+    did = _make_dashboard(ctx)
+    fired: list[ObjectId] = []
+
+    def ensure_then_write(family_id, current_user):
+        """Seed the baseline, and with it land the other editor's write: the
+        only call between this request's read and its write."""
+        if fired:
+            return None
+        fired.append(family_id)
+        ctx["dashboards"].update_one(
+            {"dashboard_id": ObjectId(str(family_id))},
+            {
+                "$set": {
+                    "report_layer": {
+                        "revision": 1,
+                        "updated_by": CALLER.id,
+                        "intro": _tip("The other editor's text"),
+                    }
+                }
+            },
+        )
+        return None
+
+    monkeypatch.setattr(report_layer_routes, "_ensure_baseline_quietly", ensure_then_write)
+
+    response = _put_layer(ctx["client"], did, {"intro": _tip("This editor's text")})
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["revision"] == 1
+    assert detail["updated_by"] == CALLER.id
+    assert detail["layer"]["intro"]["content"][0]["content"][0]["text"] == (
+        "The other editor's text"
+    )
+    stored = ctx["dashboards"].find_one({"_id": did})["report_layer"]
+    assert stored["intro"]["content"][0]["content"][0]["text"] == "The other editor's text"
+
+
+def test_after_a_restore_a_put_with_the_pre_restore_base_revision_is_409(ctx) -> None:
+    """A restore must not lower the stored revision: an editor still holding
+    the pre-restore revision cannot overwrite the restored layer."""
+    did = _make_dashboard(ctx)
+    _put_layer(ctx["client"], did, {"intro": _tip("Version one")})
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"title": "Named"}})
+    record = ctx["versioning"].capture_dashboard_version(
+        did, kind="explicit", author=CALLER, now=BASE
+    )
+    assert record is not None
+    _put_layer(ctx["client"], did, {"intro": _tip("Version two")}, base_revision=1)
+
+    response = ctx["client"].post(
+        f"/depictio/api/v1/dashboards/versions/{record.version_id}/restore"
+    )
+    assert response.status_code == 200, response.text
+
+    stale = _put_layer(ctx["client"], did, {"intro": _tip("Stale")}, base_revision=2)
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["revision"] == 3
+    stored = ctx["dashboards"].find_one({"_id": did})["report_layer"]
+    assert stored["revision"] == 3
+    assert stored["intro"]["content"][0]["content"][0]["text"] == "Version one"
+
+
 def test_an_absent_layer_and_an_explicit_none_hash_the_same(ctx) -> None:
     """Adding the field must not make existing dashboards look edited."""
     versioning = ctx["versioning"]

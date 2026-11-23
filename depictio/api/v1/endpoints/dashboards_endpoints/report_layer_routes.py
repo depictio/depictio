@@ -73,6 +73,43 @@ def _plain(value: Any) -> Any:
     return value
 
 
+def _conflict(layer: dict[str, Any] | None) -> HTTPException:
+    """409 naming the stored layer, its author and time, not this write."""
+    stored_revision = int(layer.get("revision") or 0) if layer else _EMPTY_REVISION
+    last = layer or {}
+    return HTTPException(
+        status_code=409,
+        detail={
+            "message": (
+                "The report layer changed since you opened it. "
+                f"It is now at revision {stored_revision}."
+            ),
+            # Every stored value through _plain: a layer restored before it
+            # was kept as stored holds ObjectIds, and a raw one is not JSON.
+            "layer": _plain(last) if layer else None,
+            "revision": stored_revision,
+            "updated_by": _plain(last.get("updated_by")),
+            "updated_at": last.get("updated_at"),
+        },
+    )
+
+
+def _revision_condition(stored_revision: int) -> dict[str, Any]:
+    """The stored-revision half of the write's filter.
+
+    Revision 0 means nothing is stored, so the condition is "no layer";
+    anything else pins the exact revision the request read.
+    """
+    if stored_revision == _EMPTY_REVISION:
+        return {
+            "$or": [
+                {"report_layer": None},
+                {"report_layer": {"$exists": False}},
+            ]
+        }
+    return {"report_layer.revision": stored_revision}
+
+
 def _editable_family(dashboard_id: PyObjectId, current_user: User) -> tuple[ObjectId, dict]:
     """The family's main tab, when ``current_user`` may write its report layer.
 
@@ -133,6 +170,11 @@ async def put_report_layer(
     prose. The first write takes no revision: a dashboard with nothing stored
     is at revision 0.
 
+    The revision check is also the write's filter: a second writer whose write
+    lands between this request's read and its write changes the stored
+    revision, the filter matches nothing, and the answer is the same 409
+    rather than a silent overwrite.
+
     Content change, so it seeds a baseline and captures a version before and
     after — as an autosave: the layer is part of the dashboard, but an
     editor's typing is not one timeline step per keystroke.
@@ -144,20 +186,7 @@ async def put_report_layer(
     before = stored_layer(main_tab)
     stored_revision = int(before.get("revision") or 0) if before else _EMPTY_REVISION
     if payload.base_revision != stored_revision:
-        last = before or {}
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": (
-                    "The report layer changed since you opened it. "
-                    f"It is now at revision {stored_revision}."
-                ),
-                "layer": _plain(last) if before else None,
-                "revision": stored_revision,
-                "updated_by": last.get("updated_by"),
-                "updated_at": last.get("updated_at"),
-            },
-        )
+        raise _conflict(before)
 
     layer = payload.layer.model_copy(
         update={
@@ -170,9 +199,14 @@ async def put_report_layer(
     )
     # Before the write, as for every route that bypasses `/save`.
     _ensure_baseline_quietly(family_id, current_user)
-    dashboards_collection.update_one(
-        {"dashboard_id": family_id}, {"$set": {"report_layer": layer.model_dump(mode="json")}}
+    result = dashboards_collection.update_one(
+        {"dashboard_id": family_id, **_revision_condition(stored_revision)},
+        {"$set": {"report_layer": layer.model_dump(mode="json")}},
     )
+    if result.matched_count == 0:
+        # The stored revision moved between the read and the write.
+        fresh = dashboards_collection.find_one({"dashboard_id": family_id})
+        raise _conflict(stored_layer(fresh) if fresh else None)
     _capture_version_quietly(family_id, current_user, kind="auto")
     logger.info(f"Dashboard {family_id}: report layer written at revision {layer.revision}")
     return layer.model_dump(mode="json")

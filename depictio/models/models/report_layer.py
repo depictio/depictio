@@ -24,9 +24,22 @@ silently overwriting a colleague's text.
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from bson import ObjectId
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from depictio.models.models.analysis_state import AnalysisState
+
+
+def _objectids_to_str(value: Any) -> Any:
+    """ObjectIds back to strings, recursively."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _objectids_to_str(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_objectids_to_str(v) for v in value]
+    return value
+
 
 #: The report's look, where a style exists: the PDF prints in colour or mono
 #: (``pdf_style`` already means this to the export); ``None`` keeps the export
@@ -114,6 +127,14 @@ class ReportLayer(BaseModel):
     updated_by: Optional[str] = None
     # Naive UTC (PyMongo stores and reads BSON dates as naive UTC).
     updated_at: Optional[datetime] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _stored_objectids_load(cls, data: Any) -> Any:
+        """A restore that rehydrated ids wrote ObjectIds into the stored layer
+        (``updated_by``, tab ids, even TipTap text) and the dashboard stopped
+        loading. Those documents must come back, values as strings."""
+        return _objectids_to_str(data)
 
 
 class ReportLayerPut(BaseModel):
