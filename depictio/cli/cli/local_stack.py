@@ -747,6 +747,12 @@ INHERITED_SETTINGS = (
     # Dashboard versioning switches, among them "changed since your last
     # visit" (#1397), which is opt-in.
     "DEPICTIO_DASHBOARD_VERSIONS_",
+    # The offline outputs, off by default while they are finalised: the
+    # notebook export and its render (with the report editor), the static
+    # bundle.
+    "DEPICTIO_NOTEBOOK_EXPORT_",
+    "DEPICTIO_REPORT_EDITOR_ENABLED",
+    "DEPICTIO_STATIC_EXPORT_",
 )
 
 
