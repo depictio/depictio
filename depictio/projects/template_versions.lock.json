@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "3.0.2",
-      "content_hash": "0c6d8608168ab69ac8b27a1a538c061e55658d15a34f0cd85743791d9ad6baa6",
+      "version": "3.0.3",
+      "content_hash": "95cc74eaa4a1c44d0c92fe550a36f6c67a175e0fc598f88a213cd8984f237273",
       "catalog": {
         "adapterremoval": "1.1.0",
         "agat": "1.1.1",
@@ -42,7 +42,7 @@
         "cutandrun": "1.1.1",
         "damageprofiler": "1.1.0",
         "dbcan": "1.1.1",
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "deseq2": "1.1.1",
         "dexseq": "1.2.0",
         "edger": "1.1.0",
@@ -208,11 +208,11 @@
       }
     },
     "nf-core/atacseq/1.2.2": {
-      "version": "3.1.2",
-      "content_hash": "887d7cf5bb40ff04ed23bafccc577b214429908732798c7b19c1714aff32a5b6",
+      "version": "3.1.3",
+      "content_hash": "4efa4ad9b16771f91d4081439ac9069919ab2152d6aa3f789c315af993e82dce",
       "catalog": {
         "ataqv": "1.2.1",
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
@@ -221,11 +221,11 @@
       }
     },
     "nf-core/atacseq/2.1.2": {
-      "version": "5.0.2",
-      "content_hash": "ab27cfa4bc072cee13cab9596c5fb14d592d1b526c35e61e53d66e6aa8c25ee1",
+      "version": "5.0.3",
+      "content_hash": "46db2e40f3e28b833bcb32b70bb48d87113d982731c3f62e4a00adeb35051e3c",
       "catalog": {
         "ataqv": "1.2.1",
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
@@ -235,10 +235,10 @@
       }
     },
     "nf-core/chipseq/1.2.0": {
-      "version": "2.2.2",
-      "content_hash": "a90ecea88afa1051ff5821021fb516067dd4b1529f048bc89d15a0de3ac79096",
+      "version": "2.2.3",
+      "content_hash": "3d9af4a4b2fca41d10debfcaf20c7b3800b4dd897212568bb7a571f6c27c0b7a",
       "catalog": {
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
@@ -247,10 +247,10 @@
       }
     },
     "nf-core/chipseq/2.1.0": {
-      "version": "5.0.2",
-      "content_hash": "8a724aff87f7096f6021d277393bc416f72f3528ce994658d33aa8404bf2e0b6",
+      "version": "5.0.3",
+      "content_hash": "f9fdedc07d1be1edaf100fa4ac8ffbb1352aa8f450ac2a2cef5497b7b9c303a1",
       "catalog": {
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
@@ -267,12 +267,12 @@
       }
     },
     "nf-core/cutandrun/3.1": {
-      "version": "3.0.1",
-      "content_hash": "504632b72a6a3c63f72d81d9628ea8a147e9405dd1ff3f7d9d5fd9df9b1d13eb",
+      "version": "3.0.2",
+      "content_hash": "715dbcb42cbf56b362e9f79b0853cf40eba44f93c58f6320ef6ed3c83d9dcde4",
       "catalog": {
         "bowtie2": "1.1.0",
         "cutandrun": "1.1.1",
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "samtools": "1.2.0",
@@ -280,12 +280,12 @@
       }
     },
     "nf-core/cutandrun/3.2.2": {
-      "version": "3.0.1",
-      "content_hash": "27b8fd44540f80f5408e4bc71533e77a2258a8bf888943b75be5ba29064e36b2",
+      "version": "3.0.2",
+      "content_hash": "37cb26e1fed88f3deee7266ca4508d38e73ace705c2fc3ea8aacb0f7065c0959",
       "catalog": {
         "bowtie2": "1.1.0",
         "cutandrun": "1.1.1",
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "samtools": "1.2.0",

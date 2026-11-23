@@ -135,8 +135,8 @@
       "content_hash": "1105b074cb2b7b6f7ef60d2bbb9c30351749574b3f678dd8003c4203d563ea98"
     },
     "deeptools": {
-      "version": "1.1.1",
-      "content_hash": "8a30c9b9510faca30ecd07e4a2d5a6cf0b7dddf713045fcf2cc9778e4c4109e2"
+      "version": "1.2.0",
+      "content_hash": "c53a2252e2a818425e65b67bb5746154b57293bbbae64dda8e1b79ac3f1c81d1"
     },
     "deseq2": {
       "version": "1.1.1",

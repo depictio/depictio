@@ -14,14 +14,21 @@ fixture: plot_profile.tsv
 renders_as:
   # MultiQC's deeptools module has no plot for this matrix at all: nf-core
   # publishes it as a plain table beside the PDF, and this is what reads it.
-  # C3 N/A: deepTools publishes no cut-off for a metagene signal; the anchors
-  # (start, end, centre) vary by run, so no fixed marker is drawn.
+  # C3 N/A: deepTools publishes no cut-off for a metagene signal. The anchors
+  # (TSS, TES, flank ends) vary by run, so they come from `bin_label` rather
+  # than a fixed marker, and the horizontal line is the median bin of the
+  # table, a data-defined background level the peak is read against.
   - id: metagene_profile
     component: advanced_viz
     kind: profile
     title: Metagene signal profile
     roles: {series: sample, x: bin, y: signal}
-    config: {x_title: Bin across the plotted window, y_title: Mean signal}
+    config:
+      x_label_col: bin_label
+      reference_y_stat: median
+      reference_y_label: median bin
+      x_title: Position along the plotted window
+      y_title: Mean signal
     description: >-
       Each line is a library: its mean signal in every bin across the plotted window.
       It answers where along genes or around an anchor the signal accumulates.
@@ -30,25 +37,9 @@ renders_as:
       the promoter for a promoter mark, and an input stays flat. A library with no peak
       did not enrich, and a peak in the wrong place points to a mislabelled library.
 
-      Note: the window is a fixed number of bins, so the anchor labels of the run, such
-      as the start and end of the scaled region, name the bins.
-
-      Source: https://deeptools.readthedocs.io/en/latest/content/tools/plotProfile.html
-  - id: signal_line
-    component: figure
-    visu_type: line
-    dict_kwargs:
-      x: bin
-      y: signal
-      color: sample
-      labels: {bin: Bin across the plotted window, signal: Mean signal, sample: Sample}
-    title: Mean signal across the plotted window
-    description: >-
-      Each line is a library: its mean signal in every bin of the window. It answers the
-      same question as the profile above with a plain line chart you can zoom.
-
-      How to read: compare the height and position of the peaks between libraries.
-      Libraries of one target should overlap, and inputs should stay low.
+      The dotted guides are the anchors deepTools names for the run, such as the TSS
+      and TES of a scaled gene body, and the dashed line is the median bin of the
+      table: the background a peak has to rise above.
 
       Source: https://deeptools.readthedocs.io/en/latest/content/tools/plotProfile.html
   - id: signal_peak_card

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  axisAnchors,
   integerTickValues,
   markerSizeFor,
   MARKER_MAX_POINTS,
@@ -54,5 +55,22 @@ describe('integerTickValues', () => {
 
   it('is null for no data', () => {
     expect(integerTickValues([])).toBeNull();
+  });
+});
+
+describe('axisAnchors', () => {
+  it('keeps each named x once, sorted, and skips blank labels', () => {
+    const xs = [11, 1, 2, 30, 1, 11, 30];
+    const labels = ['TSS', '-3.0Kb', null, 'TES', '-3.0Kb', 'TSS', ' '];
+    expect(axisAnchors(xs, labels)).toEqual([
+      { x: 1, label: '-3.0Kb' },
+      { x: 11, label: 'TSS' },
+      { x: 30, label: 'TES' },
+    ]);
+  });
+
+  it('names nothing without labels or with non-numeric x', () => {
+    expect(axisAnchors([1, 2], [null, ''])).toEqual([]);
+    expect(axisAnchors(['a', null], ['TSS', 'TES'])).toEqual([]);
   });
 });

@@ -2358,6 +2358,15 @@ class ProfileConfig(_BaseVizConfig):
         description="Draw a marker at this x, e.g. 0 for a transcription start site",
     )
     reference_label: str | None = Field(default=None, description="Label for the marker")
+    x_label_col: str | None = Field(
+        default=None,
+        description=(
+            "Column naming an anchor at some x values and null elsewhere (deepTools' "
+            "``bin_label``: TSS, TES, flank ends): each anchor is drawn as a vertical "
+            "guide and labels the x axis, so a window whose anchors move between runs "
+            "needs no hard-coded marker"
+        ),
+    )
     reference_y: float | None = Field(
         default=None, description="Draw a horizontal reference line at this y"
     )

@@ -46,3 +46,28 @@ export function integerTickValues(xs: readonly number[]): number[] | null {
   }
   return Array.from(distinct).sort((a, b) => a - b);
 }
+
+/** An x value named by the data (deepTools' `bin_label`: TSS, TES, -3.0Kb). */
+export interface AxisAnchor {
+  x: number;
+  label: string;
+}
+
+/**
+ * The anchors a label column names: the first non-empty label met at each x,
+ * sorted along x. Rows of every series repeat the same anchors, so each x is
+ * kept once; a blank or null label names nothing.
+ */
+export function axisAnchors(xs: readonly unknown[], labels: readonly unknown[]): AxisAnchor[] {
+  const byX = new Map<number, string>();
+  const n = Math.min(xs.length, labels.length);
+  for (let i = 0; i < n; i++) {
+    const raw = labels[i];
+    if (raw === null || raw === undefined) continue;
+    const label = String(raw).trim();
+    const x = Number(xs[i]);
+    if (!label || xs[i] === null || !Number.isFinite(x) || byX.has(x)) continue;
+    byX.set(x, label);
+  }
+  return Array.from(byX, ([x, label]) => ({ x, label })).sort((a, b) => a.x - b.x);
+}
