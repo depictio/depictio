@@ -40,6 +40,7 @@ import {
   isDenseTaxonomyAxis,
   isSpacerSlot,
   meltWideRows,
+  paletteUniverse,
   percentTickFormat,
   resolveSortCategory,
   SAMPLE_SORT_OPTIONS,
@@ -660,7 +661,7 @@ const StackedBarRenderer: React.FC<Props> = ({
       ...(columnCategoryColors(categorySource, activeRank) ?? {}),
       ...(config.taxon_palette ?? {}),
     });
-    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette, taxonPinned, isDark ? 'dark' : 'light', plotOverflow(theme));
+    const colourSource = stableColorMap(paletteUniverse(wide ? null : activeRank, taxonUniverse, taxaForPalette), palette, taxonPinned, isDark ? 'dark' : 'light', plotOverflow(theme));
     const series = Array.from(tracesByTaxon.entries()).filter(([, arr]) =>
       arr.some((v) => (v ?? 0) > 0),
     );

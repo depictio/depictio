@@ -417,3 +417,19 @@ export function valueAxisTitle(
 }
 
 export type TaxonomyOrientation = 'v' | 'h';
+
+/**
+ * The taxa a stacked bar hands out its palette to. A table holding several ranks
+ * (Kingdom to Genus) lists every rank's taxa under one column, so its whole
+ * universe would spend the palette's slots on taxa of other ranks, and the shown
+ * rank's taxa would fall past them into the overflow grey. With a rank shown, the
+ * palette goes to that rank's taxa; a single-level table keeps its whole universe,
+ * so a filter does not reshuffle colours.
+ */
+export function paletteUniverse(
+  activeRank: string | null,
+  fetched: readonly string[] | null,
+  shown: readonly string[],
+): readonly string[] {
+  return activeRank ? shown : (fetched ?? shown);
+}
