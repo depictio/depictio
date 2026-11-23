@@ -534,3 +534,43 @@ def test_companion_tables_of_a_live_kind_ship_under_their_real_ids() -> None:
 
     # A frozen / omitted tile reads no bundled table, companions included.
     assert advanced_viz_companions(_stored_comp("molecule_3d", msa_dc_id="x" * 24)) == {}
+
+
+_SHOWCASE_SEEDS = (
+    Path(__file__).resolve().parents[3]
+    / "projects"
+    / "init"
+    / "advanced_viz_showcase"
+    / ".db_seeds"
+)
+
+
+@pytest.mark.parametrize(
+    "seed",
+    [
+        "dashboard_clustering_pca.json",
+        "dashboard_clustering_umap.json",
+        "dashboard_clustering_tsne.json",
+        "dashboard_clustering_pcoa.json",
+        "dashboard_spatial_cells.json",
+    ],
+)
+def test_the_showcase_table_driven_embeddings_are_live(seed):
+    """The five showcase embeddings carry their coordinates as columns and no
+    ``compute_method``: the bundle serves them live, never as a frozen compute."""
+    import json
+
+    doc = json.loads((_SHOWCASE_SEEDS / seed).read_text())
+    docs = doc if isinstance(doc, list) else [doc]
+    embeddings = [
+        c
+        for d in docs
+        for c in d.get("stored_metadata") or []
+        if c.get("component_type") == "advanced_viz" and advanced_viz_kind(c) == "embedding"
+    ]
+    assert embeddings, f"{seed} holds no embedding tile"
+    for comp in embeddings:
+        assert not (comp.get("config") or {}).get("compute_method")
+        assert celery_compute_request(comp) is None
+        plan = classify_stored_component(comp)
+        assert plan.tier is ComponentTier.LIVE, (seed, plan)
