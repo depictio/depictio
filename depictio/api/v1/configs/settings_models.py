@@ -974,6 +974,15 @@ class AuthBootstrapConfig(BaseSettings):
             "Set via DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD."
         ),
     )
+    admin_password_generated: bool = Field(
+        default=False,
+        description=(
+            "The bootstrap password was made up by a tool, not chosen by a person "
+            "(`depictio local up` and `local export` set this). The admin then starts "
+            "unclaimed: in single-user mode its owner sets an email and a password "
+            "without being asked for one nobody saw."
+        ),
+    )
 
     # Optional CI / dev test user. Off by default; CI sets the flag to true and
     # the existing fixture credentials keep working so the Cypress + workflow

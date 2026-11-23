@@ -822,7 +822,9 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
         # An operator who set both env vars chose these credentials; every
         # fallback below makes up a password nobody knows, which the owner
         # claims later (POST /auth/me/admin_credentials, single-user mode).
-        credentials_claimed = bool(admin_email and admin_password)
+        credentials_claimed = bool(
+            admin_email and admin_password and not settings.bootstrap.admin_password_generated
+        )
         if not admin_email or not admin_password:
             if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
                 # Single-user mode has no login UI — the anonymous auto-login

@@ -426,6 +426,12 @@ backend:
     # public-facing instance.
     DEPICTIO_AUTH_REGISTRATION_DISABLED: "false"
 
+    # Public mode: guests see an "Admin sign-in" link to the password form.
+    # On by default. Whatever it says, a public instance's password sign-in
+    # admits admins only, fails closed without Redis, and locks an account
+    # after 5 wrong passwords in 15 minutes.
+    DEPICTIO_AUTH_PUBLIC_ADMIN_SIGN_IN: "true"
+
     # Project migration (#1303). Receiving is on by default in the chart, off in
     # the code: inbound with no DEPICTIO_MIGRATION_INBOUND_SOURCES and no valid
     # invite code accepts nothing, and an invite can only be issued by an admin

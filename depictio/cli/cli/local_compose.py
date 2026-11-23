@@ -131,6 +131,7 @@ def compose_env(secret_values: dict, version: str | None) -> str:
         f"DEPICTIO_S3_BUCKET={S3_BUCKET}",
         f"DEPICTIO_BOOTSTRAP_ADMIN_EMAIL={ADMIN_EMAIL}",
         f"DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD={secret_values['admin_password']}",
+        "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD_GENERATED=true",
     ]
     if version:
         lines.append(f"DEPICTIO_VERSION={version}")

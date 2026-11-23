@@ -7,11 +7,19 @@ import pytest
 from depictio.api.v1 import db_init
 
 
-def _settings(*, single_user: bool, public: bool, email: str = "", password: str = ""):
+def _settings(
+    *,
+    single_user: bool,
+    public: bool,
+    email: str = "",
+    password: str = "",
+    generated: bool = False,
+):
     mock_settings = MagicMock()
     mock_settings.bootstrap.admin_email = email
     mock_settings.bootstrap.admin_password.get_secret_value.return_value = password
     mock_settings.bootstrap.seed_test_user = False
+    mock_settings.bootstrap.admin_password_generated = generated
     mock_settings.auth.is_single_user_mode = single_user
     mock_settings.auth.is_public_mode = public
     mock_settings.auth.is_password_login_disabled = False
@@ -74,3 +82,23 @@ async def test_private_multi_user_mode_still_fails_fast():
     with p1, p2, p3, p4, pytest.raises(RuntimeError, match="No admin user exists"):
         await db_init._bootstrap_admin_and_test_user()
     create_user.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_tool_made_password_leaves_the_admin_unclaimed():
+    """`depictio local up` makes the bootstrap password up and never shows it:
+    the owner must still be able to claim the admin without it."""
+    admin = MagicMock(email="admin@example.com")
+    create_user = AsyncMock(return_value={"success": True, "user": admin})
+    mock_settings = _settings(
+        single_user=True,
+        public=False,
+        email="admin@example.com",
+        password="m" * 32,
+        generated=True,
+    )
+    p1, p2, p3, p4 = _patches(mock_settings, create_user)
+    with p1, p2, p3, p4:
+        await db_init._bootstrap_admin_and_test_user()
+
+    assert create_user.await_args.kwargs["credentials_claimed"] is False
