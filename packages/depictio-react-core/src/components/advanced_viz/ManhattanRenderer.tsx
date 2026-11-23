@@ -29,7 +29,7 @@ import {
   type GenomicPoints,
 } from '../../highlight/genomicHover';
 import { useViewWindow } from '../../highlight/viewWindow';
-import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
+import AdvancedVizFrame, { tierColour } from './AdvancedVizFrame';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -529,11 +529,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     //     what lets the user emphasise consensus vs subconsensus regardless
     //     of which Colour-by mode they picked.
     const dimColor = 'rgba(160,160,160,0.45)';
-    const tierColorHex = (tier: 'ABOVE' | 'BELOW') => {
-      const name = TIER_COLORS[tier];
-      const swatch = (theme.colors as Record<string, readonly string[]>)[name];
-      return swatch?.[5] ?? colorByChr.values().next().value ?? '#777';
-    };
+    const tierColorHex = (tier: 'ABOVE' | 'BELOW') => tierColour(tier, isDark ? 'dark' : 'light');
 
     // Detect numeric vs categorical for an arbitrary colour-by column.
     const colorByValues =
