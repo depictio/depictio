@@ -81,14 +81,21 @@ def resolve_reference_lines(lines: list[dict[str, Any]], frame: Any) -> list[dic
 def apply_reference_lines(fig: Any, resolved: list[dict[str, Any]], theme: str = "light") -> Any:
     """Draw resolved lines on a plotly figure (a ``go.Figure`` or its dict).
 
-    Dashed, in the theme's neutral zero-line colour (the same one the
-    advanced-viz guides use), with the label at the end of the line.
+    Drawn as the shared palette's ``reference_guide`` says (the viewer's
+    scatter and profile guides read the same block), with the label at the
+    end of the line.
     """
     if not resolved:
         return fig
-    from depictio.api.v1.services.advanced_viz.theme import plotly_theme_colors
+    from depictio.models import palettes
 
-    colour = plotly_theme_colors(theme == "dark").zero_line_color
+    mode = "dark" if theme == "dark" else "light"
+    guide = palettes.style()["reference_guide"]
+    chrome = palettes.chrome(mode)
+    colour = chrome[guide["line"]]
+    label_colour = chrome[guide["label"]]
+    line_style = {"color": colour, "width": guide["width"], "dash": guide["dash"]}
+    font = {"size": guide["font_size"], "color": label_colour}
     shapes: list[dict[str, Any]] = []
     annotations: list[dict[str, Any]] = []
     for line in resolved:
@@ -103,7 +110,7 @@ def apply_reference_lines(fig: Any, resolved: list[dict[str, Any]], theme: str =
                     "yref": "y",
                     "y0": value,
                     "y1": value,
-                    "line": {"color": colour, "width": 1, "dash": "dash"},
+                    "line": line_style,
                 }
             )
             annotations.append(
@@ -116,7 +123,7 @@ def apply_reference_lines(fig: Any, resolved: list[dict[str, Any]], theme: str =
                     "showarrow": False,
                     "xanchor": "right",
                     "yanchor": "bottom",
-                    "font": {"size": 10, "color": colour},
+                    "font": font,
                 }
             )
         else:
@@ -129,7 +136,7 @@ def apply_reference_lines(fig: Any, resolved: list[dict[str, Any]], theme: str =
                     "xref": "x",
                     "x0": value,
                     "x1": value,
-                    "line": {"color": colour, "width": 1, "dash": "dash"},
+                    "line": line_style,
                 }
             )
             annotations.append(
@@ -142,7 +149,7 @@ def apply_reference_lines(fig: Any, resolved: list[dict[str, Any]], theme: str =
                     "showarrow": False,
                     "xanchor": "left",
                     "yanchor": "top",
-                    "font": {"size": 10, "color": colour},
+                    "font": font,
                 }
             )
     # The lines on record for the overview look, which colours bars and points
@@ -163,8 +170,7 @@ def apply_reference_lines(fig: Any, resolved: list[dict[str, Any]], theme: str =
     )
     # A built figure takes plotly's own helpers, which repeat the line on every
     # facet panel (the dict path above spans the first axis pair only).
-    style = {"line_color": colour, "line_width": 1, "line_dash": "dash"}
-    font = {"size": 10, "color": colour}
+    style = {"line_color": colour, "line_width": guide["width"], "line_dash": guide["dash"]}
     for line in resolved:
         if line["axis"] == "y":
             fig.add_hline(

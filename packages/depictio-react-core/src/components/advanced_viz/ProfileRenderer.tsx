@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { referenceGuide } from '../../palettes';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
@@ -628,7 +629,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         x1: 1,
         y0: refY.value,
         y1: refY.value,
-        line: { color: zeroLineColor, width: 1, dash: 'dash' },
+        line: referenceGuide(isDark ? 'dark' : 'light').line,
         layer: 'below',
       });
       annotations.push({
@@ -640,7 +641,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         showarrow: false,
         xanchor: 'right',
         yanchor: 'bottom',
-        font: { size: 10, color: textColor },
+        font: referenceGuide(isDark ? 'dark' : 'light').font,
       });
     }
 

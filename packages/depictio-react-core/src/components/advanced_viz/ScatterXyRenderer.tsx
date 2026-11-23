@@ -53,6 +53,7 @@ import {
 import { extentFraction, labelPlacement } from './scatterLabels';
 import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
 import { referenceTint } from '../../figureTint';
+import { referenceGuide } from '../../palettes';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { applyHighlight, highlightLayout } from './highlight/highlightTraces';
 import { isAdditiveClick, selectionFromClick } from './highlight/highlightModel';
@@ -763,12 +764,13 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     // Guide lines. The diagonal is drawn in paper-free data coordinates over
     // the shared range of both axes, so it stays the identity line under zoom.
     const shapes: Record<string, unknown>[] = [];
-    const guide = { color: themeColors.zeroLineColor, width: 1, dash: 'dash' as const };
+    const guideStyle = referenceGuide(isDark ? 'dark' : 'light');
+    const guide = guideStyle.line;
     // A guide line is named on the plot itself: it has no legend entry, and an
     // unnamed dashed line reads as data.
     const guideLabel = {
       showarrow: false,
-      font: { size: 10, color: themeColors.zeroLineColor },
+      font: guideStyle.font,
     };
     if (refLine === 'diagonal') {
       // One shared range drives both ends, so under either log axis the line

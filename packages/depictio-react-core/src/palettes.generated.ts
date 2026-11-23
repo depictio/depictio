@@ -762,6 +762,24 @@ export const SCATTER_MARKERS: readonly ScatterMarkerBucket[] = [
   }
 ];
 
+/** A reference line and its label: width, dash, label size, and the `PLOT_CHROME`
+ *  tokens their colours come from. */
+export interface ReferenceGuideStyle {
+  width: number;
+  dash: 'dash' | 'dot' | 'solid';
+  font_size: number;
+  line: keyof ChromeTokens;
+  label: keyof ChromeTokens;
+}
+
+export const REFERENCE_GUIDE: ReferenceGuideStyle = {
+  "width": 2,
+  "dash": "dash",
+  "font_size": 12,
+  "line": "muted",
+  "label": "text"
+};
+
 export const UI_HUES = [
   "violet",
   "grape",

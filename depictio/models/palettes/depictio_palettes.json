@@ -643,6 +643,7 @@
       "light": -0.16,
       "dark": 0.14
     },
+    "reference_guide": {"width": 2, "dash": "dash", "font_size": 12, "line": "muted", "label": "text"},
     "reference_tint": {
       "light": {"dL": 0.18, "dC": -0.05},
       "dark": {"dL": -0.16, "dC": -0.04}

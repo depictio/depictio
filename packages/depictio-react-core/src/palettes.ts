@@ -23,6 +23,7 @@ import {
   PALETTE_IDS,
   PALETTES,
   PLOT_CHROME,
+  REFERENCE_GUIDE,
   RESERVED_VALUES,
   SCATTER_MARKERS,
   SEMANTIC_COLORS,
@@ -90,6 +91,18 @@ export function annotationInk(scheme: ColorScheme = 'light'): string {
 
 export function plotChrome(scheme: ColorScheme = 'light'): ChromeTokens {
   return PLOT_CHROME[scheme];
+}
+
+/** How a reference line and its label are drawn (the server's `reference_lines` too). */
+export function referenceGuide(scheme: ColorScheme = 'light'): {
+  line: { color: string; width: number; dash: 'dash' | 'dot' | 'solid' };
+  font: { size: number; color: string };
+} {
+  const chrome = PLOT_CHROME[scheme];
+  return {
+    line: { color: chrome[REFERENCE_GUIDE.line], width: REFERENCE_GUIDE.width, dash: REFERENCE_GUIDE.dash },
+    font: { size: REFERENCE_GUIDE.font_size, color: chrome[REFERENCE_GUIDE.label] },
+  };
 }
 
 const RESERVED_LOOKUP: Map<string, ReservedKind> = new Map(

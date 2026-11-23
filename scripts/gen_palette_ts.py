@@ -105,6 +105,11 @@ def render(data: dict) -> str:
         + "export interface ScatterMarkerBucket {\n  max_n: number | null;\n  size: number;\n"
         + "  opacity: number;\n  outline: boolean;\n}\n\n"
         + f"export const SCATTER_MARKERS: readonly ScatterMarkerBucket[] = {dump(data['style']['scatter_markers'])};\n\n"
+        + "/** A reference line and its label: width, dash, label size, and the `PLOT_CHROME`\n"
+        + " *  tokens their colours come from. */\n"
+        + "export interface ReferenceGuideStyle {\n  width: number;\n  dash: 'dash' | 'dot' | 'solid';\n"
+        + "  font_size: number;\n  line: keyof ChromeTokens;\n  label: keyof ChromeTokens;\n}\n\n"
+        + f"export const REFERENCE_GUIDE: ReferenceGuideStyle = {dump(data['style']['reference_guide'])};\n\n"
         + "export const UI_HUES = "
         + dump(ui_names)
         + " as const;\n\n"
