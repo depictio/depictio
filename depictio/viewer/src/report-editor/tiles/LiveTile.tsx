@@ -140,6 +140,15 @@ const LiveTile: React.FC<LiveTileProps> = ({ tabId, metadata, state, onStatus })
   // Cards, and text tiles with live values (`{{name}}`), take their values
   // from the tab's bulk compute, as on the dashboard.
   const isCard = metadata.component_type === 'card' || hasLiveValues(metadata);
+  // A thumbnail shows the figure, not its controls: an advanced
+  // visualisation keeps them behind its settings icon here.
+  const drawn = useMemo<StoredMetadata>(
+    () =>
+      metadata.component_type === 'advanced_viz'
+        ? ({ ...metadata, controls_placement: 'popover' } as StoredMetadata)
+        : metadata,
+    [metadata],
+  );
   const [card, setCard] = useState<CardValue | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const settled = useRef(false);
@@ -196,7 +205,7 @@ const LiveTile: React.FC<LiveTileProps> = ({ tabId, metadata, state, onStatus })
         <Box className="react-grid-item" style={{ height: '100%', width: '100%' }}>
           <TileBoundary onError={() => report('error')}>
             <ComponentRenderer
-              metadata={metadata}
+              metadata={drawn}
               filters={filters}
               dashboardId={tabId}
               cardValue={card?.value}
