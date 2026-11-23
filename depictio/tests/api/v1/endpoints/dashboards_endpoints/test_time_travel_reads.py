@@ -7,7 +7,8 @@ borrows from its siblings. Each looked right and was wrong, the failure this
 feature cannot have:
 
 * ``POST /filter_options/{id}``: a select offering values the pinned data does
-  not hold, so picking one emptied every chart;
+  not hold, so picking one emptied every chart; and a list cut at its limit
+  (4,333 families, 1,000 listed) with no way to search past the cut (#1418);
 * ``POST /data_version_status/{id}``: "every value is from v3" over a
   collection added since, which reads live data;
 * ``GET /cross_tab_components/{id}?version_id=``: today's persistent sections
@@ -154,6 +155,7 @@ def env(tmp_path, monkeypatch):
         "client": TestClient(app),
         "versions": db["dashboard_versions"],
         "dashboards": db["dashboards"],
+        "deltatables": db["deltatables"],
         "cache": cache,
         "granted": granted,
     }
@@ -193,7 +195,7 @@ def test_unique_options_follow_the_pin(env):
     assert live.status_code == 200, live.text
     assert live.json()["values"] == ["a", "b", "c"]
     assert pinned.status_code == 200, pinned.text
-    assert pinned.json() == {"column": "variety", "values": ["a", "b"]}
+    assert pinned.json() == {"column": "variety", "values": ["a", "b"], "truncated": False}
 
 
 def test_unique_options_as_of_a_version(env):
@@ -221,6 +223,77 @@ def test_pinned_options_are_cached_apart_from_live(env):
     assert live.json()["values"] == ["a", "b", "c"]
     pinned_keys = [k for k in env["cache"].store if k.startswith("filter_options_")]
     assert pinned_keys and all(k.endswith("_dv0") for k in pinned_keys)
+
+
+def test_unique_options_search_the_column(env):
+    """A literal, case-insensitive match on both the live and the pinned path."""
+    live = _options(env, dc_id=str(DC), column="variety", kind="unique", search="A")
+    pinned = _options(
+        env, dc_id=str(DC), column="variety", kind="unique", search="A", data_versions={str(DC): 0}
+    )
+
+    assert live.json() == {"column": "variety", "values": ["a"], "truncated": False}
+    assert pinned.json() == {"column": "variety", "values": ["a"], "truncated": False}
+    # The search must not narrow another search's cached answer: the key
+    # carries it.
+    assert _options(
+        env, dc_id=str(DC), column="variety", kind="unique", search="b", data_versions={str(DC): 0}
+    ).json()["values"] == ["b"]
+
+
+def test_a_blank_search_is_no_search(env):
+    blank = _options(env, dc_id=str(DC), column="variety", kind="unique", search="   ")
+
+    assert blank.json()["values"] == ["a", "b", "c"]
+
+
+def test_a_capped_pinned_list_says_it_was_cut(env, tmp_path):
+    """A pinned list past the limit reports it, and a search reaches past it."""
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import _FILTER_OPTIONS_LIMIT
+
+    # A table wider than the option limit: 1,005 varieties, one commit (v0).
+    big = str(tmp_path / "big")
+    varieties = [f"v{i:05d}" for i in range(_FILTER_OPTIONS_LIMIT + 5)]
+    pl.DataFrame({"variety": varieties}).write_delta(big)
+    env["deltatables"].update_one(
+        {"data_collection_id": DC}, {"$set": {"delta_table_location": big}}
+    )
+
+    pinned = _options(
+        env, dc_id=str(DC), column="variety", kind="unique", data_versions={str(DC): 0}
+    )
+    body = pinned.json()
+    assert body["truncated"] is True
+    assert len(body["values"]) == _FILTER_OPTIONS_LIMIT
+
+    # The search applies before the limit, so it still sees every match: a
+    # broad one is cut again, a narrow one lists all it found.
+    broad = _options(
+        env, dc_id=str(DC), column="variety", kind="unique", search="v", data_versions={str(DC): 0}
+    ).json()
+    assert broad["truncated"] is True
+    assert len(broad["values"]) == _FILTER_OPTIONS_LIMIT
+    narrow = _options(
+        env,
+        dc_id=str(DC),
+        column="variety",
+        kind="unique",
+        search="0001",
+        data_versions={str(DC): 0},
+    ).json()
+    assert narrow == {
+        "column": "variety",
+        "values": sorted(v for v in varieties if "0001" in v),
+        "truncated": False,
+    }
+
+
+@pytest.mark.parametrize("search", [123, "x" * 201])
+def test_a_malformed_search_is_400(env, search):
+    assert (
+        _options(env, dc_id=str(DC), column="variety", kind="unique", search=search).status_code
+        == 400
+    )
 
 
 def test_a_collection_of_another_project_is_404(env):

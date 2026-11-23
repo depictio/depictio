@@ -12,7 +12,7 @@ import json
 import math
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import boto3
 import polars as pl
@@ -925,9 +925,12 @@ async def specs(
 def get_unique_values(
     data_collection_id: PyObjectId,
     column: str,
-    limit: int = Query(1000, ge=1, le=UNIQUE_VALUES_MAX_LIMIT),
+    # Annotated, so a direct Python call (the export manifest, filter_options)
+    # gets the plain default rather than FastAPI's Query object.
+    limit: Annotated[int, Query(ge=1, le=UNIQUE_VALUES_MAX_LIMIT)] = 1000,
     filter_expr: str | None = None,
     order_by: str | None = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
     current_user: str = Depends(get_user_or_anonymous),
 ):
     """Return the sorted unique values of ``column`` within a data collection.
@@ -956,15 +959,23 @@ def get_unique_values(
             smallest key it carries, numerically when every key is a number. Unset,
             values that all end in a duration (``30min``, ``2h``) follow it, and
             the rest sort as strings. See ``depictio.models.components.value_order``.
+        search: Optional server-side lookup over the option list: a literal
+            (not regex) case-insensitive substring match on the column cast to
+            string, applied after ``filter_expr`` and before the unique / limit.
+            Lets a client reach a value past where ``limit`` cut the list (4,333
+            families, 1,000 listed). Empty or whitespace-only means no search.
         current_user: Authenticated or anonymous user (permission-checked).
 
     Returns:
         ``{"column": str, "values": list[str], "truncated": bool}``: strings for
-        the MultiSelect UI; ``truncated`` when the column holds more than ``limit``.
+        the MultiSelect UI; ``truncated`` when the column holds more than ``limit``
+        matches.
 
     Raises:
         HTTPException: 404 if DC not found / not accessible, 500 on read error.
     """
+    # Empty or whitespace-only means no search.
+    search = search.strip() or None if search else None
     # Find the project that owns this data collection. Doing a full MongoDB
     # permission filter via _build_permission_pipeline rejects the anonymous
     # admin user (no explicit owner entry) — use the same admin-aware
@@ -1026,6 +1037,11 @@ def get_unique_values(
             md = rep.get("metadata") or {}
             for v in md.get("canonical_samples") or md.get("samples") or []:
                 union.add(str(v))
+        if search:
+            # Same literal, case-insensitive match as the Delta path, so a
+            # search on a MultiQC-backed sample filter narrows this list too.
+            needle = search.lower()
+            union = {v for v in union if needle in v.lower()}
         values_str = sorted(union)[:limit]
         return {"column": column, "values": values_str}
 
@@ -1055,9 +1071,13 @@ def get_unique_values(
 
     dc_id_str = str(data_collection_id)
     agg_version = _get_aggregation_version(dc_id_str)
+    # The search is part of the key, length-prefixed so no search string can
+    # read as another segment of the key: one query's answer is never served
+    # for another's.
     cache_key = (
         f"unique_values_o2_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
         + (f"_by_{order_by}" if order_by else "")
+        + (f"_search{len(search)}_{search}" if search else "")
     )
     # Negative entry: "this DC (at this version) has no such column". Keyed
     # without limit/filter because absence does not depend on them. Without it
@@ -1119,6 +1139,17 @@ def get_unique_values(
                     detail=f"Invalid filter_expr: {exc}",
                 )
             lazy = lazy.filter(expr)
+
+        if search:
+            # Applied before the unique so the limit caps the matches, not the
+            # whole column: a value past where an unsearched list was cut can
+            # still be found. Nulls never match, which the reads drop anyway.
+            lazy = lazy.filter(
+                pl.col(column)
+                .cast(pl.Utf8)
+                .str.to_lowercase()
+                .str.contains(search.lower(), literal=True)
+            )
 
         if order_by and order_by not in lazy.collect_schema().names():
             raise HTTPException(

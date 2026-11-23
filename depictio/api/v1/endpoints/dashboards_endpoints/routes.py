@@ -10920,13 +10920,15 @@ def _computed_filter_options(
     limit: int,
     delta_version: int | None,
     order_by: str | None = None,
+    search: str | None = None,
 ) -> dict[str, Any]:
     """Filter options read from the collection itself, at ``delta_version``.
 
     The path for a pinned read, and for a range narrowed by ``filter_expr``
     (the precomputed specs describe the whole latest commit only). Cached
     under a key salted with the pin, so a historical option list is never
-    filed under, nor served from, the live one.
+    filed under, nor served from, the live one. ``search`` narrows the unique
+    list like ``GET /deltatables/unique_values`` does, and is part of the key.
     """
     import polars as pl
 
@@ -10940,9 +10942,13 @@ def _computed_filter_options(
     from depictio.models.components.filter_expr import build_filter_expr, validate_filter_expr
 
     salt = _version_salt_for(dc_id, delta_version)
+    # The search is part of the key, length-prefixed so no search string can
+    # read as another segment of the key: one query's answer is never served
+    # for another's.
     cache_key = (
         f"filter_options_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
         + (f"_by_{order_by}" if order_by else "")
+        + (f"_search{len(search)}_{search}" if search else "")
     )
     try:
         cached = get_cache().get(cache_key)
@@ -10994,6 +11000,17 @@ def _computed_filter_options(
         if kind == "unique":
             from depictio.models.components.value_order import order_values
 
+            if search:
+                # Applied before the unique so the limit caps the matches, not
+                # the whole column: a value past where an unsearched list was
+                # cut can still be found. Nulls never match, which the reads
+                # drop anyway.
+                scan = scan.filter(
+                    pl.col(column)
+                    .cast(pl.Utf8)
+                    .str.to_lowercase()
+                    .str.contains(search.lower(), literal=True)
+                )
             keys: dict[str, Any] | None = None
             if order_by and order_by != column:
                 if order_by not in schema.names():
@@ -11003,9 +11020,12 @@ def _computed_filter_options(
                     )
                 pairs = (
                     scan.select(column, order_by)
+                    # A null is not a value: it must not eat a slot the
+                    # limit counts.
+                    .filter(pl.col(column).is_not_null())
                     .group_by(column)
                     .agg(pl.col(order_by).min().alias("_order_key"))
-                    .limit(limit)
+                    .limit(limit + 1)
                     .collect()
                 )
                 keys = {
@@ -11018,14 +11038,19 @@ def _computed_filter_options(
                 unique_values = (
                     scan.select(column)
                     .unique()
-                    .limit(limit)
+                    .limit(limit + 1)
                     .collect()[column]
                     .drop_nulls()
                     .to_list()
                 )
+            # One value past ``limit`` was read to tell exactly ``limit``
+            # matches from more, the same contract as unique_values.
+            truncated = len(unique_values) > limit
+            unique_values = unique_values[:limit]
             result: dict[str, Any] = {
                 "column": column,
                 "values": order_values(unique_values, keys),
+                "truncated": truncated,
             }
         else:
             dtype = schema[column]
@@ -11082,11 +11107,13 @@ async def filter_options_endpoint(
     Request body:
         {"dc_id": str, "column": str, "kind": "unique" | "range",
          "filter_expr": str (optional), "order_by": str (optional, unique only),
+         "search": str (optional, unique only: a literal, case-insensitive
+                       substring match, at most 200 characters, empty = none),
          "as_of_version": str, "data_versions": {"<dc_id>": int | null}}
 
     Response, the shapes ``GET /deltatables/unique_values/{dc}`` and a column's
     ``/deltatables/specs/{dc}`` entry give:
-        unique: {"column": str, "values": [str, ...]}
+        unique: {"column": str, "values": [str, ...], "truncated": bool}
         range:  {"min": number | null, "max": number | null,
                  "dtype": str | null, "unique": int | null}
 
@@ -11100,6 +11127,7 @@ async def filter_options_endpoint(
     kind = request.get("kind")
     filter_expr = request.get("filter_expr") or None
     order_by = request.get("order_by") or None
+    search = request.get("search")
     if not isinstance(dc_id, str) or not dc_id or not isinstance(column, str) or not column:
         raise HTTPException(status_code=400, detail="dc_id and column are required.")
     if kind not in ("unique", "range"):
@@ -11108,6 +11136,14 @@ async def filter_options_endpoint(
         raise HTTPException(status_code=400, detail="filter_expr must be a string.")
     if order_by is not None and not isinstance(order_by, str):
         raise HTTPException(status_code=400, detail="order_by must be a string.")
+    if search is not None:
+        if not isinstance(search, str):
+            raise HTTPException(status_code=400, detail="search must be a string.")
+        search = search.strip()
+        if len(search) > 200:
+            raise HTTPException(status_code=400, detail="search must be at most 200 characters.")
+        # Empty or whitespace-only means no search, like on unique_values.
+        search = search or None
 
     def _resolve() -> tuple[dict[str, Any], int | None]:
         dashboard_data = _viewable_dashboard(dashboard_id, current_user)
@@ -11131,6 +11167,7 @@ async def filter_options_endpoint(
             limit=_FILTER_OPTIONS_LIMIT,
             filter_expr=filter_expr,
             order_by=order_by,
+            search=search,
             current_user=current_user,
         )
     if delta_version is None and not filter_expr:
@@ -11146,6 +11183,7 @@ async def filter_options_endpoint(
             limit=_FILTER_OPTIONS_LIMIT,
             delta_version=delta_version,
             order_by=order_by if kind == "unique" else None,
+            search=search if kind == "unique" else None,
         )
     )
 
