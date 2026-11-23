@@ -14,6 +14,7 @@ const SPA_ROUTE_PREFIXES = [
   'auth',
   'dashboards',
   'dashboard-edit',
+  'dashboard-report',
   'projects',
   'about',
   'admin',

@@ -59,6 +59,7 @@ window.addEventListener('load', () => {
 // chosen tree's chunk on demand behind the Suspense boundary below.
 const App = React.lazy(() => import('./App'));
 const EditorApp = React.lazy(() => import('./EditorApp'));
+const ReportEditorApp = React.lazy(() => import('./report-editor/ReportEditorApp'));
 import { rememberReturnTo } from './auth/postAuthTarget';
 const AuthApp = React.lazy(() => import('./auth/AuthApp'));
 const DashboardsApp = React.lazy(() => import('./dashboards/DashboardsApp'));
@@ -119,6 +120,11 @@ function resolveTree(): React.ReactElement {
   }
   if (window.location.pathname.startsWith('/auth')) {
     return <AuthApp />;
+  }
+  // The report editor lives under /dashboard-report/, which is neither the
+  // /dashboards listing nor an editor route: match it before both.
+  if (/^\/dashboard-report\/[^/]+/.test(window.location.pathname)) {
+    return <ReportEditorApp />;
   }
   if (window.location.pathname.startsWith('/dashboards')) {
     return <DashboardsApp />;

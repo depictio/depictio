@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Accordion,
   Alert,
+  Anchor,
   Badge,
   Button,
   Center,
@@ -33,6 +34,7 @@ import {
   type NotebookTheme,
   Z_LAYERS,
 } from 'depictio-react-core';
+import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 
 /**
  * Export the dashboard: preflight first (what each tile becomes, with a reason
@@ -115,6 +117,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   combinedOffered = true,
   onExportDashboardOnly,
 }) => {
+  const reportEditorEnabled = useReportEditorEnabled();
   const [state, setState] = useState<AnalysisState | null>(null);
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -271,6 +274,18 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
             : 'As a Quarto document you can keep working in: each tile is reproduced as code ' +
               'where it can be, and rendered through Depictio otherwise.'}
         </Text>
+
+        {reportEditorEnabled && (
+          <Group gap={6} data-testid="notebook-export-edit-report">
+            <Icon icon="mdi:file-document-edit-outline" width={16} />
+            <Anchor size="sm" href={`/dashboard-report/${dashboardId}`}>
+              Edit the report…
+            </Anchor>
+            <Text size="xs" c="dimmed">
+              Cover, introduction, captions and what each tile contributes.
+            </Text>
+          </Group>
+        )}
 
         {combinedFallback && (
           <Alert

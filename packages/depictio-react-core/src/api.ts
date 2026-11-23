@@ -13,6 +13,7 @@ import {
   parseAnnotations,
   parseSharedColumns,
 } from './sessionAnnotations';
+import type { AnalysisState } from './analysisState';
 import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
@@ -1493,6 +1494,195 @@ export async function downloadNotebookRender(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   return filename;
+}
+
+/** A finished render's file as a Blob, without saving it: the report editor's
+ *  exact preview shows it in a frame instead of downloading it. */
+export async function fetchNotebookRenderBlob(
+  jobId: string,
+  format: 'html' | 'pdf' = 'html',
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download?format=${format}`,
+    { signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download the report');
+  return res.blob();
+}
+
+// ── Report layer: what the report says around the tiles ────────────────────
+
+/** TipTap's JSON document (`editor.getJSON()`). */
+export interface ReportDoc {
+  type: string;
+  content?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface ReportCover {
+  title: string | null;
+  subtitle: string | null;
+  authors: string[];
+  date: string | null;
+}
+
+export type ReportOrientation = 'auto' | 'portrait' | 'landscape';
+export type ReportTabPlacement = 'body' | 'appendix';
+
+/** One tile's place in the report. A tile with no entry takes the defaults. */
+export interface ReportTile {
+  tab_id: string;
+  component_id: string;
+  caption: string | null;
+  in_report: boolean;
+  in_pdf: boolean;
+  order: number | null;
+  orientation: ReportOrientation;
+  section: string | null;
+  page_break_before: boolean;
+}
+
+export interface ReportTab {
+  tab_id: string;
+  placement: ReportTabPlacement;
+  order: number | null;
+}
+
+/** The layer stored on a dashboard: the prose, cover and per-tile choices the
+ *  report adds around what the dashboard already is. */
+export interface ReportLayer {
+  intro: ReportDoc | null;
+  conclusion: ReportDoc | null;
+  cover: ReportCover | null;
+  state: AnalysisState | null;
+  revision: number;
+  style: 'colour' | 'mono' | null;
+  tiles: ReportTile[];
+  tabs: ReportTab[];
+  /** The intro was drafted from the dashboard notes, not written here. */
+  seeded_from_notes: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface ReportOutlineEntry {
+  kind: 'tab' | 'section' | 'component';
+  tab_id: string;
+  title: string;
+  level: number | null;
+  component_id: string | null;
+  component_type: string | null;
+  caption: string | null;
+  in_report: boolean;
+  in_pdf: boolean;
+  orientation: ReportOrientation;
+  section: string | null;
+  page_break_before: boolean;
+  order: number | null;
+}
+
+export interface ReportOutlineTab {
+  tab_id: string;
+  title: string;
+  placement: ReportTabPlacement;
+  order: number | null;
+  entries: ReportOutlineEntry[];
+}
+
+/** The report's structure as the generator would lay it out, in its own order. */
+export interface ReportOutline {
+  dashboard_id: string;
+  title: string;
+  revision: number;
+  tabs: ReportOutlineTab[];
+  cover_defaults: ReportCover;
+  preview_available: boolean;
+  preview_unavailable_reason: string | null;
+}
+
+/** Someone else wrote the layer since this editor last read it (HTTP 409). */
+export interface ReportLayerConflictDetail {
+  message: string;
+  layer: ReportLayer | null;
+  revision: number | null;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export class ReportLayerConflict extends Error {
+  readonly detail: ReportLayerConflictDetail;
+
+  constructor(detail: ReportLayerConflictDetail) {
+    super(detail.message);
+    this.name = 'ReportLayerConflict';
+    this.detail = detail;
+  }
+}
+
+export async function fetchReportLayer(
+  dashboardId: string,
+  signal?: AbortSignal,
+): Promise<ReportLayer> {
+  const res = await authFetch(`${API_BASE}/dashboards/report_layer/${dashboardId}`, { signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the report layer');
+  return res.json();
+}
+
+/** Store the layer. `baseRevision` is the revision this editor last saw; a
+ *  newer one on the server throws `ReportLayerConflict` instead of overwriting. */
+export async function saveReportLayer(
+  dashboardId: string,
+  baseRevision: number,
+  layer: ReportLayer,
+): Promise<ReportLayer> {
+  const res = await authFetch(`${API_BASE}/dashboards/report_layer/${dashboardId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ base_revision: baseRevision, layer }),
+  });
+  if (res.status === 409) {
+    let detail: Partial<ReportLayerConflictDetail> = {};
+    try {
+      const body = await res.json();
+      if (body?.detail && typeof body.detail === 'object') detail = body.detail;
+    } catch {
+      // A 409 without a readable body is still a conflict.
+    }
+    throw new ReportLayerConflict({
+      message: detail.message ?? 'The report was changed by someone else.',
+      layer: detail.layer ?? null,
+      revision: detail.revision ?? null,
+      updated_by: detail.updated_by ?? null,
+      updated_at: detail.updated_at ?? null,
+    });
+  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save the report layer');
+  return res.json();
+}
+
+export async function fetchReportOutline(
+  dashboardId: string,
+  signal?: AbortSignal,
+): Promise<ReportOutline> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/outline`, {
+    signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the report outline');
+  return res.json();
+}
+
+/** Render the real report with the stored layer, for the editor's exact
+ *  preview. Poll the returned job with `fetchNotebookRenderStatus`. */
+export async function startReportPreview(
+  dashboardId: string,
+  options: { force?: boolean } = {},
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/preview`, {
+    method: 'POST',
+    body: JSON.stringify(options.force ? { force: true } : {}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report preview');
+  return res.json();
 }
 
 /** Payload for a card's numeric / QC secondary layout (histogram, threshold,
@@ -3653,6 +3843,7 @@ export interface ServerInfo {
     changes_since?: boolean;
     static_export?: boolean;
     notebook_export?: boolean;
+    report_editor?: boolean;
   };
 }
 
