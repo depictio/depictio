@@ -22,6 +22,8 @@ export interface FrameBridge {
   /** The report's look, to render a snapshot with. */
   styles: PreviewStyles | null;
   onFrameLoad: () => void;
+  /** Scrolls the frame to a tile (scroll sync); the frame does not report it back. */
+  scrollFrameTo: (tabId: string, componentId: string) => void;
 }
 
 /**
@@ -39,6 +41,8 @@ export function useFrameBridge(
   patch: PreviewPatch | null,
   onSelect: (tabId: string, componentId: string) => void,
   scheme: PreviewScheme,
+  /** The tile at the top of the frame's viewport changed (the reader scrolled it). */
+  onVisible?: (tabId: string, componentId: string) => void,
 ): FrameBridge {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [frameReady, setFrameReady] = useState(false);
@@ -51,6 +55,8 @@ export function useFrameBridge(
   patchRef.current = patch;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onVisibleRef = useRef(onVisible);
+  onVisibleRef.current = onVisible;
   const schemeRef = useRef(scheme);
   schemeRef.current = scheme;
   // The scheme the frame was last told, so "ready" and the effect below do
@@ -83,6 +89,8 @@ export function useFrameBridge(
         post({ type: MSG.thumbnails, width: THUMB_WIDTH, height: THUMB_HEIGHT });
       } else if (message.type === MSG.select) {
         onSelectRef.current(message.tab_id, message.component_id);
+      } else if (message.type === MSG.visible) {
+        onVisibleRef.current?.(message.tab_id, message.component_id);
       } else if (message.type === MSG.thumbnail) {
         const key = tileKey(message.tab_id, message.component_id);
         setThumbs((prev) => ({ ...prev, [key]: message.data_url }));
@@ -117,6 +125,11 @@ export function useFrameBridge(
   }, [loaded, frameReady]);
 
   const onFrameLoad = useCallback(() => setLoaded(true), []);
+  const scrollFrameTo = useCallback(
+    (tabId: string, componentId: string) =>
+      post({ type: MSG.scrollTo, tab_id: tabId, component_id: componentId }),
+    [post],
+  );
 
-  return { iframeRef, frameReady, unresponsive, thumbs, snapshots, styles, onFrameLoad };
+  return { iframeRef, frameReady, unresponsive, thumbs, snapshots, styles, onFrameLoad, scrollFrameTo };
 }

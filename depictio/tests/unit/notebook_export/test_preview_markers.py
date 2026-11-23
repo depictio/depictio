@@ -21,6 +21,7 @@ from pathlib import Path
 from depictio.api.v1.services.notebook_export.generator import (
     NotebookBuilder,
     generate_qmd,
+    tile_anchor_id,
 )
 from depictio.api.v1.services.notebook_export.reading_order import MarkdownUnit
 
@@ -237,6 +238,8 @@ def test_the_patch_script_answers_every_message_of_the_protocol():
         "depictio-preview:snapshot",
         "depictio-preview:styles",
         "depictio-preview:scheme",
+        "depictio-preview:scrollto",
+        "depictio-preview:visible",
     ):
         assert message in js, f"the patch script never handles {message}"
     # The marks of §3's effects, spelled as the contract writes them.
@@ -262,3 +265,23 @@ def test_prose_tiles_carry_their_own_marker_the_runtime_ignores(penguins_tabs):
     assert not texts & set(_tile_refs(src))
     _assert_fences_balanced(src)
     assert "[data-depictio-prose]" in PATCH_JS.read_text()
+
+
+def test_every_tile_has_an_html_only_anchor(penguins_tabs):
+    """Each component (a card in a strip included) gets one anchor, so
+    ``report.html#dpx-tile-...`` lands on it; the anchors are an HTML raw
+    block, never a typst label the PDF would have to place."""
+    src = generate_qmd(penguins_plan(penguins_tabs))
+    prose = {html.unescape(p) for p in re.findall(r'data-depictio-prose="([^"]+)"', src)}
+    refs = set(_tile_refs(src)) | prose
+    assert refs
+    anchors = re.findall(r'<span id="([^"]+)" class="dpx-anchor"></span>', src)
+    assert sorted(anchors) == sorted(tile_anchor_id(r) for r in refs)
+    assert all(re.fullmatch(r"dpx-tile-[A-Za-z0-9_-]+", a) for a in anchors)
+    for block in re.findall(r"```\{=html\}\n(.*?)\n```", src):
+        if "dpx-anchor" in block:
+            assert block.startswith("<span id=")
+    _assert_fences_balanced(src)
+    # The preview opens a folded tab by the same anchor: one spelling of it.
+    js = PATCH_JS.read_text()
+    assert "'dpx-tile-' + ref.replace(/[^A-Za-z0-9_-]/g, '-')" in js

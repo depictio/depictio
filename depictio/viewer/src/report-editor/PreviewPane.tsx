@@ -1,6 +1,6 @@
 import React from 'react';
-import { Alert, Badge, Button, Group, Loader, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
-import { CircleAlert, Eye, Moon, RefreshCw, Sun } from 'lucide-react';
+import { ActionIcon, Alert, Badge, Button, Group, Loader, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
+import { CircleAlert, Eye, Link2, Link2Off, Moon, RefreshCw, Sun } from 'lucide-react';
 
 import { STROKE } from '../chrome/variants/glass/icons';
 import type { PreviewScheme } from './previewProtocol';
@@ -18,6 +18,9 @@ interface PreviewPaneProps {
   bridge: FrameBridge;
   /** The app's scheme, which the frame follows. */
   scheme: PreviewScheme;
+  /** The column and the frame scroll together. */
+  syncScroll: boolean;
+  onToggleSync: () => void;
 }
 
 type ChipProps = Pick<PreviewPaneProps, 'job' | 'bridge'>;
@@ -62,7 +65,7 @@ const StatusChip: React.FC<ChipProps> = ({ job, bridge }) => {
 
 /** The right half of the page: the real report, as a page on a stage, kept in
  *  step with the edits on the left and in the app's own colour scheme. */
-const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme }) => (
+const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme, syncScroll, onToggleSync }) => (
   <Stack gap={0} h="100%" style={{ minHeight: 0 }} data-testid="report-preview-pane">
     <div className="re-pv-bar">
       <span className="re-pv-name">
@@ -73,6 +76,24 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme }) => (
         <StatusChip job={job} bridge={bridge} />
       </span>
       <span className="re-top-grow" />
+      <Tooltip
+        label={syncScroll ? 'Scrolling together: click to scroll each side on its own' : 'Scroll the structure and the preview together'}
+        withArrow
+        openDelay={250}
+      >
+        <ActionIcon
+          variant={syncScroll ? 'light' : 'subtle'}
+          color={syncScroll ? undefined : 'gray'}
+          size="md"
+          radius="xl"
+          onClick={onToggleSync}
+          aria-pressed={syncScroll}
+          aria-label="Scroll sync"
+          data-testid="report-scroll-sync"
+        >
+          {syncScroll ? <Link2 size={16} strokeWidth={STROKE} /> : <Link2Off size={16} strokeWidth={STROKE} />}
+        </ActionIcon>
+      </Tooltip>
       <Tooltip label={`The preview follows the app theme (${scheme})`} withArrow openDelay={250}>
         <span className="re-pv-scheme" data-testid="report-preview-scheme" data-scheme={scheme}>
           {scheme === 'dark' ? (

@@ -18,6 +18,8 @@
     SNAPSHOT = 'depictio-preview:snapshot',
     STYLES = 'depictio-preview:styles',
     SCHEME = 'depictio-preview:scheme',
+    SCROLL_TO = 'depictio-preview:scrollto',
+    VISIBLE = 'depictio-preview:visible',
     APPLY = 'depictio-preview:apply',
     THUMBNAILS = 'depictio-preview:thumbnails',
     TILE_SEL = '[data-depictio-tile],[data-depictio-prose]',
@@ -330,16 +332,93 @@
     return found ? { order: order, companion: companionOf(el) } : null;
   }
 
+  function hostOf(ref) {
+    var host = null;
+    forEach(document.querySelectorAll(TILE_SEL), function (t) {
+      forEach(refsOf(t), function (r) { if (host === null && r.tab_id + ':' + r.component_id === ref) host = t; });
+    });
+    return host;
+  }
+
+  // ── Scroll sync with the editor's structure column ────────────────────────
+  // The editor scrolls the frame to the tile at the top of its column
+  // (`scrollto`); the frame reports the tile at the top of its own viewport
+  // (`visible`). A scroll the frame was asked for is not reported back, or
+  // the two sides would chase each other.
+  var drivenUntil = 0, lastVisible = null, scrollTimer = null;
+  var TOP_BAND = 96;
+
+  // A tile inside a folded tab or section: the report's chrome opens every
+  // fold on the way to an in-page link's target. A link to the tile's anchor
+  // is clicked for it, and its navigation cancelled: no history, no URL change.
+  function unfoldTo(ref) {
+    var id = 'dpx-tile-' + ref.replace(/[^A-Za-z0-9_-]/g, '-');
+    if (!document.getElementById(id)) return;
+    var a = document.createElement('a');
+    a.setAttribute('href', '#' + id);
+    a.style.display = 'none';
+    a.addEventListener('click', function (ev) { ev.preventDefault(); });
+    document.body.appendChild(a);
+    try { a.click(); } finally { a.parentNode.removeChild(a); }
+  }
+
+  function scrollToTile(ref) {
+    var host = hostOf(ref);
+    if (!host) return;
+    var block = blockOf(host);
+    if (!block.getClientRects().length) unfoldTo(ref);
+    if (!block.getClientRects().length) return; // hidden: left out of the report
+    drivenUntil = Date.now() + 800;
+    lastVisible = ref;
+    // An instant jump: a smooth one is cut short by Quarto's own scrolling
+    // (the table of contents follows the page). Checked once more after the
+    // page has settled (late plots change the heights above).
+    var jump = function () { window.scrollTo(0, block.getBoundingClientRect().top + window.pageYOffset - 16); };
+    jump();
+    setTimeout(function () {
+      if (Math.abs(block.getBoundingClientRect().top - 16) > 24) { drivenUntil = Date.now() + 400; jump(); }
+    }, 250);
+  }
+
+  // The first shown tile whose component (not its caption) reaches below the
+  // top band: what the reader is looking at.
+  function topTile() {
+    var found = null;
+    forEach(document.querySelectorAll(TILE_SEL), function (host) {
+      if (found) return;
+      if (!host.getClientRects().length) return;
+      var rect = host.getBoundingClientRect();
+      if (rect.bottom > TOP_BAND) found = refsOf(host)[0] || null;
+    });
+    return found;
+  }
+
+  function reportVisible() {
+    scrollTimer = null;
+    if (Date.now() < drivenUntil) return;
+    var ref = topTile();
+    if (!ref) return;
+    var key = ref.tab_id + ':' + ref.component_id;
+    if (key === lastVisible) return;
+    lastVisible = key;
+    post({ type: VISIBLE, tab_id: ref.tab_id, component_id: ref.component_id });
+  }
+
+  window.addEventListener('scroll', function () {
+    // A smooth scroll the editor asked for can outlast the window: it holds
+    // for as long as that scroll keeps moving.
+    if (Date.now() < drivenUntil) { drivenUntil = Date.now() + 250; return; }
+    if (scrollTimer !== null) clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(reportVisible, 120);
+  }, { passive: true });
+
   // Focus: the outline, and the tile scrolled to the middle of the frame, only
   // when the focus moves: the editor resends it with every patch, and typing a
   // caption must not keep recentring the page.
   var scrolledTo = null;
   function applyFocus(focus) {
     if (!focus || focus.tab_id == null || focus.component_id == null) { scrolledTo = null; return; }
-    var ref = String(focus.tab_id) + ':' + String(focus.component_id), host = null;
-    forEach(document.querySelectorAll(TILE_SEL), function (t) {
-      forEach(refsOf(t), function (r) { if (host === null && r.tab_id + ':' + r.component_id === ref) host = t; });
-    });
+    var ref = String(focus.tab_id) + ':' + String(focus.component_id), host = hostOf(ref);
     if (!host) return;
     var block = blockOf(host);
     block.style.outline = '2px solid currentColor';
@@ -347,6 +426,8 @@
     focusBlock = block;
     if (scrolledTo === ref) return;
     scrolledTo = ref;
+    drivenUntil = Date.now() + 800; // the editor chose it: not reported back
+    lastVisible = ref;
     if (typeof block.scrollIntoView === 'function') {
       try { block.scrollIntoView({ block: 'center' }); } catch (err) { block.scrollIntoView(); }
     }
@@ -540,6 +621,9 @@
     if (msg.type === APPLY) apply(msg.patch);
     else if (msg.type === THUMBNAILS) thumbnails(msg.width, msg.height);
     else if (msg.type === SCHEME) applyScheme(msg.scheme);
+    else if (msg.type === SCROLL_TO && msg.tab_id != null && msg.component_id != null) {
+      scrollToTile(String(msg.tab_id) + ':' + String(msg.component_id));
+    }
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', announce);

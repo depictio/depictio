@@ -25,6 +25,8 @@ export const MSG = {
   snapshot: 'depictio-preview:snapshot',
   styles: 'depictio-preview:styles',
   scheme: 'depictio-preview:scheme',
+  scrollTo: 'depictio-preview:scrollto',
+  visible: 'depictio-preview:visible',
 } as const;
 
 /** The colour scheme the frame is asked to show: the app's own. */
@@ -112,6 +114,7 @@ export function buildPatch(
 export type FrameMessage =
   | { type: typeof MSG.ready; tiles: TileFocus[]; tabs: string[] }
   | { type: typeof MSG.select; tab_id: string; component_id: string }
+  | { type: typeof MSG.visible; tab_id: string; component_id: string }
   | { type: typeof MSG.thumbnail; tab_id: string; component_id: string; data_url: string }
   | { type: typeof MSG.snapshot; tab_id: string; component_id: string; html: string }
   | { type: typeof MSG.styles; styles: PreviewStyles };
@@ -131,6 +134,10 @@ export function parseFrameMessage(data: unknown): FrameMessage | null {
     case MSG.select:
       return typeof m.tab_id === 'string' && typeof m.component_id === 'string'
         ? { type: MSG.select, tab_id: m.tab_id, component_id: m.component_id }
+        : null;
+    case MSG.visible:
+      return typeof m.tab_id === 'string' && typeof m.component_id === 'string'
+        ? { type: MSG.visible, tab_id: m.tab_id, component_id: m.component_id }
         : null;
     case MSG.thumbnail:
       return typeof m.tab_id === 'string' &&

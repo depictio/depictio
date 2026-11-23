@@ -15,7 +15,7 @@
  * Only owners and editors of the project reach it (the API answers 404 to
  * anyone else, and while the feature is off).
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -68,6 +68,7 @@ import { buildTabViews, docSummary } from './model';
 import { buildPatch, tileKey } from './previewProtocol';
 import { useExactPdf } from './useExactPdf';
 import { useFrameBridge } from './useFrameBridge';
+import { useScrollSync } from './useScrollSync';
 import { usePreviewJob } from './usePreviewJob';
 import { useReportLayer } from './useReportLayer';
 import type { ReportSaveStatus } from './useReportLayer';
@@ -158,7 +159,17 @@ const ReportEditorApp: React.FC = () => {
     setSelected({ tabId, componentId });
     setRevealToken((t) => t + 1);
   }, []);
-  const bridge = useFrameBridge(job.previewUrl, patch, onFrameSelect, scheme);
+  // Scroll sync: the bridge hands the frame's "visible" tile to the column
+  // (through a ref: the hook that scrolls it needs the bridge's sender).
+  const [syncScroll, setSyncScroll] = useState(true);
+  const editColumnRef = useRef<HTMLDivElement>(null);
+  const followFrameRef = useRef<((tabId: string, componentId: string) => void) | null>(null);
+  const onFrameVisible = useCallback(
+    (tabId: string, componentId: string) => followFrameRef.current?.(tabId, componentId),
+    [],
+  );
+  const bridge = useFrameBridge(job.previewUrl, patch, onFrameSelect, scheme, onFrameVisible);
+  followFrameRef.current = useScrollSync(editColumnRef, syncScroll, bridge.frameReady, bridge.scrollFrameTo);
   const snapshotSource = useMemo(
     () => ({
       snapshots: bridge.snapshots,
@@ -312,7 +323,7 @@ const ReportEditorApp: React.FC = () => {
     return (
       <SnapshotContext.Provider value={snapshotSource}>
         <div className="re-body" data-testid="report-editor">
-          <div className="re-edit" data-testid="report-edit-column">
+          <div className="re-edit" ref={editColumnRef} data-testid="report-edit-column">
             <div className="re-edit-inner">
               {conflict && (
                 <Alert
@@ -441,7 +452,13 @@ const ReportEditorApp: React.FC = () => {
             </div>
           </div>
           <div className="re-preview">
-            <PreviewPane job={job} bridge={bridge} scheme={scheme} />
+            <PreviewPane
+              job={job}
+              bridge={bridge}
+              scheme={scheme}
+              syncScroll={syncScroll}
+              onToggleSync={() => setSyncScroll((on) => !on)}
+            />
           </div>
         </div>
       </SnapshotContext.Provider>

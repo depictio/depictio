@@ -171,6 +171,20 @@ def section_div(tab_id: str, title: str) -> str:
     return f'{SECTION_FENCE} {{data-depictio-section="{_esc(f"{tab_id}:{title}")}"}}'
 
 
+def tile_anchor_id(ref: str) -> str:
+    """The HTML anchor of a tile, from its ``<tab_id>:<index>`` ref: a link to
+    ``report.html#dpx-tile-...`` lands on the component."""
+    return "dpx-tile-" + re.sub(r"[^A-Za-z0-9_-]", "-", ref)
+
+
+def tile_anchors(refs: list[str]) -> str:
+    """The anchors of a tile (one per card in a strip), as an HTML-only raw
+    block: the PDF has no use for them, and a typst label on a marker block
+    would be one more thing for its layout to place."""
+    spans = "".join(f'<span id="{tile_anchor_id(r)}" class="dpx-anchor"></span>' for r in refs)
+    return f"```{{=html}}\n{spans}\n```"
+
+
 def caption_marked(caption: str) -> str:
     """The caption paragraph carrying the preview's caption marker."""
     return f'[{caption}]{{data-depictio-caption=""}}'
@@ -2410,7 +2424,9 @@ def card_row(cards):
         out: list[Cell] = []
         # One placeholder for the strip (its output is one cell), as the
         # preview's marker and, with the runtime, the cards' mount point.
-        out.append(md_cell(tile_open([self._tile_ref(e) for e in row])))
+        refs = [self._tile_ref(e) for e in row]
+        out.append(md_cell(tile_anchors(refs)))
+        out.append(md_cell(tile_open(refs)))
         render_names = []
         for e in row:
             cell, render_name = self._tile_cell(e, show=False)
@@ -2521,6 +2537,8 @@ def card_row(cards):
             ref = _esc(self._tile_ref(entry))
             tile = [md_cell(f'::: {{data-depictio-prose="{ref}"}}'), tile, md_cell(DIV_CLOSE)]
         tiles = tile if isinstance(tile, list) else [tile]
+        if meta.get("index"):
+            tiles = [md_cell(tile_anchors([self._tile_ref(entry)])), *tiles]
         if ctype == "text":
             surface = str(meta.get("surface") or "")
             if surface == "card":
