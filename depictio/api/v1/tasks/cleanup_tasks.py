@@ -16,7 +16,6 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _purge_expired_tokens,
 )
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import cleanup_orphaned_s3_files
-from depictio.api.v1.services.analytics_service import AnalyticsService
 from depictio.api.v1.services.migration_import import expire_stale_requests
 from depictio.models.models.users import UserBeanie
 
@@ -51,6 +50,17 @@ def _calculate_interval(
         return default_seconds, f"{default_seconds // 3600} hour(s)"
 
 
+async def periodic_usage_archive(interval_hours: int = 24) -> None:
+    """Daily: keep anonymous totals of closed periods (``usage_archive``)."""
+    from starlette.concurrency import run_in_threadpool
+
+    from depictio.api.v1.services.usage_stats import archive_closed_periods
+
+    while True:
+        await run_in_threadpool(archive_closed_periods)
+        await asyncio.sleep(interval_hours * 3600)
+
+
 async def periodic_cleanup_expired_temporary_users(
     interval_hours: int | None = None,
     interval_minutes: int | None = None,
@@ -82,43 +92,6 @@ async def periodic_cleanup_expired_temporary_users(
                 pass
         except Exception as e:
             logger.error(f"Error during periodic cleanup: {e}")
-
-        # Wait for the next cleanup cycle
-        await asyncio.sleep(interval_in_seconds)
-
-
-async def periodic_cleanup_analytics_data(
-    interval_hours: int | None = None,
-    interval_minutes: int | None = None,
-    interval_seconds: int | None = None,
-):
-    """
-    Periodically clean up old analytics data.
-
-    Args:
-        interval_hours: How often to run cleanup (in hours)
-        interval_minutes: How often to run cleanup (in minutes)
-        interval_seconds: How often to run cleanup (in seconds)
-
-    Note: Only one interval should be specified. If multiple are provided, precedence is:
-          seconds > minutes > hours. If none are provided, defaults to 24 hours.
-    """
-    interval_in_seconds, _ = _calculate_interval(
-        interval_hours, interval_minutes, interval_seconds, default_seconds=24 * 3600
-    )
-
-    analytics_service = AnalyticsService(
-        session_timeout_minutes=settings.analytics.session_timeout_minutes,
-        cleanup_days=settings.analytics.cleanup_days,
-    )
-
-    while True:
-        try:
-            # Run the cleanup
-            await analytics_service.cleanup_old_sessions()
-
-        except Exception as e:
-            logger.error(f"Error during periodic analytics cleanup: {e}")
 
         # Wait for the next cleanup cycle
         await asyncio.sleep(interval_in_seconds)
@@ -339,13 +312,10 @@ def start_cleanup_tasks(
         )
     )
 
-    # Start analytics cleanup if enabled
-    if settings.analytics.enabled and settings.analytics.cleanup_enabled:
-        asyncio.create_task(
-            periodic_cleanup_analytics_data(
-                interval_hours=24,  # Run analytics cleanup daily
-            )
-        )
+    # Usage statistics: archive closed months/years as anonymous totals before
+    # the daily rows' TTL removes them (idempotent, so every worker may run it).
+    if settings.usage_stats.enabled:
+        asyncio.create_task(periodic_usage_archive())
 
     # Start S3 orphaned files cleanup
     asyncio.create_task(

@@ -1,63 +1,36 @@
-"""Analytics API endpoints."""
+"""Internal usage statistics API (``/analytics``).
 
-import hmac
-from datetime import datetime, timedelta
-from typing import Annotated
+* ``POST /analytics/hit``: the viewer's navigation beacon (token optional).
+* ``GET /analytics/usage``: the period report, for the Admin Usage pane and for
+  agents. Admin session **or** ``X-Api-Key`` (``DEPICTIO_AUTH_INTERNAL_API_KEY``).
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel
-from pymongo import DESCENDING
+See ``docs/usage-stats.md``.
+"""
+
+from datetime import datetime, timezone
+from typing import Annotated, Literal, Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from starlette.concurrency import run_in_threadpool
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _async_fetch_user_from_token,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import oauth2_scheme_optional
-from depictio.api.v1.services.analytics_data_service import AnalyticsDataService
-from depictio.api.v1.services.analytics_service import AnalyticsService
-from depictio.models.models.analytics import (
-    AnalyticsSummary,
-    SessionSummary,
-    UserActivity,
-    UserSession,
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    _is_valid_internal_api_key,
+    oauth2_scheme_optional,
 )
-from depictio.models.models.users import User
+from depictio.api.v1.services import usage_stats
+from depictio.models.models.usage import Granularity, UsageHit, UsageReport
 
 router = APIRouter()
 
-
-class ClientPageView(BaseModel):
-    """Client-side page view tracking data."""
-
-    page_path: str
-    page_title: str | None = None
-    user_type: str | None = None  # "anonymous", "temporary", "authenticated"
-    user_id: str | None = None
-    session_id: str | None = None
-    referrer: str | None = None
-    timestamp: datetime | None = None
-
-
-def get_analytics_service() -> AnalyticsService:
-    """Dependency to get analytics service."""
-    return AnalyticsService(
-        session_timeout_minutes=settings.analytics.session_timeout_minutes,
-        cleanup_days=settings.analytics.cleanup_days,
-    )
-
-
-def _is_valid_internal_api_key(x_api_key: str | None) -> bool:
-    """Constant-time check of a caller-supplied internal API key.
-
-    Returns ``False`` (rather than raising) when the header is absent or the
-    configured key is unset so callers can fall back to session-based admin
-    authentication.
-    """
-    configured_key = settings.auth.internal_api_key
-    if not x_api_key or not configured_key:
-        return False
-    return hmac.compare_digest(x_api_key, configured_key)
+#: Navigations per minute per address. A whole institute shares one address,
+#: so this only stops a script, not a busy room.
+_HITS_PER_MINUTE = 600
 
 
 async def require_analytics_admin(
@@ -68,555 +41,76 @@ async def require_analytics_admin(
         description="Internal API key (alternative to an authenticated admin session)",
     ),
 ) -> None:
-    """Authorize access to protected analytics endpoints.
-
-    Analytics data (IPs, user IDs, request paths) is sensitive in multi-user /
-    public deployments. Access is granted if EITHER:
-
-    - a valid internal API key is supplied via ``X-Api-Key`` (for trusted
-      internal services / operators), OR
-    - the request carries an authenticated admin user session.
-
-    Non-admin authenticated users are rejected so they cannot read other
-    users' analytics.
-    """
-    # 1. Internal service path: constant-time API-key comparison.
+    """Admin session (not a temporary guest) or the internal API key."""
     if _is_valid_internal_api_key(x_api_key):
         return
-
-    # 2. Authenticated admin session path.
     if token is not None:
         user = await _async_fetch_user_from_token(token)
-        if user is not None:
-            if user.is_admin:
-                return
-            logger.warning(
-                f"Non-admin user {user.id} denied access to protected analytics endpoint"
-            )
-            raise HTTPException(
-                status_code=403,
-                detail="Administrator privileges required to access analytics data",
-            )
+        if user is not None and user.is_admin and not getattr(user, "is_temporary", False):
+            return
+    raise HTTPException(status_code=403, detail="Administrator privileges required")
 
-    raise HTTPException(
-        status_code=403,
-        detail="Invalid API key or insufficient privileges",
-    )
 
+def _naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """API timestamps are naive UTC: convert an offset, don't drop it."""
+    if dt is None or dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
-# Backwards-compatible alias: existing callers (e.g. analytics-data routes)
-# depend on ``verify_internal_api_key``; route through the hardened combined
-# admin/API-key gate.
-verify_internal_api_key = require_analytics_admin
 
+def _require_enabled() -> None:
+    if not settings.usage_stats.enabled:
+        raise HTTPException(status_code=404, detail="Usage statistics are disabled")
 
-@router.get("/summary", response_model=AnalyticsSummary)
-async def get_analytics_summary(
-    analytics_service: AnalyticsService = Depends(get_analytics_service),
-    _: None = Depends(verify_internal_api_key),
-) -> AnalyticsSummary:
-    """
-    Get analytics summary with key metrics.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
 
-    return await analytics_service.get_analytics_summary()
-
-
-@router.get("/sessions/active", response_model=list[SessionSummary])
-async def get_active_sessions(
-    limit: int = Query(50, ge=1, le=200),
-    analytics_service: AnalyticsService = Depends(get_analytics_service),
-    _: None = Depends(verify_internal_api_key),
-) -> list[SessionSummary]:
-    """
-    Get list of currently active sessions.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    return await analytics_service.get_active_sessions(limit=limit)
-
-
-@router.get("/sessions", response_model=list[UserSession])
-async def get_sessions(
-    user_id: str | None = Query(None),
-    is_anonymous: bool | None = Query(None),
-    start_date: datetime | None = Query(None),
-    end_date: datetime | None = Query(None),
-    limit: int = Query(50, ge=1, le=200),
-    skip: int = Query(0, ge=0),
-    _: None = Depends(verify_internal_api_key),
-) -> list[UserSession]:
-    """
-    Get user sessions with optional filtering.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    # Build query filters
-    filters = []
-
-    if user_id:
-        filters.append(UserSession.user_id == user_id)
-
-    if is_anonymous is not None:
-        filters.append(UserSession.is_anonymous == is_anonymous)
-
-    if start_date:
-        filters.append(UserSession.start_time >= start_date)
-
-    if end_date:
-        filters.append(UserSession.start_time <= end_date)
-
-    # Execute query
-    query = UserSession.find(*filters) if filters else UserSession.find()
-    sessions = (
-        await query.sort([(UserSession.start_time, DESCENDING)]).skip(skip).limit(limit).to_list()
-    )
-
-    return sessions
-
-
-@router.get("/activities", response_model=list[UserActivity])
-async def get_activities(
-    session_id: str | None = Query(None),
-    user_id: str | None = Query(None),
-    activity_type: str | None = Query(None),
-    start_date: datetime | None = Query(None),
-    end_date: datetime | None = Query(None),
-    limit: int = Query(100, ge=1, le=500),
-    skip: int = Query(0, ge=0),
-    _: None = Depends(verify_internal_api_key),
-) -> list[UserActivity]:
-    """
-    Get user activities with optional filtering.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    # Build query filters
-    filters = []
-
-    if session_id:
-        filters.append(UserActivity.session_id == session_id)
-
-    if user_id:
-        filters.append(UserActivity.user_id == user_id)
-
-    if activity_type:
-        filters.append(UserActivity.activity_type == activity_type)
-
-    if start_date:
-        filters.append(UserActivity.timestamp >= start_date)
-
-    if end_date:
-        filters.append(UserActivity.timestamp <= end_date)
-
-    # Execute query
-    query = UserActivity.find(*filters) if filters else UserActivity.find()
-    activities = (
-        await query.sort([(UserActivity.timestamp, DESCENDING)]).skip(skip).limit(limit).to_list()
-    )
-
-    return activities
-
-
-@router.get("/sessions/{session_id}", response_model=UserSession)
-async def get_session(session_id: str, _: None = Depends(verify_internal_api_key)) -> UserSession:
-    """
-    Get specific session by ID.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    session = await UserSession.find_one(UserSession.session_id == session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    return session
-
-
-@router.get("/sessions/{session_id}/activities", response_model=list[UserActivity])
-async def get_session_activities(
-    session_id: str,
-    limit: int = Query(100, ge=1, le=500),
-    skip: int = Query(0, ge=0),
-    _: None = Depends(verify_internal_api_key),
-) -> list[UserActivity]:
-    """
-    Get all activities for a specific session.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    # Check if session exists
-    session = await UserSession.find_one(UserSession.session_id == session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    return (
-        await UserActivity.find(UserActivity.session_id == session_id)
-        .sort([(UserActivity.timestamp, DESCENDING)])
-        .skip(skip)
-        .limit(limit)
-        .to_list()
-    )
-
-
-@router.delete("/sessions/{session_id}")
-async def end_session(
-    session_id: str,
-    analytics_service: AnalyticsService = Depends(get_analytics_service),
-    _: None = Depends(verify_internal_api_key),
-) -> dict:
-    """
-    Manually end a session.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    session = await analytics_service.end_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found or already ended")
-
-    return {"message": "Session ended successfully", "session_id": session_id}
-
-
-@router.post("/cleanup")
-async def cleanup_old_data(
-    days_to_keep: int | None = Query(
-        None, ge=1, description="Days of data to keep (overrides default)"
-    ),
-    analytics_service: AnalyticsService = Depends(get_analytics_service),
-    _: None = Depends(verify_internal_api_key),
-) -> dict:
-    """
-    Manually trigger cleanup of old analytics data.
-
-    Args:
-        days_to_keep: Optional override for how many days of data to keep
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    result = await analytics_service.cleanup_old_sessions(days_to_keep)
-    return {
-        "message": "Cleanup completed successfully",
-        "days_kept": days_to_keep or settings.analytics.cleanup_days,
-        "result": result,
-    }
-
-
-@router.get("/stats/users")
-async def get_user_stats(
-    days: int = Query(30, ge=1, le=365), _: None = Depends(verify_internal_api_key)
-) -> dict:
-    """
-    Get user statistics for the specified period.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    start_date = datetime.utcnow() - timedelta(days=days)
-
-    # Total unique users
-    period_sessions = await UserSession.find(UserSession.start_time >= start_date).to_list()
-    unique_user_ids = set(session.user_id for session in period_sessions)
-    total_users = len(unique_user_ids)
-
-    # Anonymous vs authenticated
-    anonymous_sessions = await UserSession.find(
-        UserSession.start_time >= start_date, UserSession.is_anonymous
-    ).to_list()
-    anonymous_user_ids = set(session.user_id for session in anonymous_sessions)
-    anonymous_users = len(anonymous_user_ids)
-
-    authenticated_users = total_users - anonymous_users
-
-    # Sessions per day
-    sessions_by_day = {}
-    for i in range(days):
-        day_start = (start_date + timedelta(days=i)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        day_end = day_start + timedelta(days=1)
-
-        daily_sessions = await UserSession.find(
-            UserSession.start_time >= day_start, UserSession.start_time < day_end
-        ).count()
-
-        sessions_by_day[day_start.strftime("%Y-%m-%d")] = daily_sessions
-
-    return {
-        "period_days": days,
-        "total_users": total_users,
-        "anonymous_users": anonymous_users,
-        "authenticated_users": authenticated_users,
-        "sessions_by_day": sessions_by_day,
-    }
-
-
-@router.get("/stats/activities")
-async def get_activity_stats(
-    days: int = Query(7, ge=1, le=90), _: None = Depends(verify_internal_api_key)
-) -> dict:
-    """
-    Get activity statistics for the specified period.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    start_date = datetime.utcnow() - timedelta(days=days)
-
-    # Get all activities in period
-    activities = await UserActivity.find(UserActivity.timestamp >= start_date).to_list()
-
-    # Count by type
-    activity_counts = {}
-    for activity in activities:
-        activity_counts[activity.activity_type] = activity_counts.get(activity.activity_type, 0) + 1
-
-    # Top pages
-    page_views = [a for a in activities if a.activity_type == "page_view"]
-    page_counts = {}
-    for activity in page_views:
-        page_counts[activity.path] = page_counts.get(activity.path, 0) + 1
-
-    top_pages = [
-        {"path": path, "views": count}
-        for path, count in sorted(page_counts.items(), key=lambda x: x[1], reverse=True)[:20]
-    ]
-
-    # Average response time
-    api_calls = [a for a in activities if a.activity_type == "api_call"]
-    avg_response_time = 0
-    if api_calls:
-        avg_response_time = sum(a.response_time_ms for a in api_calls) / len(api_calls)
-
-    return {
-        "period_days": days,
-        "activity_counts": activity_counts,
-        "total_activities": len(activities),
-        "top_pages": top_pages,
-        "avg_response_time_ms": avg_response_time,
-    }
-
-
-@router.post("/track/pageview")
-async def track_client_pageview(
-    pageview: ClientPageView,
+@router.post("/hit", status_code=204)
+async def track_hit(
+    hit: UsageHit,
     request: Request,
     token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
-    analytics_service: AnalyticsService = Depends(get_analytics_service),
-) -> dict:
-    """
-    Track a client-side page view from Dash frontend.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
+) -> Response:
+    """Record one navigation. Idempotent per browser per day; never echoes data."""
+    _require_enabled()
+    enforce_rate_limit(request, "analytics/hit", max_calls=_HITS_PER_MINUTE)
+    user = None
+    if token:
+        try:
+            user = await _async_fetch_user_from_token(token)
+        except Exception:  # an expired token still counts as a visit
+            user = None
+    await run_in_threadpool(usage_stats.record_hit, hit, request, user)
+    return Response(status_code=204)
 
+
+@router.get(
+    "/usage",
+    response_model=UsageReport,
+    dependencies=[Depends(require_analytics_admin)],
+)
+def get_usage(
+    granularity: Granularity = Query("month"),
+    periods: int = Query(12, ge=1, le=120),
+    start: Optional[datetime] = Query(None, description="Custom range start (UTC)"),
+    end: Optional[datetime] = Query(
+        None, description="Custom range end (UTC), inclusive of its period"
+    ),
+    format: Literal["json", "csv"] = Query("json"),
+):
+    """Usage report per period: users, logins, visitors, content, breakdowns."""
+    _require_enabled()
+    start, end = _naive_utc(start), _naive_utc(end)
+    if start and end and end < start:
+        raise HTTPException(status_code=400, detail="end is before start")
     try:
-        # Derive the user identity server-side from the auth token. The
-        # client-supplied ``pageview.user_id`` is NEVER trusted (it is kept on
-        # the schema only for backward compatibility) — otherwise any client
-        # could attribute page views to another user's analytics.
-        authenticated_user: User | None = None
-        if token is not None:
-            authenticated_user = await _async_fetch_user_from_token(token)
-
-        user_id = str(authenticated_user.id) if authenticated_user else None
-
-        # Get or create session. When there is no authenticated user, pass
-        # ``None`` and let the service determine the proper (anonymous) user_id.
-        session = await analytics_service.get_or_create_session(request, user_id)
-
-        # Create a mock request object for the page view
-
-        # Log as page view activity
-        await analytics_service.log_activity(
-            session=session,
-            request=request,  # Use the API request but with modified path
-            status_code=200,  # Assume successful page view
-            response_time_ms=0,  # Client-side navigation is instant
-            project_id=None,  # TODO: Extract from page_path if needed
-            dashboard_id=None,  # TODO: Extract from page_path if needed
+        usage_stats.archive_closed_periods()
+        report = usage_stats.build_report(granularity, periods, start, end)
+    except Exception as exc:
+        logger.error(f"usage_stats: report failed: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to build the usage report") from exc
+    if format == "csv":
+        return Response(
+            content=usage_stats.report_to_csv(report),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="depictio-usage.csv"'},
         )
-
-        # Update the activity with correct page info
-        latest_activity = (
-            await UserActivity.find(UserActivity.session_id == session.session_id)
-            .sort([(UserActivity.timestamp, DESCENDING)])
-            .limit(1)
-            .first_or_none()
-        )
-
-        if latest_activity:
-            latest_activity.path = pageview.page_path
-            latest_activity.activity_type = "page_view"
-            if pageview.page_title:
-                # Store page title in a custom field if needed
-                pass
-            await latest_activity.save()
-
-        return {
-            "success": True,
-            "session_id": session.session_id,
-            "user_id": session.user_id,
-            "message": "Page view tracked successfully",
-        }
-
-    except Exception as e:
-        logger.warning(f"Client analytics error: {e}")
-        return {"success": False, "error": str(e)}
-
-
-def get_analytics_data_service() -> AnalyticsDataService:
-    """Dependency to get analytics data service."""
-    return AnalyticsDataService()
-
-
-@router.get("/unique-connections")
-async def get_unique_connections_analytics(
-    start_date: str | None = Query(None, description="Start date in YYYY-MM-DD format"),
-    end_date: str | None = Query(None, description="End date in YYYY-MM-DD format"),
-    data_service: AnalyticsDataService = Depends(get_analytics_data_service),
-    _: None = Depends(verify_internal_api_key),
-) -> dict:
-    """
-    Get analytics for unique IP addresses and connections.
-
-    Returns information about unique connections, IP-to-user mapping,
-    and connection patterns for identifying unique visitors.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    try:
-        # Parse dates if provided
-        parsed_start_date = None
-        parsed_end_date = None
-
-        if start_date:
-            try:
-                parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-            except ValueError:
-                raise HTTPException(
-                    status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD"
-                )
-
-        if end_date:
-            try:
-                parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-            except ValueError:
-                raise HTTPException(
-                    status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD"
-                )
-
-        # Get unique connections analytics
-        result = await data_service.get_unique_connections_analytics(
-            start_date=parsed_start_date,
-            end_date=parsed_end_date,
-        )
-
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in unique connections analytics: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get unique connections analytics: {str(e)}"
-        )
-
-
-@router.post("/admin/consolidate-sessions")
-async def consolidate_duplicate_sessions(
-    analytics_service: AnalyticsService = Depends(get_analytics_service),
-    _: None = Depends(verify_internal_api_key),
-) -> dict:
-    """
-    Consolidate duplicate sessions from the same IP address.
-
-    This endpoint fixes legacy data where multiple sessions exist per IP
-    due to different user agents creating separate anonymous user IDs.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    try:
-        result = await analytics_service.consolidate_duplicate_sessions()
-
-        if result["success"]:
-            return {
-                "success": True,
-                "message": "Session consolidation completed",
-                "details": {
-                    "consolidated_ips": result["consolidated_ips"],
-                    "removed_sessions": result["removed_sessions"],
-                    "total_duplicate_ips": result["total_duplicate_ips"],
-                },
-            }
-        else:
-            raise HTTPException(status_code=500, detail=f"Consolidation failed: {result['error']}")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in session consolidation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to consolidate sessions: {str(e)}")
-
-
-@router.delete("/admin/cleanup-anonymous-sessions")
-async def cleanup_anonymous_sessions(
-    _: None = Depends(verify_internal_api_key),
-) -> dict:
-    """
-    Clean up anonymous sessions when unauthenticated mode is disabled.
-
-    This removes all anonymous sessions and their associated activities
-    since anonymous sessions shouldn't exist when unauthenticated mode is disabled.
-    """
-    if not settings.analytics.enabled:
-        raise HTTPException(status_code=404, detail="Analytics not enabled")
-
-    # Only allow cleanup when unauthenticated mode is disabled
-    if settings.auth.unauthenticated_mode:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot cleanup anonymous sessions when unauthenticated mode is enabled",
-        )
-
-    try:
-        # Delete anonymous sessions and their activities
-        anonymous_sessions = await UserSession.find(UserSession.is_anonymous).to_list()
-        session_ids = [session.session_id for session in anonymous_sessions]
-
-        # Delete activities first (foreign key constraint)
-        deleted_activities = 0
-        if session_ids:
-            activities_result = await UserActivity.find(
-                {"session_id": {"$in": session_ids}}
-            ).delete()
-            deleted_activities = getattr(activities_result, "deleted_count", 0)
-
-        # Delete anonymous sessions
-        sessions_result = await UserSession.find(UserSession.is_anonymous).delete()
-        deleted_sessions = getattr(sessions_result, "deleted_count", 0)
-
-        return {
-            "success": True,
-            "message": "Anonymous sessions cleanup completed",
-            "details": {
-                "deleted_sessions": deleted_sessions,
-                "deleted_activities": deleted_activities,
-                "reason": "Unauthenticated mode is disabled - anonymous sessions not allowed",
-            },
-        }
-
-    except Exception as e:
-        logger.error(f"Error in anonymous session cleanup: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to cleanup anonymous sessions: {str(e)}"
-        )
+    return report

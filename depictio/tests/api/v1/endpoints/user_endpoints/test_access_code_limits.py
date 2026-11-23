@@ -31,6 +31,7 @@ class FakeRedis:
 def _request(ip: str):
     request = MagicMock()
     request.headers = {"x-real-ip": ip}
+    request.client.host = "10.0.0.2"  # behind the bundled nginx
     return request
 
 

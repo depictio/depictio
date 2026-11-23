@@ -66,6 +66,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
 )
 from depictio.api.v1.services import avatars as avatar_service
+from depictio.api.v1.services.usage_stats import record_login
 from depictio.models.models.users import (
     RequestAdminCreateUser,
     RequestEditPassword,
@@ -281,6 +282,7 @@ async def login(
         if token is None:
             raise HTTPException(status_code=500, detail="Failed to create session token")
         token.logged_in = True
+        await record_login(admin, "single_user", request)
         return token
 
     # Instances that source every account from one identity provider can close
@@ -308,6 +310,7 @@ async def login(
             detail="Token with the same name already exists",
         )
     token.logged_in = True
+    await record_login(user, "password", request)
     return token
 
 
@@ -1185,6 +1188,7 @@ async def create_temporary_user_public(request: Request, body: dict | None = Bod
         expiry_minutes=settings.auth.temporary_user_expiry_minutes,
     )
     session_data = await _create_temporary_user_session(temp_user)
+    await record_login(temp_user, "temporary", request)
     logger.info(f"Created temporary user via public endpoint: {temp_user.email}")
     return session_data
 

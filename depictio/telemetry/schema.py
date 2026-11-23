@@ -80,8 +80,8 @@ class UsageBuckets(_StrictBase):
     deltatables: str = Field(description="Number of Delta tables, bucketed.")
     active_users_7d: str = Field(
         description=(
-            "Users active in the last 7 days, bucketed. `unknown` unless the "
-            "operator has also enabled the local analytics subsystem."
+            "Users active in the last 7 days, bucketed. `unknown` when the "
+            "operator has turned the local usage statistics off."
         ),
     )
     component_types: dict[str, str] = Field(
@@ -104,7 +104,7 @@ class FeatureFlags(_StrictBase):
     auth_single_user_mode: bool = Field(description="Running as a single-user personal instance.")
     auth_public_mode: bool = Field(description="Unauthenticated/public access enabled.")
     auth_demo_mode: bool = Field(description="Demo mode enabled.")
-    analytics_enabled: bool = Field(description="Local (inbound) analytics subsystem enabled.")
+    analytics_enabled: bool = Field(description="Local (inbound) usage statistics enabled.")
     google_analytics_enabled: bool = Field(
         description="Google Analytics enabled for the frontend. The tracking ID is never sent.",
     )

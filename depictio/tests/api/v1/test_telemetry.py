@@ -493,9 +493,29 @@ class TestPayloadContainsNothingIdentifying:
         # 7 dashboards x 2 figures = 14, x 1 table = 7.
         assert payload["usage"]["component_types"] == {"figure": "11-50", "table": "6-10"}
 
-    def test_active_users_is_unknown_without_local_analytics(self, payload):
+    def test_active_users_is_unknown_without_local_analytics(self, seeded_db):
         """Absent measurement must not masquerade as a measured zero."""
-        assert payload["usage"]["active_users_7d"] == "unknown"
+        from depictio.api.v1.telemetry.payload import _active_users_7d
+
+        with patch("depictio.api.v1.telemetry.payload.settings") as mock_settings:
+            mock_settings.usage_stats.enabled = False
+            assert _active_users_7d() is None
+
+    def test_active_users_counts_real_users_from_usage_stats(self, seeded_db):
+        from depictio.api.v1.telemetry.payload import _active_users_7d
+        from depictio.models.timestamps import utc_now_naive
+
+        today = utc_now_naive()
+        seeded_db.usage_visits.insert_many(
+            [
+                {"day": today, "visitor_id": "a", "user_id": "u1", "user_class": "real"},
+                {"day": today, "visitor_id": "b", "user_id": "t1", "user_class": "temporary"},
+            ]
+        )
+        seeded_db.usage_logins.insert_one(
+            {"day": today, "user_id": "u1", "method": "password", "user_class": "real"}
+        )
+        assert _active_users_7d() == 1
 
     def test_usage_omitted_when_operator_disables_it(self, seeded_db):
         from depictio.api.v1.telemetry.payload import build_heartbeat_properties
@@ -504,7 +524,7 @@ class TestPayloadContainsNothingIdentifying:
             mock_settings.telemetry.include_usage_metrics = False
             mock_settings.telemetry.deployment_kind = None
             mock_settings.telemetry.replicas = None
-            mock_settings.analytics.enabled = False
+            mock_settings.usage_stats.enabled = False
             mock_settings.fastapi.workers = 4
             _instance_id, properties = build_heartbeat_properties()
 
@@ -545,7 +565,7 @@ class TestKubernetesResourcesInPayload:
             mock_settings.telemetry.cpu_limit = "2"
             mock_settings.telemetry.memory_request = "1Gi"
             mock_settings.telemetry.memory_limit = "4Gi"
-            mock_settings.analytics.enabled = False
+            mock_settings.usage_stats.enabled = False
             mock_settings.fastapi.workers = 4
             _instance_id, properties = build_heartbeat_properties()
 
@@ -573,7 +593,7 @@ class TestKubernetesResourcesInPayload:
             mock_settings.telemetry.cpu_limit = None
             mock_settings.telemetry.memory_request = None
             mock_settings.telemetry.memory_limit = None
-            mock_settings.analytics.enabled = False
+            mock_settings.usage_stats.enabled = False
             mock_settings.fastapi.workers = 4
             _instance_id, properties = build_heartbeat_properties()
 

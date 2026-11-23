@@ -171,6 +171,7 @@ async def server_info(
             "changes_since": settings.dashboard_versions.changes_since_enabled,
             "static_export": settings.static_export.enabled,
             "notebook_export": settings.notebook_export.enabled,
+            "usage_stats": settings.usage_stats.enabled,
         },
     }
 

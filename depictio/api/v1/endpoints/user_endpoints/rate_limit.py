@@ -37,14 +37,28 @@ def _get_redis_client() -> Any:
 
 
 def _client_ip(request: Request) -> str:
-    # Prefer X-Real-IP forwarded by the nginx reverse-proxy over the raw TCP
-    # connection source, which would be the nginx pod IP in k8s (causing all
-    # visitors to share one rate-limit bucket).
-    return (
-        request.headers.get("x-real-ip")
-        or (request.client.host if request.client else None)
-        or "unknown"
-    )
+    """The visitor's address.
+
+    Behind the bundled nginx / an ingress the TCP peer is the proxy (a private
+    address), so its ``X-Real-IP`` names the visitor. A client reaching the API
+    directly has a public peer address and could forge that header to dodge
+    per-IP limits, so the header is only honoured from a private or loopback peer.
+    """
+    peer = request.client.host if request.client else None
+    forwarded = request.headers.get("x-real-ip")
+    if forwarded and (peer is None or _is_proxy_peer(peer)):
+        return forwarded.strip()
+    return peer or "unknown"
+
+
+def _is_proxy_peer(host: str) -> bool:
+    import ipaddress
+
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return addr.is_private or addr.is_loopback
 
 
 def _window_key(endpoint: str, scope: str) -> str:

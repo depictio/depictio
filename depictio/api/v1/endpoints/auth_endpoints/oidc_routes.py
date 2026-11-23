@@ -165,7 +165,9 @@ async def oidc_callback(
 
     if user.id is None:
         return _error_redirect("sso_failed")
-    ticket = await _create_magic_link_ticket(user.id, expiry_minutes=_TICKET_EXPIRY_MINUTES)
+    ticket = await _create_magic_link_ticket(
+        user.id, expiry_minutes=_TICKET_EXPIRY_MINUTES, login_method=f"oidc:{provider.id}"
+    )
     logger.info(f"OIDC login with '{provider.id}' successful for {user.email} (created={created})")
     return_to = oidc.safe_return_path(login.return_to)
     # The ticket rides in the URL fragment: browsers apply fragments on

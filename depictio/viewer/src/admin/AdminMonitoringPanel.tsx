@@ -49,6 +49,7 @@ import { routeMonitoringEvent } from '../monitoring/runs';
 import { AgentsPane } from '../monitoring/AgentsPane';
 import { TasksPane } from '../monitoring/TasksPane';
 import { IngestionPane } from '../monitoring/IngestionPane';
+import { UsagePane } from '../monitoring/UsagePane';
 import { useTone } from '../monitoring/useTone';
 
 /**
@@ -405,6 +406,8 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
         return <LogsPane />;
       case 'health':
         return <HealthPane />;
+      case 'usage':
+        return <UsagePane />;
       default:
         return <TasksPane liveSignal={taskSignal} />;
     }
@@ -433,6 +436,7 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
                 { value: 'watchers', label: 'Watchers' },
                 { value: 'logs', label: 'Logs' },
                 { value: 'health', label: 'Health' },
+                { value: 'usage', label: 'Usage' },
               ]}
             />
           )}

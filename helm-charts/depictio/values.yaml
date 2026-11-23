@@ -458,12 +458,11 @@ backend:
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"
 
-    # Analytics configuration
-    DEPICTIO_ANALYTICS_ENABLED: "false"
-    DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: "30"
-    DEPICTIO_ANALYTICS_CLEANUP_DAYS: "90"
-    DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: "true"
-    DEPICTIO_ANALYTICS_CLEANUP_ENABLED: "true"
+    # Internal usage statistics (logins, visitors, content; never leaves the instance)
+    DEPICTIO_USAGE_STATS_ENABLED: "true"
+    DEPICTIO_USAGE_STATS_RETENTION_DAYS: "395"
+    # Optional: City .mmdb (DB-IP Lite) mounted into the backend, for countries/cities
+    # DEPICTIO_USAGE_STATS_GEOIP_DB_PATH: "/geoip/dbip-city-lite.mmdb"
 
     # Anonymous installation telemetry
     # Sends an anonymous daily heartbeat (random installation ID, version,

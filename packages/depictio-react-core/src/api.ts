@@ -11768,3 +11768,158 @@ export async function fetchComponentDiff(
   if (!res.ok) await throwHttpDetailError(res, 'Failed to compare with your last visit');
   return (await res.json()) as ComponentDiff;
 }
+
+// ── Usage statistics (Admin > Activity > Usage; `/analytics`) ────────────────
+
+export type UsageGranularity = 'day' | 'week' | 'month' | 'year';
+
+/** One period of `UsageReport.series`. Mirrors `UsagePoint` in models/usage.py. */
+export interface UsagePoint {
+  period_start: string;
+  active_users: number;
+  new_users: number;
+  returning_users: number;
+  logins: number;
+  logins_by_method: Record<string, number>;
+  visitors: number;
+  new_visitors: number;
+  returning_visitors: number;
+  visitors_fp: number;
+  unique_ips: number;
+  pageviews: number;
+  dashboard_views: number;
+  temporary_users: number;
+  signups: number;
+  new_projects: number;
+  new_dashboards: number;
+  ingestions: number;
+}
+
+export interface UsageReport {
+  granularity: UsageGranularity;
+  start: string;
+  end: string;
+  generated_at: string;
+  mode: 'single_user' | 'public' | 'multi_user';
+  geoip_available: boolean;
+  archived_periods: number;
+  timezone: string;
+  totals: Record<string, number>;
+  kpis: Record<string, { current: number; previous: number }>;
+  series: UsagePoint[];
+  breakdowns: Record<string, Array<Record<string, string | number>>>;
+  hours_heatmap: number[][];
+}
+
+export interface UsageQuery {
+  granularity: UsageGranularity;
+  periods?: number;
+  start?: string;
+  end?: string;
+}
+
+function usageQueryString(q: UsageQuery, format?: 'csv'): string {
+  const params = new URLSearchParams({ granularity: q.granularity });
+  if (q.periods) params.set('periods', String(q.periods));
+  if (q.start) params.set('start', q.start);
+  if (q.end) params.set('end', q.end);
+  if (format) params.set('format', format);
+  return params.toString();
+}
+
+/** The usage report (admin-only). */
+export async function fetchUsageReport(q: UsageQuery): Promise<UsageReport> {
+  const res = await authFetch(`${API_BASE}/analytics/usage?${usageQueryString(q)}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load usage statistics');
+  return (await res.json()) as UsageReport;
+}
+
+/** The report's series as CSV text (admin-only). */
+export async function fetchUsageCsv(q: UsageQuery): Promise<string> {
+  const res = await authFetch(`${API_BASE}/analytics/usage?${usageQueryString(q, 'csv')}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export usage statistics');
+  return res.text();
+}
+
+const VISITOR_KEY = 'depictio-visitor-id';
+const USAGE_OPT_OUT_KEY = 'depictio-usage-opt-out';
+/** The browser id is renewed after 13 months (CNIL audience-measurement rule). */
+const VISITOR_ID_MAX_AGE_MS = 395 * 24 * 3600 * 1000;
+
+function storage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** True when this browser refuses usage statistics: its own opt-out, Do Not
+ *  Track or Global Privacy Control. The server checks the headers too. */
+export function isUsageOptedOut(): boolean {
+  const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
+  if (nav.doNotTrack === '1' || nav.globalPrivacyControl === true) return true;
+  return storage()?.getItem(USAGE_OPT_OUT_KEY) === '1';
+}
+
+/** Opt this browser out of (or back into) usage statistics. Opting out also
+ *  forgets the browser id. */
+export function setUsageOptOut(optOut: boolean): void {
+  const s = storage();
+  if (!s) return;
+  if (optOut) {
+    s.setItem(USAGE_OPT_OUT_KEY, '1');
+    s.removeItem(VISITOR_KEY);
+  } else {
+    s.removeItem(USAGE_OPT_OUT_KEY);
+  }
+}
+
+function visitorId(): string | null {
+  const s = storage();
+  if (!s) return null; // storage blocked: not counted, never an error
+  try {
+    const stored = JSON.parse(s.getItem(VISITOR_KEY) || 'null') as { id?: string; at?: number } | null;
+    if (
+      stored?.id &&
+      /^[0-9a-f-]{36}$/i.test(stored.id) &&
+      typeof stored.at === 'number' &&
+      Date.now() - stored.at < VISITOR_ID_MAX_AGE_MS
+    ) {
+      return stored.id;
+    }
+  } catch {
+    /* a pre-expiry plain string, or garbage: renew below */
+  }
+  try {
+    // randomUUID needs a secure context; setItem can throw (quota, private mode).
+    const id = crypto.randomUUID();
+    s.setItem(VISITOR_KEY, JSON.stringify({ id, at: Date.now() }));
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+/** Fire-and-forget navigation beacon. Never redirects, never throws. */
+export function sendUsageHit(hit: { path_kind: string; dashboard_id?: string | null }): void {
+  if (isUsageOptedOut()) return;
+  const id = visitorId();
+  if (!id) return;
+  const session = readStoredSession();
+  const token = typeof session?.access_token === 'string' ? session.access_token : null;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  void fetch(`${API_BASE}/analytics/hit`, {
+    method: 'POST',
+    headers,
+    keepalive: true,
+    body: JSON.stringify({
+      visitor_id: id,
+      path_kind: hit.path_kind,
+      dashboard_id: hit.dashboard_id ?? null,
+      referrer: document.referrer || null,
+      lang: navigator.language || null,
+    }),
+  }).catch(() => undefined);
+}

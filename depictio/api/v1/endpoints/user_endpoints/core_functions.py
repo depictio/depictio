@@ -974,6 +974,7 @@ async def _provision_user(email: EmailStr) -> dict:
 async def _create_magic_link_ticket(
     user_id: PydanticObjectId,
     expiry_minutes: int = 15,
+    login_method: str = "magic_link",
 ) -> MagicLinkTicketBeanie:
     """Create a short-lived, single-use magic-link ticket for ``user_id``.
 
@@ -986,6 +987,7 @@ async def _create_magic_link_ticket(
         ticket=secrets.token_urlsafe(32),
         user_id=user_id,
         expire_datetime=datetime.now() + timedelta(minutes=expiry_minutes),
+        login_method=login_method,
     )
     await ticket.save()
     return ticket
@@ -1024,6 +1026,10 @@ async def _redeem_magic_link_ticket(ticket_secret: str) -> dict:
     token = await _add_token(token_data)
     if token is None:
         raise HTTPException(status_code=500, detail="Failed to issue session token")
+
+    from depictio.api.v1.services.usage_stats import record_login
+
+    await record_login(user, ticket_doc.login_method)
 
     return {
         "logged_in": True,

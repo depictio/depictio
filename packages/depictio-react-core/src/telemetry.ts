@@ -160,6 +160,7 @@ export function capture(event: string, properties: Record<string, unknown> = {})
           // Anonymous event: no person profile is created for this browser.
           // Mirrors what the Python senders set in build_body().
           $process_person_profile: false,
+          $geoip_disable: true,
         },
         timestamp: new Date().toISOString(),
       }),

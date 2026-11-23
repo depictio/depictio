@@ -6,8 +6,8 @@ publishes no pull counts for either the images or the OCI chart, so without this
 package the project has no way to know how many installations exist or which
 features are used.
 
-What this package is *not*: the ``depictio.api.v1.services.analytics_service``
-subsystem, which records per-user sessions into each deployment's own MongoDB and
+What this package is *not*: the ``depictio.api.v1.services.usage_stats``
+subsystem, which records logins and visits into each deployment's own MongoDB and
 never transmits anything. That one answers "who used my instance". This one
 answers "how many Depictio instances exist", and only ever sends anonymous,
 aggregate, bucketed data to the project maintainers.
@@ -22,7 +22,7 @@ Two invariants hold everywhere in here:
 
 1. **Telemetry can never break, block or slow the thing it measures.** Every
    send path swallows every exception and runs under a hard timeout, mirroring
-   the guarantee ``AnalyticsMiddleware`` already makes for inbound analytics.
+   the guarantee the internal usage statistics make for inbound recording.
 2. **Nothing identifying is ever collected.** See ``schema.py`` for the exact
    payloads and ``docs/telemetry.md`` for the operator-facing description.
 

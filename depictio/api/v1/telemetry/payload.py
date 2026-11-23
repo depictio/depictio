@@ -74,28 +74,28 @@ def _component_type_buckets() -> dict[str, str]:
 
 
 def _active_users_7d() -> int | None:
-    """Users seen in the last 7 days, or ``None`` when not knowable.
+    """Real users seen in the last 7 days, or ``None`` when not knowable.
 
-    Depends on the local analytics subsystem's session records, which only exist
-    when the operator has enabled it. Returns ``None`` otherwise rather than 0, so
-    "not measured" stays distinct from "nobody used it".
+    Read from the internal usage statistics (``usage_visits`` / ``usage_logins``),
+    which only exist when the operator keeps them on. Returns ``None`` otherwise
+    rather than 0, so "not measured" stays distinct from "nobody used it".
     """
-    if not settings.analytics.enabled:
+    if not settings.usage_stats.enabled:
         return None
 
-    from datetime import datetime, timedelta, timezone
+    from datetime import timedelta
 
     from depictio.api.v1.db import db
-    from depictio.models.models.analytics import UserSession
+    from depictio.api.v1.services.usage_stats import LOGINS, VISITS
+    from depictio.models.timestamps import utc_now_naive
 
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        # Read through the Beanie document's own declared collection name so this
-        # cannot drift if the collection is ever renamed.
-        sessions = db[UserSession.Settings.name]
-        # Distinct on the user identifier, not a session count: one person
-        # generates many sessions and would otherwise be counted many times.
-        return len(sessions.distinct("user_id", {"last_activity": {"$gte": cutoff}}))
+        cutoff = utc_now_naive() - timedelta(days=7)
+        query = {"day": {"$gte": cutoff}, "user_class": "real", "user_id": {"$ne": None}}
+        # Distinct people, not visits: one person visits on many days.
+        users = set(db[VISITS].distinct("user_id", query))
+        users |= set(db[LOGINS].distinct("user_id", query))
+        return len(users)
     except Exception as exc:
         logger.debug("Telemetry: active-user count failed: %s", exc)
         return None
@@ -134,7 +134,7 @@ def _feature_flags() -> FeatureFlags:
         auth_single_user_mode=settings.auth.is_single_user_mode,
         auth_public_mode=settings.auth.is_public_mode,
         auth_demo_mode=settings.auth.is_demo_mode,
-        analytics_enabled=settings.analytics.enabled,
+        analytics_enabled=settings.usage_stats.enabled,
         google_analytics_enabled=settings.google_analytics.enabled,
         events_enabled=settings.events.enabled,
         monitoring_enabled=settings.monitoring.enabled,

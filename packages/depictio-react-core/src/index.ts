@@ -1934,3 +1934,12 @@ export {
   writeLocalMode,
 } from './changesStore';
 export type { LocalReaderState } from './changesStore';
+export {
+  fetchUsageReport,
+  fetchUsageCsv,
+  isUsageOptedOut,
+  sendUsageHit,
+  setUsageOptOut,
+} from './api';
+export type { UsageGranularity, UsagePoint, UsageQuery, UsageReport } from './api';
+export { CARD_FRAME, CARD_RULE } from './components/cardFrame';

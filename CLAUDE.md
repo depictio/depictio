@@ -211,6 +211,18 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 - A new ingestion path must set `ingestion_run_id` (and `run_tags`, `trigger`) on what it
   writes, or the project Runs tab cannot tell which run produced it
 
+### Usage statistics
+- Self-hosted, on by default (`DEPICTIO_USAGE_STATS_*`): daily upsert rollups `usage_visits` /
+  `usage_logins` / `usage_dashboard_views` (TTL on `day`), no per-request middleware.
+  `services/usage_stats.py`; report `GET /analytics/usage` (admin or `X-Api-Key`, json/csv),
+  beacon `POST /analytics/hit`; UI Admin › Activity › Usage. **Detail**: `docs/usage-stats.md`
+- A new token-issuing path must call `record_login(user, method, request)`. IPs/UAs are never
+  stored raw; a temporary guest is never a "user"
+- GDPR: daily rows 13 months (TTL, max 25), closed months/years archived as identifier-free
+  totals (`usage_archive`, kept); browser id renewed at 13 months; DNT/GPC + About opt-out
+  honoured; account deletion calls `erase_user_usage`. Keep new fields out of the archive
+  if they identify anyone
+
 ### Migration & Publishing (#1303)
 - One instance pushes a project to another (`/migrate/push` → target `/migrate/inbound/requests`,
   pairing key header); an admin approves it in Admin > Migrations; the import runs in a

@@ -151,8 +151,7 @@ EXEMPT_MODULES: dict[str, str] = {
     "jobs_endpoints.routes": "job bookkeeping",
     "celery_endpoints.routes": "worker bookkeeping",
     "events_endpoints.routes": "event stream",
-    "analytics_endpoints.routes": "usage analytics",
-    "analytics_data_endpoints.routes": "usage analytics",
+    "analytics_endpoints.routes": "usage statistics (daily visit/login rollups), no project content",
     "catalog_endpoints.routes": "template catalog, not a project",
     "jbrowse_endpoints.routes": "session rendering",
     "project_builder.routes": (

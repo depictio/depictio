@@ -37,7 +37,6 @@ from depictio.api.v1.services.yaml_sync import (
 from depictio.api.v1.tasks.backup_tasks import start_backup_tasks
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
-from depictio.models.models.analytics import UserActivity, UserSession
 from depictio.models.models.dashboard_annotations import DashboardAnnotationsBeanie
 from depictio.models.models.dashboard_filter_state import DashboardFilterStateBeanie
 from depictio.models.models.oauth_state import OAuthStateBeanie
@@ -79,8 +78,6 @@ async def init_pymongo_beanie() -> AsyncMongoClient:
             MagicLinkTicketBeanie,
             OAuthStateBeanie,
             ProjectBeanie,
-            UserSession,
-            UserActivity,
             DashboardFilterStateBeanie,
             DashboardAnnotationsBeanie,
         ],
@@ -250,6 +247,14 @@ def start_core_indexes(should_initialize: bool) -> None:
         from depictio.api.v1.core_indexes import ensure_core_indexes
 
         ensure_core_indexes()
+        from depictio.api.v1.services.usage_stats import ensure_usage_indexes
+
+        ensure_usage_indexes()
+        if any(k.startswith("DEPICTIO_ANALYTICS_") for k in os.environ):
+            logger.warning(
+                "DEPICTIO_ANALYTICS_* is no longer read: the legacy analytics were replaced "
+                "by DEPICTIO_USAGE_STATS_* (on by default). See docs/usage-stats.md."
+            )
         logger.info(f"Worker {WORKER_ID}: Core indexes ready")
     except Exception as exc:
         logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")

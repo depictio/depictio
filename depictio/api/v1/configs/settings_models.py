@@ -2500,38 +2500,45 @@ class PerformanceConfig(BaseSettings):
         return self
 
 
-class AnalyticsConfig(BaseSettings):
-    """Configuration for analytics tracking."""
+class UsageStatsConfig(BaseSettings):
+    """Internal usage statistics (logins, visits, dashboard views).
 
-    enabled: bool = Field(default=False, description="Enable analytics tracking")
-    session_timeout_minutes: int = Field(
-        default=30,
-        description="Session timeout in minutes",
-        ge=5,
-        le=1440,
+    Everything stays in this deployment's MongoDB: one upsert per visitor per
+    day, IPs only as keyed hashes, no raw user agent. Read by admins in
+    Admin > Activity > Usage and by agents via ``GET /analytics/usage``.
+    """
+
+    enabled: bool = Field(default=True, description="Record and serve usage statistics")
+    retention_days: int = Field(
+        default=395,
+        ge=30,
+        le=760,
+        description=(
+            "Days the daily, pseudonymous usage rows are kept (TTL index). 395 = 13 months; "
+            "capped at 25 months (CNIL audience-measurement rule). Closed months and years "
+            "are archived first as anonymous totals, which are kept."
+        ),
     )
-    cleanup_days: int = Field(
-        default=90,
-        description="Days to retain analytics data",
-        ge=1,
-        le=365,
+    max_daily_visitors: int = Field(
+        default=50_000,
+        ge=100,
+        description="New browsers recorded per day, instance-wide (flood guard)",
     )
-    track_anonymous_users: bool = Field(
-        default=True,
-        description="Track anonymous user sessions",
-    )
-    cleanup_enabled: bool = Field(
-        default=True,
-        description="Enable automatic cleanup of old analytics data",
+    geoip_db_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Path to a City .mmdb file (DB-IP Lite or MaxMind GeoLite2). Country and "
+            "city are resolved at reception, then the IP is discarded. Unset = no geo."
+        ),
     )
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_ANALYTICS_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_USAGE_STATS_")
 
 
 class TelemetryConfig(BaseSettings):
     """Configuration for anonymous *outbound* installation telemetry.
 
-    Distinct from :class:`AnalyticsConfig`, which records per-user sessions into
+    Distinct from :class:`UsageStatsConfig`, which records usage into
     this deployment's own MongoDB and never transmits anything. This one sends
     anonymous, aggregate, bucketed data to the Depictio maintainers so the project
     can tell how many installations exist and which features are used — GHCR
@@ -3129,7 +3136,7 @@ class Settings(BaseSettings):
 
     # Observability & development
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
-    analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
+    usage_stats: UsageStatsConfig = Field(default_factory=UsageStatsConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     version_check: VersionCheckConfig = Field(default_factory=VersionCheckConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
