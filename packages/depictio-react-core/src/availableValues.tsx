@@ -479,7 +479,9 @@ export const AvailableFilterValuesProvider: React.FC<
       if (funnelEnabled && ownIndex) {
         const st = funnelState?.targets[ownIndex];
         if (st) {
-          if (st.status === 'ok') return st.set;
+          // A set the server cut at its limit is a subset: a value missing
+          // from it may still lead somewhere, so it narrows nothing (#1418).
+          if (st.status === 'ok') return st.truncated ? null : st.set;
           if (st.status === 'unrestricted') return null;
           // unsupported / error → fall through to the static intersection.
         }
