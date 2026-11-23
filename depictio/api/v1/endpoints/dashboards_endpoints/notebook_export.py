@@ -13,10 +13,11 @@ import base64
 import hashlib
 import json
 import mimetypes
+import re
 from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -61,6 +62,7 @@ from depictio.models.models.report_layer import (
     ReportPreviewRequest,
 )
 from depictio.models.models.users import User
+from depictio.notebook.theme import palette_hex
 
 STAGE_COMPONENT_TYPES: frozenset[str] = frozenset(
     {"figure", "table", "map", "image", "card", "interactive"}
@@ -1231,11 +1233,18 @@ def notebook_export_outline(
             if entry.kind == "tab":
                 tab_id = entry.dashboard_id or ""
                 cfg = tab_cfgs.get(tab_id)
+                # The tab's identity, as the report draws it: the sidebar
+                # icon the generator puts on the tab's heading, and the same
+                # accent it tints that heading with (the tab's own colour,
+                # else its brand's primary; none when neither is set).
+                brand = plan.tab_brands.get(tab_id) or plan.brand or {}
                 current = ReportOutlineTab(
                     tab_id=tab_id,
                     title=entry.text,
                     placement=cfg.placement if cfg is not None else "body",
                     order=cfg.order if cfg is not None else None,
+                    icon=entry.icon,
+                    color=palette_hex(entry.color, brand.get("primary") or "") or None,
                     entries=[],
                 )
                 outline_tabs.append(current)
@@ -1329,6 +1338,9 @@ def _ready_preview(job_id: str, current_user: User) -> NotebookRenderStatus | No
         status="ready",
         filename=payload.get("filename"),
         size=payload.get("size"),
+        # A preview job's report, by its capability URL; ``None`` for a
+        # download's job (its report is fetched through the download route).
+        preview_url=payload.get("preview_url"),
     )
 
 
@@ -1359,68 +1371,130 @@ def _cached_preview(
     return _ready_preview(str(newest["_id"]), current_user)
 
 
-#: The frame the editor shows a preview in. The report arrives by
-#: ``postMessage`` and is written into this document, so it runs under this
-#: page's policy rather than the app's: a ``blob:`` or ``srcdoc`` frame would
-#: inherit the app's CSP, which refuses the frame outright (``default-src
-#: 'self'``) and every inline script a Quarto report is made of.
-PREVIEW_FRAME_MESSAGE = "depictio-report-preview"
-PREVIEW_FRAME_HTML = f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Report preview</title></head><body>
-<script>
-addEventListener("message", function onReport(event) {{
-  var data = event.data;
-  if (event.source !== parent || !data || data.type !== "{PREVIEW_FRAME_MESSAGE}"
-      || typeof data.html !== "string") return;
-  removeEventListener("message", onReport);
-  document.open();
-  document.write(data.html);
-  document.close();
-}});
-parent.postMessage({{ type: "{PREVIEW_FRAME_MESSAGE}-ready" }}, "*");
-</script>
-</body></html>
-"""
+#: The script the served report runs first: the editor's live patch (the
+#: postMessage protocol that applies the editor's edits in the browser). It
+#: lives in the service's assets, is served under this virtual path, and is
+#: injected into ``report.html`` only.
+PREVIEW_PATCH_SCRIPT = "__depictio_preview_patch.js"
+_PREVIEW_PATCH_TAG = f'<script src="{PREVIEW_PATCH_SCRIPT}"></script>'
 
 
-def preview_frame_csp() -> str:
-    """The preview frame's policy: an offline report's, in a sandbox.
+def preview_files_csp() -> str:
+    """The served preview's policy: an offline report's, in a sandbox.
 
-    ``sandbox allow-scripts`` gives the frame an opaque origin, so the report's
-    scripts run but cannot read the app's storage or call the API as the
-    reader. The rest is what a self-contained report needs and nothing more:
-    inline scripts and styles, ``data:``/``blob:`` assets, no network except
-    the basemap CDNs a map draws from.
+    ``sandbox allow-scripts`` gives the frame an opaque origin, so the
+    report's scripts run but cannot read the app's storage or call the API as
+    the reader. The rest is what the report needs and nothing more: its own
+    files from this origin (``report_files/``, the patch script), inline
+    scripts and styles, ``data:``/``blob:`` assets, no network except the
+    basemap CDNs a map draws from.
     """
     from depictio.api.v1.configs.security_headers import BASEMAP_CONNECT_SRC
 
     return (
         "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; "
         "default-src 'none'; "
-        "script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; "
         "worker-src blob:; "
-        "style-src 'unsafe-inline' data:; "
-        f"img-src data: blob: {BASEMAP_CONNECT_SRC}; "
-        "font-src data:; "
-        f"connect-src data: blob: {BASEMAP_CONNECT_SRC}; "
+        "style-src 'self' 'unsafe-inline' data:; "
+        f"img-src 'self' data: blob: {BASEMAP_CONNECT_SRC}; "
+        "font-src 'self' data:; "
+        f"connect-src 'self' data: blob: {BASEMAP_CONNECT_SRC}; "
         "frame-ancestors 'self'; "
-        "base-uri 'none'; "
+        "base-uri 'self'; "
         "form-action 'none'"
     )
 
 
-@dashboards_endpoint_router.get("/notebook_export/preview_frame")
-def notebook_export_preview_frame() -> Response:
-    """The empty page the editor's exact preview writes the report into.
+_PREVIEW_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 
-    It holds nothing of its own (the report is fetched by the editor with the
-    reader's credentials and handed over), so it needs no sign-in.
+
+def _preview_relpath(token: str, path: str) -> str | None:
+    """The path under the job's token prefix a request names, or ``None``.
+
+    The token is the capability, so a well-formed one is all that is checked
+    here (an unknown one simply has no file in the store, and 404s); the path
+    may not escape the token's prefix: no absolute path, no ``..``, no
+    backslash — exactly the relative paths the render uploaded.
     """
+    if not _PREVIEW_TOKEN_RE.match(token):
+        return None
+    if not path or path.startswith("/") or "\\" in path:
+        return None
+    pure = PurePosixPath(path)
+    if pure.is_absolute() or ".." in pure.parts or any(p in ("", ".") for p in pure.parts):
+        return None
+    return "/".join(pure.parts)
+
+
+def _inject_preview_patch(html: bytes) -> bytes:
+    """The patch script tag before ``</body>``, once, in the served report.
+
+    The editor's edits reach the preview through it; the report's own files
+    are served untouched.
+    """
+    idx = html.rfind(b"</body>")
+    if idx == -1:
+        return html
+    return html[:idx] + _PREVIEW_PATCH_TAG.encode("utf-8") + html[idx:]
+
+
+def _preview_headers(*, immutable: bool = False) -> dict[str, str]:
+    """The headers of every preview file.
+
+    ``Access-Control-Allow-Origin: *``: the frame is sandboxed, so its origin is
+    opaque, and Quarto's own scripts (``quarto.js``, ``tabsets.js``) are ES
+    modules, which a browser fetches in CORS mode: without the header the
+    contents, the tabsets and the code tools never start. It gives nothing
+    away: the token in the URL is the only key to these files either way.
+    A file under a token never changes, so all but the patched report are
+    cached for the session.
+    """
+    return {
+        "Content-Security-Policy": preview_files_csp(),
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "private, max-age=3600, immutable" if immutable else "no-store",
+    }
+
+
+@dashboards_endpoint_router.get("/notebook_export/preview_files/{token}/{path:path}")
+def notebook_export_preview_files(token: str, path: str) -> Response:
+    """One file of a preview job's rendered report, by the job's token.
+
+    No sign-in: the token is the capability, minted per job and known only to
+    the editor that queued it, so an unknown token or path is simply a file
+    the store does not have — a 404 either way. The report itself
+    (``report.html``) is served with the patch script injected before its
+    ``</body>``; the patch script is served from the service's own assets.
+    """
+    from depictio.api.v1.services.notebook_export import store
+
     _require_report_editor()
+    relpath = _preview_relpath(token, path)
+    if relpath is None:
+        raise HTTPException(status_code=404, detail="No such preview file.")
+    if relpath == PREVIEW_PATCH_SCRIPT:
+        from depictio.api.v1.services.notebook_export import resources
+
+        try:
+            patch = resources.asset("preview_patch.js")
+        except Exception as exc:  # noqa: BLE001 — an absent asset is a missing file
+            raise HTTPException(status_code=404, detail="No such preview file.") from exc
+        return Response(
+            content=patch.encode("utf-8"),
+            media_type="text/javascript",
+            headers=_preview_headers(),
+        )
+    try:
+        body = store.get(store.preview_key(token, relpath))
+    except Exception as exc:  # noqa: BLE001 — no such object is no such file
+        raise HTTPException(status_code=404, detail="No such preview file.") from exc
+    if relpath == "report.html":
+        body = _inject_preview_patch(body)
     return Response(
-        content=PREVIEW_FRAME_HTML,
-        media_type="text/html",
-        headers={"Content-Security-Policy": preview_frame_csp(), "Cache-Control": "no-store"},
+        content=body,
+        media_type=store.preview_content_type(relpath),
+        headers=_preview_headers(immutable=relpath != "report.html"),
     )
 
 
@@ -1470,6 +1544,22 @@ def notebook_export_preview(
     )
     _require_owner_for_authored_code(plan, current_user)
     plan.author_code = False
+    # A preview is built from a NEUTRAL layer: every tile in the report,
+    # default order and placement, no caption overrides, no page breaks, the
+    # default cover, no intro or conclusion — the editor applies all of that
+    # itself, in the browser, the instant it is typed, and Quarto re-renders
+    # only when the filter state or the data change. So the built document —
+    # and with it the preview cache key below — depends on nothing a text
+    # edit changes: the same report previewed after one is served from the
+    # finished job instead of run again. The layer's own state stays in
+    # charge (``_resolved_request_state`` above), and the real layer still
+    # drives every download.
+    plan.report_layer = ReportLayer().model_dump(mode="json")
+    # The preview's provenance carries the day, not the minute (a cache key
+    # must not move with the clock), and Quarto renders it with
+    # ``embed-resources: false`` — the editor's iframe loads the report and
+    # its files from the API (``preview_files``) rather than one huge file.
+    plan.preview = True
     builder = NotebookBuilder(plan)
     qmd = builder.build().encode("utf-8")
     cache_key = _preview_cache_key(qmd, embed_runtime)
@@ -1518,6 +1608,7 @@ def notebook_export_preview(
             "combined": None,
             "filename": filename,
             "pdf": False,
+            "preview": True,
             "preview_cache": f"{user_id}/{dashboard_id}",
             "preview_force": bool(request.force),
         },
@@ -1548,6 +1639,7 @@ def notebook_export_render_status(
             size=payload.get("size"),
             pdf_filename=payload.get("pdf_filename"),
             pdf_error=payload.get("pdf_error"),
+            preview_url=payload.get("preview_url"),
         )
     if result.failed() or record.get("status") == "failed":
         # The worker's own sentence, never the exception's text.
@@ -1595,8 +1687,17 @@ def notebook_export_render_download(
             },
         )
     filename = str(payload.get("filename") or "report.html")
+    key = payload.get("key")
+    if not key:
+        # A preview job keeps no downloadable report: the editor serves its
+        # files through the preview_files route, by the job's token.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Render job '{job_id}' made no downloadable report "
+            "(the editor's preview is served, not downloaded).",
+        )
     try:
-        html = store.get(str(payload["key"]))
+        html = store.get(str(key))
     except Exception as exc:  # noqa: BLE001 — a missing object is a gone report
         raise HTTPException(
             status_code=404, detail=f"Report '{job_id}' is no longer stored."

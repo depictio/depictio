@@ -163,7 +163,11 @@ def _about_item(body: str, *, name: str = "", index: str = "", pos: int | None =
         attrs += f' data-dpx-pos="{pos}"'
     longest = max((len(m.group(0)) for m in re.finditer(r":{3,}", body)), default=2)
     fence = ":" * max(3, longest + 1)
-    return f"{fence} {{{attrs}}}\n{body}\n{fence}"
+    # A blank line before the closing fence: pandoc reads a fence that follows
+    # a paragraph line as part of that paragraph, and the note then never
+    # closes, swallowing every tile after it (and a landscape PDF page inside
+    # it fails the whole PDF).
+    return f"{fence} {{{attrs}}}\n{body}\n\n{fence}"
 
 
 def _attr(value: str) -> str:

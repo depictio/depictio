@@ -221,7 +221,7 @@ def typst_preamble(
     # element stays in the document, so the contents still list and link it.
     add(
         "#show heading: it => context { let next = dpx-next(it.location()); "
-        "if next != none and dpx-is-wide(next) { [] } else { it } }"
+        "if next != none and dpx-flips(next) { [] } else { it } }"
     )
     add("#show figure.caption: set text(size: 8pt, fill: dpx-muted)")
     add("#show link: set text(fill: dpx-accent)")

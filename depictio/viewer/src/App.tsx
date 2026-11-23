@@ -2352,6 +2352,7 @@ const App: React.FC = () => {
         }}
         getAnalysisState={getAnalysisState}
         previewing={Boolean(previewVersionId)}
+        canEditReport={canEditNow}
         filters={
           remembering
             ? {

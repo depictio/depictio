@@ -1,3 +1,13 @@
+// The HTML report's marker divs (``data-depictio-*``, read by the editor's
+// live preview) reach typst as bare ``#block[...]``: a container, and a page
+// configuration (a landscape page) is refused inside one. A block with no
+// argument but its body draws nothing of its own, so it is its body here;
+// every block that asks for something keeps typst's own.
+#let block(..args) = if args.named().len() == 0 and args.pos().len() == 1 {
+  args.pos().at(0)
+} else {
+  std.block(..args)
+}
 
 #let dpx-well = luma(246)
 #let dpx-zebra = luma(240)
@@ -76,16 +86,29 @@
 #let dpx-heading-size = (18pt, 15pt, 12pt, 10.5pt, 9.5pt)
 #let dpx-heading-copy(h) = align(left, block(below: 0.65em, text(font: dpx-sans, weight: "bold",
   fill: dpx-ink, size: dpx-heading-size.at(calc.min(h.level, 5) - 1))[#h.body]))
+// Typst refuses a page configuration inside a container (block, grid, box),
+// so a wide figure in one (a row of the dashboard's grid, a callout) stays on
+// its portrait page rather than failing the whole PDF. The flag is a style
+// (a highlight extent nothing else sets), not a state: a style is known on the
+// first layout pass, a state only once the layout converges, and the refused
+// page would already have failed the compile.
+#show std.block: set highlight(extent: 0.01pt)
+#show grid: set highlight(extent: 0.01pt)
+#show box: set highlight(extent: 0.01pt)
+// Whether a wide figure did turn its page: the heading before it moves onto
+// that page only then.
+#let dpx-flips(it) = query(<dpx-flip>).any(m => m.value == it.location())
 #show figure: it => context {
-  if not dpx-is-wide(it) { return it }
+  if not dpx-is-wide(it) or highlight.extent != 0pt { return it }
   let prev = dpx-prev(it.location())
   page(flipped: true)[
+    #metadata(it.location()) <dpx-flip>
     #if prev != none and prev.func() == heading { dpx-heading-copy(prev) }
     #it
   ]
 }
 // A table taller than a page breaks across pages instead of being cut off.
-#show figure.where(kind: "quarto-float-tbl"): set block(breakable: true)
+#show figure.where(kind: "quarto-float-tbl"): set std.block(breakable: true)
 // A tile that could not be drawn: its name, one neutral sentence. It marks
 // itself, so the caption under it does not claim to show data.
 #let dpx-failed = state("dpx-failed", false)

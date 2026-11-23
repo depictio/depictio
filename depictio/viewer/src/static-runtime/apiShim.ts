@@ -1568,6 +1568,9 @@ export async function exportNotebook(): Promise<never> {
 export async function startNotebookRender(): Promise<never> {
   throw new Error(`Exporting is ${READ_ONLY}.`);
 }
+export async function startReportPreview(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
 export async function fetchNotebookRenderStatus(): Promise<never> {
   throw new Error(`Exporting is ${READ_ONLY}.`);
 }

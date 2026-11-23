@@ -1,16 +1,15 @@
 import React, { useRef } from 'react';
 import { Box, Text } from '@mantine/core';
-import { Link } from '@mantine/tiptap';
 import { useEditor } from '@tiptap/react';
 import type { JSONContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
 import type { ReportDoc } from 'depictio-react-core';
 
 import NotesEditorSurface from '../components/notes/NotesEditorSurface';
+import { DOC_EXTENSIONS } from './docHtml';
 import { isEmptyDoc } from './model';
 
 interface RichDocFieldProps {
-  label: string;
+  label?: string;
   description?: string;
   /** The stored document. Read once per mount: the page remounts the field
    *  (a new `key`) when the layer is reloaded from the server. */
@@ -40,7 +39,7 @@ const RichDocField: React.FC<RichDocFieldProps> = ({
   onChangeRef.current = onChange;
 
   const editor = useEditor({
-    extensions: [StarterKit, Link.configure({ openOnClick: false })],
+    extensions: DOC_EXTENSIONS,
     content: isEmptyDoc(value) ? '' : (value as JSONContent),
     editable: true,
     onUpdate: ({ editor: ed }) => {
@@ -54,9 +53,11 @@ const RichDocField: React.FC<RichDocFieldProps> = ({
 
   return (
     <Box data-testid={testId}>
-      <Text fw={500} size="sm">
-        {label}
-      </Text>
+      {label && (
+        <Text fw={500} size="sm">
+          {label}
+        </Text>
+      )}
       {description && (
         <Text size="xs" c="dimmed" mb={6}>
           {description}

@@ -53,7 +53,6 @@ import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidt
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
-import { useReportEditorEnabled } from './hooks/useReportEditorEnabled';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import Inspector from './chrome/inspector/Inspector';
@@ -697,7 +696,6 @@ const EditorApp: React.FC = () => {
     familyVersions.length > 0 ? handleOpenComponentHistory : undefined;
 
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
-  const reportEditorEnabled = useReportEditorEnabled();
 
   // Editor route is owner-only. Visitors who land here without permission
   // (typed the URL, opened a public dashboard, etc.) get bounced to the
@@ -2889,23 +2887,6 @@ const EditorApp: React.FC = () => {
             onDataWritten={() => setPlotThemeTick((t) => t + 1)}
           />
         </MetadataHeaderControl>
-      ),
-    });
-  }
-  if (dashboard && dashboardId && reportEditorEnabled) {
-    headerActions.push({
-      id: 'report',
-      group: 'author',
-      node: (
-        <ChromeButton
-          role="secondary"
-          collapse
-          icon="mdi:file-document-edit-outline"
-          label="Report"
-          tooltip="Edit the report: cover, introduction, captions and order"
-          href={`/dashboard-report/${dashboardId}`}
-          data-testid="editor-report-button"
-        />
       ),
     });
   }

@@ -47,8 +47,13 @@ def test_off_by_default_the_document_is_unchanged(penguins_tabs):
     plan = penguins_plan(penguins_tabs)
     assert plan.embed_runtime is False
     src = generate_qmd(plan)
-    assert TILE_ATTR not in src and FILTERS_ATTR not in src
+    # The runtime itself is not embedded: no manifest, no filter panels, no
+    # report_runtime call. The tile markers stay — every report carries them
+    # for the report editor's live preview (contract #1457, §2); their
+    # placeholders keep the tiles' own output as the fallback either way.
+    assert MANIFEST_ID not in src and FILTERS_ATTR not in src
     assert "report_runtime" not in src
+    assert TILE_OPEN_RE.search(src)
 
 
 def test_every_drawable_tile_gets_one_placeholder_with_its_fallback(penguins_tabs):

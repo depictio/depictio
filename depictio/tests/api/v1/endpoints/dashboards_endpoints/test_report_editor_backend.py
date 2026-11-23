@@ -10,9 +10,16 @@ cover, so the editor's fields reset to what an export would print.
 **The preview** (``POST /dashboards/notebook_export/{id}/preview``) is the
 render route's own path for the editor: the same job (``pdf`` off, the
 runtime embedded when it may be, the same quotas and the same
-author-code gate), into a per user+dashboard workdir. A finished job of the
-same user, dashboard and document answers instead of queuing again — unless
-``force``, which also re-executes the cached cells (``--cache-refresh``).
+author-code gate), into a per user+dashboard workdir. It is built from a
+**neutral layer** — every tile in, default placement, no caption overrides,
+no intro or conclusion — and carries no export minute, so the preview cache
+key depends only on the dashboard, the state and the data: a text edit
+changes nothing and the finished job of the same document answers instead of
+queuing again — unless ``force``, which also re-executes the cached cells
+(``--cache-refresh``). Its document is rendered with ``embed-resources:
+false``, so the report is served by capability URL
+(``GET .../notebook_export/preview_files/<token>/<path>``, the job's token is
+the secret) with the patch script injected into ``report.html``.
 
 **The workdir**: ``render._render`` keeps its temporary-directory behaviour
 unless given a workdir; with jupyter-cache importable it asks Quarto to cache
@@ -37,6 +44,7 @@ from fastapi import HTTPException
 
 from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as nbx
 from depictio.api.v1.endpoints.dashboards_endpoints import report_layer_routes
+from depictio.models.models.analysis_state import NotebookExportRequest
 from depictio.models.models.report_layer import ReportPreviewRequest
 
 DASHBOARD_ID = str(ObjectId())
@@ -319,6 +327,7 @@ def test_a_preview_queues_the_render_job(ctx) -> None:
     assert status.status == "queued" and status.filename.endswith(".html")
     kwargs = queued["kwargs"]  # type: ignore[index]
     assert kwargs["pdf"] is False
+    assert kwargs["preview"] is True
     assert kwargs["preview_cache"] == f"{USER_ID}/{DASHBOARD_ID}"
     assert kwargs["preview_force"] is False
     assert kwargs["combined"] is None
@@ -378,6 +387,121 @@ def test_force_queues_a_new_preview(ctx) -> None:
     assert forced.job_id != first.job_id
     assert forced.status == "queued"
     assert queued2["kwargs"]["preview_force"] is True  # type: ignore[index]
+
+
+# ── the preview: a neutral build, the same key after a text edit ─────────────
+
+
+def _staged_preview_qmd():
+    """Queue one preview over the staging patches; its staged qmd and kwargs."""
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+    a, b, c = _staging(staged, queued)
+    with a, b, c:
+        status = _preview()
+    return staged, queued, status
+
+
+def test_a_preview_builds_a_neutral_document_and_a_download_does_not(ctx) -> None:
+    """The preview's document is built from a neutral layer (every tile in,
+    the default cover, no intro) and carries no export minute, so an edit of
+    the layer's text cannot change it; a downloaded report honours the layer
+    and keeps the minute."""
+    staged, _queued, _status = _staged_preview_qmd()
+    qmd = next(iter(staged.values())).decode()
+
+    assert "embed-resources: false" in qmd, "the preview's files are served, not inlined"
+    assert "12:00" not in qmd, "no export minute in a preview's provenance"
+    assert "Custom cover" not in qmd, "the layer's cover does not reach a preview"
+
+    export = nbx.notebook_export(
+        dashboard_id=ObjectId(DASHBOARD_ID),  # type: ignore[arg-type]
+        request=NotebookExportRequest(),
+        current_user=_RenderUser(),  # type: ignore[arg-type]
+        access_token=None,
+    )
+    export_qmd = export.body.decode()
+    assert "embed-resources: true" in export_qmd, "a download stays self-contained"
+    assert "12:00" in export_qmd
+    assert "Custom cover" in export_qmd, "the layer's cover is the download's"
+
+
+def test_the_preview_key_ignores_intro_and_caption_edits(ctx) -> None:
+    """Only the dashboard, the state and the data move the key: editing the
+    layer's intro text or a tile's caption override does not."""
+    from depictio.api.v1.services.notebook_export import jobs
+
+    staged, queued, first = _staged_preview_qmd()
+    first_key = jobs.get(first.job_id)["preview_key"]  # type: ignore[index]
+
+    layer = ctx["dashboards"].find_one({"dashboard_id": ObjectId(DASHBOARD_ID)})["report_layer"]
+    layer["intro"] = {
+        "type": "doc",
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "A hand-written intro."}]}
+        ],
+    }
+    layer["conclusion"] = {
+        "type": "doc",
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": "The end."}]}],
+    }
+    layer["tiles"][0]["caption"] = "A caption override."
+    layer["tiles"][1]["in_report"] = True
+    ctx["dashboards"].update_one(
+        {"dashboard_id": ObjectId(DASHBOARD_ID)}, {"$set": {"report_layer": layer}}
+    )
+
+    staged2, _queued2, second = _staged_preview_qmd()
+
+    assert staged2 and next(iter(staged2.values())) == next(iter(staged.values()))
+    assert jobs.get(second.job_id)["preview_key"] == first_key  # type: ignore[index]
+    assert queued and queued["kwargs"]["preview_cache"]  # type: ignore[index]
+
+
+def test_a_ready_preview_status_carries_the_capability_url(ctx) -> None:
+    from depictio.api.v1.services.notebook_export import jobs
+
+    _staged, _queued, status = _staged_preview_qmd()
+    jobs.finish(status.job_id, "success")
+
+    class _ReadyPreview(_Ready):
+        result = {
+            "user_id": USER_ID,
+            "filename": "wells-rivers.html",
+            "size": 10,
+            "preview_url": "/depictio/api/v1/dashboards/notebook_export/preview_files/t/report.html",
+        }
+
+    with patch("celery.result.AsyncResult", lambda *args, **kw: _ReadyPreview()):
+        got = nbx.notebook_export_render_status(job_id=status.job_id, current_user=_RenderUser())
+    assert got.status == "ready" and got.preview_url is not None
+    assert got.preview_url.startswith("/depictio/api/v1/dashboards/notebook_export/preview_files/")
+    assert got.preview_url.endswith("/report.html")
+
+
+def test_the_outline_exposes_the_tab_s_icon_and_accent(ctx) -> None:
+    """The tab's icon and the accent the report tints its heading with: the
+    sidebar precedence, resolved to hex the same way the generator does."""
+    from depictio.notebook.theme import palette_hex
+
+    ctx["dashboards"].update_one(
+        {"dashboard_id": ObjectId(DASHBOARD_ID)},
+        {"$set": {"icon": "mdi:flask", "icon_color": "teal"}},
+    )
+
+    tab = _outline().tabs[0]
+    assert tab.icon == "mdi:flask"
+    assert tab.color == palette_hex("teal", "")
+    assert tab.color and tab.color.startswith("#")
+
+    # No colour anywhere: the accent stays unset rather than picked.
+    ctx["dashboards"].update_one(
+        {"dashboard_id": ObjectId(DASHBOARD_ID)},
+        {"$unset": {"icon": "", "icon_color": ""}},
+    )
+    tab = _outline().tabs[0]
+    assert tab.icon == "mdi:view-dashboard"  # a main tab's fallback icon
+    assert tab.color is None or tab.color.startswith("#")
 
 
 # ── the worker's render: the persistent workdir and its cache ────────────────
@@ -540,34 +664,105 @@ def test_the_preview_workdir_is_per_user_and_dashboard(
     )
 
 
-# ── The preview frame ──────────────────────────────────────────────────────
+# ── the preview files route: the capability URL the editor's iframe opens ────
 
 
-def test_the_preview_frame_is_404_with_the_editor_flag_off(ctx) -> None:
+_REPORT_HTML = (
+    b"<html><head><title>x</title></head><body><p>report</p>"
+    b'<script src="report_files/site_libs/quarto.js"></script></body></html>'
+)
+
+#: A token as the worker mints one: ``secrets.token_urlsafe(32)`` is 43 chars
+#: of the URL-safe alphabet, so a shape check may not refuse the real thing.
+_REPORT_TOKEN = "t" * 43
+
+
+def _served(token: str, path: str):
+    """One preview file request, over an object store that has a single
+    report — under ``_REPORT_TOKEN``'s prefix and nowhere else."""
+    from depictio.api.v1.services.notebook_export import store
+
+    objects = {
+        store.preview_key(_REPORT_TOKEN, "report.html"): _REPORT_HTML,
+        store.preview_key(_REPORT_TOKEN, "report_files/site_libs/quarto.js"): b"console.log(1)",
+    }
+    with patch.object(store, "get", lambda key: objects[key]):
+        return nbx.notebook_export_preview_files(token=token, path=path)
+
+
+def test_the_preview_files_are_404_with_the_editor_flag_off(ctx) -> None:
     with patch.object(nbx.settings.notebook_export, "report_editor", False):
         with pytest.raises(HTTPException) as exc:
-            nbx.notebook_export_preview_frame()
+            _served(_REPORT_TOKEN, "report.html")
     assert exc.value.status_code == 404
 
 
-def test_the_preview_frame_runs_a_report_s_inline_scripts_in_a_sandbox(ctx) -> None:
-    """The app's own policy refuses a blob: frame and every inline script of a
-    Quarto report; the frame's policy allows those, and only in an opaque origin."""
-    response = nbx.notebook_export_preview_frame()
+def test_an_unknown_token_or_path_is_404(ctx) -> None:
+    # A token that is shaped like one but was never minted: nothing under it.
+    with pytest.raises(HTTPException) as exc:
+        _served("u" * 43, "report.html")
+    assert exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as exc:
+        _served(_REPORT_TOKEN, "report_files/site_libs/no-such.js")
+    assert exc.value.status_code == 404
+
+    # A token that is not even shaped like one: no such file, not a probe.
+    with pytest.raises(HTTPException) as exc:
+        _served("../../etc/passwd", "report.html")
+    assert exc.value.status_code == 404
+
+
+def test_a_path_may_not_escape_the_token_s_prefix(ctx) -> None:
+    for path in (
+        "../secret.html",
+        "report_files/../../secret.html",
+        "..%2Fsecret.html",
+        "/etc/passwd",
+        "report_files\\..\\..\\secret.html",
+        ".",
+        "",
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _served(_REPORT_TOKEN, path)
+        assert exc.value.status_code == 404, path
+
+
+def test_the_report_is_served_sandboxed_with_the_patch_injected(ctx) -> None:
+    """The app's own policy would refuse the report outright (``default-src
+    'self'`` and no inline scripts); the preview's policy allows those, only
+    in an opaque origin, and the patch script is injected into the report
+    alone."""
+    response = _served(_REPORT_TOKEN, "report.html")
     csp = response.headers["Content-Security-Policy"]
     directives = {d.split()[0]: d.split()[1:] for d in csp.split("; ")}
     assert directives["sandbox"][0] == "allow-scripts"
     assert "allow-same-origin" not in directives["sandbox"]
-    assert "'unsafe-inline'" in directives["script-src"]
+    assert "'self'" in directives["script-src"] and "'unsafe-inline'" in directives["script-src"]
     assert directives["default-src"] == ["'none'"]
     assert directives["frame-ancestors"] == ["'self'"]
+    assert directives["base-uri"] == ["'self'"]
+    assert directives["form-action"] == ["'none'"]
     body = response.body.decode()
-    assert nbx.PREVIEW_FRAME_MESSAGE in body and "document.write(data.html)" in body
+    assert f'<script src="{nbx.PREVIEW_PATCH_SCRIPT}"></script><' in body
+    assert body.count("</body>") == 1
+
+    other = _served(_REPORT_TOKEN, "report_files/site_libs/quarto.js")
+    assert nbx.PREVIEW_PATCH_SCRIPT not in other.body.decode(), "only report.html is patched"
 
 
-def test_the_editor_and_the_frame_agree_on_the_message() -> None:
-    drawer = (
-        Path(__file__).resolve().parents[5] / "viewer/src/report-editor/PreviewDrawer.tsx"
-    ).read_text()
-    assert f"PREVIEW_FRAME_MESSAGE = '{nbx.PREVIEW_FRAME_MESSAGE}'" in drawer
-    assert "/dashboards/notebook_export/preview_frame" in drawer
+def test_the_patch_script_is_served_from_the_assets(ctx) -> None:
+    from depictio.api.v1.services.notebook_export import resources
+
+    response = _served(_REPORT_TOKEN, nbx.PREVIEW_PATCH_SCRIPT)
+    assert response.headers["Content-Type"].startswith("text/javascript")
+    assert response.body.decode() == resources.asset("preview_patch.js")
+
+
+def test_preview_files_answer_cors_so_quarto_s_module_scripts_load(ctx) -> None:
+    """The sandboxed frame's origin is opaque, and quarto.js is an ES module:
+    fetched in CORS mode, it only runs with an allow-origin header."""
+    headers = nbx._preview_headers(immutable=True)
+    assert headers["Access-Control-Allow-Origin"] == "*"
+    assert "max-age" in headers["Cache-Control"]
+    assert nbx._preview_headers()["Cache-Control"] == "no-store"

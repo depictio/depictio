@@ -4,42 +4,51 @@
  * A notebook export turns a dashboard into a Quarto report. The report layer
  * stored on the dashboard is what the author writes around the tiles: a cover,
  * an introduction and a conclusion, and per tile whether it is in the report
- * and the PDF, its caption, order and section. This page edits that layer next
- * to the report's structure (the outline), and "Exact preview" renders the
- * real report.
+ * and the PDF, its caption, order and section.
+ *
+ * Two halves side by side. On the left the author edits (cover, introduction,
+ * the structure mirrored from the dashboard, conclusion); on the right the real
+ * report is shown in a frame and every edit is applied to it at once, by
+ * postMessage (PREVIEW_CONTRACT.md). Quarto only runs again when the filter
+ * state changes.
  *
  * Only owners and editors of the project reach it (the API answers 404 to
  * anyone else, and while the feature is off).
  */
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   AppShell,
   Badge,
   Box,
   Button,
-  Card,
   Center,
-  Container,
   Group,
   Loader,
   Stack,
   Text,
   Title,
-  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { usePageTitle } from '../branding';
 import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 import { useServerInfo } from '../hooks/useServerInfo';
+import CollapsiblePanel from './CollapsiblePanel';
 import CoverForm from './CoverForm';
-import OutlineTab from './OutlineTab';
-import PreviewDrawer from './PreviewDrawer';
+import PreviewPane from './PreviewPane';
 import RichDocField from './RichDocField';
-import { buildTabViews, moveTab, stateFilters } from './model';
+import { SnapshotContext } from './SnapshotContext';
+import StructurePanel from './StructurePanel';
+import { buildTabViews, docSummary } from './model';
+import { buildPatch, tileKey } from './previewProtocol';
+import { useExactPdf } from './useExactPdf';
+import { useFrameBridge } from './useFrameBridge';
+import { usePreviewJob } from './usePreviewJob';
 import { useReportLayer } from './useReportLayer';
 import type { ReportSaveStatus } from './useReportLayer';
+
+const HEADER_HEIGHT = 56;
 
 /** The dashboard id out of `/dashboard-report/{id}`. */
 function dashboardIdFromPath(): string {
@@ -47,19 +56,24 @@ function dashboardIdFromPath(): string {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
-function statusLabel(status: ReportSaveStatus, error: string | null): { text: string; color?: string } {
+function statusLabel(status: ReportSaveStatus, error: string | null): { text: string; color: string } {
   switch (status) {
     case 'saving':
-      return { text: 'Saving…', color: 'dimmed' };
+      return { text: 'Saving…', color: 'gray' };
     case 'saved':
-      return { text: 'Saved', color: 'dimmed' };
+      return { text: 'Saved', color: 'green' };
     case 'error':
       return { text: error ? `Not saved: ${error}` : 'Not saved', color: 'red' };
     case 'conflict':
       return { text: 'Changed by someone else', color: 'red' };
     default:
-      return { text: '', color: 'dimmed' };
+      return { text: 'Up to date', color: 'gray' };
   }
+}
+
+interface Selection {
+  tabId: string;
+  componentId: string;
 }
 
 const ReportEditorApp: React.FC = () => {
@@ -68,7 +82,9 @@ const ReportEditorApp: React.FC = () => {
   const { loading: serverInfoLoading } = useServerInfo();
   const api = useReportLayer(dashboardId);
   const { layer, outline } = api;
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selected, setSelected] = useState<Selection | null>(null);
+  const [revealToken, setRevealToken] = useState(0);
+  const [fold, setFold] = useState({ open: true, n: 0 });
 
   usePageTitle(outline?.title ? `Report: ${outline.title}` : 'Report');
 
@@ -76,10 +92,34 @@ const ReportEditorApp: React.FC = () => {
     () => (layer && outline ? buildTabViews(outline.tabs, layer) : []),
     [layer, outline],
   );
-  const filters = useMemo(() => stateFilters(layer?.state ?? null), [layer?.state]);
+  const patch = useMemo(
+    () => (layer && outline ? buildPatch(layer, outline, selected && {
+      tab_id: selected.tabId,
+      component_id: selected.componentId,
+    }) : null),
+    [layer, outline, selected],
+  );
+
+  const ready = Boolean(enabled && layer && outline && !api.loadError);
+  const stateKey = useMemo(() => JSON.stringify(layer?.state ?? null), [layer?.state]);
+  const job = usePreviewJob(dashboardId, ready, stateKey, api.flush);
+
+  const onFrameSelect = useCallback((tabId: string, componentId: string) => {
+    setSelected({ tabId, componentId });
+    setRevealToken((t) => t + 1);
+  }, []);
+  const bridge = useFrameBridge(job.previewUrl, patch, onFrameSelect);
+  const snapshotSource = useMemo(
+    () => ({ snapshots: bridge.snapshots, styles: bridge.styles, baseUrl: job.previewUrl }),
+    [bridge.snapshots, bridge.styles, job.previewUrl],
+  );
+  const pdf = useExactPdf(dashboardId, layer, api.flush);
+
+  const onSelect = useCallback((tabId: string, componentId: string | null) => {
+    setSelected(componentId ? { tabId, componentId } : null);
+  }, []);
 
   const editorUrl = `/dashboard-edit/${dashboardId}`;
-  const previewAvailable = outline?.preview_available ?? false;
   const status = statusLabel(api.saveStatus, api.saveError);
   const conflict = api.saveStatus === 'conflict';
 
@@ -108,9 +148,20 @@ const ReportEditorApp: React.FC = () => {
         </Stack>
       </Group>
       <Group gap="sm" wrap="nowrap">
-        <Text size="sm" c={status.color} data-testid="report-save-status">
+        {pdf.error && (
+          <Text size="xs" c="red" maw={280} lineClamp={2} data-testid="report-pdf-error">
+            {pdf.error}
+          </Text>
+        )}
+        <Badge
+          color={status.color}
+          variant="light"
+          size="lg"
+          tt="none"
+          data-testid="report-save-status"
+        >
           {status.text}
-        </Text>
+        </Badge>
         {conflict && (
           <Button
             size="xs"
@@ -123,180 +174,211 @@ const ReportEditorApp: React.FC = () => {
             Reload
           </Button>
         )}
-        <Tooltip
-          label={outline?.preview_unavailable_reason ?? 'The preview is not available here.'}
-          disabled={previewAvailable || !outline}
-          multiline
-          w={320}
+        <Button
+          size="xs"
+          variant="default"
+          leftSection={<Icon icon="mdi:file-pdf-box" width={16} />}
+          loading={pdf.busy}
+          disabled={!layer || conflict}
+          onClick={pdf.run}
+          data-testid="report-exact-pdf"
         >
-          {/* A disabled button swallows hover: the span carries the tooltip. */}
-          <span>
-            <Button
-              size="xs"
-              leftSection={<Icon icon="mdi:file-eye-outline" width={16} />}
-              disabled={!previewAvailable || conflict}
-              onClick={() => setPreviewOpen(true)}
-              data-testid="report-preview-button"
-            >
-              Exact preview
-            </Button>
-          </span>
-        </Tooltip>
+          Exact PDF
+        </Button>
       </Group>
     </Group>
   );
 
+  const centered = (content: React.ReactNode) => (
+    <Center mih={300} h={`calc(100dvh - ${HEADER_HEIGHT}px)`}>
+      {content}
+    </Center>
+  );
+
   const body = (() => {
     if (!dashboardId) {
-      return <Alert color="red">This address names no dashboard.</Alert>;
+      return <Alert color="red" m="md">This address names no dashboard.</Alert>;
     }
-    if (serverInfoLoading && !enabled) {
-      return (
-        <Center mih={300}>
-          <Loader />
-        </Center>
+    if (serverInfoLoading && !enabled) return centered(<Loader />);
+    if (!enabled) {
+      return centered(
+        <Stack align="center" gap="sm" maw={420} ta="center">
+          <Icon icon="mdi:file-document-remove-outline" width={48} />
+          <Title order={3}>The report editor is not available</Title>
+          <Text c="dimmed">This server does not offer it.</Text>
+          <Button component="a" href={editorUrl} variant="light">
+            Back to editor
+          </Button>
+        </Stack>,
       );
     }
-    if (!enabled) {
-      return (
-        <Center mih={300}>
-          <Stack align="center" gap="sm" maw={420} ta="center">
-            <Icon icon="mdi:file-document-remove-outline" width={48} />
-            <Title order={3}>The report editor is not available</Title>
-            <Text c="dimmed">This server does not offer it.</Text>
-            <Button component="a" href={editorUrl} variant="light">
+    if (api.loading && !layer) return centered(<Loader />);
+    if (api.loadError || !layer || !outline) {
+      return centered(
+        <Stack align="center" gap="sm" maw={460} ta="center">
+          <Icon icon="mdi:alert-circle-outline" width={48} />
+          <Title order={3}>The report could not be opened</Title>
+          <Text c="dimmed">
+            {api.loadError ??
+              "Only the owners and editors of the dashboard's project can edit its report."}
+          </Text>
+          <Group>
+            <Button component="a" href={editorUrl} variant="default">
               Back to editor
             </Button>
-          </Stack>
-        </Center>
-      );
-    }
-    if (api.loading && !layer) {
-      return (
-        <Center mih={300}>
-          <Loader />
-        </Center>
-      );
-    }
-    if (api.loadError || !layer || !outline) {
-      return (
-        <Center mih={300}>
-          <Stack align="center" gap="sm" maw={460} ta="center">
-            <Icon icon="mdi:alert-circle-outline" width={48} />
-            <Title order={3}>The report could not be opened</Title>
-            <Text c="dimmed">
-              {api.loadError ??
-                'Only the owners and editors of the dashboard\'s project can edit its report.'}
-            </Text>
-            <Group>
-              <Button component="a" href={editorUrl} variant="default">
-                Back to editor
-              </Button>
-              <Button variant="light" onClick={api.reload}>
-                Try again
-              </Button>
-            </Group>
-          </Stack>
-        </Center>
+            <Button variant="light" onClick={api.reload}>
+              Try again
+            </Button>
+          </Group>
+        </Stack>,
       );
     }
 
-    const notesDraft = layer.seeded_from_notes;
     return (
-      <Stack gap="md" data-testid="report-editor">
-        {conflict && (
-          <Alert
-            color="red"
-            variant="light"
-            title={
-              api.conflict?.updated_by
-                ? `Modified by ${api.conflict.updated_by}`
-                : 'Modified by someone else'
-            }
-            data-testid="report-conflict"
-          >
-            <Group justify="space-between" wrap="nowrap">
-              <Text size="sm">
-                {api.conflict?.message ??
-                  'The report changed since you opened it.'}{' '}
-                Your last edits were not saved. Reload to continue from the stored version.
-              </Text>
-              <Button size="xs" color="red" onClick={api.reload}>
-                Reload
-              </Button>
-            </Group>
-          </Alert>
-        )}
-
-        <CoverForm layer={layer} defaults={outline.cover_defaults} onEdit={api.edit} />
-
-        <Card withBorder radius="md" p="md">
-          <Stack gap="xs">
-            {notesDraft && (
-              <Badge variant="light" color="blue" w="fit-content" data-testid="report-seeded-note">
-                Drafted from the dashboard notes
-              </Badge>
-            )}
-            <RichDocField
-              key={`intro-${api.epoch}`}
-              label="Introduction"
-              description="Opens the report, before the first tab."
-              value={layer.intro}
-              testId="report-intro"
-              onChange={(doc) =>
-                api.edit((l) => ({ ...l, intro: doc, seeded_from_notes: false }))
-              }
-            />
-          </Stack>
-        </Card>
-
-        <Box>
-          <Text fw={600} mb="xs">
-            Structure
-          </Text>
+      <SnapshotContext.Provider value={snapshotSource}>
+      <Box
+        data-testid="report-editor"
+        style={{ display: 'flex', height: `calc(100dvh - ${HEADER_HEIGHT}px)` }}
+      >
+        <Box
+          p="md"
+          style={{ flex: '1 1 50%', minWidth: 0, overflowY: 'auto' }}
+          data-testid="report-edit-column"
+        >
           <Stack gap="md">
-            {tabs.map((tab, i) => (
-              <OutlineTab
-                key={tab.tabId}
-                tab={tab}
-                index={i}
-                count={tabs.length}
-                filters={filters}
+            {conflict && (
+              <Alert
+                color="red"
+                variant="light"
+                title={
+                  api.conflict?.updated_by
+                    ? `Modified by ${api.conflict.updated_by}`
+                    : 'Modified by someone else'
+                }
+                data-testid="report-conflict"
+              >
+                <Group justify="space-between" wrap="nowrap">
+                  <Text size="sm">
+                    {api.conflict?.message ?? 'The report changed since you opened it.'} Your last
+                    edits were not saved. Reload to continue from the stored version.
+                  </Text>
+                  <Button size="xs" color="red" onClick={api.reload}>
+                    Reload
+                  </Button>
+                </Group>
+              </Alert>
+            )}
+
+            <CoverForm layer={layer} defaults={outline.cover_defaults} onEdit={api.edit} />
+
+            <CollapsiblePanel
+              icon="mdi:text-box-outline"
+              title="Introduction"
+              summary={docSummary(layer.intro)}
+              testId="report-intro-panel"
+            >
+              <Stack gap="xs">
+                {layer.seeded_from_notes && (
+                  <Badge
+                    variant="light"
+                    color="blue"
+                    w="fit-content"
+                    data-testid="report-seeded-note"
+                  >
+                    Drafted from the dashboard notes
+                  </Badge>
+                )}
+                <RichDocField
+                  key={`intro-${api.epoch}`}
+                  description="Opens the report, before the first tab."
+                  value={layer.intro}
+                  testId="report-intro"
+                  onChange={(doc) =>
+                    api.edit((l) => ({ ...l, intro: doc, seeded_from_notes: false }))
+                  }
+                />
+              </Stack>
+            </CollapsiblePanel>
+
+            <Box>
+              <Group justify="space-between" align="flex-end" wrap="nowrap" mb="xs">
+                <Box>
+                  <Text fw={600}>Structure</Text>
+                  <Text size="xs" c="dimmed">
+                    Tick what goes in the report, drag to reorder, click a card to set its caption
+                    and PDF options.
+                  </Text>
+                </Box>
+                <Group gap={4} wrap="nowrap" style={{ flex: 'none' }}>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => setFold((f) => ({ open: true, n: f.n + 1 }))}
+                    data-testid="report-expand-all"
+                  >
+                    Expand all
+                  </Button>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => setFold((f) => ({ open: false, n: f.n + 1 }))}
+                    data-testid="report-collapse-all"
+                  >
+                    Collapse all
+                  </Button>
+                </Group>
+              </Group>
+              <StructurePanel
+                tabs={tabs}
+                outline={outline}
+                selectedKey={selected ? tileKey(selected.tabId, selected.componentId) : null}
+                revealToken={revealToken}
+                thumbs={bridge.thumbs}
+                fold={fold}
                 onEdit={api.edit}
-                onMoveTab={(dir) => api.edit((l) => moveTab(l, tabs, i, i + dir))}
+                onSelect={onSelect}
               />
-            ))}
+            </Box>
+
+            <CollapsiblePanel
+              icon="mdi:text-box-check-outline"
+              title="Conclusion"
+              summary={docSummary(layer.conclusion)}
+              testId="report-conclusion-panel"
+            >
+              <RichDocField
+                key={`conclusion-${api.epoch}`}
+                description="Closes the report, after the last tab."
+                value={layer.conclusion}
+                testId="report-conclusion"
+                onChange={(doc) => api.edit((l) => ({ ...l, conclusion: doc }))}
+              />
+            </CollapsiblePanel>
           </Stack>
         </Box>
-
-        <Card withBorder radius="md" p="md">
-          <RichDocField
-            key={`conclusion-${api.epoch}`}
-            label="Conclusion"
-            description="Closes the report, after the last tab."
-            value={layer.conclusion}
-            testId="report-conclusion"
-            onChange={(doc) => api.edit((l) => ({ ...l, conclusion: doc }))}
-          />
-        </Card>
-      </Stack>
+        <Box
+          p="md"
+          style={{
+            flex: '1 1 50%',
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            borderLeft: '1px solid var(--mantine-color-default-border)',
+          }}
+        >
+          <PreviewPane job={job} bridge={bridge} />
+        </Box>
+      </Box>
+      </SnapshotContext.Provider>
     );
   })();
 
   return (
-    <AppShell header={{ height: 56 }} padding="md" data-testid="app-shell">
+    <AppShell header={{ height: HEADER_HEIGHT }} padding={0} data-testid="app-shell">
       <AppShell.Header>{header}</AppShell.Header>
-      <AppShell.Main>
-        <Container size="lg" p="md">
-          {body}
-        </Container>
-      </AppShell.Main>
-      <PreviewDrawer
-        opened={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        dashboardId={dashboardId}
-        beforeRun={api.flush}
-      />
+      <AppShell.Main>{body}</AppShell.Main>
     </AppShell>
   );
 };

@@ -1375,6 +1375,8 @@ export interface NotebookRenderStatus {
   pdf_filename?: string | null;
   /** Why the PDF is missing, when it was asked for and failed. */
   pdf_error?: string | null;
+  /** A ready report preview: the address of its `report.html`, to put in a frame. */
+  preview_url?: string | null;
 }
 
 /** What an export will contain, before anything is generated. `state` is an
@@ -1496,8 +1498,8 @@ export async function downloadNotebookRender(
   return filename;
 }
 
-/** A finished render's file as a Blob, without saving it: the report editor's
- *  exact preview shows it in a frame instead of downloading it. */
+/** A finished render's file as a Blob, without saving it: the report editor
+ *  opens the exact PDF in a tab instead of downloading it. */
 export async function fetchNotebookRenderBlob(
   jobId: string,
   format: 'html' | 'pdf' = 'html',
@@ -1587,6 +1589,10 @@ export interface ReportOutlineTab {
   title: string;
   placement: ReportTabPlacement;
   order: number | null;
+  /** The tab's Iconify id, as the dashboard shows it. */
+  icon?: string | null;
+  /** The tab's accent colour (hex), the one the report uses. */
+  color?: string | null;
   entries: ReportOutlineEntry[];
 }
 
@@ -1671,8 +1677,9 @@ export async function fetchReportOutline(
   return res.json();
 }
 
-/** Render the real report with the stored layer, for the editor's exact
- *  preview. Poll the returned job with `fetchNotebookRenderStatus`. */
+/** Render the real report for the editor's live preview. The job is rendered
+ *  on a neutral layer; once ready its status carries `preview_url`, the address
+ *  of the report to show in a frame. Poll it with `fetchNotebookRenderStatus`. */
 export async function startReportPreview(
   dashboardId: string,
   options: { force?: boolean } = {},

@@ -288,6 +288,9 @@ class NotebookRenderStatus(BaseModel):
     # when it was asked for and failed (the HTML report stands on its own).
     pdf_filename: str | None = None
     pdf_error: str | None = None
+    # A preview job's report, served by its capability URL (the job's token)
+    # once the render is ready; ``None`` for every other status and job.
+    preview_url: str | None = None
 
 
 # ---------------------------------------------------------------------------

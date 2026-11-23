@@ -169,7 +169,9 @@ class ReportOutlineEntry(BaseModel):
 
 
 class ReportOutlineTab(BaseModel):
-    """One tab's part of the outline: what the layer says about its place."""
+    """One tab's part of the outline: what the layer says about its place, and
+    the tab's own identity (its sidebar icon and the accent the report tints
+    it with, as hex) so the editor draws it as the report does."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -177,6 +179,8 @@ class ReportOutlineTab(BaseModel):
     title: str
     placement: ReportPlacement = "body"
     order: int | None = None
+    icon: str | None = None
+    color: str | None = None
     entries: list[ReportOutlineEntry] = Field(default_factory=list)
 
 

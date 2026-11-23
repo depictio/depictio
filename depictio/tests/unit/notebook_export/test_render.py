@@ -28,7 +28,14 @@ class FakeProc:
 
 
 def _quarto(
-    monkeypatch, *, log: str, returncode: int = 0, write_output: bool = True, hang: bool = False
+    monkeypatch,
+    *,
+    log: str,
+    returncode: int = 0,
+    write_output: bool = True,
+    hang: bool = False,
+    stem: str = "x",
+    write_files: dict[str, bytes] | None = None,
 ):
     """Stand in for the Quarto binary, writing whatever report it claims to."""
     monkeypatch.setattr(render, "quarto_binary", lambda: "/usr/bin/quarto")
@@ -41,8 +48,12 @@ def _quarto(
         seen["env"] = kwargs.get("env") or {}
         seen["new_session"] = kwargs.get("start_new_session")
         if write_output:
-            out = Path(kwargs["cwd"]) / f"{cmd[2].removesuffix('.qmd')}.html"
+            out = Path(kwargs["cwd"]) / f"{stem}.html"
             out.write_bytes(b"<html>report</html>")
+        for rel, body in (write_files or {}).items():
+            path = Path(kwargs["cwd"]) / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(body)
         return FakeProc(cmd, returncode=returncode, stdout=log, hang=hang)
 
     def fake_killpg(pid, sig):
@@ -157,8 +168,88 @@ def test_a_timeout_kills_the_whole_process_group(monkeypatch):
     assert seen["killed"] and set(seen["killed"]) == {4242}
 
 
+def test_a_non_embedded_render_collects_the_files_beside_the_report(monkeypatch, tmp_path: Path):
+    """A preview's document is rendered with ``embed-resources: false``: Quarto
+    writes the report beside a ``<stem>_files/`` directory, and the render
+    hands both back — the report under its served name, the files keyed as
+    they are served."""
+    monkeypatch.setitem(__import__("sys").modules, "jupyter_cache", object())
+    seen = _quarto(
+        monkeypatch,
+        log="Executing 'report.quarto_ipynb'\n",
+        write_files={
+            "report_files/site_libs/quarto.js": b"console.log(1)",
+            "report_files/site_libs/quarto.css": b"body{}",
+        },
+        stem="report",
+    )
+    html, files = render.render_quarto_html_files(
+        b"---\ntitle: x\n---\n",
+        stem="report",
+        api_url="http://api",
+        api_token="t",
+        workdir=str(tmp_path / "preview"),
+        cache=True,
+    )
+    assert html == b"<html>report</html>"
+    assert files == {
+        "report_files/site_libs/quarto.js": b"console.log(1)",
+        "report_files/site_libs/quarto.css": b"body{}",
+    }
+    assert "--cache" in seen["cmd"]
+
+
+def test_an_embedded_render_collects_no_files(monkeypatch):
+    """A self-contained report carries everything in its one file: the plain
+    render path is unchanged, and nothing is read from the output directory."""
+    _quarto(monkeypatch, log="Executing 'x.quarto_ipynb'\n")
+    html, files = render.render_quarto_html_files(
+        b"---\ntitle: x\n---\n", stem="x", api_url="http://api", api_token="t"
+    )
+    assert html == b"<html>report</html>"
+    assert files == {}
+
+
 def test_job_keys_are_namespaced_by_user():
     """A download endpoint builds this from the *caller*, so it can only reach their own."""
     key = store.job_key("user1", "job1", "report.html")
     assert key.endswith("/user1/job1/report.html")
     assert store.job_key("user2", "job1", "report.html") != key
+
+
+def test_preview_keys_carry_nothing_but_the_token_and_the_path():
+    """The capability URL is the whole secret: no user id, no job id in the key."""
+    key = store.preview_key("tok", "report_files/site_libs/quarto.js")
+    assert key.endswith("/preview/tok/report_files/site_libs/quarto.js")
+    assert store.preview_key("tok2", "report.html") != store.preview_key("tok", "report.html")
+    assert store.preview_url("tok") == (
+        "/depictio/api/v1/dashboards/notebook_export/preview_files/tok/report.html"
+    )
+
+
+def test_preview_content_types_come_from_the_extension():
+    assert store.preview_content_type("report.html") == store.HTML_MEDIA_TYPE
+    assert store.preview_content_type("report_files/site_libs/quarto.css") == "text/css"
+    assert store.preview_content_type("report_files/x.bin") == "application/octet-stream"
+
+
+def test_the_support_files_keep_the_name_the_report_links_them_by(monkeypatch, tmp_path: Path):
+    """A report rendered as ``iris_analysis.html`` links ``iris_analysis_files/…``:
+    renamed on the way to the store, every library 404s and the page loads
+    without Quarto's scripts and styles."""
+    monkeypatch.setitem(__import__("sys").modules, "jupyter_cache", object())
+    _quarto(
+        monkeypatch,
+        log="Executing 'iris_analysis.quarto_ipynb'\n",
+        write_files={"iris_analysis_files/libs/quarto-html/quarto.js": b"x"},
+        stem="iris_analysis",
+    )
+    _html, files = render.render_quarto_html_files(
+        b"---\ntitle: x\n---\n",
+        stem="iris_analysis",
+        api_url="http://api",
+        api_token="t",
+        workdir=str(tmp_path / "preview"),
+        cache=True,
+    )
+    assert list(files) == ["iris_analysis_files/libs/quarto-html/quarto.js"]

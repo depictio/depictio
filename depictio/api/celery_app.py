@@ -1175,6 +1175,7 @@ def render_notebook_report(
     combined: dict | None = None,
     filename: str | None = None,
     pdf: bool = False,
+    preview: bool = False,
     preview_cache: str | None = None,
     preview_force: bool = False,
     **_legacy: Any,
@@ -1210,7 +1211,13 @@ def render_notebook_report(
     Quarto's jupyter-cache keeps the executed cells across previews: a
     text-only edit reuses the last run's outputs. ``preview_force`` maps to
     ``--cache-refresh`` — re-execute every cell and refresh the cache with the
-    results.
+    results. ``preview`` (the same editor's request) serves the report from
+    the API rather than as one download: the document was built with
+    ``embed-resources: false``, so Quarto writes it beside a
+    ``report_files/`` directory, and both are uploaded under a token minted
+    for this one job (``secrets.token_urlsafe``) — the capability URL the
+    editor's iframe opens, carried back in the result's ``preview_url``. No
+    downloadable report is kept: the preview is served, not downloaded.
 
     At most ``report_concurrency`` reports run at once on the deployment: a
     report holds its worker while the passes it waits on need workers too.
@@ -1221,6 +1228,7 @@ def render_notebook_report(
     worker's log.
     """
     import asyncio
+    import secrets
 
     from beanie import init_beanie
     from celery.exceptions import SoftTimeLimitExceeded
@@ -1231,7 +1239,7 @@ def render_notebook_report(
     from depictio.api.v1.services.notebook_export import jobs, store
     from depictio.api.v1.services.notebook_export.render import (
         RenderUnavailable,
-        render_quarto_html,
+        render_quarto_html_files,
         render_quarto_pdf,
     )
     from depictio.api.v1.services.task_tokens import mint_task_token, revoke
@@ -1292,7 +1300,7 @@ def render_notebook_report(
             else {}
         )
         try:
-            html = render_quarto_html(
+            html, report_files = render_quarto_html_files(
                 notebook,
                 stem=stem,
                 api_url=api_url,
@@ -1309,16 +1317,33 @@ def render_notebook_report(
             self.update_state(state="PROGRESS", meta={"phase": "combining", "job_id": job_id})
             html = _embed_runtime(job_id, html, manifest, runtime, combined)
         self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
-        store.put(html_key, html, store.HTML_MEDIA_TYPE)
-        logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
+        if preview:
+            # The preview's report and its files, served by capability URL:
+            # a token minted for this one job names them in the store, and a
+            # new render is a new token, so a stale frame cannot keep serving
+            # a report the next preview replaced. (An embedded report's file
+            # set is empty — the report then carries everything itself.)
+            preview_token = secrets.token_urlsafe(32)
+            store.put(store.preview_key(preview_token, "report.html"), html, store.HTML_MEDIA_TYPE)
+            for rel, body in report_files.items():
+                store.put(
+                    store.preview_key(preview_token, rel),
+                    body,
+                    store.preview_content_type(rel),
+                )
+        else:
+            store.put(html_key, html, store.HTML_MEDIA_TYPE)
+            logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
         out = {
             "status": "success",
             "job_id": job_id,
             "user_id": user_id,
-            "key": html_key,
+            "key": html_key if not preview else None,
             "filename": out_name,
             "size": len(html),
         }
+        if preview:
+            out["preview_url"] = store.preview_url(preview_token)
         if pdf:
             # The PDF is a second render (static figures); its failure never
             # costs the HTML report, it is reported beside it.

@@ -221,6 +221,42 @@ def render_quarto_html(
         workdir=workdir,
         cache=cache,
         force=force,
+    )[0]
+
+
+def render_quarto_html_files(
+    qmd: bytes,
+    *,
+    stem: str,
+    api_url: str,
+    api_token: str | None,
+    timeout_s: int = 900,
+    extra_env: dict[str, str] | None = None,
+    workdir: str | None = None,
+    cache: bool = False,
+    force: bool = False,
+) -> tuple[bytes, dict[str, bytes]]:
+    """The report *and* every file beside it, for a preview served by the API.
+
+    The preview's document is rendered with ``embed-resources: false`` (its
+    front matter, ``QuartoFrontMatter.embed_resources``), so Quarto writes the
+    report plus a ``<stem>_files/`` directory instead of inlining everything
+    into one big file — the editor's iframe loads the report and its files
+    from the API rather than the worker shipping megabytes of it. The report
+    comes back under its served name ``report.html`` and the files keyed as
+    they are served, ``report_files/<relative path>``.
+    """
+    return _render(
+        qmd,
+        stem=stem,
+        api_url=api_url,
+        api_token=api_token,
+        timeout_s=timeout_s,
+        to="html",
+        extra_env=extra_env,
+        workdir=workdir,
+        cache=cache,
+        force=force,
     )
 
 
@@ -248,7 +284,7 @@ def render_quarto_pdf(
         timeout_s=timeout_s,
         to="typst",
         extra_env={**(extra_env or {}), STATIC_FIGURES_ENV: "1"},
-    )
+    )[0]
 
 
 def _render(
@@ -263,7 +299,13 @@ def _render(
     workdir: str | None = None,
     cache: bool = False,
     force: bool = False,
-) -> bytes:
+) -> tuple[bytes, dict[str, bytes]]:
+    """Run Quarto once; the report and the files beside it.
+
+    The files are empty unless the document was rendered with
+    ``embed-resources: false`` (a preview's document is): an embedded report
+    carries everything in its one file, so there is nothing to collect.
+    """
     if not quarto_binary():
         raise RenderUnavailable(
             "Quarto is not installed on this worker — the HTML report needs the Quarto CLI. "
@@ -344,4 +386,24 @@ def _render(
                 "quarto render produced a report without executing the notebook — "
                 "the interpreter it used has no Jupyter kernel"
             )
-        return out.read_bytes()
+        return out.read_bytes(), _support_files(out)
+
+
+def _support_files(out: Path) -> dict[str, bytes]:
+    """The files Quarto wrote beside the report, keyed as they are served.
+
+    A report whose ``embed-resources`` is off comes with a ``<stem>_files/``
+    directory (Quarto's libraries, the document's own assets), served under
+    that same name: the report links to it by it. An embedded report comes
+    alone, so this is empty.
+    Nothing of the render's own work (the notebook, the caches) is collected —
+    the served preview carries only what the page needs.
+    """
+    support = out.parent / f"{out.stem}_files"
+    if not support.is_dir():
+        return {}
+    files: dict[str, bytes] = {}
+    for path in sorted(support.rglob("*")):
+        if path.is_file():
+            files[f"{support.name}/{path.relative_to(support).as_posix()}"] = path.read_bytes()
+    return files

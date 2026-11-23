@@ -127,11 +127,13 @@ server {
         add_header Strict-Transport-Security $depictio_hsts always;
     }
 
-    # The report editor's exact-preview frame. Same reasoning as the
-    # preview-html block above: the backend sends the frame's own sandboxed
-    # policy (inline scripts allowed, opaque origin), which the server-level
-    # CSP would otherwise intersect away.
-    location = /depictio/api/v1/dashboards/notebook_export/preview_frame {
+    # The report editor's exact-preview files, served by capability URL
+    # (`.../preview_files/<token>/<path>`; the token is the secret, the report
+    # is the editor's iframe). Same reasoning as the preview-html block above:
+    # the backend sends the report's own sandboxed policy (inline scripts
+    # allowed, opaque origin), which the server-level CSP would otherwise
+    # intersect away.
+    location ~ ^/depictio/api/v1/dashboards/notebook_export/preview_files/ {
         set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

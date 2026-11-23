@@ -147,6 +147,7 @@ def header_markdown(
     project: dict[str, Any] | None,
     exported_by: str | None,
     exported_at: datetime,
+    date_only: bool = False,
     instance: str | None,
     api_url: str,
     dashboard_id: str,
@@ -187,7 +188,11 @@ def header_markdown(
 
     # A table scans faster than a run-on sentence.
     meta_rows = [("Live dashboard", f"[{dashboard_url}]({dashboard_url})")]
-    exported_line = f"{exported_at.strftime('%Y-%m-%d %H:%M UTC')}"
+    exported_line = (
+        # The day alone for a preview (a preview cache key must not move with
+        # the clock); to the minute for a report a reader downloads.
+        f"{exported_at:%Y-%m-%d} UTC" if date_only else f"{exported_at:%Y-%m-%d %H:%M} UTC"
+    )
     if exported_by:
         exported_line += f" by {_md_escape(exported_by)}"
     if instance:

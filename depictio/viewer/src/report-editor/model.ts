@@ -223,3 +223,38 @@ export function stateFilters(state: AnalysisState | null): InteractiveFilter[] {
     return out;
   });
 }
+
+/** Move a tile to row `to` of its tab. `section` is the section of the row it
+ *  lands beside: a tile dropped among another section's rows joins that
+ *  section, one dropped among its own keeps (or returns to) its own. */
+export function relocateTile(
+  layer: ReportLayer,
+  tab: TabView,
+  from: number,
+  to: number,
+  section: string | null,
+): ReportLayer {
+  const moved = tab.tiles[from];
+  if (!moved) return layer;
+  const next = moveTile(layer, tab, from, to);
+  const target = section && section !== moved.entry.section ? section : null;
+  return (moved.sectionOverride || null) === target
+    ? next
+    : patchTile(next, moved.entry, { section: target });
+}
+
+/** The first words of a TipTap document, for a closed panel's one-line summary. */
+export function docSummary(doc: ReportDoc | null | undefined, words = 10): string {
+  if (isEmptyDoc(doc)) return 'Empty';
+  const parts: string[] = [];
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== 'object' || parts.length > words * 2) return;
+    const n = node as { text?: string; content?: unknown[] };
+    if (typeof n.text === 'string') parts.push(n.text);
+    n.content?.forEach(walk);
+  };
+  walk(doc);
+  const all = parts.join(' ').split(/\s+/).filter(Boolean);
+  if (all.length === 0) return 'Empty';
+  return all.slice(0, words).join(' ') + (all.length > words ? '…' : '');
+}

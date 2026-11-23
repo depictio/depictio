@@ -357,8 +357,6 @@ test.describe("Static export (owner flows)", () => {
     });
     await expect(drawer).toBeVisible({ timeout: 15_000 });
     await page.locator("[data-testid='settings-nav-export']").click();
-    // The separate outputs sit under "Advanced"; the default is report + dashboard.
-    await page.locator("[data-testid='export-advanced-toggle']").first().click();
     await expect(btn).toBeVisible();
     await expect(btn).toBeEnabled();
 
@@ -424,8 +422,6 @@ test.describe("Static export (non-owner)", () => {
       });
       await expect(drawer).toBeVisible({ timeout: 15_000 });
       await page.locator("[data-testid='settings-nav-export']").click();
-      // The separate outputs sit under "Advanced"; the default is report + dashboard.
-      await page.locator("[data-testid='export-advanced-toggle']").first().click();
 
       const btn = page.locator("[data-testid='export-static-btn']");
       // Present and readable, but inert — and the reason is on screen, not in
@@ -473,8 +469,6 @@ test.describe("Static export in public/demo mode", () => {
     });
     await expect(drawer).toBeVisible({ timeout: 15_000 });
     await page.locator("[data-testid='settings-nav-export']").click();
-    // The separate outputs sit under "Advanced"; the default is report + dashboard.
-    await page.locator("[data-testid='export-advanced-toggle']").first().click();
 
     const btn = page.locator("[data-testid='export-static-btn']");
     await expect(btn).toBeVisible();

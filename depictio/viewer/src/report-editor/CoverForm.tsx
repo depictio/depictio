@@ -1,7 +1,8 @@
 import React from 'react';
-import { Card, Group, Stack, TagsInput, Text, TextInput } from '@mantine/core';
+import { Group, Stack, TagsInput, Text, TextInput } from '@mantine/core';
 import type { ReportCover, ReportLayer } from 'depictio-react-core';
 
+import CollapsiblePanel from './CollapsiblePanel';
 import { EMPTY_COVER, setCoverField } from './model';
 
 interface CoverFormProps {
@@ -16,27 +17,31 @@ const CoverForm: React.FC<CoverFormProps> = ({ layer, defaults, onEdit }) => {
   const cover = layer.cover ?? EMPTY_COVER;
   const set = (patch: Partial<ReportCover>) => onEdit((l) => setCoverField(l, patch));
 
+  const summary = cover.title || defaults.title || 'Default cover';
+
   return (
-    <Card withBorder radius="md" p="md" data-testid="report-cover">
+    <CollapsiblePanel
+      icon="mdi:book-open-page-variant-outline"
+      title="Cover"
+      summary={summary}
+      testId="report-cover"
+    >
       <Stack gap="sm">
-        <Text fw={600}>Cover</Text>
         <Text size="xs" c="dimmed">
           Leave a field empty to use the default shown in it.
         </Text>
-        <Group grow align="flex-start">
-          <TextInput
-            label="Title"
-            value={cover.title ?? ''}
-            placeholder={defaults.title ?? ''}
-            onChange={(e) => set({ title: e.currentTarget.value || null })}
-          />
-          <TextInput
-            label="Subtitle"
-            value={cover.subtitle ?? ''}
-            placeholder={defaults.subtitle ?? ''}
-            onChange={(e) => set({ subtitle: e.currentTarget.value || null })}
-          />
-        </Group>
+        <TextInput
+          label="Title"
+          value={cover.title ?? ''}
+          placeholder={defaults.title ?? ''}
+          onChange={(e) => set({ title: e.currentTarget.value || null })}
+        />
+        <TextInput
+          label="Subtitle"
+          value={cover.subtitle ?? ''}
+          placeholder={defaults.subtitle ?? ''}
+          onChange={(e) => set({ subtitle: e.currentTarget.value || null })}
+        />
         <Group grow align="flex-start">
           <TagsInput
             label="Authors"
@@ -52,7 +57,7 @@ const CoverForm: React.FC<CoverFormProps> = ({ layer, defaults, onEdit }) => {
           />
         </Group>
       </Stack>
-    </Card>
+    </CollapsiblePanel>
   );
 };
 

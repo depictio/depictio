@@ -218,7 +218,7 @@ def test_a_heading_before_a_wide_float_moves_onto_its_landscape_page():
     from depictio.api.v1.services.notebook_export.pdf_typst import typst_preamble
 
     preamble = typst_preamble(title="T", subtitle=None, primary="#228be6")
-    skip = preamble.index("if next != none and dpx-is-wide(next) { [] } else { it }")
+    skip = preamble.index("if next != none and dpx-flips(next) { [] } else { it }")
     styled = preamble.index('let key = if it.has("label")')
     assert skip > styled, "the skipping rule must come last to see the heading first"
     assert "dpx-heading-copy(prev)" in preamble
