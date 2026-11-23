@@ -72,6 +72,7 @@ import { useGestureGuardedSelection, useSelectionRevision } from './selectionGes
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { categoricalPalette } from '../../palettes';
 
 type Highlight = 'above' | 'below' | 'none';
 
@@ -1266,7 +1267,9 @@ const ManhattanRenderer: React.FC<Props> = ({
   // position. Only this shape changes on a hover, so the data, the traces and
   // the fetch are untouched; a contig this plot does not draw draws nothing.
   const hovered = useHighlight(String(metadata.index));
-  const cursorColor = theme.colors[theme.primaryColor]?.[isDark ? 4 : 7] ?? theme.colors.blue[isDark ? 4 : 7];
+  // The shared palette's lead hue, as every other mark: a Mantine primary
+  // differed per page and read as one more data colour.
+  const cursorColor = categoricalPalette(null, isDark ? 'dark' : 'light')[0];
   // A hover that names a feature (a browser's `genomic`, a table's `record`, a
   // row key) rings the nearest drawn point instead; a plain cursor stays a line.
   // The pixel tolerance is read off the graph div at hover time, so a zoomed

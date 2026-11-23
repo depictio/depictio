@@ -134,6 +134,31 @@ def semantic(kind: ReservedKind, mode: str | None = "light") -> str:
     return load()["semantic"][kind][_mode(mode)]
 
 
+def direction(kind: Literal["up", "down"], mode: str | None = "light") -> str:
+    """Colour of a differential direction (up / down), shared by every DE tile."""
+    return load()["direction"][kind][_mode(mode)]
+
+
+def ordinal_colors(values: Iterable[str], mode: str | None = "light") -> dict[str, str] | None:
+    """Colours along a documented ordinal scale, when every value belongs to one.
+
+    ``None`` unless there are at least two values and each one (case-insensitive)
+    is a level of the same vocabulary in ``ordinal_vocabularies``: SnpEff's
+    HIGH / MODERATE / LOW / MODIFIER is a severity, so it reads red to grey
+    rather than taking whichever categorical slots its sort order lands on.
+    """
+    distinct = list(dict.fromkeys(values))
+    if len(distinct) < 2:
+        return None
+    for key, vocab in load()["ordinal_vocabularies"].items():
+        if key.startswith("$"):
+            continue
+        levels = {k.casefold(): c for k, c in vocab["values"].items()}
+        if all(v.casefold() in levels for v in distinct):
+            return {v: levels[v.casefold()][_mode(mode)] for v in distinct}
+    return None
+
+
 def annotation_ink(mode: str | None = "light") -> str:
     """Default colour of a drawn annotation: neutral, told apart from data by form."""
     return load()["annotation_ink"][_mode(mode)]
@@ -243,6 +268,11 @@ def assign_colors(
             result[value] = semantic(kind, mode)
         else:
             free_values.append(value)
+
+    ordinal = ordinal_colors(free_values, mode)
+    if ordinal is not None:
+        result.update(ordinal)
+        free_values = []
 
     used = {c.lower() for c in pinned.values()}
     slots = [c for c in colours if c.lower() not in used]

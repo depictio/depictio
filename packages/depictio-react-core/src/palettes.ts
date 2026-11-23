@@ -17,6 +17,7 @@ import {
   ANNOTATION_INK,
   BAR_CORNER_RADIUS,
   DEFAULT_PALETTE_ID,
+  ORDINAL_VOCABULARIES,
   OVERFLOW_MODE,
   OVERFLOW_SHADES,
   OVERVIEW_TOP_N,
@@ -137,6 +138,28 @@ export interface AssignOptions {
   overflow?: OverflowMode | null;
 }
 
+/**
+ * Colours along a documented ordinal scale (`ORDINAL_VOCABULARIES`), when every
+ * value belongs to one: SnpEff's HIGH / MODERATE / LOW / MODIFIER is a
+ * severity, so it reads red to grey instead of taking whichever categorical
+ * slots its sort order lands on. Null under two values or on any stray value.
+ * Mirrors `ordinal_colors` in depictio/models/palettes.
+ */
+export function ordinalColors(
+  values: readonly string[],
+  scheme: ColorScheme = 'light',
+): Map<string, string> | null {
+  const distinct = Array.from(new Set(values));
+  if (distinct.length < 2) return null;
+  for (const vocab of Object.values(ORDINAL_VOCABULARIES)) {
+    const levels = new Map(Object.entries(vocab).map(([k, c]) => [k.toLowerCase(), c]));
+    if (distinct.every((v) => levels.has(v.toLowerCase()))) {
+      return new Map(distinct.map((v) => [v, levels.get(v.toLowerCase())![scheme]]));
+    }
+  }
+  return null;
+}
+
 export function assignColors(
   values: Iterable<unknown>,
   { pinned, palette, scheme = 'light', ranked = false, overflow }: AssignOptions = {},
@@ -165,6 +188,11 @@ export function assignColors(
     const kind = reservedKind(value);
     if (kind) result.set(value, semanticColor(kind, scheme));
     else free.push(value);
+  }
+  const ordinal = ordinalColors(free, scheme);
+  if (ordinal) {
+    for (const [value, colour] of ordinal) result.set(value, colour);
+    free.length = 0;
   }
   const used = new Set(Array.from(pins.values(), (c) => c.toLowerCase()));
   const slots = colours.filter((c) => !used.has(c.toLowerCase()));

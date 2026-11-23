@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { DIRECTION_COLORS } from '../../palettes.generated';
 import { ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
@@ -59,8 +60,8 @@ interface Props {
 }
 
 // The volcano's UP / DN colours, so a taxon reads the same on both: up pink, down blue.
-const POSITIVE = '#e64980';
-const NEGATIVE = '#1c7ed6';
+const POSITIVE = DIRECTION_COLORS.up.light;
+const NEGATIVE = DIRECTION_COLORS.down.light;
 const FADED = 'rgba(127,127,127,0.45)';
 const ALL_TAB = 'all';
 

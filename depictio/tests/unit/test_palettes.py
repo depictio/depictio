@@ -285,3 +285,20 @@ def test_ui_hues_never_remap_neutrals_or_the_brand():
 
 def test_unknown_palette_ui_hue_falls_back_to_default():
     assert palettes.ui_hue_tuple("teal", "nope") == palettes.ui_hue_tuple("teal", None)
+
+
+def test_snpeff_impact_classes_read_as_a_severity():
+    from depictio.models import palettes as p
+
+    colours = p.assign_colors(["MODIFIER", "high", "LOW", "MODERATE"])
+    assert colours["high"] == p.direction("up")
+    assert colours["MODIFIER"] == p.semantic("other")
+    assert colours["MODERATE"] != colours["LOW"]
+
+
+def test_a_stray_value_keeps_categorical_slots():
+    from depictio.models import palettes as p
+
+    assert p.ordinal_colors(["HIGH", "LOW", "banana"]) is None
+    assert p.ordinal_colors(["HIGH"]) is None
+    assert p.assign_colors(["HIGH", "LOW"], pinned={"HIGH": "#000001"})["HIGH"] == "#000001"

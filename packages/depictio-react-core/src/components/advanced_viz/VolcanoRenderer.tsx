@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { DEFAULT_PALETTE_ID, PALETTES, PLOT_CHROME } from '../../palettes.generated';
 import {
   Badge,
   Box,
@@ -1487,7 +1488,7 @@ function buildQq(input: {
           text: series.ids,
           ...(ids ? { customdata: series.ids.map((id) => [id]) } : {}),
           hovertemplate: hoverTemplate(Boolean(series.ids[0])),
-          marker: qqMarker(series.indices, '#4C72B0'),
+          marker: qqMarker(series.indices, PALETTES[DEFAULT_PALETTE_ID].categorical.light[0]),
         },
         input.glGranted,
       ),
@@ -1585,7 +1586,7 @@ function buildQq(input: {
               y0: 0,
               x1: diagonalUpper,
               y1: diagonalUpper,
-              line: { dash: 'dash', color: input.isDark ? '#ddd' : '#444', width: 1 },
+              line: { dash: 'dash', color: PLOT_CHROME[input.isDark ? 'dark' : 'light'].muted, width: 1 },
             },
           ]
         : [],

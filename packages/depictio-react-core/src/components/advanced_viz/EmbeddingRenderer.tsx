@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { DEFAULT_PALETTE_ID, PALETTES } from '../../palettes.generated';
 import { Badge, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
@@ -721,7 +722,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
           '<extra></extra>',
         marker: {
           ...(actuallyRender3D ? baseMarker3D : baseMarker2D),
-          color: colourArr ?? categoricalColours ?? '#4C72B0',
+          color: colourArr ?? categoricalColours ?? PALETTES[DEFAULT_PALETTE_ID].categorical.light[0],
           colorscale: colourArr ? 'Spectral' : undefined,
           reversescale: colourArr ? reverseScale : undefined,
           showscale: Boolean(colourArr),

@@ -115,6 +115,15 @@ def render(data: dict) -> str:
         + "export interface LineStyle {\n  width: number;\n  width_many: number;\n"
         + "  many_series: number;\n  marker_max_points: number;\n}\n\n"
         + f"export const LINE_STYLE: LineStyle = {dump(data['style']['line_style'])};\n\n"
+        + "/** Direction of a differential result, shared by every DE tile. */\n"
+        + "export const DIRECTION_COLORS: Record<'up' | 'down', PaletteModesSingle> = "
+        + dump({k: data["direction"][k] for k in ("up", "down")})
+        + ";\n\n"
+        + "/** Documented ordinal scales (value -> colour per mode, most severe first):\n"
+        + " *  a column whose values all belong to one is coloured along it. */\n"
+        + "export const ORDINAL_VOCABULARIES: Record<string, Record<string, PaletteModesSingle>> = "
+        + dump({k: v["values"] for k, v in data["ordinal_vocabularies"].items() if not k.startswith("$")})
+        + ";\n\n"
         + "export const UI_HUES = "
         + dump(ui_names)
         + " as const;\n\n"

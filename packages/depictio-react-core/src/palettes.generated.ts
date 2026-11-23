@@ -796,6 +796,41 @@ export const LINE_STYLE: LineStyle = {
   "marker_max_points": 60
 };
 
+/** Direction of a differential result, shared by every DE tile. */
+export const DIRECTION_COLORS: Record<'up' | 'down', PaletteModesSingle> = {
+  "up": {
+    "light": "#E53935",
+    "dark": "#E63A36"
+  },
+  "down": {
+    "light": "#6495ED",
+    "dark": "#73A5FF"
+  }
+};
+
+/** Documented ordinal scales (value -> colour per mode, most severe first):
+ *  a column whose values all belong to one is coloured along it. */
+export const ORDINAL_VOCABULARIES: Record<string, Record<string, PaletteModesSingle>> = {
+  "snpeff_impact": {
+    "HIGH": {
+      "light": "#E53935",
+      "dark": "#E63A36"
+    },
+    "MODERATE": {
+      "light": "#F68B33",
+      "dark": "#F68B33"
+    },
+    "LOW": {
+      "light": "#EBD244",
+      "dark": "#F9CB40"
+    },
+    "MODIFIER": {
+      "light": "#ADB5BD",
+      "dark": "#5C5F66"
+    }
+  }
+};
+
 export const UI_HUES = [
   "violet",
   "grape",

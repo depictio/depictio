@@ -606,6 +606,23 @@
       "null"
     ]
   },
+  "direction": {
+    "$comment": "Direction of a differential result (volcano, MA, DA bars, dot plot fold change): up and down, in the red and blue of the default palette so a direction never borrows a category's colour.",
+    "up": {"light": "#E53935", "dark": "#E63A36"},
+    "down": {"light": "#6495ED", "dark": "#73A5FF"}
+  },
+  "ordinal_vocabularies": {
+    "$comment": "A categorical column whose values all belong to one documented ordinal scale is coloured along it, most severe first, not by categorical slots: an impact class is a verdict, not a name. Matched case-insensitively, at least two values; pins still win.",
+    "snpeff_impact": {
+      "source": "https://pcingola.github.io/SnpEff/snpeff/inputoutput/",
+      "values": {
+        "HIGH": {"light": "#E53935", "dark": "#E63A36"},
+        "MODERATE": {"light": "#F68B33", "dark": "#F68B33"},
+        "LOW": {"light": "#EBD244", "dark": "#F9CB40"},
+        "MODIFIER": {"light": "#ADB5BD", "dark": "#5C5F66"}
+      }
+    }
+  },
   "annotation_ink": {
     "light": "#343A40",
     "dark": "#E9ECEF"
