@@ -142,6 +142,30 @@ def set_static_width(px: int | None = None) -> None:
     _STATIC_WIDTH["px"] = int(px) if px else STATIC_FIGURE_WIDTH
 
 
+#: A figure whose layout is wider than this width:height ratio prints on a
+#: landscape page (``figure_orientation``).
+LANDSCAPE_FIGURE_RATIO = 1.6
+
+
+def figure_ratio(fig) -> float | None:
+    """The figure's own layout width:height ratio, when the layout sets both."""
+    layout = getattr(fig, "layout", None)
+    width = getattr(layout, "width", None) if layout is not None else None
+    height = getattr(layout, "height", None) if layout is not None else None
+    if not width or not height:
+        return None
+    return width / height
+
+
+def figure_orientation(ratio: float | None, override: str = "auto") -> str:
+    """The page orientation a figure asks for: landscape when its layout is
+    wider than ``LANDSCAPE_FIGURE_RATIO``:1, else portrait. ``override``
+    (``"auto"``, ``"portrait"``, ``"landscape"``) wins when it is set."""
+    if override in ("portrait", "landscape"):
+        return override
+    return "landscape" if ratio is not None and ratio > LANDSCAPE_FIGURE_RATIO else "portrait"
+
+
 _BR_RE = re.compile(r"<br\s*/?>", re.I)
 _MARKUP_RE = re.compile(r"<[^>]+>")
 # Inter's average glyph is a little over half its size; a label's width in px
@@ -239,7 +263,10 @@ def fit_category_axes(fig, width: int) -> None:
 def figure_png(fig) -> str | None:
     """The figure as a base64 PNG (kaleido), or ``None`` when it cannot be drawn.
 
-    In the report's type (Inter, then the system's sans), like the page around it.
+    In the report's type (Inter, then the system's sans), like the page around
+    it. The figure's own layout width:height ratio holds when the layout sets
+    both (``figure_ratio``), so a tile drawn wide and short on the dashboard
+    prints wide and short instead of stretched to a default height.
     """
     try:
         import plotly.graph_objects as go
@@ -247,6 +274,10 @@ def figure_png(fig) -> str | None:
         fig = go.Figure(fig)
         fig.update_layout(font_family=_theme.sans_stack())
         width = _STATIC_WIDTH["px"]
+        ratio = figure_ratio(fig)
+        if ratio:
+            fig.layout.width = width
+            fig.layout.height = int(width / ratio)
         if not getattr(fig.layout, "height", None):
             fig.layout.height = 420
         fit_category_axes(fig, width)
@@ -256,7 +287,8 @@ def figure_png(fig) -> str | None:
     return base64.b64encode(data).decode("ascii")
 
 
-#: Columns a table keeps on a static page (a portrait page holds about this many).
+#: Columns a table keeps on a portrait page. The PDF turns the page for more
+#: (``typst.table``); the HTML report's static table truncates here.
 STATIC_TABLE_COLS = 8
 _TAG_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.S | re.I)
 
@@ -579,6 +611,15 @@ def figure_bundle(fig) -> dict[str, Any]:
         png = figure_png(fig)
         if png:
             bundle[PNG_MIME] = png
+            # A figure wider than a portrait page prints on a landscape one:
+            # typst carrying the dpx-wide mark, read by the preamble's show
+            # rule. Portrait figures stay on the image path above. The
+            # caption is the float's, so the block carries none.
+            orientation = figure_orientation(figure_ratio(fig))
+            if orientation == "landscape":
+                typst = _typst.figure(png, orientation=orientation)
+                if typst:
+                    bundle[MARKDOWN_MIME] = typst
     return bundle
 
 

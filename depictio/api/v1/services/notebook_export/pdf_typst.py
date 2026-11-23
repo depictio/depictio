@@ -215,6 +215,14 @@ def typst_preamble(
         "#show heading.where(level: 1): it => { "
         'if it.has("label") and str(it.label) == "appendices" { pagebreak(weak: true) }; it }'
     )
+    # Last of the heading rules, so it sees the heading before they draw it: a
+    # heading right before a wide float moves onto its landscape page
+    # (definitions.typ, ``dpx-heading-copy``). Here it draws nothing: the
+    # element stays in the document, so the contents still list and link it.
+    add(
+        "#show heading: it => context { let next = dpx-next(it.location()); "
+        "if next != none and dpx-is-wide(next) { [] } else { it } }"
+    )
     add("#show figure.caption: set text(size: 8pt, fill: dpx-muted)")
     add("#show link: set text(fill: dpx-accent)")
     # The notes ("About this component"): a quiet card, the accent on its edge.

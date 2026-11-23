@@ -14,18 +14,27 @@ only the PDF render sets that.
 
 from __future__ import annotations
 
+import base64
 import datetime as _dt
 import math
 import re
+import struct
 from typing import Any
 
 import polars as pl
 
 from depictio.notebook.qmd_safe import typst_str
 
-#: Rows and columns a table keeps on a page; the HTML report has them all.
+#: Rows a table keeps on a page; the HTML report has them all.
 TABLE_ROWS = 30
+#: Columns a portrait page takes; wider tables print on a landscape page.
 TABLE_COLS = 8
+#: Columns a landscape page takes in one table; wider tables split into
+#: column blocks, the first (id) column repeated on each.
+LANDSCAPE_TABLE_COLS = 14
+#: Data columns per block of a split table (the id column comes on top, so a
+#: block is this wide plus one).
+SPLIT_TABLE_COLS = 13
 # A token longer than this gets break opportunities, so a sample id or a path
 # wraps inside its column instead of running off the page.
 _LONG_TOKEN = 18
@@ -79,12 +88,12 @@ def _cell(value: Any) -> str:
     return _breakable(str(value).replace("\n", " ")[:160])
 
 
-def table(df: pl.DataFrame, *, rows: int = TABLE_ROWS, cols: int = TABLE_COLS) -> str:
-    """``df`` as a typst table: a styled header row, zebra rows, numbers right
-    aligned and formatted, columns as wide as what they hold, and a note when
-    rows or columns were left out."""
-    total_rows, total_cols = df.height, df.width
-    view = df.select(df.columns[:cols]).head(rows)
+def _dpx_table(df: pl.DataFrame, *, rows: int, column_note: str = "") -> str:
+    """One ``dpx-table`` call: the first ``rows`` rows of ``df``, all of its
+    columns shown, widths from what they hold. ``column_note`` leads the note
+    ("Columns 2-14 of 28") when part of the table is elsewhere."""
+    total_rows = df.height
+    view = df.head(rows)
     numeric = [view.schema[c].is_numeric() for c in view.columns]
     body = [[_cell(v) for v in row] for row in view.iter_rows()]
     weights = []
@@ -100,19 +109,107 @@ def table(df: pl.DataFrame, *, rows: int = TABLE_ROWS, cols: int = TABLE_COLS) -
     header = "(" + ", ".join(tstr(_breakable(str(c), 0)) for c in view.columns) + ",)"
     cells = "(" + ", ".join("(" + ", ".join(tstr(v) for v in r) + ",)" for r in body) + ",)"
     shown = []
+    if column_note:
+        shown.append(column_note)
     if total_rows > view.height:
-        shown.append(f"{view.height:,} of {total_rows:,} rows")
-    if total_cols > view.width:
-        shown.append(f"{view.width} of {total_cols} columns")
+        shown.append(f"Showing {view.height:,} of {total_rows:,} rows")
     note_arg = (
-        tstr("Showing " + " · ".join(shown) + "; the HTML report has the whole table.")
-        if shown
-        else "none"
+        tstr(" · ".join(shown) + "; the HTML report has the whole table.") if shown else "none"
     )
-    return raw(
+    return (
         f"#dpx-table(columns: {columns}, align: {align}, header: {header}, "
         f"rows: {cells}, note: {note_arg})"
     )
+
+
+def table(df: pl.DataFrame, *, rows: int = TABLE_ROWS, orientation: str = "auto") -> str:
+    """``df`` as a typst table: a styled header row, zebra rows, numbers right
+    aligned and formatted, columns as wide as what they hold, and a note when
+    rows or columns were left out.
+
+    A portrait page holds ``TABLE_COLS`` columns. Wider tables print on a
+    landscape page: one table while every column fits it, else column blocks
+    of ``SPLIT_TABLE_COLS`` columns with the first (id) column repeated on
+    each, one block per landscape page. ``orientation`` forces one or the
+    other (``"auto"``, ``"portrait"``, ``"landscape"``); landscape pages come
+    from the preamble's show rule, which flips the page of a float whose body
+    carries ``dpx-wide`` — the mark a wide table wears here.
+    """
+    total_cols = df.width
+    if orientation not in ("portrait", "landscape"):
+        orientation = "landscape" if total_cols > TABLE_COLS else "portrait"
+    if orientation == "portrait":
+        dropped = total_cols - TABLE_COLS
+        note = f"Columns 1-{TABLE_COLS} of {total_cols}" if dropped > 0 else ""
+        return raw(_dpx_table(df.select(df.columns[:TABLE_COLS]), rows=rows, column_note=note))
+    if total_cols <= LANDSCAPE_TABLE_COLS:
+        body = _dpx_table(df, rows=rows)
+    else:
+        blocks = []
+        for start in range(0, total_cols, SPLIT_TABLE_COLS):
+            names = list(df.columns[start : start + SPLIT_TABLE_COLS])
+            if start:
+                names = [df.columns[0], *names]
+            note = (
+                f"Columns {start + 1}-{min(start + SPLIT_TABLE_COLS, total_cols)} of {total_cols}"
+            )
+            block = _dpx_table(df.select(names), rows=rows, column_note=note)
+            # Non-breakable, so a block a landscape page cannot hold moves
+            # whole onto the next one instead of splitting mid-table.
+            blocks.append(f"#block(breakable: false)[\n{block}\n]")
+        body = "\n#v(6pt)\n".join(blocks)
+    return raw(f"#dpx-wide[\n{body}\n]")
+
+
+def _png_size(data: bytes) -> tuple[int, int] | None:
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or len(data) < 24:
+        return None
+    w, h = struct.unpack(">II", data[16:24])
+    return (w, h) if w and h else None
+
+
+def _figure_svg(png: str) -> str | None:
+    """A base64 PNG as the SVG text typst can draw (``image(bytes(...))``).
+
+    Typst reads no data URI and decodes no base64; an SVG it reads as text,
+    and an SVG may hold a PNG as its own data URI.
+    """
+    try:
+        data = base64.b64decode(png)
+    except ValueError:
+        return None
+    size = _png_size(data)
+    if size is None:
+        return None
+    w, h = size
+    uri = f"data:image/png;base64,{png}"
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
+        f'<image width="{w}" height="{h}" xlink:href="{uri}"/></svg>'
+    )
+
+
+def figure(png: str, caption: str | None = None, *, orientation: str = "auto") -> str:
+    """A static figure as typst: the picture and, when given, its caption in
+    one non-breakable block, so a page break cannot come between them.
+
+    ``orientation`` (``"auto"``, ``"portrait"``, ``"landscape"``; landscape
+    when the figure is wider than ``components.LANDSCAPE_FIGURE_RATIO``:1)
+    puts the block on a landscape page via the preamble's ``dpx-wide`` show
+    rule, as a wide table's is.
+    """
+    svg = _figure_svg(png)
+    if svg is None:
+        return ""
+    parts = [f"#image(bytes({tstr(svg)}), width: 100%)"]
+    if caption:
+        parts.append("#v(3pt)")
+        parts.append(f"#text(size: 8pt, fill: dpx-muted, {tstr(caption)})")
+    inner = "#block(breakable: false)[\n" + "\n".join(parts) + "\n]"
+    if orientation == "landscape":
+        return raw(f"#dpx-wide[\n{inner}\n]")
+    return raw(inner)
 
 
 def colored_svg(svg: str | None, color: str) -> str | None:

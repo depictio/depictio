@@ -1,6 +1,10 @@
 
 #let dpx-well = luma(246)
-#let dpx-zebra = luma(250)
+#let dpx-zebra = luma(240)
+// A table's header row and its cell rules: dark enough to follow a row or a
+// column across the page, as in a spreadsheet.
+#let dpx-table-head = luma(222)
+#let dpx-table-rule = luma(200)
 #let dpx-svg(svg, h) = box(baseline: 12%, image(bytes(svg), height: h))
 // A grid cell of the dashboard's rows (Quarto's layout draws each as a rect):
 // a quiet card, as the page draws its tiles.
@@ -32,17 +36,56 @@
 #let dpx-range(lo, mid, hi) = grid(columns: (1fr, auto, 1fr),
   align: (left, center, right), text(size: 7pt, fill: dpx-muted)[#lo],
   text(size: 7pt, weight: "semibold")[median #mid], text(size: 7pt, fill: dpx-muted)[#hi])
-// A table: a header row on a well, zebra rows, a rule under the header.
+// A table read like a spreadsheet: a bold header row on a darker band, rows
+// alternating grey and white, a rule around every cell.
 #let dpx-table(columns: (), align: (), header: (), rows: (), note: none) = {
   set text(size: 7.3pt)
   set par(justify: false, leading: 0.5em)
-  table(columns: columns, align: align, inset: (x: 4.5pt, y: 3.6pt), stroke: none,
-    fill: (x, y) => if y == 0 { dpx-well } else if calc.even(y) { dpx-zebra } else { none },
-    table.header(..header.map(h => text(weight: "semibold", fill: dpx-muted)[#h])),
-    table.hline(stroke: 0.6pt + dpx-hair),
+  table(columns: columns, align: align, inset: (x: 4.5pt, y: 3.6pt),
+    stroke: 0.5pt + dpx-table-rule,
+    fill: (x, y) => if y == 0 { dpx-table-head } else if calc.even(y) { dpx-zebra } else { white },
+    table.header(..header.map(h => text(weight: "bold", fill: dpx-ink)[#h])),
+    table.hline(y: 1, stroke: 1pt + dpx-muted),
     ..rows.flatten().map(c => [#c]))
   if note != none { v(-4pt); text(size: 6.8pt, fill: dpx-muted, style: "italic")[#note] }
 }
+// A wide tile (a table with more columns than a portrait page holds, a figure
+// wider than the page is tall): marked so the show rule below turns its page.
+// A tile's output sits inside its float, and page configuration is allowed
+// only at the top level of the flow, so the mark rides in the float's body
+// and the rule -- itself top level -- does the flipping for it. The mark is
+// zero-size text: the rule reads the body's evaluated source (``repr``),
+// which keeps text but not the names of the functions that drew it.
+#let dpx-wide-mark = box[#text(size: 0pt)[dpx-wide]]
+#let dpx-wide(body) = block(width: 100%)[#dpx-wide-mark #body]
+#let dpx-is-wide(it) = (
+  it.func() == figure and str(it.kind).starts-with("quarto-float")
+    and repr(it.body).contains("dpx-wide")
+)
+// What reads next to (or before) an element in the flow. A heading whose next
+// element is a wide float would be left alone at the foot of a portrait page
+// by the page turn, so it moves onto the landscape page instead: drawn as
+// nothing where it was (the rule doing that comes last in the body, after the
+// report's own heading rules, so it sees the heading first; the element stays,
+// so the contents still list it), and drawn again above the float as plain
+// styled text: a copy that is not a heading takes no tab page
+// break and no sticky block, either of which would leave a blank page.
+#let dpx-flow = selector(heading).or(figure).or(par).or(table).or(image)
+#let dpx-next(loc) = query(dpx-flow.after(loc)).find(e => e.location() != loc)
+#let dpx-prev(loc) = query(dpx-flow.before(loc)).filter(e => e.location() != loc).last(default: none)
+#let dpx-heading-size = (18pt, 15pt, 12pt, 10.5pt, 9.5pt)
+#let dpx-heading-copy(h) = align(left, block(below: 0.65em, text(font: dpx-sans, weight: "bold",
+  fill: dpx-ink, size: dpx-heading-size.at(calc.min(h.level, 5) - 1))[#h.body]))
+#show figure: it => context {
+  if not dpx-is-wide(it) { return it }
+  let prev = dpx-prev(it.location())
+  page(flipped: true)[
+    #if prev != none and prev.func() == heading { dpx-heading-copy(prev) }
+    #it
+  ]
+}
+// A table taller than a page breaks across pages instead of being cut off.
+#show figure.where(kind: "quarto-float-tbl"): set block(breakable: true)
 // A tile that could not be drawn: its name, one neutral sentence. It marks
 // itself, so the caption under it does not claim to show data.
 #let dpx-failed = state("dpx-failed", false)

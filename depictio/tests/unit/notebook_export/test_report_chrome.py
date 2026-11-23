@@ -574,7 +574,10 @@ def test_the_table_builder():
     assert '"1,000"' in out and '"0.1235"' in out
     # Widths from what the columns hold, never more than the page.
     assert re.search(r"columns: \((\d+\.\d+fr, ?)+\)", out)
-    assert "Showing 30 of 40 rows · 8 of 12 columns" in out
+    # 12 columns: more than a portrait page holds, all of them on a
+    # landscape one (the mark the preamble's show rule reads).
+    assert "#dpx-wide[" in out
+    assert "Showing 30 of 40 rows; the HTML report has the whole table." in out
 
 
 def test_a_tile_that_cannot_be_drawn_is_named_not_numbered():
