@@ -128,9 +128,41 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, var(--re-split, 1fr)) 10px minmax(0, var(--re-split-rest, 1fr));
   padding: 10px;
+}
+/* The handle between the panes: a hairline that thickens on hover/drag. */
+.re-splitter {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.re-splitter::after {
+  content: '';
+  position: absolute;
+  top: 18%;
+  bottom: 18%;
+  left: 50%;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: var(--re-line);
+  transition: background 120ms ease, width 120ms ease;
+}
+.re-splitter:hover::after,
+.re-splitter:focus-visible::after,
+.re-resizing .re-splitter::after {
+  width: 4px;
+  background: var(--mantine-primary-color-filled);
+}
+.re-resizing,
+.re-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+.re-resizing iframe {
+  pointer-events: none;
 }
 .re-edit {
   min-width: 0;
@@ -167,6 +199,10 @@
   }
   .re-body {
     grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .re-splitter {
+    display: none;
   }
   .re-edit {
     overflow: visible;

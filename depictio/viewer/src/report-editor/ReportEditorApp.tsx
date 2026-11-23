@@ -36,8 +36,9 @@ import {
   BookOpen,
   ChevronsDownUp,
   ChevronsUpDown,
+  Check,
   CircleAlert,
-  CloudCheck,
+  CircleCheck,
   FileDown,
   FileText,
   FileX,
@@ -69,6 +70,7 @@ import { buildPatch, tileKey } from './previewProtocol';
 import { useExactPdf } from './useExactPdf';
 import { useFrameBridge } from './useFrameBridge';
 import { useScrollSync } from './useScrollSync';
+import { useSplitPane } from './useSplitPane';
 import { usePreviewJob } from './usePreviewJob';
 import { useReportLayer } from './useReportLayer';
 import type { ReportSaveStatus } from './useReportLayer';
@@ -94,7 +96,7 @@ function statusLabel(status: ReportSaveStatus, error: string | null): StatusView
       return {
         text: 'Saved',
         color: 'green',
-        icon: <CloudCheck size={13} strokeWidth={STROKE} aria-hidden />,
+        icon: <CircleCheck size={14} strokeWidth={STROKE} aria-hidden />,
       };
     case 'error':
       return {
@@ -112,7 +114,7 @@ function statusLabel(status: ReportSaveStatus, error: string | null): StatusView
       return {
         text: 'Up to date',
         color: 'gray',
-        icon: <CloudCheck size={13} strokeWidth={STROKE} aria-hidden />,
+        icon: <Check size={14} strokeWidth={STROKE} aria-hidden />,
       };
   }
 }
@@ -163,6 +165,8 @@ const ReportEditorApp: React.FC = () => {
   // (through a ref: the hook that scrolls it needs the bridge's sender).
   const [syncScroll, setSyncScroll] = useState(true);
   const editColumnRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const split = useSplitPane(bodyRef);
   const followFrameRef = useRef<((tabId: string, componentId: string) => void) | null>(null);
   const onFrameVisible = useCallback(
     (tabId: string, componentId: string) => followFrameRef.current?.(tabId, componentId),
@@ -322,7 +326,12 @@ const ReportEditorApp: React.FC = () => {
 
     return (
       <SnapshotContext.Provider value={snapshotSource}>
-        <div className="re-body" data-testid="report-editor">
+        <div
+          className="re-body"
+          ref={bodyRef}
+          data-testid="report-editor"
+          style={{ '--re-split': `${split.ratio}fr`, '--re-split-rest': `${1 - split.ratio}fr` } as React.CSSProperties}
+        >
           <div className="re-edit" ref={editColumnRef} data-testid="report-edit-column">
             <div className="re-edit-inner">
               {conflict && (
@@ -451,6 +460,21 @@ const ReportEditorApp: React.FC = () => {
               </EditorSection>
             </div>
           </div>
+          <div
+            className="re-splitter"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the structure and the preview"
+            aria-valuemin={Math.round(split.min * 100)}
+            aria-valuemax={Math.round(split.max * 100)}
+            aria-valuenow={Math.round(split.ratio * 100)}
+            tabIndex={0}
+            title="Drag to resize, double-click to reset"
+            onPointerDown={split.onPointerDown}
+            onKeyDown={split.onKeyDown}
+            onDoubleClick={split.reset}
+            data-testid="report-splitter"
+          />
           <div className="re-preview">
             <PreviewPane
               job={job}

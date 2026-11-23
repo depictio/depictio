@@ -41,6 +41,7 @@ import {
   Stack,
   Title,
   Tooltip,
+  useComputedColorScheme,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -141,6 +142,8 @@ import {
   fetchDashboardVersion,
   fetchDashboardChanges,
   panelsFromGroups,
+  panelsForGrouping,
+  buildAnalysisState,
   isCurrentDataOnlyType,
   isHttpStatus,
   DATA_VERSION_GONE_EVENT,
@@ -188,6 +191,7 @@ import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
 import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal, tabIntroShown } from './chrome';
+import ExportStaticModal from './chrome/ExportStaticModal';
 import type { HeaderAction } from './chrome/Header';
 import ShellHost from './chrome/shell/ShellHost';
 import DashboardLoadError from './chrome/DashboardLoadError';
@@ -2081,6 +2085,48 @@ const EditorApp: React.FC = () => {
       runOverlay,
     ],
   );
+  // The view on screen as the one object the exports take (mirrors App.tsx),
+  // so Settings > Export works from the editor too: it is where the author
+  // customises the report.
+  const computedColorScheme = useComputedColorScheme('light');
+  const [exportStaticOpened, { open: openExportStatic, close: closeExportStatic }] =
+    useDisclosure(false);
+  const getAnalysisState = useCallback(
+    () =>
+      buildAnalysisState({
+        filters: combinedFilters,
+        groups: groupsApi.groups,
+        colorBy: groupsApi.colorBy,
+        displayMode: groupsApi.displayMode,
+        showOther: groupsApi.showOther,
+        showOverall: groupsApi.showOverall,
+        compareInCards: groupsApi.compareInCards,
+        funnel: { enabled: dashboard?.funnel_filtering ?? true, order: [] },
+        splitPanels: groupRender ? panelsForGrouping(groupRender, combinedFilters) : [],
+        // Time travel in the editor exports the data it shows.
+        dataVersions: timeTravelling ? { asOfVersionId, pins: dataPins } : null,
+        dashboardId: dashboardId ?? '',
+        familyId: groupingScopeId ?? null,
+        theme: computedColorScheme,
+      }),
+    [
+      combinedFilters,
+      groupsApi.groups,
+      groupsApi.colorBy,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+      groupsApi.showOverall,
+      groupsApi.compareInCards,
+      dashboard?.funnel_filtering,
+      groupRender,
+      timeTravelling,
+      asOfVersionId,
+      dataPins,
+      dashboardId,
+      groupingScopeId,
+      computedColorScheme,
+    ],
+  );
   // A view that redraws the canvas is no edit. The click that turned it on
   // armed `userActedRef`, and a grid re-measuring what it now draws would
   // report a layout that gets saved: disarm it, as for a server copy. The
@@ -3281,6 +3327,21 @@ const EditorApp: React.FC = () => {
           ) : undefined
         }
         initialSection={settingsSection}
+        dashboardId={dashboardId}
+        onExportStatic={() => {
+          closeSettings();
+          openExportStatic();
+        }}
+        getAnalysisState={getAnalysisState}
+        previewing={false}
+        canEditReport={!dashboard?.published_lock}
+      />
+      <ExportStaticModal
+        opened={exportStaticOpened}
+        onClose={closeExportStatic}
+        dashboardId={dashboardId ?? null}
+        dashboardTitle={dashboard?.title ?? null}
+        getAnalysisState={getAnalysisState}
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
