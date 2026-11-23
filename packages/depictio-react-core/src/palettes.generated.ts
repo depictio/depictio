@@ -780,6 +780,22 @@ export const REFERENCE_GUIDE: ReferenceGuideStyle = {
   "label": "text"
 };
 
+/** Line strokes: `width` up to `many_series` lines, `width_many` past it; a
+ *  series of at most `marker_max_points` points shows a dot on each. */
+export interface LineStyle {
+  width: number;
+  width_many: number;
+  many_series: number;
+  marker_max_points: number;
+}
+
+export const LINE_STYLE: LineStyle = {
+  "width": 2.5,
+  "width_many": 1.5,
+  "many_series": 8,
+  "marker_max_points": 60
+};
+
 export const UI_HUES = [
   "violet",
   "grape",

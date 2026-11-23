@@ -24,6 +24,11 @@ d. *Light chrome.* Grid on the value axis only for bars, boxes and violins, in a
 e. *Rounded bars.*
 f. *Markers by point count.* Fewer points are larger, bolder and outlined; a
    dense cloud is small and faint (see ``palettes.scatter_marker``).
+g. *Bold lines, dots where there are few points.* Line traces are drawn at the
+   palette's width (thinner past ``many_series`` lines); a short series also
+   shows a dot on each measured point, so a line between two samples is not
+   read as a measured trend; several lines share one hover along x
+   (see ``palettes.line_style``).
 
 Every rule yields to the author: a value the figure sets itself is never
 replaced (a template-level value counts as unset). The constants live in the
@@ -679,6 +684,47 @@ def _size_markers(traces: list[dict], chrome: dict[str, str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# g. line width and dots
+
+
+def _line_traces(traces: Iterable[dict]) -> list[dict]:
+    return [
+        t
+        for t in traces
+        if _kind(t) in _SCATTER and not _is_key(t) and "lines" in (t.get("mode") or "")
+    ]
+
+
+def _style_lines(traces: list[dict], layout: dict, chrome: dict[str, str]) -> None:
+    lines = _line_traces(traces)
+    if not lines:
+        return
+    spec = palettes.line_style(len(lines))
+    for trace in lines:
+        line = _sub(trace, "line")
+        if line.get("width") is None:
+            line["width"] = spec["width"]
+        n = _n_points(trace)
+        if (
+            trace.get("mode") == "lines"
+            and not trace.get("fill")
+            and 0 < n <= spec["marker_max_points"]
+        ):
+            trace["mode"] = "lines+markers"
+            marker = _sub(trace, "marker")
+            if marker.get("color") is None and line.get("color") is not None:
+                marker["color"] = line["color"]
+            if marker.get("size") is None:
+                marker["size"] = palettes.line_marker_size(line["width"])
+            if not marker.get("line"):
+                marker["line"] = {"width": 1, "color": chrome["surface"]}
+    if 1 < len(lines) <= palettes.style()["line_style"]["many_series"] and len(lines) == len(
+        [t for t in traces if not _is_key(t)]
+    ):
+        layout.setdefault("hovermode", "x unified")
+
+
+# ---------------------------------------------------------------------------
 # entry point
 
 
@@ -716,6 +762,7 @@ def apply_overview(
     if any(_kind(t) == "bar" for t in traces):
         layout.setdefault("barcornerradius", palettes.style()["bar_corner_radius"])
     _size_markers(traces, chrome)
+    _style_lines(traces, layout, chrome)
 
     out = dict(figure)
     out["layout"] = layout

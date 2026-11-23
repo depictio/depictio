@@ -46,6 +46,7 @@ import {
 } from './plotlyTheme';
 import { logLogSlope } from './logLogSlope';
 import { integerTickValues, markerSizeFor, showsMarkers } from './profileAxis';
+import { LINE_STYLE } from '../../palettes.generated';
 import { medianIqrByX, type ProfileAggregate } from './profileAggregate';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import {
@@ -194,7 +195,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const [logX, setLogX] = usePersistedVizControl<boolean>(metadata, 'log_x', false);
   const [logY, setLogY] = usePersistedVizControl<boolean>(metadata, 'log_y', false);
   const [bandOpacity, setBandOpacity] = usePersistedVizControl<number>(metadata, 'band_opacity', 0.2);
-  const [lineWidth, setLineWidth] = usePersistedVizControl<number>(metadata, 'line_width', 2);
+  const [lineWidth, setLineWidth] = usePersistedVizControl<number>(metadata, 'line_width', LINE_STYLE.width);
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
   // The Hi-C P(s) convention, useful to any log-log profile: the slope is what
   // separates one regime from another and it is unreadable off the curve.

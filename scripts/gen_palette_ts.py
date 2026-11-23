@@ -110,6 +110,11 @@ def render(data: dict) -> str:
         + "export interface ReferenceGuideStyle {\n  width: number;\n  dash: 'dash' | 'dot' | 'solid';\n"
         + "  font_size: number;\n  line: keyof ChromeTokens;\n  label: keyof ChromeTokens;\n}\n\n"
         + f"export const REFERENCE_GUIDE: ReferenceGuideStyle = {dump(data['style']['reference_guide'])};\n\n"
+        + "/** Line strokes: `width` up to `many_series` lines, `width_many` past it; a\n"
+        + " *  series of at most `marker_max_points` points shows a dot on each. */\n"
+        + "export interface LineStyle {\n  width: number;\n  width_many: number;\n"
+        + "  many_series: number;\n  marker_max_points: number;\n}\n\n"
+        + f"export const LINE_STYLE: LineStyle = {dump(data['style']['line_style'])};\n\n"
         + "export const UI_HUES = "
         + dump(ui_names)
         + " as const;\n\n"

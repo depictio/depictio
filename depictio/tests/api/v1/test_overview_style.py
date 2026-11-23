@@ -630,3 +630,56 @@ def test_a_legend_key_sits_on_a_category_so_the_bar_axis_stays_categorical():
     }
     out = apply_overview(_with_reference(fig, 2))
     assert all(k["x"] == ["a"] and k["y"] == [None] for k in _keys(out))
+
+
+# --- g. lines -------------------------------------------------------------
+
+
+def _lines(n_series, n_points, **trace):
+    return {
+        "data": [
+            {
+                "type": "scatter",
+                "mode": "lines",
+                "name": f"s{i}",
+                "x": list(range(n_points)),
+                "y": [i + j for j in range(n_points)],
+                **trace,
+            }
+            for i in range(n_series)
+        ],
+        "layout": {},
+    }
+
+
+def test_lines_are_drawn_bold_with_a_dot_on_each_point_of_a_short_series():
+    out = apply_overview(_lines(2, 24))
+    spec = palettes.style()["line_style"]
+    for t in out["data"]:
+        assert t["line"]["width"] == spec["width"]
+        assert t["mode"] == "lines+markers"
+        assert t["marker"]["size"] == palettes.line_marker_size(spec["width"])
+    assert out["layout"]["hovermode"] == "x unified"
+
+
+def test_a_long_series_stays_a_bare_curve():
+    out = apply_overview(_lines(1, 500))
+    assert out["data"][0]["mode"] == "lines"
+    assert "hovermode" not in out["layout"]
+
+
+def test_many_lines_thin_out_and_keep_their_own_hover():
+    spec = palettes.style()["line_style"]
+    out = apply_overview(_lines(spec["many_series"] + 1, 10))
+    assert {t["line"]["width"] for t in out["data"]} == {spec["width_many"]}
+    assert "hovermode" not in out["layout"]
+
+
+def test_the_authors_line_width_mode_and_area_fill_survive():
+    fig = _lines(2, 10, line={"width": 1})
+    fig["data"][1]["fill"] = "tozeroy"
+    fig["layout"]["hovermode"] = "closest"
+    out = apply_overview(fig)
+    assert [t["line"]["width"] for t in out["data"]] == [1, 1]
+    assert out["data"][1]["mode"] == "lines"
+    assert out["layout"]["hovermode"] == "closest"

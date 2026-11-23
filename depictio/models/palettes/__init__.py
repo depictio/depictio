@@ -166,6 +166,24 @@ def scatter_marker(n: int) -> dict[str, Any]:
     return dict(buckets[-1])
 
 
+def line_style(n_series: int) -> dict[str, Any]:
+    """Stroke ``width`` for a figure of ``n_series`` lines, and how short a
+    series must be (``marker_max_points``) to show a dot on every point.
+
+    Up to ``many_series`` lines each is drawn bold; past it they thin out so a
+    bundle of lines does not merge into one band.
+    """
+    spec = style()["line_style"]
+    width = spec["width"] if n_series <= spec["many_series"] else spec["width_many"]
+    return {"width": width, "marker_max_points": spec["marker_max_points"]}
+
+
+def line_marker_size(width: float) -> int:
+    """A line's dot: about twice its width plus three, never under 6, so the dot
+    clears the stroke it sits on (``markerSizeFor`` in the viewer)."""
+    return max(6, round(2 * width + 3))
+
+
 @lru_cache(maxsize=1)
 def _reserved_lookup() -> dict[str, ReservedKind]:
     out: dict[str, ReservedKind] = {}

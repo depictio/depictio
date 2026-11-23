@@ -7,9 +7,11 @@
  * only (a tick at 0.5 or 1.5 names a step that does not exist).
  */
 
+import { LINE_STYLE } from '../../palettes.generated';
+
 /** Past this many points a series is a curve, and a marker per point would
  *  paint over it. Every series of one or a few points stays under it. */
-export const MARKER_MAX_POINTS = 60;
+export const MARKER_MAX_POINTS = LINE_STYLE.marker_max_points;
 
 /** Marker diameter for a line of `lineWidth` px: about twice the width plus
  *  three, never under 6, so the dot always clears the stroke it sits on. */

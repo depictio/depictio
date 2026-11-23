@@ -648,7 +648,13 @@
       "light": {"dL": 0.18, "dC": -0.05},
       "dark": {"dL": -0.16, "dC": -0.04}
     },
-    "scatter_markers": [
+    "line_style": {
+    "width": 2.5,
+    "width_many": 1.5,
+    "many_series": 8,
+    "marker_max_points": 60
+  },
+  "scatter_markers": [
       {
         "max_n": 50,
         "size": 9,
