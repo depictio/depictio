@@ -12,6 +12,7 @@
  * `categoricalPalette`); a brand colorway on the theme wins over the palette.
  */
 import type { MantineTheme } from '@mantine/core';
+import { withReadableTitle } from './axisTitle';
 
 import { brandColorway } from '../../colors';
 import { PLOT_FONT_FAMILY } from '../../palettes.generated';
@@ -128,7 +129,7 @@ export function applyLayoutTheme(
       key.startsWith('yaxis') ||
       key.startsWith('zaxis')
     ) {
-      out[key] = retintAxis(out[key], c);
+      out[key] = withReadableTitle(retintAxis(out[key], c));
     } else if (key === 'scene' || key.startsWith('scene')) {
       const scene = { ...((out[key] || {}) as Record<string, unknown>) };
       for (const sk of ['xaxis', 'yaxis', 'zaxis']) {
