@@ -2519,6 +2519,11 @@ class UsageStatsConfig(BaseSettings):
             "are archived first as anonymous totals, which are kept."
         ),
     )
+    max_daily_visitors: int = Field(
+        default=50_000,
+        ge=100,
+        description="New browsers recorded per day, instance-wide (flood guard)",
+    )
     geoip_db_path: Optional[str] = Field(
         default=None,
         description=(

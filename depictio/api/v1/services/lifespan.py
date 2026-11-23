@@ -250,8 +250,6 @@ def start_core_indexes(should_initialize: bool) -> None:
         from depictio.api.v1.services.usage_stats import ensure_usage_indexes
 
         ensure_usage_indexes()
-        import os
-
         if any(k.startswith("DEPICTIO_ANALYTICS_") for k in os.environ):
             logger.warning(
                 "DEPICTIO_ANALYTICS_* is no longer read: the legacy analytics were replaced "

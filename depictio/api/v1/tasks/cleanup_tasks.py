@@ -8,6 +8,7 @@ import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import initialization_collection
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
@@ -47,6 +48,17 @@ def _calculate_interval(
         return interval_hours * 3600, f"{interval_hours} hours"
     else:
         return default_seconds, f"{default_seconds // 3600} hour(s)"
+
+
+async def periodic_usage_archive(interval_hours: int = 24) -> None:
+    """Daily: keep anonymous totals of closed periods (``usage_archive``)."""
+    from starlette.concurrency import run_in_threadpool
+
+    from depictio.api.v1.services.usage_stats import archive_closed_periods
+
+    while True:
+        await run_in_threadpool(archive_closed_periods)
+        await asyncio.sleep(interval_hours * 3600)
 
 
 async def periodic_cleanup_expired_temporary_users(
@@ -299,6 +311,11 @@ def start_cleanup_tasks(
             interval_seconds=interval_seconds,
         )
     )
+
+    # Usage statistics: archive closed months/years as anonymous totals before
+    # the daily rows' TTL removes them (idempotent, so every worker may run it).
+    if settings.usage_stats.enabled:
+        asyncio.create_task(periodic_usage_archive())
 
     # Start S3 orphaned files cleanup
     asyncio.create_task(

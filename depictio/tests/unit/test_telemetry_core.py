@@ -327,6 +327,7 @@ class TestPostHogBody:
         """
         body = build_body("server_heartbeat", "inst", {}, api_key="phc_test")
         assert body["properties"]["$process_person_profile"] is False
+        assert body["properties"]["$geoip_disable"] is True
 
     def test_caller_properties_cannot_override_the_anonymity_flag(self):
         body = build_body(

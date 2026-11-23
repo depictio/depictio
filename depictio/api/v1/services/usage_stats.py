@@ -25,9 +25,10 @@ import hmac
 import re
 import secrets
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Literal, Optional
 from urllib.parse import urlparse
 
 from bson import ObjectId
@@ -49,6 +50,8 @@ from depictio.models.timestamps import utc_now_naive
 VISITS = "usage_visits"
 LOGINS = "usage_logins"
 DASHBOARD_VIEWS = "usage_dashboard_views"
+#: Distinct browsers kept per dashboard per day (views keep counting past it).
+MAX_DASHBOARD_VISITORS = 2000
 _SALT_DOC_ID = "usage_stats_salt"
 
 _BOT_RE = re.compile(
@@ -219,12 +222,18 @@ def ensure_usage_indexes(database: Any = None) -> None:
 
 
 async def record_login(user: Any, method: str, request: Optional[Request] = None) -> None:
-    """Count one login and stamp ``last_login``. Never raises."""
+    """Count one login and stamp ``last_login``. Never raises, never blocks the loop."""
     if not settings.usage_stats.enabled or user is None or getattr(user, "id", None) is None:
         return
+    if request is not None and is_bot(request.headers.get("user-agent", "")):
+        return
+    from starlette.concurrency import run_in_threadpool
+
+    await run_in_threadpool(_write_login, user, method)
+
+
+def _write_login(user: Any, method: str) -> None:
     try:
-        if request is not None and is_bot(request.headers.get("user-agent", "")):
-            return
         now = utc_now_naive()
         day = _day(now)
         database = _db()
@@ -232,7 +241,7 @@ async def record_login(user: Any, method: str, request: Optional[Request] = None
             {"day": day, "user_id": str(user.id), "method": method[:64]},
             {
                 "$inc": {"count": 1},
-                "$set": {"user_class": user_class(user), "last_at": now},
+                "$set": {"user_class": user_class(user)},
             },
             upsert=True,
         )
@@ -257,7 +266,9 @@ def erase_user_usage(user_id: str) -> None:
         database[VISITS].delete_many({"user_id": user_id})
         database[LOGINS].delete_many({"user_id": user_id})
         if visitor_ids:
-            database[DASHBOARD_VIEWS].update_many({}, {"$pull": {"visitors": {"$in": visitor_ids}}})
+            database[DASHBOARD_VIEWS].update_many(
+                {"visitors": {"$in": visitor_ids}}, {"$pull": {"visitors": {"$in": visitor_ids}}}
+            )
     except Exception as exc:
         logger.warning(f"usage_stats: failed to erase usage of a deleted user: {exc}")
 
@@ -276,43 +287,58 @@ def record_hit(hit: UsageHit, request: Request, user: Any) -> bool:
         cls = user_class(user)
         user_id = str(user.id) if user is not None and cls != "anonymous" else None
         on_set: dict[str, Any] = {
-            "last_seen": now,
-            "user_class": cls,
             "ip_hash": keyed_hash(f"ip|{ip}"),
             "fp_hash": keyed_hash(f"fp|{ip}|{ua}"),
             "browser": browser,
             "os": os_name,
             "device": device,
         }
+        # The account is set only when one is known, so a logout later the same
+        # day never turns a signed-in day back into an anonymous one.
         if user_id:
             on_set["user_id"] = user_id
+            on_set["user_class"] = cls
         if country:
             on_set["country"] = country
             on_set["city"] = city
-        on_insert: dict[str, Any] = {"first_seen": now}
+        on_insert: dict[str, Any] = {} if user_id else {"user_class": "anonymous"}
         ref = referrer_domain(hit.referrer, request)
         if ref:
             on_insert["referrer"] = ref
         if hit.lang:
             on_insert["lang"] = hit.lang.split("-")[0].lower()[:8]
         database = _db()
+        vid = hit.visitor_id.lower()
+        key = {"day": day, "visitor_id": vid}
+        # A script minting a fresh id per request could otherwise grow the table
+        # without bound: past the daily cap, only known browsers are counted.
+        if database[VISITS].find_one(key, {"_id": 1}) is None and (
+            database[VISITS].count_documents({"day": day})
+            >= settings.usage_stats.max_daily_visitors
+        ):
+            return False
         database[VISITS].update_one(
-            {"day": day, "visitor_id": hit.visitor_id.lower()},
+            key,
             {
                 "$set": on_set,
                 "$setOnInsert": on_insert,
-                "$inc": {"pageviews": 1, f"hours.{now.hour}": 1, f"kinds.{hit.path_kind}": 1},
+                "$inc": {"pageviews": 1, f"hours.{now.hour}": 1},
             },
             upsert=True,
         )
         if hit.dashboard_id:
-            database[DASHBOARD_VIEWS].update_one(
-                {"day": day, "dashboard_id": hit.dashboard_id},
+            views = database[DASHBOARD_VIEWS]
+            views.update_one(
+                {"day": day, "dashboard_id": hit.dashboard_id}, {"$inc": {"views": 1}}, upsert=True
+            )
+            # Distinct visitors are kept up to a bound, so one row never nears 16MB.
+            views.update_one(
                 {
-                    "$inc": {"views": 1},
-                    "$addToSet": {"visitors": hit.visitor_id.lower()},
+                    "day": day,
+                    "dashboard_id": hit.dashboard_id,
+                    f"visitors.{MAX_DASHBOARD_VISITORS - 1}": {"$exists": False},
                 },
-                upsert=True,
+                {"$addToSet": {"visitors": vid}},
             )
         return True
     except Exception as exc:
@@ -321,6 +347,15 @@ def record_hit(hit: UsageHit, request: Request, user: Any) -> bool:
 
 
 # ── Report ───────────────────────────────────────────────────────────────────
+
+#: Anonymous totals of closed months and years (no identifier of any kind).
+#: Not under the TTL: this is what remains once the daily rows expire.
+ARCHIVE = "usage_archive"
+_ARCHIVED_GRANULARITIES: tuple[Granularity, ...] = ("month", "year")
+#: Breakdowns holding pseudonymous keys are never archived.
+_NOT_ARCHIVED = {"visitors_per_ip"}
+
+_PREV = datetime.min  # bucket key of the previous range in the accumulator
 
 
 def period_start(dt: datetime, granularity: Granularity) -> datetime:
@@ -344,6 +379,12 @@ def next_period(dt: datetime, granularity: Granularity) -> datetime:
     return dt.replace(year=dt.year + 1)
 
 
+def _back(dt: datetime, granularity: Granularity, n: int) -> datetime:
+    for _ in range(max(1, n)):
+        dt = period_start(dt - timedelta(days=1), granularity)
+    return dt
+
+
 def resolve_range(
     granularity: Granularity,
     periods: int,
@@ -351,36 +392,17 @@ def resolve_range(
     end: Optional[datetime],
     now: Optional[datetime] = None,
 ) -> tuple[datetime, datetime]:
-    """``[start, end)`` aligned on period boundaries."""
-    now = now or utc_now_naive()
-    if start is not None:
-        s = period_start(start, granularity)
-        e = next_period(period_start(end or now, granularity), granularity)
-        return s, max(e, next_period(s, granularity))
-    e = next_period(period_start(now, granularity), granularity)
-    s = e
-    for _ in range(max(1, periods)):
-        s = period_start(s - timedelta(days=1), granularity)
-    return s, e
+    """``[start, end)`` on period boundaries. ``end`` is inclusive of its period;
+    without ``start``, ``periods`` periods ending with ``end``'s (or now's)."""
+    anchor = end or now or utc_now_naive()
+    e = next_period(period_start(anchor, granularity), granularity)
+    if start is None:
+        return _back(e, granularity, periods), e
+    s = period_start(start, granularity)
+    return s, max(e, next_period(s, granularity))
 
 
-def _oid_time(oid: Any) -> Optional[datetime]:
-    if isinstance(oid, ObjectId):
-        return oid.generation_time.replace(tzinfo=None)
-    return None
-
-
-def _created_between(coll: Any, start: datetime, end: datetime, query: dict | None = None):
-    q = dict(query or {})
-    q["_id"] = {"$gte": ObjectId.from_datetime(start), "$lt": ObjectId.from_datetime(end)}
-    return [_oid_time(d["_id"]) for d in coll.find(q, {"_id": 1})]
-
-
-def _top(counter: Counter, n: int = 15, key: str = "name") -> list[dict[str, Any]]:
-    return [{key: k, "visitors": v} for k, v in counter.most_common(n) if k]
-
-
-def _mode() -> str:
+def _mode() -> Literal["single_user", "public", "multi_user"]:
     if settings.auth.is_single_user_mode:
         return "single_user"
     if settings.auth.is_public_mode:
@@ -388,15 +410,228 @@ def _mode() -> str:
     return "multi_user"
 
 
-def _first_seen(coll: Any, field: str, ids: Iterable[str]) -> dict[str, datetime]:
-    ids = [i for i in ids if i]
-    if not ids:
-        return {}
+@dataclass
+class _Acc:
+    """Everything counted for one period (or the previous range)."""
+
+    users: set = field(default_factory=set)
+    visitors: set = field(default_factory=set)
+    fps: set = field(default_factory=set)
+    ips: set = field(default_factory=set)
+    temps: set = field(default_factory=set)
+    countries: set = field(default_factory=set)
+    logins: Counter = field(default_factory=Counter)
+    pageviews: int = 0
+    dviews: int = 0
+    created: Counter = field(default_factory=Counter)
+
+
+@dataclass
+class _Dims:
+    """Range-wide breakdowns (current range only)."""
+
+    browsers: Counter = field(default_factory=Counter)
+    os: Counter = field(default_factory=Counter)
+    devices: Counter = field(default_factory=Counter)
+    countries: Counter = field(default_factory=Counter)
+    cities: Counter = field(default_factory=Counter)
+    langs: Counter = field(default_factory=Counter)
+    refs: Counter = field(default_factory=Counter)
+    methods: Counter = field(default_factory=Counter)
+    dash_views: Counter = field(default_factory=Counter)
+    dash_visitors: dict = field(default_factory=lambda: defaultdict(set))
+    ip_visitors: dict = field(default_factory=lambda: defaultdict(set))
+    seen: set = field(default_factory=set)
+    heat: list = field(default_factory=lambda: [[0] * 24 for _ in range(7)])
+
+
+def _first_seen(coll: Any, key: str, before: datetime) -> dict[str, datetime]:
+    """First day each id appears, within retention. Streamed, no ``$in`` list."""
     pipeline = [
-        {"$match": {field: {"$in": ids}}},
-        {"$group": {"_id": f"${field}", "first": {"$min": "$day"}}},
+        {"$match": {"day": {"$lt": before}, key: {"$ne": None}}},
+        {"$group": {"_id": f"${key}", "first": {"$min": "$day"}}},
     ]
     return {d["_id"]: d["first"] for d in coll.aggregate(pipeline)}
+
+
+def _fold_visits(rows: Iterable[dict], bucket_of, acc: dict, dims: _Dims) -> None:
+    for v in rows:
+        b = bucket_of(v["day"])
+        a = acc[b]
+        vid = v["visitor_id"]
+        a.visitors.add(vid)
+        a.fps.add(v.get("fp_hash"))
+        a.ips.add(v.get("ip_hash"))
+        a.pageviews += v.get("pageviews", 0)
+        if v.get("country"):
+            a.countries.add(v["country"])
+        cls, uid = v.get("user_class"), v.get("user_id")
+        if uid and cls == "real":
+            a.users.add(uid)
+        elif uid and cls == "temporary":
+            a.temps.add(uid)
+        if b is _PREV:
+            continue
+        if vid not in dims.seen:  # each browser once over the range
+            dims.seen.add(vid)
+            dims.browsers[v.get("browser")] += 1
+            dims.os[v.get("os")] += 1
+            dims.devices[v.get("device")] += 1
+            dims.langs[v.get("lang")] += 1
+            if v.get("country"):
+                dims.countries[v["country"]] += 1
+                dims.cities[(v["country"], v.get("city") or "?")] += 1
+        if v.get("referrer"):
+            dims.refs[v["referrer"]] += 1
+        if v.get("ip_hash"):
+            dims.ip_visitors[v["ip_hash"]].add(vid)
+        for h, n in (v.get("hours") or {}).items():
+            dims.heat[v["day"].weekday()][int(h)] += int(n)
+
+
+def _fold_logins(rows: Iterable[dict], bucket_of, acc: dict, dims: _Dims) -> None:
+    for lg in rows:
+        b = bucket_of(lg["day"])
+        n = int(lg.get("count", 1))
+        acc[b].logins[lg["method"]] += n
+        if lg.get("user_class") == "real":
+            acc[b].users.add(lg["user_id"])
+        elif lg.get("user_class") == "temporary":
+            acc[b].temps.add(lg["user_id"])
+        if b is not _PREV:
+            dims.methods[lg["method"]] += n
+
+
+def _fold_dashboard_views(rows: Iterable[dict], bucket_of, acc: dict, dims: _Dims) -> None:
+    for dv in rows:
+        b = bucket_of(dv["day"])
+        acc[b].dviews += dv.get("views", 0)
+        if b is not _PREV:
+            dims.dash_views[dv["dashboard_id"]] += dv.get("views", 0)
+            dims.dash_visitors[dv["dashboard_id"]].update(dv.get("visitors") or [])
+
+
+_REAL_USERS = {"is_temporary": {"$ne": True}, "is_anonymous": {"$ne": True}}
+
+
+def _fold_creations(database: Any, lo: datetime, hi: datetime, bucket_of, acc: dict) -> None:
+    """Accounts, projects, dashboards and ingestion runs created, by ObjectId time
+    (an imported document keeps its source's creation time)."""
+    cols = settings.mongodb.collections
+    for key, name, q in (
+        ("signups", cols.users_collection, _REAL_USERS),
+        ("new_projects", cols.projects_collection, {}),
+        ("new_dashboards", cols.dashboards_collection, {"parent_dashboard_id": None}),
+        ("ingestions", cols.ingestion_runs_collection, {}),
+    ):
+        query = {
+            **q,
+            "_id": {"$gte": ObjectId.from_datetime(lo), "$lt": ObjectId.from_datetime(hi)},
+        }
+        for d in database[name].find(query, {"_id": 1}):
+            acc[bucket_of(d["_id"].generation_time.replace(tzinfo=None))].created[key] += 1
+
+
+def _point(b: datetime, a: _Acc, first_user: dict, first_visitor: dict) -> UsagePoint:
+    new_u = sum(1 for u in a.users if first_user.get(u, b) >= b)
+    new_v = sum(1 for x in a.visitors if first_visitor.get(x, b) >= b)
+    return UsagePoint(
+        period_start=b,
+        active_users=len(a.users),
+        new_users=new_u,
+        returning_users=len(a.users) - new_u,
+        logins=sum(a.logins.values()),
+        logins_by_method=dict(a.logins),
+        visitors=len(a.visitors),
+        new_visitors=new_v,
+        returning_visitors=len(a.visitors) - new_v,
+        visitors_fp=len(a.fps - {None}),
+        unique_ips=len(a.ips - {None}),
+        pageviews=a.pageviews,
+        dashboard_views=a.dviews,
+        temporary_users=len(a.temps),
+        signups=a.created["signups"],
+        new_projects=a.created["new_projects"],
+        new_dashboards=a.created["new_dashboards"],
+        ingestions=a.created["ingestions"],
+    )
+
+
+def _breakdowns(database: Any, dims: _Dims) -> dict[str, list[dict[str, Any]]]:
+    cols = settings.mongodb.collections
+    ids = [ObjectId(i) for i in dims.dash_views if ObjectId.is_valid(i)]
+    dash_docs = {
+        str(d["_id"]): d
+        for d in database[cols.dashboards_collection].find(
+            {"_id": {"$in": ids}}, {"title": 1, "project_id": 1}
+        )
+    }
+    project_views: Counter = Counter()
+    for did, n in dims.dash_views.items():
+        pid = (dash_docs.get(did) or {}).get("project_id")
+        if pid:
+            project_views[str(pid)] += n
+    names = {
+        str(p["_id"]): p.get("name", "")
+        for p in database[cols.projects_collection].find(
+            {"_id": {"$in": [ObjectId(p) for p in project_views if ObjectId.is_valid(p)]}},
+            {"name": 1},
+        )
+    }
+
+    def top(counter: Counter, key: str = "name", n: int = 15) -> list[dict[str, Any]]:
+        return [{key: k, "visitors": v} for k, v in counter.most_common(n) if k]
+
+    return {
+        "top_dashboards": [
+            {
+                "dashboard_id": did,
+                "title": (dash_docs.get(did) or {}).get("title") or "(deleted)",
+                "project": names.get(str((dash_docs.get(did) or {}).get("project_id")), ""),
+                "views": n,
+                "visitors": len(dims.dash_visitors[did]),
+            }
+            for did, n in dims.dash_views.most_common(15)
+        ],
+        "top_projects": [
+            {"project_id": pid, "name": names.get(pid, "(deleted)"), "views": n}
+            for pid, n in project_views.most_common(10)
+        ],
+        "countries": top(dims.countries, "country", 60),
+        "cities": [
+            {"country": c, "city": city, "visitors": n}
+            for (c, city), n in dims.cities.most_common(25)
+        ],
+        "browsers": top(dims.browsers),
+        "os": top(dims.os),
+        "devices": top(dims.devices),
+        "languages": top(dims.langs),
+        "referrers": [{"domain": k, "visits": v} for k, v in dims.refs.most_common(15)],
+        "login_methods": [{"method": k, "logins": v} for k, v in dims.methods.most_common()],
+        "visitors_per_ip": [
+            {"ip_hash": ip, "visitors": len(vs)}
+            for ip, vs in sorted(dims.ip_visitors.items(), key=lambda kv: -len(kv[1]))[:15]
+        ],
+    }
+
+
+def _totals(database: Any) -> dict[str, int]:
+    cols = settings.mongodb.collections
+    users = database[cols.users_collection]
+    return {
+        "users": users.count_documents(_REAL_USERS),
+        "temporary_users": users.count_documents({"is_temporary": True}),
+        "projects": database[cols.projects_collection].count_documents({}),
+        "dashboards": database[cols.dashboards_collection].count_documents(
+            {"parent_dashboard_id": None}
+        ),
+        "data_collections": database[cols.data_collection].count_documents({}),
+    }
+
+
+def _raw_floor(now: datetime) -> datetime:
+    """First day still held as daily rows."""
+    return _day(now) - timedelta(days=int(settings.usage_stats.retention_days))
 
 
 def build_report(
@@ -405,273 +640,82 @@ def build_report(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     now: Optional[datetime] = None,
+    use_archive: bool = True,
 ) -> UsageReport:
-    from depictio.api.v1 import db as dbmod
+    """The usage report for ``[start, end)``, plus the same span just before it.
 
-    database = dbmod.db
+    Periods older than the daily rows' retention come from ``usage_archive``
+    (anonymous totals) when one was kept; KPIs and breakdowns cover the daily
+    rows only.
+    """
+    database = _db()
+    now = now or utc_now_naive()
     s, e = resolve_range(granularity, periods, start, end, now)
-    prev_s = s - (e - s)
-
     buckets: list[datetime] = []
     cur = s
     while cur < e:
         buckets.append(cur)
         cur = next_period(cur, granularity)
+    prev_s = _back(s, granularity, len(buckets))
 
-    def bucket_of(dt: datetime) -> Optional[datetime]:
-        if dt < s or dt >= e:
-            return None
-        return period_start(dt, granularity)
+    def bucket_of(dt: datetime) -> datetime:
+        return _PREV if dt < s else period_start(dt, granularity)
 
-    visits = list(database[VISITS].find({"day": {"$gte": prev_s, "$lt": e}}, {"_id": 0}))
-    logins = list(database[LOGINS].find({"day": {"$gte": prev_s, "$lt": e}}, {"_id": 0}))
-    dviews = list(database[DASHBOARD_VIEWS].find({"day": {"$gte": prev_s, "$lt": e}}, {"_id": 0}))
+    acc: dict[datetime, _Acc] = defaultdict(_Acc)
+    dims = _Dims()
+    window = {"day": {"$gte": prev_s, "$lt": e}}
+    _fold_visits(database[VISITS].find(window, {"_id": 0}), bucket_of, acc, dims)
+    _fold_logins(database[LOGINS].find(window, {"_id": 0}), bucket_of, acc, dims)
+    _fold_dashboard_views(database[DASHBOARD_VIEWS].find(window, {"_id": 0}), bucket_of, acc, dims)
+    _fold_creations(database, prev_s, e, bucket_of, acc)
 
-    real_ids = {v["user_id"] for v in visits if v.get("user_class") == "real" and v.get("user_id")}
-    real_ids |= {lg["user_id"] for lg in logins if lg.get("user_class") == "real"}
     first_user: dict[str, datetime] = {}
-    for coll in (database[VISITS], database[LOGINS]):
-        for uid, first in _first_seen(coll, "user_id", real_ids).items():
+    for name in (VISITS, LOGINS):
+        for uid, first in _first_seen(database[name], "user_id", e).items():
             first_user[uid] = min(first, first_user.get(uid, first))
-    first_visitor = _first_seen(database[VISITS], "visitor_id", {v["visitor_id"] for v in visits})
+    first_visitor = _first_seen(database[VISITS], "visitor_id", e)
 
-    per: dict[datetime, dict[str, Any]] = defaultdict(
-        lambda: {
-            "users": set(),
-            "visitors": set(),
-            "fps": set(),
-            "ips": set(),
-            "temps": set(),
-            "logins": Counter(),
-            "pageviews": 0,
-            "dviews": 0,
-        }
-    )
-    prev: dict[str, Any] = {
-        "users": set(),
-        "visitors": set(),
-        "ips": set(),
-        "countries": set(),
-        "logins": 0,
-        "pageviews": 0,
-        "dviews": 0,
-        "signups": 0,
-    }
-
-    browsers: Counter = Counter()
-    oses: Counter = Counter()
-    devices: Counter = Counter()
-    countries: Counter = Counter()
-    cities: Counter = Counter()
-    langs: Counter = Counter()
-    refs: Counter = Counter()
-    seen_dims: set[tuple[str, str]] = set()
-    ip_visitors: dict[str, set] = defaultdict(set)
-    heat = [[0] * 24 for _ in range(7)]
-
-    for v in visits:
-        b = bucket_of(v["day"])
-        vid = v["visitor_id"]
-        if b is None:
-            prev["visitors"].add(vid)
-            prev["ips"].add(v.get("ip_hash"))
-            prev["pageviews"] += v.get("pageviews", 0)
-            if v.get("country"):
-                prev["countries"].add(v["country"])
-            if v.get("user_class") == "real" and v.get("user_id"):
-                prev["users"].add(v["user_id"])
-            continue
-        p = per[b]
-        p["visitors"].add(vid)
-        p["fps"].add(v.get("fp_hash"))
-        p["ips"].add(v.get("ip_hash"))
-        p["pageviews"] += v.get("pageviews", 0)
-        if v.get("user_class") == "real" and v.get("user_id"):
-            p["users"].add(v["user_id"])
-        if v.get("user_class") == "temporary" and v.get("user_id"):
-            p["temps"].add(v["user_id"])
-        # Breakdowns count each browser once over the whole range.
-        if ("v", vid) not in seen_dims:
-            seen_dims.add(("v", vid))
-            browsers[v.get("browser")] += 1
-            oses[v.get("os")] += 1
-            devices[v.get("device")] += 1
-            if v.get("country"):
-                countries[v["country"]] += 1
-                cities[(v["country"], v.get("city") or "?")] += 1
-            if v.get("lang"):
-                langs[v["lang"]] += 1
-        if v.get("referrer"):
-            refs[v["referrer"]] += 1
-        if v.get("ip_hash"):
-            ip_visitors[v["ip_hash"]].add(vid)
-        wd = v["day"].weekday()
-        for h, n in (v.get("hours") or {}).items():
-            heat[wd][int(h)] += int(n)
-
-    login_methods: Counter = Counter()
-    for lg in logins:
-        b = bucket_of(lg["day"])
-        n = int(lg.get("count", 1))
-        if b is None:
-            prev["logins"] += n
-            if lg.get("user_class") == "real":
-                prev["users"].add(lg["user_id"])
-            continue
-        per[b]["logins"][lg["method"]] += n
-        login_methods[lg["method"]] += n
-        if lg.get("user_class") == "real":
-            per[b]["users"].add(lg["user_id"])
-        elif lg.get("user_class") == "temporary":
-            per[b]["temps"].add(lg["user_id"])
-
-    dash_views: Counter = Counter()
-    dash_visitors: dict[str, set] = defaultdict(set)
-    for dv in dviews:
-        b = bucket_of(dv["day"])
-        if b is None:
-            prev["dviews"] += dv.get("views", 0)
-            continue
-        per[b]["dviews"] += dv.get("views", 0)
-        dash_views[dv["dashboard_id"]] += dv.get("views", 0)
-        dash_visitors[dv["dashboard_id"]].update(dv.get("visitors") or [])
-
-    # Creations (ObjectId time) per bucket.
-    cols = settings.mongodb.collections
-    users_coll = database[cols.users_collection]
-    real_user_q = {"is_temporary": {"$ne": True}, "is_anonymous": {"$ne": True}}
-    created: dict[str, Counter] = {}
-    for key, coll, q in (
-        ("signups", users_coll, real_user_q),
-        ("new_projects", database[cols.projects_collection], None),
-        ("new_dashboards", database[cols.dashboards_collection], {"parent_dashboard_id": None}),
-        ("ingestions", database[cols.ingestion_runs_collection], None),
-    ):
-        c: Counter = Counter()
-        for t in _created_between(coll, prev_s, e, q):
-            if t is None:
-                continue
-            b = bucket_of(t)
-            if b is None:
-                if key == "signups":
-                    prev["signups"] += 1
-            else:
-                c[b] += 1
-        created[key] = c
-
-    series: list[UsagePoint] = []
-    for b in buckets:
-        p = per[b]
-        users = p["users"]
-        new_u = sum(1 for u in users if first_user.get(u, b) >= b)
-        vis = p["visitors"]
-        new_v = sum(1 for x in vis if first_visitor.get(x, b) >= b)
-        series.append(
-            UsagePoint(
-                period_start=b,
-                active_users=len(users),
-                new_users=new_u,
-                returning_users=len(users) - new_u,
-                logins=sum(p["logins"].values()),
-                logins_by_method=dict(p["logins"]),
-                visitors=len(vis),
-                new_visitors=new_v,
-                returning_visitors=len(vis) - new_v,
-                visitors_fp=len(p["fps"] - {None}),
-                unique_ips=len(p["ips"] - {None}),
-                pageviews=p["pageviews"],
-                dashboard_views=p["dviews"],
-                temporary_users=len(p["temps"]),
-                signups=created["signups"][b],
-                new_projects=created["new_projects"][b],
-                new_dashboards=created["new_dashboards"][b],
-                ingestions=created["ingestions"][b],
+    series = [_point(b, acc[b], first_user, first_visitor) for b in buckets]
+    archived = 0
+    if use_archive:
+        floor = _raw_floor(now)
+        kept = {
+            d["period_start"]: d["point"]
+            for d in database[ARCHIVE].find(
+                {"granularity": granularity, "period_start": {"$gte": s, "$lt": min(e, floor)}}
             )
-        )
+        }
+        for i, b in enumerate(buckets):
+            if b in kept:
+                series[i] = UsagePoint(**kept[b])
+                archived += 1
 
-    all_users: set = set().union(*(per[b]["users"] for b in buckets)) if buckets else set()
-    all_visitors: set = set().union(*(per[b]["visitors"] for b in buckets)) if buckets else set()
-    all_ips: set = set().union(*(per[b]["ips"] for b in buckets)) - {None} if buckets else set()
+    cur_acc = _Acc()
+    for b in buckets:
+        a = acc[b]
+        for name in ("users", "visitors", "ips", "countries"):
+            getattr(cur_acc, name).update(getattr(a, name))
+    prev = acc[_PREV]
 
-    def kpi(cur_v: float, prev_v: float) -> UsageKpi:
-        return UsageKpi(current=cur_v, previous=prev_v)
+    def returning_pct(users: set, since: datetime) -> float:
+        back = sum(1 for u in users if first_user.get(u, since) < since)
+        return round(100 * back / len(users), 1) if users else 0
+
+    def total(attr: str) -> int:
+        return sum(getattr(p, attr) for p in series)
 
     kpis = {
-        "active_users": kpi(len(all_users), len(prev["users"])),
-        "logins": kpi(sum(sp.logins for sp in series), prev["logins"]),
-        "signups": kpi(sum(sp.signups for sp in series), prev["signups"]),
-        "returning_users_pct": kpi(
-            round(100 * sum(1 for u in all_users if first_user.get(u, s) < s) / len(all_users), 1)
-            if all_users
-            else 0,
-            0,
+        "active_users": UsageKpi(current=len(cur_acc.users), previous=len(prev.users)),
+        "logins": UsageKpi(current=total("logins"), previous=sum(prev.logins.values())),
+        "signups": UsageKpi(current=total("signups"), previous=prev.created["signups"]),
+        "returning_users_pct": UsageKpi(
+            current=returning_pct(cur_acc.users, s), previous=returning_pct(prev.users, prev_s)
         ),
-        "visitors": kpi(len(all_visitors), len(prev["visitors"])),
-        "unique_ips": kpi(len(all_ips), len(prev["ips"] - {None})),
-        "pageviews": kpi(sum(sp.pageviews for sp in series), prev["pageviews"]),
-        "dashboard_views": kpi(sum(sp.dashboard_views for sp in series), prev["dviews"]),
-        "countries": kpi(len(countries), len(prev["countries"])),
-    }
-
-    # Titles for the top dashboards / projects (no ids without a name in the UI).
-    top_ids = [d for d, _ in dash_views.most_common(15)]
-    dash_docs = {
-        str(d["_id"]): d
-        for d in database[cols.dashboards_collection].find(
-            {"_id": {"$in": [ObjectId(i) for i in top_ids if ObjectId.is_valid(i)]}},
-            {"title": 1, "project_id": 1},
-        )
-    }
-    project_views: Counter = Counter()
-    for did, n in dash_views.items():
-        doc = dash_docs.get(did)
-        if doc and doc.get("project_id"):
-            project_views[str(doc["project_id"])] += n
-    proj_ids = [ObjectId(p) for p in project_views if ObjectId.is_valid(p)]
-    proj_names = {
-        str(p["_id"]): p.get("name", "")
-        for p in database[cols.projects_collection].find({"_id": {"$in": proj_ids}}, {"name": 1})
-    }
-
-    breakdowns: dict[str, list[dict[str, Any]]] = {
-        "top_dashboards": [
-            {
-                "dashboard_id": did,
-                "title": (dash_docs.get(did) or {}).get("title") or "(deleted)",
-                "project": proj_names.get(str((dash_docs.get(did) or {}).get("project_id")), ""),
-                "views": n,
-                "visitors": len(dash_visitors[did]),
-            }
-            for did, n in dash_views.most_common(15)
-        ],
-        "top_projects": [
-            {"project_id": pid, "name": proj_names.get(pid, "(deleted)"), "views": n}
-            for pid, n in project_views.most_common(10)
-        ],
-        "countries": _top(countries, 50, "country"),
-        "cities": [
-            {"country": c, "city": city, "visitors": n} for (c, city), n in cities.most_common(25)
-        ],
-        "browsers": _top(browsers),
-        "os": _top(oses),
-        "devices": _top(devices),
-        "languages": _top(langs),
-        "referrers": [{"domain": k, "visits": v} for k, v in refs.most_common(15)],
-        "login_methods": [{"method": k, "logins": v} for k, v in login_methods.most_common()],
-        "visitors_per_ip": [
-            {"ip_hash": ip, "visitors": len(vs)}
-            for ip, vs in sorted(ip_visitors.items(), key=lambda kv: -len(kv[1]))[:15]
-        ],
-    }
-
-    totals = {
-        "users": users_coll.count_documents(real_user_q),
-        "temporary_users": users_coll.count_documents({"is_temporary": True}),
-        "projects": database[cols.projects_collection].count_documents({}),
-        "dashboards": database[cols.dashboards_collection].count_documents(
-            {"parent_dashboard_id": None}
-        ),
-        "data_collections": database[cols.data_collection].count_documents({}),
+        "visitors": UsageKpi(current=len(cur_acc.visitors), previous=len(prev.visitors)),
+        "unique_ips": UsageKpi(current=len(cur_acc.ips - {None}), previous=len(prev.ips - {None})),
+        "pageviews": UsageKpi(current=total("pageviews"), previous=prev.pageviews),
+        "dashboard_views": UsageKpi(current=total("dashboard_views"), previous=prev.dviews),
+        "countries": UsageKpi(current=len(cur_acc.countries), previous=len(prev.countries)),
     }
 
     return UsageReport(
@@ -679,14 +723,56 @@ def build_report(
         start=s,
         end=e,
         generated_at=utc_now_naive(),
-        mode=_mode(),  # type: ignore[arg-type]
+        mode=_mode(),
         geoip_available=geoip_available(),
-        totals=totals,
+        archived_periods=archived,
+        totals=_totals(database),
         kpis=kpis,
         series=series,
-        breakdowns=breakdowns,
-        hours_heatmap=heat,
+        breakdowns=_breakdowns(database, dims),
+        hours_heatmap=dims.heat,
     )
+
+
+def archive_closed_periods(now: Optional[datetime] = None) -> int:
+    """Keep anonymous totals of every closed month and year still covered by the
+    daily rows, before the TTL removes those rows. Idempotent; never raises."""
+    now = now or utc_now_naive()
+    database = _db()
+    written = 0
+    try:
+        oldest = database[VISITS].find_one({}, {"day": 1}, sort=[("day", 1)])
+        if oldest is None:
+            return 0
+        for g in _ARCHIVED_GRANULARITIES:
+            ps = period_start(oldest["day"], g)
+            current = period_start(now, g)
+            while ps < current:
+                key = f"{g}:{ps.date().isoformat()}"
+                if database[ARCHIVE].find_one({"_id": key}, {"_id": 1}) is None:
+                    rpt = build_report(g, 1, start=ps, end=ps, now=now, use_archive=False)
+                    database[ARCHIVE].update_one(
+                        {"_id": key},
+                        {
+                            "$setOnInsert": {
+                                "granularity": g,
+                                "period_start": ps,
+                                "point": rpt.series[0].model_dump(),
+                                "breakdowns": {
+                                    k: v
+                                    for k, v in rpt.breakdowns.items()
+                                    if k not in _NOT_ARCHIVED
+                                },
+                                "archived_at": now,
+                            }
+                        },
+                        upsert=True,
+                    )
+                    written += 1
+                ps = next_period(ps, g)
+    except Exception as exc:
+        logger.warning(f"usage_stats: archiving closed periods failed: {exc}")
+    return written
 
 
 SERIES_CSV_FIELDS = [f for f in UsagePoint.model_fields if f != "logins_by_method"]

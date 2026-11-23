@@ -212,4 +212,115 @@ def test_hit_route_records_anonymously_and_returns_no_body(db):
     assert bad.status_code == 422
     assert report.status_code == 403
     row = db[us.VISITS].find_one()
-    assert row["user_class"] == "anonymous" and row["kinds"] == {"dashboards": 1}
+    assert row["user_class"] == "anonymous" and "user_id" not in row
+
+
+def test_range_resolution_end_only_and_boundaries():
+    now = datetime(2026, 3, 15)
+    assert us.resolve_range("month", 3, None, datetime(2025, 6, 30), now) == (
+        datetime(2025, 4, 1),
+        datetime(2025, 7, 1),
+    )
+    assert us.resolve_range("year", 2, None, None, now) == (
+        datetime(2025, 1, 1),
+        datetime(2027, 1, 1),
+    )
+    # ISO week: Monday 2026-03-09 .. Monday 2026-03-16
+    assert us.resolve_range("week", 1, None, None, now) == (
+        datetime(2026, 3, 9),
+        datetime(2026, 3, 16),
+    )
+
+
+def test_previous_period_is_period_aligned(db):
+    _hit_on(datetime(2026, 2, 3), _vid(1), "198.51.100.1")  # February: previous
+    _hit_on(datetime(2026, 1, 30), _vid(2), "198.51.100.2")  # January: neither
+    report = us.build_report("month", 1, now=datetime(2026, 3, 10))
+    assert report.kpis["visitors"].previous == 1
+
+
+def test_signed_in_day_survives_a_later_logout(db):
+    day = datetime(2026, 3, 4, 9)
+    user = _user()
+    _hit_on(day, _vid(1), "198.51.100.1", user=user)
+    _hit_on(day.replace(hour=17), _vid(1), "198.51.100.1", user=None)
+    row = db[us.VISITS].find_one()
+    assert row["user_class"] == "real" and row["user_id"] == str(user.id)
+    assert us.build_report("month", 1, now=day).series[-1].active_users == 1
+
+
+def test_project_views_count_every_dashboard_not_only_the_top_15(db):
+    proj = ObjectId()
+    db.projects.insert_one({"_id": proj, "name": "Big"})
+    day = datetime(2026, 3, 4)
+    for i in range(20):
+        d = ObjectId()
+        db.dashboards.insert_one({"_id": d, "title": f"D{i}", "project_id": proj})
+        _hit_on(day, _vid(i), "198.51.100.1", dashboard_id=str(d))
+    report = us.build_report("month", 1, now=day)
+    assert len(report.breakdowns["top_dashboards"]) == 15
+    assert report.breakdowns["top_projects"][0]["views"] == 20
+
+
+def test_dnt_and_daily_cap_drop_hits(db):
+    day = datetime(2026, 3, 4)
+    req = _request("198.51.100.1", CHROME)
+    req.headers["dnt"] = "1"
+    with patch.object(us, "utc_now_naive", return_value=day):
+        assert not us.record_hit(UsageHit(visitor_id=_vid(1)), req, None)
+    with patch.object(us.settings.usage_stats, "max_daily_visitors", 2):
+        for i in range(3):
+            _hit_on(day, _vid(i), "198.51.100.1")
+        assert _hit_on(day, _vid(0), "198.51.100.1")  # a known browser still counts
+    assert db[us.VISITS].count_documents({}) == 2
+
+
+def test_erasure_removes_a_deleted_users_rows(db):
+    day = datetime(2026, 3, 4)
+    user = _user()
+    _hit_on(day, _vid(1), "198.51.100.1", user=user, dashboard_id="b" * 24)
+    _hit_on(day, _vid(2), "198.51.100.2", dashboard_id="b" * 24)
+    us.erase_user_usage(str(user.id))
+    assert db[us.VISITS].count_documents({}) == 1
+    assert db[us.DASHBOARD_VIEWS].find_one()["visitors"] == [_vid(2)]
+
+
+def test_closed_periods_are_archived_anonymously_and_outlive_raw_rows(db):
+    _hit_on(datetime(2025, 1, 10), _vid(1), "198.51.100.1", user=_user())
+    _hit_on(datetime(2025, 2, 10), _vid(2), "198.51.100.2")
+    written = us.archive_closed_periods(now=datetime(2025, 3, 5))
+    assert written == 2  # Jan + Feb 2025; 2025 is not closed yet
+    doc = db[us.ARCHIVE].find_one({"_id": "month:2025-01-01"})
+    assert doc["point"]["visitors"] == 1 and "visitors_per_ip" not in doc["breakdowns"]
+    assert "198.51.100" not in str(doc) and _vid(1) not in str(doc)
+    assert us.archive_closed_periods(now=datetime(2025, 3, 6)) == 0  # idempotent
+
+    db[us.VISITS].delete_many({})  # the TTL removed the daily rows
+    report = us.build_report(
+        "month", 3, start=datetime(2025, 1, 1), end=datetime(2025, 3, 1), now=datetime(2026, 6, 1)
+    )
+    assert [p.visitors for p in report.series] == [1, 1, 0]
+    assert report.archived_periods == 2
+
+
+def test_x_real_ip_is_only_trusted_from_a_proxy():
+    from depictio.api.v1.endpoints.user_endpoints.rate_limit import _client_ip
+
+    spoof = SimpleNamespace(
+        headers={"x-real-ip": "1.2.3.4"}, client=SimpleNamespace(host="8.8.8.8")
+    )
+    proxied = SimpleNamespace(
+        headers={"x-real-ip": "1.2.3.4"}, client=SimpleNamespace(host="10.0.0.5")
+    )
+    assert _client_ip(spoof) == "8.8.8.8"
+    assert _client_ip(proxied) == "1.2.3.4"
+
+
+def test_offset_timestamps_are_converted_not_dropped():
+    from datetime import timedelta as td
+    from datetime import timezone as tz
+
+    from depictio.api.v1.endpoints.analytics_endpoints.routes import _naive_utc
+
+    aware = datetime(2026, 3, 1, 0, 0, tzinfo=tz(td(hours=2)))
+    assert _naive_utc(aware) == datetime(2026, 2, 28, 22, 0)

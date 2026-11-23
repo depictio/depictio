@@ -11802,6 +11802,7 @@ export interface UsageReport {
   generated_at: string;
   mode: 'single_user' | 'public' | 'multi_user';
   geoip_available: boolean;
+  archived_periods: number;
   timezone: string;
   totals: Record<string, number>;
   kpis: Record<string, { current: number; previous: number }>;
@@ -11890,9 +11891,14 @@ function visitorId(): string | null {
   } catch {
     /* a pre-expiry plain string, or garbage: renew below */
   }
-  const id = crypto.randomUUID();
-  s.setItem(VISITOR_KEY, JSON.stringify({ id, at: Date.now() }));
-  return id;
+  try {
+    // randomUUID needs a secure context; setItem can throw (quota, private mode).
+    const id = crypto.randomUUID();
+    s.setItem(VISITOR_KEY, JSON.stringify({ id, at: Date.now() }));
+    return id;
+  } catch {
+    return null;
+  }
 }
 
 /** Fire-and-forget navigation beacon. Never redirects, never throws. */

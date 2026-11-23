@@ -17,8 +17,22 @@ return 404 and stops all recording.
 | `usage_dashboard_views` | day × dashboard | the same beacon, when a dashboard is opened |
 
 Rows are upserts. Their number grows with visitors × days, not with requests, and a TTL
-index on `day` removes them after `DEPICTIO_USAGE_STATS_RETENTION_DAYS` (default 400, so a
-year can be compared with the previous one). A login also sets `users.last_login`.
+index on `day` removes them after `DEPICTIO_USAGE_STATS_RETENTION_DAYS` (default 395, i.e.
+13 months; capped at 25 months). A login also sets `users.last_login`.
+
+**After 13 months: anonymous totals.** Before the daily rows expire, every closed month
+and year is copied into `usage_archive` as totals only: the `UsagePoint` counts and the
+breakdowns (countries, browsers, top dashboards…), without any visitor id, user id or
+address hash. The copy runs daily and whenever the report is opened, and it is idempotent.
+Archived totals are not personal data, so they are kept. A report over older periods reads
+their series from the archive (`archived_periods` in the response). KPIs and breakdowns
+always come from the daily rows.
+
+**Flood guard.** The beacon needs no login. To keep a script minting a fresh browser id
+per request from growing the table, at most `DEPICTIO_USAGE_STATS_MAX_DAILY_VISITORS`
+(default 50,000) new browsers are recorded per day; known browsers keep counting. A
+dashboard row keeps at most 2,000 distinct browsers per day, and its views keep counting
+past that.
 
 Bots and headless browsers are dropped by user agent. That covers crawlers, curl and
 python-requests, Playwright and the screenshot engine. `/embed` renders send no beacon.
@@ -44,8 +58,9 @@ the IP alone would show a single visitor. Three counts are reported side by side
 | public / demo | real accounts only. Each guest's temporary account is counted apart (`temporary_users`) and never as a user | visitors, unique IPs, countries, page views |
 | single-user | the one owner (`user_class=single_user`) | page views, dashboard views, browsers |
 
-*Returning* means active in the period and already seen in an earlier period (first
-activity within the retention window). *New* means first seen in the period.
+*Returning* means active in the period and already seen in an earlier period. *New* means
+first seen in the period. Both are judged within the daily rows' retention (13 months), so a
+person last seen more than 13 months ago counts as new again.
 
 ## Privacy
 
@@ -58,10 +73,39 @@ activity within the retention window). *New* means first seen in the period.
 - **Referrers** are kept as the external domain only. Navigation within the site is not a
   referrer.
 - **Responses** contain no emails and no IPs. Dashboards and projects appear by title.
-- **Client IP** comes from `X-Real-IP` (set by the bundled nginx / ingress-nginx), or
-  otherwise from the TCP peer. This is the same rule as the auth rate limiter. Make sure
-  your proxy overwrites `X-Real-IP`. A client that can reach the API directly can set it
-  itself.
+- **Client IP**: `X-Real-IP` is honoured only when the TCP peer is a private or loopback
+  address, i.e. the bundled nginx or an ingress. A client reaching the API directly is
+  identified by its own address and cannot forge the header. The auth rate limiter uses
+  the same rule.
+
+## GDPR
+
+The operator of the instance is the controller. Depictio's maintainers receive none of
+this data.
+
+- **Purpose and legal basis.** The data serves audience measurement of the instance
+  itself: how many people use it, how often, which dashboards. Legal basis: legitimate
+  interest (Art. 6(1)(f)). The design follows the conditions under which the CNIL exempts
+  audience measurement from consent:
+  - first-party only, never shared or combined with other data;
+  - aggregated output;
+  - browser identifier renewed after 13 months;
+  - daily rows kept 13 months (at most 25);
+  - IP addresses hashed;
+  - location no finer than the city.
+- **Information and objection.** The *About* page has a *Privacy* notice describing exactly
+  what is recorded, and a switch that excludes the browser. Opting out also forgets its
+  identifier. Browsers sending **Do Not Track** or **Global Privacy Control** are never
+  recorded: the viewer sends nothing, and the API drops such hits.
+- **Erasure.** Deleting an account deletes its login and visit rows and removes its browsers
+  from the per-dashboard lists. Anonymous archived totals are unaffected; they hold nothing
+  about the person.
+- **No profiling.** Responses hold counts, titles and hashes only. The per-address table
+  shows hashes truncated to 8 characters, to admins only.
+- **Your obligations as operator.** Mention the statistics in your instance's privacy
+  policy (the About notice can serve as the basis), and keep the retention at or below
+  25 months. In the EU, if you enable GeoIP, keep it at city level, which is what DB-IP
+  Lite provides.
 
 ## Countries and cities (optional)
 
@@ -82,7 +126,7 @@ the file into the backend and set the variable through `backend.env`. Refresh it
 | --- | --- | --- |
 | `granularity` | `month` | `day`, `week` (ISO, Monday), `month`, `year` |
 | `periods` | `12` | number of periods ending with the current one |
-| `start`, `end` | – | custom range (UTC dates), aligned on period boundaries; overrides `periods` |
+| `start`, `end` | – | custom range (UTC, an offset is converted), aligned on period boundaries. `end` is **inclusive of its period** (`end=2026-04-01` with `month` includes April). `end` alone anchors `periods` |
 | `format` | `json` | `csv` returns the time series only |
 
 ```bash

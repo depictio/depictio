@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -16,12 +16,12 @@ import {
   TextInput,
   Title,
   Tooltip,
-  DEFAULT_THEME,
   useComputedColorScheme,
+  useMantineTheme,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { AgGridReact } from 'ag-grid-react';
-import type { ColDef, ValueFormatterParams } from 'ag-grid-community';
+import type { ColDef, GetQuickFilterTextParams, ValueFormatterParams } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { Icon } from '@iconify/react';
@@ -85,7 +85,22 @@ const regionNames = (() => {
     return null;
   }
 })();
+/** Intl spellings Plotly's `country names` does not know. */
+const PLOTLY_COUNTRY_NAMES: Record<string, string> = {
+  CZ: 'Czech Republic',
+  TR: 'Turkey',
+  HK: 'Hong Kong',
+  MO: 'Macao',
+  MM: 'Myanmar',
+  CD: 'Democratic Republic of the Congo',
+  CG: 'Republic of the Congo',
+  CI: "Cote d'Ivoire",
+  PS: 'Palestine',
+  KR: 'South Korea',
+  KP: 'North Korea',
+};
 const countryName = (code: string) => regionNames?.of(code) ?? code;
+const plotlyCountry = (code: string) => PLOTLY_COUNTRY_NAMES[code] ?? countryName(code);
 
 function fmtPeriod(iso: string, g: UsageGranularity): string {
   const d = new Date(`${iso}Z`);
@@ -165,6 +180,10 @@ const UsageGrid: React.FC<{
           type: numeric ? 'numericColumn' : undefined,
           valueFormatter: c.format
             ? (p: ValueFormatterParams<UsageRow>) => c.format!(p.value as string | number)
+            : undefined,
+          // The quick search matches what is shown ("France"), not the raw code.
+          getQuickFilterText: c.format
+            ? (p: GetQuickFilterTextParams<UsageRow>) => c.format!(p.value as string | number)
             : undefined,
         };
       }),
@@ -269,18 +288,19 @@ const MiniTable: React.FC<{
 
 export const UsagePane: React.FC = () => {
   const scheme = useComputedColorScheme('light');
+  const theme = useMantineTheme();
   const template = useMemo(() => mantinePlotlyTemplate(scheme), [scheme]);
   // One hue, from the body colour up to the brand blue: a heatmap of counts
   // reads as "more", never as a diverging scale.
   const heatScale = useMemo((): Array<[number, string]> => {
-    const blue = DEFAULT_THEME.colors.blue;
-    const low = scheme === 'dark' ? DEFAULT_THEME.colors.dark[6] : blue[0];
+    const blue = theme.colors.blue;
+    const low = scheme === 'dark' ? theme.colors.dark[6] : blue[0];
     return [
       [0, low],
       [0.5, blue[scheme === 'dark' ? 7 : 3]],
       [1, blue[scheme === 'dark' ? 4 : 7]],
     ];
-  }, [scheme]);
+  }, [scheme, theme]);
   const [granularity, setGranularity] = useState<UsageGranularity>('month');
   const [periods, setPeriods] = useState<number>(DEFAULT_PERIODS.month);
   const [range, setRange] = useState<[Date | null, Date | null]>([null, null]);
@@ -295,15 +315,24 @@ export const UsagePane: React.FC = () => {
       : { granularity, periods };
   }, [granularity, periods, range]);
 
+  // Only the latest request may land: a slow answer to an older query must
+  // not overwrite the one the controls now show.
+  const requestSeq = useRef(0);
   const load = useCallback(() => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     fetchUsageReport(query)
       .then((r) => {
+        if (seq !== requestSeq.current) return;
         setReport(r);
         setError(null);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
+      .catch((e: unknown) => {
+        if (seq === requestSeq.current) setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (seq === requestSeq.current) setLoading(false);
+      });
   }, [query]);
 
   useEffect(load, [load]);
@@ -316,11 +345,12 @@ export const UsagePane: React.FC = () => {
       a.download = `depictio-usage-${granularity}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-    });
+    }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, [query, granularity]);
 
   const x = report?.series.map((p) => fmtPeriod(p.period_start, report.granularity)) ?? [];
-  const isPublic = report?.mode === 'public';
+  // Without accounts to count (public, single-user), browsers lead.
+  const isPublic = report !== null && report.mode !== 'multi_user';
   const plotLayout = (extra: Record<string, unknown> = {}) => ({
     template,
     autosize: true,
@@ -345,9 +375,11 @@ export const UsagePane: React.FC = () => {
               {report.mode.replace('_', '-')}
             </Badge>
           )}
-          <Badge variant="outline" color="gray" size="sm">
-            UTC
-          </Badge>
+          {report && (
+            <Badge variant="outline" color="gray" size="sm">
+              {report.start.slice(0, 10)} → {report.end.slice(0, 10)} (UTC, end excluded)
+            </Badge>
+          )}
         </Group>
         <Group gap="xs" wrap="wrap">
           <SegmentedControl
@@ -359,6 +391,7 @@ export const UsagePane: React.FC = () => {
               setPeriods(DEFAULT_PERIODS[g]);
             }}
             data={[
+              { value: 'day', label: 'Day' },
               { value: 'week', label: 'Week' },
               { value: 'month', label: 'Month' },
               { value: 'year', label: 'Year' },
@@ -401,6 +434,12 @@ export const UsagePane: React.FC = () => {
         <Alert color="red" variant="light">
           {error}
         </Alert>
+      )}
+      {report && report.archived_periods > 0 && (
+        <Text size="xs" c="dimmed">
+          {report.archived_periods} older period(s) come from the anonymous archive (daily rows
+          are kept 13 months); KPIs and tables cover the daily rows only.
+        </Text>
       )}
       {report && !report.geoip_available && (
         <Text size="xs" c="dimmed">
@@ -475,14 +514,14 @@ export const UsagePane: React.FC = () => {
                           name: 'New',
                           x,
                           y: report.series.map((p) => p.new_visitors),
-                          marker: { color: DEFAULT_THEME.colors.teal[6] },
+                          marker: { color: theme.colors.teal[6] },
                         },
                         {
                           type: 'bar',
                           name: 'Returning',
                           x,
                           y: report.series.map((p) => p.returning_visitors),
-                          marker: { color: DEFAULT_THEME.colors.blue[6] },
+                          marker: { color: theme.colors.blue[6] },
                         },
                       ]
                     : [
@@ -491,14 +530,14 @@ export const UsagePane: React.FC = () => {
                           name: 'New',
                           x,
                           y: report.series.map((p) => p.new_users),
-                          marker: { color: DEFAULT_THEME.colors.teal[6] },
+                          marker: { color: theme.colors.teal[6] },
                         },
                         {
                           type: 'bar',
                           name: 'Returning',
                           x,
                           y: report.series.map((p) => p.returning_users),
-                          marker: { color: DEFAULT_THEME.colors.blue[6] },
+                          marker: { color: theme.colors.blue[6] },
                         },
                       ]
                 }
@@ -567,7 +606,7 @@ export const UsagePane: React.FC = () => {
                     locationmode: 'country names',
                     colorscale: heatScale,
                     marker: { line: { width: 0.5, color: 'rgba(128,128,128,0.4)' } },
-                    locations: (b.countries ?? []).map((c) => countryName(String(c.country))),
+                    locations: (b.countries ?? []).map((c) => plotlyCountry(String(c.country))),
                     z: (b.countries ?? []).map((c) => Number(c.visitors)),
                     showscale: false,
                   },
@@ -583,11 +622,7 @@ export const UsagePane: React.FC = () => {
               href={(r) => (r.dashboard_id ? `/dashboard/${r.dashboard_id}` : null)}
               rows={b.top_dashboards ?? []}
               columns={[
-                {
-                  key: 'title',
-                  label: 'Dashboard',
-                  format: (v) => String(v),
-                },
+                { key: 'title', label: 'Dashboard' },
                 { key: 'project', label: 'Project' },
                 { key: 'views', label: 'Views' },
                 { key: 'visitors', label: 'Visitors' },
@@ -630,7 +665,7 @@ export const UsagePane: React.FC = () => {
                 rows={b.cities ?? []}
                 columns={[
                   { key: 'city', label: 'City' },
-                  { key: 'country', label: 'Country' },
+                  { key: 'country', label: 'Country', format: (v) => countryName(String(v)) },
                   { key: 'visitors', label: 'Visitors' },
                 ]}
               />

@@ -300,6 +300,18 @@ Every event is flagged `$process_person_profile: false`, so the collector stores
 no person profile for your installation. There is no user record on the receiving
 end to enrich, segment or export — only counts.
 
+**IP address and GDPR.** Like any HTTPS request, an event reaches the collector
+from your server's (or CLI host's) address. Depictio never puts an address in
+the payload and flags every event `$geoip_disable: true`, so no location is
+derived from it. For the address not to be stored at all, the receiving
+PostHog project must have *Discard client IP data* turned on: a project setting
+outside this code (and yours to set if you point `DEPICTIO_TELEMETRY_ENDPOINT`
+at your own collector). What remains is an installation id that is random, not tied to a
+person, and counts of features. Legal basis: the maintainers' legitimate
+interest in knowing which versions are deployed (Art. 6(1)(f) GDPR), balanced by
+the opt-outs below, the first-run notice and the absence of any personal field.
+Events are kept by PostHog Cloud EU under the project's data retention.
+
 ## All configuration
 
 | Variable | Default | Effect |

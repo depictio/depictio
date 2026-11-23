@@ -67,6 +67,9 @@ def build_body(
             # what docs/telemetry.md promises operators; and identified events
             # cost up to 4x more than anonymous ones.
             "$process_person_profile": False,
+            # No IP geolocation at the collector: the request's address is the
+            # only personal datum it could derive, and nothing here needs it.
+            "$geoip_disable": True,
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

@@ -14,5 +14,9 @@ export function trackPageView(): void {
   const { pathname } = window.location;
   if (pathname.startsWith('/embed/')) return;
   const { kind, dashboardId } = usagePathKind(pathname);
-  sendUsageHit({ path_kind: kind, dashboard_id: dashboardId });
+  try {
+    sendUsageHit({ path_kind: kind, dashboard_id: dashboardId });
+  } catch {
+    // Statistics must never stop the app from rendering.
+  }
 }

@@ -7,11 +7,11 @@
 See ``docs/usage-stats.md``.
 """
 
-import hmac
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from starlette.concurrency import run_in_threadpool
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -19,7 +19,10 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _async_fetch_user_from_token,
 )
 from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
-from depictio.api.v1.endpoints.user_endpoints.routes import oauth2_scheme_optional
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    _is_valid_internal_api_key,
+    oauth2_scheme_optional,
+)
 from depictio.api.v1.services import usage_stats
 from depictio.models.models.usage import Granularity, UsageHit, UsageReport
 
@@ -28,14 +31,6 @@ router = APIRouter()
 #: Navigations per minute per address. A whole institute shares one address,
 #: so this only stops a script, not a busy room.
 _HITS_PER_MINUTE = 600
-
-
-def _is_valid_internal_api_key(x_api_key: str | None) -> bool:
-    """Constant-time check of a caller-supplied internal API key."""
-    configured_key = settings.auth.internal_api_key
-    if not x_api_key or not configured_key:
-        return False
-    return hmac.compare_digest(x_api_key, configured_key)
 
 
 async def require_analytics_admin(
@@ -54,6 +49,13 @@ async def require_analytics_admin(
         if user is not None and user.is_admin and not getattr(user, "is_temporary", False):
             return
     raise HTTPException(status_code=403, detail="Administrator privileges required")
+
+
+def _naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """API timestamps are naive UTC: convert an offset, don't drop it."""
+    if dt is None or dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _require_enabled() -> None:
@@ -76,7 +78,7 @@ async def track_hit(
             user = await _async_fetch_user_from_token(token)
         except Exception:  # an expired token still counts as a visit
             user = None
-    usage_stats.record_hit(hit, request, user)
+    await run_in_threadpool(usage_stats.record_hit, hit, request, user)
     return Response(status_code=204)
 
 
@@ -85,22 +87,22 @@ async def track_hit(
     response_model=UsageReport,
     dependencies=[Depends(require_analytics_admin)],
 )
-async def get_usage(
+def get_usage(
     granularity: Granularity = Query("month"),
     periods: int = Query(12, ge=1, le=120),
     start: Optional[datetime] = Query(None, description="Custom range start (UTC)"),
-    end: Optional[datetime] = Query(None, description="Custom range end (UTC)"),
+    end: Optional[datetime] = Query(
+        None, description="Custom range end (UTC), inclusive of its period"
+    ),
     format: Literal["json", "csv"] = Query("json"),
 ):
     """Usage report per period: users, logins, visitors, content, breakdowns."""
     _require_enabled()
-    if start is not None:
-        start = start.replace(tzinfo=None)
-    if end is not None:
-        end = end.replace(tzinfo=None)
+    start, end = _naive_utc(start), _naive_utc(end)
     if start and end and end < start:
         raise HTTPException(status_code=400, detail="end is before start")
     try:
+        usage_stats.archive_closed_periods()
         report = usage_stats.build_report(granularity, periods, start, end)
     except Exception as exc:
         logger.error(f"usage_stats: report failed: {exc}")

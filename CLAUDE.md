@@ -218,6 +218,10 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   beacon `POST /analytics/hit`; UI Admin › Activity › Usage. **Detail**: `docs/usage-stats.md`
 - A new token-issuing path must call `record_login(user, method, request)`. IPs/UAs are never
   stored raw; a temporary guest is never a "user"
+- GDPR: daily rows 13 months (TTL, max 25), closed months/years archived as identifier-free
+  totals (`usage_archive`, kept); browser id renewed at 13 months; DNT/GPC + About opt-out
+  honoured; account deletion calls `erase_user_usage`. Keep new fields out of the archive
+  if they identify anyone
 
 ### Migration & Publishing (#1303)
 - One instance pushes a project to another (`/migrate/push` → target `/migrate/inbound/requests`,

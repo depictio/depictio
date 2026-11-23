@@ -63,6 +63,8 @@ class UsagePoint(BaseModel):
 
 
 class UsageKpi(BaseModel):
+    """A range total and the same total over the span just before it."""
+
     current: float = 0
     previous: float = 0
 
@@ -76,6 +78,9 @@ class UsageReport(BaseModel):
     generated_at: datetime
     mode: Literal["single_user", "public", "multi_user"]
     geoip_available: bool
+    archived_periods: int = Field(
+        default=0, description="Periods read from the anonymous archive (older than retention)"
+    )
     timezone: str = "UTC"
     totals: dict[str, int]
     kpis: dict[str, UsageKpi]
