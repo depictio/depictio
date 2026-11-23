@@ -429,7 +429,11 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
             ]
           : [],
         // The curve names carry the AUC, so the legend is the sweep views' own.
-        showlegend: drawCurves && showLegend,
+        // One curve with no AUC to report has nothing to say in a legend.
+        showlegend:
+          drawCurves &&
+          showLegend &&
+          (curveGroups.size > 1 || traces.some((t) => String(t.name ?? '').includes('(AUC'))),
         legend: {
           x: 0.98,
           y: 0.02,

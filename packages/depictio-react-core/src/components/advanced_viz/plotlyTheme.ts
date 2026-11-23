@@ -138,7 +138,8 @@ export function applyLayoutTheme(
       scene.bgcolor = c.bgColor;
       out[key] = scene;
     } else if (key === 'coloraxis' && typeof out[key] === 'object' && out[key] != null) {
-      out[key] = retintColorbar(out[key] as Record<string, unknown>, c);
+      const axis = retintColorbar(out[key] as Record<string, unknown>, c);
+      out[key] = axis.colorbar ? { ...axis, colorbar: withReadableTitle(axis.colorbar) } : axis;
     } else if (key === 'annotations' && Array.isArray(out[key])) {
       out[key] = (out[key] as Array<Record<string, unknown>>).map((a) => {
         const font = (a.font || {}) as Record<string, unknown>;
@@ -211,7 +212,7 @@ export function applyDataTheme(
       const retinted = retintColorbar({ colorbar: t.colorbar }, c) as {
         colorbar: Record<string, unknown>;
       };
-      t.colorbar = retinted.colorbar;
+      t.colorbar = withReadableTitle(retinted.colorbar);
     }
     if (t.marker != null && typeof t.marker === 'object') {
       const marker = { ...(t.marker as Record<string, unknown>) };
@@ -219,7 +220,7 @@ export function applyDataTheme(
         const retinted = retintColorbar({ colorbar: marker.colorbar }, c) as {
           colorbar: Record<string, unknown>;
         };
-        marker.colorbar = retinted.colorbar;
+        marker.colorbar = withReadableTitle(retinted.colorbar);
       }
       t.marker = marker;
     }

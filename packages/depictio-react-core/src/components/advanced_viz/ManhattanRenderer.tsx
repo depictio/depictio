@@ -72,7 +72,7 @@ import { useGestureGuardedSelection, useSelectionRevision } from './selectionGes
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
-import { categoricalPalette } from '../../palettes';
+import { categoricalPalette, referenceGuide } from '../../palettes';
 
 type Highlight = 'above' | 'below' | 'none';
 
@@ -716,14 +716,11 @@ const ManhattanRenderer: React.FC<Props> = ({
       });
     });
 
-    // 4) Threshold horizontal line. Solid + accent colour so it actually
-    //    catches the eye — the previous dotted rgba(128,128,128,0.6) was
-    //    invisible against the grey theme. Paired with the per-point recolour
-    //    above (hits in chromosome colour, misses dimmed), the line is now
-    //    informational rather than load-bearing.
+    // 4) Threshold horizontal line, drawn as every reference line is
+    //    (`referenceGuide`): neutral and dashed, told apart from data by its
+    //    form, so it never borrows a colour a hit could wear.
+    const guide = referenceGuide(isDark ? 'dark' : 'light');
     if (hasThreshold) {
-      const accent =
-        colorScheme === 'dark' ? 'rgba(232,62,140,0.85)' : 'rgba(214,51,108,0.85)';
       layoutShapes.push({
         type: 'line',
         xref: 'paper',
@@ -731,7 +728,7 @@ const ManhattanRenderer: React.FC<Props> = ({
         x1: 1,
         y0: scoreThreshold as number,
         y1: scoreThreshold as number,
-        line: { dash: 'solid', color: accent, width: 1.5 },
+        line: guide.line,
       });
     }
 
@@ -759,7 +756,7 @@ const ManhattanRenderer: React.FC<Props> = ({
         showarrow: false,
         xanchor: 'right',
         yanchor: 'bottom',
-        font: { size: 10, color: plotlyThemeColors(isDark, theme).textColor },
+        font: guide.font,
       });
     }
     if (topNLabels > 0) {
