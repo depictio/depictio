@@ -366,7 +366,8 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 - The rendered HTML report is that same `.qmd` run by `quarto render` on a worker, behind
   `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (on, once the export is). The server render never runs an author's Python:
   code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`), and a dashboard
-  carrying them renders for project owners only; anonymous visitors cannot render
+  carrying them renders for project owners and editors only (project role, not ownership of a
+  duplicated document); anonymous visitors cannot render
 - **Nothing dynamic reaches the `.qmd` raw**: Quarto runs inline `` `{python}` ``, chunk fences and
   `{{< shortcodes >}}` (in prose, raw HTML/typst, code-cell strings and cell *output*). Every site
   writes through `depictio/notebook/qmd_safe.py` (`esc`, `defuse`, `comment`, `typst_str`,
@@ -378,6 +379,15 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   requester in every state, limited per user (429), reports bounded deployment-wide
   (`report_concurrency`, below the report worker's pool), kept `report_retention_hours`. Headless
   extraction runs as the requester, never with the admin token
+- **Report layer** (#1457, `models/models/report_layer.py`): intro/conclusion (TipTap JSON), cover,
+  the state the report is drawn at, per-tile caption / in report / in PDF / order / section /
+  page break / orientation, per-tab body or appendix. Main tab only, like `shared_labels`: written
+  only by `PUT /dashboards/report_layer/{id}` (baseline + autosave capture, `revision` vs
+  `base_revision` = 409 with the stored layer), popped by `/save`, in `TabSnapshot`. Off by default:
+  `DEPICTIO_REPORT_EDITOR_ENABLED` (`features.report_editor`, needs the export on); owners and
+  editors, 404 for everyone else. An export request without a state uses `layer.state`. The PDF
+  orientation reaches the kernel through `set_page_orientation()`, written at the top of the
+  tile's cell, reset after it (IPython `post_run_cell`)
 - Design: `docs/design/rfc-notebook-export.md`
 
 ### Offline outputs: one manifest, one runtime, two hosts
@@ -399,9 +409,18 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   `combined-runtime.mjs` its JS twin (byte parity: `test_runtime_compose_parity.py`). The
   generator wraps each tile in `data-depictio-tile="<tab>:<index>"` with its own output as
   `.depictio-fallback`; `depictio/serverless/report.py` builds the block (owner-only, like a static
-  export; pinned/grouped states refused); `POST /serverless/report-manifest/{id}` is a Celery job
+  export); `POST /serverless/report-manifest/{id}` is a Celery job
   (202, then `GET .../job/{job_id}`)
-- Which tile mounts: `static-core/src/reportMount.ts` (live always, frozen only at the default state)
+- Which tile mounts: `static-core/src/reportMount.ts` (live always, frozen only at the exported state)
+- Exported state: `/export-static` takes the `AnalysisState` shown at click time; every freeze is
+  computed there (`interactive_defaults.filters_for_state`) and `initial_filters` carries it. A
+  state with pins ships only that version (Delta at the pinned commits, definitions from
+  `definition_version`); `manifest.pinned_version` drives the bundle's banner and lists the
+  collections it could not pin. Selection groups ship as `initial_grouping` and the reader can
+  edit them locally (`selectionGroupsShim.ts`, never saved)
+- Server computes ported to static-core (`sankey.ts`, `grouping.ts`, `contactMap.ts`, ...) keep
+  parity through fixtures a Python script writes (`scripts/generate_*_fixture.py` → `fixtures/*.json`,
+  vitest). Change the Python side, regenerate the fixture
 - `BundleManifest.initial_filters` is the report's exported state; a contract change means
   regenerating `serverless.schema.json` and `manifest-basic.json`
 - Design: `docs/design/rfc-serverless-deployment.md` §14, `rfc-notebook-export.md` §3.9
