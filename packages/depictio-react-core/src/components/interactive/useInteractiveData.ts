@@ -162,7 +162,10 @@ export function mergeValues(
  * the list was cut (`truncated`), what the reader types is searched on the
  * server and the matches join the list, so a value past the cut (family
  * 3,052 of 4,333) can be found and picked (#1418). `keep` holds values that
- * must stay listed whatever the search (the current selection).
+ * stay listed whatever the search (the current selection), when the list was
+ * cut only: past the cut, a held value missing from the list may still be in
+ * the column, so it must not read as gone (an always-selected filter would
+ * re-pick its first option). A whole list that lacks it says it is gone.
  */
 export function useSearchedValues(
   dcId: string | undefined,
@@ -175,14 +178,13 @@ export function useSearchedValues(
 ): { values: string[]; onSearchChange: (query: string) => void } {
   const versioned = useFilterDataPins();
   const [query, setQuery] = useState('');
-  const [found, setFound] = useState<string[]>([]);
+  // The server's matches for `query`; null until they arrive.
+  const [found, setFound] = useState<string[] | null>(null);
 
   useEffect(() => {
     const q = query.trim();
-    if (!truncated || !q || !dcId || !columnName) {
-      setFound([]);
-      return;
-    }
+    setFound(null);
+    if (!truncated || !q || !dcId || !columnName) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       const request = versioned
@@ -198,7 +200,7 @@ export function useSearchedValues(
         })
         .catch((err) => {
           console.warn('[useSearchedValues] search failed:', err);
-          if (!cancelled) setFound([]);
+          if (!cancelled) setFound(null);
         });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -210,11 +212,15 @@ export function useSearchedValues(
   }, [query, truncated, dcId, columnName, filterExpr, orderBy, versioned?.key]);
 
   const keepKey = keep.join('\u0000');
-  const values = useMemo(
-    () => mergeValues(base, keep, found),
+  // While a search has its matches, they are the list (with the held values):
+  // the server returned every match up to its limit, so the cut list adds
+  // none, and a dropdown that shows its first N entries ranks them as it would
+  // a whole list.
+  const values = useMemo(() => {
+    if (!truncated) return [...base];
+    return found ? mergeValues(found, keep) : mergeValues(base, keep);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [base, keepKey, found],
-  );
+  }, [base, truncated, keepKey, found]);
   return { values, onSearchChange: setQuery };
 }
 

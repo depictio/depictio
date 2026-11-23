@@ -189,7 +189,8 @@ const ScopeCard: React.FC<{
     metadata.filter_expr,
   );
   const facts = bannerFactItems(metadata.banner_facts, row);
-  const { options, onSearchChange } = useScopeOptions(metadata, value);
+  const held = React.useMemo(() => (value === undefined ? [] : [value]), [value]);
+  const { options, onSearchChange } = useScopeOptions(metadata, held);
   const steps = unitSteps(options, value);
   const labelOf = React.useCallback((v: string) => optionLabel(metadata, v), [metadata]);
   const hint = optionDescription(metadata, value);

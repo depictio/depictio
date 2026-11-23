@@ -18,10 +18,12 @@ export interface ScopeOption {
   disabled: boolean;
 }
 
+const NONE: readonly string[] = [];
+
 export function useScopeOptions(
   metadata: StoredMetadata,
-  /** The value on screen: listed even when a cut list leaves it out. */
-  current?: string,
+  /** The values held: listed even when a cut list leaves them out. */
+  held: readonly string[] = NONE,
 ): {
   options: ScopeOption[];
   loading: boolean;
@@ -34,7 +36,6 @@ export function useScopeOptions(
     metadata.filter_expr,
     metadata.order_by,
   );
-  const keep = useMemo(() => (current === undefined ? [] : [current]), [current]);
   const { values, onSearchChange } = useSearchedValues(
     metadata.dc_id,
     metadata.column_name,
@@ -42,7 +43,7 @@ export function useScopeOptions(
     metadata.order_by,
     listed,
     truncated,
-    keep,
+    held,
   );
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
   const { data: ranking, loading: rankLoading } = useRankedValues(

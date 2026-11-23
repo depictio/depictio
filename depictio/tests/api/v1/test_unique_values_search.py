@@ -25,7 +25,18 @@ FAMILIES = ["Brassicaceae", "brassica.oleracea", "a.c", "abc", "SOLANACEAE", "po
 def env(tmp_path, monkeypatch):
     dc_id = ObjectId()
     table = tmp_path / "dt"
-    pl.DataFrame({"family": FAMILIES, "reads": [1, 2, 3, 4, 5, 6, 7]}).write_delta(str(table))
+    # "x" and "x_search3_bar" exist for the key-collision test below: an
+    # order_by of "x" plus a search of "bar" spells the same key segment an
+    # unsearched order_by of "x_search3_bar" would, if order_by were not
+    # length-prefixed.
+    pl.DataFrame(
+        {
+            "family": FAMILIES,
+            "reads": [1, 2, 3, 4, 5, 6, 7],
+            "x": [3, 1, 2, 2, 1, 3, 1],
+            "x_search3_bar": [10, 20, 30, 40, 50, 60, 70],
+        }
+    ).write_delta(str(table))
 
     db = mongomock.MongoClient().db
     db["projects"].insert_one(
@@ -121,3 +132,17 @@ def test_a_cache_hit_of_one_search_is_not_served_for_another(env):
     assert second["values"] == ["poaceae"]
     # The unsearched list has its own entry too.
     assert len(_call(env, "family")["values"]) == 6
+
+
+def test_a_cache_hit_of_an_order_by_is_not_served_for_a_search_spelling_the_same_key(env):
+    # order_by "x" with search "bar" builds the same key an unsearched
+    # order_by "x_search3_bar" would, were order_by not length-prefixed: the
+    # two queries must never be handed each other's cached answer.
+    unsearched = _call(env, "family", order_by="x_search3_bar")
+    # No search narrows it: every family is listed.
+    assert len(unsearched["values"]) == 6
+
+    searched = _call(env, "family", order_by="x", search="bar")
+    # No family contains "bar": this is a fresh answer, not the six families
+    # the unsearched query just cached.
+    assert searched == {"column": "family", "values": [], "truncated": False}

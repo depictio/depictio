@@ -105,6 +105,22 @@ export async function uniqueValuesLive(
   filterExpr?: string | null,
   orderBy?: string | null,
 ): Promise<string[]> {
+  return (await uniqueValuePageLive(dcId, column, { filterExpr, orderBy })).values;
+}
+
+/** `uniqueValuesLive` with the server's page contract: a literal,
+ *  case-insensitive `search` applied before the `limit` (default the
+ *  server's), and `truncated` when more values match than were returned, so
+ *  a filter on 4,333 families can find any of them (#1418). */
+export async function uniqueValuePageLive(
+  dcId: string,
+  column: string,
+  query: { filterExpr?: string | null; orderBy?: string | null; limit?: number; search?: string | null } = {},
+): Promise<{ values: string[]; truncated: boolean }> {
+  const { filterExpr, orderBy } = query;
+  const limit = query.limit ?? FILTER_OPTIONS_LIMIT;
+  const needle = query.search?.trim().toLowerCase() || '';
+  const matches = (v: string) => !needle || v.toLowerCase().includes(needle);
   const ref = dataRefFor(dcId);
   if (!ref) throw new Error(`static bundle: no data_ref for dc "${dcId}"`);
   const mask = await maskWith(dcId, flagFor(filterExpr));
@@ -126,15 +142,15 @@ export async function uniqueValuesLive(
       if (!keys.has(v)) keys.set(v, k ?? null);
       else if (k !== null && k !== undefined && (keys.get(v) == null || less(k, keys.get(v)))) keys.set(v, k);
     }
-    const values = [...keys.keys()].slice(0, FILTER_OPTIONS_LIMIT);
+    const all = [...keys.keys()].filter(matches);
     const stringKeys = new Map<string, unknown>();
     for (const [v, k] of keys) {
       stringKeys.set(v, typeof k === 'bigint' ? Number(k) : k);
     }
-    return orderValues(values, stringKeys);
+    return { values: orderValues(all.slice(0, limit), stringKeys), truncated: all.length > limit };
   }
-  const values = (await distinctUnder(dcId, column, mask)).slice(0, FILTER_OPTIONS_LIMIT);
-  return orderValues(values);
+  const all = (await distinctUnder(dcId, column, mask)).filter(matches);
+  return { values: orderValues(all.slice(0, limit)), truncated: all.length > limit };
 }
 
 // ---------------------------------------------------------------------------

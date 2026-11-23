@@ -2669,11 +2669,17 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # dropped (the server hides a component whose collection has no data),
     # and later full ingests keep the existing dashboard, so they would never
     # come back. The dashboards are left to the next ingest of every
-    # collection, unless --reset-dashboards asked for the import now.
+    # collection, unless --reset-dashboards asked for the import now. A tag
+    # naming the project's only collection covers everything: it imports.
+    other_collections = bool(data_collection_tag) and any(
+        dc.data_collection_tag != data_collection_tag
+        for wf in getattr(project_config, "workflows", None) or []
+        for dc in wf.data_collections
+    )
     if (
         not skip_dashboard_import
         and template_dashboard_paths
-        and data_collection_tag
+        and other_collections
         and not reset_dashboards
     ):
         rich_print_checked_statement(

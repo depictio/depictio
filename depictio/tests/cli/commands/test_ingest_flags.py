@@ -759,6 +759,11 @@ class TestTagScopedIngestLeavesTheDashboardsToAFullOne:
         self, app, runner, data_root, dashboard_file, make_harness
     ):
         harness = make_harness(data_root, remote_locations=[str(data_root)])
+        # A second collection the tag leaves out.
+        wf = harness.project.workflows[0]
+        wf.data_collections.append(
+            wf.data_collections[0].model_copy(update={"data_collection_tag": "taxonomy"})
+        )
 
         result = _invoke(
             app,
@@ -778,6 +783,33 @@ class TestTagScopedIngestLeavesTheDashboardsToAFullOne:
         output = normalize(result.output)
         assert "dashboard import skipped" in output
         assert "next ingest of every collection" in output
+
+    def test_a_tag_naming_the_only_collection_imports_the_dashboards(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        # The tag covers every collection of the project: nothing is left out.
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        wf = harness.project.workflows[0]
+        wf.data_collections = [
+            dc for dc in wf.data_collections if dc.data_collection_tag == "asv_table"
+        ]
+        harness.project.workflows = [wf]
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(
+                data_root,
+                "--dashboard",
+                str(dashboard_file),
+                "--data-collection-tag",
+                "asv_table",
+            ),
+        )
+
+        assert result.exit_code == 0, result.output
+        harness.import_dashboards.assert_called_once()
 
     def test_a_full_ingest_imports_the_dashboards(
         self, app, runner, data_root, dashboard_file, make_harness

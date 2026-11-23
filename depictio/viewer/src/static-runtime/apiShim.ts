@@ -114,7 +114,7 @@ import {
   resolvedGroupsLive,
   rowValuesLive,
   textFilterMatchesLive,
-  uniqueValuesLive,
+  uniqueValuePageLive,
 } from './interactiveLive';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
 import { withReachableBasemap } from './mapBasemap';
@@ -915,22 +915,28 @@ export async function fetchUniqueValues(
   filterExpr?: string | null,
   orderBy?: string | null,
   // A bundle holds the whole list: the server's cap does not apply.
-  _limit?: number,
+  limit?: number,
 ): Promise<string[]> {
-  // The component's own scope (`filter_expr`, through its `__fe__` companion)
-  // and the `order_by` companion column, as `/deltatables/unique_values`.
-  if (dataRefFor(dcId)) return uniqueValuesLive(dcId, columnName, filterExpr, orderBy);
-  return interactiveFrozen(dcId, columnName, 'unique-values').unique ?? [];
+  return (await fetchUniqueValuePage(dcId, columnName, { filterExpr, orderBy, limit })).values;
 }
 
-/** `fetchUniqueValuePage`: a bundle holds the whole list, so it is never cut,
- *  and a search narrows it here. */
+/** `fetchUniqueValuePage`. Live data follows the server's contract (search,
+ *  limit, `truncated`); a frozen bundle holds the whole list, so it is never
+ *  cut and a search narrows it here. */
 export async function fetchUniqueValuePage(
   dcId: string,
   columnName: string,
-  query: { filterExpr?: string | null; orderBy?: string | null; search?: string | null } = {},
+  query: {
+    filterExpr?: string | null;
+    orderBy?: string | null;
+    limit?: number;
+    search?: string | null;
+  } = {},
 ): Promise<{ values: string[]; truncated: boolean }> {
-  const values = await fetchUniqueValues(dcId, columnName, query.filterExpr, query.orderBy);
+  // The component's own scope (`filter_expr`, through its `__fe__` companion)
+  // and the `order_by` companion column, as `/deltatables/unique_values`.
+  if (dataRefFor(dcId)) return uniqueValuePageLive(dcId, columnName, query);
+  const values = interactiveFrozen(dcId, columnName, 'unique-values').unique ?? [];
   const q = query.search?.trim().toLowerCase();
   return { values: q ? values.filter((v) => v.toLowerCase().includes(q)) : values, truncated: false };
 }

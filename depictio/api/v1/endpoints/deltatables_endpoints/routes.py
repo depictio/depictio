@@ -1042,8 +1042,7 @@ def get_unique_values(
             # search on a MultiQC-backed sample filter narrows this list too.
             needle = search.lower()
             union = {v for v in union if needle in v.lower()}
-        values_str = sorted(union)[:limit]
-        return {"column": column, "values": values_str}
+        return {"column": column, "values": sorted(union)[:limit], "truncated": len(union) > limit}
 
     deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
     if not deltatables_list:
@@ -1071,12 +1070,11 @@ def get_unique_values(
 
     dc_id_str = str(data_collection_id)
     agg_version = _get_aggregation_version(dc_id_str)
-    # The search is part of the key, length-prefixed so no search string can
-    # read as another segment of the key: one query's answer is never served
-    # for another's.
+    # order_by and search are length-prefixed, so neither can read as the
+    # other: one query's answer is never served for another's.
     cache_key = (
         f"unique_values_o2_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
-        + (f"_by_{order_by}" if order_by else "")
+        + (f"_by{len(order_by)}_{order_by}" if order_by else "")
         + (f"_search{len(search)}_{search}" if search else "")
     )
     # Negative entry: "this DC (at this version) has no such column". Keyed

@@ -10946,8 +10946,10 @@ def _computed_filter_options(
     # read as another segment of the key: one query's answer is never served
     # for another's.
     cache_key = (
-        f"filter_options_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
-        + (f"_by_{order_by}" if order_by else "")
+        # v2: a unique list now carries `truncated`; an entry cached before
+        # it must not be served as a complete list.
+        f"filter_options_v2_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
+        + (f"_by{len(order_by)}_{order_by}" if order_by else "")
         + (f"_search{len(search)}_{search}" if search else "")
     )
     try:
@@ -11035,12 +11037,13 @@ def _computed_filter_options(
                 }
                 unique_values = list(keys)
             else:
+                # Nulls go before the limit: one must not take a counted slot.
                 unique_values = (
                     scan.select(column)
+                    .drop_nulls()
                     .unique()
                     .limit(limit + 1)
                     .collect()[column]
-                    .drop_nulls()
                     .to_list()
                 )
             # One value past ``limit`` was read to tell exactly ``limit``
