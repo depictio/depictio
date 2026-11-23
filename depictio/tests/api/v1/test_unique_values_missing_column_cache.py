@@ -22,7 +22,9 @@ from depictio.api.v1.endpoints.deltatables_endpoints import routes
 def env(tmp_path, monkeypatch):
     dc_id = ObjectId()
     table = tmp_path / "dt"
-    pl.DataFrame({"sample": ["b", "a", "a"], "reads": [1, 2, 3]}).write_delta(str(table))
+    pl.DataFrame(
+        {"sample": ["b", "a", "a"], "reads": [1, 2, 3], "tag": ["x", None, "y"]}
+    ).write_delta(str(table))
 
     db = mongomock.MongoClient().db
     db["projects"].insert_one(
@@ -64,7 +66,23 @@ def _call(dc_id, column, **kw):
 
 def test_present_column_returns_sorted_values(env):
     dc_id, _ = env
-    assert _call(dc_id, "sample") == {"column": "sample", "values": ["a", "b"]}
+    assert _call(dc_id, "sample") == {"column": "sample", "values": ["a", "b"], "truncated": False}
+
+
+@pytest.mark.parametrize("order_by", [None, "reads"])
+def test_a_capped_list_says_it_was_cut(env, order_by):
+    # An entity picker read the first 1,000 of 4,333 families as the whole
+    # table and opened its logo on another family than the one picked (#1418).
+    dc_id, _ = env
+    kw = {"order_by": order_by}
+    assert _call(dc_id, "sample", limit=2, **kw)["truncated"] is False  # exactly 2 values
+    cut = _call(dc_id, "sample", limit=1, **kw)
+    assert cut["truncated"] is True and len(cut["values"]) == 1
+    # A null is not a value: it neither fills the list nor marks it cut.
+    tags = _call(dc_id, "tag", limit=2, **kw)
+    assert tags["values"] == ["x", "y"] and tags["truncated"] is False
+    # Served from the cache, the flag is still there.
+    assert _call(dc_id, "sample", limit=1, **kw)["truncated"] is True
 
 
 def test_missing_column_404_is_cached(env):

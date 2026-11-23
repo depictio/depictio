@@ -1082,12 +1082,15 @@ export function fetchUniqueValues(
   columnName: string,
   filterExpr?: string | null,
   orderBy?: string | null,
+  /** Values to ask for (the server's default is 1,000, its ceiling 100,000).
+   *  Past it the server returns an arbitrary subset. */
+  limit?: number,
 ): Promise<string[]> {
   // One request per (collection, column, scope) while one is in flight: a
   // dashboard mounts several filters on the same column (the filter panel, the
   // viz controls, a card), and a page load sent ~45 requests for ~20 lists.
   // Nothing is kept once it settles, so a later call still sees fresh data.
-  const key = `${dcId}|${columnName}|${filterExpr ?? ''}|${orderBy ?? ''}`;
+  const key = `${dcId}|${columnName}|${filterExpr ?? ''}|${orderBy ?? ''}|${limit ?? ''}`;
   const pending = UNIQUE_VALUES_IN_FLIGHT.get(key);
   // A copy per caller, so one caller sorting its list cannot reorder another's.
   if (pending) return pending.then((values) => values.slice());
@@ -1096,6 +1099,7 @@ export function fetchUniqueValues(
     if (filterExpr) params.set('filter_expr', filterExpr);
     // The server orders the values by this companion column.
     if (orderBy) params.set('order_by', orderBy);
+    if (limit) params.set('limit', String(limit));
     const res = await authFetch(
       `${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`,
     );

@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { InteractiveFilter } from '../../../api';
 import {
   chainSelectionFilter,
+  chooseEntity,
   entitiesByRowCount,
   entityScopeFilter,
   foreignValuesOn,
   frameLength,
+  heldEntities,
   numberOrNull,
   ownSelectionValues,
   rowIndicesWhere,
@@ -140,5 +142,34 @@ describe('entitiesByRowCount', () => {
     expect(entitiesByRowCount(['B', 'A', 'C', 'A', null, '', 'C', 'A'])).toEqual(['A', 'C', 'B']);
     expect(entitiesByRowCount(['Q2', 'Q1'])).toEqual(['Q2', 'Q1']);
     expect(entitiesByRowCount([])).toEqual([]);
+  });
+});
+
+describe('heldEntities / chooseEntity (#1418)', () => {
+  // The model list stopped at 1,000 of 4,333 families: the family the sidebar
+  // picked was not in it, so the logo fell back to the list's first family and
+  // ANDed it with the picked one into an empty fetch.
+  const cut = Array.from({ length: 1000 }, (_, i) => `bu_proteins_${i + 1}`);
+
+  it('keeps the opening entity a cut list leaves out', () => {
+    const held = heldEntities(cut, 'bu_proteins_3052');
+    expect(held).toContain('bu_proteins_3052');
+    expect(held).toHaveLength(1001);
+    expect(chooseEntity(held, null, 'bu_proteins_3052')).toBe('bu_proteins_3052');
+  });
+
+  it('sorts the added entity in natural order and does not duplicate a listed one', () => {
+    expect(heldEntities(['a_2', 'a_10'], 'a_3')).toEqual(['a_2', 'a_3', 'a_10']);
+    expect(heldEntities(['a_2', 'a_10'], 'a_2')).toEqual(['a_2', 'a_10']);
+    expect(heldEntities(null, 'a_2')).toBeNull();
+  });
+
+  it('prefers the reader pick, then the agreed one, then the first held', () => {
+    const held = ['a', 'b', 'c'];
+    expect(chooseEntity(held, 'c', 'b')).toBe('c');
+    expect(chooseEntity(held, 'z', 'b')).toBe('b');
+    expect(chooseEntity(held, null, 'z')).toBe('a');
+    expect(chooseEntity([], 'a', 'a')).toBeNull();
+    expect(chooseEntity(null, 'a', 'a')).toBeNull();
   });
 });

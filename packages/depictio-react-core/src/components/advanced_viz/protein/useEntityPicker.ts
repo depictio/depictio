@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   fetchAdvancedVizData,
@@ -7,7 +7,11 @@ import {
   type InteractiveFilter,
 } from '../../../api';
 import { useSharedOpeningEntity } from '../../../highlight/openingEntity';
-import { entitiesByRowCount } from './rendererData';
+import { chooseEntity, compareEntityNames, entitiesByRowCount, heldEntities } from './rendererData';
+
+/** Distinct values the picker asks for: every family or protein of a table,
+ *  not the 1,000 a filter's option list stops at. The server caps it. */
+export const ENTITY_LIST_LIMIT = 100_000;
 
 export interface EntityPicker {
   /** Every entity the bound table holds, sorted; null while loading. */
@@ -72,11 +76,11 @@ export function useEntityPicker(
     }
     let cancelled = false;
     setEntities(null);
-    fetchUniqueValues(dcId, column)
+    fetchUniqueValues(dcId, column, null, null, ENTITY_LIST_LIMIT)
       .then((values) => {
         if (cancelled) return;
         const clean = Array.from(new Set(values.filter((v) => v != null && v !== '').map(String)));
-        clean.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        clean.sort(compareEntityNames);
         setEntities(clean);
         setFailed(false);
       })
@@ -110,23 +114,17 @@ export function useEntityPicker(
     };
   }, [dcId, column, refreshTick, wfId, vizKind, filtersKey]);
 
+  // The listed entities plus the opening one, which the table holds even when
+  // a cut list leaves it out.
+  const held = useMemo(() => heldEntities(entities, opening), [entities, opening]);
+
   useEffect(() => {
-    if (followed && entities?.includes(followed)) setPicked(followed);
-  }, [followed, entities]);
+    if (followed && held?.includes(followed)) setPicked(followed);
+  }, [followed, held]);
 
   // The dashboard's agreed opening when this table holds it, else its own.
-  const agreed = useSharedOpeningEntity(
-    column ? rows?.shareKey : null,
-    rows?.owner ?? '',
-    opening,
-    entities,
-  );
+  const agreed = useSharedOpeningEntity(column ? rows?.shareKey : null, rows?.owner ?? '', opening, held);
 
-  let entity: string | null = null;
-  if (column && entities && entities.length) {
-    if (picked && entities.includes(picked)) entity = picked;
-    else if (agreed && entities.includes(agreed)) entity = agreed;
-    else entity = entities[0];
-  }
-  return { entities, entity, setEntity: setPicked, failed };
+  const entity = column ? chooseEntity(held, picked, agreed) : null;
+  return { entities: held, entity, setEntity: setPicked, failed };
 }

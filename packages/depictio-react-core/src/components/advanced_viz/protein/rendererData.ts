@@ -108,6 +108,41 @@ export function scopeToEntity(
   ];
 }
 
+/** Natural order of entity names (`bu_proteins_2` before `bu_proteins_10`). */
+export function compareEntityNames(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
+/**
+ * Every entity a picker can show: the listed ones, plus the opening entity
+ * when the list lacks it. The list is the column's distinct values cut at a
+ * limit, while the opening entity comes from reading the table under the
+ * dashboard's filters, so the table holds it even when the cut list does not.
+ * Checked against the list alone, a family picked past the cut fell back to
+ * the list's first one, and its fetch ANDed two families into nothing (#1418).
+ */
+export function heldEntities(
+  listed: readonly string[] | null,
+  opening: string | null,
+): string[] | null {
+  if (listed === null) return null;
+  if (opening === null || listed.includes(opening)) return [...listed];
+  return [...listed, opening].sort(compareEntityNames);
+}
+
+/** The entity on screen: the reader's pick, else the agreed opening one, else
+ *  the first held one; null while the list loads or when the table is empty. */
+export function chooseEntity(
+  held: readonly string[] | null,
+  picked: string | null,
+  agreed: string | null,
+): string | null {
+  if (!held || !held.length) return null;
+  if (picked && held.includes(picked)) return picked;
+  if (agreed && held.includes(agreed)) return agreed;
+  return held[0];
+}
+
 /** Whether the tile's own residue pick (either half) currently holds a value. */
 export function hasOwnResiduePick(
   filters: readonly InteractiveFilter[],

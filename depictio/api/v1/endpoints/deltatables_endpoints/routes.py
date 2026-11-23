@@ -74,6 +74,10 @@ def sanitize_for_json(obj):
 # from, and nothing worth deferring to a worker.
 _NO_DELTA_TYPES = frozenset({"multiqc", "geojson"})
 
+# Upper bound of ``unique_values``' ``limit``: an entity picker lists every
+# family or protein of a table (tens of thousands), never an unbounded column.
+UNIQUE_VALUES_MAX_LIMIT = 100_000
+
 
 def stores_delta_table(dc_type: str) -> bool:
     """Whether a collection of this type is written as a Delta table."""
@@ -921,7 +925,7 @@ async def specs(
 def get_unique_values(
     data_collection_id: PyObjectId,
     column: str,
-    limit: int = 1000,
+    limit: int = Query(1000, ge=1, le=UNIQUE_VALUES_MAX_LIMIT),
     filter_expr: str | None = None,
     order_by: str | None = None,
     current_user: str = Depends(get_user_or_anonymous),
@@ -939,8 +943,11 @@ def get_unique_values(
     Args:
         data_collection_id: Target data collection.
         column: Column name whose unique values to return.
-        limit: Max values to return (default 1000). Prevents unbounded payloads
-            on high-cardinality columns; MultiSelect's UX caps at 100 anyway.
+        limit: Max values to return (default 1000, at most
+            ``UNIQUE_VALUES_MAX_LIMIT``). Prevents unbounded payloads on
+            high-cardinality columns. Past it the values are an arbitrary subset,
+            and ``truncated`` says so: a caller that needs a given value (an entity
+            picker opening on a family) must not take its absence as "not held".
         filter_expr: Optional Polars filter expression (string) applied before
             collecting unique values. Validated through the safe-eval pipeline
             in ``depictio.models.components.filter_expr``.
@@ -952,7 +959,8 @@ def get_unique_values(
         current_user: Authenticated or anonymous user (permission-checked).
 
     Returns:
-        ``{"column": str, "values": list[str]}`` — strings for MultiSelect UI.
+        ``{"column": str, "values": list[str], "truncated": bool}``: strings for
+        the MultiSelect UI; ``truncated`` when the column holds more than ``limit``.
 
     Raises:
         HTTPException: 404 if DC not found / not accessible, 500 on read error.
@@ -1048,7 +1056,7 @@ def get_unique_values(
     dc_id_str = str(data_collection_id)
     agg_version = _get_aggregation_version(dc_id_str)
     cache_key = (
-        f"unique_values_o1_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
+        f"unique_values_o2_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
         + (f"_by_{order_by}" if order_by else "")
     )
     # Negative entry: "this DC (at this version) has no such column". Keyed
@@ -1068,7 +1076,7 @@ def get_unique_values(
         cached = get_cache().get(cache_key)
         if cached is not None:
             logger.debug(f"unique_values: cache hit for {column} on {dc_id_str}")
-            return {"column": column, "values": cached}
+            return {"column": column, **cached}
     except HTTPException:
         raise
     except Exception as exc:  # the cache is an optimisation, never a dependency
@@ -1123,9 +1131,10 @@ def get_unique_values(
                 # itself (numeric or natural) is `order_values`.
                 pairs = (
                     lazy.select(column, order_by)
+                    .filter(pl.col(column).is_not_null())
                     .group_by(column)
                     .agg(pl.col(order_by).min().alias("_order_key"))
-                    .limit(limit)
+                    .limit(limit + 1)
                     .collect()
                 )
                 keys = {
@@ -1136,8 +1145,8 @@ def get_unique_values(
                 values = list(keys)
             else:
                 keys = None
-                df = lazy.select(column).unique().limit(limit).collect()
-                values = df[column].drop_nulls().to_list()
+                df = lazy.select(column).drop_nulls().unique().limit(limit + 1).collect()
+                values = df[column].to_list()
         except pl.exceptions.ColumnNotFoundError:
             raise column_missing_exc
 
@@ -1145,14 +1154,18 @@ def get_unique_values(
         # plain string sort a MultiSelect has always had.
         from depictio.models.components.value_order import order_values
 
-        values_str = order_values(values, keys)
+        # One value past ``limit`` was read (nulls left out before counting) to
+        # tell a column of exactly ``limit`` values from a larger one.
+        truncated = len(values) > limit
+        values = values[:limit]
+        payload = {"values": order_values(values, keys), "truncated": truncated}
         try:
             from depictio.api.cache import get_cache
 
-            get_cache().set(cache_key, values_str)
+            get_cache().set(cache_key, payload)
         except Exception as exc:
             logger.debug(f"unique_values: cache write failed for {cache_key}: {exc}")
-        return {"column": column, "values": values_str}
+        return {"column": column, **payload}
     except HTTPException:
         raise
     except Exception as e:

@@ -914,6 +914,8 @@ export async function fetchUniqueValues(
   columnName: string,
   filterExpr?: string | null,
   orderBy?: string | null,
+  // A bundle holds the whole list: the server's cap does not apply.
+  _limit?: number,
 ): Promise<string[]> {
   // The component's own scope (`filter_expr`, through its `__fe__` companion)
   // and the `order_by` companion column, as `/deltatables/unique_values`.
