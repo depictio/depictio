@@ -7,7 +7,13 @@ import {
   type InteractiveFilter,
 } from '../../../api';
 import { useSharedOpeningEntity } from '../../../highlight/openingEntity';
-import { chooseEntity, compareEntityNames, entitiesByRowCount, heldEntities } from './rendererData';
+import {
+  chooseEntity,
+  compareEntityNames,
+  entitiesByRowCount,
+  heldEntities,
+  withoutFiltersOn,
+} from './rendererData';
 
 /** Distinct values the picker asks for: every family or protein of a table,
  *  not the 1,000 a filter's option list stops at. The server caps it. */
@@ -100,29 +106,50 @@ export function useEntityPicker(
   useEffect(() => {
     if (!dcId || !column || !wfId || !vizKind) {
       setOpening(null);
-      setInScope(null);
       return;
     }
     let cancelled = false;
     const filters = JSON.parse(filtersKey) as InteractiveFilter[];
     fetchAdvancedVizData({ wfId, dcId, columns: [column], filters, vizKind })
       .then((res) => {
-        if (cancelled) return;
-        const ranked = entitiesByRowCount(res.rows?.[column] ?? []);
-        setOpening(ranked[0] ?? null);
-        // A sampled read may miss entities: then nothing is known to be out.
-        const whole = !res.sampled && res.sampling?.exact !== false;
-        setInScope(whole ? new Set(ranked) : null);
+        if (!cancelled) setOpening(entitiesByRowCount(res.rows?.[column] ?? [])[0] ?? null);
       })
       .catch(() => {
-        if (cancelled) return;
-        setOpening(null);
-        setInScope(null);
+        if (!cancelled) setOpening(null);
       });
     return () => {
       cancelled = true;
     };
   }, [dcId, column, refreshTick, wfId, vizKind, filtersKey]);
+
+  // Once the reader picks in the tile, the entities the dashboard's filters
+  // leave for that pick: the tile's fetch replaces any filter on its own
+  // column with the pick (`scopeToEntity`), so those filters are left out
+  // here too, and only the others (a family linked from another table) can
+  // exclude it. A pick they exclude would AND two entities into nothing.
+  useEffect(() => {
+    if (!picked || !dcId || !column || !wfId || !vizKind) {
+      setInScope(null);
+      return;
+    }
+    // A scope read for an earlier pick says nothing about this one.
+    setInScope(null);
+    let cancelled = false;
+    const filters = withoutFiltersOn(JSON.parse(filtersKey) as InteractiveFilter[], [column]);
+    fetchAdvancedVizData({ wfId, dcId, columns: [column], filters, vizKind })
+      .then((res) => {
+        if (cancelled) return;
+        // A sampled read may miss entities: then nothing is known to be out.
+        const whole = !res.sampled && res.sampling?.exact !== false;
+        setInScope(whole ? new Set(entitiesByRowCount(res.rows?.[column] ?? [])) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setInScope(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [picked, dcId, column, refreshTick, wfId, vizKind, filtersKey]);
 
   // The listed entities plus the opening one, which the table holds even when
   // a cut list leaves it out.
