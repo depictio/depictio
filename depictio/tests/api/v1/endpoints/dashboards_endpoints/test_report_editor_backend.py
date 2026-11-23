@@ -141,9 +141,18 @@ def ctx():
     }
     db.dashboards.insert_one(doc)
     db.projects.insert_one(_project_doc())
+    # The preview's data identity reads each collection's latest commit from
+    # the same Mongo-only place the reader marks do.
+    db.deltatables.insert_one(
+        {
+            "data_collection_id": ObjectId(DC1),
+            "aggregation": [{"delta_version": 3, "aggregation_version": 2}],
+        }
+    )
 
     routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
     jobs_mod = "depictio.api.v1.services.notebook_export.jobs"
+    changes_mod = "depictio.api.v1.services.changes.baseline"
     granted = {"level": "owner"}
 
     def fake_mutation(doc_, user, level="editor"):
@@ -157,6 +166,9 @@ def ctx():
         patch(f"{routes_mod}.projects_collection", db.projects),
         patch(f"{routes_mod}.check_project_permission", lambda *a, **k: True),
         patch(f"{routes_mod}._resolve_link_filters_cached", lambda **kw: list(kw["filters"])),
+        patch(f"{changes_mod}.deltatables_collection", db.deltatables),
+        patch(f"{changes_mod}.multiqc_collection", db.multiqc),
+        patch(f"{changes_mod}.projects_collection", db.projects),
         patch("depictio.api.v1.deltatables_utils.load_deltatable_lite", _fake_load),
         # The report's icons come from the Iconify API when missing from the
         # bundled set: offline, the export carries on without them (the
@@ -179,7 +191,7 @@ def ctx():
             SimpleNamespace(now=lambda tz=None: FIXED_NOW),
         ),
     ):
-        yield {"granted": granted, "dashboards": db.dashboards}
+        yield {"granted": granted, "dashboards": db.dashboards, "deltatables": db.deltatables}
     client.close()
 
 
@@ -328,7 +340,9 @@ def test_a_preview_queues_the_render_job(ctx) -> None:
     kwargs = queued["kwargs"]  # type: ignore[index]
     assert kwargs["pdf"] is False
     assert kwargs["preview"] is True
-    assert kwargs["preview_cache"] == f"{USER_ID}/{DASHBOARD_ID}"
+    # One workdir per user, dashboard and data identity: the digest moves when
+    # the data does, so Quarto's cell cache cannot serve outputs of other data.
+    assert kwargs["preview_cache"].startswith(f"{USER_ID}/{DASHBOARD_ID}/")
     assert kwargs["preview_force"] is False
     assert kwargs["combined"] is None
     # The notebook is staged under the caller's prefix, as a render's is.
@@ -387,6 +401,158 @@ def test_force_queues_a_new_preview(ctx) -> None:
     assert forced.job_id != first.job_id
     assert forced.status == "queued"
     assert queued2["kwargs"]["preview_force"] is True  # type: ignore[index]
+
+
+# ── the preview: the data identity in the key and the workdir ────────────────
+
+
+def test_a_changed_data_identity_serves_a_fresh_preview(ctx) -> None:
+    """The same document after a re-ingest is NOT the same preview: another
+    data identity gets another cache key, another job and another workdir, and
+    the same identity still reuses the finished job."""
+    from depictio.api.v1.services.notebook_export import jobs
+
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+    a, b, c = _staging(staged, queued)
+    with a, b, c, patch.object(nbx, "_report_data_identity", lambda plan: "identity-A"):
+        first = _preview()
+    jobs.finish(first.job_id, "success")
+
+    staged2: dict[str, bytes] = {}
+    queued2: dict[str, object] = {}
+    a, b, c = _staging(staged2, queued2)
+    with (
+        a,
+        b,
+        c,
+        patch.object(nbx, "_report_data_identity", lambda plan: "identity-B"),
+        patch("celery.result.AsyncResult", lambda *args, **kw: _Ready()),
+    ):
+        second = _preview()
+
+    assert second.status == "queued", "the finished job of the old data is not served"
+    assert second.job_id != first.job_id
+    assert next(iter(staged2.values())) == next(iter(staged.values())), "the document is the same"
+    assert jobs.get(first.job_id)["preview_key"] != jobs.get(second.job_id)["preview_key"]  # type: ignore[index]
+    assert queued2["kwargs"]["preview_cache"] != queued["kwargs"]["preview_cache"]  # type: ignore[index]
+    assert str(queued2["kwargs"]["preview_cache"]).startswith(f"{USER_ID}/{DASHBOARD_ID}/")  # type: ignore[index]
+
+    # The finished job of THIS identity answers the next identical request.
+    jobs.finish(second.job_id, "success")
+    queued3: dict[str, object] = {}
+    a, b, c = _staging(staged2, queued3)
+    with (
+        a,
+        b,
+        c,
+        patch.object(nbx, "_report_data_identity", lambda plan: "identity-B"),
+        patch("celery.result.AsyncResult", lambda *args, **kw: _Ready()),
+    ):
+        third = _preview()
+    assert third.job_id == second.job_id and third.status == "ready"
+
+
+def test_a_reingest_moves_the_preview_key_and_the_workdir(ctx) -> None:
+    """The current Delta commit is part of the identity: a collection whose
+    latest commit moved gets a fresh preview, a collection that did not move
+    does not (the qmd itself is unchanged either way)."""
+    from depictio.api.v1.services.notebook_export import jobs
+
+    staged, queued, first = _staged_preview_qmd()
+    jobs.finish(first.job_id, "success")
+    first_key = jobs.get(first.job_id)["preview_key"]  # type: ignore[index]
+    first_workdir = queued["kwargs"]["preview_cache"]  # type: ignore[index]
+
+    ctx["deltatables"].update_one(
+        {"data_collection_id": ObjectId(DC1)},
+        {"$set": {"aggregation": [{"delta_version": 4, "aggregation_version": 3}]}},
+    )
+
+    staged2, queued2, second = _staged_preview_qmd()
+
+    assert second.status == "queued" and second.job_id != first.job_id
+    assert next(iter(staged2.values())) == next(iter(staged.values())), "same document, new data"
+    assert jobs.get(second.job_id)["preview_key"] != first_key  # type: ignore[index]
+    assert queued2["kwargs"]["preview_cache"] != first_workdir  # type: ignore[index]
+
+
+# ── the layer's stale pins: the editor stays open, live data answers ─────────
+
+
+def _layer_with_stale_pins(ctx, state):
+    layer = ctx["dashboards"].find_one({"dashboard_id": ObjectId(DASHBOARD_ID)})["report_layer"]
+    layer["state"] = state
+    ctx["dashboards"].update_one(
+        {"dashboard_id": ObjectId(DASHBOARD_ID)}, {"$set": {"report_layer": layer}}
+    )
+
+
+_STALE_PIN_STORE = "depictio.api.v1.endpoints.dashboards_endpoints.data_versions.version_store"
+
+
+def test_a_layer_pin_that_no_longer_exists_no_longer_blocks_the_editor(ctx) -> None:
+    """Retention deleted the version the layer's state pins: the outline and
+    the preflight still answer, and the export falls back to live data."""
+    _layer_with_stale_pins(
+        ctx,
+        {
+            "filters": [],
+            "context": {"dashboard_id": DASHBOARD_ID},
+            "pins": {"as_of_version": "gone", "definition_version": "gone"},
+        },
+    )
+    with (
+        patch(f"{_STALE_PIN_STORE}.get_version", lambda vid: None),
+        patch(f"{_STALE_PIN_STORE}.get_version_tab", lambda vid, tab: None),
+        # The combined file's owner check reads the live database: not this test's.
+        patch.object(nbx, "_combined_refusal", lambda *a, **k: None),
+    ):
+        outline = _outline()
+        preflight = nbx.notebook_export_preflight(
+            dashboard_id=ObjectId(DASHBOARD_ID),  # type: ignore[arg-type]
+            request=NotebookExportRequest(),
+            current_user=_RenderUser(),  # type: ignore[arg-type]
+            access_token=None,
+        )
+        source = nbx.notebook_export(
+            dashboard_id=ObjectId(DASHBOARD_ID),  # type: ignore[arg-type]
+            request=NotebookExportRequest(),
+            current_user=_RenderUser(),  # type: ignore[arg-type]
+            access_token=None,
+        ).body.decode()
+
+    assert [e.kind for e in outline.tabs[0].entries] == ["section", "component", "component"]
+    assert not any("pinned" in w for w in preflight.warnings), "the export reads live data"
+    assert "version=" not in source.split("client.data(")[1][:60], "no commit pin in the document"
+
+
+def test_a_layer_pin_sent_in_the_request_body_is_still_a_400(ctx) -> None:
+    from depictio.models.models.analysis_state import AnalysisState
+
+    _layer_with_stale_pins(
+        ctx,
+        {
+            "filters": [],
+            "context": {"dashboard_id": DASHBOARD_ID},
+            "pins": {"as_of_version": "gone"},
+        },
+    )
+    state = AnalysisState.model_validate(
+        {"context": {"dashboard_id": DASHBOARD_ID}, "pins": {"as_of_version": "gone"}}
+    )
+    with (
+        patch(f"{_STALE_PIN_STORE}.get_version", lambda vid: None),
+        pytest.raises(HTTPException) as exc,
+    ):
+        nbx.notebook_export_preflight(
+            dashboard_id=ObjectId(DASHBOARD_ID),  # type: ignore[arg-type]
+            request=NotebookExportRequest(state=state),
+            current_user=_RenderUser(),  # type: ignore[arg-type]
+            access_token=None,
+        )
+    assert exc.value.status_code == 400
+    assert "no longer exists" in str(exc.value.detail)
 
 
 # ── the preview: a neutral build, the same key after a text edit ─────────────

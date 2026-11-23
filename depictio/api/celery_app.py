@@ -1145,13 +1145,31 @@ def _preview_workdir(preview_cache: str) -> str:
     what changed. The root is ``preview_cache_dir`` when configured, the
     system temporary directory's ``depictio-preview`` otherwise.
     """
+    import shutil
     import tempfile
+    import time
     from pathlib import Path
 
     root = settings.notebook_export.preview_cache_dir or str(
         Path(tempfile.gettempdir()) / "depictio-preview"
     )
-    return str(Path(root) / preview_cache)
+    workdir = Path(root) / preview_cache
+    # The workdirs of this dashboard's older data (``<user>/<dashboard>/
+    # <data identity>``) are never read again: one left untouched for a day
+    # goes, so a dashboard keeps about one cache, not one per ingestion.
+    parent = workdir.parent
+    if parent.is_dir():
+        for sibling in parent.iterdir():
+            try:
+                if (
+                    sibling != workdir
+                    and sibling.is_dir()
+                    and time.time() - sibling.stat().st_mtime > 86400
+                ):
+                    shutil.rmtree(sibling, ignore_errors=True)
+            except OSError:
+                continue
+    return str(workdir)
 
 
 @celery_app.task(

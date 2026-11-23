@@ -643,6 +643,27 @@ def test_an_export_without_a_layer_state_uses_the_dashboard_defaults(ctx) -> Non
     assert state.filters == []
 
 
+def test_a_layer_state_that_does_not_validate_falls_back_and_logs(ctx, caplog) -> None:
+    """A state the layer holds but that does not validate leaves the export at
+    the dashboard's defaults, with a warning naming the dashboard."""
+    import logging
+
+    from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export
+    from depictio.models.models.analysis_state import NotebookExportRequest
+
+    did = _make_dashboard(ctx)
+    ctx["dashboards"].update_one(
+        {"_id": did},
+        {"$set": {"report_layer": {"state": {"filters": "not-a-list"}, "revision": 1}}},
+    )
+
+    with caplog.at_level(logging.WARNING, logger="depictio"):
+        state = notebook_export._resolved_request_state(did, NotebookExportRequest(state=None))
+
+    assert state.filters == [], "the fallback to the dashboard's defaults holds"
+    assert str(did) in caplog.text
+
+
 # ── the document ────────────────────────────────────────────────────────────
 
 DC_ID = "646b0f3c1e4a2d7f8e5b8ca1"

@@ -111,15 +111,50 @@ def _require_enabled() -> None:
 
 def _state_of_layer(main_tab: dict[str, Any]) -> AnalysisState | None:
     """The report layer's state: the filters the report is drawn and exported
-    at, or ``None`` (the layer holds none, or one that does not validate)."""
+    at, or ``None`` (the layer holds none, or one that does not validate).
+
+    A pin of that state naming a version retention has since deleted is
+    dropped, with a warning: that half reads live data. A stored state must
+    never 400 every export of the dashboard, or lock its report editor out
+    (the outline sends no state). A pin a caller sends stays a 400.
+    """
     layer = main_tab.get("report_layer")
     raw_state = layer.get("state") if isinstance(layer, dict) else None
     if not isinstance(raw_state, dict):
         return None
     try:
-        return AnalysisState.model_validate(raw_state)
-    except Exception:
+        state = AnalysisState.model_validate(raw_state)
+    except Exception as exc:
+        logger.warning(
+            f"Dashboard {main_tab.get('dashboard_id')}: the report layer's state does not "
+            f"validate, the export uses the dashboard's defaults ({exc})"
+        )
         return None
+    return _without_lost_pins(state, main_tab)
+
+
+def _without_lost_pins(state: AnalysisState, main_tab: dict[str, Any]) -> AnalysisState:
+    """``state`` without the version pins that no longer resolve for this family."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import data_versions
+
+    drop: dict[str, Any] = {}
+    for field_name in ("as_of_version", "definition_version"):
+        version_id = getattr(state.pins, field_name)
+        if not version_id:
+            continue
+        try:
+            record = data_versions.version_store.get_version(str(version_id))
+            data_versions.check_version_family(record, version_id, main_tab)
+        except ValueError:
+            drop[field_name] = None
+    if not drop:
+        return state
+    logger.warning(
+        f"Dashboard {main_tab.get('dashboard_id')}: the report layer pins version(s) "
+        f"{sorted(str(getattr(state.pins, f)) for f in drop)} that no longer exist; "
+        "the export reads live data for them"
+    )
+    return state.model_copy(update={"pins": state.pins.model_copy(update=drop)})
 
 
 def _resolved_request_state(
@@ -142,7 +177,8 @@ def _resolved_request_state(
         # queried is the family's main tab itself.
         family_id = doc.get("parent_dashboard_id") or dashboard_id
         main_tab = routes.dashboards_collection.find_one(
-            {"dashboard_id": ObjectId(str(family_id))}, {"report_layer": 1}
+            {"dashboard_id": ObjectId(str(family_id))},
+            {"report_layer": 1, "dashboard_id": 1, "parent_dashboard_id": 1},
         )
         state = _state_of_layer(main_tab or {})
         if state is not None:
@@ -1335,13 +1371,36 @@ def notebook_export_outline(
     )
 
 
-def _preview_cache_key(qmd: bytes, embed_runtime: bool) -> str:
-    """What makes one preview equal to another: the document and the runtime
-    embedded in it. The document carries everything else that changes it —
-    the state, the layer, the filters."""
+def _report_data_identity(plan: Any) -> str:
+    """What the report's data is at now: each collection's latest commit (a
+    MultiQC collection's report set), as the reader marks read it. The
+    document carries the day, not the data, so without this a re-ingest the
+    same day would be answered with the preview of the data before it."""
+    from depictio.api.v1.services.changes import baseline
+
+    tabs = list(getattr(plan, "tabs", None) or [])
+    project_id = tabs[0].get("project_id") if tabs else None
+    try:
+        types = baseline.family_dc_types(tabs, project_id)
+        tokens = sorted(
+            f"{dc_id}={baseline.data_token(baseline.dc_state(dc_id, dc_type)) or '-'}"
+            for dc_id, dc_type in types.items()
+        )
+    except Exception as exc:  # the identity is a cache hint, never a failure
+        logger.warning(f"Report preview: the data identity could not be read ({exc})")
+        tokens = []
+    return hashlib.sha256("\n".join(tokens).encode()).hexdigest()
+
+
+def _preview_cache_key(qmd: bytes, embed_runtime: bool, data_identity: str = "") -> str:
+    """What makes one preview equal to another: the document, the runtime
+    embedded in it, and the data it reads (``_report_data_identity``). The
+    document carries everything else that changes it: the state, the layer,
+    the filters."""
     digest = hashlib.sha256()
     digest.update(qmd)
     digest.update(b"\x00embed=" + (b"1" if embed_runtime else b"0"))
+    digest.update(b"\x00data=" + data_identity.encode())
     return digest.hexdigest()
 
 
@@ -1602,7 +1661,8 @@ def notebook_export_preview(
     plan.preview = True
     builder = NotebookBuilder(plan)
     qmd = builder.build().encode("utf-8")
-    cache_key = _preview_cache_key(qmd, embed_runtime)
+    data_identity = _report_data_identity(plan)
+    cache_key = _preview_cache_key(qmd, embed_runtime, data_identity)
 
     if not request.force:
         ready = _cached_preview(user_id, str(dashboard_id), cache_key, current_user)
@@ -1649,7 +1709,9 @@ def notebook_export_preview(
             "filename": filename,
             "pdf": False,
             "preview": True,
-            "preview_cache": f"{user_id}/{dashboard_id}",
+            # One workdir per data identity too: Quarto's cell cache is keyed
+            # on the cell source, so it would serve outputs of the old data.
+            "preview_cache": f"{user_id}/{dashboard_id}/{data_identity[:16]}",
             "preview_force": bool(request.force),
         },
         task_id=job_id,
