@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { themeReferenceGuides } from '../referenceGuideTheme';
 import { Paper, Text, Stack, Badge, Group, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
@@ -534,8 +535,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const baseLayout = useMemo<Record<string, unknown>>(() => {
     // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the
     // server template, under everything this renderer decides below.
+    // Reference lines first take the scheme on show: a figure drawn once for
+    // both (the catalog) carries the other scheme's label colour otherwise.
     const srcLayout = applyChromePlotly(
-      tinted.layout,
+      themeReferenceGuides(tinted.layout, theme),
       theme,
       chromeStyle,
     );

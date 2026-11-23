@@ -17,6 +17,7 @@ import {
   UpsetResult,
 } from '../../api';
 import { pinsForColumns } from '../../categoryColors';
+import { PLOT_CHROME } from '../../palettes.generated';
 import { plotOverflow, resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import {
@@ -583,7 +584,8 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
     // plotly-upset's near-black ink (bars several sets share, the edges) turns
     // a neutral grey in both schemes: the set colours carry the reading.
     data = inkUpsetForDark(data, figureLayout, {
-      ink: isDark ? theme.colors.gray[4] : theme.colors.gray[6],
+      // The plot's muted token: a shared bar stays neutral beside a set's colour.
+      ink: PLOT_CHROME[isDark ? 'dark' : 'light'].muted,
       empty: isDark ? theme.colors.dark[4] : theme.colors.gray[3],
     });
     return withUpsetHoverTargets(
