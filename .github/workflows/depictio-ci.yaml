@@ -290,7 +290,11 @@ jobs:
 
           # Ensure correct polars-lts-cpu version is installed (required for MultiQC)
           echo "📦 Installing polars-lts-cpu 1.33.1..."
-          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1"
+          # The deltalake extra resolves the newest deltalake unless pinned: keep
+          # the version pyproject.toml pins (1.7.0 slipped in this way once).
+          DELTALAKE_PIN=$(grep -oE '"deltalake==[^"]+"' pyproject.toml | head -1 | tr -d '"')
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1" "$DELTALAKE_PIN"
+          python -c "import deltalake; print(f'deltalake {deltalake.__version__}')"
 
           # Verify only polars-lts-cpu is installed
           echo "✅ Verifying polars installation..."

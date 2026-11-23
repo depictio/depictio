@@ -207,6 +207,23 @@ class TestVersionedWrite:
         assert commit.custom_metadata[f"{METADATA_PREFIX}trigger"] == "watch"
         assert commit.timestamp is not None
 
+    def test_commit_info_reads_a_history_generator(self, destination, storage, monkeypatch):
+        # deltalake 1.7 returns history() as a generator; indexing it raised a
+        # TypeError the reader swallowed, and every write reported version None.
+        write_delta_table_versioned(frame(["A"]), destination, storage)
+        real_history = DeltaTable.history
+
+        def as_generator(self, limit=None):
+            yield from real_history(self, limit)
+
+        monkeypatch.setattr(DeltaTable, "history", as_generator)
+
+        latest = read_delta_commit_info(destination, storage)
+        assert latest is not None and latest.version == 0
+        pinned = read_delta_commit_info(destination, storage, version=0)
+        assert pinned is not None and pinned.version == 0
+        assert [entry.version for entry in list_delta_versions(destination, storage)] == [0]
+
     def test_history_is_newest_first(self, destination, storage):
         write_delta_table_versioned(frame(["A"]), destination, storage)
         write_delta_table_versioned(frame(["A", "B"]), destination, storage)
