@@ -61,6 +61,8 @@ export function useEntityPicker(
 ): EntityPicker {
   const [entities, setEntities] = useState<string[] | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  // Every entity the dashboard's filters leave, when the read was whole.
+  const [inScope, setInScope] = useState<ReadonlySet<string> | null>(null);
   const [failed, setFailed] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const wfId = rows?.wfId ?? null;
@@ -98,16 +100,24 @@ export function useEntityPicker(
   useEffect(() => {
     if (!dcId || !column || !wfId || !vizKind) {
       setOpening(null);
+      setInScope(null);
       return;
     }
     let cancelled = false;
     const filters = JSON.parse(filtersKey) as InteractiveFilter[];
     fetchAdvancedVizData({ wfId, dcId, columns: [column], filters, vizKind })
       .then((res) => {
-        if (!cancelled) setOpening(entitiesByRowCount(res.rows?.[column] ?? [])[0] ?? null);
+        if (cancelled) return;
+        const ranked = entitiesByRowCount(res.rows?.[column] ?? []);
+        setOpening(ranked[0] ?? null);
+        // A sampled read may miss entities: then nothing is known to be out.
+        const whole = !res.sampled && res.sampling?.exact !== false;
+        setInScope(whole ? new Set(ranked) : null);
       })
       .catch(() => {
-        if (!cancelled) setOpening(null);
+        if (cancelled) return;
+        setOpening(null);
+        setInScope(null);
       });
     return () => {
       cancelled = true;
@@ -125,6 +135,6 @@ export function useEntityPicker(
   // The dashboard's agreed opening when this table holds it, else its own.
   const agreed = useSharedOpeningEntity(column ? rows?.shareKey : null, rows?.owner ?? '', opening, held);
 
-  const entity = column ? chooseEntity(held, picked, agreed) : null;
+  const entity = column ? chooseEntity(held, picked, agreed, inScope) : null;
   return { entities: held, entity, setEntity: setPicked, failed };
 }

@@ -1086,32 +1086,59 @@ export function fetchUniqueValues(
    *  Past it the server returns an arbitrary subset. */
   limit?: number,
 ): Promise<string[]> {
+  return fetchUniqueValuePage(dcId, columnName, { filterExpr, orderBy, limit }).then((page) => page.values);
+}
+
+/** A column's distinct values, and whether the server cut the list at its limit. */
+export interface UniqueValuePage {
+  values: string[];
+  /** More values exist than were returned: search for the others (`search`). */
+  truncated: boolean;
+}
+
+export interface UniqueValueQuery {
+  filterExpr?: string | null;
+  orderBy?: string | null;
+  limit?: number;
+  /** Case-insensitive literal substring the values must contain. */
+  search?: string | null;
+}
+
+/** `fetchUniqueValues` with the `truncated` flag, and a server-side search. */
+export function fetchUniqueValuePage(
+  dcId: string,
+  columnName: string,
+  query: UniqueValueQuery = {},
+): Promise<UniqueValuePage> {
+  const { filterExpr, orderBy, limit } = query;
+  const search = query.search?.trim() || '';
   // One request per (collection, column, scope) while one is in flight: a
   // dashboard mounts several filters on the same column (the filter panel, the
   // viz controls, a card), and a page load sent ~45 requests for ~20 lists.
   // Nothing is kept once it settles, so a later call still sees fresh data.
-  const key = `${dcId}|${columnName}|${filterExpr ?? ''}|${orderBy ?? ''}|${limit ?? ''}`;
+  const key = `${dcId}|${columnName}|${filterExpr ?? ''}|${orderBy ?? ''}|${limit ?? ''}|${search}`;
   const pending = UNIQUE_VALUES_IN_FLIGHT.get(key);
   // A copy per caller, so one caller sorting its list cannot reorder another's.
-  if (pending) return pending.then((values) => values.slice());
+  if (pending) return pending.then((page) => ({ ...page, values: page.values.slice() }));
   const request = (async () => {
     const params = new URLSearchParams({ column: columnName });
     if (filterExpr) params.set('filter_expr', filterExpr);
     // The server orders the values by this companion column.
     if (orderBy) params.set('order_by', orderBy);
     if (limit) params.set('limit', String(limit));
+    if (search) params.set('search', search);
     const res = await authFetch(
       `${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`,
     );
     if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
-    const body = (await res.json()) as { values?: string[] };
-    return body.values || [];
+    const body = (await res.json()) as { values?: string[]; truncated?: boolean };
+    return { values: body.values || [], truncated: Boolean(body.truncated) };
   })().finally(() => UNIQUE_VALUES_IN_FLIGHT.delete(key));
   UNIQUE_VALUES_IN_FLIGHT.set(key, request);
   return request;
 }
 
-const UNIQUE_VALUES_IN_FLIGHT = new Map<string, Promise<string[]>>();
+const UNIQUE_VALUES_IN_FLIGHT = new Map<string, Promise<UniqueValuePage>>();
 
 /** The distinct values of a column, ranked by the largest value of another
  *  column each one carries (``default_by`` of an ``always_selected`` Select). */
@@ -1548,6 +1575,8 @@ export interface FilterOptionsRequest extends DataPinFields {
   filter_expr?: string | null;
   /** `unique` only: the companion column ordering the values. */
   order_by?: string | null;
+  /** `unique` only: case-insensitive literal substring the values contain. */
+  search?: string | null;
 }
 
 /**
@@ -1649,16 +1678,34 @@ export async function fetchUniqueValuesAt(
   filterExpr?: string | null,
   orderBy?: string | null,
 ): Promise<string[]> {
+  const page = await fetchUniqueValuePageAt(dashboardId, dcId, columnName, pins, { filterExpr, orderBy });
+  return page.values;
+}
+
+/** `fetchUniqueValuePage` at a data version (see `fetchFilterOptions`). */
+export async function fetchUniqueValuePageAt(
+  dashboardId: string,
+  dcId: string,
+  columnName: string,
+  pins: DataPinFields,
+  query: UniqueValueQuery = {},
+): Promise<UniqueValuePage> {
+  const { filterExpr, orderBy } = query;
+  const search = query.search?.trim() || '';
   const body = await fetchFilterOptions(dashboardId, {
     dc_id: dcId,
     column: columnName,
     kind: 'unique',
     ...(filterExpr ? { filter_expr: filterExpr } : {}),
     ...(orderBy ? { order_by: orderBy } : {}),
+    ...(search ? { search } : {}),
     ...pins,
   });
   const values = body.values;
-  return Array.isArray(values) ? values.map(String) : [];
+  return {
+    values: Array.isArray(values) ? values.map(String) : [],
+    truncated: Boolean(body.truncated),
+  };
 }
 
 /** `fetchColumnRange` at a data version (see `fetchFilterOptions`). */

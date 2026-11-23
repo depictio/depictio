@@ -16,7 +16,7 @@
  * offer values the pinned data does not hold. The pins are part of the cache
  * key, so a version's options never answer for the live ones.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   ColumnRange,
@@ -24,9 +24,10 @@ import {
   fetchColumnRangeAt,
   fetchRankedValues,
   fetchRowValues,
-  fetchUniqueValues,
-  fetchUniqueValuesAt,
+  fetchUniqueValuePage,
+  fetchUniqueValuePageAt,
   type DataPinFields,
+  type UniqueValuePage,
 } from '../../api';
 import { dataPinBody, isDataVersionActive, useDataVersions } from '../../dataVersions';
 
@@ -54,8 +55,8 @@ export function useFilterDataPins(): { dashboardId: string; pins: DataPinFields;
 
 // ---------------------------------------------------------------- unique values
 
-const uniqueValuesPending = new Map<string, Promise<string[]>>();
-const uniqueValuesResolved = new Map<string, string[]>();
+const uniqueValuesPending = new Map<string, Promise<UniqueValuePage>>();
+const uniqueValuesResolved = new Map<string, UniqueValuePage>();
 
 /** Cache key: `filter_expr` and the data pins change the option set, so they
  *  are part of it. */
@@ -79,48 +80,49 @@ export function useUniqueValues(
   columnName: string | undefined,
   filterExpr?: string | null,
   orderBy?: string | null,
-): Loadable<string[]> {
+): Loadable<string[]> & { truncated: boolean } {
   const versioned = useFilterDataPins();
   const key = uniqueValuesKey(dcId, columnName, filterExpr, versioned?.key, orderBy);
-  const [state, setState] = useState<Loadable<string[]>>(() => {
+  const [state, setState] = useState<Loadable<string[]> & { truncated: boolean }>(() => {
     const hit = key ? uniqueValuesResolved.get(key) : undefined;
-    return { data: hit ?? [], loading: Boolean(key) && !hit, error: null };
+    return {
+      data: hit?.values ?? [],
+      truncated: hit?.truncated ?? false,
+      loading: Boolean(key) && !hit,
+      error: null,
+    };
   });
 
   useEffect(() => {
     if (!key || !dcId || !columnName) {
-      setState({ data: [], loading: false, error: null });
+      setState({ data: [], truncated: false, loading: false, error: null });
       return;
     }
     const hit = uniqueValuesResolved.get(key);
     if (hit) {
-      setState({ data: hit, loading: false, error: null });
+      setState({ data: hit.values, truncated: hit.truncated, loading: false, error: null });
       return;
     }
     let cancelled = false;
     let pending = uniqueValuesPending.get(key);
     if (!pending) {
       pending = versioned
-        ? fetchUniqueValuesAt(
-            versioned.dashboardId,
-            dcId,
-            columnName,
-            versioned.pins,
+        ? fetchUniqueValuePageAt(versioned.dashboardId, dcId, columnName, versioned.pins, {
             filterExpr,
             orderBy,
-          )
-        : fetchUniqueValues(dcId, columnName, filterExpr, orderBy);
+          })
+        : fetchUniqueValuePage(dcId, columnName, { filterExpr, orderBy });
       uniqueValuesPending.set(key, pending);
     }
     pending
-      .then((values) => {
-        uniqueValuesResolved.set(key, values);
-        if (!cancelled) setState({ data: values, loading: false, error: null });
+      .then((page) => {
+        uniqueValuesResolved.set(key, page);
+        if (!cancelled) setState({ data: page.values, truncated: page.truncated, loading: false, error: null });
       })
       .catch((err) => {
         console.warn('[useUniqueValues] fetchUniqueValues failed:', err);
         uniqueValuesPending.delete(key);
-        if (!cancelled) setState({ data: [], loading: false, error: errorMessage(err) });
+        if (!cancelled) setState({ data: [], truncated: false, loading: false, error: errorMessage(err) });
       });
     return () => {
       cancelled = true;
@@ -130,6 +132,90 @@ export function useUniqueValues(
   }, [key]);
 
   return state;
+}
+
+// ---------------------------------------------------------- searched values
+
+/** Wait after the last keystroke before asking the server. */
+const SEARCH_DEBOUNCE_MS = 250;
+
+/** `base`, then `extra` and `found`, without repeats. */
+export function mergeValues(
+  base: readonly string[],
+  ...more: ReadonlyArray<readonly string[]>
+): string[] {
+  const seen = new Set(base);
+  const out = [...base];
+  for (const list of more) {
+    for (const v of list) {
+      if (!seen.has(v)) {
+        seen.add(v);
+        out.push(v);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * A column's option list that stays complete past the server's limit. When
+ * the list was cut (`truncated`), what the reader types is searched on the
+ * server and the matches join the list, so a value past the cut (family
+ * 3,052 of 4,333) can be found and picked (#1418). `keep` holds values that
+ * must stay listed whatever the search (the current selection).
+ */
+export function useSearchedValues(
+  dcId: string | undefined,
+  columnName: string | undefined,
+  filterExpr: string | null | undefined,
+  orderBy: string | null | undefined,
+  base: readonly string[],
+  truncated: boolean,
+  keep: readonly string[] = [],
+): { values: string[]; onSearchChange: (query: string) => void } {
+  const versioned = useFilterDataPins();
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<string[]>([]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!truncated || !q || !dcId || !columnName) {
+      setFound([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      const request = versioned
+        ? fetchUniqueValuePageAt(versioned.dashboardId, dcId, columnName, versioned.pins, {
+            filterExpr,
+            orderBy,
+            search: q,
+          })
+        : fetchUniqueValuePage(dcId, columnName, { filterExpr, orderBy, search: q });
+      request
+        .then((page) => {
+          if (!cancelled) setFound(page.values);
+        })
+        .catch((err) => {
+          console.warn('[useSearchedValues] search failed:', err);
+          if (!cancelled) setFound([]);
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // `versioned.key` stands for the pins.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, truncated, dcId, columnName, filterExpr, orderBy, versioned?.key]);
+
+  const keepKey = keep.join('\u0000');
+  const values = useMemo(
+    () => mergeValues(base, keep, found),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [base, keepKey, found],
+  );
+  return { values, onSearchChange: setQuery };
 }
 
 // ---------------------------------------------------------------- ranked values

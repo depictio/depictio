@@ -19,7 +19,7 @@ import {
   interactiveAccent,
 } from './frame';
 import { optionLabel } from './scope';
-import { useRankedValues, useUniqueValues } from './useInteractiveData';
+import { useRankedValues, useSearchedValues, useUniqueValues } from './useInteractiveData';
 
 const MultiSelectRenderer: React.FC<{
   metadata: StoredMetadata;
@@ -30,7 +30,7 @@ const MultiSelectRenderer: React.FC<{
 }> = ({ metadata, filters, onChange, compact }) => {
   // Shared with every other control on the same column (see useInteractiveData).
   // A failed fetch leaves the select empty rather than replacing it.
-  const { data: options, loading } = useUniqueValues(
+  const { data: listed, truncated, loading } = useUniqueValues(
     metadata.dc_id,
     metadata.column_name,
     metadata.filter_expr,
@@ -39,6 +39,17 @@ const MultiSelectRenderer: React.FC<{
 
   const selected =
     (filters.find((f) => f.index === metadata.index)?.value as string[]) || [];
+  // Past the server's limit the typed text is searched on the server, and the
+  // selection stays listed (a pill needs its option) (#1418).
+  const { values: options, onSearchChange } = useSearchedValues(
+    metadata.dc_id,
+    metadata.column_name,
+    metadata.filter_expr,
+    metadata.order_by,
+    listed,
+    truncated,
+    selected,
+  );
   // `always_selected`: one value, never none. The host makes the automatic
   // pick (`AlwaysSelectedPickers`); here a user's change is kept to one value
   // and the clear button goes.
@@ -101,6 +112,7 @@ const MultiSelectRenderer: React.FC<{
           column_name={metadata.column_name}
           accent={interactiveAccent(metadata)}
           options={optionItems}
+          onSearchChange={onSearchChange}
           value={selected}
           placeholder={`Select ${metadata.column_name || 'values'}…`}
           renderOption={

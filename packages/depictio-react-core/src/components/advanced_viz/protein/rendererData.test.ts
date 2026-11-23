@@ -173,3 +173,17 @@ describe('heldEntities / chooseEntity (#1418)', () => {
     expect(chooseEntity(null, 'a', 'a')).toBeNull();
   });
 });
+
+describe('chooseEntity with the entities in scope (#1418)', () => {
+  const held = ['fam_1', 'fam_2', 'fam_3'];
+
+  it('drops a reader pick the dashboard filters no longer leave', () => {
+    // The reader picked fam_1 in the tile, then fam_3 on the sidebar.
+    expect(chooseEntity(held, 'fam_1', 'fam_3', new Set(['fam_3']))).toBe('fam_3');
+  });
+
+  it('keeps a pick still in scope, and any pick when the scope is unknown', () => {
+    expect(chooseEntity(held, 'fam_1', 'fam_3', new Set(['fam_1', 'fam_3']))).toBe('fam_1');
+    expect(chooseEntity(held, 'fam_1', 'fam_3', null)).toBe('fam_1');
+  });
+});

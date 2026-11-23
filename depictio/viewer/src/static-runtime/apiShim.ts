@@ -923,6 +923,29 @@ export async function fetchUniqueValues(
   return interactiveFrozen(dcId, columnName, 'unique-values').unique ?? [];
 }
 
+/** `fetchUniqueValuePage`: a bundle holds the whole list, so it is never cut,
+ *  and a search narrows it here. */
+export async function fetchUniqueValuePage(
+  dcId: string,
+  columnName: string,
+  query: { filterExpr?: string | null; orderBy?: string | null; search?: string | null } = {},
+): Promise<{ values: string[]; truncated: boolean }> {
+  const values = await fetchUniqueValues(dcId, columnName, query.filterExpr, query.orderBy);
+  const q = query.search?.trim().toLowerCase();
+  return { values: q ? values.filter((v) => v.toLowerCase().includes(q)) : values, truncated: false };
+}
+
+/** `fetchUniqueValuePage` at a data version: a bundle carries no pins. */
+export async function fetchUniqueValuePageAt(
+  _dashboardId: string,
+  dcId: string,
+  columnName: string,
+  _pins: unknown,
+  query: { filterExpr?: string | null; orderBy?: string | null; search?: string | null } = {},
+): Promise<{ values: string[]; truncated: boolean }> {
+  return fetchUniqueValuePage(dcId, columnName, query);
+}
+
 /** The time-travel variant (`POST /filter_options`): a bundle is one point in
  *  time and carries no pins, so it is the plain option list. */
 export async function fetchUniqueValuesAt(

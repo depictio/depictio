@@ -55,6 +55,9 @@ export interface DepictioMultiSelectProps {
   searchable?: boolean;
   /** Max options rendered in dropdown (virtualization hint). */
   limit?: number;
+  /** The text typed in the search box, e.g. to search the server for options
+   *  a cut list left out. */
+  onSearchChange?: (query: string) => void;
   /** Render the bare Mantine input: no Paper, no title row. Used by the React
    *  viewer, whose interactive renderers supply one shared frame for every
    *  control type (see `components/interactive/frame.tsx` in
@@ -104,6 +107,7 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
   size = 'sm',
   setProps,
   onChange,
+  onSearchChange,
   renderOption,
 }) => {
   const handleChange = useCallback(
@@ -154,6 +158,7 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
       searchable={searchable}
       clearable={clearable}
       limit={limit}
+      onSearchChange={onSearchChange}
       size={size}
       maxDropdownHeight={220}
       comboboxProps={{ withinPortal: true }}

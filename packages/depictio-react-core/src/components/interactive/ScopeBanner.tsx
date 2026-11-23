@@ -64,9 +64,18 @@ const UnitPicker: React.FC<{
   /** How a value reads (its `option_cards` label); the value itself when unset. */
   labelOf?: (value: string) => string;
   onPick?: (value: string) => void;
-}> = ({ title, value, options, labelOf = (v) => v, onPick }) => {
+  /** The text typed in the search box (a cut list searches the server). */
+  onSearchChange?: (query: string) => void;
+}> = ({ title, value, options, labelOf = (v) => v, onPick, onSearchChange }) => {
   const style = useChromeStyle();
-  const [search, setSearch] = React.useState('');
+  const [search, setSearchState] = React.useState('');
+  const setSearch = React.useCallback(
+    (next: string) => {
+      setSearchState(next);
+      onSearchChange?.(next);
+    },
+    [onSearchChange],
+  );
   const combobox = useCombobox({
     onDropdownOpen: () => combobox.focusSearchInput(),
     onDropdownClose: () => {
@@ -180,7 +189,7 @@ const ScopeCard: React.FC<{
     metadata.filter_expr,
   );
   const facts = bannerFactItems(metadata.banner_facts, row);
-  const { options } = useScopeOptions(metadata);
+  const { options, onSearchChange } = useScopeOptions(metadata, value);
   const steps = unitSteps(options, value);
   const labelOf = React.useCallback((v: string) => optionLabel(metadata, v), [metadata]);
   const hint = optionDescription(metadata, value);
@@ -229,7 +238,14 @@ const ScopeCard: React.FC<{
         <Text className="depictio-scope-banner__eyebrow" c="dimmed" fw={600}>
           {title}
         </Text>
-        <UnitPicker title={title} value={value} options={options} labelOf={labelOf} onPick={pick} />
+        <UnitPicker
+          title={title}
+          value={value}
+          options={options}
+          labelOf={labelOf}
+          onPick={pick}
+          onSearchChange={onSearchChange}
+        />
         {hint && (
           <Text size="xs" c="dimmed" className="depictio-scope-banner__hint">
             {hint}

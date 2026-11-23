@@ -130,15 +130,22 @@ export function heldEntities(
   return [...listed, opening].sort(compareEntityNames);
 }
 
-/** The entity on screen: the reader's pick, else the agreed opening one, else
- *  the first held one; null while the list loads or when the table is empty. */
+/**
+ * The entity on screen: the reader's pick, else the agreed opening one, else
+ * the first held one; null while the list loads or when the table is empty.
+ * `inScope` is every entity the dashboard's filters leave (null when unknown,
+ * e.g. a sampled read): a pick outside it yields, since its fetch would AND
+ * two entities into nothing (a model picked in the tile, then another family
+ * picked on the sidebar).
+ */
 export function chooseEntity(
   held: readonly string[] | null,
   picked: string | null,
   agreed: string | null,
+  inScope: ReadonlySet<string> | null = null,
 ): string | null {
   if (!held || !held.length) return null;
-  if (picked && held.includes(picked)) return picked;
+  if (picked && held.includes(picked) && (!inScope || inScope.has(picked))) return picked;
   if (agreed && held.includes(agreed)) return agreed;
   return held[0];
 }
