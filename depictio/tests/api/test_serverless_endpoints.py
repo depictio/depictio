@@ -686,22 +686,22 @@ def test_dispatch_with_a_state_carries_it_to_the_worker(
 def test_dispatch_with_an_ineligible_state_is_409_without_dispatching(
     client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
 ):
-    """Colour-by-groups (or pins, or group filters) cannot be reproduced in the
-    page: 409 with the reason, and nothing enqueued."""
+    """A state the runtime cannot reproduce (pinned data) is a 409 with the
+    reason, and nothing is enqueued."""
     from depictio.serverless import report
 
     _patch_project(monkeypatch, [OWNER_OID])
     task = _FakeTask()
     monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
     _as_user(client, owner)
-    state = _export_state(color_by={"kind": "groups"})
+    state = _export_state(pins={"as_of_version": "v-old"})
     reason = report.ineligibility(AnalysisState.model_validate(state))
-    assert reason and "selection groups" in reason  # what the detail answers
+    assert reason and "pinned data" in reason  # what the detail answers
 
     resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}", json={"state": state})
 
     assert resp.status_code == 409
-    assert "selection groups" in resp.json()["detail"]
+    assert "pinned data" in resp.json()["detail"]
     assert task.calls == []
     assert jobs.docs == {}
 

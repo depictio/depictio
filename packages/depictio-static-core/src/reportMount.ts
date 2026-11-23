@@ -95,6 +95,13 @@ export function componentFor(
   return (meta.find((m) => String(m.index ?? '') === ref.index) as Record<string, unknown>) ?? null;
 }
 
+/** True when the exported groups colour, split or filter what the tiles draw. */
+function groupingShapesTheView(manifest: BundleManifest): boolean {
+  const grouping = manifest.initial_grouping;
+  if (!grouping) return false;
+  return grouping.color_by.kind !== 'none' || grouping.groups.some((g) => g.filter_active);
+}
+
 /** Whether the runtime replaces this tile's fallback, and if not, why. */
 export function tileMountVerdict(manifest: BundleManifest, ref: TileRef): MountVerdict {
   if (!tabDoc(manifest, ref.tabId)) {
@@ -115,6 +122,14 @@ export function tileMountVerdict(manifest: BundleManifest, ref: TileRef): MountV
       reason:
         "frozen at the dashboard's default state, and the report opens on another; " +
         'the export drew it at that state',
+    };
+  }
+  if (tier.tier === 'frozen' && groupingShapesTheView(manifest)) {
+    return {
+      mount: false,
+      reason:
+        'frozen without the selection groups the report opens with (colour-by, split or a ' +
+        'group filter); the export drew it with them',
     };
   }
   return { mount: true };

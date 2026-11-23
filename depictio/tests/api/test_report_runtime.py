@@ -120,22 +120,6 @@ def test_no_user_is_never_read_as_the_admin():
     [
         ({"pins": {"as_of_version": "v1"}}, "pinned"),
         ({"pins": {"data_versions": {str(DC_OID): 2}}}, "pinned"),
-        ({"color_by": {"kind": "groups"}}, "selection groups"),
-        ({"split_panels": [{"name": "A", "constraints": []}]}, "selection groups"),
-        (
-            {
-                "groups": [
-                    {
-                        "id": "g",
-                        "name": "G",
-                        "color": "#000",
-                        "column_name": "species",
-                        "filter_active": True,
-                    }
-                ]
-            },
-            "selection group",
-        ),
     ],
 )
 def test_a_state_the_page_cannot_reproduce_is_refused(extra, needle):
@@ -143,6 +127,46 @@ def test_a_state_the_page_cannot_reproduce_is_refused(extra, needle):
     assert needle in (report.ineligibility(state) or "")
     with pytest.raises(report.ReportRuntimeRefused):
         report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
+
+
+GROUPED = {
+    "groups": [
+        {
+            "id": "g",
+            "name": "G",
+            "color": "#e03131",
+            "dc_id": str(DC_OID),
+            "column_name": "year",
+            "values": ["2021"],
+            "filter_active": True,
+        }
+    ],
+    "color_by": {"kind": "groups"},
+    "display_mode": "facet",
+    "split_panels": [{"name": "G", "constraints": []}],
+}
+
+
+def test_a_grouped_coloured_split_state_is_eligible():
+    """The runtime keeps a group store, colours by it and splits, so a state
+    that uses them is embedded rather than refused."""
+    assert report.ineligibility(_state(**GROUPED)) is None
+
+
+@pytest.mark.usefixtures("offline_stack")
+def test_the_report_manifest_carries_the_groups_colour_by_and_split():
+    state = _state(**GROUPED)
+    manifest = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
+    grouping = manifest.initial_grouping
+    assert grouping is not None
+    assert [g.name for g in grouping.groups] == ["G"]
+    assert grouping.groups[0].filter_active is True
+    assert grouping.color_by.kind == "groups"
+    assert grouping.display_mode == "facet"
+    assert [p.name for p in grouping.split_panels] == ["G"]
+    # a plain state carries none
+    plain = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, _state())
+    assert plain.initial_grouping is None
 
 
 def test_a_plain_state_is_eligible_and_group_filters_never_ride_along():

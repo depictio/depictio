@@ -10,6 +10,8 @@
  *
  *   - depictio-react-core api.ts        -> src/static-runtime/tabApiShim.ts
  *                                          -> src/static-runtime/apiShim.ts
+ *   - depictio-react-core selectionGroups.ts -> src/static-runtime/selectionGroupsShim.ts
+ *                                          (groups kept in memory, seeded from the manifest)
  *   - viewer hooks/useCurrentUser.ts    -> src/static-runtime/useCurrentUserShim.ts
  *   - depictio-react-core realtime.ts   -> src/static-runtime/realtimeShim.ts
  *   - viewer hooks/useServerStatus.ts   -> src/static-runtime/serverStatusShim.ts
@@ -56,6 +58,9 @@ export function staticRuntimeShim(): Plugin {
       // the real api.ts.
       [path.join(CORE_SRC, 'api.ts')]: path.join(RUNTIME, 'tabApiShim.ts'),
       [path.join(CORE_SRC, 'realtime.ts')]: path.join(RUNTIME, 'realtimeShim.ts'),
+      // Groups a reader makes live in memory, never in localStorage; the store
+      // opens on the manifest's `initial_grouping`.
+      [path.join(CORE_SRC, 'selectionGroups.ts')]: path.join(RUNTIME, 'selectionGroupsShim.ts'),
       [path.resolve(VIEWER, 'src/hooks/useCurrentUser.ts')]: path.join(
         RUNTIME,
         'useCurrentUserShim.ts',

@@ -52,6 +52,210 @@
       "title": "AggSpec",
       "type": "object"
     },
+    "AnalysisFilter": {
+      "additionalProperties": true,
+      "description": "One entry of the viewer's ``InteractiveFilter[]`` (``api.ts``).\n\nGroup projections travel here too, exactly as the render endpoints see\nthem: ``source == \"group_filter\"`` and an index prefixed with\n``__depictio_group__:``. Keeping them in the same list means the server\nnever has to re-implement the viewer's ``groupsToFilters``.",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "index": {
+          "title": "Index",
+          "type": "string"
+        },
+        "interactive_component_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Component Type"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnalysisFilterMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "AnalysisFilter",
+      "type": "object"
+    },
+    "AnalysisFilterMetadata": {
+      "additionalProperties": true,
+      "description": "The ``metadata`` block the viewer attaches to a filter.\n\n``dc_id`` is what cross-DC link resolution keys on server-side: a filter\nwithout it is treated as global (applied wherever its column exists).",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "dc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dc Id"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "interactive_component_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Component Type"
+        },
+        "selection_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selection Column"
+        }
+      },
+      "title": "AnalysisFilterMetadata",
+      "type": "object"
+    },
+    "AnalysisGroup": {
+      "description": "A saved selection group (``SelectionGroup`` in ``selectionGroups.ts``).",
+      "properties": {
+        "color": {
+          "title": "Color",
+          "type": "string"
+        },
+        "column_name": {
+          "title": "Column Name",
+          "type": "string"
+        },
+        "created_at": {
+          "default": 0,
+          "title": "Created At",
+          "type": "integer"
+        },
+        "dc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dc Id"
+        },
+        "filter_active": {
+          "default": false,
+          "title": "Filter Active",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "color",
+        "column_name"
+      ],
+      "title": "AnalysisGroup",
+      "type": "object"
+    },
     "AndPred": {
       "additionalProperties": false,
       "description": "``{\"and\": [<Pred>, ...]}`` \u2014 the field is aliased because ``and`` is a keyword.",
@@ -97,6 +301,19 @@
       "additionalProperties": false,
       "description": "Everything the runtime needs to refill a ui-mode figure (RFC \u00a74).",
       "properties": {
+        "color_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The discrete column the figure is coloured by (px ``color``), None when it has none. Lets the runtime recolour the figure by selection groups: the traces of that colour are merged and re-cut by the group a row belongs to",
+          "title": "Color Col"
+        },
         "group_cols": {
           "description": "px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
           "items": {
@@ -269,6 +486,35 @@
         "col"
       ],
       "title": "ColRef",
+      "type": "object"
+    },
+    "ColorBy": {
+      "description": "The dashboard-global \"Colour by\" override.",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "kind": {
+          "default": "none",
+          "enum": [
+            "none",
+            "groups",
+            "column"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ColorBy",
       "type": "object"
     },
     "ColumnSpec": {
@@ -594,6 +840,50 @@
         "agg"
       ],
       "title": "GroupByOp",
+      "type": "object"
+    },
+    "InitialGrouping": {
+      "additionalProperties": false,
+      "description": "The grouping half of an analysis state a bundle or report opens on.\n\nThe shapes are the analysis state's own (``analysis_state.py``), so a\nproducer copies them across and the runtime reads the viewer's types.\n``split_panels`` is what the viewer derived from the display when the state\nwas built; the runtime derives its own from ``groups`` and ``display_mode``.",
+      "properties": {
+        "color_by": {
+          "$ref": "#/$defs/ColorBy"
+        },
+        "display_mode": {
+          "default": "color",
+          "enum": [
+            "color",
+            "facet"
+          ],
+          "title": "Display Mode",
+          "type": "string"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/AnalysisGroup"
+          },
+          "title": "Groups",
+          "type": "array"
+        },
+        "show_other": {
+          "default": true,
+          "title": "Show Other",
+          "type": "boolean"
+        },
+        "show_overall": {
+          "default": true,
+          "title": "Show Overall",
+          "type": "boolean"
+        },
+        "split_panels": {
+          "items": {
+            "$ref": "#/$defs/SplitPanel"
+          },
+          "title": "Split Panels",
+          "type": "array"
+        }
+      },
+      "title": "InitialGrouping",
       "type": "object"
     },
     "IsInArgs": {
@@ -1785,6 +2075,39 @@
       "title": "SortOp",
       "type": "object"
     },
+    "SplitPanel": {
+      "description": "One cell of a split view (``PanelSpec`` in ``splitPanels.ts``).\n\n``constraints`` are ordinary filters appended to the dashboard's own for\nthat cell alone, so a panel serialises straight to a ``.filter(...)``.",
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "constraints": {
+          "items": {
+            "$ref": "#/$defs/AnalysisFilter"
+          },
+          "title": "Constraints",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SplitPanel",
+      "type": "object"
+    },
     "TabEntry": {
       "additionalProperties": false,
       "description": "One tab of a bundled tab family.\n\nServer-side a family is a main tab (``is_main_tab``) plus children carrying\n``parent_dashboard_id``; the viewer's left rail switches between them by\nnavigating to /dashboard/<id>. A bundle has no routing, so it carries every\ntab's document and switches in place.",
@@ -2171,6 +2494,18 @@
       },
       "title": "Initial Filters",
       "type": "array"
+    },
+    "initial_grouping": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InitialGrouping"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The selection groups, colour-by and split the runtime opens on (the exported analysis state's own). The viewer's group store is seeded from it, in memory: a reader can add, edit and delete groups, none of it saved. None opens with no group, colouring the figures as built"
     },
     "inline_blobs": {
       "additionalProperties": {

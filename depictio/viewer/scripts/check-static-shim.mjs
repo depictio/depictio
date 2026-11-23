@@ -42,6 +42,7 @@ const SHIM_FILES = [path.join(RUNTIME, 'tabApiShim.ts'), path.join(RUNTIME, 'api
 // The swaps of vite-plugins/static-runtime.ts (api.ts is handled by name, below).
 const SWAPS = {
   [path.join(CORE, 'realtime.ts')]: path.join(RUNTIME, 'realtimeShim.ts'),
+  [path.join(CORE, 'selectionGroups.ts')]: path.join(RUNTIME, 'selectionGroupsShim.ts'),
   [path.join(VIEWER, 'src/hooks/useCurrentUser.ts')]: path.join(RUNTIME, 'useCurrentUserShim.ts'),
   [path.join(VIEWER, 'src/hooks/useServerStatus.ts')]: path.join(RUNTIME, 'serverStatusShim.ts'),
   [path.join(VIEWER, 'src/chrome/variants/index.ts')]: path.join(RUNTIME, 'chromeVariantShim.ts'),

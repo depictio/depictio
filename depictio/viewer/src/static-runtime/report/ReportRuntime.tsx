@@ -23,12 +23,18 @@ import {
   CategoryColorsContext,
   ComponentRenderer,
   FilterPanel,
+  COLOR_BY_NONE,
   FunnelView,
   activeFiltersFor,
   bulkComputeCards,
   enrichFilterWithDcId,
+  groupsRenderPayload,
+  groupsToFilters,
   hasLiveValues,
   mergeFiltersBySource,
+  resolveGroupRender,
+  useCategoricalColumns,
+  useColorByColumnRender,
 } from 'depictio-react-core';
 import type {
   CategoryColorSource,
@@ -50,6 +56,7 @@ import {
 } from 'depictio-static-core';
 
 import { familyMetadata } from '../bundle';
+import { initialSelectionGroups } from '../selectionGroupsShim';
 
 /** Same pause as the viewer's (App.tsx `FILTER_DEBOUNCE_MS`). */
 const FILTER_DEBOUNCE_MS = 250;
@@ -201,6 +208,36 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
     [channel],
   );
 
+  // The exported selection groups, colour-by and split. A report has no group
+  // panel: they are the state the document narrates, fixed. The groups that
+  // were filtering project into filters here, composed after the reader's own
+  // (as the viewer's App does), so "Back to the exported state" and the
+  // filter panel never see them.
+  const seeded = useMemo(() => initialSelectionGroups(), [manifest]);
+  const groupFilters = useMemo(() => groupsToFilters(seeded?.groups ?? []), [seeded]);
+  const colorBy = seeded?.colorBy ?? COLOR_BY_NONE;
+  const colorByColumns = useCategoricalColumns(colorBy.kind === 'column' ? metadata : undefined);
+  const colorByColumnRender = useColorByColumnRender(colorBy, colorByColumns);
+  const groupRender = useMemo(
+    () =>
+      resolveGroupRender(
+        colorBy,
+        groupsRenderPayload(seeded?.groups ?? []),
+        colorByColumnRender,
+        seeded?.displayMode ?? 'color',
+        seeded?.showOther ?? true,
+      ),
+    [seeded, colorBy, colorByColumnRender],
+  );
+  const filtersWithGroups = useMemo(
+    () => (groupFilters.length > 0 ? [...filters, ...groupFilters] : filters),
+    [filters, groupFilters],
+  );
+  const deferredWithGroups = useMemo(
+    () => (groupFilters.length > 0 ? [...deferredFilters, ...groupFilters] : deferredFilters),
+    [deferredFilters, groupFilters],
+  );
+
   const onFilterChange = useCallback(
     (update: InteractiveFilter) => {
       setFilters((prev) => mergeFiltersBySource(prev, enrichFilterWithDcId(update, metadata)));
@@ -289,12 +326,12 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const cardRound = useRef(0);
-  const filterKey = JSON.stringify(deferredFilters);
+  const filterKey = JSON.stringify(deferredWithGroups);
   useEffect(() => {
     if (cardIds.length === 0) return;
     const round = ++cardRound.current;
     setCardsLoading(true);
-    bulkComputeCards(entryId, deferredFilters, cardIds)
+    bulkComputeCards(entryId, deferredWithGroups, cardIds)
       .then((res) => {
         if (round !== cardRound.current) return;
         setCardValues(res.values ?? {});
@@ -326,7 +363,8 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
       >
         <ComponentRenderer
           metadata={m}
-          filters={type === 'card' ? deferredFilters : filters}
+          filters={type === 'card' ? deferredWithGroups : filtersWithGroups}
+          groupRender={groupRender}
           onFilterChange={onFilterChange}
           dashboardId={ref.tabId}
           cardValue={cardValues[ref.index]}

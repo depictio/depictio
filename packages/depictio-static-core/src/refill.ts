@@ -49,8 +49,15 @@
  */
 
 import type { BindingTable, TraceBinding } from './manifest';
-import { serializeOption } from './engine/filters';
 import { fitTrendline } from './trendline';
+import { fillTrace, jsonClone, selectRows, traceAt } from './refillHelpers';
+import {
+  groupedRefill,
+  groupingColumns,
+  planColoring,
+  type GroupingOutcome,
+  type GroupingRequest,
+} from './grouping';
 
 export interface RefillInput {
   binding: BindingTable;
@@ -58,6 +65,12 @@ export interface RefillInput {
   columns(names: string[]): Promise<Record<string, ArrayLike<unknown>>>;
   /** Current filter mask (1 byte per row, 1 = selected); null = no filters. */
   mask: Uint8Array | null;
+  /**
+   * Selection groups / colour-by / split the figure is asked to be drawn with
+   * (`./grouping.ts`). Absent, or a request the binding cannot take, draws the
+   * figure as built.
+   */
+  grouping?: GroupingRequest;
 }
 
 export interface RefillResult {
@@ -66,6 +79,8 @@ export interface RefillResult {
   displayed: number;
   /** Mask-selected row count (server's total_data_count). */
   total: number;
+  /** Set when the figure was recoloured: the server's `group_colored` / `column_colored`. */
+  grouping?: GroupingOutcome;
 }
 
 export async function refillFigure(input: RefillInput): Promise<RefillResult> {
@@ -100,6 +115,30 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
     for (let i = 0; i < mask.length; i++) total += mask[i];
   }
 
+  // ---- groups, colour-by, split ---------------------------------------------
+  // A request px would honour redraws the figure from its rows (`grouping.ts`):
+  // the scaffold's traces are cut and merged by the new colour, so none of the
+  // per-trace work below applies. A request this binding cannot take, or a
+  // column the table does not carry, leaves the figure as built.
+  if (input.grouping) {
+    const extra = groupingColumns(input.grouping).filter((c) => !(c in cols));
+    let available = true;
+    if (extra.length > 0) {
+      try {
+        Object.assign(cols, await input.columns(extra));
+      } catch {
+        available = false;
+      }
+    }
+    const plan = available
+      ? planColoring(input.grouping, cols, rows, scaffold.layout)
+      : null;
+    const grouped = plan ? groupedRefill(binding, cols, mask, rows, plan) : null;
+    if (grouped) {
+      return { figure: grouped.figure, displayed: grouped.displayed, total, grouping: grouped.outcome };
+    }
+  }
+
   // ---- raw traces ----------------------------------------------------------
   const hidden = new Set<number>();
   const selectionByTrace = new Map<number, number[]>();
@@ -110,22 +149,7 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
     const sel = selectRows(t, cols, mask, rows);
     selectionByTrace.set(t.i, sel);
     displayed += sel.length;
-    for (const [path, col] of Object.entries(t.fields)) {
-      setPath(trace, path, gather(cols[col], sel, col));
-    }
-    if (t.customdata !== undefined && t.customdata.length > 0) {
-      // px stacks hover_data/custom_data into one (n, k) array and the
-      // hovertemplate addresses it POSITIONALLY (`%{customdata[2]}`), so the
-      // binding's column order is the contract: zip the gathered columns back
-      // in that order and every index in the (untouched) hovertemplate keeps
-      // pointing at the value the server put there.
-      const gathered = t.customdata.map((col) => gather(cols[col], sel, col));
-      const rowsOut: unknown[][] = new Array(sel.length);
-      for (let k = 0; k < sel.length; k++) {
-        rowsOut[k] = gathered.map((values) => values[k]);
-      }
-      trace.customdata = rowsOut;
-    }
+    fillTrace(trace, t, cols, sel);
     if (sel.length === 0) {
       // Empty group under this filter: the server would render an empty
       // subframe → nothing visible. Hide, never drop — indices stay stable.
@@ -190,81 +214,4 @@ export function readsHiddenTraces(layout: Record<string, unknown>): boolean {
     const order = (axis as { categoryorder?: unknown }).categoryorder;
     return typeof order === 'string' && DATA_CATEGORY_ORDER.test(order);
   });
-}
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-function jsonClone<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v)) as T;
-}
-
-function traceAt(data: Record<string, unknown>[], i: number): Record<string, unknown> {
-  const trace = data[i];
-  if (trace === undefined || trace === null || typeof trace !== 'object') {
-    throw new Error(`refill: binding references trace ${i} but scaffold has ${data.length} traces`);
-  }
-  return trace;
-}
-
-/** Rows selected for one trace: filter mask AND every group-equality predicate. */
-function selectRows(
-  t: TraceBinding,
-  cols: Record<string, ArrayLike<unknown>>,
-  mask: Uint8Array | null,
-  rows: number,
-): number[] {
-  const preds = Object.entries(t.group).map(([col, groupValue]) => {
-    const values = cols[col];
-    if (values === undefined) {
-      throw new Error(`refill: group column "${col}" was not projected`);
-    }
-    const key = serializeOption(groupValue);
-    return { values, key };
-  });
-  const out: number[] = [];
-  for (let i = 0; i < rows; i++) {
-    if (mask !== null && mask[i] === 0) continue;
-    let ok = true;
-    for (const { values, key } of preds) {
-      const v = values[i];
-      // Null never matches any predicate (same rule as the mask kernel).
-      if (v === null || v === undefined || serializeOption(v) !== key) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok) out.push(i);
-  }
-  return out;
-}
-
-/** Project the selected rows of a column into a plain, Plotly-safe array
- *  (bigint → number; undefined holes → null), in row order. */
-function gather(values: ArrayLike<unknown> | undefined, sel: number[], col: string): unknown[] {
-  if (values === undefined) {
-    throw new Error(`refill: bound column "${col}" was not projected`);
-  }
-  const out: unknown[] = new Array(sel.length);
-  for (let k = 0; k < sel.length; k++) {
-    const v = values[sel[k]];
-    out[k] = v === undefined ? null : typeof v === 'bigint' ? Number(v) : v;
-  }
-  return out;
-}
-
-/** Write `value` at a dotted field path (e.g. 'marker.size'), creating
- *  intermediate objects as needed; sibling keys are preserved. */
-function setPath(obj: Record<string, unknown>, path: string, value: unknown): void {
-  const parts = path.split('.');
-  let cur = obj;
-  for (let k = 0; k < parts.length - 1; k++) {
-    const next = cur[parts[k]];
-    if (typeof next !== 'object' || next === null || Array.isArray(next)) {
-      cur[parts[k]] = {};
-    }
-    cur = cur[parts[k]] as Record<string, unknown>;
-  }
-  cur[parts[parts.length - 1]] = value;
 }

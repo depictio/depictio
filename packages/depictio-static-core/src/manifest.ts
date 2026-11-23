@@ -114,6 +114,12 @@ export interface BindingTable {
   scaffold: Record<string, unknown>;
   /** px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]. */
   group_cols: string[];
+  /**
+   * The discrete column the figure is coloured by (px `color`); null/absent when
+   * it has none, and in bindings built before the field existed. Lets the
+   * runtime recolour the figure by selection groups.
+   */
+  color_col?: string | null;
   traces: TraceBinding[];
   trendlines: TrendlineBinding[];
   /** True when the build sampled before filtering -> partial tier. */
@@ -425,6 +431,39 @@ export interface PythonComponent {
   table_uri: string;
 }
 
+/** A selection group as the analysis state holds it (`AnalysisGroup`). */
+export interface InitialGroup {
+  id: string;
+  name: string;
+  color: string;
+  dc_id?: string | null;
+  column_name: string;
+  values: string[];
+  created_at: number;
+  filter_active: boolean;
+}
+
+/** One cell of a split view (`SplitPanel`); informational, the runtime derives its own. */
+export interface InitialSplitPanel {
+  name: string;
+  color?: string | null;
+  constraints: Record<string, unknown>[];
+}
+
+/**
+ * The grouping half of the analysis state a bundle or report opens on
+ * (`InitialGrouping` in the models): the selection groups, the dashboard-wide
+ * colour-by, and how the override is displayed.
+ */
+export interface InitialGrouping {
+  groups: InitialGroup[];
+  color_by: { kind: 'none' | 'groups' | 'column'; column_name?: string | null };
+  display_mode: 'color' | 'facet';
+  show_other: boolean;
+  show_overall: boolean;
+  split_panels: InitialSplitPanel[];
+}
+
 export interface BundleManifest {
   manifest_version: number;
   mode: BundleMode;
@@ -471,6 +510,12 @@ export interface BundleManifest {
    * opens on the dashboard's own defaults. Absent in older manifests.
    */
   initial_filters?: Record<string, unknown>[];
+  /**
+   * The selection groups, colour-by and split the runtime opens on. The
+   * viewer's group store is seeded from it, in memory: readers add, edit and
+   * delete groups without any of it being saved. Absent/null: no group.
+   */
+  initial_grouping?: InitialGrouping | null;
 }
 
 /** The manifest's sampling ceilings, with server defaults for older bundles. */

@@ -62,6 +62,7 @@ import type {
   FigureResponse,
   FloatingComponent,
   FloatingComponentsResponse,
+  RenderFigureOptions,
   FunnelStageColumn,
   FunnelValuesResponse,
   InteractiveFilter,
@@ -80,7 +81,12 @@ import type {
   VizSuggestionsResponse,
 } from '../../../../packages/depictio-react-core/src/api';
 
-import { base64ToBytes, scopeRegionFilters } from 'depictio-static-core';
+import {
+  base64ToBytes,
+  scopeRegionFilters,
+  type GroupingOutcome,
+  type GroupingRequest,
+} from 'depictio-static-core';
 
 import {
   bundle,
@@ -552,11 +558,14 @@ export async function renderFigure(
   componentId: string,
   filters: InteractiveFilter[] = [],
   theme: 'light' | 'dark' = 'light',
+  _fullLoad = false,
+  _signal?: AbortSignal,
+  options?: RenderFigureOptions,
 ): Promise<FigureResponse> {
   // A figure tile can draw on a map too (`px.scatter_map` in a code figure):
   // its basemap gets the same offline fallback as a map tile's, or the style
   // fetch fails offline and Plotly throws `Map error.` (`./mapBasemap.ts`).
-  const figure = await renderFigureUnmapped(dashboardId, componentId, filters, theme);
+  const figure = await renderFigureUnmapped(dashboardId, componentId, filters, theme, options);
   return withReachableBasemap(figure, theme, { retheme: false });
 }
 
@@ -565,6 +574,7 @@ async function renderFigureUnmapped(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark',
+  options?: RenderFigureOptions,
 ): Promise<FigureResponse> {
   // Live path (phase 5b): a figure with a binding table refills from the
   // bundled Parquet under the current filter state — the RFC §4
@@ -588,13 +598,24 @@ async function renderFigureUnmapped(
       filters = scopeRegionFilters(filters, 'figure', figureMetaFor(componentId));
       const prologue = bundle().prologues?.[componentId];
       try {
-        const live =
-          prologue && prologue.length > 0
-            ? // Phase 6: replay the transpiled prologue over the mask-selected
-              // base rows, then refill from the derived frame. displayed/total
-              // count DERIVED rows (post-reshape) — what the figure plots.
-              await renderPrologueFigureLive(binding, prologue, dcId, filters)
-            : await renderFigureLive(binding, dcId, filters);
+        // Selection groups / colour-by / split: a ui-mode figure only. The
+        // server never rewrites a code figure's kwargs (it colours one only
+        // when its own code spreads the group kwargs), and a replayed one
+        // draws from a derived frame its groups' columns may not be in.
+        const hasPrologue = prologue !== undefined && prologue.length > 0;
+        const grouped =
+          hasPrologue || figureMetaFor(componentId)?.mode === 'code'
+            ? null
+            : await groupingRequestFor(dcId, options);
+        const live = hasPrologue
+          ? // Phase 6: replay the transpiled prologue over the mask-selected
+            // base rows, then refill from the derived frame. displayed/total
+            // count DERIVED rows (post-reshape) — what the figure plots.
+            await renderPrologueFigureLive(binding, prologue, dcId, filters)
+          : await renderFigureLive(binding, dcId, filters, grouped?.request);
+        const outcome: GroupingOutcome | undefined = hasPrologue
+          ? undefined
+          : (live as { grouping?: GroupingOutcome }).grouping;
         return themedFrozenFigure(
           {
             figure: live.figure,
@@ -604,6 +625,11 @@ async function renderFigureUnmapped(
               displayed_data_count: live.displayed,
               total_data_count: live.total,
               full_data_loaded: !binding.sampled,
+              // What the server reports for the override: whether it drew the
+              // figure coloured, and how each group reached this collection.
+              group_colored: outcome?.groupColored ?? false,
+              column_colored: outcome?.columnColored ?? null,
+              ...(grouped?.status ? { group_status: grouped.status } : {}),
             },
           },
           theme,
@@ -654,6 +680,39 @@ async function renderFigureUnmapped(
   // equivalent: swap the frozen figure's layout.template with the matching
   // client-side mantine template so frozen figures follow the theme too.
   return themedFrozenFigure(frozenPayload<FigureResponse>(componentId, 'figure'), theme);
+}
+
+/**
+ * The grouping a render request asks of a figure on `dcId`, as the refill
+ * takes it. Groups win over a column override, as on the server; each group
+ * is first pointed at a column of this collection (or dropped), through the
+ * bundled links (`resolve_group_defs_for_dc`), and `status` says which
+ * happened to each, as the response's `group_status`.
+ */
+async function groupingRequestFor(
+  dcId: string,
+  options: RenderFigureOptions | undefined,
+): Promise<{
+  request: GroupingRequest;
+  status?: ResolvedGroupsResult['status'];
+} | null> {
+  if (!options) return null;
+  if (options.colorByGroup && options.groups && options.groups.length > 0) {
+    const resolved = await resolvedGroupsLive(dcId, options.groups);
+    return {
+      request: {
+        groups: resolved.groups,
+        colorByGroup: true,
+        display: options.display,
+        showOther: options.showOther,
+      },
+      status: resolved.status,
+    };
+  }
+  if (options.colorByColumn) {
+    return { request: { colorByColumn: options.colorByColumn, display: options.display } };
+  }
+  return null;
 }
 
 /** The server's code-error figure, in its words (create_error_figure). */

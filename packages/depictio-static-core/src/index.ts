@@ -19,3 +19,4 @@ export * from './sankey';
 export * from './reportMount';
 export * from './bundledFiles';
 export * from './combined';
+export * from './grouping';

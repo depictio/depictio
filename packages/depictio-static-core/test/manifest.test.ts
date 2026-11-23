@@ -81,6 +81,17 @@ describe('contract pinning against the committed JSON-schema snapshot', () => {
     }
   });
 
+  it('InitialGrouping mirrors the snapshot definition', () => {
+    const fixture = parseManifest(JSON.parse(readFileSync(FIXTURE, 'utf-8')));
+    const grouping = fixture.initial_grouping;
+    expect(grouping).toBeTruthy();
+    if (!grouping) return;
+    expect(Object.keys(grouping).sort()).toEqual(Object.keys(defs.InitialGrouping.properties).sort());
+    expect(Object.keys(grouping.groups[0]).sort()).toEqual(
+      Object.keys(defs.AnalysisGroup.properties).sort(),
+    );
+  });
+
   it('ProjectSummary and its parts mirror the snapshot definitions', () => {
     const project = tabsFixture.project;
     expect(project).toBeTruthy();

@@ -1338,6 +1338,7 @@ def _freeze_figure(
     comp: dict[str, Any],
     full_load: bool = False,
     filters: list[dict[str, Any]] | None = None,
+    grouping: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Build a figure by calling the Celery task *function* directly.
 
@@ -1359,6 +1360,12 @@ def _freeze_figure(
     from the *whole* frame, since the runtime refills it from the whole bundled
     table. Sampling there would produce a scaffold whose traces no filtered view
     can reproduce.
+
+    ``grouping`` is the exported state's colour-by / split, in the render
+    request's own keys (``interactive_defaults.grouping_render_body``): a frozen
+    figure is coloured the way the bundle opens, as the live ones beside it.
+    A scaffold (``full_load``) never takes it: the runtime recolours that
+    itself, from the reader's groups.
 
     Returns ``(payload, was_sampled)``.
     """
@@ -1383,6 +1390,8 @@ def _freeze_figure(
         "theme": "light",
         "full_load": full_load,
     }
+    if grouping:
+        payload.update(grouping)
     # The family's colours, as the render endpoint sends them: a code figure
     # reads them as `depictio_category_colors` (the ampliseq "Phylum
     # composition per group" bars), and the worker's group colouring too.
@@ -2436,6 +2445,7 @@ def _bundle_data_refs(
     stored_metadata: list[dict[str, Any]],
     links: list[dict[str, Any]] | None = None,
     serialize: bool = True,
+    extra_columns: set[str] | None = None,
 ) -> tuple[dict[str, DataRef], dict[str, str], dict[str, str], dict[str, pl.DataFrame]]:
     """Bundle every DC a live component, a ui-mode figure or a live
     advanced_viz consumes (:func:`_ships_data`).
@@ -2443,6 +2453,10 @@ def _bundle_data_refs(
     ``links`` are the emitted cross-DC link configs; their join columns are
     folded into the per-DC keep sets (:func:`link_join_column_sets`) so a
     bundled link always finds the column it resolves against.
+
+    ``extra_columns`` are kept in whichever collection carries them, as an
+    interactive filter's column is: the exported state's group and colour-by
+    columns, which the runtime reads whether or not a tile does.
 
     ``serialize=False`` is the binding preflight's path (``export_manifest(...,
     decide_only=True)``): the frames are loaded, pruned and given their
@@ -2481,6 +2495,7 @@ def _bundle_data_refs(
     column_sets = live_column_sets(stored_metadata)
     filter_cols = interactive_filter_columns(stored_metadata)
     join_cols = link_join_column_sets(links or [])
+    extra = set(extra_columns or ())
     interactive_comps = [c for c in stored_metadata if c.get("component_type") == "interactive"]
     live_comps_by_dc: dict[str, list[dict[str, Any]]] = {}
     for comp in stored_metadata:
@@ -2533,7 +2548,7 @@ def _bundle_data_refs(
                 # link join column (RFC §8) before intersecting — the schema
                 # intersection below is the guard that keeps a column absent
                 # from this DC out of ``select`` (mirroring ``_project_scan``).
-                wanted = cols | filter_cols | join_cols.get(dc_id, set())
+                wanted = cols | filter_cols | extra | join_cols.get(dc_id, set())
                 select = [c for c in available if c in wanted]
                 if dc_id in companion_only and not (cols & set(available)):
                     select = None
@@ -2736,6 +2751,7 @@ def decide_figure(
     data_refs: dict[str, DataRef],
     pruned_frames: dict[str, pl.DataFrame],
     filters: list[dict[str, Any]] | None = None,
+    grouping: dict[str, Any] | None = None,
 ) -> FigureDecision:
     """Offer a figure to the bind-and-refill builder and read off its tier.
 
@@ -2761,6 +2777,10 @@ def decide_figure(
     frozen figure is built under it, so it shows what the live tiles beside it
     show when the bundle opens. A code figure's scaffold is built without it
     (the binder needs every row), and rebuilt under it when it does not bind.
+
+    ``grouping`` is the exported colour-by / split (``grouping_render_body``): a
+    figure that does not bind is frozen coloured by it. One that binds ships no
+    payload and is recoloured by the runtime.
     """
     binding: BindingTable | None = None
     miss: BindingMiss | None = None
@@ -2834,8 +2854,8 @@ def decide_figure(
             )
         return FigureDecision(ComponentTier.LIVE, binding=binding, prologue=prologue)
 
-    if payload is None or filters:
-        payload, sampled = _freeze_figure(comp, filters=filters)
+    if payload is None or filters or grouping:
+        payload, sampled = _freeze_figure(comp, filters=filters, grouping=grouping)
     if binder_error is not None:
         # Distinguishable from a real binding miss on purpose: the binder never
         # reached a verdict here, so reporting its "no unambiguous binding"
@@ -3466,6 +3486,9 @@ class _FreezeState:
     budget: ComputeBudget
     #: Each tab's opening filter state (its interactive defaults).
     tab_defaults: dict[str, list[dict[str, Any]]]
+    #: The exported state's colour-by / split as a render request's keys; the
+    #: figures that freeze are drawn with it.
+    grouping: dict[str, Any] = field(default_factory=dict)
     frozen: dict[str, FrozenPayload] = field(default_factory=dict)
     bindings: dict[str, BindingTable] = field(default_factory=dict)
     prologues: dict[str, list[PrologueOp]] = field(default_factory=dict)
@@ -3540,7 +3563,9 @@ def _freeze_component(
                 payload=_freeze_table(dashboard_oid, component_id, user, filters=defaults),
             )
         elif ctype == "figure":
-            decision = decide_figure(comp, state.data_refs, state.pruned_frames, defaults)
+            decision = decide_figure(
+                comp, state.data_refs, state.pruned_frames, defaults, state.grouping
+            )
             row.tier = decision.tier
             row.reason = decision.reason
             row.detail = decision.detail
@@ -3737,8 +3762,13 @@ def export_manifest(
     # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
     # live advanced_viz kinds) read — keyed by dc_id, so a DC read on three tabs
     # is loaded, pruned and inlined exactly once.
+    from depictio.serverless.interactive_defaults import grouping_columns
+
     data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(
-        stored_metadata, emitted_links, serialize=not decide_only
+        stored_metadata,
+        emitted_links,
+        serialize=not decide_only,
+        extra_columns=grouping_columns(state),
     )
     apply_dc_outcomes(items, tier_by_id, data_refs, dc_failures)
 
@@ -3750,7 +3780,11 @@ def export_manifest(
     # filter. Bindings (bind-and-refill, RFC §4) — and, for code-mode figures,
     # the prologue IR the runtime replays first (RFC §7) — are filled per
     # figure below.
-    from depictio.serverless.interactive_defaults import filters_for_state
+    from depictio.serverless.interactive_defaults import (
+        filters_for_state,
+        grouping_for_state,
+        grouping_render_body,
+    )
 
     freeze = _FreezeState(
         user=user,
@@ -3761,6 +3795,7 @@ def export_manifest(
         project_doc=project_doc,
         budget=budget,
         tab_defaults={tab.id: filters_for_state(tab.components, state) for tab in tabs},
+        grouping=grouping_render_body(state),
     )
     frozen, bindings, prologues = freeze.frozen, freeze.bindings, freeze.prologues
     object_budget = freeze.object_budget
@@ -3918,6 +3953,7 @@ def export_manifest(
         resolved_structures=resolved_structures,
         addons=addons,
         python_components=python_components,
+        initial_grouping=grouping_for_state(state),
     )
     logger.info(
         "producer A: exported %s (%d tab(s), %d component(s), %d data collection(s), "

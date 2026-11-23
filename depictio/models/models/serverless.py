@@ -19,6 +19,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from depictio.models.models.analysis_state import AnalysisGroup, ColorBy, SplitPanel
+
 MANIFEST_VERSION = 1
 
 
@@ -218,6 +220,14 @@ class BindingTable(BaseModel):
     group_cols: list[str] = Field(
         default_factory=list,
         description="px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
+    )
+    color_col: str | None = Field(
+        default=None,
+        description=(
+            "The discrete column the figure is coloured by (px ``color``), None when it has "
+            "none. Lets the runtime recolour the figure by selection groups: the traces of "
+            "that colour are merged and re-cut by the group a row belongs to"
+        ),
     )
     traces: list[TraceBinding]
     trendlines: list[TrendlineBinding] = Field(default_factory=list)
@@ -884,6 +894,30 @@ class PythonComponent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class InitialGrouping(BaseModel):
+    """The grouping half of an analysis state a bundle or report opens on.
+
+    The shapes are the analysis state's own (``analysis_state.py``), so a
+    producer copies them across and the runtime reads the viewer's types.
+    ``split_panels`` is what the viewer derived from the display when the state
+    was built; the runtime derives its own from ``groups`` and ``display_mode``.
+    """
+
+    groups: list[AnalysisGroup] = Field(default_factory=list)
+    color_by: ColorBy = Field(default_factory=ColorBy)
+    display_mode: Literal["color", "facet"] = "color"
+    show_other: bool = True
+    show_overall: bool = True
+    split_panels: list[SplitPanel] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @property
+    def active(self) -> bool:
+        """True when the state holds anything the runtime must seed."""
+        return bool(self.groups) or self.color_by.kind != "none"
+
+
 class BundleManifest(BaseModel):
     """The serverless bundle contract (RFC §3.1). manifest_version 1."""
 
@@ -973,6 +1007,15 @@ class BundleManifest(BaseModel):
         description=(
             "component_id -> the Python job the Pyodide add-on runs for it (present only "
             "when the add-on is embedded)"
+        ),
+    )
+    initial_grouping: InitialGrouping | None = Field(
+        default=None,
+        description=(
+            "The selection groups, colour-by and split the runtime opens on (the exported "
+            "analysis state's own). The viewer's group store is seeded from it, in memory: "
+            "a reader can add, edit and delete groups, none of it saved. None opens with no "
+            "group, colouring the figures as built"
         ),
     )
     initial_filters: list[dict[str, Any]] = Field(

@@ -54,6 +54,8 @@ import {
   type DCLinkLike,
   type DataRef,
   type FilterLike,
+  type GroupingOutcome,
+  type GroupingRequest,
   type PrologueOp,
   type QueryEngine,
   type ResolveHop,
@@ -587,11 +589,14 @@ export async function renderFigureLive(
   binding: BindingTable,
   dcId: string,
   filters: InteractiveFilter[],
+  grouping?: GroupingRequest,
 ): Promise<{
   figure: { data: unknown[]; layout: Record<string, unknown> };
   displayed: number;
   total: number;
   filterApplied: boolean;
+  /** Set when the figure was recoloured by `grouping` (see `grouping.ts`). */
+  grouping?: GroupingOutcome;
 }> {
   const { handle } = await tableFor(dcId);
   const bound = toBoundFilters(await resolveLinkFilters(dcId, filters));
@@ -600,6 +605,7 @@ export async function renderFigureLive(
     binding,
     columns: (names) => engine.columns(handle, names),
     mask,
+    grouping,
   });
   return { ...result, filterApplied: bound.length > 0 };
 }
@@ -1430,6 +1436,9 @@ export async function columnRangeLive(
   return { min: jsonNumber(min) as number | null, max: jsonNumber(max) as number | null };
 }
 
+/** Text dtypes, the ones whose distinct count the specs carry. */
+const STRING_DTYPE_RE = /^(string|utf8|str|object|categorical)/i;
+
 /** Specs in the list shape fetchColumnRange's real implementation expects —
  *  built lazily from the DataRef's column list with engine min/max. */
 export async function specsLive(dcId: string): Promise<Record<string, unknown>> {
@@ -1439,7 +1448,14 @@ export async function specsLive(dcId: string): Promise<Record<string, unknown>> 
   const entries = await Promise.all(
     (ref.columns ?? []).map(async (c) => {
       const [min, max] = await engine.minMax(handle, null, c.name);
-      return { name: c.name, type: c.dtype, specs: { min: jsonNumber(min), max: jsonNumber(max) } };
+      const specs: Record<string, unknown> = { min: jsonNumber(min), max: jsonNumber(max) };
+      // The server's specs carry `nunique` for text columns, and the "colour
+      // by a column" picker offers only those it can count. Without it no
+      // text column would ever be offered offline.
+      if (STRING_DTYPE_RE.test(c.dtype) && !c.name.startsWith('__')) {
+        specs.nunique = (await engine.unique(handle, null, c.name)).length;
+      }
+      return { name: c.name, type: c.dtype, specs };
     }),
   );
   return entries as unknown as Record<string, unknown>;

@@ -11,6 +11,9 @@ from depictio.serverless.interactive_defaults import (
     default_filter_value,
     default_filters,
     filters_for_state,
+    grouping_columns,
+    grouping_for_state,
+    grouping_render_body,
 )
 
 
@@ -144,14 +147,95 @@ def test_a_state_entry_for_another_tab_does_not_reach_this_tab():
     )
 
 
-def test_group_filter_projections_never_ride_along():
+def test_group_filter_projections_ride_along_on_every_tab():
+    """The runtime derives the same filters from the groups it opens with, so a
+    frozen tile is computed under them, like the live ones beside it."""
     group_projection = {
         **_filter_entry("a", ["v"]),
         "index": "__depictio_group__:dc1:col_a",
         "source": "group_filter",
     }
     state = _state(group_projection, _filter_entry("a", ["v"]))
-    assert [f["index"] for f in filters_for_state([_control("a", "MultiSelect")], state)] == ["a"]
+    out = filters_for_state([_control("a", "MultiSelect")], state)
+    assert [f["index"] for f in out] == ["__depictio_group__:dc1:col_a", "a"]
+    # even on a tab that holds none of the control it is made on
+    other = filters_for_state([_control("z", "MultiSelect")], state)
+    assert [f["index"] for f in other] == ["__depictio_group__:dc1:col_a"]
+
+
+def _grouped_state(**extra: Any) -> AnalysisState:
+    return AnalysisState.model_validate(
+        {
+            "groups": [
+                {
+                    "id": "g1",
+                    "name": "North",
+                    "color": "#e03131",
+                    "dc_id": "dc1",
+                    "column_name": "sample",
+                    "values": ["s1", "s2"],
+                    "filter_active": True,
+                },
+                {
+                    "id": "g2",
+                    "name": "Empty",
+                    "color": "#1971c2",
+                    "column_name": "other",
+                    "values": [],
+                },
+            ],
+            "context": {"dashboard_id": "d1"},
+            **extra,
+        }
+    )
+
+
+def test_a_state_without_groups_or_colouring_opens_ungrouped():
+    assert grouping_for_state(None) is None
+    plain = AnalysisState.model_validate({"context": {"dashboard_id": "d1"}})
+    assert grouping_for_state(plain) is None
+    assert grouping_columns(plain) == set()
+    assert grouping_render_body(plain) == {}
+
+
+def test_the_groups_and_colour_by_are_carried_as_the_state_holds_them():
+    state = _grouped_state(
+        color_by={"kind": "groups"}, display_mode="facet", show_other=False, show_overall=False
+    )
+    grouping = grouping_for_state(state)
+    assert grouping is not None
+    assert [g.name for g in grouping.groups] == ["North", "Empty"]
+    assert grouping.color_by.kind == "groups"
+    assert (grouping.display_mode, grouping.show_other, grouping.show_overall) == (
+        "facet",
+        False,
+        False,
+    )
+    # a saved group alone, nothing coloured, is still carried
+    assert grouping_for_state(_grouped_state()) is not None
+
+
+def test_the_columns_to_keep_are_every_groups_and_the_colour_by_column():
+    assert grouping_columns(_grouped_state()) == {"sample", "other"}
+    by_column = _grouped_state(color_by={"kind": "column", "column_name": "species"})
+    assert grouping_columns(by_column) == {"sample", "other", "species"}
+
+
+def test_a_frozen_figure_is_asked_for_the_colouring_the_viewer_would():
+    groups = grouping_render_body(_grouped_state(color_by={"kind": "groups"}))
+    # a group without values is not a group (the server would drop it too)
+    assert [g["name"] for g in groups["groups"]] == ["North"]
+    assert groups["groups"][0]["dc_id"] == "dc1"
+    assert groups["color_by_group"] is True
+    assert "include_other" not in groups and "grouping_display" not in groups
+    split = grouping_render_body(
+        _grouped_state(color_by={"kind": "groups"}, display_mode="facet", show_other=False)
+    )
+    assert split["include_other"] is False and split["grouping_display"] == "facet"
+    column = grouping_render_body(_grouped_state(color_by={"kind": "column", "column_name": "sp"}))
+    assert column == {"color_by_column": {"column_name": "sp"}}
+    # colour-by off: groups that only filter colour nothing
+    assert grouping_render_body(_grouped_state()) == {}
 
 
 def test_a_state_entry_for_a_chart_selection_targets_that_tab():

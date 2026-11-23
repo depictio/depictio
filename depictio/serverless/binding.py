@@ -732,6 +732,16 @@ def _group_columns(dict_kwargs: dict[str, Any], df: pl.DataFrame) -> list[str]:
     return cols
 
 
+def _discrete_color_column(dict_kwargs: dict[str, Any], group_cols: list[str]) -> str | None:
+    """The column px colours by, when it groups (a discrete ``color``).
+
+    ``group_cols`` already left a continuous colour out, so the column is the
+    colour exactly when it is both named by ``color`` and one of them.
+    """
+    column = dict_kwargs.get("color")
+    return column if isinstance(column, str) and column in group_cols else None
+
+
 def _combinations(
     df: pl.DataFrame, group_cols: list[str]
 ) -> list[tuple[dict[str, Any], list[int]]]:
@@ -1025,6 +1035,7 @@ def build_binding_with_reason(
         BindingTable(
             scaffold=scaffold,
             group_cols=group_cols,
+            color_col=_discrete_color_column(dict_kwargs, group_cols),
             traces=trace_bindings,
             trendlines=trendlines,
             sampled=sampled,

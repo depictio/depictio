@@ -21,12 +21,14 @@ as live as the bundle of the same dashboard would be and is refused on the same
 grounds: building one needs *owner* on the dashboard's project (RFC §8, a
 manifest carries the data), and the same size ceilings apply. The one addition
 is ``initial_filters``: the exported analysis state's filters, so the runtime
-opens on the view the document narrates.
+opens on the view the document narrates. Its selection groups, colour-by and
+split ride in ``initial_grouping`` (producer A fills it from the same state):
+the runtime recolours and splits the figures it draws, and derives the filters
+of the groups that are filtering from the groups themselves.
 
 A state the runtime cannot reproduce in the page is not embedded at all
 (:func:`ineligibility`): pinned data or definitions (the manifest holds current
-data), and selection groups / colour-by / split panels (the report runtime has
-no group store). Those reports keep every tile's own output, as before.
+data). Those reports keep every tile's own output, as before.
 """
 
 from __future__ import annotations
@@ -66,17 +68,17 @@ def ineligibility(state: AnalysisState) -> str | None:
             "the export reads pinned data or definitions; the in-page runtime carries the "
             "current data only"
         )
-    if state.color_by.kind != "none" or state.split_panels:
-        return "the view is coloured or split by selection groups, which the in-page runtime does not draw"
-    if any(g.filter_active for g in state.groups) or any(
-        f.source == "group_filter" for f in state.filters
-    ):
-        return "a selection group filters the view, which the in-page runtime does not apply"
     return None
 
 
 def initial_filters(state: AnalysisState) -> list[dict[str, Any]]:
-    """The state's filters, in the wire shape the viewer's filter store holds."""
+    """The state's filters, in the wire shape the viewer's filter store holds.
+
+    Without the projections of its selection groups (``source == "group_filter"``):
+    the runtime opens with the groups (``initial_grouping``) and derives those
+    from them, as the viewer does, so listing them here too would apply each
+    twice and leave one the reader cannot clear.
+    """
     return [f for f in state.filters_as_payload() if f.get("source") != "group_filter"]
 
 
