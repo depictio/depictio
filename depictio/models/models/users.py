@@ -573,13 +573,20 @@ class RequestAdminCredentials(BaseModel):
     """
 
     email: EmailStr
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=8)
     current_password: str | None = Field(default=None, max_length=128)
 
     @field_validator("new_password", "current_password")
     def reject_hashed_password(cls, v):
         if v is not None and v.startswith("$2b$"):
             raise ValueError("Password must be sent in plaintext, not pre-hashed")
+        return v
+
+    @field_validator("new_password")
+    def fits_bcrypt(cls, v):
+        # bcrypt refuses more than 72 bytes; counted in bytes, not characters.
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes long")
         return v
 
 

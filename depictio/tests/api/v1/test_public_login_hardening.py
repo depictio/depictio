@@ -22,12 +22,20 @@ PASSWORD = "the-right-one"
 class FakeRedis:
     def __init__(self):
         self.data: dict[str, int] = {}
+        self.ttl: dict[str, int | None] = {}
 
     def incr(self, key):
         self.data[key] = self.data.get(key, 0) + 1
         return self.data[key]
 
     def expire(self, key, ttl):
+        return True
+
+    def set(self, key, value, ex=None, nx=False):
+        if nx and key in self.data:
+            return None
+        self.data[key] = int(value)
+        self.ttl[key] = ex
         return True
 
     def get(self, key):
@@ -120,6 +128,9 @@ async def test_account_locks_after_repeated_wrong_passwords(redis):
     with pytest.raises(HTTPException) as exc:
         await _login(public=True, is_admin=True, password=PASSWORD)
     assert (exc.value.status_code, exc.value.detail) == (401, "Invalid credentials")
+
+    # The counter carries the lockout window, so it always expires.
+    assert set(redis.ttl.values()) == {rate_limit._LOCKOUT_WINDOW_SECS}
 
     # Another account is unaffected.
     token = await _login(public=True, is_admin=True, password=PASSWORD, email="other@lab.org")

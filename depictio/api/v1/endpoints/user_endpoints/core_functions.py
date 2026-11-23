@@ -1,4 +1,5 @@
 import hashlib
+import re
 import secrets
 import time
 from datetime import datetime, timedelta
@@ -18,6 +19,11 @@ from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
 )
 from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
     claim_pending_project_ownership_quietly,
+)
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import (
+    clear_account_failures,
+    enforce_account_lockout,
+    record_account_failure,
 )
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
@@ -662,13 +668,21 @@ async def _set_default_admin_credentials(
         raise HTTPException(status_code=404, detail="No admin account on this instance.")
 
     if admin.credentials_claimed:
+        # The same per-account count as the public sign-in form: this password
+        # is the one that form accepts, so guessing it here must cost the same.
+        enforce_account_lockout(admin.email)
         if not current_password or not await _check_password(admin.email, current_password):
+            record_account_failure(admin.email)
             raise HTTPException(status_code=400, detail="Current password is incorrect.")
+        clear_account_failures(admin.email)
 
     email = email.strip().lower()
     if email == settings.auth.anonymous_user_email.lower() or email.endswith("@depictio.temp"):
         raise HTTPException(status_code=400, detail="This email address is reserved.")
-    other = await UserBeanie.find_one({"email": email, "_id": {"$ne": admin.id}})
+    # Case-insensitive: stored emails keep the case they were registered with.
+    other = await UserBeanie.find_one(
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "_id": {"$ne": admin.id}}
+    )
     if other is not None:
         raise HTTPException(status_code=409, detail="Another account already uses this email.")
 

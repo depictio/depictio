@@ -22,6 +22,7 @@ import time
 from typing import Any
 
 from fastapi import HTTPException, Request
+from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.redis_client import get_shared_redis_client
@@ -197,8 +198,19 @@ _LOCKOUT_WINDOW_SECS = 15 * 60
 _LOCKOUT_MAX_FAILURES = 5
 
 
+_EMAIL = TypeAdapter(EmailStr)
+
+
 def _lockout_key(email: str) -> str:
-    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    # Normalised as the account lookup normalises it (`EmailStr`: Unicode NFKC,
+    # IDNA domain), or every spelling that reaches the same account, such as a
+    # fullwidth domain, would get a counter of its own. A string that is no
+    # email reaches no account; its own bucket is harmless.
+    try:
+        normalised = str(_EMAIL.validate_python(email.strip()))
+    except ValidationError:
+        normalised = email.strip()
+    digest = hashlib.sha256(normalised.lower().encode()).hexdigest()
     return f"depictio:lockout:login:{digest}"
 
 
@@ -227,8 +239,11 @@ def record_account_failure(email: str) -> None:
         return
     try:
         key = _lockout_key(email)
-        if client.incr(key) == 1:
-            client.expire(key, _LOCKOUT_WINDOW_SECS)
+        # The window is set before the count: INCR keeps a TTL, so no crash or
+        # error between two calls can leave a counter that never expires (an
+        # account locked for good).
+        client.set(key, 0, ex=_LOCKOUT_WINDOW_SECS, nx=True)
+        client.incr(key)
     except Exception as e:
         logger.warning(f"Auth rate limiter Redis error ({e}); failure not counted.")
 

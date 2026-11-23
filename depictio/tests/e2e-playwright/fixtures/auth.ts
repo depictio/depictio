@@ -240,12 +240,27 @@ const _tokenCache = new Map<UserType, TokenBundle>();
  * Convenience: programmatic login + storage seed.
  * Re-uses a cached token if already fetched in this worker to avoid rate limits.
  */
+/**
+ * A public instance accepts password sign-in from admins only, so a test that
+ * needs a non-admin signed in that way has nothing to run on there: it skips,
+ * with that reason, rather than failing on the 401.
+ */
+async function skipWhenPasswordSignInIsAdminOnly(user: TestUser): Promise<void> {
+  if (user.is_admin) return;
+  const { is_public_mode, is_single_user_mode } = await getAuthMode();
+  base.skip(
+    is_public_mode && !is_single_user_mode,
+    "Public mode: password sign-in is for admins only.",
+  );
+}
+
 export async function loginAsTestUser(
   page: Page,
   request: APIRequestContext,
   userType: UserType = "testUser",
 ): Promise<TestUser> {
   const user = credentials[userType];
+  await skipWhenPasswordSignInIsAdminOnly(user);
   let tokens = _tokenCache.get(userType);
   if (!tokens) {
     tokens = await apiLogin(request, user.email, user.password);
@@ -303,6 +318,7 @@ export async function apiOnlyToken(
   let tokens = _apiTokenCache.get(userType);
   if (!tokens) {
     const user = credentials[userType];
+    await skipWhenPasswordSignInIsAdminOnly(user);
     tokens = await apiLogin(request, user.email, user.password);
     tokens.email = user.email;
     _apiTokenCache.set(userType, tokens);

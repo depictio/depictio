@@ -321,9 +321,9 @@ async def login(
     if public_door:
         clear_account_failures(login_request.username)
         if not user.is_admin:
-            # Admins only, checked after the password so bcrypt runs either way,
-            # and answered as a wrong password would be: a distinct refusal
-            # would tell a guesser the password was right. SSO is unaffected.
+            # Admins only, answered as a wrong password would be: a distinct
+            # refusal would tell a guesser the password was right. SSO is
+            # unaffected.
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
             )

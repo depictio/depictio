@@ -287,7 +287,10 @@ async def process_all_reference_datasets() -> None:
         )
 
         # Get admin user credentials
-        admin_user = users_collection.find_one({"is_admin": True})
+        # The default admin, as `_default_admin()` resolves it (oldest by _id).
+        admin_user = users_collection.find_one(
+            {"is_admin": True, "is_anonymous": {"$ne": True}}, sort=[("_id", 1)]
+        )
         if not admin_user:
             logger.error("No admin user found")
             return

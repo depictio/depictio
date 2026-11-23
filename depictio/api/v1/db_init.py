@@ -803,6 +803,30 @@ async def _resolve_existing_admin_token(
     }
 
 
+async def _backfill_credentials_claimed(admin_user: UserBeanie) -> None:
+    """Give an admin stored before ``credentials_claimed`` existed its real value.
+
+    A missing field reads as ``False`` (claimable without a password), which is
+    right only for the zero-config admin: ``admin@example.com`` with a random
+    password nobody knows (or the old public ``changeme``). Any other admin, or
+    one an operator still declares through ``DEPICTIO_BOOTSTRAP_ADMIN_*``, has a
+    password somebody chose, and a free claim would let anyone replace it.
+    """
+    if await UserBeanie.find_one({"_id": admin_user.id, "credentials_claimed": {"$exists": True}}):
+        return
+    declared = bool(
+        settings.bootstrap.admin_email.strip()
+        and settings.bootstrap.admin_password.get_secret_value()
+        and not settings.bootstrap.admin_password_generated
+    )
+    admin_user.credentials_claimed = declared or admin_user.email != "admin@example.com"
+    await admin_user.save()
+    logger.info(
+        "Admin stored before credentials_claimed existed: set to %s.",
+        admin_user.credentials_claimed,
+    )
+
+
 async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | None]:
     """Seed the admin (and optional CI test user) from env-driven bootstrap.
 
@@ -896,6 +920,7 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
             "Existing admin user found in MongoDB — skipping bootstrap seed: %s",
             admin_user.email,
         )
+        await _backfill_credentials_claimed(admin_user)
 
     # Optional: seed the CI / Cypress fixture user. Off by default; production
     # values files leave seed_test_user=false so no known-credentials account

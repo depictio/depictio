@@ -397,7 +397,7 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   removed; `DEPICTIO_AUTH_GOOGLE_OAUTH_*` maps to provider `google` (deprecated)
 - Default admin: single-user and public mode seed `admin@example.com` with a random password
   when no `DEPICTIO_BOOTSTRAP_ADMIN_*` is set. `_default_admin()` (oldest admin by `_id`) is the
-  only resolver of "the admin"; never an unsorted `find_one`. `credentials_claimed` says whether
+  only resolver of "the admin" (sync pymongo code repeats its query and sort); never an unsorted `find_one`. `credentials_claimed` says whether
   someone chose its credentials (env-seeded, unless `DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD_GENERATED`,
   which `local up` sets). In single-user mode the owner names them in place
   (`POST /auth/me/admin_credentials`, Account settings, `depictio config set-admin-credentials`);
