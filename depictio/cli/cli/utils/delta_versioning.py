@@ -20,7 +20,8 @@ Two consequences of never reading that history are worth stating plainly:
 environments lag to 0.24, and the two disagree on ``operationMetrics`` key
 spelling (``num_added_rows`` vs ``numOutputRows``). Everything read back from
 ``DeltaTable.history()`` is therefore parsed defensively — see
-:func:`_metric`. Custom commit metadata is *flattened* into the history entry
+:func:`_metric` — and only iterated, never indexed: 1.7 returns a generator
+where 1.6 returned a list. Custom commit metadata is *flattened* into the history entry
 at the top level rather than nested, which is why :func:`_custom_metadata`
 filters by prefix.
 """
@@ -962,8 +963,9 @@ def read_delta_commit_info(
         if version is not None:
             entries = [entry for entry in table.history(50) if entry.get("version") == version]
             return _parse_commit(entries[0]) if entries else None
-        history = table.history(1)
-        return _parse_commit(history[0]) if history else None
+        # A list up to deltalake 1.6, a generator from 1.7: never index it.
+        latest = next(iter(table.history(1)), None)
+        return _parse_commit(latest) if latest is not None else None
     except TableNotFoundError:
         return None
     except Exception as exc:  # noqa: BLE001
