@@ -24,7 +24,10 @@ from depictio.api.v1.db import (
     runs_collection,
     workflows_collection,
 )
-from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _async_fetch_user_from_token,
+    _default_admin,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     oauth2_scheme_optional,
@@ -153,7 +156,7 @@ async def server_info(
         # Same fallback as `/auth/me/optional`: with no login in single-user mode
         # (`depictio local up`) the visitor acts as the admin everywhere else, so
         # they are the one who should hear about an update.
-        user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        user = await _default_admin()
 
     repository_url = f"https://github.com/{settings.version_check.repository}"
     version = get_version()

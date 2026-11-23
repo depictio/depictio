@@ -47,6 +47,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _create_temporary_user,
     _create_temporary_user_session,
     _create_user_in_db,
+    _default_admin,
     _delete_token,
     _edit_password,
     _get_anonymous_user_session,
@@ -55,11 +56,15 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _provision_user,
     _purge_expired_tokens,
     _redeem_magic_link_ticket,
+    _set_default_admin_credentials,
     _token_fingerprint,
 )
 from depictio.api.v1.endpoints.user_endpoints.rate_limit import (
+    clear_account_failures,
+    enforce_account_lockout,
     enforce_failure_limit,
     enforce_rate_limit,
+    record_account_failure,
     record_failure,
 )
 from depictio.api.v1.endpoints.user_endpoints.utils import (
@@ -69,6 +74,7 @@ from depictio.api.v1.services import avatars as avatar_service
 from depictio.api.v1.services.usage_stats import record_login
 from depictio.models.models.users import (
     RequestAdminCreateUser,
+    RequestAdminCredentials,
     RequestEditPassword,
     RequestUserRegistration,
     TokenBeanie,
@@ -268,12 +274,17 @@ async def login(
         HTTPException: 401 if credentials are invalid.
         HTTPException: 429 if too many requests from the same IP.
     """
+    # A public instance's password door faces the whole internet and, there,
+    # only exists so its admins can get in (no registration, guests get
+    # temporary accounts). Single-user mode has no password to guess.
+    public_door = settings.auth.is_public_mode and not settings.auth.is_single_user_mode
+
     # Redis-backed per-IP rate limit to slow credential-stuffing / brute force.
-    # Fail-open if Redis is down (see rate_limit.enforce_rate_limit).
-    enforce_rate_limit(request, "login")
+    # Fail-open if Redis is down, except on a public instance (fail-closed).
+    enforce_rate_limit(request, "login", fail_closed=public_door)
 
     if settings.auth.is_single_user_mode:
-        admin = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        admin = await _default_admin()
         if not admin:
             raise HTTPException(status_code=500, detail="Admin user not found in single-user mode")
         token_name = f"{admin.email}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -296,12 +307,26 @@ async def login(
             detail="Password sign-in is disabled on this instance. Use single sign-on.",
         )
 
+    if public_door:
+        enforce_account_lockout(login_request.username, fail_closed=True)
+
     password_valid = await _check_password(login_request.username, login_request.password)
     if not password_valid:
+        if public_door:
+            record_account_failure(login_request.username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     user = await _async_fetch_user_from_email(login_request.username)
+    if public_door:
+        clear_account_failures(login_request.username)
+        if not user.is_admin:
+            # Admins only, checked after the password so bcrypt runs either way,
+            # and answered as a wrong password would be: a distinct refusal
+            # would tell a guesser the password was right. SSO is unaffected.
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            )
     token_data = TokenData(name=token_name, token_lifetime="short-lived", sub=user.id)
     token = await _add_token(token_data)
     if token is None:
@@ -845,6 +870,7 @@ async def get_current_user_info_optional(
                 # A public-mode guest: the SPA offers it a way to sign in.
                 "is_temporary": bool(getattr(user, "is_temporary", False)),
                 "must_change_password": bool(getattr(user, "must_change_password", False)),
+                "credentials_claimed": bool(getattr(user, "credentials_claimed", False)),
                 **_avatar_payload(user.id),
             }
 
@@ -854,12 +880,13 @@ async def get_current_user_info_optional(
     # everything not flagged public/example lands in "Accessed" because the
     # client thinks it's anonymous.
     if user_payload is None and settings.auth.is_single_user_mode:
-        admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        admin_user = await _default_admin()
         if admin_user:
             user_payload = {
                 "id": str(admin_user.id),
                 "email": admin_user.email,
                 "is_admin": True,
+                "credentials_claimed": bool(getattr(admin_user, "credentials_claimed", False)),
                 **_avatar_payload(admin_user.id),
             }
 
@@ -890,6 +917,14 @@ async def get_current_user_info_optional(
         # Effective, not the raw flag: the SPA must not hide the password form
         # on an instance where no OIDC provider is configured.
         "password_login_disabled": getattr(settings.auth, "is_password_login_disabled", False),
+        # Whether a public instance's guests are offered an "Admin sign-in" link
+        # to the password form. Never in demo or single-user mode.
+        "public_admin_sign_in": bool(
+            settings.auth.is_public_mode
+            and not settings.auth.is_single_user_mode
+            and not getattr(settings.auth, "is_demo_mode", False)
+            and getattr(settings.auth, "public_admin_sign_in", False)
+        ),
         # Whether public mode asks for the shared code — never the code itself.
         "public_access_code_required": getattr(
             settings.auth, "is_public_access_code_required", False
@@ -1407,6 +1442,40 @@ async def get_all_users(current_user=Depends(get_current_user)):
 # product is user-only and none had any remaining callers in the repo. Groups still
 # exist as a data concept (seeded at init, attached to users) — only the HTTP routes
 # were dropped.
+
+
+@auth_endpoint_router.post("/me/admin_credentials", include_in_schema=True)
+async def set_admin_credentials(
+    request: Request,
+    payload: RequestAdminCredentials,
+    current_user: UserBeanie = Depends(get_user_or_anonymous),
+) -> dict:
+    """Single-user mode: choose the default admin's email and password.
+
+    Single-user mode signs everyone in as the default admin, seeded as
+    ``admin@example.com`` with a random password nobody knows. That is fine
+    until the instance goes public, where the password form is the admin's
+    only way in. This names the credentials that form will accept, on the same
+    account (its id, and so everything it owns, is kept).
+
+    The first claim needs no current password; later changes do.
+    """
+    if not settings.auth.is_single_user_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin credentials are set here only in single-user mode; "
+            "use the password change once signed in.",
+        )
+    if not current_user or not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+    enforce_rate_limit(request, "admin_credentials")
+
+    admin = await _set_default_admin_credentials(
+        email=str(payload.email),
+        new_password=payload.new_password,
+        current_password=payload.current_password,
+    )
+    return {"success": True, "email": admin.email, "credentials_claimed": True}
 
 
 @auth_endpoint_router.post("/edit_password", include_in_schema=True)

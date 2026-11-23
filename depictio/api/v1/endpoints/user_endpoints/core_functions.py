@@ -606,6 +606,84 @@ async def _list_tokens(
     return await TokenBeanie.find_many(query).to_list()
 
 
+DEFAULT_ADMIN_QUERY = {"is_admin": True, "is_anonymous": {"$ne": True}}
+
+
+async def _default_admin() -> UserBeanie | None:
+    """The instance's default admin: the oldest non-anonymous admin.
+
+    Single-user mode signs everyone in as this account, and bootstrap checks it
+    exists. Sorted on ``_id`` so a second admin never makes the answer depend on
+    natural order: the seeded admin (static, oldest id) stays the default.
+    """
+    admins = await UserBeanie.find(DEFAULT_ADMIN_QUERY).sort("+_id").limit(1).to_list()
+    return admins[0] if admins else None
+
+
+_PERMISSION_ROLES = ("owners", "editors", "viewers")
+
+
+def _rename_embedded_user_email(user_id: Any, email: str) -> int:
+    """Refresh the email copy embedded in project and dashboard permissions.
+
+    Permissions are keyed on the user id, but each entry also carries the email
+    it had when it was written, which is what lists and share dialogs show.
+    Returns how many documents were rewritten.
+    """
+    from depictio.api.v1.db import dashboards_collection, projects_collection
+
+    query = {"$or": [{f"permissions.{role}._id": user_id} for role in _PERMISSION_ROLES]}
+    rewritten = 0
+    for collection in (projects_collection, dashboards_collection):
+        for doc in collection.find(query, {"permissions": 1}):
+            permissions = doc.get("permissions") or {}
+            for role in _PERMISSION_ROLES:
+                for entry in permissions.get(role) or []:
+                    if isinstance(entry, dict) and entry.get("_id") == user_id:
+                        entry["email"] = email
+            collection.update_one({"_id": doc["_id"]}, {"$set": {"permissions": permissions}})
+            rewritten += 1
+    return rewritten
+
+
+async def _set_default_admin_credentials(
+    email: str, new_password: str, current_password: str | None
+) -> UserBeanie:
+    """Single-user mode: name the default admin's email and password, in place.
+
+    The account keeps its id, so everything it owns stays its own. The first
+    claim needs no current password: the zero-config admin's is random and was
+    never shown to anyone. Once claimed, the current one is required, so the
+    credentials that work after a switch to public mode cannot be replaced
+    silently. Raises HTTPException on refusal.
+    """
+    admin = await _default_admin()
+    if admin is None:
+        raise HTTPException(status_code=404, detail="No admin account on this instance.")
+
+    if admin.credentials_claimed:
+        if not current_password or not await _check_password(admin.email, current_password):
+            raise HTTPException(status_code=400, detail="Current password is incorrect.")
+
+    email = email.strip().lower()
+    if email == settings.auth.anonymous_user_email.lower() or email.endswith("@depictio.temp"):
+        raise HTTPException(status_code=400, detail="This email address is reserved.")
+    other = await UserBeanie.find_one({"email": email, "_id": {"$ne": admin.id}})
+    if other is not None:
+        raise HTTPException(status_code=409, detail="Another account already uses this email.")
+
+    email_changed = email != admin.email
+    admin.email = email
+    admin.password = _hash_password(new_password)
+    admin.credentials_claimed = True
+    admin.must_change_password = False
+    await admin.save()
+    if email_changed:
+        _rename_embedded_user_email(admin.id, email)
+    logger.info("Default admin credentials set (email changed: %s).", email_changed)
+    return admin
+
+
 @validate_call(validate_return=True)
 async def _get_anonymous_user_session() -> dict:
     """Auto-login session for single-user mode (returns the admin user).
@@ -614,7 +692,7 @@ async def _get_anonymous_user_session() -> dict:
     via ``_create_temporary_user_session`` instead.
     """
     if settings.auth.is_single_user_mode:
-        admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        admin_user = await _default_admin()
         if not admin_user:
             # Admin user doesn't exist yet — try the env-driven bootstrap.
             # This handles race conditions during startup and database wipes.
@@ -834,6 +912,7 @@ async def _create_user_in_db(
     id: PyObjectId = None,  # type: ignore[invalid-parameter-default]
     group: str | None = None,
     claim_pending_owner: bool = False,
+    credentials_claimed: bool = False,
 ) -> dict[str, bool | str | UserBeanie | None] | None:
     """
     Helper function to create a user in the database using Beanie.
@@ -845,6 +924,8 @@ async def _create_user_in_db(
         is_admin: Whether user is admin
         claim_pending_owner: Hand over projects parked on this email (#1303). Only
             for accounts an admin creates: a self-registered address is unverified.
+        credentials_claimed: Someone chose these credentials (an operator's
+            DEPICTIO_BOOTSTRAP_ADMIN_*), as opposed to the random default admin.
 
     Returns:
         The created UserBeanie object if successful
@@ -879,6 +960,7 @@ async def _create_user_in_db(
         is_anonymous=is_anonymous,
         registration_date=current_time,
         last_login=current_time,
+        credentials_claimed=credentials_claimed,
     )
 
     try:

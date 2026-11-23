@@ -21,7 +21,7 @@ def _settings(*, single_user: bool, public: bool, email: str = "", password: str
 def _patches(mock_settings, create_user):
     return (
         patch.object(db_init, "settings", mock_settings),
-        patch.object(db_init.UserBeanie, "find_one", AsyncMock(return_value=None)),
+        patch.object(db_init, "_default_admin", AsyncMock(return_value=None)),
         patch.object(db_init, "_create_user_in_db", create_user),
         patch.object(db_init, "_resolve_existing_admin_token", AsyncMock(return_value={"t": 1})),
     )
@@ -42,8 +42,9 @@ async def test_public_mode_seeds_default_admin_without_bootstrap_env():
     kwargs = create_user.await_args.kwargs
     assert kwargs["is_admin"] is True
     assert kwargs["email"] == "admin@example.com"
-    # Random, never a known default.
+    # Random, never a known default, so its owner can claim it once.
     assert len(kwargs["password"]) >= 32
+    assert kwargs["credentials_claimed"] is False
 
 
 @pytest.mark.asyncio
@@ -60,6 +61,8 @@ async def test_public_mode_prefers_bootstrap_env_when_set():
     kwargs = create_user.await_args.kwargs
     assert kwargs["email"] == "owner@lab.org"
     assert kwargs["password"] == "p" * 20
+    # The operator chose these: no free claim in single-user mode.
+    assert kwargs["credentials_claimed"] is True
 
 
 @pytest.mark.asyncio

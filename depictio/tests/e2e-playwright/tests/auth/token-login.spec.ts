@@ -53,10 +53,12 @@ test.describe("Token-Based Login", () => {
     // Single-user mode's /auth/login ignores the submitted credentials and
     // always issues the admin token, so the per-user email assertion below
     // cannot hold. Same guard the other credential-sensitive tests here use.
-    const { is_single_user_mode } = await getAuthMode();
+    // Public mode's password sign-in admits admins only, so the non-admin test
+    // user cannot sign in there at all.
+    const { is_single_user_mode, is_public_mode } = await getAuthMode();
     test.skip(
-      is_single_user_mode,
-      "Single-user mode always logs in as admin, not the requested user.",
+      is_single_user_mode || is_public_mode,
+      "Single-user mode always logs in as admin; public mode admits admins only.",
     );
 
     const tokens = await apiLogin(

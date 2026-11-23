@@ -682,6 +682,15 @@ class AuthConfig(BaseSettings):
         "that as well). Ignored unless at least one OIDC provider is enabled "
         "and configured, so a half-done configuration cannot lock every user out.",
     )
+    public_admin_sign_in: bool = Field(
+        default=True,
+        description="Offer guests of a public instance an 'Admin sign-in' link to the "
+        "password form, so its admins can get in without single sign-on. On by "
+        "default; set DEPICTIO_AUTH_PUBLIC_ADMIN_SIGN_IN=false to hide it. Only the "
+        "link: on a public instance /auth/login accepts admins only, fails closed "
+        "when the rate limiter is down, and locks an account after repeated "
+        "wrong passwords, whether the link is shown or not.",
+    )
     public_access_code: Optional[SecretStr] = Field(
         default=None,
         description="Shared access code gating public mode. Public mode otherwise "
@@ -775,6 +784,13 @@ class AuthConfig(BaseSettings):
         env_password_login_disabled = os.getenv("DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED", "").lower()
         if env_password_login_disabled in ("true", "1", "yes"):
             object.__setattr__(self, "password_login_disabled", True)
+
+        # On by default, so unlike the flags above this one must also read "off".
+        env_public_admin_sign_in = os.getenv("DEPICTIO_AUTH_PUBLIC_ADMIN_SIGN_IN", "").lower()
+        if env_public_admin_sign_in in ("true", "1", "yes"):
+            object.__setattr__(self, "public_admin_sign_in", True)
+        elif env_public_admin_sign_in in ("false", "0", "no"):
+            object.__setattr__(self, "public_admin_sign_in", False)
 
         object.__setattr__(self, "oidc_providers", self._resolve_oidc_providers())
 

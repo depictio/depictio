@@ -38,7 +38,7 @@ from depictio.api.v1.services.screenshot_helpers import (
     wait_for_plotly_drawn,
     wait_for_theme_applied,
 )
-from depictio.models.models.users import TokenBeanie, UserBeanie
+from depictio.models.models.users import TokenBeanie
 
 _SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 
@@ -205,7 +205,9 @@ async def get_admin_auth_token() -> dict[str, str]:
     """
     # Resolve "the admin" by role rather than by hardcoded email so this
     # works under any DEPICTIO_BOOTSTRAP_ADMIN_EMAIL.
-    current_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+    from depictio.api.v1.endpoints.user_endpoints.core_functions import _default_admin
+
+    current_user = await _default_admin()
     if not current_user:
         raise ValueError("Admin user not found")
 
