@@ -11000,6 +11000,9 @@ def _computed_filter_options(
                 raise HTTPException(status_code=400, detail=f"Invalid filter_expr: {exc}")
 
         if kind == "unique":
+            from depictio.api.v1.endpoints.deltatables_endpoints.routes import (
+                closest_matches_first,
+            )
             from depictio.models.components.value_order import order_values
 
             if search:
@@ -11021,12 +11024,16 @@ def _computed_filter_options(
                         detail=f"Column '{order_by}' not found in data collection {dc_id}.",
                     )
                 pairs = (
-                    scan.select(column, order_by)
-                    # A null is not a value: it must not eat a slot the
-                    # limit counts.
-                    .filter(pl.col(column).is_not_null())
-                    .group_by(column)
-                    .agg(pl.col(order_by).min().alias("_order_key"))
+                    closest_matches_first(
+                        scan.select(column, order_by)
+                        # A null is not a value: it must not eat a slot the
+                        # limit counts.
+                        .filter(pl.col(column).is_not_null())
+                        .group_by(column)
+                        .agg(pl.col(order_by).min().alias("_order_key")),
+                        column,
+                        search,
+                    )
                     .limit(limit + 1)
                     .collect()
                 )
@@ -11039,9 +11046,7 @@ def _computed_filter_options(
             else:
                 # Nulls go before the limit: one must not take a counted slot.
                 unique_values = (
-                    scan.select(column)
-                    .drop_nulls()
-                    .unique()
+                    closest_matches_first(scan.select(column).drop_nulls().unique(), column, search)
                     .limit(limit + 1)
                     .collect()[column]
                     .to_list()

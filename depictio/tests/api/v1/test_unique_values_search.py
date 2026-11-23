@@ -146,3 +146,43 @@ def test_a_cache_hit_of_an_order_by_is_not_served_for_a_search_spelling_the_same
     # No family contains "bar": this is a fresh answer, not the six families
     # the unsearched query just cached.
     assert searched == {"column": "family", "values": [], "truncated": False}
+
+
+def test_a_search_past_the_limit_keeps_the_closest_matches(tmp_path, monkeypatch):
+    # 1,444 of 4,333 family names contain "bu_proteins_3": past the limit an
+    # arbitrary subset left out "bu_proteins_32", so typing it found nothing.
+    import mongomock
+    from bson import ObjectId
+
+    from depictio.api.v1.endpoints.deltatables_endpoints import routes
+
+    dc_id = ObjectId()
+    table = tmp_path / "dt"
+    names = [f"bu_proteins_{i}" for i in range(1, 4334)]
+    pl.DataFrame({"family": names}).write_delta(str(table))
+    db = mongomock.MongoClient().db
+    db["projects"].insert_one(
+        {
+            "_id": ObjectId(),
+            "workflows": [{"data_collections": [{"_id": dc_id, "config": {"type": "table"}}]}],
+        }
+    )
+    db["deltatables"].insert_one({"data_collection_id": dc_id, "delta_table_location": str(table)})
+    monkeypatch.setattr(routes, "projects_collection", db["projects"])
+    monkeypatch.setattr(routes, "deltatables_collection", db["deltatables"])
+    monkeypatch.setattr(routes, "polars_s3_config", {})
+    monkeypatch.setattr(
+        "depictio.api.v1.endpoints.dashboards_endpoints.routes.check_project_permission",
+        lambda *a, **k: True,
+    )
+    salt = str(ObjectId())
+    monkeypatch.setattr(
+        "depictio.api.v1.deltatables_utils._get_aggregation_version", lambda _dc: salt
+    )
+
+    out = routes.get_unique_values(
+        dc_id, "family", limit=200, search="bu_proteins_3", current_user="u"
+    )
+
+    assert out["truncated"] is True and len(out["values"]) == 200
+    assert {"bu_proteins_3", "bu_proteins_32", "bu_proteins_399"} <= set(out["values"])

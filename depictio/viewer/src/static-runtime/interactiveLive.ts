@@ -121,6 +121,10 @@ export async function uniqueValuePageLive(
   const limit = query.limit ?? FILTER_OPTIONS_LIMIT;
   const needle = query.search?.trim().toLowerCase() || '';
   const matches = (v: string) => !needle || v.toLowerCase().includes(needle);
+  // With a search, the closest matches first (shortest, then alphabetical)
+  // before the limit, as the server does.
+  const closestFirst = (vs: string[]) =>
+    needle ? [...vs].sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)) : vs;
   const ref = dataRefFor(dcId);
   if (!ref) throw new Error(`static bundle: no data_ref for dc "${dcId}"`);
   const mask = await maskWith(dcId, flagFor(filterExpr));
@@ -142,14 +146,14 @@ export async function uniqueValuePageLive(
       if (!keys.has(v)) keys.set(v, k ?? null);
       else if (k !== null && k !== undefined && (keys.get(v) == null || less(k, keys.get(v)))) keys.set(v, k);
     }
-    const all = [...keys.keys()].filter(matches);
+    const all = closestFirst([...keys.keys()].filter(matches));
     const stringKeys = new Map<string, unknown>();
     for (const [v, k] of keys) {
       stringKeys.set(v, typeof k === 'bigint' ? Number(k) : k);
     }
     return { values: orderValues(all.slice(0, limit), stringKeys), truncated: all.length > limit };
   }
-  const all = (await distinctUnder(dcId, column, mask)).filter(matches);
+  const all = closestFirst((await distinctUnder(dcId, column, mask)).filter(matches));
   return { values: orderValues(all.slice(0, limit)), truncated: all.length > limit };
 }
 

@@ -79,6 +79,19 @@ _NO_DELTA_TYPES = frozenset({"multiqc", "geojson"})
 UNIQUE_VALUES_MAX_LIMIT = 100_000
 
 
+def closest_matches_first(frame: pl.LazyFrame, column: str, search: str | None) -> pl.LazyFrame:
+    """``frame`` with the closest matches of ``search`` first: shortest, then
+    alphabetical. A search past the limit keeps those, so typing a family's
+    full name always finds it (``bu_proteins_32`` among the 1,444 names that
+    contain ``bu_proteins_3``), however many longer names also match.
+    Unchanged without a search.
+    """
+    if not search:
+        return frame
+    text = pl.col(column).cast(pl.Utf8)
+    return frame.sort([text.str.len_chars(), text])
+
+
 def stores_delta_table(dc_type: str) -> bool:
     """Whether a collection of this type is written as a Delta table."""
     return (dc_type or "").lower() not in _NO_DELTA_TYPES
@@ -1042,6 +1055,9 @@ def get_unique_values(
             # search on a MultiQC-backed sample filter narrows this list too.
             needle = search.lower()
             union = {v for v in union if needle in v.lower()}
+            # Closest first, as on the Delta path, before the limit.
+            kept = sorted(sorted(union, key=lambda v: (len(v), v))[:limit])
+            return {"column": column, "values": kept, "truncated": len(union) > limit}
         return {"column": column, "values": sorted(union)[:limit], "truncated": len(union) > limit}
 
     deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
@@ -1159,10 +1175,14 @@ def get_unique_values(
                 # Each value takes the smallest key it carries; the ordering
                 # itself (numeric or natural) is `order_values`.
                 pairs = (
-                    lazy.select(column, order_by)
-                    .filter(pl.col(column).is_not_null())
-                    .group_by(column)
-                    .agg(pl.col(order_by).min().alias("_order_key"))
+                    closest_matches_first(
+                        lazy.select(column, order_by)
+                        .filter(pl.col(column).is_not_null())
+                        .group_by(column)
+                        .agg(pl.col(order_by).min().alias("_order_key")),
+                        column,
+                        search,
+                    )
                     .limit(limit + 1)
                     .collect()
                 )
@@ -1174,7 +1194,11 @@ def get_unique_values(
                 values = list(keys)
             else:
                 keys = None
-                df = lazy.select(column).drop_nulls().unique().limit(limit + 1).collect()
+                df = (
+                    closest_matches_first(lazy.select(column).drop_nulls().unique(), column, search)
+                    .limit(limit + 1)
+                    .collect()
+                )
                 values = df[column].to_list()
         except pl.exceptions.ColumnNotFoundError:
             raise column_missing_exc
