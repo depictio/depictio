@@ -363,7 +363,7 @@ def test_the_documented_ingest_sequence_produces_four_versions(tmp_path) -> None
         )
         assert result.delta_version == expected_version
 
-    assert len(DeltaTable(table_path).history()) == 4
+    assert len(list(DeltaTable(table_path).history())) == 4
 
     heights = [pl.read_delta(table_path, version=v).height for v in range(4)]
     assert heights == [50, 100, 100, 150]
