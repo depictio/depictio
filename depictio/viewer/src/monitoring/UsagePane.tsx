@@ -1,22 +1,29 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
   Badge,
   Box,
   Button,
   Group,
   Loader,
+  Modal,
   NumberInput,
   SegmentedControl,
   SimpleGrid,
   Stack,
-  Table,
   Text,
+  TextInput,
   Title,
+  Tooltip,
   DEFAULT_THEME,
   useComputedColorScheme,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
+import { AgGridReact } from 'ag-grid-react';
+import type { ColDef, ValueFormatterParams } from 'ag-grid-community';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { Icon } from '@iconify/react';
 import Plot from 'react-plotly.js';
 import { DepictioCard } from 'depictio-components';
@@ -132,40 +139,133 @@ const Tile: React.FC<{
   </Box>
 );
 
+type UsageRow = Record<string, string | number>;
+type UsageColumn = { key: string; label: string; format?: (v: string | number) => string };
+
+/** The AG Grid both the tile and the expanded view draw. */
+const UsageGrid: React.FC<{
+  rows: UsageRow[];
+  columns: UsageColumn[];
+  height: number | string;
+  quickFilter?: string;
+  floatingFilters?: boolean;
+  href?: (row: UsageRow) => string | null;
+}> = ({ rows, columns, height, quickFilter, floatingFilters, href }) => {
+  const scheme = useComputedColorScheme('light');
+  const colDefs = useMemo<ColDef<UsageRow>[]>(
+    () =>
+      columns.map((c, i) => {
+        const numeric = rows.some((r) => typeof r[c.key] === 'number');
+        return {
+          field: c.key,
+          headerName: c.label,
+          flex: i === 0 ? 2 : 1,
+          minWidth: 80,
+          filter: numeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+          type: numeric ? 'numericColumn' : undefined,
+          valueFormatter: c.format
+            ? (p: ValueFormatterParams<UsageRow>) => c.format!(p.value as string | number)
+            : undefined,
+        };
+      }),
+    [columns, rows],
+  );
+  return (
+    <div
+      className={scheme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+      style={{ height, width: '100%', fontSize: 12 }}
+    >
+      <AgGridReact<UsageRow>
+        rowData={rows}
+        columnDefs={colDefs}
+        defaultColDef={{ sortable: true, resizable: true, floatingFilter: floatingFilters }}
+        quickFilterText={quickFilter}
+        rowHeight={30}
+        headerHeight={32}
+        animateRows={false}
+        suppressCellFocus
+        rowStyle={href ? { cursor: 'pointer' } : undefined}
+        onRowClicked={(e) => {
+          const url = e.data && href?.(e.data);
+          if (url) window.open(url, '_blank', 'noopener');
+        }}
+      />
+    </div>
+  );
+};
+
+/** A table tile: sortable/filterable AG Grid, expandable to a full-size modal
+ *  with a quick search. Rows with an `href` open their dashboard / project. */
 const MiniTable: React.FC<{
   title: string;
   icon: string;
-  rows: Array<Record<string, string | number>>;
-  columns: Array<{ key: string; label: string; render?: (v: string | number) => React.ReactNode }>;
+  rows: UsageRow[];
+  columns: UsageColumn[];
   empty?: string;
-}> = ({ title, icon, rows, columns, empty = 'No data for this period.' }) => (
-  <Tile title={title} icon={icon} color="gray">
-    {rows.length === 0 ? (
-      <Text size="xs" c="dimmed">
-        {empty}
-      </Text>
-    ) : (
-      <Table striped highlightOnHover verticalSpacing={4} fz="xs">
-        <Table.Thead>
-          <Table.Tr>
-            {columns.map((c) => (
-              <Table.Th key={c.key}>{c.label}</Table.Th>
-            ))}
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.slice(0, 10).map((r, i) => (
-            <Table.Tr key={i}>
-              {columns.map((c) => (
-                <Table.Td key={c.key}>{c.render ? c.render(r[c.key]) : r[c.key]}</Table.Td>
-              ))}
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    )}
-  </Tile>
-);
+  href?: (row: UsageRow) => string | null;
+}> = ({ title, icon, rows, columns, empty = 'No data for this period.', href }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  return (
+    <Box style={CARD_FRAME} p="sm">
+      <Group justify="space-between" wrap="nowrap" gap="xs">
+        <FigureHeader title={title} icon={icon} iconColor="gray" />
+        {rows.length > 0 && (
+          <Tooltip label="Open full size" withArrow>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              onClick={() => setOpen(true)}
+              aria-label={`Expand ${title}`}
+            >
+              <Icon icon="mdi:arrow-expand" width={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </Group>
+      {rows.length === 0 ? (
+        <Text size="xs" c="dimmed">
+          {empty}
+        </Text>
+      ) : (
+        <UsageGrid rows={rows} columns={columns} height={260} href={href} />
+      )}
+      <Modal
+        opened={open}
+        onClose={() => setOpen(false)}
+        size="80%"
+        title={
+          <Group gap="xs">
+            <Icon icon={icon} width={18} />
+            <Text fw={600}>{title}</Text>
+            <Badge size="sm" variant="light">
+              {rows.length}
+            </Badge>
+          </Group>
+        }
+      >
+        <Stack gap="sm">
+          <TextInput
+            size="xs"
+            placeholder="Search all columns"
+            leftSection={<Icon icon="mdi:magnify" width={14} />}
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+          />
+          <UsageGrid
+            rows={rows}
+            columns={columns}
+            height="65vh"
+            quickFilter={search}
+            floatingFilters
+            href={href}
+          />
+        </Stack>
+      </Modal>
+    </Box>
+  );
+};
 
 export const UsagePane: React.FC = () => {
   const scheme = useComputedColorScheme('light');
@@ -480,12 +580,13 @@ export const UsagePane: React.FC = () => {
             <MiniTable
               title="Top dashboards"
               icon="mdi:view-dashboard"
+              href={(r) => (r.dashboard_id ? `/dashboard/${r.dashboard_id}` : null)}
               rows={b.top_dashboards ?? []}
               columns={[
                 {
                   key: 'title',
                   label: 'Dashboard',
-                  render: (v) => String(v),
+                  format: (v) => String(v),
                 },
                 { key: 'project', label: 'Project' },
                 { key: 'views', label: 'Views' },
@@ -495,6 +596,7 @@ export const UsagePane: React.FC = () => {
             <MiniTable
               title="Top projects"
               icon="mdi:folder"
+              href={(r) => (r.project_id ? `/projects/${r.project_id}` : null)}
               rows={b.top_projects ?? []}
               columns={[
                 { key: 'name', label: 'Project' },
@@ -516,7 +618,7 @@ export const UsagePane: React.FC = () => {
                 icon="mdi:flag"
                 rows={b.countries ?? []}
                 columns={[
-                  { key: 'country', label: 'Country', render: (v) => countryName(String(v)) },
+                  { key: 'country', label: 'Country', format: (v) => countryName(String(v)) },
                   { key: 'visitors', label: 'Visitors' },
                 ]}
               />
@@ -584,7 +686,7 @@ export const UsagePane: React.FC = () => {
               rows={b.visitors_per_ip ?? []}
               empty="No address seen yet."
               columns={[
-                { key: 'ip_hash', label: 'Address (hashed)', render: (v) => String(v).slice(0, 8) },
+                { key: 'ip_hash', label: 'Address (hashed)', format: (v) => String(v).slice(0, 8) },
                 { key: 'visitors', label: 'Browsers' },
               ]}
             />
