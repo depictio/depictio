@@ -11,3 +11,27 @@ test_hifi_flye_links	2 copies	Copy number	2	2775353	2.552197619693787	4
 test_hifi_flye_links	3 copies	Copy number	3	684732	0.6296753531994547	4
 test_hifi_flye_links	4 copies	Copy number	4	282052	0.25937329162447875	4
 test_hifi_flye_links	More than 4	Copy number	5	658281	0.6053511756124882	4
+test_hifi_flye_ragtag	Absent	Copy number	0	627943	0.5774525366334934	4
+test_hifi_flye_ragtag	1 copy	Copy number	1	103667091	95.331621920087	4
+test_hifi_flye_ragtag	2 copies	Copy number	2	2806222	2.5805845630203934	4
+test_hifi_flye_ragtag	3 copies	Copy number	3	685240	0.630142506887942	4
+test_hifi_flye_ragtag	4 copies	Copy number	4	282797	0.2600583890613352	4
+test_hifi_flye_ragtag	More than 4	Copy number	5	674363	0.6201400843098378	4
+test_hifi_hifiasm_assembly	Absent	Copy number	0	600994	0.5526704012967892	4
+test_hifi_hifiasm_assembly	1 copy	Copy number	1	99437179	91.4418207532033	4
+test_hifi_hifiasm_assembly	2 copies	Copy number	2	6250645	5.748054856643775	4
+test_hifi_hifiasm_assembly	3 copies	Copy number	3	865141	0.7955783645898387	4
+test_hifi_hifiasm_assembly	4 copies	Copy number	4	410942	0.37789974617002026	4
+test_hifi_hifiasm_assembly	More than 4	Copy number	5	1178755	1.0839758780962818	4
+test_hifi_hifiasm_pilon	Absent	Copy number	0	601880	0.5534851614700171	4
+test_hifi_hifiasm_pilon	1 copy	Copy number	1	99393108	91.40129333153926	4
+test_hifi_hifiasm_pilon	2 copies	Copy number	2	6272223	5.767897853277988	4
+test_hifi_hifiasm_pilon	3 copies	Copy number	3	875948	0.8055164155966946	4
+test_hifi_hifiasm_pilon	4 copies	Copy number	4	410938	0.37789606779452034	4
+test_hifi_hifiasm_pilon	More than 4	Copy number	5	1189559	1.0939111703215127	4
+test_hifiasm_flye_assembly	Absent	Copy number	0	627928	0.5774387427253687	4
+test_hifiasm_flye_assembly	1 copy	Copy number	1	103830689	95.48206563884517	4
+test_hifiasm_flye_assembly	2 copies	Copy number	2	2675431	2.4603099605185244	4
+test_hifiasm_flye_assembly	3 copies	Copy number	3	674295	0.6200775519263395	4
+test_hifiasm_flye_assembly	4 copies	Copy number	4	282769	0.2600326404328359	4
+test_hifiasm_flye_assembly	More than 4	Copy number	5	652544	0.600075465551756	4

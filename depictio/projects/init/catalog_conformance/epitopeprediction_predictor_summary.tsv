@@ -4,3 +4,12 @@ PEPTIDES1|mhcnuggets	PEPTIDES1	mhcnuggets	Class I	199	123	76	0	0.0	2	5480.64
 TUMOR2|mhcnuggetsii	TUMOR2	mhcnuggetsii	Class II	707	707	0	53	0.075	1	6166.29
 TUMOR1|mhcflurry	TUMOR1	mhcflurry	Class I	187	187	0	2	0.0107	1	26737.04
 TUMOR1|mhcnuggets	TUMOR1	mhcnuggets	Class I	187	187	0	0	0.0	1	5589.25
+TUMOR3|mhcflurry	TUMOR3	mhcflurry	Class I	154	132	22	13	0.0985	2	3710.95
+TUMOR3|mhcnuggets	TUMOR3	mhcnuggets	Class I	154	132	22	1	0.0076	2	24808.04
+TUMOR3|mhcnuggetsii	TUMOR3	mhcnuggetsii	Class II	88	88	0	3	0.0341	1	15006.76
+TUMOR4|mhcflurry	TUMOR4	mhcflurry	Class I	252	216	36	6	0.0278	2	3742.16
+TUMOR4|mhcnuggets	TUMOR4	mhcnuggets	Class I	252	216	36	0	0.0	2	14329.1
+TUMOR4|mhcnuggetsii	TUMOR4	mhcnuggetsii	Class II	144	144	0	27	0.1875	2	1003.38
+TUMOR5|mhcflurry	TUMOR5	mhcflurry	Class I	182	156	26	22	0.141	3	619.92
+TUMOR5|mhcnuggets	TUMOR5	mhcnuggets	Class I	182	156	26	11	0.0705	3	10164.01
+TUMOR5|mhcnuggetsii	TUMOR5	mhcnuggetsii	Class II	104	104	0	10	0.0962	1	1560.51

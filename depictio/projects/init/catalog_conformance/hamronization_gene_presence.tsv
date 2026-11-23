@@ -6,13 +6,13 @@ ERZ1664501	aadE	AMINOGLYCOSIDE	1.0	1	0.2	99.43	60.76
 ERZ1664501	aadS	STREPTOMYCIN	3.0	3	0.6000000000000001	99.61333333333334	100.0
 ERZ1664501	aph(2'')-Ig	AMINOGLYCOSIDE	1.0	1	0.2	98.83	55.88
 ERZ1664501	aph(3')-IIIa	AMIKACIN;KANAMYCIN	2.0	2	0.4	99.745	100.0
-ERZ1664501	b1	b1	21.0	1	0.2
-ERZ1664501	b3	b3	21.0	1	0.2
+ERZ1664501	b1	b1	21.0	1	0.2		
+ERZ1664501	b3	b3	21.0	1	0.2		
 ERZ1664501	cblA	BETA-LACTAM	1.0	1	0.2	98.61	72.97
-ERZ1664501	class	class	5.0	1	0.2
-ERZ1664501	classA	classA	10.0	1	0.2
-ERZ1664501	efflux	efflux	29.0	1	0.2
-ERZ1664501	enzyme	enzyme	52.0	1	0.2
+ERZ1664501	class	class	5.0	1	0.2		
+ERZ1664501	classA	classA	10.0	1	0.2		
+ERZ1664501	efflux	efflux	29.0	1	0.2		
+ERZ1664501	enzyme	enzyme	52.0	1	0.2		
 ERZ1664501	erm(B)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	2.0	2	0.4	99.725	100.0
 ERZ1664501	erm(F)	MACROLIDE	2.0	2	0.4	99.75	100.0
 ERZ1664501	erm(G)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	1.0	1	0.2	97.65	69.67
@@ -32,3 +32,86 @@ ERZ1664501	vanXY gene in vanG cluster	glycopeptide antibiotic	1.0	1	0.2	38.46	77
 ERZ1664503	aph(3')-IIIa	AMIKACIN;KANAMYCIN	2.0	2	0.4	100.0	88.345
 ERZ1664503	lnu(AN2)	LINCOSAMIDE	2.0	2	0.4	100.0	100.0
 ERZ1664503	lnu(C)	LINCOSAMIDE	2.0	2	0.4	98.275	100.0
+ERZ1664504	ErmB	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	3.0	3	0.6	97.36	95.26
+ERZ1664504	ErmF	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	3.0	3	0.6	99.25	100.0
+ERZ1664504	aadS	STREPTOMYCIN	3.0	2	0.4	100.0	96.58
+ERZ1664504	aph(2'')-Ig	AMINOGLYCOSIDE	3.0	3	0.6	97.66	59.95
+ERZ1664504	aph(3')-IIIa	AMIKACIN;KANAMYCIN	3.0	3	0.6	99.11	100.0
+ERZ1664504	erm(B)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	4.0	3	0.6	99.34	93.6
+ERZ1664504	erm(G)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	3.0	3	0.6	96.88	70.7
+ERZ1664504	estT	MACROLIDE	3.0	3	0.6	98.23	100.0
+ERZ1664504	lnuC	lincosamide antibiotic	2.0	2	0.4	98.13	98.64
+ERZ1664504	mef(A)	MACROLIDE	2.0	2	0.4	99.58	78.81
+ERZ1664504	nimJ	nitroimidazole antibiotic	2.0	2	0.4	49.84	96.84
+ERZ1664504	tet(40)	TETRACYCLINE	4.0	3	0.6	96.4	91.7
+ERZ1664504	tet(44)	tetracycline antibiotic	2.0	1	0.2	98.51	36.83
+ERZ1664504	tet(Q)	TETRACYCLINE	4.0	4	0.8	98.17	92.04
+ERZ1664504	tet(W)	TETRACYCLINE	5.0	5	1.0	98.09	94.13
+ERZ1664504	tet(X2)	TETRACYCLINE	1.0	1	0.2	100.0	69.55
+ERZ1664504	vanXY gene in vanG cluster	glycopeptide antibiotic	3.0	2	0.4	38.49	82.92
+ERZ1664504	b1	b1	28.0	3	0.6		
+ERZ1664504	classA	classA	8.0	2	0.4		
+ERZ1664504	enzyme	enzyme	39.0	1	0.2		
+ERZ1664505	ErmB	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	3.0	3	0.6	99.12	100.0
+ERZ1664505	ErmF	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	2.0	1	0.2	98.27	100.0
+ERZ1664505	aadE	AMINOGLYCOSIDE	2.0	2	0.4	99.66	60.88
+ERZ1664505	aadS	STREPTOMYCIN	3.0	2	0.4	100.0	91.25
+ERZ1664505	aph(2'')-Ig	AMINOGLYCOSIDE	2.0	1	0.2	100.0	57.85
+ERZ1664505	aph(3')-IIIa	AMIKACIN;KANAMYCIN	4.0	4	0.8	99.53	97.25
+ERZ1664505	cblA	BETA-LACTAM	1.0	1	0.2	98.06	63.42
+ERZ1664505	erm(B)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	4.0	1	0.2	98.66	100.0
+ERZ1664505	erm(F)	MACROLIDE	4.0	4	0.8	98.63	99.34
+ERZ1664505	erm(G)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	3.0	3	0.6	95.71	76.83
+ERZ1664505	estT	MACROLIDE	3.0	3	0.6	99.68	100.0
+ERZ1664505	lnu(AN2)	LINCOSAMIDE	3.0	3	0.6	100.0	94.03
+ERZ1664505	lnu(C)	LINCOSAMIDE	3.0	3	0.6	97.69	100.0
+ERZ1664505	lnuC	lincosamide antibiotic	3.0	1	0.2	97.22	98.84
+ERZ1664505	mef(A)	MACROLIDE	3.0	1	0.2	98.61	84.14
+ERZ1664505	nimJ	nitroimidazole antibiotic	3.0	3	0.6	47.65	100.0
+ERZ1664505	tet(40)	TETRACYCLINE	2.0	1	0.2	99.15	86.85
+ERZ1664505	tet(44)	tetracycline antibiotic	3.0	3	0.6	99.45	39.28
+ERZ1664505	tet(W)	TETRACYCLINE	4.0	2	0.4	99.06	93.14
+ERZ1664505	tet(X2)	TETRACYCLINE	3.0	3	0.6	100.0	73.58
+ERZ1664505	vanT gene in vanG cluster	glycopeptide antibiotic	3.0	1	0.2	35.41	70.62
+ERZ1664505	vanXY gene in vanG cluster	glycopeptide antibiotic	2.0	1	0.2	39.71	84.17
+ERZ1664505	class	class	6.0	1	0.2		
+ERZ1664505	classA	classA	7.0	3	0.6		
+ERZ1664505	efflux	efflux	28.0	2	0.4		
+ERZ1664506	ErmB	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	3.0	3	0.6	99.94	100.0
+ERZ1664506	ErmF	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	1.0	1	0.2	97.28	94.5
+ERZ1664506	aadE	AMINOGLYCOSIDE	2.0	2	0.4	98.3	63.0
+ERZ1664506	erm(B)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	4.0	1	0.2	98.95	100.0
+ERZ1664506	erm(F)	MACROLIDE	4.0	2	0.4	99.47	99.03
+ERZ1664506	estT	MACROLIDE	3.0	3	0.6	97.91	92.8
+ERZ1664506	lnu(AN2)	LINCOSAMIDE	3.0	1	0.2	100.0	100.0
+ERZ1664506	lnuC	lincosamide antibiotic	3.0	1	0.2	96.43	100.0
+ERZ1664506	mef(A)	MACROLIDE	3.0	1	0.2	99.05	77.11
+ERZ1664506	tet(40)	TETRACYCLINE	3.0	3	0.6	97.44	80.36
+ERZ1664506	tet(44)	tetracycline antibiotic	2.0	2	0.4	96.66	47.05
+ERZ1664506	tet(X2)	TETRACYCLINE	3.0	1	0.2	98.8	74.31
+ERZ1664506	vanT gene in vanG cluster	glycopeptide antibiotic	5.0	1	0.2	34.57	76.68
+ERZ1664506	b3	b3	26.0	1	0.2		
+ERZ1664506	classA	classA	18.0	1	0.2		
+ERZ1664506	enzyme	enzyme	45.0	1	0.2		
+ERZ1664507	APH(3')-IIIa	aminoglycoside antibiotic	2.0	2	0.4	100.0	100.0
+ERZ1664507	ErmB	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	3.0	2	0.4	99.49	100.0
+ERZ1664507	ErmF	macrolide antibiotic; lincosamide antibiotic; streptogramin antibiotic; streptogramin A antibiotic; streptogramin B antibiotic	2.0	1	0.2	97.64	96.04
+ERZ1664507	aadE	AMINOGLYCOSIDE	3.0	3	0.6	98.06	65.63
+ERZ1664507	aadS	STREPTOMYCIN	5.0	3	0.6	99.12	99.02
+ERZ1664507	aph(3')-IIIa	AMIKACIN;KANAMYCIN	2.0	2	0.4	97.81	95.05
+ERZ1664507	erm(F)	MACROLIDE	4.0	4	0.8	98.35	99.06
+ERZ1664507	erm(G)	LINCOSAMIDE/MACROLIDE/STREPTOGRAMIN	3.0	3	0.6	97.81	75.36
+ERZ1664507	estT	MACROLIDE	3.0	3	0.6	97.11	88.98
+ERZ1664507	lnu(C)	LINCOSAMIDE	2.0	2	0.4	97.13	100.0
+ERZ1664507	lnuC	lincosamide antibiotic	3.0	3	0.6	97.03	94.33
+ERZ1664507	mef(A)	MACROLIDE	2.0	2	0.4	97.56	87.36
+ERZ1664507	nimJ	nitroimidazole antibiotic	2.0	2	0.4	50.24	100.0
+ERZ1664507	tet(40)	TETRACYCLINE	4.0	4	0.8	97.34	92.32
+ERZ1664507	tet(44)	tetracycline antibiotic	2.0	1	0.2	100.0	33.53
+ERZ1664507	tet(Q)	TETRACYCLINE	5.0	4	0.8	96.91	100.0
+ERZ1664507	tet(W)	TETRACYCLINE	4.0	4	0.8	100.0	96.44
+ERZ1664507	vanT gene in vanG cluster	glycopeptide antibiotic	3.0	1	0.2	33.26	73.99
+ERZ1664507	vanXY gene in vanG cluster	glycopeptide antibiotic	3.0	2	0.4	37.45	76.56
+ERZ1664507	class	class	7.0	1	0.2		
+ERZ1664507	classA	classA	17.0	3	0.6		
+ERZ1664507	enzyme	enzyme	47.0	1	0.2		

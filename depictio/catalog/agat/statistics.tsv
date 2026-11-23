@@ -23,3 +23,27 @@ Polistes_canadensis	longest	mrna	Number of gene	9876.0	1
 Polistes_canadensis	longest	mrna	Number of mrna	9876.0	2
 Polistes_canadensis	longest	mrna	Number of mrnas with utr both sides	8526.0	3
 Polistes_canadensis	longest	mrna	Number of mrnas with at least one utr	9270.0	4
+Apis_cerana	all	mrna	Number of gene	8720.0	1
+Apis_cerana	all	mrna	Number of mrna	20246.0	2
+Apis_cerana	all	mrna	Number of mrnas with utr both sides	17983.0	3
+Apis_cerana	all	mrna	Number of mrnas with at least one utr	20043.0	4
+Apis_cerana	longest	mrna	Number of gene	8720.0	1
+Apis_cerana	longest	mrna	Number of mrna	8720.0	2
+Apis_cerana	longest	mrna	Number of mrnas with utr both sides	8313.0	3
+Apis_cerana	longest	mrna	Number of mrnas with at least one utr	8618.0	4
+Bombus_terrestris	all	mrna	Number of gene	9386.0	1
+Bombus_terrestris	all	mrna	Number of mrna	21927.0	2
+Bombus_terrestris	all	mrna	Number of mrnas with utr both sides	20290.0	3
+Bombus_terrestris	all	mrna	Number of mrnas with at least one utr	21846.0	4
+Bombus_terrestris	longest	mrna	Number of gene	9386.0	1
+Bombus_terrestris	longest	mrna	Number of mrna	9386.0	2
+Bombus_terrestris	longest	mrna	Number of mrnas with utr both sides	8333.0	3
+Bombus_terrestris	longest	mrna	Number of mrnas with at least one utr	9257.0	4
+Nasonia_vitripennis	all	mrna	Number of gene	10522.0	1
+Nasonia_vitripennis	all	mrna	Number of mrna	21636.0	2
+Nasonia_vitripennis	all	mrna	Number of mrnas with utr both sides	19100.0	3
+Nasonia_vitripennis	all	mrna	Number of mrnas with at least one utr	21515.0	4
+Nasonia_vitripennis	longest	mrna	Number of gene	10522.0	1
+Nasonia_vitripennis	longest	mrna	Number of mrna	10522.0	2
+Nasonia_vitripennis	longest	mrna	Number of mrnas with utr both sides	9366.0	3
+Nasonia_vitripennis	longest	mrna	Number of mrnas with at least one utr	10483.0	4

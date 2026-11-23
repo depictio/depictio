@@ -1,3 +1,7 @@
 label	caller	truth_set	precision	recall	f1	tp	fp	fn
 sampleA	manta	HG002	0.9	0.82	0.858	1150	120	250
 sampleB	delly	HG002	0.84	0.76	0.798	1050	180	330
+sampleC	lumpy	HG002	0.8	0.71	0.752	1010	260	420
+sampleD	svaba	HG002	0.93	0.81	0.866	1290	95	310
+sampleE	gridss	HG002	0.91	0.87	0.89	1370	140	200
+sampleF	cutesv	HG002	0.93	0.64	0.758	930	70	520
