@@ -37,6 +37,8 @@ import { InSplitPanelContext } from './AdvancedVizExtras';
 import { namedColumns } from './namedColumns';
 import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
+import { inkStructure } from './heatmapInk';
+import { PLOT_CHROME } from '../../palettes.generated';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { demandForPx } from './contentDemand';
 import { heatmapDemandPx } from './heatmapDemand';
@@ -324,7 +326,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
         ? groupStrip.colours
         : columnCategoryColors(categorySource, strip, ownColours?.[strip]),
     );
-    return applyDataTheme(recoloured, isDark, theme);
+    return applyDataTheme(inkStructure(recoloured, PLOT_CHROME[isDark ? 'dark' : 'light'].muted), isDark, theme);
   }, [figure, categorySource, config.col_annotation_colors, isDark, theme, groupStrip]);
 
   // Whether the groups reached the columns, for the dispatch's "not grouped"
