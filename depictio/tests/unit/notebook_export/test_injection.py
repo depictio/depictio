@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import polars as pl
 import pytest
+import yaml
 
 from depictio.api.v1.services.notebook_export.generator import (
     DCPlan,
@@ -35,8 +36,10 @@ from depictio.api.v1.services.notebook_export.generator import (
     StagePlan,
     generate_qmd,
 )
+from depictio.api.v1.services.notebook_export.quarto import QuartoFrontMatter
 from depictio.api.v1.services.notebook_export.render import quarto_binary, render_available
 from depictio.models.models.analysis_state import AnalysisState
+from depictio.notebook.qmd_safe import ZWSP, meta_text
 from depictio.tests.unit.notebook_export.test_generator import (
     PENGUINS_DASHBOARD,
     PENGUINS_DC,
@@ -189,6 +192,20 @@ def test_no_live_construct_reaches_the_document(penguins_tabs, pdf):
             assert not re.search(r"[\r\v\f\x1c-\x1e\x85  ]", line), repr(line)
     # The payload is still there for the reader to see.
     assert "env " + SECRET_VAR in md
+
+
+def test_a_poisoned_cover_date_reaches_the_front_matter_inert():
+    """The cover's date is author text: it reaches the front matter through
+    ``meta_text``, neutralised the same way as a poisoned title."""
+    poison = "d >}} {{< env X >}} `{python} 1`"
+    out = QuartoFrontMatter(title=f"t {poison}", date=poison).to_yaml()
+    doc = yaml.safe_load(out)
+    assert doc["date"] == meta_text(poison)
+    assert doc["date"] == doc["title"].removeprefix("t ")
+    for pattern in _LIVE:
+        assert not pattern.findall(out), pattern.pattern
+    # The pairs are broken by the zero-width space, the backtick is an entity.
+    assert ZWSP in doc["date"] and "&#96;" in out
 
 
 def test_the_downloaded_notebook_keeps_the_authors_code_and_the_report_does_not(penguins_tabs):

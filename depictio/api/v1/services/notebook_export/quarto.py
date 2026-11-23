@@ -68,7 +68,7 @@ class QuartoFrontMatter:
         if self.author:
             doc["author"] = meta_text(self.author)
         if self.date:
-            doc["date"] = self.date
+            doc["date"] = meta_text(self.date)
         doc["format"] = {
             "html": {
                 "toc": self.toc,

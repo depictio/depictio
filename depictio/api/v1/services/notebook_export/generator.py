@@ -132,6 +132,8 @@ def _appendix_letter(n: int) -> str:
 
 #: A tile the layer keeps out of the PDF, wrapped so only the HTML shows it.
 HTML_ONLY_OPEN = '::: {.content-visible when-format="html"}'
+#: The same fold the other way round: only the PDF (typst) shows the content.
+TYPST_ONLY_OPEN = '::: {.content-visible when-format="typst"}'
 PAGE_BREAK_MD = (
     # The page break the layer asks for before a tile: a typst one in the PDF,
     # a CSS one in the HTML (Quarto's typst writer reads only the raw block).
@@ -190,28 +192,45 @@ def caption_marked(caption: str) -> str:
     return f'[{caption}]{{data-depictio-caption=""}}'
 
 
-def _tiptap_markdown(node: dict[str, Any] | None) -> str:
+#: Nesting cap of the layer prose walk: no author JSON walks the interpreter's
+#: recursion limit into a 500 (the export must always succeed).
+_MAX_PROSE_DEPTH = 50
+
+
+def _tiptap_markdown(node: dict[str, Any] | None, depth: int = 0) -> str:
     """TipTap JSON (the report layer's intro and conclusion) as markdown.
 
     One small helper, the only reader of that shape: paragraphs, headings,
     lists, quotes, code blocks, the marks a text editor writes and hard
-    breaks; anything else degrades to its text. The result still goes through
-    ``defuse`` (author markdown: its emphasis survives, a chunk or a shortcode
-    typed into it does not), so nothing here has to be safe — only faithful.
+    breaks; anything else degrades to its text. Total on any author JSON (an
+    editor can PUT shapes this never wrote): nodes, marks, attrs and levels
+    of the wrong type are ignored, nesting past ``_MAX_PROSE_DEPTH`` stops
+    the walk. The result still goes through ``defuse`` (author markdown: its
+    emphasis survives, a chunk or a shortcode typed into it does not), so
+    nothing here has to be safe — only faithful.
     """
-    if not isinstance(node, dict):
+    if not isinstance(node, dict) or depth > _MAX_PROSE_DEPTH:
         return ""
     ntype = str(node.get("type") or "")
+
+    def children(node: dict[str, Any]) -> list[Any]:
+        content = node.get("content")
+        return content if isinstance(content, list) else []
 
     def render_content(items: Any) -> str:
         if not isinstance(items, list):
             return ""
-        return "".join(_tiptap_markdown(child) for child in items if isinstance(child, dict))
+        return "".join(
+            _tiptap_markdown(child, depth + 1) for child in items if isinstance(child, dict)
+        )
 
     def inline(node: dict[str, Any]) -> str:
         text = str(node.get("text") or "")
-        for mark in node.get("marks") or []:
-            mtype = str((mark or {}).get("type") or "")
+        marks = node.get("marks")
+        for mark in marks if isinstance(marks, list) else []:
+            if not isinstance(mark, dict):
+                continue
+            mtype = str(mark.get("type") or "")
             if mtype == "bold":
                 text = f"**{text}**" if text else text
             elif mtype == "italic":
@@ -227,13 +246,15 @@ def _tiptap_markdown(node: dict[str, Any] | None) -> str:
     if ntype == "hardBreak":
         return "\\\n"
     if ntype == "paragraph":
-        return render_content(node.get("content")) + "\n\n"
+        return render_content(children(node)) + "\n\n"
     if ntype == "heading":
-        level = min(6, max(1, int((node.get("attrs") or {}).get("level") or 1) + 1))
-        return f"{'#' * level} {one_line(render_content(node.get('content')))}\n\n"
+        attrs = node.get("attrs")
+        raw = attrs.get("level") if isinstance(attrs, dict) else None
+        level = 1 if isinstance(raw, bool) or not isinstance(raw, (int, float)) else int(raw)
+        return f"{'#' * min(6, max(1, level + 1))} {one_line(render_content(children(node)))}\n\n"
     if ntype in ("bulletList", "orderedList"):
         lines = []
-        for child in node.get("content") or []:
+        for child in children(node):
             if not isinstance(child, dict) or child.get("type") != "listItem":
                 continue
             body = render_content(child.get("content")).strip()
@@ -241,13 +262,17 @@ def _tiptap_markdown(node: dict[str, Any] | None) -> str:
             lines.extend(f"{marker} {line}" for line in body.split("\n") if line)
         return "\n".join(lines) + ("\n\n" if lines else "")
     if ntype == "blockquote":
-        body = render_content(node.get("content")).strip()
+        body = render_content(children(node)).strip()
         return "".join(f"> {line}\n" for line in body.split("\n") if line) + "\n" if body else ""
     if ntype == "codeBlock":
-        body = one_line(str((node.get("content") or [{}])[0].get("text") or ""))
-        return f"```\n{body}\n```\n\n"
+        # The code as it is: its lines are its meaning (not one-lined), and
+        # the fence outlongs any backtick run inside, so the block never
+        # closes early.
+        body = "".join(str(c.get("text") or "") for c in children(node) if isinstance(c, dict))
+        fence = "`" * (3 + len(max(re.findall(r"`+", body), default="", key=len)))
+        return f"{fence}\n{body}\n{fence}\n\n"
     # Unknown block node: its content, if any, as the best approximation.
-    return render_content(node.get("content"))
+    return render_content(children(node))
 
 
 def _layer_prose(node: dict[str, Any] | None) -> str:
@@ -2279,7 +2304,10 @@ def card_row(cards):
                 group.clear()
                 cells.append(md_cell(SECTION_FENCE))
                 open_section = False
+            # Both, or the next tab's tile joins a name `flush` still counts
+            # as seen and is never laid out.
             moved_order.clear()
+            moved.clear()
 
         tabs_seen = 0
         appendices_seen = 0
@@ -2443,12 +2471,26 @@ def card_row(cards):
         refs = [self._tile_ref(e) for e in row]
         out.append(md_cell(tile_anchors(refs)))
         out.append(md_cell(tile_open(refs)))
-        render_names = []
+        render_names: list[str] = []
+        pdf_names: list[str] = []
         for e in row:
             cell, render_name = self._tile_cell(e, show=False)
             out.extend(self._maybe_hide_pdf(e, [cell]))
             render_names.append(render_name)
-        out.append(self._row_cell(render_names))
+            if self._tile_in_pdf(e):
+                pdf_names.append(render_name)
+        if self.plan.pdf and len(pdf_names) < len(render_names):
+            # A strip the PDF only partly carries prints twice: every card on
+            # the page, only the kept ones on paper (none kept: no PDF row).
+            out.append(md_cell(HTML_ONLY_OPEN))
+            out.append(self._row_cell(render_names))
+            out.append(md_cell(DIV_CLOSE))
+            if pdf_names:
+                out.append(md_cell(TYPST_ONLY_OPEN))
+                out.append(self._row_cell(pdf_names))
+                out.append(md_cell(DIV_CLOSE))
+        else:
+            out.append(self._row_cell(render_names))
         out.append(md_cell(tile_close()))
         about = about_callout_many(
             [
@@ -2633,6 +2675,11 @@ def card_row(cards):
         if self.plan.pdf and cfg is not None and not cfg.in_pdf:
             return [md_cell(HTML_ONLY_OPEN), *cells, md_cell(DIV_CLOSE)]
         return cells
+
+    def _tile_in_pdf(self, entry: ComponentEntry) -> bool:
+        """Whether the PDF carries this tile (the layer's say, kept by default)."""
+        cfg = self._layer_tile(entry)
+        return cfg is None or cfg.in_pdf
 
     # ---------------------------------------------------------- the runtime
     @property

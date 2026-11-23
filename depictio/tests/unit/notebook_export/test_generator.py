@@ -6,6 +6,7 @@ import ast
 import builtins
 import html
 import re
+from dataclasses import replace
 
 import polars as pl
 
@@ -14,6 +15,7 @@ from depictio.api.v1.services.notebook_export.generator import (
     ExportPlan,
     NotebookBuilder,
     StagePlan,
+    _layer_prose,
     generate_qmd,
 )
 from depictio.api.v1.services.notebook_export.reading_order import MarkdownUnit
@@ -801,3 +803,151 @@ def test_the_overview_holds_everything_the_live_overview_shows(ampliseq_tabs):
         "Sample sheet",
         "sample-sheet",
     ]
+
+
+# ---------------------------------------------------------------------------
+# The report layer's placement of tiles
+# ---------------------------------------------------------------------------
+
+
+def _figure_of(tab) -> dict:
+    return next(m for m in tab["stored_metadata"] if m.get("component_type") == "figure")
+
+
+def test_two_tabs_moving_a_tile_to_the_same_section_keep_both(penguins_tabs):
+    """A moved section is per tab: two tabs that both move a tile to a section
+    of the same name each get their own, and no tile is dropped on the way."""
+    main = next(t for t in penguins_tabs if t.get("is_main_tab"))
+    child = next(t for t in penguins_tabs if not t.get("is_main_tab"))
+    plan = replace(
+        penguins_plan(penguins_tabs),
+        report_layer={
+            "tiles": [
+                {
+                    "tab_id": str(main["dashboard_id"]),
+                    "component_id": str(_figure_of(main)["index"]),
+                    "section": "Overview",
+                },
+                {
+                    "tab_id": str(child["dashboard_id"]),
+                    "component_id": str(_figure_of(child)["index"]),
+                    "section": "Overview",
+                },
+            ]
+        },
+    )
+    src = generate_qmd(plan)
+    overviews = re.findall(r'^:::: \{data-depictio-section="[^"]*:Overview"\}$', src, re.M)
+    assert len(overviews) == 2
+    for tab in (main, child):
+        ref = f"{tab['dashboard_id']}:{_figure_of(tab)['index']}"
+        assert f'data-depictio-tile="{ref}"' in src
+
+
+def _card_strip_plan(excluded: set[str]) -> ExportPlan:
+    """One tab holding a strip of exactly three cards over the penguins data."""
+    tab = {
+        "dashboard_id": PENGUINS_DASHBOARD,
+        "title": "Strip",
+        "is_main_tab": True,
+        "stored_metadata": [
+            {
+                "index": f"card-{i}",
+                "component_type": "card",
+                "title": f"Card {i}",
+                "dc_id": PENGUINS_DC,
+                "aggregation": "count",
+                "column_name": "species",
+            }
+            for i in range(3)
+        ],
+    }
+    return replace(
+        penguins_plan([tab]),
+        pdf=True,
+        report_layer={
+            "tiles": [
+                {"tab_id": PENGUINS_DASHBOARD, "component_id": f"card-{i}", "in_pdf": False}
+                for i in range(3)
+                if f"card-{i}" in excluded
+            ]
+        },
+    )
+
+
+def _card_rows(src: str) -> list[tuple[str, int]]:
+    return [(m.group(1), m.start()) for m in re.finditer(r"^card_row\(\[([^\]]*)\]\)", src, re.M)]
+
+
+def _fold_at(src: str, pos: int) -> str:
+    """The format whose fold the position sits in (the nearest open above it)."""
+    opens = [
+        m.group(1)
+        for m in re.finditer(r'^::: \{\.content-visible when-format="(html|typst)"\}$', src, re.M)
+        if m.start() < pos
+    ]
+    assert opens, "the row sits in no content-visible fold"
+    return opens[-1]
+
+
+def test_a_pdf_excluded_card_stays_out_of_the_pdfs_card_row():
+    """A strip the PDF only partly carries: the page draws every card, the PDF
+    row references only the cards the layer keeps in it."""
+    plan = _card_strip_plan({"card-1"})
+    src = generate_qmd(plan)
+    rows = _card_rows(src)
+    assert len(rows) == 2
+    (full, full_at), (pdf, pdf_at) = sorted(rows, key=lambda r: -len(r[0].split(", ")))
+    assert len(full.split(", ")) == 3 and len(pdf.split(", ")) == 2
+    assert set(pdf.split(", ")) < set(full.split(", "))
+    assert _fold_at(src, full_at) == "html"
+    assert _fold_at(src, pdf_at) == "typst"
+
+
+def test_a_card_row_entirely_excluded_from_the_pdf_prints_no_pdf_row():
+    plan = _card_strip_plan({"card-0", "card-1", "card-2"})
+    src = generate_qmd(plan)
+    rows = _card_rows(src)
+    assert len(rows) == 1
+    assert _fold_at(src, rows[0][1]) == "html"
+
+
+# ---------------------------------------------------------------------------
+# The layer's TipTap prose as markdown
+# ---------------------------------------------------------------------------
+
+
+def _prose_doc(*content) -> dict:
+    return {"type": "doc", "content": list(content)}
+
+
+def test_layer_prose_renders_author_json_of_an_odd_shape():
+    """Any editor can PUT a layer, so none of these shapes may fail the export."""
+    odd = [
+        {"type": "text", "content": ["not a node"], "text": "t"},
+        {"type": "text", "marks": ["bold"], "text": "b"},
+        {"type": "heading", "attrs": "2", "content": [{"type": "text", "text": "h"}]},
+        {"type": "heading", "attrs": {"level": "many"}, "content": [{"type": "text", "text": "i"}]},
+        {"type": "codeBlock", "content": ["not a node"]},
+        {"type": "paragraph", "content": "not a list"},
+        ["not", "a", "node"],
+        None,
+    ]
+    for node in odd:
+        assert isinstance(_layer_prose(node), str)
+    # Deep nesting is walked to a cap, not to the interpreter's limit.
+    deep = {"type": "paragraph", "content": [{"type": "text", "text": "bottom"}]}
+    for _ in range(2000):
+        deep = {"type": "blockquote", "content": [deep]}
+    assert isinstance(_layer_prose(_prose_doc(deep)), str)
+
+
+def test_a_layer_code_block_keeps_its_lines_and_its_fence_beats_its_backticks():
+    three = _layer_prose(
+        _prose_doc({"type": "codeBlock", "content": [{"type": "text", "text": "a\nb\nc"}]})
+    )
+    assert "a\nb\nc" in three
+    ticked = _layer_prose(
+        _prose_doc({"type": "codeBlock", "content": [{"type": "text", "text": "x ``` y"}]})
+    )
+    assert "````\nx ``` y\n````" in ticked
