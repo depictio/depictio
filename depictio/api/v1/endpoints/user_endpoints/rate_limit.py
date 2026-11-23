@@ -17,6 +17,7 @@ Design notes:
 
 from __future__ import annotations
 
+import hashlib
 import time
 from typing import Any
 
@@ -197,8 +198,6 @@ _LOCKOUT_MAX_FAILURES = 5
 
 
 def _lockout_key(email: str) -> str:
-    import hashlib
-
     digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
     return f"depictio:lockout:login:{digest}"
 

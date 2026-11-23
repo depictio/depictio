@@ -606,9 +606,6 @@ async def _list_tokens(
     return await TokenBeanie.find_many(query).to_list()
 
 
-DEFAULT_ADMIN_QUERY = {"is_admin": True, "is_anonymous": {"$ne": True}}
-
-
 async def _default_admin() -> UserBeanie | None:
     """The instance's default admin: the oldest non-anonymous admin.
 
@@ -616,8 +613,11 @@ async def _default_admin() -> UserBeanie | None:
     exists. Sorted on ``_id`` so a second admin never makes the answer depend on
     natural order: the seeded admin (static, oldest id) stays the default.
     """
-    admins = await UserBeanie.find(DEFAULT_ADMIN_QUERY).sort("+_id").limit(1).to_list()
-    return admins[0] if admins else None
+    return (
+        await UserBeanie.find({"is_admin": True, "is_anonymous": {"$ne": True}})
+        .sort("+_id")
+        .first_or_none()
+    )
 
 
 _PERMISSION_ROLES = ("owners", "editors", "viewers")
