@@ -209,12 +209,18 @@ function recoloured(t: Trace, setAt: (i: number) => string | undefined): Trace {
  * here; a bar several sets share keeps the neutral grey the server gave it, so
  * the matrix underneath stays the one place that spells out the membership.
  * The single colour and the degree colouring are the author's choice and stay
- * as they are.
+ * as they are, unless `perSet` says the component asked for per-set colours
+ * and the figure came drawn in one colour anyway (the catalog preview's
+ * compute path does): the bars are then coloured here as the server would.
  */
 export function colourUpsetSets(
   data: Trace[],
   layout: Layout,
   colors: Record<string, string> | null,
+  /** The component asks for per-set colouring (`color_intersections_by: set`):
+   *  a figure the server drew in one colour (the catalog preview) is coloured
+   *  bar by bar here too. */
+  perSet = false,
 ): Trace[] {
   if (!colors || Object.keys(colors).length === 0) return data;
   const axes = setNameAxes(layout);
@@ -235,7 +241,7 @@ export function colourUpsetSets(
       return recoloured(t, (i) => setOfRow(ys[i]));
     }
     const perBar = Array.isArray((t.marker as { color?: unknown } | undefined)?.color);
-    if (t.type === 'bar' && perBar) {
+    if (t.type === 'bar' && (perBar || perSet)) {
       const xs = values(t.x);
       return recoloured(t, (i) => {
         const sets = columnSets.get(Number(xs[i]));

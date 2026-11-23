@@ -23,7 +23,7 @@ import {
   dispatchSankey,
   pollSankey,
 } from '../../api';
-import { plotOverflow, stableColorMap } from '../../colors';
+import { plotOverflow, resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { useCategoryColorSource, useCategoryPalette } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { isUnassigned, lineageShade, remainderColour } from './hierarchyColors';
@@ -258,27 +258,13 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     JSON.stringify(stepFilters),
   ]);
 
-  /** Categorical palette pulled from Mantine theme — same swatches used by the
-   *  Coverage track renderer so the two viz feel consistent in either scheme.
+  /** Categorical palette: depictio's shared one, as the other viz use.
    *  The dashboard's colorway (its brand's) comes first when it has one. */
   const categorySource = useCategoryColorSource();
   const categoryPalette = useCategoryPalette();
   const themePalette = useMemo<string[]>(
-    () => [
-      theme.colors.blue[5],
-      theme.colors.orange[5],
-      theme.colors.green[5],
-      theme.colors.grape[5],
-      theme.colors.teal[5],
-      theme.colors.red[5],
-      theme.colors.violet[5],
-      theme.colors.yellow[7],
-      theme.colors.cyan[5],
-      theme.colors.pink[5],
-      theme.colors.lime[6],
-      theme.colors.indigo[5],
-    ],
-    [theme.colors],
+    () => [...resolveCategoricalPalette(theme, TAB10_PALETTE, isDark)],
+    [theme, isDark],
   );
   const palette = useMemo<string[]>(
     () => (categoryPalette && categoryPalette.length ? [...categoryPalette] : themePalette),

@@ -10,6 +10,7 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
+import { resolveCategoricalPalette, TAB10_PALETTE } from '../../colors';
 import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
@@ -389,23 +390,10 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     else setViewMode('aggregate');
   }, [data, viewMode]);
 
-  /** Mantine theme palette for categorical traces. */
+  /** depictio's shared categorical palette (the brand's colorway when it has one). */
   const palette = useMemo<string[]>(
-    () => [
-      theme.colors.blue[5],
-      theme.colors.orange[5],
-      theme.colors.green[5],
-      theme.colors.grape[5],
-      theme.colors.teal[5],
-      theme.colors.red[5],
-      theme.colors.violet[5],
-      theme.colors.yellow[7],
-      theme.colors.cyan[5],
-      theme.colors.pink[5],
-      theme.colors.lime[6],
-      theme.colors.indigo[5],
-    ],
-    [theme.colors],
+    () => [...resolveCategoricalPalette(theme, TAB10_PALETTE, isDark)],
+    [theme, isDark],
   );
   /** The dashboard's colours for a sample and for a region category: a value
    *  it pins is drawn in that colour, every other one takes the palette. */

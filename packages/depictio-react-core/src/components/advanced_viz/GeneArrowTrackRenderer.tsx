@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
+import { resolveCategoricalPalette, TAB10_PALETTE } from '../../colors';
 import {
   AdvancedVizKind,
   InteractiveFilter,
@@ -416,23 +417,10 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     return Math.max(pool.length - shown.size, 0);
   }, [lanes, allContigs, selectedContigs]);
 
-  /** Mantine hues for the class colouring, same list the coverage track uses. */
+  /** depictio's shared categorical palette for the class colouring. */
   const palette = useMemo<string[]>(
-    () => [
-      theme.colors.blue[5],
-      theme.colors.orange[5],
-      theme.colors.green[5],
-      theme.colors.grape[5],
-      theme.colors.teal[5],
-      theme.colors.red[5],
-      theme.colors.violet[5],
-      theme.colors.yellow[7],
-      theme.colors.cyan[5],
-      theme.colors.pink[5],
-      theme.colors.lime[6],
-      theme.colors.indigo[5],
-    ],
-    [theme.colors],
+    () => [...resolveCategoricalPalette(theme, TAB10_PALETTE, isDark)],
+    [theme, isDark],
   );
   const neutralColor = isDark ? theme.colors.gray[6] : theme.colors.gray[5];
 

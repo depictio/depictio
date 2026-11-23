@@ -17,6 +17,7 @@ import {
   UpsetResult,
 } from '../../api';
 import { pinsForColumns } from '../../categoryColors';
+import { plotOverflow, resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -466,14 +467,22 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
   // so a site is the same colour here as on every other tile. None found, the
   // figure stays as the server drew it.
   const categorySource = useCategoryColorSource();
+  // No pins: the sets take the shared palette, so a set's bar, dots and own
+  // intersection are one colour and the plot is never drawn all in ink.
+  const setPalette = resolveCategoricalPalette(theme, TAB10_PALETTE, isDark);
   const setColors = useMemo(
-    () =>
-      resolveUpsetSetColors(categorySource, setNames, {
+    () => {
+      const pinned = resolveUpsetSetColors(categorySource, setNames, {
         column: config.set_category_column,
         overrides: config.set_colors,
-      }),
+      });
+      const names = setNames.filter(Boolean);
+      if (names.length === 0) return pinned;
+      const map = stableColorMap(names, setPalette, pinned, isDark ? 'dark' : 'light', plotOverflow(theme));
+      return Object.fromEntries(names.map((n) => [n, map.get(n)]));
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [categorySource, setNamesKey, config.set_category_column, JSON.stringify(config.set_colors)],
+    [categorySource, setNamesKey, config.set_category_column, JSON.stringify(config.set_colors), setPalette, isDark],
   );
 
   // ---- Intersection members ---------------------------------------------------
@@ -571,17 +580,17 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
   const themedData = useMemo(() => {
     if (!shownData || !figureLayout) return null;
     let data = applyDataTheme(shownData, isDark, theme) as Record<string, unknown>[];
-    if (isDark) {
-      data = inkUpsetForDark(data, figureLayout, {
-        ink: theme.colors.gray[4],
-        empty: theme.colors.dark[4],
-      });
-    }
+    // plotly-upset's near-black ink (bars several sets share, the edges) turns
+    // a neutral grey in both schemes: the set colours carry the reading.
+    data = inkUpsetForDark(data, figureLayout, {
+      ink: isDark ? theme.colors.gray[4] : theme.colors.gray[6],
+      empty: isDark ? theme.colors.dark[4] : theme.colors.gray[3],
+    });
     return withUpsetHoverTargets(
-      scaleUpsetDots(colourUpsetSets(data, figureLayout, setColors), figureLayout, plotWidth),
+      scaleUpsetDots(colourUpsetSets(data, figureLayout, setColors, colorBy === 'set'), figureLayout, plotWidth),
       figureLayout,
     );
-  }, [shownData, figureLayout, isDark, theme, setColors, plotWidth]);
+  }, [shownData, figureLayout, isDark, theme, setColors, plotWidth, colorBy]);
   // Hovering an intersection dims everything outside it, as the UpSet Shiny
   // app does. A selected one stays at full strength through the hover of
   // another, so both read: what is selected, and what a click would select.

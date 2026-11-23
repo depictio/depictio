@@ -163,6 +163,12 @@ describe('colourUpsetSets', () => {
     expect(two).toBe(degree);
   });
 
+  it('colours a one-colour figure bar by bar when the component asks for per-set colours', () => {
+    const single = { ...intersectionBars, marker: { color: '#333333' } };
+    const [one] = colourUpsetSets([single, filledDots], layout, SITES, true);
+    expect(colorOf(one)).toEqual(['#333333', '#f5a11b', '#1a4f8f', '#333333']);
+  });
+
   it('returns the figure unchanged without colours, and never mutates it', () => {
     expect(colourUpsetSets(figure, layout, null)).toBe(figure);
     expect(setSizes.marker.color).toBe('#333333');

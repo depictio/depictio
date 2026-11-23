@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
+import { resolveCategoricalPalette, TAB10_PALETTE } from '../../colors';
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { plotlyColorscale } from '../../utils/colorScale';
@@ -323,22 +324,19 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
       : colourBy;
   const expressionPanel = hasExpression && showExpressionPanel && colourMode !== 'expression';
 
-  /** Mantine hues for the class colouring, the list the other track kinds use. */
+  /** depictio's shared categorical palette. Its first colour is the base
+   *  (unclassed) block colour, so the class colouring starts after it and a
+   *  class never shares a hue with the unclassed transcripts. */
+  const sharedPalette = useMemo<string[]>(
+    () => [...resolveCategoricalPalette(theme, TAB10_PALETTE, isDark)],
+    [theme, isDark],
+  );
   const palette = useMemo<string[]>(
-    () => [
-      theme.colors.orange[5],
-      theme.colors.grape[5],
-      theme.colors.teal[5],
-      theme.colors.red[5],
-      theme.colors.violet[5],
-      theme.colors.cyan[5],
-      theme.colors.lime[6],
-      theme.colors.indigo[5],
-    ],
-    [theme.colors],
+    () => (sharedPalette.length > 1 ? sharedPalette.slice(1) : sharedPalette),
+    [sharedPalette],
   );
   const neutralColour = isDark ? theme.colors.gray[6] : theme.colors.gray[5];
-  const baseColour = theme.colors.blue[isDark ? 4 : 6];
+  const baseColour = sharedPalette[0];
   // The intron backbone reads as an axis rule, so it takes the shared theme's
   // zero-line colour rather than a second literal to keep in step with it.
   const lineColour = plotlyThemeColors(isDark, theme).zeroLineColor;
