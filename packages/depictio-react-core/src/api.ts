@@ -11841,22 +11841,63 @@ export async function fetchUsageCsv(q: UsageQuery): Promise<string> {
 }
 
 const VISITOR_KEY = 'depictio-visitor-id';
+const USAGE_OPT_OUT_KEY = 'depictio-usage-opt-out';
+/** The browser id is renewed after 13 months (CNIL audience-measurement rule). */
+const VISITOR_ID_MAX_AGE_MS = 395 * 24 * 3600 * 1000;
+
+function storage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** True when this browser refuses usage statistics: its own opt-out, Do Not
+ *  Track or Global Privacy Control. The server checks the headers too. */
+export function isUsageOptedOut(): boolean {
+  const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
+  if (nav.doNotTrack === '1' || nav.globalPrivacyControl === true) return true;
+  return storage()?.getItem(USAGE_OPT_OUT_KEY) === '1';
+}
+
+/** Opt this browser out of (or back into) usage statistics. Opting out also
+ *  forgets the browser id. */
+export function setUsageOptOut(optOut: boolean): void {
+  const s = storage();
+  if (!s) return;
+  if (optOut) {
+    s.setItem(USAGE_OPT_OUT_KEY, '1');
+    s.removeItem(VISITOR_KEY);
+  } else {
+    s.removeItem(USAGE_OPT_OUT_KEY);
+  }
+}
 
 function visitorId(): string | null {
+  const s = storage();
+  if (!s) return null; // storage blocked: not counted, never an error
   try {
-    let id = localStorage.getItem(VISITOR_KEY);
-    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
-      id = crypto.randomUUID();
-      localStorage.setItem(VISITOR_KEY, id);
+    const stored = JSON.parse(s.getItem(VISITOR_KEY) || 'null') as { id?: string; at?: number } | null;
+    if (
+      stored?.id &&
+      /^[0-9a-f-]{36}$/i.test(stored.id) &&
+      typeof stored.at === 'number' &&
+      Date.now() - stored.at < VISITOR_ID_MAX_AGE_MS
+    ) {
+      return stored.id;
     }
-    return id;
   } catch {
-    return null; // storage blocked: not counted, never an error
+    /* a pre-expiry plain string, or garbage: renew below */
   }
+  const id = crypto.randomUUID();
+  s.setItem(VISITOR_KEY, JSON.stringify({ id, at: Date.now() }));
+  return id;
 }
 
 /** Fire-and-forget navigation beacon. Never redirects, never throws. */
 export function sendUsageHit(hit: { path_kind: string; dashboard_id?: string | null }): void {
+  if (isUsageOptedOut()) return;
   const id = visitorId();
   if (!id) return;
   const session = readStoredSession();

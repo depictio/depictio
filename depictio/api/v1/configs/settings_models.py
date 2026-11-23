@@ -2510,10 +2510,14 @@ class UsageStatsConfig(BaseSettings):
 
     enabled: bool = Field(default=True, description="Record and serve usage statistics")
     retention_days: int = Field(
-        default=400,
+        default=395,
         ge=30,
-        le=3650,
-        description="Days of daily usage rows kept (TTL index); 400 keeps a year comparable",
+        le=760,
+        description=(
+            "Days the daily, pseudonymous usage rows are kept (TTL index). 395 = 13 months; "
+            "capped at 25 months (CNIL audience-measurement rule). Closed months and years "
+            "are archived first as anonymous totals, which are kept."
+        ),
     )
     geoip_db_path: Optional[str] = Field(
         default=None,

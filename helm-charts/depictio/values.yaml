@@ -460,7 +460,7 @@ backend:
 
     # Internal usage statistics (logins, visitors, content; never leaves the instance)
     DEPICTIO_USAGE_STATS_ENABLED: "true"
-    DEPICTIO_USAGE_STATS_RETENTION_DAYS: "400"
+    DEPICTIO_USAGE_STATS_RETENTION_DAYS: "395"
     # Optional: City .mmdb (DB-IP Lite) mounted into the backend, for countries/cities
     # DEPICTIO_USAGE_STATS_GEOIP_DB_PATH: "/geoip/dbip-city-lite.mmdb"
 

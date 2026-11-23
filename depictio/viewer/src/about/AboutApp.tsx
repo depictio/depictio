@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActionIcon,
   Anchor,
@@ -10,11 +10,13 @@ import {
   Group,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
+import { isUsageOptedOut, setUsageOptOut } from 'depictio-react-core';
 import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
 
 import { AppSidebar } from '../chrome';
@@ -100,6 +102,44 @@ const AboutSection: React.FC<{ title: string; children: React.ReactNode }> = ({
   </Stack>
 );
 
+/** What this instance records about visits, and the switch to refuse it. */
+const PrivacyNotice: React.FC = () => {
+  const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
+  const browserRefuses = nav.doNotTrack === '1' || nav.globalPrivacyControl === true;
+  const [optedOut, setOptedOut] = useState(() => isUsageOptedOut());
+  return (
+    <Card withBorder radius="md" p="lg" maw={720} mx="auto">
+      <Stack gap="xs">
+        <Text size="sm">
+          This instance keeps its own usage statistics, in its own database, to know how much it
+          is used. Nothing is sent to a third party and nothing is used for advertising or
+          profiling. Per day it records: that this browser opened the app (a random id kept in
+          this browser, renewed every 13 months), sign-ins, which dashboards were opened, the
+          browser family, operating system, device type, language, referring site and, when the
+          operator enabled it, the country and city. IP addresses and user agents are never
+          stored; an address is kept only as a keyed, non-reversible hash. Daily records are
+          deleted after 13 months; only anonymous monthly and yearly totals are kept after that.
+          Deleting your account deletes your records.
+        </Text>
+        <Switch
+          checked={optedOut || browserRefuses}
+          disabled={browserRefuses}
+          onChange={(e) => {
+            setUsageOptOut(e.currentTarget.checked);
+            setOptedOut(e.currentTarget.checked);
+          }}
+          label="Exclude this browser from usage statistics"
+          description={
+            browserRefuses
+              ? 'Your browser sends Do Not Track / Global Privacy Control: nothing is recorded.'
+              : undefined
+          }
+        />
+      </Stack>
+    </Card>
+  );
+};
+
 const AboutApp: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
@@ -165,6 +205,10 @@ const AboutApp: React.FC = () => {
               />
             </div>
           </Center>
+        </AboutSection>
+
+        <AboutSection title="Privacy">
+          <PrivacyNotice />
         </AboutSection>
 
         {/* Computed rather than written out, so the notice cannot go

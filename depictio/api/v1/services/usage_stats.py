@@ -243,10 +243,29 @@ async def record_login(user: Any, method: str, request: Optional[Request] = None
         logger.warning(f"usage_stats: failed to record login: {exc}")
 
 
+def refuses_tracking(request: Request) -> bool:
+    """Do Not Track or Global Privacy Control sent by the browser."""
+    return request.headers.get("dnt") == "1" or request.headers.get("sec-gpc") == "1"
+
+
+def erase_user_usage(user_id: str) -> None:
+    """Right to erasure: drop a deleted account's logins, visits and its browsers'
+    trace in dashboard views. Never raises."""
+    try:
+        database = _db()
+        visitor_ids = database[VISITS].distinct("visitor_id", {"user_id": user_id})
+        database[VISITS].delete_many({"user_id": user_id})
+        database[LOGINS].delete_many({"user_id": user_id})
+        if visitor_ids:
+            database[DASHBOARD_VIEWS].update_many({}, {"$pull": {"visitors": {"$in": visitor_ids}}})
+    except Exception as exc:
+        logger.warning(f"usage_stats: failed to erase usage of a deleted user: {exc}")
+
+
 def record_hit(hit: UsageHit, request: Request, user: Any) -> bool:
     """Upsert today's visit row for this browser (+ dashboard view). Never raises."""
     ua = request.headers.get("user-agent", "")
-    if not settings.usage_stats.enabled or is_bot(ua):
+    if not settings.usage_stats.enabled or is_bot(ua) or refuses_tracking(request):
         return False
     try:
         now = utc_now_naive()

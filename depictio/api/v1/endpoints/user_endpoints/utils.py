@@ -183,6 +183,9 @@ def delete_user_from_db(
         )
 
         delete_annotations_for_user(user_id)
+        from depictio.api.v1.services.usage_stats import erase_user_usage
+
+        erase_user_usage(str(user_id))
         return {"success": True, "message": "User deleted successfully"}
     return {"success": False, "message": "Error deleting user"}
 

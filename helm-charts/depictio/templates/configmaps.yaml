@@ -129,7 +129,7 @@ data:
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   # Internal usage statistics (Admin > Activity > Usage, GET /analytics/usage)
   DEPICTIO_USAGE_STATS_ENABLED: {{ .Values.backend.env.DEPICTIO_USAGE_STATS_ENABLED | default "true" | quote }}
-  DEPICTIO_USAGE_STATS_RETENTION_DAYS: {{ .Values.backend.env.DEPICTIO_USAGE_STATS_RETENTION_DAYS | default "400" | quote }}
+  DEPICTIO_USAGE_STATS_RETENTION_DAYS: {{ .Values.backend.env.DEPICTIO_USAGE_STATS_RETENTION_DAYS | default "395" | quote }}
   {{- if .Values.backend.env.DEPICTIO_USAGE_STATS_GEOIP_DB_PATH }}
   DEPICTIO_USAGE_STATS_GEOIP_DB_PATH: {{ .Values.backend.env.DEPICTIO_USAGE_STATS_GEOIP_DB_PATH | quote }}
   {{- end }}
