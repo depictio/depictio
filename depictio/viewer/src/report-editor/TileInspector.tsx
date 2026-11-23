@@ -1,8 +1,9 @@
 import React from 'react';
-import { Button, Group, Paper, SegmentedControl, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Box, Button, Group, SegmentedControl, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
+import { ArrowDown, ArrowUp, SlidersHorizontal } from 'lucide-react';
 import type { ReportOrientation, ReportTile } from 'depictio-react-core';
 
+import { STROKE } from '../chrome/variants/glass/icons';
 import type { TileView } from './model';
 
 const OWN_SECTION = '__own__';
@@ -43,14 +44,15 @@ const TileInspector: React.FC<TileInspectorProps> = ({
   ];
 
   return (
-    <Paper
-      withBorder
-      radius="md"
-      p="sm"
-      ml="md"
+    <Box
+      className="re-inspector"
       data-testid="report-inspector"
       data-component-id={view.componentId}
     >
+      <div className="re-inspector-head">
+        <SlidersHorizontal size={14} strokeWidth={STROKE} aria-hidden />
+        Tile settings
+      </div>
       <Stack gap="sm">
         <TextInput
           label="Caption"
@@ -98,7 +100,7 @@ const TileInspector: React.FC<TileInspectorProps> = ({
           <Button
             size="compact-xs"
             variant="default"
-            leftSection={<Icon icon="mdi:arrow-up" width={14} />}
+            leftSection={<ArrowUp size={14} strokeWidth={STROKE} />}
             disabled={!canMoveUp}
             onClick={() => onMove(-1)}
           >
@@ -107,7 +109,7 @@ const TileInspector: React.FC<TileInspectorProps> = ({
           <Button
             size="compact-xs"
             variant="default"
-            leftSection={<Icon icon="mdi:arrow-down" width={14} />}
+            leftSection={<ArrowDown size={14} strokeWidth={STROKE} />}
             disabled={!canMoveDown}
             onClick={() => onMove(1)}
           >
@@ -115,7 +117,7 @@ const TileInspector: React.FC<TileInspectorProps> = ({
           </Button>
         </Group>
       </Stack>
-    </Paper>
+    </Box>
   );
 };
 

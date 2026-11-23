@@ -24,7 +24,11 @@ export const MSG = {
   thumbnails: 'depictio-preview:thumbnails',
   snapshot: 'depictio-preview:snapshot',
   styles: 'depictio-preview:styles',
+  scheme: 'depictio-preview:scheme',
 } as const;
+
+/** The colour scheme the frame is asked to show: the app's own. */
+export type PreviewScheme = 'light' | 'dark';
 
 /** Thumbnail size asked of the frame. */
 export const THUMB_WIDTH = 480;

@@ -17,6 +17,7 @@
     THUMBNAIL = 'depictio-preview:thumbnail',
     SNAPSHOT = 'depictio-preview:snapshot',
     STYLES = 'depictio-preview:styles',
+    SCHEME = 'depictio-preview:scheme',
     APPLY = 'depictio-preview:apply',
     THUMBNAILS = 'depictio-preview:thumbnails',
     TILE_SEL = '[data-depictio-tile],[data-depictio-prose]',
@@ -420,6 +421,68 @@
     });
   }
 
+  // ── The colour scheme: the editor's, not the browser's ────────────────────
+
+  // Quarto's own mechanism: the report carries a light and a dark stylesheet
+  // set (`link.quarto-color-scheme`, the dark one `.quarto-color-alternate`
+  // when the light is the author's default) and `toggleColorMode(alternate)`,
+  // declared by Quarto's inline script, switches them, the `quarto-dark` /
+  // `quarto-light` body class and the toggle button. Its toggle button and the
+  // OS listener read the choice from the browser's storage, which the sandboxed
+  // frame may not touch (the script even stops at its first read there, so the
+  // page would be left on whatever the OS prefers). So the editor sends the scheme
+  // and it is set here, deterministically, never toggled.
+  function alternateIsDark(sheets) {
+    var mode = null;
+    forEach(sheets, function (sheet) {
+      var m = sheet.getAttribute('data-mode');
+      if (m && sheet.classList.contains('quarto-color-alternate')) mode = m;
+    });
+    return mode === null || mode === 'dark';
+  }
+
+  function setBodyMode(dark) {
+    if (!document.body) return;
+    document.body.classList.add(dark ? 'quarto-dark' : 'quarto-light');
+    document.body.classList.remove(dark ? 'quarto-light' : 'quarto-dark');
+  }
+
+  // Quarto's switch re-done by hand, for a version that does not expose it.
+  function switchSheets(alternate) {
+    var primary = document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)'),
+      alt = document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+    forEach(alternate ? alt : primary, function (sheet) { if (sheet.rel !== 'stylesheet') sheet.rel = 'stylesheet'; });
+    // Dark is layered on light: the primary set stays on for the alternate.
+    if (!alternate) forEach(alt, function (sheet) { sheet.rel = 'disabled-stylesheet'; });
+    forEach(alternate ? alt : primary, function (sheet) {
+      if (sheet.id === 'quarto-bootstrap') setBodyMode(sheet.getAttribute('data-mode') === 'dark');
+    });
+    forEach(document.querySelectorAll('.quarto-color-scheme-toggle'), function (t) {
+      if (alternate) t.classList.add('alternate'); else t.classList.remove('alternate');
+    });
+  }
+
+  function applyScheme(scheme) {
+    if (scheme !== 'light' && scheme !== 'dark') return;
+    var sheets = document.querySelectorAll('link.quarto-color-scheme');
+    if (sheets.length) {
+      var alternate = (scheme === 'dark') === alternateIsDark(sheets);
+      var done = false;
+      if (typeof toggleColorMode === 'function') {
+        try { toggleColorMode(alternate); done = true; } catch (err) { /* by hand, below */ }
+      }
+      if (!done) switchSheets(alternate);
+      // The report's own toggle cannot work here (no storage), and the editor
+      // decides: it is hidden rather than left to do nothing.
+      forEach(document.querySelectorAll('.quarto-color-scheme-toggle'), function (t) {
+        t.style.display = 'none';
+      });
+      try { window.dispatchEvent(new Event('resize')); } catch (err) { /* old engine */ }
+    }
+    // The classes and sheets the editor rebuilds snapshots with changed.
+    postStyles();
+  }
+
   function absolute(value) {
     try { return new URL(value, document.baseURI).href; } catch (err) { return value; }
   }
@@ -476,6 +539,7 @@
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === APPLY) apply(msg.patch);
     else if (msg.type === THUMBNAILS) thumbnails(msg.width, msg.height);
+    else if (msg.type === SCHEME) applyScheme(msg.scheme);
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', announce);

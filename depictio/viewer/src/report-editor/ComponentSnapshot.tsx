@@ -79,6 +79,10 @@ const ComponentSnapshot: React.FC<ComponentSnapshotProps> = ({
           tabIndex={-1}
           style={{
             border: 0,
+            // Same colour scheme as the document inside, or the browser paints
+            // the iframe's canvas opaque instead of leaving it transparent.
+            background: 'transparent',
+            colorScheme: styles?.colorScheme?.replace(/[^a-z ]/gi, '') || undefined,
             width: virtualWidth,
             height: height / scale,
             transform: `scale(${scale})`,

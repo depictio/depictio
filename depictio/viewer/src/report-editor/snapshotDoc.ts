@@ -34,7 +34,9 @@ export function buildSnapshotDoc(
   // A literal end tag inside the css would close its <style>.
   const css = (styles?.css ?? '').replace(/<\/style/gi, '<\\/style');
   const scheme = styles?.colorScheme ? `color-scheme:${styles.colorScheme.replace(/[^a-z ]/gi, '')};` : '';
-  const frameCss = `html,body{margin:0;min-width:0;${scrollable ? '' : 'overflow:hidden;'}}body{padding:8px;box-sizing:border-box;width:${virtualWidth}px;pointer-events:${scrollable ? 'auto' : 'none'}}`;
+  // Transparent around the component: the report's page background is not
+  // part of it. A thumbnail has no padding either, only the component shows.
+  const frameCss = `html,body{margin:0;min-width:0;background:transparent!important;${scrollable ? '' : 'overflow:hidden;'}}body{padding:${scrollable ? 8 : 0}px;box-sizing:border-box;width:${virtualWidth}px;pointer-events:${scrollable ? 'auto' : 'none'}}`;
   return (
     `<!doctype html><html class="${attr(styles?.htmlClass ?? '')}" style="${scheme}">` +
     `<head><meta charset="utf-8">${base}${links}<style>${css}</style><style>${frameCss}</style></head>` +

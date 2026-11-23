@@ -63,7 +63,7 @@ const RichDocField: React.FC<RichDocFieldProps> = ({
           {description}
         </Text>
       )}
-      <Box style={{ display: 'flex', flexDirection: 'column', height: 240 }}>
+      <Box className="re-doc" style={{ display: 'flex', flexDirection: 'column', height: 240 }}>
         <NotesEditorSurface editor={editor} canEdit />
       </Box>
     </Box>

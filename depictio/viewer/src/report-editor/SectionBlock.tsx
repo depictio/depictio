@@ -1,6 +1,8 @@
 import React from 'react';
-import { Box, Checkbox, Collapse, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Box, Checkbox, Collapse, Group, Text, UnstyledButton } from '@mantine/core';
 import { Icon } from '@iconify/react';
+
+import TileGrid from './tiles/TileGrid';
 
 interface SectionBlockProps {
   tabId: string;
@@ -64,9 +66,9 @@ const SectionBlock: React.FC<SectionBlockProps> = ({
       </UnstyledButton>
     </Group>
     <Collapse in={open}>
-      <Stack gap={6} pt={6}>
-        {children}
-      </Stack>
+      <Box pt={6}>
+        <TileGrid>{children}</TileGrid>
+      </Box>
     </Collapse>
   </Box>
 );

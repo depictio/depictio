@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
 import { MSG, THUMB_HEIGHT, THUMB_WIDTH, parseFrameMessage, tileKey } from './previewProtocol';
-import type { PreviewPatch, PreviewStyles } from './previewProtocol';
+import type { PreviewPatch, PreviewScheme, PreviewStyles } from './previewProtocol';
 
 /** An edit reaches the frame this long after the last one. */
 const APPLY_DEBOUNCE_MS = 60;
@@ -28,14 +28,17 @@ export interface FrameBridge {
  * The page's side of the preview protocol.
  *
  * Messages are accepted from the frame's own window only. On "ready" the
- * current patch goes over and the frame is asked for thumbnails; afterwards
- * every new patch is posted after a short debounce. The frame has an opaque
+ * current patch and the app's colour scheme go over and the frame is asked
+ * for thumbnails (after the scheme, so the styles it reports are the ones
+ * shown); afterwards every new patch is posted after a short debounce, and
+ * the scheme again whenever the app's changes. The frame has an opaque
  * origin, so no target origin can name it.
  */
 export function useFrameBridge(
   frameUrl: string | null,
   patch: PreviewPatch | null,
   onSelect: (tabId: string, componentId: string) => void,
+  scheme: PreviewScheme,
 ): FrameBridge {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [frameReady, setFrameReady] = useState(false);
@@ -48,6 +51,11 @@ export function useFrameBridge(
   patchRef.current = patch;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const schemeRef = useRef(scheme);
+  schemeRef.current = scheme;
+  // The scheme the frame was last told, so "ready" and the effect below do
+  // not both send it.
+  const sentSchemeRef = useRef<PreviewScheme | null>(null);
 
   const post = useCallback((message: Record<string, unknown>) => {
     iframeRef.current?.contentWindow?.postMessage(message, '*');
@@ -70,6 +78,8 @@ export function useFrameBridge(
         setFrameReady(true);
         setUnresponsive(false);
         if (patchRef.current) post({ type: MSG.apply, patch: patchRef.current });
+        sentSchemeRef.current = schemeRef.current;
+        post({ type: MSG.scheme, scheme: schemeRef.current });
         post({ type: MSG.thumbnails, width: THUMB_WIDTH, height: THUMB_HEIGHT });
       } else if (message.type === MSG.select) {
         onSelectRef.current(message.tab_id, message.component_id);
@@ -92,6 +102,13 @@ export function useFrameBridge(
     const timer = window.setTimeout(() => post({ type: MSG.apply, patch }), APPLY_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [frameReady, patch, post]);
+
+  // The app's scheme changed while the frame is up: the frame follows.
+  useEffect(() => {
+    if (!frameReady || sentSchemeRef.current === scheme) return;
+    sentSchemeRef.current = scheme;
+    post({ type: MSG.scheme, scheme });
+  }, [frameReady, scheme, post]);
 
   useEffect(() => {
     if (!loaded || frameReady) return;

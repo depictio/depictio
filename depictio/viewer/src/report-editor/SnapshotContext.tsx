@@ -1,5 +1,7 @@
 import { createContext, useContext } from 'react';
 
+import type { AnalysisState } from 'depictio-react-core';
+
 import type { PreviewStyles } from './previewProtocol';
 
 export interface SnapshotSource {
@@ -9,6 +11,9 @@ export interface SnapshotSource {
   styles: PreviewStyles | null;
   /** Where the preview files live: the snapshots' <base>. */
   baseUrl: string | null;
+  /** The report's analysis state (the layer's `state`): the filters and groups
+   *  the live tiles are drawn with. Absent or null = unfiltered. */
+  state?: AnalysisState | null;
 }
 
 const EMPTY: SnapshotSource = { snapshots: {}, styles: null, baseUrl: null };

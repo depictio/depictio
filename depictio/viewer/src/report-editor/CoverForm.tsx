@@ -1,5 +1,6 @@
 import React from 'react';
 import { Group, Stack, TagsInput, Text, TextInput } from '@mantine/core';
+import { BookMarked } from 'lucide-react';
 import type { ReportCover, ReportLayer } from 'depictio-react-core';
 
 import CollapsiblePanel from './CollapsiblePanel';
@@ -21,7 +22,7 @@ const CoverForm: React.FC<CoverFormProps> = ({ layer, defaults, onEdit }) => {
 
   return (
     <CollapsiblePanel
-      icon="mdi:book-open-page-variant-outline"
+      icon={BookMarked}
       title="Cover"
       summary={summary}
       testId="report-cover"

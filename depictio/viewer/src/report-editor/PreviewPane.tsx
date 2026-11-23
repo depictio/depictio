@@ -1,7 +1,9 @@
 import React from 'react';
-import { Alert, Badge, Box, Button, Group, Loader, Skeleton, Stack, Text } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Alert, Badge, Button, Group, Loader, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
+import { CircleAlert, Eye, Moon, RefreshCw, Sun } from 'lucide-react';
 
+import { STROKE } from '../chrome/variants/glass/icons';
+import type { PreviewScheme } from './previewProtocol';
 import type { FrameBridge } from './useFrameBridge';
 import type { PreviewJobApi } from './usePreviewJob';
 
@@ -14,13 +16,17 @@ function elapsedLabel(seconds: number): string {
 interface PreviewPaneProps {
   job: PreviewJobApi;
   bridge: FrameBridge;
+  /** The app's scheme, which the frame follows. */
+  scheme: PreviewScheme;
 }
 
+type ChipProps = Pick<PreviewPaneProps, 'job' | 'bridge'>;
+
 /** The status chip above the frame. */
-const StatusChip: React.FC<PreviewPaneProps> = ({ job, bridge }) => {
+const StatusChip: React.FC<ChipProps> = ({ job, bridge }) => {
   if (job.error) {
     return (
-      <Badge color="red" variant="light" leftSection={<Icon icon="mdi:alert-circle-outline" width={12} />}>
+      <Badge color="red" variant="light" leftSection={<CircleAlert size={12} strokeWidth={STROKE} />}>
         Preview failed
       </Badge>
     );
@@ -48,82 +54,87 @@ const StatusChip: React.FC<PreviewPaneProps> = ({ job, bridge }) => {
     );
   }
   return (
-    <Badge color="green" variant="light" leftSection={<Icon icon="mdi:circle-medium" width={14} />}>
+    <Badge color="green" variant="light" leftSection={<span className="re-live-dot" aria-hidden />}>
       Live
     </Badge>
   );
 };
 
-/** The right half of the page: the real report in a frame, kept in step with
- *  the edits on the left. */
-const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge }) => (
-  <Stack gap="xs" h="100%" style={{ minHeight: 0 }} data-testid="report-preview-pane">
-    <Group justify="space-between" wrap="nowrap">
-      <Group gap="xs">
-        <Text fw={600} size="sm">
-          Preview
-        </Text>
-        <span data-testid="report-preview-status">
-          <StatusChip job={job} bridge={bridge} />
+/** The right half of the page: the real report, as a page on a stage, kept in
+ *  step with the edits on the left and in the app's own colour scheme. */
+const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme }) => (
+  <Stack gap={0} h="100%" style={{ minHeight: 0 }} data-testid="report-preview-pane">
+    <div className="re-pv-bar">
+      <span className="re-pv-name">
+        <Eye size={17} strokeWidth={STROKE} aria-hidden />
+        Preview
+      </span>
+      <span data-testid="report-preview-status">
+        <StatusChip job={job} bridge={bridge} />
+      </span>
+      <span className="re-top-grow" />
+      <Tooltip label={`The preview follows the app theme (${scheme})`} withArrow openDelay={250}>
+        <span className="re-pv-scheme" data-testid="report-preview-scheme" data-scheme={scheme}>
+          {scheme === 'dark' ? (
+            <Moon size={16} strokeWidth={STROKE} aria-hidden />
+          ) : (
+            <Sun size={16} strokeWidth={STROKE} aria-hidden />
+          )}
         </span>
-      </Group>
+      </Tooltip>
       <Button
-        size="compact-xs"
+        size="compact-sm"
         variant="subtle"
         color="gray"
-        leftSection={<Icon icon="mdi:refresh" width={14} />}
+        leftSection={<RefreshCw size={14} strokeWidth={STROKE} />}
         onClick={job.rerun}
         disabled={job.running}
         data-testid="report-preview-rerun"
       >
         Refresh data
       </Button>
-    </Group>
+    </div>
 
-    {job.error && (
-      <Alert color="red" title="The preview failed">
-        {job.error}
-      </Alert>
-    )}
+    <div className="re-pv-stage">
+      {job.error && (
+        <Alert color="red" title="The preview failed" w="100%" h="fit-content">
+          {job.error}
+        </Alert>
+      )}
 
-    {!job.previewUrl && !job.error && (
-      <Stack gap="sm" data-testid="report-preview-running">
-        <Group gap="xs">
-          <Loader size="xs" />
-          <Text size="sm">
-            {job.phase} · {elapsedLabel(job.elapsed)}
-          </Text>
-        </Group>
-        <Skeleton h={36} w="60%" />
-        <Skeleton h={14} />
-        <Skeleton h={14} w="90%" />
-        <Skeleton h={220} />
-        <Skeleton h={14} w="80%" />
-        <Skeleton h={220} />
-      </Stack>
-    )}
+      {!job.previewUrl && !job.error && (
+        <div className="re-pv-page re-pv-wait">
+          <Stack gap="sm" data-testid="report-preview-running">
+            <Group gap="xs">
+              <Loader size="xs" />
+              <Text size="sm">
+                {job.phase} · {elapsedLabel(job.elapsed)}
+              </Text>
+            </Group>
+            <Skeleton h={36} w="60%" />
+            <Skeleton h={14} />
+            <Skeleton h={14} w="90%" />
+            <Skeleton h={220} />
+            <Skeleton h={14} w="80%" />
+            <Skeleton h={220} />
+          </Stack>
+        </div>
+      )}
 
-    {job.previewUrl && (
-      <Box
-        style={{
-          flex: 1,
-          minHeight: 0,
-          opacity: job.rerendering ? 0.6 : 1,
-          transition: 'opacity 150ms',
-        }}
-      >
-        <iframe
-          ref={bridge.iframeRef}
-          key={job.previewUrl}
-          title="Report preview"
-          src={job.previewUrl}
-          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-          onLoad={bridge.onFrameLoad}
-          style={{ width: '100%', height: '100%', border: 0, background: 'var(--mantine-color-white)' }}
-          data-testid="report-preview-frame"
-        />
-      </Box>
-    )}
+      {job.previewUrl && (
+        <div className="re-pv-page" style={{ opacity: job.rerendering ? 0.6 : 1 }}>
+          <iframe
+            ref={bridge.iframeRef}
+            key={job.previewUrl}
+            title="Report preview"
+            src={job.previewUrl}
+            sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+            onLoad={bridge.onFrameLoad}
+            data-testid="report-preview-frame"
+          />
+        </div>
+      )}
+    </div>
   </Stack>
 );
 

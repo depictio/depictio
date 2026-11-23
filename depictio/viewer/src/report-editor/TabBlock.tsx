@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ActionIcon, Box, Collapse, Group, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Box, Collapse, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { ArrowDown, ArrowUp, ChevronRight, GripVertical, Pin } from 'lucide-react';
 import type { ReportLayer, ReportTabPlacement } from 'depictio-react-core';
 
+import { STROKE } from '../chrome/variants/glass/icons';
 import InspectorSlot from './InspectorSlot';
 import { patchTile, relocateTile, setTabPlacement } from './model';
 import type { TabView, TileView } from './model';
@@ -10,6 +12,7 @@ import SectionBlock from './SectionBlock';
 import TileCard from './TileCard';
 import type { DropPosition } from './TileCard';
 import TileInspector from './TileInspector';
+import TileGrid from './tiles/TileGrid';
 import { tabIconId, tabTint } from './visuals';
 
 /** Drag handlers of the tab's own header, from the panel that orders tabs. */
@@ -181,11 +184,8 @@ const TabBlock: React.FC<TabBlockProps> = ({
 
   return (
     <Box data-testid="report-outline-tab" data-tab-id={tab.tabId}>
-      <Group
-        justify="space-between"
-        wrap="nowrap"
-        py={6}
-        px="xs"
+      <div
+        className="re-tabhead"
         draggable={!tab.isMain}
         onDragStart={tabDrag.onDragStart}
         onDragOver={(e) => {
@@ -195,8 +195,6 @@ const TabBlock: React.FC<TabBlockProps> = ({
         onDrop={tabDrag.onDrop}
         onDragEnd={tabDrag.onDragEnd}
         style={{
-          borderRadius: 'var(--mantine-radius-md)',
-          background: 'var(--mantine-color-default-hover)',
           opacity: tabDrag.dragging ? 0.4 : 1,
           borderTop:
             tabDrag.indicator === 'before' ? '2px solid var(--mantine-primary-color-filled)' : undefined,
@@ -204,15 +202,18 @@ const TabBlock: React.FC<TabBlockProps> = ({
             tabDrag.indicator === 'after' ? '2px solid var(--mantine-primary-color-filled)' : undefined,
         }}
       >
-        <Group
-          gap="xs"
-          wrap="nowrap"
-          style={{ minWidth: 0, cursor: 'pointer' }}
-          onClick={() => setOpen((o) => !o)}
-        >
-          <Box c="dimmed" style={{ display: 'flex', cursor: tab.isMain ? 'default' : 'grab' }}>
-            <Icon icon={tab.isMain ? 'mdi:pin-outline' : 'mdi:drag'} width={18} />
-          </Box>
+        <div className="re-tabhead-main" onClick={() => setOpen((o) => !o)}>
+          <span
+            className="re-tabhead-grip"
+            style={{ cursor: tab.isMain ? 'default' : 'grab' }}
+            aria-hidden
+          >
+            {tab.isMain ? (
+              <Pin size={16} strokeWidth={STROKE} />
+            ) : (
+              <GripVertical size={16} strokeWidth={STROKE} />
+            )}
+          </span>
           <ActionIcon
             variant="subtle"
             color="gray"
@@ -223,19 +224,33 @@ const TabBlock: React.FC<TabBlockProps> = ({
             }}
             aria-label={open ? 'Collapse the tab' : 'Expand the tab'}
           >
-            <Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={18} />
+            <span className="re-tabhead-chevron" data-open={open || undefined}>
+              <ChevronRight size={17} strokeWidth={STROKE} />
+            </span>
           </ActionIcon>
-          <Icon icon={tabIconId(icon)} width={20} color={tabTint(color)} />
-          <Text fw={600} truncate>
-            {tab.title}
-          </Text>
-          <Text size="xs" c="dimmed" style={{ flex: 'none' }} data-testid="report-tab-count">
+          <span
+            className="re-chip re-chip--tab"
+            style={{ ['--re-tint' as string]: tabTint(color) }}
+            aria-hidden
+          >
+            <Icon icon={tabIconId(icon)} width={18} />
+          </span>
+          <span className="re-tabhead-title">{tab.title}</span>
+          <Badge
+            variant="light"
+            color="gray"
+            size="sm"
+            tt="none"
+            fw={500}
+            style={{ flex: 'none' }}
+            data-testid="report-tab-count"
+          >
             {inReport} of {tab.tiles.length} in the report
-          </Text>
-        </Group>
-        <Group gap="xs" wrap="nowrap">
-          <Group gap={0} wrap="nowrap">
-            <Tooltip label={tab.isMain ? 'The main tab stays first' : 'Move the tab up'}>
+          </Badge>
+        </div>
+        <div className="re-tabhead-tools">
+          <div style={{ display: 'flex' }}>
+            <Tooltip label={tab.isMain ? 'The main tab stays first' : 'Move the tab up'} withArrow>
               <ActionIcon
                 variant="subtle"
                 color="gray"
@@ -244,7 +259,7 @@ const TabBlock: React.FC<TabBlockProps> = ({
                 onClick={() => onMoveTab(-1)}
                 aria-label="Move tab up"
               >
-                <Icon icon="mdi:arrow-up" width={16} />
+                <ArrowUp size={16} strokeWidth={STROKE} />
               </ActionIcon>
             </Tooltip>
             <ActionIcon
@@ -255,9 +270,9 @@ const TabBlock: React.FC<TabBlockProps> = ({
               onClick={() => onMoveTab(1)}
               aria-label="Move tab down"
             >
-              <Icon icon="mdi:arrow-down" width={16} />
+              <ArrowDown size={16} strokeWidth={STROKE} />
             </ActionIcon>
-          </Group>
+          </div>
           <SegmentedControl
             size="xs"
             value={tab.placement}
@@ -270,8 +285,8 @@ const TabBlock: React.FC<TabBlockProps> = ({
               { label: 'Appendix', value: 'appendix' },
             ]}
           />
-        </Group>
-      </Group>
+        </div>
+      </div>
 
       <Collapse in={open}>
         <Stack gap={6} pt="xs">
@@ -282,7 +297,7 @@ const TabBlock: React.FC<TabBlockProps> = ({
           )}
           {runs.map((run, r) => {
             const cards = run.rows.map(({ view, i }) => renderRow(view, i));
-            if (!run.section) return <React.Fragment key={`run-${r}`}>{cards}</React.Fragment>;
+            if (!run.section) return <TileGrid key={`run-${r}`}>{cards}</TileGrid>;
             const name = run.section;
             const included = run.rows.filter((row) => row.view.inReport).length;
             return (

@@ -236,6 +236,7 @@ def test_the_patch_script_answers_every_message_of_the_protocol():
         "depictio-preview:thumbnails",
         "depictio-preview:snapshot",
         "depictio-preview:styles",
+        "depictio-preview:scheme",
     ):
         assert message in js, f"the patch script never handles {message}"
     # The marks of §3's effects, spelled as the contract writes them.
