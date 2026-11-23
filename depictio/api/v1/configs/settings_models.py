@@ -3113,6 +3113,17 @@ class NotebookExportConfig(BaseSettings):
         ),
     )
 
+    preview_cache_dir: Optional[str] = Field(
+        default=None,
+        description=(
+            "Root directory for the report editor's preview workdirs, one per user and "
+            "dashboard (`<user_id>/<dashboard_id>`): Quarto's jupyter-cache keeps the "
+            "executed cells of the last preview there, so an unchanged tile is not "
+            "re-executed. ``None`` uses the system temporary directory "
+            "(``<tmp>/depictio-preview``). Only the preview render uses it."
+        ),
+    )
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_", populate_by_name=True)
 
 

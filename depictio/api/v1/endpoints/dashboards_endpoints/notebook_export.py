@@ -10,8 +10,10 @@ funnel view showed, computed by the same code.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import mimetypes
+from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -25,6 +27,10 @@ from fastapi import Depends, HTTPException, Response
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.dashboards_endpoints import routes
+from depictio.api.v1.endpoints.dashboards_endpoints.report_layer_routes import (
+    _editable_family,
+    _require_report_editor,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
     dashboards_endpoint_router,
     get_user_or_anonymous,
@@ -33,6 +39,7 @@ from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
 from depictio.api.v1.services.notebook_export.generator import (
     DCPlan,
     ExportPlan,
+    MarkdownUnit,
     NotebookBuilder,
     StagePlan,
 )
@@ -45,6 +52,14 @@ from depictio.models.models.analysis_state import (
     NotebookRenderStatus,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.report_layer import (
+    ReportCoverDefaults,
+    ReportLayer,
+    ReportOutline,
+    ReportOutlineEntry,
+    ReportOutlineTab,
+    ReportPreviewRequest,
+)
 from depictio.models.models.users import User
 
 STAGE_COMPONENT_TYPES: frozenset[str] = frozenset(
@@ -1128,6 +1143,387 @@ def notebook_export_render(
         f"📄 Notebook {'report + dashboard' if combined else 'report'} {job_id} queued "
         f"for dashboard {dashboard_id}"
     )
+    return NotebookRenderStatus(job_id=job_id, status="queued", filename=filename, phase="queued")
+
+
+# ── The report editor's backend ──────────────────────────────────────────────
+#
+# The editor page (`/dashboard-report/{id}`) reads the report's shape from the
+# outline and asks for an exact preview of it — the same document, rendered on
+# a worker, with the last one of an unchanged report served from the finished
+# job instead of run again. Both are editor routes: the report editor's flag
+# and the dashboard-editing rule decide who may call them, and everyone else
+# is told the dashboard does not exist.
+
+
+def _cover_defaults_for(plan: ExportPlan) -> ReportCoverDefaults:
+    """The cover's fields as the export fills them, ignoring the layer's cover.
+
+    The dashboard's title, the project's name, the project's owners, the day
+    of the export — what the editor's cover fields reset to.
+    """
+    project = plan.project or {}
+    owners: list[str] = []
+    for owner in (project.get("permissions") or {}).get("owners") or []:
+        if not isinstance(owner, dict):
+            continue
+        name = str(owner.get("username") or owner.get("email") or "").strip()
+        if name and name not in owners:
+            owners.append(name)
+    return ReportCoverDefaults(
+        title=plan.title or "Report",
+        subtitle=str(project.get("name") or "") or None,
+        authors=owners,
+        date=plan.exported_at.strftime("%Y-%m-%d"),
+    )
+
+
+@dashboards_endpoint_router.get(
+    "/notebook_export/{dashboard_id}/outline", response_model=ReportOutline
+)
+def notebook_export_outline(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+) -> ReportOutline:
+    """The report's shape, as the editor page draws it: its tabs, sections and
+    tiles in the generator's order, with the cover's defaults.
+
+    Every tile of the family is listed — also the ones the layer left out of
+    the report, whose ``in_report`` says so. Built by the same plan and
+    builder the export uses, so the outline is exactly what a report of this
+    dashboard would hold.
+    """
+    _require_report_editor()
+    _editable_family(dashboard_id, current_user)
+
+    state = _resolved_request_state(dashboard_id, NotebookExportRequest())
+    plan = build_export_plan(dashboard_id, state, current_user, access_token)
+
+    # The layer's own settings per tile, from the layer as stored — the
+    # outline reports them even where the walk below forces every tile in.
+    revision = 0
+    tiles: dict[tuple[str, str], Any] = {}
+    tab_cfgs: dict[str, Any] = {}
+    if plan.report_layer:
+        try:
+            layer = ReportLayer.model_validate(plan.report_layer)
+            revision = layer.revision
+            tiles = {(t.tab_id, t.component_id): t for t in layer.tiles}
+            tab_cfgs = {t.tab_id: t for t in layer.tabs}
+        except Exception:  # the builder says why in its warning; the outline still lists everything
+            pass
+
+    # A copy of the layer with every tile forced in, so the excluded ones are
+    # walked too: the outline shows the whole report an editor can switch on.
+    forced = deepcopy(plan.report_layer)
+    if forced:
+        for tile in forced.get("tiles") or []:
+            if isinstance(tile, dict):
+                tile["in_report"] = True
+    plan.report_layer = forced
+
+    builder = NotebookBuilder(plan)
+    outline_tabs: list[ReportOutlineTab] = []
+    current: ReportOutlineTab | None = None
+    for entry, _tab_name in builder.entries():
+        if isinstance(entry, MarkdownUnit):
+            if entry.kind == "tab":
+                tab_id = entry.dashboard_id or ""
+                cfg = tab_cfgs.get(tab_id)
+                current = ReportOutlineTab(
+                    tab_id=tab_id,
+                    title=entry.text,
+                    placement=cfg.placement if cfg is not None else "body",
+                    order=cfg.order if cfg is not None else None,
+                    entries=[],
+                )
+                outline_tabs.append(current)
+            elif current is not None:
+                current.entries.append(
+                    ReportOutlineEntry(
+                        kind="section",
+                        tab_id=current.tab_id,
+                        title=entry.text,
+                        level=entry.level,
+                    )
+                )
+            continue
+        if current is None:  # a component before any tab: nothing to attach it to
+            continue
+        meta = entry.highlight if entry.highlight is not None else entry.unit.meta
+        # The layer's settings, by the generator's own lookup — a highlight
+        # is placed by the figure it shows, on the tab that figure lives on.
+        unit = entry.unit
+        tile = tiles.get(
+            (str(unit.tab.get("dashboard_id") or ""), str(unit.meta.get("index") or ""))
+        )
+        caption = meta.get("caption")
+        current.entries.append(
+            ReportOutlineEntry(
+                kind="component",
+                tab_id=current.tab_id,
+                title=str(meta.get("title") or meta.get("index") or ""),
+                component_id=str(meta.get("index") or ""),
+                component_type=str(meta.get("component_type") or "") or None,
+                caption=str(caption) if caption is not None else None,
+                in_report=bool(tile.in_report) if tile is not None else True,
+                in_pdf=bool(tile.in_pdf) if tile is not None else True,
+                orientation=tile.orientation if tile is not None else "auto",
+                section=tile.section if tile is not None else None,
+                page_break_before=bool(tile.page_break_before) if tile is not None else False,
+                order=tile.order if tile is not None else None,
+            )
+        )
+
+    if settings.notebook_export.render_enabled:
+        from depictio.api.v1.services.notebook_export import render as render_service
+
+        if render_service.render_available():
+            preview_available, preview_reason = True, None
+        else:
+            preview_available = False
+            preview_reason = render_service.render_unavailable_reason() or (
+                "Reports cannot be rendered on this deployment."
+            )
+    else:
+        preview_available, preview_reason = (
+            False,
+            (
+                "Rendered reports are not enabled on this deployment "
+                "(DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED)."
+            ),
+        )
+    return ReportOutline(
+        dashboard_id=str(dashboard_id),
+        title=plan.title,
+        revision=revision,
+        tabs=outline_tabs,
+        cover_defaults=_cover_defaults_for(plan),
+        preview_available=preview_available,
+        preview_unavailable_reason=preview_reason,
+    )
+
+
+def _preview_cache_key(qmd: bytes, embed_runtime: bool) -> str:
+    """What makes one preview equal to another: the document and the runtime
+    embedded in it. The document carries everything else that changes it —
+    the state, the layer, the filters."""
+    digest = hashlib.sha256()
+    digest.update(qmd)
+    digest.update(b"\x00embed=" + (b"1" if embed_runtime else b"0"))
+    return digest.hexdigest()
+
+
+def _ready_preview(job_id: str, current_user: User) -> NotebookRenderStatus | None:
+    """The finished job's ready status — or ``None`` when it is not (yet, or
+    any more) a finished report of its owner's."""
+    try:
+        result, payload, _record = _render_job(job_id, current_user)
+    except HTTPException:
+        return None
+    if not result.successful():
+        return None
+    return NotebookRenderStatus(
+        job_id=job_id,
+        status="ready",
+        filename=payload.get("filename"),
+        size=payload.get("size"),
+    )
+
+
+def _cached_preview(
+    user_id: str, dashboard_id: str, cache_key: str, current_user: User
+) -> NotebookRenderStatus | None:
+    """The ready preview this user already has for this dashboard and this
+    exact document, or ``None``. Only the newest one answers: a re-render of
+    the same document replaces the served preview."""
+    from depictio.api.v1.services.notebook_export import jobs
+
+    record = (
+        jobs.jobs_collection.find(
+            {
+                "user_id": user_id,
+                "kind": jobs.RENDER,
+                "dashboard_id": dashboard_id,
+                "preview_key": cache_key,
+                "status": "success",
+            }
+        )
+        .sort("created_at", -1)
+        .limit(1)
+    )
+    newest = next(iter(record), None)
+    if newest is None:
+        return None
+    return _ready_preview(str(newest["_id"]), current_user)
+
+
+#: The frame the editor shows a preview in. The report arrives by
+#: ``postMessage`` and is written into this document, so it runs under this
+#: page's policy rather than the app's: a ``blob:`` or ``srcdoc`` frame would
+#: inherit the app's CSP, which refuses the frame outright (``default-src
+#: 'self'``) and every inline script a Quarto report is made of.
+PREVIEW_FRAME_MESSAGE = "depictio-report-preview"
+PREVIEW_FRAME_HTML = f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Report preview</title></head><body>
+<script>
+addEventListener("message", function onReport(event) {{
+  var data = event.data;
+  if (event.source !== parent || !data || data.type !== "{PREVIEW_FRAME_MESSAGE}"
+      || typeof data.html !== "string") return;
+  removeEventListener("message", onReport);
+  document.open();
+  document.write(data.html);
+  document.close();
+}});
+parent.postMessage({{ type: "{PREVIEW_FRAME_MESSAGE}-ready" }}, "*");
+</script>
+</body></html>
+"""
+
+
+def preview_frame_csp() -> str:
+    """The preview frame's policy: an offline report's, in a sandbox.
+
+    ``sandbox allow-scripts`` gives the frame an opaque origin, so the report's
+    scripts run but cannot read the app's storage or call the API as the
+    reader. The rest is what a self-contained report needs and nothing more:
+    inline scripts and styles, ``data:``/``blob:`` assets, no network except
+    the basemap CDNs a map draws from.
+    """
+    from depictio.api.v1.configs.security_headers import BASEMAP_CONNECT_SRC
+
+    return (
+        "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; "
+        "default-src 'none'; "
+        "script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; "
+        "worker-src blob:; "
+        "style-src 'unsafe-inline' data:; "
+        f"img-src data: blob: {BASEMAP_CONNECT_SRC}; "
+        "font-src data:; "
+        f"connect-src data: blob: {BASEMAP_CONNECT_SRC}; "
+        "frame-ancestors 'self'; "
+        "base-uri 'none'; "
+        "form-action 'none'"
+    )
+
+
+@dashboards_endpoint_router.get("/notebook_export/preview_frame")
+def notebook_export_preview_frame() -> Response:
+    """The empty page the editor's exact preview writes the report into.
+
+    It holds nothing of its own (the report is fetched by the editor with the
+    reader's credentials and handed over), so it needs no sign-in.
+    """
+    _require_report_editor()
+    return Response(
+        content=PREVIEW_FRAME_HTML,
+        media_type="text/html",
+        headers={"Content-Security-Policy": preview_frame_csp(), "Cache-Control": "no-store"},
+    )
+
+
+@dashboards_endpoint_router.post(
+    "/notebook_export/{dashboard_id}/preview",
+    response_model=NotebookRenderStatus,
+    status_code=202,
+)
+def notebook_export_preview(
+    dashboard_id: PyObjectId,
+    request: ReportPreviewRequest,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+) -> NotebookRenderStatus:
+    """Render the dashboard's report as the editor's exact preview.
+
+    The render route's own path — the same document, the same worker, the
+    same quotas and gates — into a job whose report the editor polls and
+    shows. A finished job of the same user, dashboard and document answers
+    instead of queuing a new one, unless ``force`` asks for a fresh render
+    (which also re-executes the cached cells of the preview's workdir).
+    """
+    _require_report_editor()
+    _editable_family(dashboard_id, current_user)
+    _require_render_enabled()
+    _require_signed_in(current_user)
+
+    from depictio.api.celery_app import render_notebook_report
+    from depictio.api.v1.services.notebook_export import jobs, store
+    from depictio.serverless.report import user_payload
+
+    state = _resolved_request_state(dashboard_id, NotebookExportRequest())
+    user_id = str(current_user.id)
+    # The report the reader gets: the runtime embedded when it may be, no
+    # PDF (that stays the export's own feature), and the server never runs
+    # an author's Python itself.
+    embed_runtime = _embed_runtime(
+        NotebookExportRequest(), dashboard_id, state, current_user, default=True
+    )
+    plan = build_export_plan(
+        dashboard_id,
+        state,
+        current_user,
+        access_token,
+        embed_runtime=embed_runtime,
+        pdf=False,
+    )
+    _require_owner_for_authored_code(plan, current_user)
+    plan.author_code = False
+    builder = NotebookBuilder(plan)
+    qmd = builder.build().encode("utf-8")
+    cache_key = _preview_cache_key(qmd, embed_runtime)
+
+    if not request.force:
+        ready = _cached_preview(user_id, str(dashboard_id), cache_key, current_user)
+        if ready is not None:
+            return ready
+
+    # After the cache: answering with a finished preview costs no render.
+    limits = settings.notebook_export
+    jobs.admit(
+        user_id,
+        jobs.RENDER,
+        max_active=limits.render_max_active_per_user,
+        max_per_hour=limits.render_max_per_hour,
+        window_s=2 * limits.render_timeout_s + 120 + 3600,
+    )
+    job_id = uuid4().hex
+    filename = f"{plan.stem}.html"
+    notebook_key = store.job_key(user_id, job_id, f"{plan.stem}.qmd")
+    store.put(notebook_key, qmd, store.QMD_MEDIA_TYPE)
+    jobs.record(job_id, user_id, jobs.RENDER, dashboard_id=str(dashboard_id), preview_key=cache_key)
+
+    # The preview's workdir on the worker: one per user and dashboard, so its
+    # jupyter-cache serves the next preview of the same dashboard (a
+    # text-only edit then renders without re-executing the tiles). ``force``
+    # asks the worker to re-execute everything and refresh that cache.
+    render_notebook_report.apply_async(
+        kwargs={
+            "job_id": job_id,
+            "user_id": user_id,
+            "notebook_key": notebook_key,
+            "stem": plan.stem,
+            "api_url": settings.fastapi.internal_url,
+            "runtime": (
+                {
+                    "dashboard_id": str(dashboard_id),
+                    "state": state.model_dump(mode="json"),
+                    "user": user_payload(current_user),
+                    "config": builder.runtime_config(),
+                }
+                if embed_runtime
+                else None
+            ),
+            "combined": None,
+            "filename": filename,
+            "pdf": False,
+            "preview_cache": f"{user_id}/{dashboard_id}",
+            "preview_force": bool(request.force),
+        },
+        task_id=job_id,
+    )
+    logger.info(f"📄 Report preview {job_id} queued for dashboard {dashboard_id}")
     return NotebookRenderStatus(job_id=job_id, status="queued", filename=filename, phase="queued")
 
 

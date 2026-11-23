@@ -127,6 +127,23 @@ server {
         add_header Strict-Transport-Security $depictio_hsts always;
     }
 
+    # The report editor's exact-preview frame. Same reasoning as the
+    # preview-html block above: the backend sends the frame's own sandboxed
+    # policy (inline scripts allowed, opaque origin), which the server-level
+    # CSP would otherwise intersect away.
+    location = /depictio/api/v1/dashboards/notebook_export/preview_frame {
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Strict-Transport-Security $depictio_hsts always;
+    }
+
     # Component export / embed. Same reasoning as the preview-html block above,
     # one step further: an embed must be frameable by other origins, so this
     # location also omits X-Frame-Options. The server-level `add_header ...

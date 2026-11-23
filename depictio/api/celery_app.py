@@ -1137,6 +1137,23 @@ _REPORT_SLOT = "report"
 _REPORT_SLOT_RETRY_S = 30
 
 
+def _preview_workdir(preview_cache: str) -> str:
+    """The persistent workdir of one user's preview of one dashboard.
+
+    Quarto's jupyter-cache keeps the executed cells of the last preview there
+    across jobs, so the next preview of the same dashboard re-executes only
+    what changed. The root is ``preview_cache_dir`` when configured, the
+    system temporary directory's ``depictio-preview`` otherwise.
+    """
+    import tempfile
+    from pathlib import Path
+
+    root = settings.notebook_export.preview_cache_dir or str(
+        Path(tempfile.gettempdir()) / "depictio-preview"
+    )
+    return str(Path(root) / preview_cache)
+
+
 @celery_app.task(
     bind=True,
     name="render_notebook_report",
@@ -1158,6 +1175,8 @@ def render_notebook_report(
     combined: dict | None = None,
     filename: str | None = None,
     pdf: bool = False,
+    preview_cache: str | None = None,
+    preview_force: bool = False,
     **_legacy: Any,
 ) -> dict:
     """Execute an exported notebook and keep the report Quarto renders from it.
@@ -1185,6 +1204,13 @@ def render_notebook_report(
     the combined report + dashboard file instead: the same embedding, with the
     "Report | Dashboard" switch on. A failed manifest then fails the job: a
     combined file without its dashboard is not what was asked for.
+
+    ``preview_cache`` (``"<user_id>/<dashboard_id>"``, set by the report
+    editor's preview) renders into a persistent workdir of that name, where
+    Quarto's jupyter-cache keeps the executed cells across previews: a
+    text-only edit reuses the last run's outputs. ``preview_force`` maps to
+    ``--cache-refresh`` — re-execute every cell and refresh the cache with the
+    results.
 
     At most ``report_concurrency`` reports run at once on the deployment: a
     report holds its worker while the passes it waits on need workers too.
@@ -1253,6 +1279,18 @@ def render_notebook_report(
             manifest = _runtime_manifest(job_id, runtime, required=bool(combined))
         self.update_state(state="PROGRESS", meta={"phase": "rendering", "job_id": job_id})
         notebook = store.get(notebook_key)
+        # The preview's persistent workdir: one per user and dashboard, so its
+        # Quarto cache (the executed cells) survives the job and serves the
+        # next preview of the same dashboard.
+        preview_render: dict[str, Any] = (
+            {
+                "workdir": _preview_workdir(preview_cache),
+                "cache": True,
+                "force": bool(preview_force),
+            }
+            if preview_cache
+            else {}
+        )
         try:
             html = render_quarto_html(
                 notebook,
@@ -1261,6 +1299,7 @@ def render_notebook_report(
                 api_token=token.access_token,
                 timeout_s=settings.notebook_export.render_timeout_s,
                 extra_env=extra_env,
+                **preview_render,
             )
         except RenderUnavailable as exc:
             if exc.log:

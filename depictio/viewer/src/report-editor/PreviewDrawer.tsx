@@ -10,6 +10,9 @@ import {
 import type { NotebookRenderStatus } from 'depictio-react-core';
 
 const POLL_MS = 2000;
+const PREVIEW_FRAME_URL = '/depictio/api/v1/dashboards/notebook_export/preview_frame';
+/** Must match ``PREVIEW_FRAME_MESSAGE`` in ``notebook_export.py``. */
+const PREVIEW_FRAME_MESSAGE = 'depictio-report-preview';
 
 /** What the worker is doing, in the reader's words. */
 function phaseLabel(job: NotebookRenderStatus | null): string {
@@ -128,17 +131,21 @@ const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ opened, onClose, dashboar
     return () => controller.abort();
   }, [jobId, jobStatus]);
 
-  // The frame loads a blob URL: no origin, so the report's scripts run but
-  // cannot reach the app's session.
-  const [frameUrl, setFrameUrl] = useState<string | null>(null);
+  // The report is written into an empty page the API serves with its own
+  // sandboxed policy. A blob: or srcdoc frame would inherit this app's CSP,
+  // which refuses the frame and every inline script of a Quarto report.
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
   useEffect(() => {
-    if (!html) {
-      setFrameUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    setFrameUrl(url);
-    return () => URL.revokeObjectURL(url);
+    if (!html) return;
+    const onMessage = (event: MessageEvent) => {
+      const frame = frameRef.current?.contentWindow;
+      if (!frame || event.source !== frame) return;
+      if ((event.data as { type?: string } | null)?.type !== `${PREVIEW_FRAME_MESSAGE}-ready`) return;
+      // The frame has an opaque origin, so no target origin can name it.
+      frame.postMessage({ type: PREVIEW_FRAME_MESSAGE, html }, '*');
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
   }, [html]);
 
   const running = starting || (job !== null && job.status !== 'ready' && job.status !== 'error');
@@ -204,12 +211,14 @@ const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ opened, onClose, dashboar
           </Group>
         )}
 
-        {frameUrl && (
+        {html && (
           <Box style={{ flex: 1, minHeight: 0 }}>
             <iframe
+              key={jobId}
+              ref={frameRef}
               title="Report preview"
-              src={frameUrl}
-              sandbox="allow-scripts"
+              src={PREVIEW_FRAME_URL}
+              sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
               style={{ width: '100%', height: '100%', border: 0 }}
               data-testid="report-preview-frame"
             />

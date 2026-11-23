@@ -1,0 +1,573 @@
+"""The report editor's backend (#1457): the outline and the exact preview.
+
+**The outline** (``GET /dashboards/notebook_export/{id}/outline``) is an
+editor route: the report editor's flag and the dashboard-editing rule answer
+404 to everyone else. It lists the whole report an editor can compose — every
+tile in the generator's order, also the ones the layer left out, whose real
+``in_report`` comes back — and the cover's defaults ignoring the layer's
+cover, so the editor's fields reset to what an export would print.
+
+**The preview** (``POST /dashboards/notebook_export/{id}/preview``) is the
+render route's own path for the editor: the same job (``pdf`` off, the
+runtime embedded when it may be, the same quotas and the same
+author-code gate), into a per user+dashboard workdir. A finished job of the
+same user, dashboard and document answers instead of queuing again — unless
+``force``, which also re-executes the cached cells (``--cache-refresh``).
+
+**The workdir**: ``render._render`` keeps its temporary-directory behaviour
+unless given a workdir; with jupyter-cache importable it asks Quarto to cache
+the executed cells there, so a text-only edit of the report does not
+re-execute every tile.
+"""
+
+from __future__ import annotations
+
+import sys
+import types
+from datetime import datetime, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import mongomock
+import polars as pl
+import pytest
+from bson import ObjectId
+from fastapi import HTTPException
+
+from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as nbx
+from depictio.api.v1.endpoints.dashboards_endpoints import report_layer_routes
+from depictio.models.models.report_layer import ReportPreviewRequest
+
+DASHBOARD_ID = str(ObjectId())
+PROJECT_ID = ObjectId()
+DC1 = str(ObjectId())
+USER_ID = str(ObjectId())
+FIXED_NOW = datetime(2026, 11, 23, 12, 0, 0, tzinfo=timezone.utc)
+
+BASE_DF = pl.DataFrame({"habitat": ["Groundwater", "Riverwater"], "temp": [4.0, 12.0]})
+
+
+def _component(index, **extra):
+    return {
+        "index": index,
+        "component_type": "figure",
+        "dc_id": DC1,
+        "wf_id": str(ObjectId()),
+        "dc_config": {"delta_location": f"memory://{DC1}", "type": "table"},
+        **extra,
+    }
+
+
+def _dashboard_doc() -> dict:
+    return {
+        "dashboard_id": ObjectId(DASHBOARD_ID),
+        "project_id": PROJECT_ID,
+        "title": "Wells & Rivers",
+        "subtitle": "Where the samples came from",
+        "is_main_tab": True,
+        "tab_order": 0,
+        "grid_sections": [{"name": "Overview"}],
+        "stored_metadata": [
+            _component(
+                "fig-1",
+                title="Temperature by habitat",
+                caption="The tiles' own caption.",
+                mode="ui",
+                visu_type="bar",
+                dict_kwargs={"x": "habitat", "y": "temp"},
+                section="Overview",
+            ),
+            _component(
+                "fig-2",
+                title="Custom",
+                mode="code",
+                visu_type="scatter",
+                code_content="fig = px.scatter(df.to_pandas(), x='habitat', y='temp')",
+                section="Overview",
+            ),
+        ],
+    }
+
+
+def _project_doc() -> dict:
+    return {
+        "_id": PROJECT_ID,
+        "name": "Wells",
+        "permissions": {"owners": [{"username": "tweber", "email": "t@depictio.org"}]},
+        "workflows": [
+            {
+                "workflow_tag": "sampling",
+                "data_collections": [{"_id": ObjectId(DC1), "data_collection_tag": "samples"}],
+            }
+        ],
+    }
+
+
+def _fake_load(workflow_id, data_collection_id, metadata=None, init_data=None, **kwargs):
+    return BASE_DF
+
+
+class _RenderUser:
+    id = USER_ID
+    email = "t.weber@example.org"
+    is_anonymous = False
+
+
+@pytest.fixture()
+def ctx():
+    """A live app's modules over in-memory Mongo: the routes' collections, the
+    job bookkeeping, the Delta load and the editor rule, like the two export
+    test files. The dashboard carries a report layer that leaves ``fig-2`` out
+    of the report and sets a cover."""
+    client = mongomock.MongoClient()
+    db = client.test_db
+    doc = _dashboard_doc()
+    doc["report_layer"] = {
+        "revision": 1,
+        "cover": {"title": "Custom cover", "authors": ["Layer Author"]},
+        "tiles": [
+            {"tab_id": DASHBOARD_ID, "component_id": "fig-2", "in_report": False},
+            {"tab_id": DASHBOARD_ID, "component_id": "fig-1", "page_break_before": True},
+        ],
+    }
+    db.dashboards.insert_one(doc)
+    db.projects.insert_one(_project_doc())
+
+    routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+    jobs_mod = "depictio.api.v1.services.notebook_export.jobs"
+    granted = {"level": "owner"}
+
+    def fake_mutation(doc_, user, level="editor"):
+        order = {"none": -1, "viewer": 0, "editor": 1, "owner": 2}
+        return order[level] <= order[granted["level"]]
+
+    with (
+        patch(f"{jobs_mod}.jobs_collection", db.notebook_export_jobs),
+        patch(f"{jobs_mod}.slots_collection", db.notebook_export_slots),
+        patch(f"{routes_mod}.dashboards_collection", db.dashboards),
+        patch(f"{routes_mod}.projects_collection", db.projects),
+        patch(f"{routes_mod}.check_project_permission", lambda *a, **k: True),
+        patch(f"{routes_mod}._resolve_link_filters_cached", lambda **kw: list(kw["filters"])),
+        patch("depictio.api.v1.deltatables_utils.load_deltatable_lite", _fake_load),
+        # The report's icons come from the Iconify API when missing from the
+        # bundled set: offline, the export carries on without them (the
+        # resolver's own failure path), so no test may fetch them for real.
+        patch("depictio.api.v1.services.icons._fetch_icon_svg", lambda icon_id: None),
+        patch.object(nbx, "_dtypes_for", lambda *a, **k: None),
+        patch.object(report_layer_routes, "dashboards_collection", db.dashboards),
+        patch.object(report_layer_routes, "check_dashboard_mutation_permission", fake_mutation),
+        patch.object(nbx.settings.notebook_export, "report_editor", True),
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        # Whether the runtime is embedded depends on a built `dist-static` and
+        # the static export switch, neither of which a preview test is about.
+        patch.object(nbx, "_embed_runtime", lambda *a, **k: False),
+        # Two builds of the same report a minute apart differ by the export
+        # minute in their provenance: freeze the clock so an unchanged report
+        # hashes to the same preview key.
+        patch.object(
+            nbx,
+            "datetime",
+            SimpleNamespace(now=lambda tz=None: FIXED_NOW),
+        ),
+    ):
+        yield {"granted": granted, "dashboards": db.dashboards}
+    client.close()
+
+
+def _outline(dashboard_id=None, user=None):
+    return nbx.notebook_export_outline(
+        # As the router's PyObjectId would: an ObjectId, which is also what
+        # the stored docs carry.
+        dashboard_id=dashboard_id or ObjectId(DASHBOARD_ID),  # type: ignore[arg-type]
+        current_user=user or _RenderUser(),  # type: ignore[arg-type]
+        access_token=None,
+    )
+
+
+def _preview(force: bool = False, user=None):
+    return nbx.notebook_export_preview(
+        dashboard_id=ObjectId(DASHBOARD_ID),  # type: ignore[arg-type]
+        request=ReportPreviewRequest(force=force),
+        current_user=user or _RenderUser(),  # type: ignore[arg-type]
+        access_token=None,
+    )
+
+
+def _staging(staged: dict, queued: dict):
+    return (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch(
+            "depictio.api.v1.services.notebook_export.store.put",
+            lambda key, body, content_type: staged.__setitem__(key, body),
+        ),
+        patch(
+            "depictio.api.celery_app.render_notebook_report.apply_async",
+            lambda **kw: queued.update(kw),
+        ),
+    )
+
+
+class _Ready:
+    """A Celery result for a job that finished with a report."""
+
+    state = "SUCCESS"
+    result = {"user_id": USER_ID, "key": "k", "filename": "wells-rivers.html", "size": 10}
+
+    def successful(self):
+        return True
+
+    def failed(self):
+        return False
+
+
+# ── the outline: who may call it ─────────────────────────────────────────────
+
+
+def test_the_outline_is_404_with_the_editor_flag_off(ctx) -> None:
+    with patch.object(nbx.settings.notebook_export, "report_editor", False):
+        with pytest.raises(HTTPException) as exc:
+            _outline()
+    assert exc.value.status_code == 404
+
+
+def test_the_outline_is_404_for_a_viewer_and_an_unknown_dashboard(ctx) -> None:
+    ctx["granted"]["level"] = "viewer"
+    with pytest.raises(HTTPException) as exc:
+        _outline()
+    assert exc.value.status_code == 404
+
+    ctx["granted"]["level"] = "owner"
+    with pytest.raises(HTTPException) as exc:
+        _outline(dashboard_id=str(ObjectId()))
+    assert exc.value.status_code == 404
+
+
+def test_a_preview_is_404_for_a_viewer(ctx) -> None:
+    ctx["granted"]["level"] = "viewer"
+    with pytest.raises(HTTPException) as exc:
+        _preview()
+    assert exc.value.status_code == 404
+
+
+# ── the outline: what it lists ───────────────────────────────────────────────
+
+
+def test_the_outline_lists_an_excluded_tile_with_its_real_settings(ctx) -> None:
+    outline = _outline()
+
+    assert [t.tab_id for t in outline.tabs] == [DASHBOARD_ID]
+    tab = outline.tabs[0]
+    # The generator's own order, section first, and the excluded tile still
+    # listed — the layer only keeps it out of the report itself.
+    assert [e.kind for e in tab.entries] == ["section", "component", "component"]
+    section, fig1, fig2 = tab.entries
+    assert section.title == "Overview" and section.level is not None
+
+    assert (fig1.component_id, fig2.component_id) == ("fig-1", "fig-2")
+    assert fig1.in_report is True
+    assert fig2.in_report is False, "the layer leaves it out; the outline says so"
+    # The layer's other settings come back, and the caption is the tile's own
+    # (the layer sets none here, and the export's caption stays the tile's).
+    assert fig1.page_break_before is True
+    assert fig1.caption == "The tiles' own caption."
+    assert fig1.component_type == "figure"
+    assert fig2.orientation == "auto" and fig2.order is None
+
+
+def test_cover_defaults_are_the_dashboard_and_project_ones(ctx) -> None:
+    outline = _outline()
+
+    assert outline.revision == 1
+    assert outline.dashboard_id == DASHBOARD_ID
+    assert outline.cover_defaults.title == "Wells & Rivers"
+    assert outline.cover_defaults.subtitle == "Wells"
+    assert outline.cover_defaults.authors == ["tweber"]
+    assert outline.cover_defaults.date == FIXED_NOW.strftime("%Y-%m-%d")
+
+
+def test_the_outline_says_whether_a_preview_can_run(ctx) -> None:
+    from depictio.api.v1.services.notebook_export import render as render_service
+
+    with (
+        patch.object(render_service, "quarto_binary", lambda: "quarto"),
+        patch.dict(sys.modules, {"ipykernel": types.ModuleType("ipykernel")}),
+        patch.dict(sys.modules, {"nbclient": types.ModuleType("nbclient")}),
+    ):
+        outline = _outline()
+    assert outline.preview_available is True
+    assert outline.preview_unavailable_reason is None
+
+    with patch.object(render_service, "quarto_binary", lambda: None):
+        outline = _outline()
+    assert outline.preview_available is False
+    assert outline.preview_unavailable_reason is not None
+    assert "quarto.org" in outline.preview_unavailable_reason
+    assert "depictio[render]" in outline.preview_unavailable_reason
+
+
+# ── the preview: the job, and its cache ──────────────────────────────────────
+
+
+def test_a_preview_queues_the_render_job(ctx) -> None:
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+    a, b, c = _staging(staged, queued)
+    with a, b, c:
+        status = _preview()
+
+    assert status.status == "queued" and status.filename.endswith(".html")
+    kwargs = queued["kwargs"]  # type: ignore[index]
+    assert kwargs["pdf"] is False
+    assert kwargs["preview_cache"] == f"{USER_ID}/{DASHBOARD_ID}"
+    assert kwargs["preview_force"] is False
+    assert kwargs["combined"] is None
+    # The notebook is staged under the caller's prefix, as a render's is.
+    key = next(iter(staged))
+    assert key.startswith(f"notebook_reports/{USER_ID}/{status.job_id}/")
+    assert key.endswith(".qmd")
+    # The record carries the cache key the next identical preview matches on.
+    from depictio.api.v1.services.notebook_export import jobs
+
+    record = jobs.get(status.job_id)
+    assert record is not None
+    assert record["user_id"] == USER_ID
+    assert record["dashboard_id"] == DASHBOARD_ID
+    assert record["preview_key"]
+
+
+def test_an_identical_preview_returns_the_ready_job_without_queuing(ctx) -> None:
+    from depictio.api.v1.services.notebook_export import jobs
+
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+    a, b, c = _staging(staged, queued)
+    with a, b, c:
+        first = _preview()
+    assert first.status == "queued"
+    jobs.finish(first.job_id, "success")
+
+    staged2: dict[str, bytes] = {}
+    queued2: dict[str, object] = {}
+    a, b, c = _staging(staged2, queued2)
+    with a, b, c, patch("celery.result.AsyncResult", lambda *args, **kw: _Ready()):
+        second = _preview()
+
+    assert second.job_id == first.job_id
+    assert second.status == "ready"
+    assert second.filename == "wells-rivers.html"
+    assert queued2 == {}, "no second job was queued for an unchanged report"
+    assert staged2 == {}, "and no notebook was staged again"
+
+
+def test_force_queues_a_new_preview(ctx) -> None:
+    from depictio.api.v1.services.notebook_export import jobs
+
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+    a, b, c = _staging(staged, queued)
+    with a, b, c:
+        first = _preview()
+    jobs.finish(first.job_id, "success")
+
+    queued2: dict[str, object] = {}
+    a, b, c = _staging(staged, queued2)
+    with a, b, c, patch("celery.result.AsyncResult", lambda *args, **kw: _Ready()):
+        forced = _preview(force=True)
+
+    assert forced.job_id != first.job_id
+    assert forced.status == "queued"
+    assert queued2["kwargs"]["preview_force"] is True  # type: ignore[index]
+
+
+# ── the worker's render: the persistent workdir and its cache ────────────────
+
+
+def _fake_quarto(monkeypatch: pytest.MonkeyPatch, calls: list[list[str]]) -> None:
+    """A quarto run that writes its report next to its source and logs that it
+    executed the notebook — the two things ``_render`` checks."""
+
+    class _Proc:
+        returncode = 0
+        pid = 99999  # nothing of ours: the group kill finds no process
+
+        def __init__(self, cwd) -> None:
+            self._cwd = cwd
+
+        def communicate(self, timeout=None):
+            (self._cwd / "report.html").write_text("<html>report</html>")
+            return "Executing 'report.qmd'", ""
+
+        def wait(self, timeout=None):
+            return 0
+
+    def popen(cmd, **kwargs):
+        calls.append(list(cmd))
+        return _Proc(Path(kwargs["cwd"]))
+
+    from depictio.api.v1.services.notebook_export import render as render_service
+
+    monkeypatch.setattr(render_service.subprocess, "Popen", popen)
+    monkeypatch.setattr(render_service, "quarto_binary", lambda: "quarto")
+
+
+def _renderable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "ipykernel", types.ModuleType("ipykernel"))
+    monkeypatch.setitem(sys.modules, "nbclient", types.ModuleType("nbclient"))
+
+
+def test_render_in_a_workdir_caches_and_keeps_the_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from depictio.api.v1.services.notebook_export import render as render_service
+
+    _renderable(monkeypatch)
+    calls: list[list[str]] = []
+    _fake_quarto(monkeypatch, calls)
+    monkeypatch.setattr("importlib.import_module", lambda name: types.ModuleType(name))
+    workdir = tmp_path / "preview" / "deep"
+
+    html = render_service.render_quarto_html(
+        b"# Hi",
+        stem="report",
+        api_url="http://api",
+        api_token=None,
+        timeout_s=10,
+        workdir=str(workdir),
+        cache=True,
+    )
+
+    assert html == b"<html>report</html>"
+    cmd = calls[0]
+    assert "--cache" in cmd and "--cache-refresh" not in cmd
+    # The workdir is created (parents included) and survives the render: the
+    # cache in it is the next preview's starting point.
+    assert (workdir / "report.qmd").exists()
+    assert (workdir / "report.html").exists()
+
+
+def test_render_with_force_refreshes_the_cache(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    from depictio.api.v1.services.notebook_export import render as render_service
+
+    _renderable(monkeypatch)
+    calls: list[list[str]] = []
+    _fake_quarto(monkeypatch, calls)
+    monkeypatch.setattr("importlib.import_module", lambda name: types.ModuleType(name))
+
+    render_service.render_quarto_html(
+        b"# Hi",
+        stem="report",
+        api_url="http://api",
+        api_token=None,
+        timeout_s=10,
+        workdir=str(tmp_path / "wd"),
+        cache=True,
+        force=True,
+    )
+
+    cmd = calls[0]
+    assert "--cache-refresh" in cmd and "--cache" not in cmd
+
+
+def test_render_without_jupyter_cache_adds_no_cache_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from depictio.api.v1.services.notebook_export import render as render_service
+
+    _renderable(monkeypatch)
+    calls: list[list[str]] = []
+    _fake_quarto(monkeypatch, calls)
+
+    def _no_jupyter_cache(name):
+        raise ImportError(f"no module named {name!r}")
+
+    monkeypatch.setattr("importlib.import_module", _no_jupyter_cache)
+
+    render_service.render_quarto_html(
+        b"# Hi",
+        stem="report",
+        api_url="http://api",
+        api_token=None,
+        timeout_s=10,
+        workdir=str(tmp_path / "wd"),
+        cache=True,
+    )
+
+    assert "--cache" not in calls[0], "the flag is unknown to Quarto without jupyter-cache"
+
+
+def test_render_without_a_workdir_stays_in_a_temporary_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """The plain render path is unchanged: no cache flags, nothing left behind."""
+    from depictio.api.v1.services.notebook_export import render as render_service
+
+    _renderable(monkeypatch)
+    calls: list[list[str]] = []
+    _fake_quarto(monkeypatch, calls)
+
+    render_service.render_quarto_html(
+        b"# Hi",
+        stem="report",
+        api_url="http://api",
+        api_token=None,
+        timeout_s=10,
+    )
+
+    assert "--cache" not in calls[0] and "--cache-refresh" not in calls[0]
+
+
+# ── the worker task's preview workdir ────────────────────────────────────────
+
+
+def test_the_preview_workdir_is_per_user_and_dashboard(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """``preview_cache`` (``"<user>/<dashboard>"``) sits under the configured
+    root; without one, under the system temporary directory."""
+    from depictio.api import celery_app
+
+    monkeypatch.setattr(
+        celery_app.settings.notebook_export, "preview_cache_dir", str(tmp_path / "cache")
+    )
+    assert celery_app._preview_workdir(f"{USER_ID}/{DASHBOARD_ID}") == str(
+        tmp_path / "cache" / USER_ID / DASHBOARD_ID
+    )
+
+    monkeypatch.setattr(celery_app.settings.notebook_export, "preview_cache_dir", None)
+    assert celery_app._preview_workdir(f"{USER_ID}/{DASHBOARD_ID}").endswith(
+        f"depictio-preview/{USER_ID}/{DASHBOARD_ID}"
+    )
+
+
+# ── The preview frame ──────────────────────────────────────────────────────
+
+
+def test_the_preview_frame_is_404_with_the_editor_flag_off(ctx) -> None:
+    with patch.object(nbx.settings.notebook_export, "report_editor", False):
+        with pytest.raises(HTTPException) as exc:
+            nbx.notebook_export_preview_frame()
+    assert exc.value.status_code == 404
+
+
+def test_the_preview_frame_runs_a_report_s_inline_scripts_in_a_sandbox(ctx) -> None:
+    """The app's own policy refuses a blob: frame and every inline script of a
+    Quarto report; the frame's policy allows those, and only in an opaque origin."""
+    response = nbx.notebook_export_preview_frame()
+    csp = response.headers["Content-Security-Policy"]
+    directives = {d.split()[0]: d.split()[1:] for d in csp.split("; ")}
+    assert directives["sandbox"][0] == "allow-scripts"
+    assert "allow-same-origin" not in directives["sandbox"]
+    assert "'unsafe-inline'" in directives["script-src"]
+    assert directives["default-src"] == ["'none'"]
+    assert directives["frame-ancestors"] == ["'self'"]
+    body = response.body.decode()
+    assert nbx.PREVIEW_FRAME_MESSAGE in body and "document.write(data.html)" in body
+
+
+def test_the_editor_and_the_frame_agree_on_the_message() -> None:
+    drawer = (
+        Path(__file__).resolve().parents[5] / "viewer/src/report-editor/PreviewDrawer.tsx"
+    ).read_text()
+    assert f"PREVIEW_FRAME_MESSAGE = '{nbx.PREVIEW_FRAME_MESSAGE}'" in drawer
+    assert "/dashboards/notebook_export/preview_frame" in drawer

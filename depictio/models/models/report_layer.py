@@ -130,6 +130,91 @@ class ReportLayerPut(BaseModel):
     layer: ReportLayer
 
 
+class ReportPreviewRequest(BaseModel):
+    """The body of the preview render: a plain POST, ``force`` to re-render.
+
+    The preview of an unchanged report is served from the finished job of the
+    last identical request; ``force`` queues a new one regardless.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    force: bool = False
+
+
+class ReportOutlineEntry(BaseModel):
+    """One line of the report's outline: a tab part, a section, or a tile.
+
+    A ``component`` entry carries the tile's own caption as the editor shows
+    it, and the *layer's* settings for it — ``in_report`` says whether the
+    report actually holds the tile (the outline lists excluded ones too, with
+    ``in_report: False``), the rest is how the layer places it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["tab", "section", "component"]
+    tab_id: str
+    title: str
+    level: int | None = None
+    component_id: str | None = None
+    component_type: str | None = None
+    caption: str | None = None
+    in_report: bool = True
+    in_pdf: bool = True
+    orientation: ReportOrientation = "auto"
+    section: str | None = None
+    page_break_before: bool = False
+    order: int | None = None
+
+
+class ReportOutlineTab(BaseModel):
+    """One tab's part of the outline: what the layer says about its place."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tab_id: str
+    title: str
+    placement: ReportPlacement = "body"
+    order: int | None = None
+    entries: list[ReportOutlineEntry] = Field(default_factory=list)
+
+
+class ReportCoverDefaults(BaseModel):
+    """The cover's fields as the export fills them, ignoring the layer's cover.
+
+    The dashboard's title, the project's name, the project's owners, the day
+    of the export — what the cover shows wherever the layer sets nothing, and
+    what the editor resets its fields to.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    subtitle: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    date: str
+
+
+class ReportOutline(BaseModel):
+    """The report's shape, as the report editor page draws it.
+
+    ``preview_available`` is whether a preview render can run on this
+    deployment at all; ``preview_unavailable_reason`` is the sentence to show
+    when it cannot, with the install hint.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dashboard_id: str
+    title: str
+    revision: int = 0
+    tabs: list[ReportOutlineTab] = Field(default_factory=list)
+    cover_defaults: ReportCoverDefaults
+    preview_available: bool = False
+    preview_unavailable_reason: str | None = None
+
+
 def seed_intro_from_notes(notes_content: str) -> dict[str, Any] | None:
     """The dashboard's notes as a minimal TipTap document for the intro.
 

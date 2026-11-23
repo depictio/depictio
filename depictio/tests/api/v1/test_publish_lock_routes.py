@@ -282,6 +282,10 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("dashboards_endpoints.notebook_export", "notebook_export_render"): (
         "renders a report into the caller's own S3 prefix; the dashboard is only read"
     ),
+    ("dashboards_endpoints.notebook_export", "notebook_export_preview"): (
+        "renders the editor's exact preview into the caller's own S3 prefix; the "
+        "dashboard is only read, nothing of the project is written"
+    ),
     ("dashboards_endpoints.embed", "component_embed"): _READ,
     ("dashboards_endpoints.embed", "component_figure"): _READ,
     (_VER, "create_dashboard_version"): "records the current state; changes no content",

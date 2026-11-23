@@ -87,6 +87,29 @@ def test_a_report_quarto_never_executed_is_a_failure(monkeypatch):
         )
 
 
+def test_a_preview_read_from_quarto_s_cache_is_not_a_failure(monkeypatch, tmp_path):
+    """A text-only edit re-renders without executing: the cache hit is the point."""
+    monkeypatch.setitem(__import__("sys").modules, "jupyter_cache", object())
+    log = "Starting python3 kernel...(Notebook read from cache)\npandoc\n"
+    seen = _quarto(monkeypatch, log=log)
+    html = render.render_quarto_html(
+        b"---\ntitle: x\n---\n",
+        stem="x",
+        api_url="http://api",
+        api_token="t",
+        workdir=str(tmp_path / "preview"),
+        cache=True,
+    )
+    assert html == b"<html>report</html>"
+    assert "--cache" in seen["cmd"]
+    # Without the cache flag the same log is still a render that never ran.
+    _quarto(monkeypatch, log=log)
+    with pytest.raises(render.RenderUnavailable, match="without executing"):
+        render.render_quarto_html(
+            b"---\ntitle: x\n---\n", stem="x", api_url="http://api", api_token="t"
+        )
+
+
 def test_a_failed_render_keeps_quarto_s_log_for_the_server(monkeypatch):
     """The log can hold worker paths and what the document printed: it goes to
     the worker's log, and the message a user can be shown does not carry it."""
