@@ -531,6 +531,10 @@ def _remainder_last(traces: list[dict], mode: str) -> list[dict]:
         name = trace.get("name")
         if _kind(trace) not in _COLOURED or not isinstance(name, str):
             return None
+        # Plotly Express names a series with no colour column "" and keeps it
+        # out of the legend: that is the whole figure, not a missing value.
+        if name.strip() == "" and trace.get("showlegend") is False:
+            return None
         return palettes.reserved_kind(name)
 
     for trace in traces:

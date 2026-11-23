@@ -683,3 +683,21 @@ def test_the_authors_line_width_mode_and_area_fill_survive():
     assert [t["line"]["width"] for t in out["data"]] == [1, 1]
     assert out["data"][1]["mode"] == "lines"
     assert out["layout"]["hovermode"] == "closest"
+
+
+def test_a_px_series_without_a_colour_column_is_not_a_missing_value():
+    fig = {
+        "data": [
+            {
+                "type": "scatter",
+                "mode": "markers",
+                "name": "",
+                "showlegend": False,
+                "x": [1, 2],
+                "y": [3, 4],
+            }
+        ],
+        "layout": {},
+    }
+    out = apply_overview(fig)
+    assert out["data"][0].get("marker", {}).get("color") != palettes.semantic("na", "light")
