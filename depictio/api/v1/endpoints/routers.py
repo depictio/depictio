@@ -10,9 +10,6 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.advanced_viz_endpoints.routes import (
     advanced_viz_endpoint_router,
 )
-from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
-    router as analytics_data_router,
-)
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
 from depictio.api.v1.endpoints.auth_endpoints.oidc_routes import oidc_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
@@ -276,18 +273,13 @@ router.include_router(
     tags=["OIDC SSO"],
 )
 
-# Include Analytics routes
-if settings.analytics.enabled:
-    router.include_router(
-        analytics_router,
-        prefix="/analytics",
-        tags=["Analytics"],
-    )
-    router.include_router(
-        analytics_data_router,
-        prefix="/analytics-data",
-        tags=["Analytics Data"],
-    )
+# Internal usage statistics (hit beacon + report). Each route checks
+# `settings.usage_stats.enabled` itself, so the switch needs no restart-time branch.
+router.include_router(
+    analytics_router,
+    prefix="/analytics",
+    tags=["Usage statistics"],
+)
 
 # Include Real-time Events routes (WebSocket)
 if settings.events.enabled:

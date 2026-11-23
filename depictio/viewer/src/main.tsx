@@ -100,6 +100,7 @@ import { useUiScalePref } from './hooks/useUiScalePref';
 import { BrandingContext, getBranding, setBranding, subscribeBranding } from './branding';
 import { setFeedback } from './feedback';
 import { initGoogleAnalytics } from './googleAnalytics';
+import { trackPageView } from './usageBeacon';
 import { CoachHost } from './coach';
 import { MigrationPushHost } from './projects/MigrationPushHost';
 
@@ -454,6 +455,8 @@ if (STANDALONE_BUILDER) {
     // long-open view (dashboard filters, admin monitoring) outlives the 1h
     // token and every subsequent request 401s with "Invalid token".
     startSessionKeepAlive();
+    // After the session exists, so the visit is tied to the signed-in user.
+    trackPageView();
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
         <ThemeRoot>{resolveTree()}</ThemeRoot>

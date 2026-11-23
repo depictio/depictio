@@ -26,7 +26,14 @@ export const ADMIN_TABS = [
 ] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
 
-export const MONITORING_PANES = ['tasks', 'ingestion', 'watchers', 'logs', 'health'] as const;
+export const MONITORING_PANES = [
+  'tasks',
+  'ingestion',
+  'watchers',
+  'logs',
+  'health',
+  'usage',
+] as const;
 export type MonitoringPane = (typeof MONITORING_PANES)[number];
 
 /** Mirrors `IngestionStatus` in depictio/models/models/monitoring.py. */

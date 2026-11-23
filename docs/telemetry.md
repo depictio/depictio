@@ -71,7 +71,7 @@ Booleans only — which optional subsystems are switched on.
 | `auth_single_user_mode` | boolean | Running as a single-user personal instance. |
 | `auth_public_mode` | boolean | Unauthenticated/public access enabled. |
 | `auth_demo_mode` | boolean | Demo mode enabled. |
-| `analytics_enabled` | boolean | Local (inbound) analytics subsystem enabled. |
+| `analytics_enabled` | boolean | Local (inbound) usage statistics enabled. |
 | `google_analytics_enabled` | boolean | Google Analytics enabled for the frontend. The tracking ID is never sent. |
 | `events_enabled` | boolean | Real-time WebSocket/SSE events enabled. |
 | `monitoring_enabled` | boolean | Admin log & task monitoring enabled. |
@@ -99,7 +99,7 @@ is it — while leaving the installation in a group with many others.
 | `workflows` | string | Number of workflows, bucketed. |
 | `runs` | string | Number of workflow runs, bucketed. |
 | `deltatables` | string | Number of Delta tables, bucketed. |
-| `active_users_7d` | string | Users active in the last 7 days, bucketed. `unknown` unless the operator has also enabled the local analytics subsystem. |
+| `active_users_7d` | string | Users active in the last 7 days, bucketed. `unknown` when the operator has turned the local usage statistics off. |
 | `component_types` | object (string → string) | Bucketed count per dashboard component type (`figure`, `table`, `card`, …). Keys are Depictio's own component type names; no user-supplied string can appear here. |
 
 #### `kubernetes`
@@ -276,9 +276,9 @@ anything to the Depictio maintainers:
 
 1. **`DEPICTIO_TELEMETRY_*`** — this page. Anonymous installation counting.
    Enabled by default.
-2. **`DEPICTIO_ANALYTICS_*`** — Depictio's own per-user session and activity
-   tracking, stored in *your* MongoDB and surfaced in *your* admin UI. Never
-   transmitted anywhere. Disabled by default.
+2. **`DEPICTIO_USAGE_STATS_*`** — Depictio's own usage statistics (logins,
+   visitors, content), stored in *your* MongoDB and surfaced in *your* admin UI
+   (Admin > Activity > Usage). Never transmitted anywhere. Enabled by default.
 3. **`DEPICTIO_GOOGLE_ANALYTICS_*`** — optional GA4 tracking in the web frontend.
    Data goes to *your* GA4 property, not to us. Disabled by default.
 

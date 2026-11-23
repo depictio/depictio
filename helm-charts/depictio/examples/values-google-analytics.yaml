@@ -46,7 +46,7 @@ backend:
 #
 # 1. Google Analytics (this file) — per-deployment web analytics. Opt-in, and the
 #    data goes to YOUR GA4 property, not to the Depictio maintainers.
-# 2. DEPICTIO_ANALYTICS_* — Depictio's own session/activity tracking. Stays in
-#    your MongoDB and is never transmitted anywhere. Opt-in.
+# 2. DEPICTIO_USAGE_STATS_* — Depictio's own usage statistics (logins, visitors,
+#    content). Stays in your MongoDB and is never transmitted anywhere. On by default.
 # 3. DEPICTIO_TELEMETRY_* — anonymous installation counting sent to the Depictio
 #    maintainers. Enabled by default; see docs/telemetry.md to review or disable.

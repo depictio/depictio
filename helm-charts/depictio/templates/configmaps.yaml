@@ -127,12 +127,12 @@ data:
 
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
-  # Analytics
-  DEPICTIO_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_ENABLED | default "true" | quote }}
-  DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: {{ .Values.backend.env.DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES | default "30" | quote }}
-  DEPICTIO_ANALYTICS_CLEANUP_DAYS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_DAYS | default "90" | quote }}
-  DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
-  DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
+  # Internal usage statistics (Admin > Activity > Usage, GET /analytics/usage)
+  DEPICTIO_USAGE_STATS_ENABLED: {{ .Values.backend.env.DEPICTIO_USAGE_STATS_ENABLED | default "true" | quote }}
+  DEPICTIO_USAGE_STATS_RETENTION_DAYS: {{ .Values.backend.env.DEPICTIO_USAGE_STATS_RETENTION_DAYS | default "400" | quote }}
+  {{- if .Values.backend.env.DEPICTIO_USAGE_STATS_GEOIP_DB_PATH }}
+  DEPICTIO_USAGE_STATS_GEOIP_DB_PATH: {{ .Values.backend.env.DEPICTIO_USAGE_STATS_GEOIP_DB_PATH | quote }}
+  {{- end }}
   # Anonymous installation telemetry (see docs/telemetry.md). Enabled by default;
   # set backend.env.DEPICTIO_TELEMETRY_ENABLED=false to opt out. The deployment
   # kind is stated outright rather than guessed — a Helm pod and a hand-rolled

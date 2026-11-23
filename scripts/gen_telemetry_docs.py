@@ -321,9 +321,9 @@ anything to the Depictio maintainers:
 
 1. **`DEPICTIO_TELEMETRY_*`** — this page. Anonymous installation counting.
    Enabled by default.
-2. **`DEPICTIO_ANALYTICS_*`** — Depictio's own per-user session and activity
-   tracking, stored in *your* MongoDB and surfaced in *your* admin UI. Never
-   transmitted anywhere. Disabled by default.
+2. **`DEPICTIO_USAGE_STATS_*`** — Depictio's own usage statistics (logins,
+   visitors, content), stored in *your* MongoDB and surfaced in *your* admin UI
+   (Admin > Activity > Usage). Never transmitted anywhere. Enabled by default.
 3. **`DEPICTIO_GOOGLE_ANALYTICS_*`** — optional GA4 tracking in the web frontend.
    Data goes to *your* GA4 property, not to us. Disabled by default.
 

@@ -180,6 +180,9 @@ class MagicLinkTicket(MongoModel):
     expire_datetime: datetime
     used: bool = False
     created_at: datetime = Field(default_factory=datetime.now)
+    #: What the redemption counts as in the usage statistics: ``magic_link``
+    #: for a mailed/admin link, ``oidc:<provider>`` when SSO minted it.
+    login_method: str = "magic_link"
 
     @field_serializer("user_id")
     def serialize_user_id(self, user_id: PydanticObjectId) -> str:

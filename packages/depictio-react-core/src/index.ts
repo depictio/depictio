@@ -1934,3 +1934,5 @@ export {
   writeLocalMode,
 } from './changesStore';
 export type { LocalReaderState } from './changesStore';
+export { fetchUsageReport, fetchUsageCsv, sendUsageHit } from './api';
+export type { UsageGranularity, UsagePoint, UsageQuery, UsageReport } from './api';

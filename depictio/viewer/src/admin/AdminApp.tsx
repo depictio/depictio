@@ -22,6 +22,7 @@ import {
   Database,
   Eye,
   HeartPulse,
+  ChartNoAxesColumn,
   ListChecks,
   Palette,
   ScrollText,
@@ -95,6 +96,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { view: 'watchers', label: 'Watchers', icon: Eye, trusted: true },
       { view: 'logs', label: 'Logs', icon: ScrollText, trusted: true },
       { view: 'health', label: 'Health', icon: HeartPulse, trusted: true },
+      { view: 'usage', label: 'Usage', icon: ChartNoAxesColumn, trusted: true },
     ],
   },
   {

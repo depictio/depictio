@@ -106,8 +106,8 @@ backend:
     # Performance - Balanced workers for multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
 
-    # Analytics Configuration
-    DEPICTIO_ANALYTICS_ENABLED: "true"
+    # Internal usage statistics (on by default)
+    DEPICTIO_USAGE_STATS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
 
     # Google OAuth Configuration (legacy, deprecated: see oidc below)

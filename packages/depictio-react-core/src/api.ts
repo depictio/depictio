@@ -11768,3 +11768,111 @@ export async function fetchComponentDiff(
   if (!res.ok) await throwHttpDetailError(res, 'Failed to compare with your last visit');
   return (await res.json()) as ComponentDiff;
 }
+
+// ── Usage statistics (Admin > Activity > Usage; `/analytics`) ────────────────
+
+export type UsageGranularity = 'day' | 'week' | 'month' | 'year';
+
+/** One period of `UsageReport.series`. Mirrors `UsagePoint` in models/usage.py. */
+export interface UsagePoint {
+  period_start: string;
+  active_users: number;
+  new_users: number;
+  returning_users: number;
+  logins: number;
+  logins_by_method: Record<string, number>;
+  visitors: number;
+  new_visitors: number;
+  returning_visitors: number;
+  visitors_fp: number;
+  unique_ips: number;
+  pageviews: number;
+  dashboard_views: number;
+  temporary_users: number;
+  signups: number;
+  new_projects: number;
+  new_dashboards: number;
+  ingestions: number;
+}
+
+export interface UsageReport {
+  granularity: UsageGranularity;
+  start: string;
+  end: string;
+  generated_at: string;
+  mode: 'single_user' | 'public' | 'multi_user';
+  geoip_available: boolean;
+  timezone: string;
+  totals: Record<string, number>;
+  kpis: Record<string, { current: number; previous: number }>;
+  series: UsagePoint[];
+  breakdowns: Record<string, Array<Record<string, string | number>>>;
+  hours_heatmap: number[][];
+}
+
+export interface UsageQuery {
+  granularity: UsageGranularity;
+  periods?: number;
+  start?: string;
+  end?: string;
+}
+
+function usageQueryString(q: UsageQuery, format?: 'csv'): string {
+  const params = new URLSearchParams({ granularity: q.granularity });
+  if (q.periods) params.set('periods', String(q.periods));
+  if (q.start) params.set('start', q.start);
+  if (q.end) params.set('end', q.end);
+  if (format) params.set('format', format);
+  return params.toString();
+}
+
+/** The usage report (admin-only). */
+export async function fetchUsageReport(q: UsageQuery): Promise<UsageReport> {
+  const res = await authFetch(`${API_BASE}/analytics/usage?${usageQueryString(q)}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load usage statistics');
+  return (await res.json()) as UsageReport;
+}
+
+/** The report's series as CSV text (admin-only). */
+export async function fetchUsageCsv(q: UsageQuery): Promise<string> {
+  const res = await authFetch(`${API_BASE}/analytics/usage?${usageQueryString(q, 'csv')}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export usage statistics');
+  return res.text();
+}
+
+const VISITOR_KEY = 'depictio-visitor-id';
+
+function visitorId(): string | null {
+  try {
+    let id = localStorage.getItem(VISITOR_KEY);
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      id = crypto.randomUUID();
+      localStorage.setItem(VISITOR_KEY, id);
+    }
+    return id;
+  } catch {
+    return null; // storage blocked: not counted, never an error
+  }
+}
+
+/** Fire-and-forget navigation beacon. Never redirects, never throws. */
+export function sendUsageHit(hit: { path_kind: string; dashboard_id?: string | null }): void {
+  const id = visitorId();
+  if (!id) return;
+  const session = readStoredSession();
+  const token = typeof session?.access_token === 'string' ? session.access_token : null;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  void fetch(`${API_BASE}/analytics/hit`, {
+    method: 'POST',
+    headers,
+    keepalive: true,
+    body: JSON.stringify({
+      visitor_id: id,
+      path_kind: hit.path_kind,
+      dashboard_id: hit.dashboard_id ?? null,
+      referrer: document.referrer || null,
+      lang: navigator.language || null,
+    }),
+  }).catch(() => undefined);
+}

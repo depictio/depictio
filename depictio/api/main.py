@@ -22,7 +22,6 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.security_headers import SECURITY_HEADERS
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.json_response import CustomJSONResponse
-from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
 from depictio.api.v1.remote_fetch import RemoteFetchFailed, RemoteURLRejected
 from depictio.api.v1.services.lifespan import lifespan
 from depictio.models.s3_access import S3AccessError
@@ -79,16 +78,11 @@ _OPENAPI_TAGS: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Analytics",
+        "name": "Usage statistics",
         "description": (
-            "Admin/ops: usage analytics. Feature-gated by DEPICTIO_ANALYTICS_ENABLED "
-            "and has no frontend client yet (kept pending a product decision)."
-        ),
-    },
-    {
-        "name": "Analytics Data",
-        "description": (
-            "Admin/ops: analytics data maintenance. Feature-gated by DEPICTIO_ANALYTICS_ENABLED."
+            "Internal usage stats (logins, visitors, content) per week/month/year. "
+            "GET /analytics/usage takes an admin token or X-Api-Key. "
+            "DEPICTIO_USAGE_STATS_ENABLED (on by default)."
         ),
     },
     {
@@ -281,10 +275,6 @@ if settings.local_data.root_list and not settings.auth.is_single_user_mode:
         "stay disabled. Set DEPICTIO_AUTH_SINGLE_USER_MODE=true (as `depictio local` "
         "does) or unset DEPICTIO_LOCAL_DATA_ROOTS."
     )
-
-# Add analytics middleware if enabled
-if settings.analytics.enabled:
-    app.add_middleware(cast(Any, AnalyticsMiddleware), enabled=settings.analytics.enabled)
 
 # Include API router with versioned prefix
 api_version = get_api_version()
