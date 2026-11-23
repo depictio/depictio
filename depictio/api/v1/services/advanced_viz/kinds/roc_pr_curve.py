@@ -46,12 +46,24 @@ def _as_float(value: Any) -> float | None:
     return result if math.isfinite(result) else None
 
 
-def _auc(xs: list[float | None], ys: list[float | None]) -> float:
-    """Trapezoidal area under y(x), over finite points sorted by x."""
+# Share of the unit x axis a curve must sweep for its area to be an AUC
+# (MIN_AUC_SPAN in the viewer's prCurves.ts).
+MIN_AUC_SPAN = 0.5
+
+
+def _auc(xs: list[float | None], ys: list[float | None]) -> float | None:
+    """Trapezoidal area under y(x), over finite points sorted by x.
+
+    None when the points sweep less than ``MIN_AUC_SPAN`` of x: two hap.py
+    thresholds a few millionths of recall apart have an area of 0.000, which
+    reads as a useless caller rather than as a sweep too short to measure.
+    """
     points = sorted(
         ((x, y) for x, y in zip(xs, ys) if x is not None and y is not None),
         key=lambda p: p[0],
     )
+    if len(points) < 2 or points[-1][0] - points[0][0] < MIN_AUC_SPAN:
+        return None
     area = 0.0
     for (x0, y0), (x1, y1) in zip(points, points[1:]):
         area += (x1 - x0) * (y1 + y0) / 2

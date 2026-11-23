@@ -56,6 +56,22 @@ export function trapezoidArea(xs: readonly number[], ys: readonly number[]): num
   return area;
 }
 
+/** Share of the unit x axis a curve must sweep for its area to be an AUC. */
+export const MIN_AUC_SPAN = 0.5;
+
+/**
+ * The curve's AUC, or null when the curve does not sweep enough of x to have
+ * one. A hap.py run with two quality thresholds spans recall 0.95769 to
+ * 0.95775: its trapezoid is 0.000, which printed as "AUC 0.000" reads as a
+ * useless caller rather than as a sweep too short to measure.
+ */
+export function curveAuc(xs: readonly number[], ys: readonly number[]): number | null {
+  const finite = xs.map(Number).filter(Number.isFinite);
+  if (finite.length < 2) return null;
+  const span = Math.max(...finite) - Math.min(...finite);
+  return span >= MIN_AUC_SPAN ? trapezoidArea(xs, ys) : null;
+}
+
 /**
  * `idx` ordered along the curve: by the swept threshold when one is bound,
  * otherwise by the x coordinate the curve is drawn against.

@@ -15,7 +15,7 @@ import { resolveCategoricalPalette, plotOverflow, stableColorMap } from '../../c
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
-import { groupIndices, largestGroup, sortCurveIndices, trapezoidArea } from './prCurves';
+import { curveAuc, groupIndices, largestGroup, sortCurveIndices } from './prCurves';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { COLORSCALE_NAMES, plotlyColorscale } from '../../utils/colorScale';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
@@ -267,7 +267,7 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
           : sortCurveIndices(idx, xCol, thr);
         const xs = sorted.map((i) => xCol[i]);
         const ys = sorted.map((i) => yCol[i]);
-        const area = showAuc ? trapezoidArea(xs, ys) : null;
+        const area = showAuc ? curveAuc(xs, ys) : null;
         const name = (key || (rocSpace ? 'ROC' : 'curve')) +
           (area != null ? `  (AUC ${area.toFixed(3)})` : '');
         traces.push({

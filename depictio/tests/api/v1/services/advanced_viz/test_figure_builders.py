@@ -1070,3 +1070,10 @@ def test_stable_color_map_uses_the_shared_palette_with_reserved_greys() -> None:
     # A pin wins and frees its slot for the next value.
     pinned = stable_color_map(["a", "b"], overrides={"a": CATEGORICAL[0]})
     assert pinned["b"] == CATEGORICAL[1]
+
+
+def test_roc_curve_that_barely_sweeps_has_no_auc():
+    from depictio.api.v1.services.advanced_viz.kinds.roc_pr_curve import _auc
+
+    assert _auc([0.957749, 0.957693], [0.9996, 0.9996]) is None
+    assert _auc([0.0, 1.0], [1.0, 1.0]) == 1.0
