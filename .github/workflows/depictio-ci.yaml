@@ -2969,7 +2969,7 @@ jobs:
 
       # Static-export template — single-user leg only. The celery worker
       # bind-mounts this checkout (docker-compose.dev.yaml: ./depictio:/app/depictio),
-      # so building depictio/viewer/dist-static/static.html on the host makes it
+      # so building depictio/viewer/dist-static/combined-runtime.js on the host makes it
       # visible to the export task in-container. On the other two legs the export
       # spec's full-flow test self-skips via its "static-runtime bundle not built"
       # branch — by design, so only one leg pays the build cost.

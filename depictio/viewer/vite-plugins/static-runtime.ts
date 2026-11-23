@@ -1,10 +1,10 @@
 /**
- * The module swaps and resolution shared by the two hosts of the static
- * runtime: the serverless bundle (`vite.static.config.ts`, the whole viewer App
- * in one HTML file) and the runtime a report embeds (`vite.combined.config.ts`,
- * the same renderers mounted into a Quarto report, plus the App for the
- * combined file's dashboard view). One list, so the two can never disagree on
- * which module reaches a server: a shim added for one host is a shim for both.
+ * The module swaps and resolution of the static runtime, built once
+ * (`vite.combined.config.ts`) for both of its hosts: the serverless bundle (the
+ * whole viewer App in one HTML file, composed from this runtime by
+ * `depictio/serverless/bundle_html.py`) and a Quarto report (the same
+ * renderers mounted into the report, plus the App for the combined file's
+ * dashboard view). One list, so no host can reach a server a shim covers.
  *
  * Swapped by the module-shim plugin (RFC errata #5/#6):
  *
@@ -123,7 +123,7 @@ export const staticRuntimeAliases: Alias[] = [
   // 3Dmol.js is a CONDITIONAL add-on: never compiled into the base
   // runtime (budget), appended by the producer only to bundles holding a
   // molecule_3d tile (scripts/build-static-addons.mjs builds it next to
-  // static.html). This module forwards to the global the add-on defines,
+  // combined-runtime.js). This module forwards to the global the add-on defines,
   // and behaves as the catalog stub without it.
   { find: /^3dmol$/, replacement: path.join(RUNTIME, 'threeDmolAddon.ts') },
 ];

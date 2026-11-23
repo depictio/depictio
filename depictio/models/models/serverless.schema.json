@@ -1675,7 +1675,7 @@
     },
     "RuntimeAddon": {
       "additionalProperties": false,
-      "description": "An optional runtime piece embedded only into bundles that need it.\n\nThe base runtime (``static.html``) stays inside its byte budget; a producer\nappends an add-on's script when a component needs it, and records it here so\nthe runtime and the tier table can say what was embedded and why.",
+      "description": "An optional runtime piece embedded only into bundles that need it.\n\nThe base runtime (``combined-runtime.js``) stays inside its byte budget; a producer\nappends an add-on's script when a component needs it, and records it here so\nthe runtime and the tier table can say what was embedded and why.",
       "properties": {
         "bytes": {
           "default": 0,

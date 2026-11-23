@@ -1,5 +1,5 @@
 {
-  "//": "The live project page's server-only parts. vite.static.config.ts swaps each for projectServerStubs.tsx and scripts/check-static-shim.mjs walks the same swap; ProjectDetailApp hides them in a bundle (useIsStaticBundle).",
+  "//": "The live project page's server-only parts. vite.combined.config.ts swaps each for projectServerStubs.tsx and scripts/check-static-shim.mjs walks the same swap; ProjectDetailApp hides them in a bundle (useIsStaticBundle).",
   "modules": [
     "src/projects/detail/ProjectSettingsModal.tsx",
     "src/projects/detail/IngestionReportPanel.tsx",

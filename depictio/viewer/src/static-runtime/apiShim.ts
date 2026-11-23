@@ -1,7 +1,7 @@
 /**
  * Offline API shim for the serverless static-bundle runtime.
  *
- * vite.static.config.ts redirects every import of the real
+ * vite.combined.config.ts redirects every import of the real
  * `depictio-react-core` api.ts to this module (see vite-plugins/module-shim).
  * It re-exports the real api unchanged, then overrides only the render-path
  * data functions so the real App + ComponentRenderer render from the bundle
@@ -16,7 +16,7 @@
  *
  * SHIM SURFACE. The rule is: every api.ts export that touches the network AND
  * sits in the static entry's module graph must be overridden here. That graph
- * was walked from `static-runtime/main.tsx` (which mounts App directly — no
+ * was walked from `static-runtime/combined/main.tsx` (which mounts App directly — no
  * router, so builder/, dashboards/, admin/, profile/, cli-agents/ and auth/
  * are absent from the bundle entirely, and their api calls are unreachable by
  * construction, not by luck). The one management page a bundle mounts is the

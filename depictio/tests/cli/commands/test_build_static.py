@@ -75,10 +75,10 @@ def test_check_needs_no_data_dir(tmp_path: Path) -> None:
 
 
 def test_build_writes_bundle(data_dir: Path, tmp_path: Path) -> None:
-    from depictio.serverless.producer_b import TEMPLATE_PATH
+    from depictio.serverless.producer_b import RUNTIME_PATH
 
-    if not TEMPLATE_PATH.exists():
-        pytest.skip("dist-static/static.html not built (run `pnpm run build:static`)")
+    if not RUNTIME_PATH.exists():
+        pytest.skip("dist-static/combined-runtime.js not built (run `pnpm run build:static`)")
     out = tmp_path / "bundle.html"
     result = runner.invoke(
         app,

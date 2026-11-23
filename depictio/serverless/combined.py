@@ -53,7 +53,7 @@ DEFAULT_VIEWS: tuple[str, ...] = ("report", "dashboard")
 
 
 class RuntimeUnavailable(RuntimeError):
-    """The static runtime is not built next to the static template."""
+    """The static runtime is not built (``pnpm run build:static``)."""
 
 
 def combined_filename(stem: str) -> str:

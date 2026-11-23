@@ -1,7 +1,7 @@
 /**
  * depictio-react-core's `JBrowseRenderer` in static bundles.
  *
- * vite.static.config.ts swaps the real module for this one. Producer A freezes
+ * vite.combined.config.ts swaps the real module for this one. Producer A freezes
  * `render_jbrowse` at the default filter state and, when the session's files
  * fit the bundle's budget, ships them (`payload.bundle`, see
  * depictio/serverless/jbrowse_bundle.py) and rewrites every location to a URL
@@ -22,7 +22,7 @@ import type {
   JBrowseSessionResponse,
   StoredMetadata,
 } from '../../../../packages/depictio-react-core/src/api';
-// From the shim itself: this module IS a shim (vite.static.config.ts), so its
+// From the shim itself: this module IS a shim (vite.combined.config.ts), so its
 // imports reach the real modules.
 import RealJBrowseRenderer from '../../../../packages/depictio-react-core/src/components/JBrowseRenderer';
 import { fetchJBrowseSession } from './apiShim';

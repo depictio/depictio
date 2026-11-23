@@ -11,8 +11,8 @@
  * switch, the cross-links and the deep links (`host.ts`); without one (the
  * report-only output) it stops there: no switch, no dashboard, no frame.
  *
- * In the dashboard (the iframe `host.ts` writes on demand, holding
- * `#bundle-manifest` and `#root`) it mounts the whole viewer App (the bundle
+ * In the dashboard (a serverless bundle page, or the iframe `host.ts` writes
+ * on demand, holding `#bundle-manifest` and `#root`) it mounts the whole viewer App (the bundle
  * host, `appHost.tsx`), opened on the tab asked for and sharing the report's
  * filter state.
  *

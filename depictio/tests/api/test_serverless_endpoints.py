@@ -999,17 +999,30 @@ def test_export_task_propagates_missing_template(monkeypatch: pytest.MonkeyPatch
 def test_template_path_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     from depictio.serverless import addons, dist
 
-    assert dist.template_path() == dist.TEMPLATE_PATH
-    assert dist.dist_static_dir() == dist.TEMPLATE_PATH.parent
+    assert dist.runtime_path() == dist.RUNTIME_PATH
+    assert dist.RUNTIME_PATH.name == "combined-runtime.js"
+    assert dist.dist_static_dir() == dist.RUNTIME_PATH.parent
+    assert not dist.is_legacy_template(dist.RUNTIME_PATH)
 
-    custom = tmp_path / "static.html"
-    custom.write_text("__BUNDLE_MANIFEST__", encoding="utf-8")
+    custom = tmp_path / "combined-runtime.js"
+    custom.write_text("/* runtime */", encoding="utf-8")
+    (tmp_path / "combined-runtime.css").write_text("/* css */", encoding="utf-8")
     monkeypatch.setenv(dist.TEMPLATE_PATH_ENV, str(custom))
-    assert dist.template_path() == custom
-    # Everything beside the template moves with it.
+    assert dist.runtime_path() == custom
+    assert dist.runtime_css_path(custom) == tmp_path / "combined-runtime.css"
+    assert dist.runtime_bytes() == len("/* runtime *//* css */")
+    # Everything beside the runtime moves with it.
     assert dist.dist_static_dir() == tmp_path
     monkeypatch.delenv(addons.ADDONS_DIR_ENV, raising=False)
     assert addons.addons_dir() == tmp_path / "addons"
 
+    # A legacy `.html` template is still honoured (token injection).
+    legacy = tmp_path / "static.html"
+    legacy.write_text("__BUNDLE_MANIFEST__", encoding="utf-8")
+    monkeypatch.setenv(dist.TEMPLATE_PATH_ENV, str(legacy))
+    assert dist.is_legacy_template(dist.runtime_path())
+    assert dist.runtime_bytes() == len("__BUNDLE_MANIFEST__")
+    assert dist.dist_static_dir() == tmp_path
+
     monkeypatch.delenv(dist.TEMPLATE_PATH_ENV)
-    assert dist.template_path() == dist.TEMPLATE_PATH
+    assert dist.runtime_path() == dist.RUNTIME_PATH

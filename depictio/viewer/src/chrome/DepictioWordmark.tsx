@@ -5,7 +5,7 @@ import { useIsStaticBundle } from 'depictio-react-core';
 import DepictioRose from '../components/rose/DepictioRose';
 // Bundled copy of public/logos/logo_black.svg. Static bundles open from
 // file:// where the server-served `/dashboard/logos/...` path can't resolve;
-// importing the asset lets Vite inline it (vite.static.config.ts sets
+// importing the asset lets Vite inline it (vite.combined.config.ts sets
 // `assetsInlineLimit` high enough that the single-file build embeds it as a
 // data: URI). Server builds keep the absolute path so the SVG stays
 // separately cacheable.

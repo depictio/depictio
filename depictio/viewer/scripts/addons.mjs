@@ -1,7 +1,7 @@
 /**
- * Append runtime add-ons to a built static template — the JS twin of
- * depictio/serverless/addons.py::apply_addons (same element, same place:
- * before the last `</body>`), for the demo site and the offline specs.
+ * Runtime add-ons as markup — the JS twin of depictio/serverless/addons.py
+ * (`addons_html`; `apply_addons` puts them before the last `</body>` of a
+ * template), for the demo site and the offline specs.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -24,10 +24,11 @@ export function addonEntry(name, reason, dir = ADDONS_DIR) {
   return { name, version: info.version, packages: [], bytes: info.bytes, reason };
 }
 
-export function applyAddons(template, names, dir = ADDONS_DIR) {
-  if (!names.length) return template;
+/** The add-ons' elements, in order (`addons_html` in serverless/addons.py). */
+export function addonsHtml(names, dir = ADDONS_DIR) {
+  if (!names.length) return '';
   const registry = addonRegistry(dir);
-  const scripts = names
+  return names
     .map((n) => {
       const info = registry[n];
       if (!info) throw new Error(`add-on ${n} is not built (run pnpm run build:static)`);
@@ -35,6 +36,11 @@ export function applyAddons(template, names, dir = ADDONS_DIR) {
       return `<script data-depictio-addon="${n}">${body}</script>`;
     })
     .join('');
+}
+
+export function applyAddons(template, names, dir = ADDONS_DIR) {
+  if (!names.length) return template;
+  const scripts = addonsHtml(names, dir);
   const at = template.lastIndexOf('</body>');
   return at < 0 ? template + scripts : template.slice(0, at) + scripts + template.slice(at);
 }

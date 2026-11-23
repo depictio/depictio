@@ -385,10 +385,11 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   is one router-wide dependency on every `/serverless` route (404), and `_runtime_refusal` refuses
   the runtime to reports without it, so the combined file needs both switches. The viewer hides
   what is off. The offline CLI commands (`export-static`, `combine-report`) do not read it
-- The serverless bundle (`/serverless/export-static`, `static.html`) and the rendered notebook report
+- The serverless bundle (`/serverless/export-static`: a page composed from the runtime by
+  `serverless/bundle_html.py`, no `static.html`) and the rendered notebook report
   embed the same `BundleManifest` from producer A (`depictio/serverless/producer_a.py`) and the same
   static runtime. Module swaps live once in `viewer/vite-plugins/static-runtime.ts`;
-  `check:static-shim` walks both entries (`static-runtime/main.tsx`, `static-runtime/combined/main.tsx`)
+  `check:static-shim` walks the entry (`static-runtime/combined/main.tsx`)
 - Report host: ONE runtime, `dist-static/combined-runtime.{js,css}` (built by `build:static`). A
   report-only file and a combined report+dashboard file differ only in the report config's
   `combined` section: without it `combined/main.tsx` boots the report host alone (no Dashboard

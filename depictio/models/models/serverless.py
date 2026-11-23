@@ -838,7 +838,7 @@ class ResolvedStructure(BaseModel):
 class RuntimeAddon(BaseModel):
     """An optional runtime piece embedded only into bundles that need it.
 
-    The base runtime (``static.html``) stays inside its byte budget; a producer
+    The base runtime (``combined-runtime.js``) stays inside its byte budget; a producer
     appends an add-on's script when a component needs it, and records it here so
     the runtime and the tier table can say what was embedded and why.
     """

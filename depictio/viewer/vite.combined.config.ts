@@ -1,6 +1,7 @@
 /**
- * The static runtime a rendered report embeds, in both of a report's outputs
- * (`src/static-runtime/combined/main.tsx`): the report alone, and the combined
+ * The static runtime, built once for every offline output
+ * (`src/static-runtime/combined/main.tsx`): a serverless bundle page (composed
+ * by `depictio/serverless/bundle_html.py`), a report alone, and the combined
  * report + dashboard file.
  *
  * The whole viewer App (the bundle's runtime) plus the report host, built as
@@ -12,8 +13,9 @@
  * (`combined/scopeStyles.ts`), and the dashboard view of a combined file (an
  * iframe written from that same text) takes it as written.
  *
- * Same shims (`vite-plugins/static-runtime.ts`) as the bundle. Built after it
- * into the same `dist-static/` (`emptyOutDir: false`), by `pnpm run
+ * The offline shims (`vite-plugins/static-runtime.ts`) apply to every host.
+ * Built into `dist-static/` (`emptyOutDir: false`, the add-ons build writes
+ * beside it; `scripts/clean-dist-static.mjs` empties it first), by `pnpm run
  * build:static`.
  */
 import { defineConfig } from 'vite';

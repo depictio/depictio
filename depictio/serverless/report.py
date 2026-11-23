@@ -5,8 +5,9 @@ notebook export §3.9). A serverless bundle and a rendered report embed the same
 thing — one ``BundleManifest`` built by producer A, one static runtime — and
 differ only in the host page:
 
-* the bundle (``producer_a.export_static``) injects the manifest into
-  ``static.html``, which mounts the viewer App over the whole page;
+* the bundle (``producer_a.export_static``) is a page composed from that same
+  runtime and the manifest (``serverless.bundle_html``), which mounts the
+  viewer App over the whole page;
 * the report (this module, then ``combined.py``) carries the manifest, once,
   beside the static runtime (``dist-static/combined-runtime.{js,css}``,
   ``vite.combined.config.ts``), which mounts each tile into the placeholder the
@@ -49,7 +50,7 @@ class ReportRuntimeRefused(RuntimeError):
 
 
 def runtime_dir() -> Path:
-    """``dist-static/`` beside the static template in use (or the env override)."""
+    """``dist-static/`` of the runtime in use (or the env override)."""
     override = os.environ.get(RUNTIME_DIR_ENV)
     if override:
         return Path(override)

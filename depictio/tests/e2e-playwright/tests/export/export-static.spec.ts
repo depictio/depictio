@@ -18,10 +18,10 @@
  *                  non-owner — owner flows skip; the visitor's POST is refused
  *                  with 404, and the UI shows the action disabled.
  *
- * The full-flow test self-skips when the worker reports the static-runtime
- * template is missing ("static-runtime bundle not built" — see
+ * The full-flow test self-skips when the worker reports the static runtime
+ * is missing ("static-runtime bundle not built" — see
  * depictio/serverless/producer_b.py::render_bundle_html): that is stack
- * infrastructure (only the single-user CI leg builds the template), not a
+ * infrastructure (only the single-user CI leg builds the runtime), not a
  * product bug.
  *
  * UI contract, on top of the API one: the export action is DISABLED for a
@@ -289,9 +289,9 @@ test.describe("Static export (owner flows)", () => {
       status.status === "failed" &&
       /static-runtime bundle not built/i.test(status.error ?? "")
     ) {
-      // Stack infrastructure: dist-static/static.html was not built before the
+      // Stack infrastructure: dist-static/combined-runtime.js was not built before the
       // worker started (only the single-user CI leg builds it). Not a bug.
-      test.skip(true, "static template not built in this stack");
+      test.skip(true, "static runtime not built in this stack");
     }
     expect(status.status, `export failed: ${status.error}`).toBe("done");
 

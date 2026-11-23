@@ -192,13 +192,12 @@ exclude = [
 [tool.setuptools.package-data]
 "depictio" = [
   "viewer/dist/**/*",
-  # The serverless bundle template (cd depictio/viewer && pnpm run build:static):
-  # `depictio build-static` (producer B) injects its manifest into it, so a
-  # pip-installed CLI can build a bundle without a checkout.
-  "viewer/dist-static/static.html",
-  # The runtime a rendered notebook report embeds (same build): its tiles drawn
-  # by the dashboard's renderers, and the whole dashboard in the combined file
-  # (serverless/combined.py).
+  # The static runtime (cd depictio/viewer && pnpm run build:static), shipped
+  # once for every offline output: `depictio build-static` (producer B) composes
+  # a bundle page from it and the manifest, so a pip-installed CLI can build a
+  # bundle without a checkout (serverless/bundle_html.py); a rendered notebook
+  # report embeds it too: its tiles drawn by the dashboard's renderers, and the
+  # whole dashboard in the combined file (serverless/combined.py).
   "viewer/dist-static/combined-runtime.js",
   "viewer/dist-static/combined-runtime.css",
   # Its conditional add-ons (3Dmol.js, 0.54 MB raw / 0.16 MB deflated), appended

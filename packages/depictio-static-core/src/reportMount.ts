@@ -2,7 +2,7 @@
  * The report host of the static runtime: which placeholder of a rendered
  * Quarto report the runtime may fill, and with what.
  *
- * One manifest contract, two hosts. The bundle host (`static.html`) mounts the
+ * One manifest contract, two hosts. The bundle host (a page composed from the runtime) mounts the
  * whole viewer App; the report host mounts the same renderers into the tiles
  * a Quarto export laid out (`<div data-depictio-tile="<tab_id>:<index>">`,
  * written by `notebook_export/generator.py`). Each placeholder already holds

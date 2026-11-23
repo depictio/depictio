@@ -110,13 +110,14 @@ jobs:
       #
       # Re-set on the rebase onto main v1.21, whose viewer grew a lot (genome
       # views, protein kinds, new chrome): measured 3.76 MB for the static
-      # runtime (with JBrowse and 3Dmol stubbed out, see vite.static.config.ts)
+      # runtime (with JBrowse and 3Dmol stubbed out, see vite.combined.config.ts;
+      # it is now checked on combined-runtime.js, the one file shipped)
       # and 4.06 MB for main's own catalog preview, against 2.2 MB / 2.21 MB
       # when these guards were introduced. Each budget is today's measure plus
       # ~0.4 MB of headroom: static runtime 4.2 MB, catalog preview 4.5 MB.
       - name: Byte budget — static runtime
         working-directory: depictio/viewer
-        run: node scripts/check-bundle-budget.mjs dist-static/static.html 4404019 static-runtime
+        run: node scripts/check-bundle-budget.mjs dist-static/combined-runtime.js 4404019 static-runtime
 
       # The structure-viewer floor: the base runtime plus the conditional
       # 3Dmol.js add-on (dist-static/static-structure.html, written by
@@ -200,8 +201,8 @@ jobs:
         run: npx playwright test --project=static-runtime
 
       # The demo site is directly openable (manifests already injected) —
-      # download, unzip, double-click index.html. static.html stays the raw
-      # token template the producers consume.
+      # download, unzip, double-click index.html. combined-runtime.{js,css}
+      # stay the raw runtime the producers compose their pages from.
       - name: Upload demo site artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -209,7 +210,6 @@ jobs:
           name: serverless-demos
           path: |
             depictio/viewer/dist-static/site/
-            depictio/viewer/dist-static/static.html
             depictio/viewer/dist-static/combined-runtime.js
             depictio/viewer/dist-static/combined-runtime.css
             depictio/viewer/dist-static/addons/

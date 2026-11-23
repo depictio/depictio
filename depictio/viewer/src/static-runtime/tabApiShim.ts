@@ -1,7 +1,7 @@
 /**
  * Tab-family layer on top of the offline api shim.
  *
- * `vite.static.config.ts` points every `depictio-react-core` api.ts import at
+ * `vite.combined.config.ts` points every `depictio-react-core` api.ts import at
  * THIS module, which re-exports `apiShim.ts` (the render-path overrides) and
  * replaces only the two functions that have to know about a tab family:
  *

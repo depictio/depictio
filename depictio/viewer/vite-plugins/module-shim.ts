@@ -9,7 +9,7 @@
  * real module (`export * from` + targeted overrides) — imports whose importer
  * is one of the shim files pass through untouched.
  *
- * Used by vite.static.config.ts (api.ts / useCurrentUser.ts / realtime.ts /
+ * Used by vite.combined.config.ts (api.ts / useCurrentUser.ts / realtime.ts /
  * useServerStatus.ts → the static-runtime shims). The catalog preview and the
  * component embed swap api.ts only and keep `apiShimPlugin`.
  */

@@ -1,13 +1,14 @@
 /**
  * The App host of the static runtime: the whole viewer App over a page.
  *
- * Booted by the serverless bundle's entry (`main.tsx`, RFC §3.2) and by the
- * combined runtime (`combined/main.tsx`) inside the dashboard view of a
- * combined report + dashboard file, where the page is a same-origin iframe the
- * report builds on demand.
+ * Booted by the runtime's one entry (`combined/main.tsx`, RFC §3.2) when the
+ * page holds `#bundle-manifest` and `#root`: in a serverless bundle (the page
+ * composed by `depictio/serverless/bundle_html.py`) and inside the dashboard
+ * view of a combined report + dashboard file, where the page is a same-origin
+ * iframe the report builds on demand.
  *
  * Mounts the *real* viewer App against an embedded bundle manifest instead of
- * the API: the vite.static.config.ts build shims api.ts, useCurrentUser.ts and
+ * the API: the vite.combined.config.ts build shims api.ts, useCurrentUser.ts and
  * realtime.ts (see moduleShim), and this entry never imports bootstrapSession,
  * the router, or BootSplash — exactly the catalog-preview precedent.
  */
@@ -16,7 +17,7 @@
 //
 // Registering them is only half of it: Iconify's default entry FETCHES an
 // unknown icon name from api.iconify.design, and a dashboard document carries
-// author-supplied icon ids the source scanner never saw. vite.static.config.ts
+// author-supplied icon ids the source scanner never saw. vite.combined.config.ts
 // therefore aliases `@iconify/react` to its `/offline` entry, which has no API
 // code at all — see the comment there for the trade-off.
 import '../icons';

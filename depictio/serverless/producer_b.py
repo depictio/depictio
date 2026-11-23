@@ -73,10 +73,13 @@ from depictio.serverless.binding import (
 )
 from depictio.serverless.companions import build_companions, filter_expr_targets
 from depictio.serverless.dist import (  # noqa: F401 - re-exported
-    TEMPLATE_PATH,
+    RUNTIME_PATH,
     TEMPLATE_PATH_ENV,
     dist_static_dir,
-    template_path,
+    is_legacy_template,
+    runtime_bytes,
+    runtime_css_path,
+    runtime_path,
 )
 from depictio.serverless.maps import freeze_map_payload
 from depictio.serverless.preflight import (
@@ -99,31 +102,33 @@ from depictio.serverless.pruning import (
     spec_links,
 )
 
-# Prebuilt single-file static-runtime bundle (`cd depictio/viewer && pnpm run
-# build:static`); where it lives is `serverless.dist`'s concern.
+# Prebuilt static runtime (`cd depictio/viewer && pnpm run build:static`);
+# where it lives is `serverless.dist`'s concern. The token is only for a legacy
+# `.html` template named by DEPICTIO_SERVERLESS_TEMPLATE_PATH.
 BUNDLE_TOKEN = "__BUNDLE_MANIFEST__"
 
 
 # The static runtime is the floor under every single-file bundle: measured at
 # ~7.7 MB of HTML/JS/CSS before a single row of data (RFC §8.1, v1.5.0). Used
-# only when the template itself cannot be read — see :func:`runtime_floor_bytes`.
+# only when the runtime itself cannot be read — see :func:`runtime_floor_bytes`.
 RUNTIME_FLOOR_FALLBACK_BYTES = int(7.7 * 1024 * 1024)
 
 
 def runtime_floor_bytes() -> int:
     """What a bundle costs before any data: the built static runtime's size.
 
-    Measured off the template this process would actually inject into, so the
-    number tracks the runtime instead of lagging it. The fallback is only for
-    when there is no template to measure — a preflight on a box with no Node
-    build, or a container that mounts the template elsewhere without setting
+    Measured off the runtime this process would actually compose a bundle from
+    (script + stylesheet), so the number tracks the runtime instead of lagging
+    it. The fallback is only for when there is no runtime to measure — a
+    preflight on a box with no Node build, or a container that mounts the
+    runtime elsewhere without setting
     ``DEPICTIO_SERVERLESS_TEMPLATE_PATH``. It drifts whenever the runtime's own
     bundle does (new renderers, newly vendored libraries, a change to the CI
     byte budget of 3.20 MB gzip), which is exactly why it is the fallback and
     not the primary source.
     """
     try:
-        return template_path().stat().st_size
+        return runtime_bytes()
     except OSError:
         return RUNTIME_FLOOR_FALLBACK_BYTES
 
@@ -1269,25 +1274,40 @@ def build_manifest(
 
 
 def render_bundle_html(manifest: BundleManifest) -> str:
-    """Inject a manifest into the prebuilt static-runtime template."""
+    """The self-contained page for a manifest, from the prebuilt static runtime.
+
+    Composed from ``combined-runtime.js`` + ``.css`` (``serverless.bundle_html``).
+    ``DEPICTIO_SERVERLESS_TEMPLATE_PATH`` may instead name a legacy ``.html``
+    template, which the manifest is injected into by token.
+    """
+    from depictio.serverless.addons import addons_html, apply_addons
+    from depictio.serverless.bundle_html import compose_bundle_html
     from depictio.serverless.inject import inject
 
-    template = template_path()
-    if not template.exists():
+    path = runtime_path()
+    legacy = is_legacy_template(path)
+    css_path = runtime_css_path(path)
+    if not path.exists() or (not legacy and not css_path.exists()):
+        missing = path if not path.exists() else css_path
         raise ProducerBError(
-            f"static-runtime bundle not built: {template} is missing — run "
+            f"static-runtime bundle not built: {missing} is missing — run "
             f"`cd depictio/viewer && pnpm run build:static`, or point "
-            f"{TEMPLATE_PATH_ENV} at a prebuilt static.html"
+            f"{TEMPLATE_PATH_ENV} at a prebuilt combined-runtime.js"
         )
-    from depictio.serverless.addons import apply_addons
-
+    names = [a.name for a in manifest.addons]
     pyodide = next((a for a in manifest.addons if a.name == "pyodide"), None)
-    html = apply_addons(
-        template.read_text(),
-        [a.name for a in manifest.addons],
-        list(pyodide.packages) if pyodide else None,
+    packages = list(pyodide.packages) if pyodide else None
+    payload = manifest.model_dump(mode="json")
+    if legacy:
+        html = apply_addons(path.read_text(), names, packages)
+        return inject(html, BUNDLE_TOKEN, payload)
+    return compose_bundle_html(
+        payload,
+        js=path.read_text(encoding="utf-8"),
+        css=css_path.read_text(encoding="utf-8"),
+        title=manifest.dashboard.title,
+        addons=addons_html(names, packages),
     )
-    return inject(html, BUNDLE_TOKEN, manifest.model_dump(mode="json"))
 
 
 def build_static(

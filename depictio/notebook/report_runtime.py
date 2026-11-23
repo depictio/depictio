@@ -1,8 +1,8 @@
 """The report host of Depictio's static runtime: markup only, no server.
 
 A rendered report and a serverless bundle are two hosts of one runtime. The
-bundle (``static.html``) mounts the viewer App over a whole page; a report
-mounts the same renderers into the tiles its Quarto document laid out, from
+bundle (a page composed from that runtime, ``serverless/bundle_html.py``) mounts
+the viewer App over a whole page; a report mounts the same renderers into the tiles its Quarto document laid out, from
 the same manifest contract (``BundleManifest``, built by producer A). This
 module is the report's half of that contract, as text:
 
@@ -29,6 +29,8 @@ import math
 import re
 from html import escape
 from typing import Any
+
+from depictio.serverless.inject import script_text  # noqa: F401  (re-exported)
 
 TILE_ATTR = "data-depictio-tile"
 FILTERS_ATTR = "data-depictio-filters"
@@ -89,17 +91,6 @@ def json_script(element_id: str, payload: Any) -> str:
         blob = json.dumps(_json_safe(payload), default=str, separators=(",", ":"))
     blob = blob.replace("</", "<\\/").replace("<!--", "<\\u0021--")
     return f'<script type="application/json" id="{element_id}">{blob}</script>'
-
-
-def script_text(text: str) -> str:
-    """``text`` safe inside a ``<script>`` element (run, or inert ``text/plain``).
-
-    Inside script data, ``</script`` ends the element and ``<!--`` can switch
-    the tokenizer into its escaped states. In a minified bundle both only ever
-    sit in string or regex literals, where ``<\\/`` and ``<\\!`` read the
-    same; in CSS a ``\\/`` reads as ``/``.
-    """
-    return text.replace("</script", "<\\/script").replace("<!--", "<\\!--")
 
 
 def runtime_parts(
