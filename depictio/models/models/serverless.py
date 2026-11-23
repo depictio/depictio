@@ -54,6 +54,7 @@ class TierReason(str, Enum):
     CELERY_COMPUTE = "celery_compute"
     CODE_MODE = "code_mode"
     BINDING_MISS = "binding_miss"
+    TRENDLINE = "trendline"  # a trendline the runtime cannot refit
     MAX_POINTS = "max_points"
     LINK_TABLE_TOO_BIG = "link_table_too_big"
     MAP_TILES = "map_tiles"

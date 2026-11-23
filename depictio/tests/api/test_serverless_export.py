@@ -194,7 +194,7 @@ def test_an_unported_trendline_is_a_final_frozen_verdict():
     )
     for plan in (classify_stored_component(comp), classify_component(comp)):
         assert plan.tier is ComponentTier.FROZEN
-        assert plan.reason is TierReason.BINDING_MISS
+        assert plan.reason is TierReason.TRENDLINE
         assert plan.detail and "other aggregations are not" in plan.detail
         assert plan.provisional is False
 

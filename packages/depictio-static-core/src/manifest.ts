@@ -25,6 +25,7 @@ export type TierReason =
   | 'celery_compute'
   | 'code_mode'
   | 'binding_miss'
+  | 'trendline'
   | 'max_points'
   | 'link_table_too_big'
   | 'map_tiles'

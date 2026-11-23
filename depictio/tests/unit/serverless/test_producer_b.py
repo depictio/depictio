@@ -324,7 +324,7 @@ def test_text_labelled_figure_binds_and_keeps_its_label_column(data_dir: Path) -
 
 
 def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
-    """A figure the matcher refuses keeps the frozen path + binding_miss."""
+    """A figure the matcher refuses keeps the frozen path + its tier reason."""
     import yaml
 
     from depictio.models.models.dashboards import DashboardDataLite
@@ -343,7 +343,7 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     assert "scatter-mass-flipper" not in manifest.bindings
     entry = manifest.tiers["scatter-mass-flipper"]
     assert entry.tier is ComponentTier.FROZEN
-    assert entry.reason is TierReason.BINDING_MISS
+    assert entry.reason is TierReason.TRENDLINE
     # The detail names the actual bail-out (build_binding's BindingMiss), so
     # assert the shared clause rather than one refusal's wording.
     assert entry.detail and "frozen at the default filter state" in entry.detail

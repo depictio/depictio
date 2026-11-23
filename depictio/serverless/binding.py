@@ -319,12 +319,15 @@ def miss_detail(miss: BindingMiss | None) -> str:
 def miss_tier_reason(miss: BindingMiss | None) -> TierReason:
     """The manifest tier reason a refusal maps to.
 
-    Only the whole-frame case has its own ``TierReason`` — the runtime badge
-    already has copy for it ("computed over the whole table at once"), and it is
-    not a *matching* failure at all. Everything else is a binding miss.
+    The whole-frame case and the trendline refit cases have their own
+    ``TierReason`` — the runtime badge carries copy for each ("computed over
+    the whole table at once"; "settings the browser cannot recompute"), and
+    neither is a *matching* failure. Everything else is a binding miss.
     """
     if miss is BindingMiss.WHOLE_FRAME_VISU:
         return TierReason.WHOLE_FRAME_VIZ
+    if miss is not None and miss.name.startswith("TRENDLINE_"):
+        return TierReason.TRENDLINE
     return TierReason.BINDING_MISS
 
 
