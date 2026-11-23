@@ -395,6 +395,17 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   `oauth_states` consumed atomically, nonce, JWKS rotation). One provisioning path:
   `sso_sync.provision_sso_login` → `create_or_get_sso_user` → `sync_sso_user`. SAML is
   removed; `DEPICTIO_AUTH_GOOGLE_OAUTH_*` maps to provider `google` (deprecated)
+- Default admin: single-user and public mode seed `admin@example.com` with a random password
+  when no `DEPICTIO_BOOTSTRAP_ADMIN_*` is set. `_default_admin()` (oldest admin by `_id`) is the
+  only resolver of "the admin"; never an unsorted `find_one`. `credentials_claimed` says whether
+  someone chose its credentials (env-seeded, unless `DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD_GENERATED`,
+  which `local up` sets). In single-user mode the owner names them in place
+  (`POST /auth/me/admin_credentials`, Account settings, `depictio config set-admin-credentials`);
+  current password required once claimed. That is how an app made private, then public, gets in
+- Public mode password sign-in (`/auth/login`): admins only (same 401 as a wrong password),
+  rate limiter fails closed (503), per-account lockout (5 wrong in 15 min). The viewer's
+  "Admin sign-in" link (no SSO) follows `DEPICTIO_AUTH_PUBLIC_ADMIN_SIGN_IN`, on by default;
+  the flag hides the link only, never the door
 - S3-compatible storage (bundled SeaweedFS `weed mini` locally, compose service `s3` with a
   `minio` network alias; any S3 endpoint in prod), Delta Lake format. Config prefix
   `DEPICTIO_S3_*` (`settings.s3`); legacy `DEPICTIO_MINIO_*` / `settings.minio` still accepted.
