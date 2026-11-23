@@ -329,7 +329,7 @@ SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
     "coverage_track": ServerlessCapability("live", "compute_live"),
     **{
         kind: ServerlessCapability("frozen", "celery", _CELERY_REASON.format(kind=kind))
-        for kind in ("complex_heatmap", "upset_plot", "sankey")
+        for kind in ("complex_heatmap", "upset_plot")
     },
     "phylogenetic": ServerlessCapability(
         "frozen",
@@ -337,6 +337,11 @@ SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
         "also reads a Newick tree data collection; frozen at the exported filter "
         "state with the tree merged in",
     ),
+    # Every step of the sankey aggregation (step filters, (missing) coercion,
+    # weight aggregation, link ranking, min_link_value) commutes with the
+    # filters, so the runtime replays it over the bundled Parquet
+    # (static-core ``sankey.ts`` + ``sankeyLive``), any filter state.
+    "sankey": ServerlessCapability("live", "compute_live"),
     # Every step of a contact-map window (filter mask, sample, resolution
     # partition, square window, sort, cell budget) commutes with the filters,
     # so the runtime replays it over the bundled Parquet

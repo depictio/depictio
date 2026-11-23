@@ -42,6 +42,7 @@ import {
   roundReference,
   roundSigFigs,
   runPrologue,
+  sankeyFromColumns,
   sortSlice,
   translateViaTable,
   type AdvancedVizTailSpec,
@@ -56,6 +57,7 @@ import {
   type PrologueOp,
   type QueryEngine,
   type ResolveHop,
+  type SankeyRequest,
   type SortSpec,
   type TableHandle,
 } from 'depictio-static-core';
@@ -1247,6 +1249,48 @@ export async function contactMapLive(req: ContactMapLiveRequest): Promise<Record
   const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
   const cols = await engine.columns(handle, projection);
   const out = contactMapWindow(cols, ref.rows, mask, req, resolutionCol);
+  return { ...out, compute_ms: Math.round(performance.now() - startedAt) };
+}
+
+/** `SankeyPayload` (api.ts) minus `wf_id`: there is one workflow in a bundle
+ *  and the DC id alone keys the bundled table. */
+export interface SankeyLiveRequest extends SankeyRequest {
+  dc_id: string;
+  filter_metadata?: InteractiveFilter[];
+}
+
+/**
+ * `compute_sankey` (celery_tasks.py) over the bundled Parquet: the dashboard
+ * filters (links resolved) are the load's row mask, the projection is the
+ * task's (`step_cols` + `option_cols`, then `value_col`), and the rest is
+ * `_sankey_result_from_frame` — ported as static-core's `sankeyFromColumns`
+ * and pinned against the Python function by fixtures/sankey-expected.json.
+ */
+export async function sankeyLive(req: SankeyLiveRequest): Promise<Record<string, unknown>> {
+  const startedAt = performance.now();
+  const ref = dataRefFor(req.dc_id);
+  if (!ref) throw new Error(`static bundle: no data_ref for dc "${req.dc_id}"`);
+  const stepCols = req.step_cols ?? [];
+  // Endpoint request validation (celery_tasks.py): ≥2 steps, no duplicates —
+  // duplicate steps would land in the same ambiguous group_by the task rejects.
+  if (stepCols.length < 2) {
+    throw new Error('compute_sankey: step_cols must have ≥2 columns');
+  }
+  if (new Set(stepCols).size !== stepCols.length) {
+    throw new Error('compute_sankey: step_cols must not contain duplicates');
+  }
+  const { handle } = await tableFor(req.dc_id);
+  // Projection = the task's `project_cols`, schema-guarded: pruning put
+  // exactly these columns in the bundle, but a stale bundle must degrade to a
+  // readable error inside the compute rather than throw inside the engine.
+  const schema = new Set(userColumns(ref).map((c) => c.name));
+  const projectCols = [...new Set([...stepCols, ...(req.option_cols ?? [])])];
+  if (req.value_col && !projectCols.includes(req.value_col)) projectCols.push(req.value_col);
+  const projection = projectCols.filter((c) => schema.has(c));
+  const bound = toBoundFilters(await resolveLinkFilters(req.dc_id, req.filter_metadata ?? []));
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+  const cols = await engine.columns(handle, projection);
+  const out = sankeyFromColumns(cols, ref.rows, mask, req);
   return { ...out, compute_ms: Math.round(performance.now() - startedAt) };
 }
 

@@ -47,16 +47,17 @@ kinds go ``live`` (their DC is bundled, pruned to the columns their ``config``
 binds, and the in-browser engine recomputes ``/advanced_viz/data`` at every
 filter state — no frozen payload); ``phylogenetic`` stays frozen, because its
 Newick tree DC is a second, non-tabular source one bundled table cannot carry;
-and the four Celery-computed kinds (embedding, complex_heatmap, upset, sankey)
-are *pre-exported*: the producer calls their task functions in-process and
+and the Celery-computed kinds (embedding, complex_heatmap, upset) are
+*pre-exported*: the producer calls their task functions in-process and
 ships the result as a frozen ``compute`` payload, which the runtime's
 dispatch/poll shim hands back as a finished job. They are badged as
 computed-at-export — no filter refreshes them — and degrade to ``omitted``
 (with the reason) when the compute fails or runs past its budget.
-``coverage_track`` dispatches server-side too but left that family in phase 8:
-its task is row-wise plus a per-(chromosome, sample) rolling mean, so the
-browser recomputes it live from the bundled Parquet like any data-path kind
-(see ``CELERY_VIZ_KINDS``).
+``coverage_track`` (phase 8) and ``sankey`` and ``contact_map`` dispatch
+server-side too but left that family: every step of their computes commutes
+with the dashboard filters, so the browser replays them live from the bundled
+Parquet (see ``CELERY_VIZ_KINDS`` and the ``compute_live`` entries in
+``SERVERLESS_KINDS``).
 
 One bundle carries a whole **tab family** (RFC §3.1 ``BundleManifest.tabs``):
 the requested dashboard is the entry tab, its main tab and siblings ride along,

@@ -105,8 +105,10 @@ import {
   specsLive,
   userColumns,
   keptValues,
+  sankeyLive,
   type ContactMapLiveRequest,
   type CoverageTrackLiveRequest,
+  type SankeyLiveRequest,
 } from './liveData';
 import {
   funnelValuesLive,
@@ -1108,7 +1110,8 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
 // Celery dispatch/poll kinds: the compute has no in-browser equivalent, so the
 // result is frozen at export time — dispatch returns a finished job
 // immediately and poll echoes it (catalog-preview precedent). `coverage_track`
-// left this family in phase 8; see its override below.
+// (phase 8), `sankey` and `contact_map` left this family: their computes are
+// replayed live over the bundled Parquet, see the overrides below.
 function finishedJob(dcId: string, vizKind?: string) {
   // The kind disambiguates a DC several advanced_viz tiles read (a frozen
   // UMAP over the same table as a live sunburst).
@@ -1222,7 +1225,19 @@ export async function dispatchCoverageTrack(p: CoverageTrackLiveRequest) {
 export async function pollCoverageTrack(jobId: string) {
   return finishedJob(jobId, 'coverage_track') as never;
 }
-export async function dispatchSankey(p: { dc_id: string }) {
+/** sankey is `compute_live` like contact_map: every step of the task commutes
+ *  with the filters, so the browser replays it over the bundled Parquet
+ *  (`sankeyLive`) at every filter state. A bundle built before that carries
+ *  no data_ref and takes the frozen echo. */
+export async function dispatchSankey(p: SankeyLiveRequest) {
+  if (dataRefFor(p.dc_id)) {
+    return {
+      job_id: p.dc_id,
+      status: 'done' as const,
+      result: await sankeyLive(p),
+      from_cache: false,
+    } as never;
+  }
   return finishedJob(p.dc_id, 'sankey') as never;
 }
 export async function pollSankey(jobId: string) {

@@ -92,6 +92,7 @@ def test_every_kind_has_exactly_one_explicit_serverless_tier():
     assert set(SERVERLESS_KINDS) == set(ALL_VIZ_KINDS)
     celery = [k for k in ALL_VIZ_KINDS if k in CELERY_VIZ_KINDS]
     assert "coverage_track" not in CELERY_VIZ_KINDS  # live since phase 8
+    assert "sankey" not in CELERY_VIZ_KINDS  # live through its replayed compute
     assert NON_TABULAR_VIZ_KINDS == {"phylogenetic"}
     omitted = {k for k in ALL_VIZ_KINDS if SERVERLESS_KINDS[k].tier == "omitted"}
     assert set(LIVE_KINDS) | set(celery) | NON_TABULAR_VIZ_KINDS | omitted == set(ALL_VIZ_KINDS)
@@ -172,11 +173,38 @@ def test_a_computed_embedding_is_frozen_by_producer_a():
 
 
 def test_producer_a_omits_a_celery_kind_it_cannot_call():
-    comp = _stored_comp("sankey", x_col="a")  # needs >= 2 step_cols
+    comp = _stored_comp("group_compare")  # no group_col → no opening pair to freeze
     assert celery_compute_request(comp) is None
     plan = classify_stored_component(comp)
     assert (plan.tier, plan.reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
     assert plan.detail and "no request can be derived" in plan.detail
+
+
+def test_sankey_is_live_and_bundles_the_columns_its_compute_reads():
+    """``compute_sankey`` is replayed in the browser (like contact_map), so the
+    kind leaves the Celery family — and the step columns it flows through,
+    the depth universe its pickers list and the value column it weights by
+    have to survive pruning, while the knobs beside them (sort mode, the
+    min-link cut-off) must not."""
+    config = {
+        "step_cols": ["run", "sample", "status"],
+        "available_step_cols": ["run", "sample", "status"],
+        "value_col": "reads",
+        "sort_mode": "total_flow",
+        "min_link_value": 2,
+    }
+    assert celery_compute_request(_stored_comp("sankey", **config)) is None
+    assert advanced_viz_columns(_spec_comp("sankey", **config)) == [
+        "run",
+        "sample",
+        "status",
+        "reads",
+    ]
+
+    a = classify_stored_component(_stored_comp("sankey", **config))
+    assert (a.tier, a.reason) == (ComponentTier.LIVE, None)
+    b = classify_component(_spec_comp("sankey", **config))
+    assert (b.tier, b.reason) == (ComponentTier.LIVE, None)
 
 
 def test_coverage_track_is_live_and_bundles_the_columns_its_task_projects():
