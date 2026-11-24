@@ -65,13 +65,14 @@ test.describe("Cross-tab persistent sections & filters", () => {
 
     await loginAsAdmin();
 
-    // The Overview excludes the Sample sheet: the main tab owns the section but
-    // does not render it.
+    // The main tab owns the Sample sheet section and renders it too
+    // (nf-core RULES.md: no `exclude_tabs: [Overview]`, so the study card's
+    // `section:` link has a target), once, pinned at the bottom.
     await page.goto(`/dashboard/${AMPLISEQ_OVERVIEW}`);
     await expect(page.getByText("Key figures", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText("Sample sheet", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Sample sheet", { exact: true })).toHaveCount(1);
 
     // On a child tab the fan-out host renders it (collapsed, pinned bottom).
     await page.goto(`/dashboard/${AMPLISEQ_ALPHA_DIVERSITY}`);

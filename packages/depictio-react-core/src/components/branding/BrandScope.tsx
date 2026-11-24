@@ -13,6 +13,7 @@ import {
 import { useResolvedBrandTheme } from './useResolvedBrandTheme';
 import { useChromeStyle } from '../../chrome/chromeStyle';
 import { DEFAULT_PALETTE_ID } from '../../palettes.generated';
+import { createSchemeBridge } from './schemeBridge';
 
 /**
  * Scopes a dashboard's colours to its own subtree: its brand override (#397) and
@@ -77,12 +78,28 @@ const ScopeShell: React.FC<{
   cssVariablesResolver: ReturnType<typeof brandCssVariablesResolver>;
   children: React.ReactNode;
 }> = ({ brand, theme, cssVariablesResolver, children }) => {
-  const { colorScheme } = useMantineColorScheme();
-  const scheme = colorScheme === 'dark' ? 'dark' : 'light';
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const scheme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const attributes = React.useMemo<BrandScopeAttributes>(
     () => ({ className: SCOPE_CLASS, 'data-mantine-color-scheme': scheme }),
     [scheme],
   );
+  // The app provider owns the scheme. A nested provider left to itself reads its
+  // own stored one, which drifts from the app's (a borrowed `?theme=`, an embed,
+  // a toggle that only reached one of them), and every dashboard runs inside one.
+  // The bridge reads and writes the app's scheme, so a toggle inside the scope
+  // reaches the app too (forceColorScheme would swallow it).
+  const current = React.useRef({ scheme, setColorScheme });
+  current.current = { scheme, setColorScheme };
+  const bridge = React.useMemo(
+    () =>
+      createSchemeBridge(
+        () => current.current.scheme,
+        (next) => current.current.setColorScheme(next),
+      ),
+    [],
+  );
+  React.useEffect(() => bridge.follow(scheme), [bridge, scheme]);
 
   return (
     <BrandingContext.Provider value={brand}>
@@ -97,11 +114,7 @@ const ScopeShell: React.FC<{
             cssVariablesResolver={cssVariablesResolver}
             cssVariablesSelector={`.${SCOPE_CLASS}`}
             getRootElement={() => undefined}
-            // The app provider owns the scheme. A nested provider left to itself
-            // reads its own stored one, which drifts from the app's (a borrowed
-            // `?theme=`, an embed, a toggle that only reached one of them), and
-            // now every dashboard runs inside one.
-            forceColorScheme={scheme}
+            colorSchemeManager={bridge}
           >
             {children}
           </MantineProvider>

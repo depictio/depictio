@@ -27,7 +27,8 @@ f. *Markers by point count.* Fewer points are larger, bolder and outlined; a
 g. *Bold lines, dots where there are few points.* Line traces are drawn at the
    palette's width (thinner past ``many_series`` lines); a short series also
    shows a dot on each measured point, so a line between two samples is not
-   read as a measured trend; several lines share one hover along x
+   read as a measured trend (a px trendline is a fit, not measurements, and
+   keeps its bare line); several lines share one hover along x
    (see ``palettes.line_style``).
 
 Every rule yields to the author: a value the figure sets itself is never
@@ -749,6 +750,12 @@ def _line_traces(traces: Iterable[dict]) -> list[dict]:
     ]
 
 
+def _is_fit(trace: dict) -> bool:
+    """A px trendline (OLS, LOWESS, rolling...): a curve fitted over the data's
+    own x, whose points are not measurements, so it never takes a dot each."""
+    return "trendline" in str(trace.get("hovertemplate") or "").lower()
+
+
 def _style_lines(traces: list[dict], layout: dict, chrome: dict[str, str]) -> None:
     lines = _line_traces(traces)
     if not lines:
@@ -762,6 +769,7 @@ def _style_lines(traces: list[dict], layout: dict, chrome: dict[str, str]) -> No
         if (
             trace.get("mode") == "lines"
             and not trace.get("fill")
+            and not _is_fit(trace)
             and 0 < n <= spec["marker_max_points"]
         ):
             trace["mode"] = "lines+markers"

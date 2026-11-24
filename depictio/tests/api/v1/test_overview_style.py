@@ -668,6 +668,23 @@ def test_a_long_series_stays_a_bare_curve():
     assert "hovermode" not in out["layout"]
 
 
+def test_a_trendline_is_a_fit_and_gets_no_dots():
+    """px draws a trendline as a `lines` trace over the data's own x: a fitted
+    curve, not measured points, so it keeps its bare line (and px's mode)."""
+    fig = _lines(
+        1,
+        24,
+        hovertemplate="<b>OLS trendline</b><br>y = 1 * x + 0<extra></extra>",
+        showlegend=False,
+    )
+    fig["data"].insert(0, {"type": "scatter", "mode": "markers", "x": [0, 1], "y": [0, 1]})
+    out = apply_overview(fig)
+    trend = out["data"][1]
+    assert trend["mode"] == "lines"
+    assert "size" not in (trend.get("marker") or {})
+    assert trend["line"]["width"] == palettes.style()["line_style"]["width"]
+
+
 def test_many_lines_thin_out_and_keep_their_own_hover():
     spec = palettes.style()["line_style"]
     out = apply_overview(_lines(spec["many_series"] + 1, 10))

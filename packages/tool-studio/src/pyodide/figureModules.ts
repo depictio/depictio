@@ -11,8 +11,10 @@
  *                the mantine templates (services/figure/mantine_templates.py,
  *                multiqc/themes.py, cli/cli/utils/mantine_templates.py),
  *                error_figure.py, heatmap.py, definitions.py + models.py +
- *                parameter_discovery.py (ALLOWED_VISUALIZATIONS), and
- *                models/models/branding.py (pydantic only).
+ *                parameter_discovery.py (ALLOWED_VISUALIZATIONS),
+ *                overview_style.py (the default figure look),
+ *                models/models/branding.py (pydantic only), and the plot
+ *                palette package models/palettes/ with its JSON source.
  *   extracted    `tidy_facet_layout` out of services/figure/groups.py, whose
  *                module imports deltatables_utils. Cut in the browser by the
  *                serverless bundler's own `extract()` (modules.py, shipped
@@ -53,9 +55,16 @@ const VERBATIM = [
   `${FIG}/models.py`,
   `${FIG}/parameter_discovery.py`,
   `${FIG}/style_presets.py`,
+  `${FIG}/overview_style.py`,
   'depictio/api/v1/services/multiqc/themes.py',
   'depictio/cli/cli/utils/mantine_templates.py',
   'depictio/models/models/branding.py',
+  // The shared plot palette (colours, CVD helpers, UI hues) and its JSON source,
+  // read by palettes/__init__.py through importlib.resources.
+  'depictio/models/palettes/__init__.py',
+  'depictio/models/palettes/cvd.py',
+  'depictio/models/palettes/ui_hues.py',
+  'depictio/models/palettes/depictio_palettes.json',
   // The serverless bundler's extractor, run inside Pyodide on EXTRACT below.
   'depictio/serverless/pyodide/modules.py',
 ];
@@ -174,7 +183,10 @@ export function collectFigureModules(repoRoot: string): Record<string, string> |
   const known = new Set([...shipped, ...STUBBED, ...FROM_RECIPE_SET, ...UNREACHED]);
   for (const rel of VERBATIM) {
     for (const name of depictioImports(files[rel])) {
-      if (!known.has(name)) {
+      // `from depictio.models import palettes` names the package, whose shipped
+      // submodule is what the import resolves to.
+      const isPackage = [...shipped].some((m) => m.startsWith(`${name}.`));
+      if (!known.has(name) && !isPackage) {
         throw new Error(`${rel} imports ${name}, which Tool Studio's figure engine does not ship (figureModules.ts)`);
       }
     }

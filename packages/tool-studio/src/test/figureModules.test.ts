@@ -21,6 +21,9 @@ describe.skipIf(!files)('figure modules', () => {
       'depictio/api/v1/services/figure/style_presets.py',
       'depictio/cli/cli/utils/mantine_templates.py',
       'depictio/serverless/pyodide/modules.py',
+      'depictio/api/v1/services/figure/overview_style.py',
+      'depictio/models/palettes/__init__.py',
+      'depictio/models/palettes/depictio_palettes.json',
     ]) {
       expect(files![rel]).toBe(readFileSync(resolve(repoRoot, rel), 'utf8'));
     }
