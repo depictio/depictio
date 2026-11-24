@@ -73,6 +73,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "pink",
@@ -135,7 +136,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:chart-bell-curve",
-      "icon_color": "grape",
+      "icon_color": "grape.4",
       "caption": "median, with its spread",
       "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
@@ -194,7 +195,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:counter",
-      "icon_color": "violet",
+      "icon_color": "grape.6",
       "caption": "median, with its distribution",
       "decimals": 0,
       "wf_tag": "nextflow/ampliseq"
@@ -255,7 +256,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:source-branch",
-      "icon_color": "indigo",
+      "icon_color": "grape.8",
       "caption": "median, with its spread",
       "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
@@ -314,7 +315,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:scale-balance",
-      "icon_color": "pink",
+      "icon_color": "grape.9",
       "caption": "median, 0 to 1",
       "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
@@ -344,6 +345,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Has each sample been sequenced deeply enough to see its diversity? Each curve is one sample: the chosen index (Shannon, observed ASVs or Faith's PD, switched in the controls) at each subsampling depth, coloured by Habitat. The whiskers show the spread between the random subsamples drawn at that depth.\nHow to read: a curve that flattens means more reads would add little, while one still climbing at its last depth was cut short. Curves that level off at different heights differ in diversity, not in sequencing effort. Compare the groups in the box plot below once the curves have levelled.\nLines and annotations: each curve joins the mean of the subsamples at every depth. The whiskers are plus or minus one standard error across those subsamples and can be switched off. The tile shows at most 60 samples by default (Top-N samples), and no cut-off is drawn.\nSource: nf-core/ampliseq output documentation, alpha rarefaction, which sets no numeric cut-off and reads a curve that does not become horizontal as too little sequencing depth, https://nf-co.re/ampliseq/2.18.0/docs/output\nNote: diversity is computed on data rarefied to the lowest read count of the samples, or to the depth set with --diversity_rarefaction_depth, which excludes samples below it.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/rarefaction",
@@ -400,7 +402,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "One point per sample. Compare medians and spread, all the more when a group is small.",
+      "description": "Does Shannon diversity differ between groups? One box per Habitat group, with every sample drawn as a point over it. The groups follow Analysis mode when it defines some.\nHow to read: boxes that sit apart with little overlap between their points suggest a difference, and overlapping boxes do not. With a handful of samples per group, trust the points over the box, since the quartiles of a few values move a lot. Open the rarefaction curves above to check that no group is simply undersequenced.\nLines and annotations: the box runs from the first to the third quartile (linear method), with the median as the line inside it. The whiskers reach the furthest point within 1.5 times the interquartile range of the box. No reference line is drawn.\nSource: Plotly box trace reference, https://plotly.com/python/reference/box/\nNote: the boxes describe the samples, they do not test the difference between groups.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/alpha_diversity",
@@ -452,6 +454,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "What are the diversity values behind the tiles above? One row per sample with its Shannon, observed ASVs, Faith's PD and evenness, computed on the rarefied table.\nHow to read: sort a column to find the extremes. A sample far from the others on every index is the first to check in the rarefaction curves.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/alpha_diversity",
@@ -470,6 +473,7 @@
       "compact": false,
       "row_selection_enabled": true,
       "row_selection_column": "sample_id",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/ampliseq"
     }
   ],
@@ -667,8 +671,10 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
+  "shared_labels": [],
   "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
@@ -705,11 +711,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 12:18:23",
+  "creation_time": "2026-11-22 20:39:25",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -727,5 +736,7 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Alpha Diversity"
+  "published_lock": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Alpha Diversity",
+  "template_origin": null
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 
-import { percent, rankTint } from './format';
+import { percent } from './format';
+import { useBreakdownColour } from './useBreakdownColour';
 import { METRIC, Meter, MetricCaption, MetricStrip } from './tokens';
 import { BreakdownTooltip, evennessLabel } from './breakdownTooltip';
 import type { BreakdownPayload } from './types';
@@ -18,8 +19,10 @@ import type { BreakdownPayload } from './types';
  * breakdown layout that stays readable in a 2×1 card, where ``top_n``'s stacked
  * rows have no room.
  *
- * Segment tints step down in opacity by rank, so adjacent slices stay
- * distinguishable without introducing a second hue.
+ * A segment whose value the dashboard pins a colour for (its `category_colors`
+ * for the breakdown column) wears it; a remainder value (Other, Unclassified,
+ * NA) takes the semantic grey. The rest step down in opacity by rank, so
+ * adjacent slices stay distinguishable without introducing a second hue.
  */
 const CompositionMetric: React.FC<{
   payload: BreakdownPayload;
@@ -28,6 +31,7 @@ const CompositionMetric: React.FC<{
    *  tooltip. A bare bar left readers asking what its segments were. */
   minimal?: boolean;
 }> = ({ payload, color, minimal = false }) => {
+  const colourOf = useBreakdownColour(payload, color);
   if (!payload.top.length) return null;
 
   // Derive the remainder from top_share rather than by summing the segments:
@@ -51,7 +55,7 @@ const CompositionMetric: React.FC<{
           ...payload.top.map((row, idx) => ({
             key: row.name,
             share: row.percent,
-            color: rankTint(color, idx),
+            color: colourOf(row.name, idx),
           })),
           { key: '__other__', share: otherShare, color: METRIC.remainder },
         ]}

@@ -334,3 +334,20 @@ export function sequentialColorMap(
   });
   return map;
 }
+
+/**
+ * The dashboard pins of each of `columns`, for a compute request: `{column: {value: colour}}`,
+ * or null when none of them is pinned, so an unpinned request (and its cache key) is unchanged.
+ * The server ranks the remaining values into the slots the pins leave free.
+ */
+export function pinsForColumns(
+  source: CategoryColorSource | null | undefined,
+  columns: readonly string[] | null | undefined,
+): Record<string, Record<string, string>> | null {
+  const out: Record<string, Record<string, string>> = {};
+  for (const column of columns ?? []) {
+    const pins = columnCategoryColors(source, column);
+    if (pins && Object.keys(pins).length) out[column] = pins;
+  }
+  return Object.keys(out).length ? out : null;
+}

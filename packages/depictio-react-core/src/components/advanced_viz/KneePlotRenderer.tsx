@@ -3,7 +3,7 @@ import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { VizSwitch } from './controls/VizControls';
@@ -114,7 +114,7 @@ KneePlotPlot.displayName = 'KneePlotPlot';
 const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as KneePlotConfig;
   // A sample wears the dashboard's colour for it.
   const samplePinned = usePinnedCategoryColors(config.sample_col);
@@ -208,7 +208,7 @@ const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     const names = Array.from(bySample.keys()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     for (const name of names) bySample.get(name)!.sort((a, b) => a.rank - b.rank);
 
-    const colours = stableColorMap(names, palette, samplePinned);
+    const colours = stableColorMap(names, palette, samplePinned, isDark ? 'dark' : 'light', plotOverflow(theme));
     const { textColor, gridColor, zeroLineColor } = plotlyThemeColors(isDark, theme);
 
     const traces: any[] = [];

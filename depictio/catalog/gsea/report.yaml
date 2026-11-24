@@ -55,7 +55,7 @@ renders_as:
     kind: da_barplot
     title: Top gene sets by enrichment score
     roles:
-      { feature_id: term, contrast: contrast, lfc: nes, significance: fdr_qvalue, label: phenotype }
+      { feature_id: term, contrast: contrast, lfc: nes, significance: fdr_qvalue }
     config:
       significance_threshold: 0.25
       effect_label: Normalised enrichment score (NES)

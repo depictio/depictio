@@ -12,7 +12,7 @@ import type { AnnotationPatchInput, EffectiveStyle } from '../../annotations/edi
 import { KIND_LABELS, validateLabel } from '../../annotations/layer';
 import { DEFAULT_COLOR } from '../../annotations/toPlotly';
 import { MAX_LABEL_CHARS } from '../../annotations/types';
-import type { Annotation, AnnotationColor } from '../../annotations/types';
+import type { Annotation, AnnotationColorName } from '../../annotations/types';
 import AnnotationColorPicker from './AnnotationColorPicker';
 import { LabelledSlider, OpacitySlider, RegionHighlightFields } from './AnnotationStyleFields';
 
@@ -49,7 +49,7 @@ export const AnnotationEditor: React.FC<AnnotationEditorProps> = ({
   onDraftChange,
 }) => {
   const [label, setLabel] = useState(annotation.label);
-  const [color, setColor] = useState<AnnotationColor>(annotation.color ?? DEFAULT_COLOR);
+  const [color, setColor] = useState<AnnotationColorName>(annotation.color ?? DEFAULT_COLOR);
   const [style, setStyle] = useState<EffectiveStyle>(() => effectiveStyle(annotation));
   const [keepRegion, setKeepRegion] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -101,7 +101,7 @@ export const AnnotationEditor: React.FC<AnnotationEditorProps> = ({
         }}
         error={labelError}
       />
-      <AnnotationColorPicker value={color} onChange={setColor} />
+      <AnnotationColorPicker value={color} onChange={setColor} allowInk={!annotation.color} />
       {annotation.kind === 'range' && (
         <OpacitySlider
           label="Opacity"

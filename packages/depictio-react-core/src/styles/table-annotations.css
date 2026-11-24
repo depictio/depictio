@@ -86,6 +86,12 @@
   --depictio-annot-stripe: var(--depictio-annot-indigo-stripe);
 }
 
+.depictio-row-annotated-ink {
+  --depictio-annot-bg: var(--depictio-annot-ink-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-ink-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-ink-stripe);
+}
+
 .depictio-row-annotated-gray {
   --depictio-annot-bg: var(--depictio-annot-gray-bg);
   --depictio-annot-bg-strong: var(--depictio-annot-gray-bg-strong);

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { DIRECTION_COLORS } from '../../palettes.generated';
 import { ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
@@ -16,6 +17,7 @@ import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { demandForItems } from './contentDemand';
 import { contrastLabel, contrastSides, resolveEffectLabel } from './deViews';
+import { barRowKeys } from './barRowKeys';
 
 /** Bar labels and axis text; the default 12 was small beside the tile's title. */
 const BAR_FONT_SIZE = 14;
@@ -59,8 +61,8 @@ interface Props {
 }
 
 // The volcano's UP / DN colours, so a taxon reads the same on both: up pink, down blue.
-const POSITIVE = '#e64980';
-const NEGATIVE = '#1c7ed6';
+const POSITIVE = DIRECTION_COLORS.up.light;
+const NEGATIVE = DIRECTION_COLORS.down.light;
 const FADED = 'rgba(127,127,127,0.45)';
 const ALL_TAB = 'all';
 
@@ -308,7 +310,9 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           type: 'bar' as const,
           orientation: 'h' as const,
           x: ranked.map((r) => r.lfc),
-          y: ranked.map((r) => r.label),
+          // Positioned on the feature, one row per bar: the label (shown as the
+          // bar's text) may repeat, and bars sharing a category overlap.
+          y: barRowKeys(ranked.map((r) => r.feat)),
           // Long names are cut here (the hover has the whole name): the text sits
           // outside the bar, in a margin of fixed width.
           text: ranked.map((r) => (r.label.length > 24 ? `${r.label.slice(0, 23)}…` : r.label)),

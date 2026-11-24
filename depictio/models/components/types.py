@@ -227,14 +227,17 @@ FigureMode = Literal["ui", "code"]
 # packages/depictio-react-core/src/components/cardVariant.ts.
 CardVariant = Literal["default", "headline", "compact", "minimal", "accent", "split"]
 
-# How a figure tile is drawn. `minimal` is the landing-page look: the title in
-# the card header with an icon badge and an inline subtitle, a transparent plot
-# with faint dashed grid lines, the legend in one line under the plot, large
-# markers. Shared by a figure's own `figure_style` and a grid section's
+# How a figure tile is drawn. `default` is the overview look (one hue where
+# colour only repeats the axis, bars sorted, remainder values last and in grey,
+# light chrome, markers sized by point count). `classic` leaves the drawing as
+# the figure builds it. `minimal` is the landing-page look on top of the overview
+# look: the title in the card header with an icon badge and an inline subtitle,
+# a transparent plot with faint dashed grid lines, the legend in one line under
+# the plot, large markers. Shared by a figure's own `figure_style` and a grid section's
 # `figure_style`, like CardVariant. Mirrored by FIGURE_STYLES in
 # packages/depictio-react-core/src/components/figureStyle.ts and in
 # depictio/api/v1/services/figure/style_presets.py.
-FigureStyle = Literal["default", "minimal"]
+FigureStyle = Literal["default", "minimal", "classic"]
 
 
 #: A reference computed from the data on show (RULES.md §17: a data-defined

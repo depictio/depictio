@@ -266,3 +266,46 @@ class TestResolvedPalettes:
     def test_rejects_a_tuple_of_the_wrong_length(self):
         with pytest.raises(ValueError):
             BrandTheme(palettes={"primary": ["#00a550"]})
+
+
+class TestPlotPalettePreset:
+    """`plots.palette` names a depictio palette (depictio.models.palettes)."""
+
+    def test_preset_fills_both_schemes(self):
+        from depictio.models import palettes
+
+        plots = resolve_brand_theme(BrandTheme(plots=BrandPlots(palette="terre"))).plots
+        assert plots is not None
+        assert plots.colorway == palettes.categorical("terre", "light")
+        assert plots.colorway_dark == palettes.categorical("terre", "dark")
+        assert plots.sequential == palettes.sequential("terre", "light")
+        assert plots.sequential_dark == palettes.sequential("terre", "dark")
+
+    def test_explicit_colorway_beats_the_preset_of_the_same_layer(self):
+        plots = resolve_brand_theme(
+            BrandTheme(plots=BrandPlots(palette="terre", colorway=["#112233"]))
+        ).plots
+        assert plots is not None and plots.colorway == ["#112233"]
+        assert plots.colorway_dark is None
+
+    def test_preset_beats_the_brand_palette(self):
+        from depictio.models import palettes
+
+        plots = resolve_brand_theme(
+            BrandTheme(primary="#ff0000", plots=BrandPlots(palette="froide"))
+        ).plots
+        assert plots is not None and plots.colorway == palettes.categorical("froide", "light")
+
+    def test_dashboard_preset_replaces_instance_colorway(self):
+        merged = merge_brand_themes(
+            BrandTheme(plots=BrandPlots(template="seaborn", colorway=["#111111"])),
+            BrandTheme(plots=BrandPlots(palette="douce")),
+        )
+        assert merged.plots is not None
+        assert merged.plots.colorway is None
+        assert merged.plots.template == "seaborn"
+        assert merged.plots.palette == "douce"
+
+    def test_unknown_preset_is_rejected(self):
+        with pytest.raises(ValueError):
+            BrandPlots(palette="no-such-palette")

@@ -467,3 +467,50 @@ def test_a_tied_card_mode_is_the_smallest_value_as_on_the_server() -> None:
     df = pl.DataFrame({"g": ["novel", "known", "novel", "known", None, None, None]})
     assert {_aggregate(df, "g", "mode") for _ in range(20)} == {"known"}
     assert df["g"].to_pandas().mode().iloc[0] == "known"
+
+
+def test_a_marked_figure_ships_the_patch_that_takes_its_marks_off() -> None:
+    """The preview's "Automatic marks" switch: the figure keeps its marks, and
+    `marks_off` names what to drop. A figure without marks carries none."""
+    payload = build_payload(_get_output("bclconvert_lane_summary"), "light")
+    figures = payload["data"]["figures"].values()
+    marked = [f for f in figures if "marks_off" in f]
+    assert marked, "no figure of this output carries marks"
+    for f in marked:
+        assert f["marks_off"]["data"] or f["marks_off"]["layout"]
+
+
+def test_a_bar_preview_draws_one_bar_per_group_as_a_dashboard_does() -> None:
+    """px.bar stacks one segment per row; a dashboard tile sums per group first.
+
+    The preview handed raw fixture rows to px, so a bar per cluster over six
+    samples' rows drew fourteen white-ruled slivers per bar, a chart no
+    dashboard shows. Every bar render now goes through the dashboard's
+    aggregation: within a trace, no category appears twice.
+    """
+    from depictio.catalog.payload import _figure_payload, _load_fixture_df
+
+    checked = 0
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            for render in output.renders_as:
+                if render.component != "figure" or render.visu_type != "bar" or render.code:
+                    continue
+                figure = _figure_payload(_load_fixture_df(output), render)["figure"]
+                for trace in figure["data"]:
+                    horizontal = trace.get("orientation") == "h"
+                    cats = trace.get("y" if horizontal else "x")
+                    if isinstance(cats, list):
+                        assert len(cats) == len(set(cats)), (output.id, trace.get("name"))
+                checked += 1
+    assert checked > 30
+
+
+def test_a_coverage_track_gets_the_category_it_colours_by() -> None:
+    """`color_by: category` over A/B compartments drew one hue: the payload
+    dropped the category role, so the renderer had nothing to colour by."""
+    output = _get_output("cooltools_eigenvector")
+    payload = build_payload(output, "light")
+    [result] = [v for v in payload["data"]["compute"].values() if "summary" in v]
+    assert result["columns"]["category"] == "compartment"
+    assert set(result["rows"]["compartment"]) - {None} == {"A", "B"}

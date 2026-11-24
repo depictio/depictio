@@ -16,11 +16,10 @@ unchanged.
 Replaces the former ``dash_mantine_components.add_figure_templates()`` call,
 dropped when Dash was removed in the React migration. We don't want to pull
 Dash back into the API/worker images just to register two Plotly templates, so
-this rebuilds them from the standard Mantine default palette — the same hex
-values dmc used — keeping server-rendered figures visually identical.
-
-Mantine palette reference (shade index): accent colors use [6] (light) / [8]
-(dark); ``dark[7]`` is the dark paper background.
+this rebuilds them from the shared depictio plot palette
+(``depictio.models.palettes``): the categorical colorway, the sequential
+colorscale and the text / grid / axis tokens are the same ones the viewer's
+Plotly theme reads, so a server-rendered figure matches a client-rendered one.
 """
 
 from __future__ import annotations
@@ -28,48 +27,16 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import plotly.io as pio
 
-# Mantine default fontFamily. The minimal figure style reads it to tell a brand
-# font (kept) from this default (replaced by Inter).
-FONT_FAMILY = (
-    "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "
-    'sans-serif, "Apple Color Emoji", "Segoe UI Emoji"'
-)
+from depictio.models import palettes
 
-# Categorical colorway — Mantine [blue, red, green, violet, orange, cyan, pink,
-# yellow] at shade 6 (light) and shade 8 (dark).
-_LIGHT_COLORWAY = [
-    "#228be6",
-    "#fa5252",
-    "#40c057",
-    "#7950f2",
-    "#fd7e14",
-    "#15aabf",
-    "#e64980",
-    "#fab005",
-]
-_DARK_COLORWAY = [
-    "#1971c2",
-    "#e03131",
-    "#2f9e44",
-    "#6741d9",
-    "#e8590c",
-    "#0c8599",
-    "#c2255c",
-    "#f08c00",
-]
+# The plot font stack. The minimal figure style reads it to tell a brand font
+# (kept) from this default (replaced by Inter).
+FONT_FAMILY = palettes.font_family()
 
-# Sequential colorscale shared by both templates (dmc's gradient).
-_SEQUENTIAL_COLORS = [
-    "#1864ab",
-    "#7065b9",
-    "#af61b7",
-    "#e35ea5",
-    "#ff6587",
-    "#ff7c63",
-    "#ff9e3d",
-    "#fcc419",
-]
-_SEQUENTIAL = [[i / (len(_SEQUENTIAL_COLORS) - 1), c] for i, c in enumerate(_SEQUENTIAL_COLORS)]
+
+def _sequential(mode: str) -> list[list[float | str]]:
+    """The default sequential colorscale of a mode, as Plotly stops."""
+    return palettes.colorscale(palettes.sequential(None, mode))
 
 
 # Transparent, not a painted rectangle. Every server-rendered figure sits on a
@@ -77,38 +44,34 @@ _SEQUENTIAL = [[i / (len(_SEQUENTIAL_COLORS) - 1), c] for i, c in enumerate(_SEQ
 # theme themselves that way (`plotlyTheme.ts`) — a figure that paints its own
 # opaque `#1a1b1e` reads as a darker block sitting inside the card, which is
 # exactly how a code-mode figure and an advanced viz stopped matching in dark
-# mode. Text and grid colours mirror the same file so both paths land on one
-# appearance.
+# mode. Text and grid colours come from the shared chrome tokens so both paths
+# land on one appearance.
 _TRANSPARENT = "rgba(0,0,0,0)"
-_LIGHT_TEXT = "#343a40"  # gray[8]
-_DARK_TEXT = "#e9ecef"  # gray[2]
-_LIGHT_GRID = "rgba(0,0,0,0.08)"
-_DARK_GRID = "rgba(255,255,255,0.08)"
-_LIGHT_ZERO = "rgba(0,0,0,0.35)"
-_DARK_ZERO = "rgba(255,255,255,0.35)"
 
 
-def _build(colorway: list[str], text: str, grid: str, zeroline: str) -> go.layout.Template:
+def _build(mode: str) -> go.layout.Template:
+    chrome = palettes.chrome(mode)
+    text = chrome["text"]
     # `color` covers the axis line and tick labels; a template that sets only
     # `font.family` leaves Plotly's built-in `#444`, which is unreadable on a
     # dark card.
     axis = dict(
-        gridcolor=grid,
+        gridcolor=chrome["grid"],
         gridwidth=0.5,
-        zerolinecolor=zeroline,
-        linecolor=grid,
+        zerolinecolor=chrome["zero"],
+        linecolor=chrome["axis_line"],
         color=text,
     )
     return go.layout.Template(
         layout=dict(
-            colorway=colorway,
+            colorway=palettes.categorical(None, mode),
             paper_bgcolor=_TRANSPARENT,
             plot_bgcolor=_TRANSPARENT,
             font=dict(family=FONT_FAMILY, color=text),
             xaxis=axis,
             yaxis=axis,
             geo=dict(bgcolor=_TRANSPARENT),
-            colorscale=dict(sequential=_SEQUENTIAL),
+            colorscale=dict(sequential=_sequential(mode)),
         )
     )
 
@@ -120,11 +83,9 @@ def ensure_mantine_templates() -> None:
     point (mirrors the old dmc guard). Replaces ``dmc.add_figure_templates()``.
     """
     if "mantine_light" not in pio.templates:
-        pio.templates["mantine_light"] = _build(
-            _LIGHT_COLORWAY, _LIGHT_TEXT, _LIGHT_GRID, _LIGHT_ZERO
-        )
+        pio.templates["mantine_light"] = _build("light")
     if "mantine_dark" not in pio.templates:
-        pio.templates["mantine_dark"] = _build(_DARK_COLORWAY, _DARK_TEXT, _DARK_GRID, _DARK_ZERO)
+        pio.templates["mantine_dark"] = _build("dark")
 
 
 def get_theme_template(theme: str) -> str:

@@ -60,7 +60,11 @@ installed or served by the deployment — none is fetched for you.
 **Figures** (`plots`). `template` is the Plotly template for figures whose
 component picks none; unset means "follow the UI color scheme", which is
 Depictio's own brand-aware `mantine_light` / `mantine_dark`. `colorway` and
-`sequential` are the categorical and continuous palettes.
+`sequential` are the categorical and continuous palettes. `palette` names one of the
+six depictio palettes instead (`marque`, the default, `signature`, `douce`,
+`joaillerie`, `terre`, `froide`) and `overflow` decides what a value past its
+8 slots gets. How the palettes were chosen, what each colour role means and how
+the brand hues relate to the plot palette: [design/palettes.md](design/palettes.md).
 
 ## Derived values
 

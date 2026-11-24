@@ -1399,6 +1399,7 @@ const Gallery: React.FC<{
       const owner = tools.find((t) => t.outputs.some((o) => o.output.id === selected));
       return (
         <OutputView
+          key={selected}
           entry={entry}
           theme={theme}
           toolId={owner?.id}

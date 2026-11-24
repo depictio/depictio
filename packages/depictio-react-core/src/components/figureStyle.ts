@@ -15,7 +15,7 @@ import type { Config, ModeBarDefaultButtons } from 'plotly.js';
 import type { FilterSectionSpec, StoredMetadata } from '../api';
 import { withSectionCardVariant } from './cardVariant';
 
-export const FIGURE_STYLES = ['default', 'minimal'] as const;
+export const FIGURE_STYLES = ['default', 'minimal', 'classic'] as const;
 export type FigureStyle = (typeof FIGURE_STYLES)[number];
 
 /** A known style, or null for anything else (unset, a newer release's name,

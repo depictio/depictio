@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { referenceGuide } from '../../palettes';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
@@ -9,7 +10,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -44,7 +45,8 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { logLogSlope } from './logLogSlope';
-import { integerTickValues, markerSizeFor, showsMarkers } from './profileAxis';
+import { axisAnchors, integerTickValues, markerSizeFor, showsMarkers } from './profileAxis';
+import { LINE_STYLE } from '../../palettes.generated';
 import { medianIqrByX, type ProfileAggregate } from './profileAggregate';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import {
@@ -77,6 +79,8 @@ interface ProfileConfig {
   aggregate?: ProfileAggregate | null;
   reference_x?: number | null;
   reference_label?: string | null;
+  /** Column naming anchors (TSS, TES) at some x, null elsewhere. */
+  x_label_col?: string | null;
   /** A horizontal line at this y; else at `reference_y_stat` of the y column
    *  over the rows on show, computed by the server (`reference_stats`). */
   reference_y?: number | null;
@@ -184,7 +188,7 @@ const RESIDUE_POSITION_COLUMN = 'position';
 const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as ProfileConfig;
   const isDark = colorScheme === 'dark';
 
@@ -193,7 +197,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const [logX, setLogX] = usePersistedVizControl<boolean>(metadata, 'log_x', false);
   const [logY, setLogY] = usePersistedVizControl<boolean>(metadata, 'log_y', false);
   const [bandOpacity, setBandOpacity] = usePersistedVizControl<number>(metadata, 'band_opacity', 0.2);
-  const [lineWidth, setLineWidth] = usePersistedVizControl<number>(metadata, 'line_width', 2);
+  const [lineWidth, setLineWidth] = usePersistedVizControl<number>(metadata, 'line_width', LINE_STYLE.width);
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
   // The Hi-C P(s) convention, useful to any log-log profile: the slope is what
   // separates one regime from another and it is unreadable off the curve.
@@ -219,8 +223,9 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       if (!cols.includes(bandCols.upper)) cols.push(bandCols.upper);
     }
     if (selectionColumn && !cols.includes(selectionColumn)) cols.push(selectionColumn);
+    if (config.x_label_col && !cols.includes(config.x_label_col)) cols.push(config.x_label_col);
     return cols;
-  }, [config.series_col, config.x_col, config.y_col, bandCols, selectionColumn]);
+  }, [config.series_col, config.x_col, config.y_col, bandCols, selectionColumn, config.x_label_col]);
 
   // This component must not narrow itself by its own selection: a box select
   // would otherwise redraw the profile as only the curves it caught and the
@@ -411,7 +416,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       bySeries.get(name)!.sort((a, b) => a.x - b.x);
     }
 
-    const colours = stableColorMap(seriesUniverse ?? names, palette, pinnedColours);
+    const colours = stableColorMap(seriesUniverse ?? names, palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
     const dimming = selectedSeries.size > 0;
 
     const xLabel = config.x_title || config.x_col || 'x';
@@ -423,6 +428,13 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     const logAxisX = derivative || logX;
     const logAxisY = derivative || logY;
     // A step-like x (0..N) prints whole numbers only; a log axis keeps its own.
+    // Anchors the data names (deepTools' TSS / TES) label the axis and each
+    // get a guide; they replace the bin numbers, which name nothing a reader
+    // knows. Not on a log axis, where Plotly places shapes in log units.
+    const anchors =
+      config.x_label_col && !logAxisX
+        ? axisAnchors(xs, (rows[config.x_label_col] || []) as unknown[])
+        : [];
     const wholeXTicks = logAxisX
       ? null
       : integerTickValues(Array.from(bySeries.values()).flatMap((pts) => pts.map((p) => p.x)));
@@ -579,6 +591,20 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       }
     }
 
+    for (const anchor of anchors) {
+      shapes.push({
+        type: 'line',
+        xref: 'x',
+        yref: 'paper',
+        x0: anchor.x,
+        x1: anchor.x,
+        y0: 0,
+        y1: 1,
+        line: { ...referenceGuide(isDark ? 'dark' : 'light').line, width: 1, dash: 'dot' },
+        layer: 'below',
+      });
+    }
+
     const refX = config.reference_x === null || config.reference_x === undefined
       ? null
       : toAxisX(Number(config.reference_x));
@@ -628,7 +654,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         x1: 1,
         y0: refY.value,
         y1: refY.value,
-        line: { color: zeroLineColor, width: 1, dash: 'dash' },
+        line: referenceGuide(isDark ? 'dark' : 'light').line,
         layer: 'below',
       });
       annotations.push({
@@ -640,7 +666,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         showarrow: false,
         xanchor: 'right',
         yanchor: 'bottom',
-        font: { size: 10, color: textColor },
+        font: referenceGuide(isDark ? 'dark' : 'light').font,
       });
     }
 
@@ -685,9 +711,11 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
           type: logAxisX ? 'log' : 'linear',
           zeroline: false,
           gridcolor: gridColor,
-          ...(wholeXTicks
-            ? { tickmode: 'array', tickvals: wholeXTicks, ticktext: wholeXTicks.map(String) }
-            : {}),
+          ...(anchors.length > 0
+            ? { tickmode: 'array', tickvals: anchors.map((a) => a.x), ticktext: anchors.map((a) => a.label) }
+            : wholeXTicks
+              ? { tickmode: 'array', tickvals: wholeXTicks, ticktext: wholeXTicks.map(String) }
+              : {}),
           ...(derivative ? { showticklabels: false, anchor: 'y' } : {}),
         },
         yaxis: {

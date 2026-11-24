@@ -286,7 +286,9 @@ class Annotation(_Strict):
     kind: AnnotationKind
     geometry: Geometry
     label: str = Field(min_length=1, max_length=MAX_LABEL_CHARS)
-    color: AnnotationColor = "yellow"
+    # Unset draws in the neutral annotation ink (depictio.models.palettes.annotation_ink),
+    # told apart from the data by form; a picked colour is a Mantine name.
+    color: AnnotationColor | None = None
     style: AnnotationStyle = Field(default_factory=AnnotationStyle)
     published: bool = False
     """Visible to viewers of the dashboard (shape and label only)."""
@@ -481,7 +483,7 @@ class PublishedAnnotation(BaseModel):
     kind: AnnotationKind
     geometry: Geometry
     label: str
-    color: AnnotationColor
+    color: AnnotationColor | None = None
     style: AnnotationStyle
     variant: str | None = None
 

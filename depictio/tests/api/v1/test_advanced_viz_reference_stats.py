@@ -63,6 +63,7 @@ def test_unknown_stat_is_refused() -> None:
 def test_labels_name_the_statistic() -> None:
     assert reference_label("median") == "median of this table"
     assert reference_label("p95") == "95th percentile of this table"
+    assert reference_label("median", "pct_mapped") == "median pct mapped"
 
 
 def test_malformed_requests_are_dropped_not_raised() -> None:
@@ -375,7 +376,7 @@ def test_figure_reference_lines_are_drawn_and_named() -> None:
     )
     resolved = resolve_reference_lines(lines, frame)
     assert resolved == [
-        {"axis": "y", "value": 3.0, "label": "median of this table"},
+        {"axis": "y", "value": 3.0, "label": "median v"},
         {"axis": "x", "value": 0.5, "label": "cut-off"},
     ]
     fig = apply_reference_lines(go.Figure(go.Box(x=frame["g"], y=frame["v"])), resolved)
@@ -383,7 +384,24 @@ def test_figure_reference_lines_are_drawn_and_named() -> None:
     assert len(shapes) == 2
     assert shapes[0].y0 == 3.0 and shapes[0].line.dash == "dash"
     texts = {a.text for a in fig.layout.annotations}
-    assert {"median of this table", "cut-off"} <= texts
+    assert {"median v", "cut-off"} <= texts
+
+
+def test_a_line_source_is_named_in_its_label() -> None:
+    """RULES.md §17: where a threshold comes from is on the plot, not only in YAML."""
+    from depictio.api.v1.services.figure.reference_lines import resolve_reference_lines
+
+    resolved = resolve_reference_lines(
+        [
+            {"axis": "y", "value": 30.0, "label": "Q30", "source": "Illumina spec"},
+            {"axis": "y", "value": 0.5, "source": "FastQC default"},
+        ],
+        None,
+    )
+    assert [r["label"] for r in resolved] == [
+        "Q30 (Illumina spec)",
+        "y = 0.5 (FastQC default)",
+    ]
 
 
 def test_figure_dict_path_keeps_existing_shapes() -> None:
@@ -409,7 +427,63 @@ def test_catalog_figure_preview_draws_reference_lines(tmp_path) -> None:
     fig = _figure_payload(df, render)["figure"]
     shapes = fig["layout"]["shapes"]
     assert any(math.isclose(s["y0"], 25.0) for s in shapes)
-    assert any(a["text"] == "median of this table" for a in fig["layout"]["annotations"])
+    assert any(a["text"] == "median depth" for a in fig["layout"]["annotations"])
+    # The overview look colours each bar by its side of the lone line.
+    bar = next(t for t in fig["data"] if t["type"] == "bar")
+    sides = fig["layout"]["meta"]["depictio_reference_sides"]
+    assert bar["marker"]["color"] == [
+        sides["below"],
+        sides["below"],
+        sides["above"],
+        sides["above"],
+    ]
+
+
+def test_both_figure_paths_record_the_lines_for_the_overview_look() -> None:
+    from depictio.api.v1.services.figure.reference_lines import apply_reference_lines
+
+    line = {"axis": "y", "value": 1.0, "label": "y = 1"}
+    as_dict = apply_reference_lines({"data": [], "layout": {"meta": {"keep": 1}}}, [line])
+    assert as_dict["layout"]["meta"] == {"keep": 1, "depictio_reference": [line]}
+    built = apply_reference_lines(go.Figure(go.Bar(x=["a"], y=[2])), [line])
+    assert built.layout.meta == {"depictio_reference": [line]}
+
+
+def test_a_card_breakdown_takes_the_colours_of_the_outputs_figures() -> None:
+    from depictio.catalog.payload import _share_figure_colours
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    class Output:
+        renders_as = [
+            Render(
+                component="figure", visu_type="histogram", dict_kwargs={"x": "n", "color": "sample"}
+            ),
+            Render(component="card", column="n", aggregation="max", breakdown_col="sample"),
+        ]
+
+    renders = [
+        {"index": "o-0", "component_type": "figure"},
+        {"index": "o-1", "component_type": "card", "breakdown_col": "sample"},
+    ]
+    data = {
+        "figures": {
+            "o-0": {
+                "figure": {
+                    "data": [
+                        {"name": "s1", "marker": {"color": "#111111"}},
+                        {
+                            "name": "Other (3)",
+                            "legendgroup": "__other__",
+                            "marker": {"color": "#adb5bd"},
+                        },
+                    ]
+                }
+            }
+        }
+    }
+    _share_figure_colours(Output(), renders, data)
+    assert renders[1]["_category_colors"] == {"sample": {"s1": "#111111"}}
+    assert "_category_colors" not in renders[0]
 
 
 def test_catalog_preview_carries_reference_stats() -> None:
@@ -495,4 +569,4 @@ def test_worker_figure_builder_draws_a_median_of_the_filtered_rows(monkeypatch) 
     )
     layout = result["figure"]["layout"]
     assert any(s.get("y0") == 3.0 and s["line"]["dash"] == "dash" for s in layout["shapes"])
-    assert any(a.get("text") == "median of this table" for a in layout["annotations"])
+    assert any(a.get("text") == "median depth" for a in layout["annotations"])

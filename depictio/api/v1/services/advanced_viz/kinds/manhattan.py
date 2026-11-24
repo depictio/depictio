@@ -20,24 +20,15 @@ import re
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
+from depictio.api.v1.services.advanced_viz.palette import significance_colors
+from depictio.models import palettes
 
-#: GWAS-style alternating chromosome palette, mirroring ``_palette`` in the TSX.
-_CHR_PALETTE: tuple[str, ...] = (
-    "#1c7ed6",
-    "#495057",
-    "#0ca678",
-    "#e8590c",
-    "#7048e8",
-    "#c2255c",
-    "#1098ad",
-    "#5c940d",
-)
 
-#: Tier colours when a threshold splits the points. Match the Volcano/MA scheme.
-_COLOR_ABOVE = "#0ca678"
-_COLOR_BELOW = "#e8590c"
-_COLOR_DIM = "rgba(160,160,160,0.45)"
-_COLOR_INACTIVE = "rgba(200,200,200,0.3)"
+def _rgba(colour: str, alpha: float) -> str:
+    """``colour`` (``#rrggbb``) as an ``rgba()`` string at ``alpha``."""
+    r, g, b = (int(colour[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
+
 
 #: Score kinds bounded to [0, 1]. Plotly's autorange over-pads when top-N labels
 #: sit at the ceiling, so these get an explicit range — same test as the TSX.
@@ -153,19 +144,26 @@ def build(
     if threshold is not None:
         tiers = ["ABOVE" if (s is not None and s >= threshold) else "BELOW" for s in scores]
 
-    chr_colors = {name: _CHR_PALETTE[i % len(_CHR_PALETTE)] for i, name in enumerate(all_chrs)}
+    # Chromosomes cycle the default categorical palette. With a threshold the
+    # two tiers use the volcano / MA scheme (above = up, below = down), and the
+    # points the highlight dims fall back to the NS grey.
+    chr_palette = palettes.categorical(None, theme)
+    chr_colors = {name: chr_palette[i % len(chr_palette)] for i, name in enumerate(all_chrs)}
+    color_above, color_below, color_ns = significance_colors(theme)
+    color_dim = _rgba(color_ns, 0.8)
+    color_inactive = _rgba(color_ns, 0.4)
 
     def point_color(index: int, name: str) -> str:
         if name not in active:
-            return _COLOR_INACTIVE
+            return color_inactive
         if tiers and highlight != "none":
             is_above = tiers[index] == "ABOVE"
             highlighted = is_above if highlight == "above" else not is_above
             if not highlighted:
-                return _COLOR_DIM
+                return color_dim
         if tiers:
-            return _COLOR_ABOVE if tiers[index] == "ABOVE" else _COLOR_BELOW
-        return chr_colors.get(name, "#777")
+            return color_above if tiers[index] == "ABOVE" else color_below
+        return chr_colors.get(name, palettes.semantic("unclassified", theme))
 
     colors = [point_color(i, name) for i, name in enumerate(chrs)]
 

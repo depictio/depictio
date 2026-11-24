@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { groupIndices, largestGroup, sortCurveIndices, trapezoidArea } from './prCurves';
+import { curveAuc, groupIndices, largestGroup, sortCurveIndices, trapezoidArea } from './prCurves';
 
 describe('groupIndices', () => {
   it('puts every row in one bucket when no group column is bound', () => {
@@ -64,5 +64,14 @@ describe('sortCurveIndices', () => {
     const idx = [2, 0, 1];
     sortCurveIndices(idx, [0, 1, 2], null);
     expect(idx).toEqual([2, 0, 1]);
+  });
+});
+
+describe('curveAuc', () => {
+  it('has no AUC for a sweep that barely moves along x', () => {
+    expect(curveAuc([0.957749, 0.957693], [0.9996, 0.9996])).toBeNull();
+  });
+  it('is the trapezoid over a sweep that covers the axis', () => {
+    expect(curveAuc([0, 0.5, 1], [1, 0.8, 0.2])).toBeCloseTo(trapezoidArea([0, 0.5, 1], [1, 0.8, 0.2]));
   });
 });

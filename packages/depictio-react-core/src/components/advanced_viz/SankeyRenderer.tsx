@@ -23,10 +23,17 @@ import {
   dispatchSankey,
   pollSankey,
 } from '../../api';
-import { stableColorMap } from '../../colors';
+import { plotOverflow, resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { useCategoryColorSource, useCategoryPalette } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
-import { isUnassigned, lineageShade, unassignedGrey } from './hierarchyColors';
+import {
+  isLossLabel,
+  isUnassigned,
+  lineageIsOneHue,
+  lineageShade,
+  remainderColour,
+  unassignedGrey,
+} from './hierarchyColors';
 import { pinnedPalette } from './phylo/palette';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -258,27 +265,13 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     JSON.stringify(stepFilters),
   ]);
 
-  /** Categorical palette pulled from Mantine theme — same swatches used by the
-   *  Coverage track renderer so the two viz feel consistent in either scheme.
+  /** Categorical palette: depictio's shared one, as the other viz use.
    *  The dashboard's colorway (its brand's) comes first when it has one. */
   const categorySource = useCategoryColorSource();
   const categoryPalette = useCategoryPalette();
   const themePalette = useMemo<string[]>(
-    () => [
-      theme.colors.blue[5],
-      theme.colors.orange[5],
-      theme.colors.green[5],
-      theme.colors.grape[5],
-      theme.colors.teal[5],
-      theme.colors.red[5],
-      theme.colors.violet[5],
-      theme.colors.yellow[7],
-      theme.colors.cyan[5],
-      theme.colors.pink[5],
-      theme.colors.lime[6],
-      theme.colors.indigo[5],
-    ],
-    [theme.colors],
+    () => [...resolveCategoricalPalette(theme, TAB10_PALETTE, isDark)],
+    [theme, isDark],
   );
   const palette = useMemo<string[]>(
     () => (categoryPalette && categoryPalette.length ? [...categoryPalette] : themePalette),
@@ -317,6 +310,8 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       stepOptions[firstStep]?.length ? stepOptions[firstStep] : rootValues,
       palette,
       pinnedPalette(categorySource, null, firstStep),
+      isDark ? 'dark' : 'light',
+      plotOverflow(theme),
     );
     const inflow = new Map<number, Array<{ from: number; value: number }>>();
     link.source.forEach((src, i) => {
@@ -337,7 +332,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       rootOf.set(i, root);
       return root;
     };
-    const grey = unassignedGrey(isDark);
     const placeInStep = new Map<number, number>();
     const perStep = new Map<number, number>();
     nodes.forEach((n, i) => {
@@ -346,17 +340,28 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       perStep.set(n.step_index, k + 1);
     });
     const lineageColour = nodes.map((n, i) => {
-      if (isUnassigned(n.label)) return grey;
+      if (isUnassigned(n.label)) return remainderColour(n.label, isDark);
       const root = nodes[findRoot(i)];
-      if (!root || isUnassigned(root.label)) return grey;
+      if (!root || isUnassigned(root.label)) return remainderColour(root?.label, isDark);
       return lineageShade(rootColours.get(root.label), n.step_index, placeInStep.get(i) ?? 0, isDark);
     });
-    const nodeColors = nodes.map((n, i) =>
-      colorMode === 'step' ? (stepHues[n.step_index] ?? palette[0]) : lineageColour[i],
-    );
+    // One root gives every node its hue: the steps then tell the flows apart.
+    const byStep = colorMode === 'step' || lineageIsOneHue(rootValues);
+    // A dead end (reads "Lost" at a step) is grey, and so is every flow into
+    // it, so what a step drops reads apart from what it keeps.
+    const lossGrey = unassignedGrey(isDark);
+    const isLoss = nodes.map((n) => isLossLabel(n.label));
+    const nodeColors = nodes.map((n, i) => {
+      if (isLoss[i]) return lossGrey;
+      return byStep ? (stepHues[n.step_index] ?? palette[0]) : lineageColour[i];
+    });
 
     function baseColorFor(src: number, tgt: number): string {
-      if (colorMode === 'step') return stepHues[nodes[src]?.step_index ?? 0] ?? palette[0];
+      if (isLoss[tgt] || isLoss[src]) return lossGrey;
+      if (byStep) {
+        const node = colorMode === 'target' ? tgt : src;
+        return stepHues[nodes[node]?.step_index ?? 0] ?? palette[0];
+      }
       return lineageColour[colorMode === 'target' ? tgt : src];
     }
 
@@ -465,6 +470,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     config.value_col,
     config.value_label,
     config.value_format,
+    theme,
   ]);
 
   // Encoding tier: how many steps the flow runs through, what the link colour

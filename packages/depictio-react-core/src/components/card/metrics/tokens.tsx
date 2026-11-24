@@ -60,14 +60,16 @@ export const MetricCaption: React.FC<{
   dimmed?: boolean;
   /** Right-aligned trailing caption in a two-part row. */
   ta?: 'left' | 'right';
-}> = ({ children, strong, dimmed = true, ta }) => (
+  /** Wrap onto a second line instead of cutting the text short. */
+  wrap?: boolean;
+}> = ({ children, strong, dimmed = true, ta, wrap = false }) => (
   <Text
     size="xs"
     lh={1.2}
     fw={strong ? 600 : 400}
     c={dimmed && !strong ? 'dimmed' : undefined}
     ta={ta}
-    truncate
+    truncate={!wrap}
     style={{ fontVariantNumeric: 'tabular-nums', minWidth: 0 }}
   >
     {children}

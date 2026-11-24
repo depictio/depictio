@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Paper, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
-import { stableColorMap } from '../../../colors';
+import { plotOverflow, stableColorMap } from '../../../colors';
 import { contrastingText, sampleColorscale } from '../../../utils/colorScale';
 import {
   fitCellWidth,
@@ -135,8 +135,14 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     if (!isSS) for (const c of categories) if (c != null && c !== '') universe.add(String(c));
     for (const v of variants) if (v.category) universe.add(String(v.category));
     for (const d of domains) if (d.label) universe.add(String(d.label));
-    return stableColorMap(Array.from(universe), colours.categorical, categoryColours ?? null);
-  }, [isSS, categories, variants, domains, colours.categorical, categoryColours]);
+    return stableColorMap(
+      Array.from(universe),
+      colours.categorical,
+      categoryColours ?? null,
+      undefined,
+      plotOverflow(theme),
+    );
+  }, [isSS, categories, variants, domains, colours.categorical, categoryColours, theme]);
 
   // ---- lanes -----------------------------------------------------------------
   // The lanes share the height the cell gives them, each up to its cap, and

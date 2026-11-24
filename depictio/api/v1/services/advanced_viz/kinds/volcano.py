@@ -18,11 +18,7 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-
-#: Tier colours, matching VolcanoRenderer.tsx:129-131.
-_COLOR_UP = "#e64980"
-_COLOR_DN = "#1c7ed6"
-_COLOR_NS = "rgba(160,160,160,0.55)"
+from depictio.api.v1.services.advanced_viz.palette import significance_colors
 
 #: Binary marker sizing so hits pop out of the grey NS cloud without
 #: distracting magnitude variation (VolcanoRenderer.tsx:135).
@@ -53,6 +49,31 @@ def _neg_log10(value: Any) -> float | None:
     if v <= 0 or not math.isfinite(v):
         return None
     return -math.log10(v)
+
+
+def volcano_significance(sig_raw: list[Any], is_neg_log10: bool) -> list[float | None]:
+    """The y of each row, with underflowed significances kept on the plot.
+
+    DESeq2 and edgeR report padj = 0 for their strongest calls; -log10(0) is
+    infinite, so those rows were dropped and called NS. They sit just above
+    the largest finite value instead (``volcanoSignificance`` in deViews.ts).
+    """
+    capped: list[bool] = []
+    finite: list[float | None] = []
+    for v in sig_raw:
+        try:
+            f = float(v) if v is not None else None
+        except (TypeError, ValueError):
+            f = None
+        if is_neg_log10:
+            capped.append(f == math.inf)
+            finite.append(f if f is not None and math.isfinite(f) else None)
+        else:
+            capped.append(f == 0.0)
+            finite.append(_neg_log10(f))
+    top = max((v for v in finite if v is not None), default=0.0)
+    ceiling = top * 1.05 if top > 0 else 300.0
+    return [ceiling if c else v for v, c in zip(finite, capped)]
 
 
 @register("volcano", columns=_columns)
@@ -89,11 +110,7 @@ def build(
         except (TypeError, ValueError):
             xs.append(None)
 
-    ys: list[float | None] = (
-        [None if v is None else float(v) for v in sig_raw]
-        if is_neg_log10
-        else [_neg_log10(v) for v in sig_raw]
-    )
+    ys = volcano_significance(sig_raw, is_neg_log10)
 
     # The threshold is a p-value (VolcanoConfig's documented unit) whatever the
     # column holds, so it always moves to the -log10 axis the points are drawn
@@ -113,14 +130,19 @@ def build(
         else:
             tiers.append("NS")
 
-    colors = [_COLOR_UP if t == "UP" else _COLOR_DN if t == "DN" else _COLOR_NS for t in tiers]
+    up, down, ns = significance_colors(theme)
+    colors = [up if t == "UP" else down if t == "DN" else ns for t in tiers]
     sizes = [_SIZE_NS if t == "NS" else _SIZE_HIT for t in tiers]
 
-    # Top-N by combined |effect| * significance so both axes matter.
+    # Top-N by combined |effect| * significance so both axes matter; when
+    # anything is called, only calls are labelled (`hitsFirst` in deViews.ts).
+    any_hit = any(t != "NS" for t in tiers)
     ranked = [
         (i, abs(x) * (ys[i] or 0.0))
         for i, x in enumerate(xs)
-        if x is not None and math.isfinite(abs(x) * (ys[i] or 0.0))
+        if x is not None
+        and math.isfinite(abs(x) * (ys[i] or 0.0))
+        and not (any_hit and tiers[i] == "NS")
     ]
     ranked.sort(key=lambda d: d[1], reverse=True)
     top_idx = {i for i, _ in ranked[:top_n]}

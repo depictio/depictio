@@ -15,7 +15,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap } from '../../colors';
+import { plotOverflow, stableColorMap } from '../../colors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
 import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
@@ -399,8 +399,8 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   const colours = useMemo(() => panelColours(theme, isDark), [theme, isDark]);
   const pinned = usePinnedCategoryColors(colourColumn);
   const colourMap = useMemo(
-    () => stableColorMap(universe ?? parsed.hits.map(colourKey), colours.categorical, pinned),
-    [universe, parsed, colourKey, colours.categorical, pinned],
+    () => stableColorMap(universe ?? parsed.hits.map(colourKey), colours.categorical, pinned, isDark ? 'dark' : 'light', plotOverflow(theme)),
+    [universe, parsed, colourKey, colours.categorical, pinned, theme],
   );
   const colourOf = useCallback(
     (h: DomainHit) => colourMap.get(colourKey(h)),

@@ -1,6 +1,7 @@
 import { createTheme, DEFAULT_THEME, mergeMantineTheme } from '@mantine/core';
 import { describe, expect, it } from 'vitest';
 
+import { annotationInk } from '../palettes';
 import {
   annotationColorTint,
   annotationColorValue,
@@ -28,6 +29,12 @@ describe('annotation colours', () => {
     expect(resolve('teal')).not.toBe(brand.colors.teal[6]);
   });
 
+  it('resolves the neutral ink to the shared annotation ink of the scheme', () => {
+    expect(annotationColorValue('ink', 'light')).toBe(annotationInk('light'));
+    expect(annotationColorValue('ink', 'dark')).toBe(annotationInk('dark'));
+    expect(annotationColorValue('ink', 'dark', 2)).toBe(annotationInk('dark'));
+  });
+
   it('tints backgrounds with an alpha matching the scheme', () => {
     expect(annotationColorTint('blue', 'light')).toBe(withAlpha(DEFAULT_THEME.colors.blue[6], 0.1));
     expect(annotationColorTint('blue', 'dark', true)).toBe(withAlpha(DEFAULT_THEME.colors.blue[4], 0.2));
@@ -35,7 +42,7 @@ describe('annotation colours', () => {
 
   it('exposes three custom properties per palette name for the table CSS', () => {
     const vars = annotationPaletteVars('light');
-    expect(Object.keys(vars)).toHaveLength(ANNOTATION_COLORS.length * 3);
+    expect(Object.keys(vars)).toHaveLength((ANNOTATION_COLORS.length + 1) * 3); // the palette names plus the neutral ink
     expect(vars['--depictio-annot-orange-stripe']).toBe(DEFAULT_THEME.colors.orange[6]);
     expect(vars['--depictio-annot-orange-bg']).toBe(annotationColorTint('orange', 'light'));
     expect(vars['--depictio-annot-orange-bg-strong']).toBe(annotationColorTint('orange', 'light', true));

@@ -22,6 +22,7 @@ from depictio.api.v1.services.figure.style_presets import (
     resolve_figure_style,
     section_figure_style,
 )
+from depictio.models import palettes
 
 
 def _scatter(n=3, **marker):
@@ -51,8 +52,8 @@ def _scatter(n=3, **marker):
 # resolution
 
 
-def test_styles_are_default_and_minimal():
-    assert FIGURE_STYLES == ("default", "minimal")
+def test_styles_are_default_minimal_and_classic():
+    assert FIGURE_STYLES == ("default", "minimal", "classic")
     assert DEFAULT_FIGURE_STYLE == "default"
 
 
@@ -117,12 +118,17 @@ def test_payload_header_title_follows_the_components_title():
 # the overlay
 
 
-def test_default_style_keeps_the_drawing():
+def test_classic_style_keeps_the_drawing():
     fig = _scatter()
     before = copy.deepcopy(fig)
-    for style in ("default", None, "unknown"):
-        assert apply_figure_style(fig, style) == fig
+    assert apply_figure_style(fig, "classic") == fig
     assert fig == before
+
+
+def test_unset_and_unknown_styles_are_the_default_look():
+    fig = _scatter()
+    assert apply_figure_style(fig, None) == apply_figure_style(fig, "default")
+    assert apply_figure_style(fig, "unknown") == apply_figure_style(fig, "default")
 
 
 def test_overlay_does_not_mutate_its_input():
@@ -144,7 +150,7 @@ def test_minimal_layout():
     assert (legend["y"], legend["yref"], legend["yanchor"]) == (0, "container", "bottom")
     assert legend["title"] == {"text": ""}
     assert legend["itemsizing"] == "constant"
-    assert layout["hoverlabel"]["bgcolor"] == "#ffffff"
+    assert layout["hoverlabel"]["bgcolor"] == palettes.chrome("light")["hover_bg"]
     assert layout["modebar"]["bgcolor"] == "rgba(0,0,0,0)"
     for key in ("xaxis", "yaxis"):
         axis = layout[key]
@@ -168,7 +174,7 @@ def test_dark_theme_colours():
     light = apply_figure_style(_scatter(), "minimal")["layout"]
     dark = apply_figure_style(_scatter(), "minimal", theme="dark")["layout"]
     assert light["xaxis"]["gridcolor"] != dark["xaxis"]["gridcolor"]
-    assert dark["hoverlabel"]["bgcolor"] != "#ffffff"
+    assert dark["hoverlabel"]["bgcolor"] != palettes.chrome("light")["hover_bg"]
 
 
 def test_scatter_markers_are_large_and_unoutlined():
@@ -230,7 +236,13 @@ def _stacked_bars(**layout):
     return fig
 
 
-@pytest.mark.parametrize("theme, surface", [("light", "#ffffff"), ("dark", "#242424")])
+@pytest.mark.parametrize(
+    "theme, surface",
+    [
+        ("light", palettes.chrome("light")["surface"]),
+        ("dark", palettes.chrome("dark")["surface"]),
+    ],
+)
 def test_stacked_segments_are_parted_by_a_gap_of_the_cards_colour(theme, surface):
     out = apply_figure_style(_stacked_bars(), "minimal", theme=theme)
     for trace in out["data"]:
@@ -268,7 +280,7 @@ def test_horizontal_bars_put_the_categories_on_y():
 
 
 def test_hide_legend_in_any_style():
-    for style in ("default", "minimal"):
+    for style in ("default", "minimal", "classic"):
         out = apply_figure_style(_scatter(), style, hide_legend=True)
         assert out["layout"]["showlegend"] is False
 
@@ -421,7 +433,7 @@ def test_minimal_weights_category_names_and_bar_values():
     layout = out["layout"]
     # Horizontal bars: the cities are on y, the values on x.
     assert layout["yaxis"]["tickfont"]["weight"] == 500
-    assert layout["yaxis"]["tickfont"]["color"] == "#495057"
+    assert layout["yaxis"]["tickfont"]["color"] == palettes.chrome("light")["text"]
     assert "weight" not in layout["xaxis"]["tickfont"]
     assert out["data"][0]["textfont"]["weight"] == 500
     go.Figure(out)
@@ -484,7 +496,7 @@ def test_per_point_colours_give_per_point_hover_colours():
 def test_a_scale_a_name_or_no_colour_keeps_the_neutral_hover_label(colour):
     out = apply_figure_style(_bar(colour), "minimal")
     assert "hoverlabel" not in out["data"][0]
-    assert out["layout"]["hoverlabel"]["bgcolor"] == "#ffffff"
+    assert out["layout"]["hoverlabel"]["bgcolor"] == palettes.chrome("light")["hover_bg"]
 
 
 def test_a_line_only_scatter_takes_its_line_colour():
@@ -503,10 +515,10 @@ def test_a_line_only_scatter_takes_its_line_colour():
     assert apply_figure_style(fig, "minimal")["data"][0]["hoverlabel"]["bgcolor"] == "#1c7ed6"
 
 
-def test_the_default_style_colours_hover_labels_too():
+def test_the_classic_style_colours_hover_labels_too():
     fig = _bar("#e03131")
     before = copy.deepcopy(fig)
-    out = apply_figure_style(fig, "default")
+    out = apply_figure_style(fig, "classic")
     assert out["data"][0]["hoverlabel"]["bgcolor"] == "#e03131"
     assert out["layout"] == fig["layout"]
     assert fig == before

@@ -36,6 +36,7 @@ import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { demandForItems } from './contentDemand';
+import { DE_TIER_COLOURS } from './deTierColours';
 
 /** Room one y-axis category needs: a dot at its largest plus the gap that
  *  keeps two neighbouring rows from touching. */
@@ -610,7 +611,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
           : colourBy === 'gene_count'
             ? top.map((r) => r.count)
             : top.map((r) => Math.sign(r.nes));
-    // 'Auto': NES sign uses a discrete blue (down) / red (up) palette; the
+    // 'Auto': NES sign uses the volcano's down / up colours; the
     // other modes use perceptually-uniform sequential scales. YlOrRd reads
     // better than Viridis when the user picked |NES| (magnitude-only, warm
     // end signals "stronger enrichment"). A named scale wins over all of it,
@@ -618,10 +619,10 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     const autoScale: string | (string | number)[][] =
       colourBy === 'nes_sign'
         ? [
-            [0.0, '#1f77b4'],
-            [0.49, '#1f77b4'],
-            [0.51, '#d62728'],
-            [1.0, '#d62728'],
+            [0.0, DE_TIER_COLOURS.DN],
+            [0.49, DE_TIER_COLOURS.DN],
+            [0.51, DE_TIER_COLOURS.UP],
+            [1.0, DE_TIER_COLOURS.UP],
           ]
         : colourBy === 'abs_nes'
           ? isDark

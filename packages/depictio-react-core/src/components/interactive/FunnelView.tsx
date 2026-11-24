@@ -311,7 +311,7 @@ const FunnelView: React.FC<FunnelViewProps> = ({
   // inside each band instead of stacking them into one misleading bar.
   const rowsPlot = useMemo(() => {
     if (!rowsData || chartedDcs.length === 0) return [];
-    const palette = resolveCategoricalPalette(theme, TAB10_PALETTE);
+    const palette = resolveCategoricalPalette(theme, TAB10_PALETTE, isDark);
     return chartedDcs.map((dc) => ({
       type: 'funnel' as const,
       name: dcLabel(dc),

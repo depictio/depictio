@@ -9,7 +9,8 @@ import {
   DEFAULT_POINT_RING_WIDTH,
   DEFAULT_RANGE_OPACITY,
 } from './toPlotly';
-import type { Annotation, AnnotationColor, AnnotationStyle, Geometry, MarkedPoints } from './types';
+import { ANNOTATION_INK } from './types';
+import type { Annotation, AnnotationColor, AnnotationColorName, AnnotationStyle, Geometry, MarkedPoints } from './types';
 
 /** Partial update of an annotation, as the editor hands it back. */
 export interface AnnotationPatchInput {
@@ -61,7 +62,7 @@ export function effectiveStyle(annotation: Annotation): EffectiveStyle {
 /** What the editor lets a person change. */
 export interface AnnotationEdits {
   label: string;
-  color: AnnotationColor;
+  color: AnnotationColorName;
   style: EffectiveStyle;
   /** Only read when the annotation has a region: false drops it. */
   keepRegion: boolean;
@@ -81,7 +82,10 @@ export function annotationPatch(annotation: Annotation, edits: AnnotationEdits):
   const patch: AnnotationPatchInput = {};
   const label = edits.label.trim();
   if (label !== annotation.label) patch.label = label;
-  if (edits.color !== (annotation.color ?? DEFAULT_COLOR)) patch.color = edits.color;
+  // The neutral default is never stored: only a palette colour is a pick to send.
+  if (edits.color !== (annotation.color ?? DEFAULT_COLOR) && edits.color !== ANNOTATION_INK) {
+    patch.color = edits.color;
+  }
 
   const before = effectiveStyle(annotation);
   const after = edits.style;

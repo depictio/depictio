@@ -14,7 +14,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { brandColorway, defaultCategorical, plotOverflow, stableColorMap } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
@@ -124,7 +124,7 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const [showLabels, setShowLabels] = useState<boolean>(true);
   const [showAxis, setShowAxis] = useState<boolean>(false);
 
-  const brandPalette = brandColorway(theme);
+  const brandPalette = brandColorway(theme, isDark);
   // A value of `colour_by_col` wears the dashboard's colour for it.
   const colourPinned = usePinnedCategoryColors(config.colour_by_col);
 
@@ -315,8 +315,8 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const figure = useMemo(() => {
     if (shownFacets.length === 0) return null;
     const { textColor } = plotlyThemeColors(isDark, theme);
-    const paletteArr = (brandPalette ?? TAB10_PALETTE) as readonly string[];
-    const colourFor = stableColorMap(categories, paletteArr, colourPinned);
+    const paletteArr = (brandPalette ?? defaultCategorical(isDark)) as readonly string[];
+    const colourFor = stableColorMap(categories, paletteArr, colourPinned, isDark ? 'dark' : 'light', plotOverflow(theme));
     // The unfilled part of a domain slot: a neutral track, so the category
     // colour is only ever spent on the part of the domain that survives.
     const trackColour = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)';

@@ -107,7 +107,7 @@ def test_histogram_keeps_empty_bins(frame):
     gapped = pl.DataFrame({"v": [1.0] * 100 + [200.0] * 100})
     plan = plan_aggregation("histogram", {"x": "v"})
     fig = build_aggregated_figure(gapped.lazy(), plan, "light", {})
-    assert len(fig.data[0].y) == 40
+    assert len(fig.data[0].y) == 15  # about sqrt(200) bins, the empties kept
     assert 0 in list(fig.data[0].y)
     assert sum(fig.data[0].y) == 200
 
@@ -597,3 +597,15 @@ def test_point_plots_have_no_opinion_about_height():
     assert figure_content_demand("line", scatter) is None
     assert figure_content_demand("bar", {"data": [], "layout": {}}) is None
     assert figure_content_demand("bar", None) is None
+
+
+def test_a_small_table_gets_a_few_bins_not_forty():
+    frame = pl.DataFrame({"v": [float(i) for i in range(15)]})
+    plan = plan_aggregation("histogram", {"x": "v"})
+    fig = build_aggregated_figure(frame.lazy(), plan, "light", {})
+    assert len(fig.data[0].x) == 5
+    big = pl.DataFrame({"v": np.arange(10_000, dtype=float)})
+    fig = build_aggregated_figure(big.lazy(), plan, "light", {})
+    assert len(fig.data[0].x) == 40
+    chosen = plan_aggregation("histogram", {"x": "v", "nbins": 12})
+    assert len(build_aggregated_figure(frame.lazy(), chosen, "light", {}).data[0].x) == 12

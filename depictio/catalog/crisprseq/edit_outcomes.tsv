@@ -13,3 +13,31 @@ SRR3696724	Insertion, in-frame	Outcome	132	1.37
 SRR3696724	Insertion, frameshift	Outcome	431	4.46
 SRR3696724	Deletion, in-frame	Outcome	3014	31.2
 SRR3696724	Deletion, frameshift	Outcome	3896	40.3
+SRR3696710	Wild type	Outcome	54	13.466
+SRR3696710	Template-based	Outcome	0	0.0
+SRR3696710	Deletion-insertion	Outcome	59	14.713
+SRR3696710	Insertion, in-frame	Outcome	8	1.995
+SRR3696710	Insertion, frameshift	Outcome	9	2.244
+SRR3696710	Deletion, in-frame	Outcome	137	34.165
+SRR3696710	Deletion, frameshift	Outcome	134	33.416
+SRR3696711	Wild type	Outcome	351	14.046
+SRR3696711	Template-based	Outcome	60	2.401
+SRR3696711	Deletion-insertion	Outcome	141	5.642
+SRR3696711	Insertion, in-frame	Outcome	30	1.2
+SRR3696711	Insertion, frameshift	Outcome	181	7.243
+SRR3696711	Deletion, in-frame	Outcome	720	28.812
+SRR3696711	Deletion, frameshift	Outcome	1016	40.656
+SRR3696725	Wild type	Outcome	861	12.3
+SRR3696725	Template-based	Outcome	0	0.0
+SRR3696725	Deletion-insertion	Outcome	275	3.929
+SRR3696725	Insertion, in-frame	Outcome	230	3.286
+SRR3696725	Insertion, frameshift	Outcome	395	5.643
+SRR3696725	Deletion, in-frame	Outcome	2156	30.8
+SRR3696725	Deletion, frameshift	Outcome	3083	44.043
+SRR3696726	Wild type	Outcome	2117	14.112
+SRR3696726	Template-based	Outcome	874	5.826
+SRR3696726	Deletion-insertion	Outcome	1052	7.013
+SRR3696726	Insertion, in-frame	Outcome	465	3.1
+SRR3696726	Insertion, frameshift	Outcome	342	2.28
+SRR3696726	Deletion, in-frame	Outcome	5439	36.258
+SRR3696726	Deletion, frameshift	Outcome	4712	31.411

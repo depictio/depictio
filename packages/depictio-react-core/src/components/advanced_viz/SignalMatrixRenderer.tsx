@@ -20,6 +20,7 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { categoricalPalette } from '../../palettes';
 
 /**
  * The metagene heatmap that pairs with a `profile` curve: rows are regions,
@@ -416,9 +417,8 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     if (!matrix) return null;
     const { positions, panels, grouped, zmin, zmax } = matrix;
     const themeColors = plotlyThemeColors(isDark, theme);
-    // Optional-chained: a theme whose primaryColor is not one of its own
-    // colours would otherwise take the whole renderer down for a line colour.
-    const accent = theme.colors[theme.primaryColor]?.[isDark ? 4 : 6];
+    // The shared palette's lead hue, not the page's Mantine primary.
+    const accent = categoricalPalette(null, isDark ? 'dark' : 'light')[0];
 
     // Row labels only while they can be read; the margin they get is clamped to
     // a fraction of the measured tile (see LABEL_MARGIN_FRACTION) and the text

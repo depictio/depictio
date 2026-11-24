@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { annotationPatch, effectiveStyle, hasRegion, withoutRegion } from './edit';
 import type { AnnotationEdits } from './edit';
-import { DEFAULT_LINE_WIDTH, DEFAULT_POINT_RING_WIDTH, DEFAULT_RANGE_OPACITY } from './toPlotly';
+import { DEFAULT_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_POINT_RING_WIDTH, DEFAULT_RANGE_OPACITY } from './toPlotly';
 import type { Annotation, MarkedPoints } from './types';
 
 const region = { shape: 'box' as const, x0: 0, x1: 1, y0: 0, y1: 1 };
@@ -10,7 +10,7 @@ const points: MarkedPoints = { kind: 'points', coords: [{ x: 0, y: 0 }], region 
 
 const unchanged = (a: Annotation): AnnotationEdits => ({
   label: a.label,
-  color: a.color ?? 'yellow',
+  color: a.color ?? DEFAULT_COLOR,
   style: effectiveStyle(a),
   keepRegion: true,
 });

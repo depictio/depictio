@@ -100,6 +100,45 @@ def test_every_chart_previews_more_than_one_colour_or_category():
     assert flat == [], "charts that preview in one colour or one category:\n" + "\n".join(flat)
 
 
+# A column naming samples (or what stands for them: libraries, callsets, assemblies,
+# tumours). A chart that draws one bar, box, line or point per sample needs several
+# of them to show what it compares; see depictio/catalog/ENRICHED_FIXTURES.md.
+_SAMPLE_AXIS = re.compile(
+    r"(^|_)(samples?|sample_id|sample_name|library|callset|assembly|tumou?r)($|_)", re.I
+)
+_MIN_SAMPLES = 3
+# Real reports kept as they are: growing them would mean editing a tool's own output.
+_REAL_REPORTS = {"multiqc_mirtrace_composition"}
+
+
+def test_every_sample_axis_previews_several_samples():
+    from depictio.catalog.payload import _load_fixture_df
+
+    thin: list[str] = []
+    for entry, output, i, render in _cases():
+        if output.id in _REAL_REPORTS:
+            continue
+        try:
+            df = _load_fixture_df(output)
+        except Exception:  # noqa: BLE001 — fixture readability has its own test
+            continue
+        if df is None:
+            continue
+        if render.component == "figure":
+            keys = ("x", "y", "color", "facet_col", "facet_row")
+            values = [render.dict_kwargs.get(k) for k in keys]
+        else:
+            values = list((render.roles or {}).values())
+        bound = {v for v in values if isinstance(v, str)}
+        for col in sorted(c for c in bound if _SAMPLE_AXIS.search(c)):
+            if col in df.columns and df[col].n_unique() < _MIN_SAMPLES:
+                if not _c1_na(getattr(output, "_source_file", None), i):
+                    thin.append(
+                        f"{entry.id}/{output.id}#{i}: {col!r} has {df[col].n_unique()} value(s)"
+                    )
+    assert thin == [], f"charts previewing fewer than {_MIN_SAMPLES} samples:\n" + "\n".join(thin)
+
+
 @pytest.mark.parametrize("probe", ["  # C1 N/A: pooled row\n  - {component: figure}\n"])
 def test_a_c1_na_comment_exempts_the_render_below_it(tmp_path, probe):
     f = tmp_path / "o.yaml"

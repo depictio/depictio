@@ -23,7 +23,8 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-from depictio.api.v1.services.advanced_viz.palette import TAB10_PALETTE, stable_color_map
+from depictio.api.v1.services.advanced_viz.palette import stable_color_map
+from depictio.models import palettes
 
 #: Three rings by default: enough to read the hierarchy without outer slivers
 #: so thin the chart looks like a sankey. Mirrors DEFAULT_DEPTH in the TSX.
@@ -135,8 +136,8 @@ def build(
         values.append(node["value"])
         color_keys.append(node["color_key"])
 
-    colors_map = stable_color_map(color_keys, TAB10_PALETTE, config.get("category_palette"))
-    colors = [colors_map.get(key, "#aaa") for key in color_keys]
+    colors_map = stable_color_map(color_keys, None, config.get("category_palette"), mode=theme)
+    colors = [colors_map.get(key, palettes.semantic("other", theme)) for key in color_keys]
 
     if show_counts and total > 0:
         # Only annotate slices big enough to hold the text.

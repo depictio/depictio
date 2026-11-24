@@ -65,7 +65,8 @@ describe('exact figure previews', () => {
     expect(engine.renderFigure).not.toHaveBeenCalled();
     // The approximation: plotly.js traces themed client-side, no template.
     expect((res.figure.layout as Record<string, unknown>).template).toBeUndefined();
-    expect((res.figure.layout as { font: { color: string } }).font.color).toBe('#c1c2c5');
+    // The shared plot chrome's dark-mode text (depictio_palettes.json `chrome.dark.text`).
+    expect((res.figure.layout as { font: { color: string } }).font.color).toBe('#E9ECEF');
     expect(useExactFigures.getState().fidelity['fig-1']).toEqual({ fidelity: 'approximate', reason: 'loading' });
   });
 

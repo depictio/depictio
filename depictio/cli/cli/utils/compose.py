@@ -1811,6 +1811,8 @@ def _render_tile_fields(
                 fields["reference_lines"] = [
                     line.model_dump(exclude_none=True) for line in render.reference_lines
                 ]
+            if render.annotations is not None:
+                fields["annotations"] = render.annotations.model_dump(exclude_none=True)
         return _component(tagger, stem, "figure", **base, **fields)
     if kind == "interactive":
         assert render.column_name and render.interactive_type

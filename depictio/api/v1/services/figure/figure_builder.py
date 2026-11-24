@@ -41,7 +41,7 @@ def resolve_template_override(requested: str | None) -> str | None:
     return None
 
 
-def merge_dashboard_brand_theme(brand_theme: Any, dict_kwargs: dict) -> dict:
+def merge_dashboard_brand_theme(brand_theme: Any, dict_kwargs: dict, theme: str = "light") -> dict:
     """Apply a dashboard's brand theme figure defaults to a figure's kwargs (#397).
 
     ``brand_theme`` is a ``BrandTheme`` or its dict form (what Mongo stores).
@@ -50,7 +50,10 @@ def merge_dashboard_brand_theme(brand_theme: Any, dict_kwargs: dict) -> dict:
 
     Component-explicit choices always win:
     - ``colorway`` fills ``color_discrete_sequence`` only when the component
-      sets neither a sequence nor a ``color_discrete_map``.
+      sets neither a sequence nor a ``color_discrete_map`` (the brand's
+      ``colorway_dark`` when ``theme`` is ``dark`` and the brand has one).
+      With no brand colorway nothing is set: the figure's template carries the
+      default depictio palette (``mantine_templates``), which px reads.
     - ``template`` applies only when the component's own template is unset or a
       mantine sentinel (i.e. "follow the UI theme" — see
       ``resolve_template_override``).
@@ -58,18 +61,19 @@ def merge_dashboard_brand_theme(brand_theme: Any, dict_kwargs: dict) -> dict:
     if not brand_theme:
         return dict_kwargs
 
-    theme = brand_theme if isinstance(brand_theme, BrandTheme) else BrandTheme(**brand_theme)
-    plots = resolve_brand_theme(theme).plots
+    brand = brand_theme if isinstance(brand_theme, BrandTheme) else BrandTheme(**brand_theme)
+    plots = resolve_brand_theme(brand).plots
     if not plots:
         return dict_kwargs
 
     merged = dict(dict_kwargs)
+    colorway = (theme == "dark" and plots.colorway_dark) or plots.colorway
     if (
-        plots.colorway
+        colorway
         and not merged.get("color_discrete_sequence")
         and not merged.get("color_discrete_map")
     ):
-        merged["color_discrete_sequence"] = plots.colorway
+        merged["color_discrete_sequence"] = colorway
     if plots.template and resolve_template_override(merged.get("template")) is None:
         merged["template"] = plots.template
     return merged

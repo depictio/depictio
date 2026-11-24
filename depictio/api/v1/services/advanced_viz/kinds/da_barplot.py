@@ -19,9 +19,8 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
+from depictio.api.v1.services.advanced_viz.palette import significance_colors
 
-_POSITIVE = "#1f77b4"
-_NEGATIVE = "#d62728"
 _FADED = "rgba(127,127,127,0.45)"
 
 
@@ -94,8 +93,9 @@ def build(
     entries = sorted(entries, key=lambda r: -abs(r["lfc"]))[:top_n]
     entries.sort(key=lambda r: r["lfc"])
 
+    positive, negative, _ = significance_colors(theme)
     colors = [
-        (_POSITIVE if r["lfc"] >= 0 else _NEGATIVE) if r["sig"] <= sig_threshold else _FADED
+        (positive if r["lfc"] >= 0 else negative) if r["sig"] <= sig_threshold else _FADED
         for r in entries
     ]
 

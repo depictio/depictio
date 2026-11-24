@@ -7,72 +7,43 @@ import colorsys
 import numpy as np
 from numpy.typing import NDArray
 
-# ComplexHeatmap-style blue–white–red diverging colorscale
-# Matches circlize::colorRamp2(c(-2, 0, 2), c("#2166AC","#F7F7F7","#B2182B"))
+# Defaults are a dependency-free copy of depictio's "marque" palette
+# (depictio/models/palettes/depictio_palettes.json, light mode). This package
+# must stay installable on its own, so it cannot import depictio; the test
+# depictio/tests/unit/test_palette_copies.py fails when a copy drifts.
+#
+# Diverging colorscale: the marque diverging ramp (teal - grey - orange).
 COMPLEXHEATMAP_COLORSCALE: list[list[float | str]] = [
-    [0.0, "#2166AC"],
-    [0.1, "#4393C3"],
-    [0.2, "#92C5DE"],
-    [0.3, "#D1E5F0"],
-    [0.4, "#F7F7F7"],
-    [0.5, "#F7F7F7"],
-    [0.6, "#FDDBC7"],
-    [0.7, "#F4A582"],
-    [0.8, "#D6604D"],
-    [0.9, "#B2182B"],
-    [1.0, "#67001F"],
+    [0.0, "#0A6455"],
+    [0.1, "#178673"],
+    [0.2, "#53A593"],
+    [0.3, "#87C1B3"],
+    [0.4, "#BDDAD2"],
+    [0.5, "#F2F2F2"],
+    [0.6, "#F0D4C2"],
+    [0.7, "#ECB592"],
+    [0.8, "#DF9564"],
+    [0.9, "#C97436"],
+    [1.0, "#AC5708"],
 ]
 
 # Default font matching ggplot2 / ComplexHeatmap
 FONT_FAMILY = "Arial, Helvetica, sans-serif"
 
-# Qualitative palette for column annotations (top/bottom) — warm tones
+# Categorical palette for annotation tracks: the marque categorical slots minus
+# slots 1 and 2, the hues at the two ends of COMPLEXHEATMAP_COLORSCALE, so a group
+# is never mistaken for a low or high cell.
 COLUMN_PALETTE = [
-    "#E41A1C",
-    "#FF7F00",
-    "#FFD92F",
-    "#A65628",
-    "#F781BF",
-    "#FC8D62",
-    "#E78AC3",
-    "#E5C494",
-    "#D65F5F",
-    "#E8853D",
-    "#F0B86E",
-    "#C97B84",
-    "#F4A582",
-    "#FDDBC7",
-    "#D6604D",
-    "#B2182B",
-    "#FFFF33",
-    "#A6D854",
-    "#FFD92F",
-    "#F781BF",
+    "#925FC4",
+    "#F288C0",
+    "#6495ED",
+    "#EBD244",
+    "#6EC863",
+    "#E53935",
 ]
 
-# Qualitative palette for row annotations (left/right) — cool tones
-ROW_PALETTE = [
-    "#377EB8",
-    "#4DAF4A",
-    "#984EA3",
-    "#66C2A5",
-    "#8DA0CB",
-    "#4EAFB0",
-    "#4878CF",
-    "#9B72AA",
-    "#8DD3C7",
-    "#BEBADA",
-    "#B3B3B3",
-    "#999999",
-    "#2166AC",
-    "#4393C3",
-    "#92C5DE",
-    "#6BAED6",
-    "#74C476",
-    "#31A354",
-    "#756BB1",
-    "#9E9AC8",
-]
+# Same palette on the row side: a track keeps the colour of its value on either axis.
+ROW_PALETTE = list(COLUMN_PALETTE)
 
 # Default palette (used when side is unknown)
 DEFAULT_PALETTE = COLUMN_PALETTE
@@ -86,8 +57,9 @@ def generate_colors(n: int, which: str = "column") -> list[str]:
     n:
         Number of colors to generate.
     which:
-        ``"column"`` for warm tones (top/bottom annotations),
-        ``"row"`` for cool tones (left/right annotations).
+        ``"column"`` (top/bottom annotations) or ``"row"`` (left/right
+        annotations); both start from the same palette, the generated
+        fallback past it is shifted by half a turn on the row side.
     """
     palette = ROW_PALETTE if which == "row" else COLUMN_PALETTE
     if n <= len(palette):

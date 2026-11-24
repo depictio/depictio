@@ -21,10 +21,10 @@ from __future__ import annotations
 
 import json
 
-import plotly.colors
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.models.palette_tracks import track_colors
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -53,7 +53,9 @@ MAX_LEVELS = 12
 ANNOTATIONS_COL = "_col_annotations_json"
 
 _MEASURES = ("mirna", "reads", "cpm", "log2_cpm", "isomirs", "reference_pct")
-_PALETTE = plotly.colors.qualitative.Plotly
+# Group colours come from the shared palette (depictio.models.palettes), minus the
+# hues at the ends of the heatmap's diverging scale.
+_SCALE_KIND = "diverging"
 
 
 def _annotations(counts: pl.DataFrame, samples: list[str]) -> str | None:
@@ -77,7 +79,7 @@ def _annotations(counts: pl.DataFrame, samples: list[str]) -> str | None:
         annotations[col] = {
             "values": values,
             "type": "categorical",
-            "colors": {v: _PALETTE[i % len(_PALETTE)] for i, v in enumerate(levels)},
+            "colors": track_colors(levels, _SCALE_KIND),
         }
     return json.dumps(annotations) if annotations else None
 

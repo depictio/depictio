@@ -23,6 +23,17 @@ export const ANNOTATION_COLORS = [
 
 export type AnnotationColor = (typeof ANNOTATION_COLORS)[number];
 
+/**
+ * The neutral default an annotation wears when its author picked no colour:
+ * depictio's annotation ink (`annotationInk(scheme)`), dark on light plots and
+ * light on dark ones. Not a Mantine palette name and not in `ANNOTATION_COLORS`
+ * (the backend never stores it): it is only what an unset colour resolves to.
+ */
+export const ANNOTATION_INK = 'ink' as const;
+
+/** A colour an annotation can be drawn in: a palette name, or the neutral ink. */
+export type AnnotationColorName = AnnotationColor | typeof ANNOTATION_INK;
+
 export type AnnotationKind = 'range' | 'line' | 'points' | 'note';
 
 /** A numeric value, a category, or a date string, as Plotly takes it. */

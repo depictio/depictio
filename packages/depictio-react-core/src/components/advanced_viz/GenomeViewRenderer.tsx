@@ -636,7 +636,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const backend = glGranted ? 'webgl' : 'canvas';
 
   const themeColors = plotlyThemeColors(isDark, theme);
-  const palette = resolveCategoricalPalette(theme);
+  const palette = resolveCategoricalPalette(theme, null, isDark);
   // The selection, the window band and the hover rule wear the theme's
   // primary colour, as the other genomic tiles' cursors do.
   const overlayColor =

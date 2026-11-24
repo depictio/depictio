@@ -64,7 +64,7 @@
 template:
   template_id: "nf-core/rnasplice/2.0.0"
   description: "nf-core/rnasplice template: MultiQC funnel, sample space, cross-tool differential splicing (DEXSeq exon and DTU, edgeR, rMATS, SUPPA2) with per-tool volcanoes, event types and a sashimi of the junctions around the rMATS calls"
-  version: "4.1.0"
+  version: "4.1.1"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one rnasplice run (multiqc/, pipeline_info/, star_salmon/ and/or salmon/, and input/ with the run's sample and contrast sheets)"

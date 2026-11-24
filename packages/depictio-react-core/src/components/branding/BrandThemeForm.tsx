@@ -16,6 +16,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { BrandPlots, BrandSurfaces, BrandTheme } from '../../brandTheme';
+import { DEFAULT_PALETTE_ID, OVERFLOW_MODE, PALETTE_IDS, PALETTES } from '../../palettes.generated';
 
 /**
  * The brand theme editor (#397), shared by the /admin Branding panel and the
@@ -181,13 +182,68 @@ const SurfaceFields: React.FC<{
   );
 };
 
+const PRESET_OPTIONS = PALETTE_IDS.map((id) => ({
+  value: id,
+  label: id === DEFAULT_PALETTE_ID ? `${PALETTES[id].label} (default)` : PALETTES[id].label,
+}));
+
+const Swatches: React.FC<{ colors: readonly string[] }> = ({ colors }) => (
+  <Group gap={2} wrap="nowrap">
+    {colors.map((c) => (
+      <div
+        key={c}
+        title={c}
+        style={{ width: 18, height: 12, borderRadius: 2, background: c }}
+      />
+    ))}
+  </Group>
+);
+
+type ColorwayMode = 'auto' | 'preset' | 'custom';
+
+/** What values past the palette's last slot get. Shade twins exist for named
+ *  palettes only, so a custom colorway keeps the grey (disabled, not hidden). */
+const OverflowField: React.FC<{
+  value: BrandPlots['overflow'];
+  customColorway: boolean;
+  onChange: (next: BrandPlots['overflow']) => void;
+}> = ({ value, customColorway, onChange }) => (
+  <Stack gap={4}>
+    <Group justify="space-between" align="center">
+      <Text size="xs" fw={500}>
+        Beyond 8 values
+      </Text>
+      <SegmentedControl
+        size="xs"
+        value={customColorway ? 'other' : (value ?? OVERFLOW_MODE)}
+        disabled={customColorway}
+        onChange={(next) => onChange(next === OVERFLOW_MODE ? null : (next as 'other' | 'shade'))}
+        data={[
+          { value: 'other', label: 'Other grey' },
+          { value: 'shade', label: 'Shaded twins' },
+        ]}
+        data-testid="colorway-overflow"
+      />
+    </Group>
+    <Text size="xs" c="dimmed">
+      {customColorway
+        ? 'A custom colorway has no shaded twins: values past its last colour are grey.'
+        : 'Grey keeps every colour distinct for colour-blind readers. Shaded twins give up to 16 colours, but each twin can be confused with its slot.'}
+    </Text>
+  </Stack>
+);
+
 const ColorwayEditor: React.FC<{
   value: string[] | null | undefined;
+  palette: string | null | undefined;
   derived: string[] | null | undefined;
-  onChange: (next: string[] | null) => void;
-}> = ({ value, derived, onChange }) => {
+  /** Emits the colorway and the preset together: a custom list clears the preset. */
+  onChange: (next: { colorway: string[] | null; palette: string | null }) => void;
+}> = ({ value, palette, derived, onChange }) => {
   const colors = value ?? [];
-  const isDerived = colors.length === 0;
+  const mode: ColorwayMode = colors.length ? 'custom' : palette ? 'preset' : 'auto';
+  const preset = palette && palette in PALETTES ? (palette as keyof typeof PALETTES) : DEFAULT_PALETTE_ID;
+  const setColors = (next: string[] | null) => onChange({ colorway: next, palette: null });
 
   return (
     <Stack gap={6}>
@@ -197,22 +253,45 @@ const ColorwayEditor: React.FC<{
         </Text>
         <SegmentedControl
           size="xs"
-          value={isDerived ? 'auto' : 'custom'}
-          onChange={(mode) =>
-            onChange(mode === 'auto' ? null : [...(derived ?? []), ...(colors.length ? colors : [])])
-          }
+          value={mode}
+          onChange={(next) => {
+            if (next === 'auto') onChange({ colorway: null, palette: null });
+            else if (next === 'preset') onChange({ colorway: null, palette: preset });
+            else
+              setColors([
+                ...(mode === 'preset' ? PALETTES[preset].categorical.light : (derived ?? [])),
+              ]);
+          }}
           data={[
             { value: 'auto', label: 'From palette' },
+            { value: 'preset', label: 'Preset' },
             { value: 'custom', label: 'Custom' },
           ]}
           data-testid="colorway-mode"
         />
       </Group>
-      {isDerived ? (
+      {mode === 'auto' ? (
         <Text size="xs" c="dimmed">
           Derived from the brand colors above, so figures follow the palette without a
-          second list to keep in step.
+          second list to keep in step. With no brand colors, figures use the depictio
+          palette.
         </Text>
+      ) : mode === 'preset' ? (
+        <Stack gap={4}>
+          <Select
+            size="xs"
+            data={PRESET_OPTIONS}
+            value={preset}
+            allowDeselect={false}
+            onChange={(id) => id && onChange({ colorway: null, palette: id })}
+            data-testid="colorway-preset"
+          />
+          <Text size="xs" c="dimmed">
+            {PALETTES[preset].description}
+          </Text>
+          <Swatches colors={PALETTES[preset].categorical.light} />
+          <Swatches colors={PALETTES[preset].categorical.dark} />
+        </Stack>
       ) : (
         <Stack gap={4}>
           {colors.map((color, idx) => (
@@ -224,7 +303,7 @@ const ColorwayEditor: React.FC<{
                 value={color}
                 error={!HEX_RE.test(color)}
                 onChange={(next) =>
-                  onChange(colors.map((c, i) => (i === idx ? next : c)))
+                  setColors(colors.map((c, i) => (i === idx ? next : c)))
                 }
                 style={{ flex: 1 }}
               />
@@ -236,7 +315,7 @@ const ColorwayEditor: React.FC<{
                   aria-label="Remove color"
                   onClick={() => {
                     const next = colors.filter((_, i) => i !== idx);
-                    onChange(next.length ? next : null);
+                    setColors(next.length ? next : null);
                   }}
                 >
                   <Icon icon="mdi:close" width={14} />
@@ -249,7 +328,12 @@ const ColorwayEditor: React.FC<{
               variant="default"
               size="sm"
               aria-label="Add color"
-              onClick={() => onChange([...colors, colors[colors.length - 1] ?? '#636efa'])}
+              onClick={() =>
+                setColors([
+                  ...colors,
+                  colors[colors.length - 1] ?? PALETTES[DEFAULT_PALETTE_ID].categorical.light[0],
+                ])
+              }
             >
               <Icon icon="mdi:plus" width={14} />
             </ActionIcon>
@@ -509,8 +593,14 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
         />
         <ColorwayEditor
           value={value.plots?.colorway}
+          palette={value.plots?.palette}
           derived={defaults?.plots?.colorway}
-          onChange={(next) => patchPlots({ colorway: next })}
+          onChange={(next) => patchPlots(next)}
+        />
+        <OverflowField
+          value={value.plots?.overflow}
+          customColorway={!!value.plots?.colorway?.length}
+          onChange={(overflow) => patchPlots({ overflow })}
         />
       </Stack>
       ),

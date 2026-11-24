@@ -84,7 +84,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:thermometer",
-      "icon_color": "orange",
+      "icon_color": "cyan.4",
       "caption": "median, with its spread",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -134,7 +134,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:flash",
-      "icon_color": "cyan",
+      "icon_color": "cyan.6",
       "caption": "median, with its distribution",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -186,7 +186,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:water-percent",
-      "icon_color": "blue",
+      "icon_color": "cyan.8",
       "caption": "median, with its spread",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -236,12 +236,12 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:molecule",
-      "icon_color": "grape",
+      "icon_color": "cyan.9",
       "caption": "median, with its distribution",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "fdbccbcc-7676-47bf-92e5-28c9e0c35941",
+      "index": "ref-env-scatter-temp-cond",
       "component_type": "figure",
       "title": "Temperature \u00d7 conductivity",
       "workflow_tag": "ampliseq",
@@ -325,7 +325,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "0c0b3fed-1467-4019-ba96-c58ec3ce9d97",
+      "index": "ref-env-scatter-nitrate-doc",
       "component_type": "figure",
       "title": "Nitrate \u00d7 dissolved carbon",
       "workflow_tag": "ampliseq",
@@ -460,7 +460,7 @@
       "static": true
     },
     {
-      "i": "box-fdbccbcc-7676-47bf-92e5-28c9e0c35941",
+      "i": "box-ref-env-scatter-temp-cond",
       "x": 0,
       "y": 0,
       "w": 4,
@@ -490,7 +490,7 @@
       ]
     },
     {
-      "i": "box-0c0b3fed-1467-4019-ba96-c58ec3ce9d97",
+      "i": "box-ref-env-scatter-nitrate-doc",
       "x": 0,
       "y": 5,
       "w": 8,
@@ -557,7 +557,7 @@
     {
       "name": "Diversity under the current environment",
       "icon": "mdi:chart-bell-curve",
-      "color": "orange",
+      "color": "cyan",
       "description": "Shannon per sample; the sonde filters on the left narrow it too",
       "collapsed": false,
       "persistent": false,
@@ -576,8 +576,10 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
+  "shared_labels": [],
   "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
@@ -614,11 +616,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 12:18:48",
+  "creation_time": "2026-11-22 20:40:07",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -636,5 +641,7 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": null
+  "published_lock": null,
+  "source_key": null,
+  "template_origin": null
 }

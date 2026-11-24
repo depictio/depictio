@@ -662,7 +662,7 @@ export interface StoredMetadata {
    *  components/figureStyle.ts). Unset takes its grid section's
    *  `figure_style`. `minimal`: the title in a card header with an icon badge
    *  and an inline subtitle, the plot restyled server-side. */
-  figure_style?: 'default' | 'minimal' | (string & {});
+  figure_style?: 'default' | 'minimal' | 'classic' | (string & {});
   /** Figures: a few dimmed words after the title in the `minimal` header. */
   subtitle?: string;
   /** Figures: draw without the legend. */
@@ -798,7 +798,7 @@ export interface FilterSectionSpec {
   visible_filters?: number | null;
   /** Grid sections: the style every figure in the section is drawn in unless
    *  the figure sets its own `figure_style`. */
-  figure_style?: 'default' | 'minimal' | null;
+  figure_style?: 'default' | 'minimal' | 'classic' | null;
 }
 
 /** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
@@ -2009,7 +2009,7 @@ export interface RenderFigureOptions {
 /** The `style` override of a render request; see `figure_style_payload` in
  *  depictio/api/v1/services/figure/style_presets.py. */
 export interface FigureStyleRequest {
-  figure_style?: 'default' | 'minimal';
+  figure_style?: 'default' | 'minimal' | 'classic';
   /** The card header shows the title, so the plot drops its own. */
   header_title?: boolean;
   hide_legend?: boolean;
@@ -10582,6 +10582,20 @@ export interface FigureReferenceLine {
   stat?: ReferenceStat | null;
   column?: string | null;
   label?: string | null;
+  /** Where the line's value comes from (tool default, paper, data-defined);
+   *  shown in the line's label and hover. */
+  source?: string | null;
+}
+
+/** The automatic marks a figure draws on itself, declared rather than drawn.
+ *  No block: each mark is automatic by figure type. A given block draws only
+ *  the marks it turns on, so `{}` draws none.
+ *  Mirrors `FigureAnnotations` in depictio/models/components/lite.py. */
+export interface FigureAnnotations {
+  bar_labels?: 'value' | 'percent' | null;
+  group_n?: boolean | null;
+  cell_values?: boolean | null;
+  hidden_note?: boolean | null;
 }
 
 export interface CatalogRender {
@@ -10601,6 +10615,10 @@ export interface CatalogRender {
   /** figure (UI mode): guide lines, fixed or at a statistic of the rows on
    *  show. Mirrors `ReferenceLine` in depictio/models/components/lite.py. */
   reference_lines?: FigureReferenceLine[];
+  /** figure (UI mode): the automatic marks the figure draws on itself (bar
+   *  labels, per-group counts...). Mirrors `FigureAnnotations` in
+   *  depictio/models/components/lite.py. */
+  annotations?: FigureAnnotations | null;
   column?: string;
   aggregation?: string;
   /** card only: the secondary-metric strip. `aggregations` drives the stats

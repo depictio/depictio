@@ -11,12 +11,18 @@ import {
 import { Icon } from '@iconify/react';
 
 import { annotationColorValue } from '../../annotations/resolveColor';
-import { ANNOTATION_COLORS } from '../../annotations/types';
-import type { AnnotationColor } from '../../annotations/types';
+import { ANNOTATION_COLORS, ANNOTATION_INK } from '../../annotations/types';
+import type { AnnotationColorName } from '../../annotations/types';
 
 export interface AnnotationColorPickerProps {
-  value: AnnotationColor;
-  onChange: (color: AnnotationColor) => void;
+  /** The current colour; the neutral default (`ink`) highlights no swatch. */
+  value: AnnotationColorName;
+  onChange: (color: AnnotationColorName) => void;
+  /**
+   * Offer the neutral ink as the first swatch. Only where it can be stored,
+   * i.e. as "no colour": a new annotation, or one that has none yet.
+   */
+  allowInk?: boolean;
 }
 
 /**
@@ -24,7 +30,7 @@ export interface AnnotationColorPickerProps {
  * resolved like the shapes (default palette, light/dark aware), so a brand
  * theme cannot change what the swatches show.
  */
-const AnnotationColorPicker: React.FC<AnnotationColorPickerProps> = ({ value, onChange }) => {
+const AnnotationColorPicker: React.FC<AnnotationColorPickerProps> = ({ value, onChange, allowInk = false }) => {
   const scheme = useComputedColorScheme('light');
   return (
     <Stack gap={4}>
@@ -32,8 +38,8 @@ const AnnotationColorPicker: React.FC<AnnotationColorPickerProps> = ({ value, on
         Color
       </Text>
       <Group gap={4}>
-        {ANNOTATION_COLORS.map((c) => (
-          <Tooltip key={c} label={c} withArrow openDelay={300}>
+        {(allowInk ? [ANNOTATION_INK, ...ANNOTATION_COLORS] : ANNOTATION_COLORS).map((c) => (
+          <Tooltip key={c} label={c === ANNOTATION_INK ? 'neutral (default)' : c} withArrow openDelay={300}>
             <UnstyledButton onClick={() => onChange(c)} aria-label={`Color ${c}`} aria-pressed={value === c}>
               <ColorSwatch color={annotationColorValue(c, scheme)} size={18} withShadow={value === c}>
                 {value === c && (

@@ -18,7 +18,7 @@ import {
 import { isStaleFetch } from '../../fetchQueue';
 import { advancedVizSelectionFilter, filtersExcludingOwn } from '../../selection';
 import { columnCategoryColors } from '../../categoryColors';
-import { resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { InSplitPanelContext } from './AdvancedVizExtras';
@@ -40,6 +40,7 @@ import {
   isDenseTaxonomyAxis,
   isSpacerSlot,
   meltWideRows,
+  paletteUniverse,
   percentTickFormat,
   resolveSortCategory,
   SAMPLE_SORT_OPTIONS,
@@ -188,10 +189,7 @@ interface Props {
 const GROUP_STRIP_COLUMN = '\u0000groups';
 
 /** Fallback cycle for an unbranded deployment; a brand's colorway wins. */
-const PALETTE = [
-  '#1c7ed6', '#e64980', '#fab005', '#37b24d', '#7048e8', '#f76707',
-  '#0ca678', '#d6336c', '#15aabf', '#fd7e14', '#82c91e', '#ae3ec9',
-];
+const PALETTE = TAB10_PALETTE;
 
 /** Runs of equal consecutive values, by position. */
 function categoryRuns(values: readonly string[]): { value: string; start: number; end: number }[] {
@@ -228,7 +226,7 @@ const StackedBarRenderer: React.FC<Props> = ({
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as StackedBarConfig;
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, isDark);
   const categorySource = useCategoryColorSource();
   // A wide table (`value_cols`) is melted into the long form below; it has no
   // taxon, abundance or rank column of its own.
@@ -663,7 +661,7 @@ const StackedBarRenderer: React.FC<Props> = ({
       ...(columnCategoryColors(categorySource, activeRank) ?? {}),
       ...(config.taxon_palette ?? {}),
     });
-    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette, taxonPinned);
+    const colourSource = stableColorMap(paletteUniverse(wide ? null : activeRank, taxonUniverse, taxaForPalette), palette, taxonPinned, isDark ? 'dark' : 'light', plotOverflow(theme));
     const series = Array.from(tracesByTaxon.entries()).filter(([, arr]) =>
       arr.some((v) => (v ?? 0) > 0),
     );
@@ -748,6 +746,8 @@ const StackedBarRenderer: React.FC<Props> = ({
           categories,
           palette,
           columnCategoryColors(categorySource, strip.column, strip.palette),
+          isDark ? 'dark' : 'light',
+          plotOverflow(theme),
         );
         const n = categories.length;
         // Category i gets z = i; zmin/zmax at ±0.5 put each category in its own

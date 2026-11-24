@@ -116,6 +116,11 @@ def column_data():
         yield data, reads
 
 
+def _BOTH(*columns: str) -> dict:  # noqa: N802
+    """A component that draws `columns` together (a split composition bar)."""
+    return {"component_type": "advanced_viz", "config": {"columns": list(columns)}}
+
+
 def _import(doc: dict, user, project_id, existing=None, source_key="tpl:base.yaml"):
     return asyncio.run(
         dash_routes.import_dashboard_from_yaml(
@@ -246,6 +251,82 @@ class TestResolveAutoCategoryColors:
             tables.find_one.return_value = {"delta_table_location": "s3://bucket/rel"}
             ranked = dash_routes._ranked_column_values(str(ObjectId()), "Phylum", "rel_abundance")
         assert ranked == ["c", "a", "b"]
+
+    def test_an_auto_column_avoids_colours_other_columns_pin(self, project_id, column_data):
+        dashboard = {
+            "category_colors": {"habitat": {"*": "auto"}, "Kingdom": {"B": P[0]}},
+            "stored_metadata": [_BOTH("habitat", "Kingdom")],
+        }
+        dash_routes._resolve_auto_category_colors(dashboard, project_id)
+        assert dashboard["category_colors"] == {
+            "habitat": {"lake": P[1], "soil": P[2]},
+            "Kingdom": {"B": P[0]},
+        }
+
+    def test_columns_no_component_shows_together_keep_the_whole_palette(
+        self, project_id, column_data
+    ):
+        dashboard = {
+            "category_colors": {
+                "Kingdom": {"B": P[0]},
+                "Phylum": {"*": "auto"},
+                "habitat": {"*": "auto"},
+            },
+            "stored_metadata": [_BOTH("Kingdom"), _BOTH("Phylum"), _BOTH("habitat")],
+        }
+        dash_routes._resolve_auto_category_colors(dashboard, project_id)
+        colours = dashboard["category_colors"]
+        assert colours["Phylum"] == {"a": P[0], "b": P[1]}
+        assert colours["habitat"] == {"lake": P[0], "soil": P[1]}
+
+    def test_a_component_of_another_tab_counts(self, project_id, column_data):
+        dashboard = {
+            "category_colors": {"Phylum": {"*": "auto"}, "habitat": {"*": "auto"}},
+            "stored_metadata": [],
+        }
+        tab_component = {"config": {"split_col": "habitat", "taxa": ["Phylum"]}}
+        dash_routes._resolve_auto_category_colors(dashboard, project_id, components=[tab_component])
+        assert dashboard["category_colors"]["habitat"] == {"lake": P[2], "soil": P[3]}
+
+    def test_two_auto_columns_do_not_share_a_colour(self, project_id, column_data):
+        dashboard = {
+            "category_colors": {
+                "Kingdom": {"B": P[0]},
+                "Phylum": {"*": "auto"},
+                "habitat": {"*": "auto"},
+            },
+            "stored_metadata": [_BOTH("Kingdom", "Phylum", "habitat")],
+        }
+        dash_routes._resolve_auto_category_colors(dashboard, project_id)
+        colours = dashboard["category_colors"]
+        assert colours["Phylum"] == {"a": P[1], "b": P[2]}
+        assert colours["habitat"] == {"lake": P[3], "soil": P[4]}
+
+    def test_a_later_auto_column_gives_up_a_colour_an_earlier_one_holds(
+        self, project_id, column_data
+    ):
+        dashboard = {
+            "category_colors": {"Phylum": {"*": "auto"}, "habitat": {"*": "auto"}},
+            "stored_metadata": [_BOTH("Phylum", "habitat")],
+        }
+        previous = {"Phylum": {"a": P[0], "b": P[1]}, "habitat": {"lake": P[0], "soil": P[5]}}
+        dash_routes._resolve_auto_category_colors(dashboard, project_id, previous)
+        assert dashboard["category_colors"] == {
+            "Phylum": {"a": P[0], "b": P[1]},
+            "habitat": {"lake": P[2], "soil": P[5]},
+        }
+
+    def test_colours_a_ranked_column_folds_into_other_bind_nothing(self, project_id, column_data):
+        column_data[0][str(REL_DC)]["rel_abundance"] = [1.0]
+        dashboard = {
+            "category_colors": {"Phylum": {"*": "auto:rel_abundance"}, "habitat": {"*": "auto"}},
+            "stored_metadata": [_BOTH("Phylum", "habitat")],
+        }
+        # An earlier run's phyla kept their colours; this run draws only `a`.
+        previous = {"Phylum": {"a": P[0], "old1": P[1], "old2": P[2]}}
+        with patch.object(dash_routes, "_ranked_column_values", return_value=["a"]):
+            dash_routes._resolve_auto_category_colors(dashboard, project_id, previous)
+        assert dashboard["category_colors"]["habitat"] == {"lake": P[1], "soil": P[2]}
 
     def test_a_column_no_table_holds_is_dropped(self, project_id, column_data):
         dashboard = {

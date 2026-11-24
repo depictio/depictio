@@ -36,7 +36,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { mantineCategoricalPalette, resolveCategoricalPalette, plotOverflow, stableColorMap } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   filtersExcludingOwn,
@@ -324,7 +324,7 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
   const config = (metadata.config || {}) as IdeogramConfig;
   const isDark = colorScheme === 'dark';
   const themeColors = plotlyThemeColors(isDark, theme);
-  const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
+  const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark);
   const portalTarget = useFullscreenPortalTarget();
 
   // ---- Controls. Defaults agree with IdeogramConfig's own. ---------------
@@ -486,8 +486,8 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
   // Colour universe: the whole fetched frame, so a class keeps its colour when
   // a filter removes its last feature from view.
   const colourMap = useMemo(
-    () => stableColorMap(features.map((f) => f.category), palette, pinnedColours),
-    [features, palette, pinnedColours],
+    () => stableColorMap(features.map((f) => f.category), palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme)),
+    [features, palette, pinnedColours, theme],
   );
   const catIndex = useMemo(() => {
     const m = new Map<string, number>();

@@ -11,11 +11,11 @@ import {
 } from './controls/VizControls';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
-import { resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
-import { groupIndices, largestGroup, sortCurveIndices, trapezoidArea } from './prCurves';
+import { curveAuc, groupIndices, largestGroup, sortCurveIndices } from './prCurves';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { COLORSCALE_NAMES, plotlyColorscale } from '../../utils/colorScale';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
@@ -209,8 +209,10 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     // the curve it sits on read as the same callset.
     const groupColours = stableColorMap(
       Array.from(curveGroups.keys()),
-      resolveCategoricalPalette(theme),
+      resolveCategoricalPalette(theme, null, isDark),
       groupPinned,
+      isDark ? 'dark' : 'light',
+      plotOverflow(theme),
     );
     const groupOf = config.group_col
       ? ((rows[config.group_col] || []) as (string | number)[])
@@ -265,7 +267,7 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
           : sortCurveIndices(idx, xCol, thr);
         const xs = sorted.map((i) => xCol[i]);
         const ys = sorted.map((i) => yCol[i]);
-        const area = showAuc ? trapezoidArea(xs, ys) : null;
+        const area = showAuc ? curveAuc(xs, ys) : null;
         const name = (key || (rocSpace ? 'ROC' : 'curve')) +
           (area != null ? `  (AUC ${area.toFixed(3)})` : '');
         traces.push({
@@ -308,7 +310,7 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       // Colour: the curve's own colour when there are curves to sit on, so the
       // two layers agree; otherwise a discrete palette per category if bound,
       // else the continuous F1 scale.
-      const palette = resolveCategoricalPalette(theme);
+      const palette = resolveCategoricalPalette(theme, null, isDark);
       let markerColorArr: (string | number)[] | string;
       let useColorscale = false;
       if (drawCurves && groupOf) {
@@ -318,6 +320,8 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
           category.map((v) => String(v ?? '')),
           palette,
           categoryPinned,
+          isDark ? 'dark' : 'light',
+          plotOverflow(theme),
         );
         markerColorArr = category.map((v) => swatches.get(String(v ?? '')));
       } else if (f1) {
@@ -425,7 +429,11 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
             ]
           : [],
         // The curve names carry the AUC, so the legend is the sweep views' own.
-        showlegend: drawCurves && showLegend,
+        // One curve with no AUC to report has nothing to say in a legend.
+        showlegend:
+          drawCurves &&
+          showLegend &&
+          (curveGroups.size > 1 || traces.some((t) => String(t.name ?? '').includes('(AUC'))),
         legend: {
           x: 0.98,
           y: 0.02,

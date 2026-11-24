@@ -12,6 +12,7 @@ import {
   meltWideRows,
   naturalCompare,
   niceStep,
+  paletteUniverse,
   percentTickFormat,
   resolveSortCategory,
   SAMPLE_SORT_OPTIONS,
@@ -397,5 +398,19 @@ describe('formatAxisValue', () => {
   it('survives a degenerate span', () => {
     expect(formatAxisValue(0.5, 0, true)).toBe('50%');
     expect(formatAxisValue(3, NaN, false)).toBe('3');
+  });
+});
+
+describe('paletteUniverse', () => {
+  const fetched = ['Bacteria', 'Acidobacteria', 'Proteobacteria', 'Bacilli', 'Bacillus'];
+  it('gives the palette to the shown rank when the table holds several', () => {
+    expect(paletteUniverse('Phylum', fetched, ['Acidobacteria', 'Proteobacteria'])).toEqual([
+      'Acidobacteria',
+      'Proteobacteria',
+    ]);
+  });
+  it('keeps the fetched universe for a single-level table', () => {
+    expect(paletteUniverse(null, fetched, ['Bacillus'])).toBe(fetched);
+    expect(paletteUniverse(null, null, ['Bacillus'])).toEqual(['Bacillus']);
   });
 });

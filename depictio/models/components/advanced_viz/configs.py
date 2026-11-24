@@ -1052,9 +1052,9 @@ class ComplexHeatmapConfig(_BaseVizConfig):
         description=(
             "Optional per-annotation colour overrides for the column-annotation "
             "track. Shape: ``{annotation_name: {category_value: hex}}``. When "
-            "unset the server picks colours from a Dark2 palette (chosen to "
-            "contrast with the row-track's Set2 pastels so the two tracks "
-            "read as distinct families). Use to pin domain palettes (e.g. "
+            "unset the server picks colours from the shared depictio palette, "
+            "minus the hues at the ends of the heatmap's colour scale. Use to "
+            "pin domain palettes (e.g. "
             "habitat → Set1) across PCoA + UpSet + heatmap. Applies to both "
             "``col_annotations`` and ``col_annotation_cols`` strips."
         ),
@@ -1723,9 +1723,12 @@ class SunburstConfig(_BaseVizConfig):
         ge=1,
         description="How many rings to draw from the start rank outwards",
     )
-    palette: Literal["tab10", "tab20"] = Field(
-        default="tab20",
-        description="Categorical palette for the colour key; tab20 for wider hierarchies",
+    palette: Literal["default", "tab10", "tab20"] = Field(
+        default="default",
+        description=(
+            "Categorical palette for the colour key: the dashboard's palette, whose tail "
+            "past its slots goes grey (default), or matplotlib tab10 / tab20"
+        ),
     )
     show_counts: bool = Field(default=True, description="Label each arc with its share of the root")
     min_percent: float = Field(
@@ -2355,6 +2358,15 @@ class ProfileConfig(_BaseVizConfig):
         description="Draw a marker at this x, e.g. 0 for a transcription start site",
     )
     reference_label: str | None = Field(default=None, description="Label for the marker")
+    x_label_col: str | None = Field(
+        default=None,
+        description=(
+            "Column naming an anchor at some x values and null elsewhere (deepTools' "
+            "``bin_label``: TSS, TES, flank ends): each anchor is drawn as a vertical "
+            "guide and labels the x axis, so a window whose anchors move between runs "
+            "needs no hard-coded marker"
+        ),
+    )
     reference_y: float | None = Field(
         default=None, description="Draw a horizontal reference line at this y"
     )

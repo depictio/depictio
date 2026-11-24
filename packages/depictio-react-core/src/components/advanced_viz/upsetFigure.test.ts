@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  capUpsetLegend,
   colourUpsetSets,
+  MAX_LEGEND_ENTRIES,
+  MAX_LEGEND_ROWS,
   inkUpsetForDark,
   resolveUpsetSetColors,
   scaleUpsetDots,
@@ -160,6 +163,12 @@ describe('colourUpsetSets', () => {
     expect(two).toBe(degree);
   });
 
+  it('colours a one-colour figure bar by bar when the component asks for per-set colours', () => {
+    const single = { ...intersectionBars, marker: { color: '#333333' } };
+    const [one] = colourUpsetSets([single, filledDots], layout, SITES, true);
+    expect(colorOf(one)).toEqual(['#333333', '#f5a11b', '#1a4f8f', '#333333']);
+  });
+
   it('returns the figure unchanged without colours, and never mutates it', () => {
     expect(colourUpsetSets(figure, layout, null)).toBe(figure);
     expect(setSizes.marker.color).toBe('#333333');
@@ -316,5 +325,28 @@ describe('upset responsive layout', () => {
     expect(narrow[1]).toBe(bars);
     const wide = scaleUpsetDots([dots, bars], matrix, 1000);
     expect(wide[0]).toBe(dots);
+  });
+});
+
+describe('legend cap', () => {
+  const entry = (i: number) => ({ type: 'bar', name: `Kingdom: value number ${i}`, legendgroup: 'Kingdom', showlegend: true });
+  const flood = Array.from({ length: 80 }, (_, i) => entry(i));
+  const bare = { margin: { l: 90, r: 20, t: 30, b: 50 }, legend: { font: { size: 10 } } };
+
+  it('never takes more than MAX_LEGEND_ROWS rows, however long the legend', () => {
+    const top = (withUpsetResponsiveLayout(bare, flood, { width: 500 }).margin as { t: number }).t;
+    const rowHeight = Math.round(10 * 1.4) + 4;
+    expect(top).toBeLessThanOrEqual(MAX_LEGEND_ROWS * rowHeight + 8 + 20 + 50 + 20);
+    expect(top).toBe(
+      (withUpsetResponsiveLayout(bare, [...flood, entry(99)], { width: 500 }).margin as { t: number }).t,
+    );
+  });
+
+  it('lists at most MAX_LEGEND_ENTRIES and keeps every trace', () => {
+    const out = capUpsetLegend([{ type: 'bar', name: 'Intersection Size', showlegend: false }, ...flood]);
+    expect(out).toHaveLength(81);
+    expect(out.filter((t) => t.showlegend === true)).toHaveLength(MAX_LEGEND_ENTRIES);
+    expect(out[0].showlegend).toBe(false);
+    expect(flood[79].showlegend).toBe(true);
   });
 });

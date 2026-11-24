@@ -1,7 +1,8 @@
+import { useComputedColorScheme, useMantineTheme } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
 
 import { fetchUniqueValues, type StoredMetadata } from '../api';
-import { stableColorMap } from '../colors';
+import { plotOverflow, stableColorMap } from '../colors';
 import { fetchSpecsCached, multiqcDcIds } from '../dcSpecs';
 import type { ColorByState } from '../selectionGroups';
 
@@ -109,6 +110,9 @@ export function useColorByColumnRender(
   colorBy: ColorByState,
   columns: ColorByColumn[],
 ): ColorByColumnRender | undefined {
+  const theme = useMantineTheme();
+  const overflow = plotOverflow(theme);
+  const scheme = useComputedColorScheme('light');
   const columnName = colorBy.kind === 'column' ? colorBy.columnName : null;
   const dcId = useMemo(() => {
     if (!columnName) return null;
@@ -130,7 +134,7 @@ export function useColorByColumnRender(
     fetchUniqueValues(dcId, columnName)
       .then((values) => {
         if (cancelled || values.length === 0) return;
-        const stable = stableColorMap(values);
+        const stable = stableColorMap(values, null, null, scheme, overflow);
         setRender({
           columnName,
           colorMap: Object.fromEntries(stable.universe.map((v) => [v, stable.get(v)])),
@@ -142,7 +146,7 @@ export function useColorByColumnRender(
     return () => {
       cancelled = true;
     };
-  }, [columnName, dcId]);
+  }, [columnName, dcId, overflow, scheme]);
 
   return render;
 }

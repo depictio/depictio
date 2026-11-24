@@ -15,11 +15,30 @@
  * palette index so a stale ``allValues`` doesn't crash colouring.
  */
 
-// matplotlib tab10 (also scanpy's default categorical palette). Kept here in
-// addition to per-renderer copies so callers can opt into the shared mapping
-// without changing their inline palette as well — but importing the same
-// constant from this module keeps cross-viz colours consistent.
-export const TAB10_PALETTE: readonly string[] = [
+import {
+  assignColors,
+  categoricalPalette,
+  compareValues,
+  overflowMode,
+  reservedKind,
+  semanticColor,
+} from './palettes';
+import type { ColorScheme, OverflowMode } from './palettes';
+
+/**
+ * @deprecated The light-mode default palette, kept as a name for callers that
+ * have not learned the colour scheme yet. It is no longer matplotlib's tab10:
+ * it IS depictio's shared categorical palette (`categoricalPalette(null)`).
+ * Prefer `defaultCategorical(isDark)`, which follows the scheme.
+ */
+export const TAB10_PALETTE: readonly string[] = categoricalPalette(null, 'light');
+
+/**
+ * matplotlib tab10, for the viz controls that offer it BY NAME ("tab10"). A
+ * viewer's explicit choice, never a default: defaults come from
+ * `defaultCategorical`.
+ */
+export const TAB10_CLASSIC: readonly string[] = [
   '#1f77b4',
   '#ff7f0e',
   '#2ca02c',
@@ -32,12 +51,15 @@ export const TAB10_PALETTE: readonly string[] = [
   '#17becf',
 ];
 
+/** depictio's default categorical palette for the colour scheme. */
+export function defaultCategorical(isDark = false): readonly string[] {
+  return categoricalPalette(null, isDark ? 'dark' : 'light');
+}
+
 /**
- * Hue order for `mantineCategoricalPalette`, chosen so the first two are as far
- * apart as the wheel allows: a two-class viz (known vs novel, pass vs fail) is
- * the common case and its two colours have to survive being drawn crossing each
- * other. Deliberately not tab10's blue-then-orange, which every matplotlib and
- * seaborn figure already opens with.
+ * @deprecated Mantine hue names, no longer a palette source: the default
+ * categorical colours come from the shared palette. Still exported for the
+ * allele grid, which keys its hue tints by Mantine colour name.
  */
 export const MANTINE_COLORWAY_HUES: readonly string[] = [
   'teal',
@@ -58,24 +80,24 @@ interface ScaleCarryingTheme {
 }
 
 /**
- * A categorical palette taken from the theme's own colour scales rather than
- * from a table of hex literals, so it follows a customised Mantine theme and
- * shifts with the colour scheme: shade 6 reads on white, shade 4 on the dark
- * background, where 6 goes muddy.
- *
+ * The default categorical palette for the scheme: depictio's shared palette.
  * Pass it as the `fallback` of `resolveCategoricalPalette` — a branded
  * deployment's own colorway still wins over it.
+ *
+ * Only when a caller names `hues` explicitly does it read the theme's own
+ * Mantine colour scales (shade 6 on light, 4 on dark) for those hues.
  */
 export function mantineCategoricalPalette(
   theme?: ScaleCarryingTheme | null,
   isDark = false,
-  hues: readonly string[] = MANTINE_COLORWAY_HUES,
+  hues?: readonly string[],
 ): readonly string[] {
+  const shared = defaultCategorical(isDark);
   const scales = theme?.colors;
-  if (!scales) return TAB10_PALETTE;
+  if (!hues || !scales) return shared;
   const shade = isDark ? 4 : 6;
   const out = hues.map((hue) => scales[hue]?.[shade]).filter((c): c is string => !!c);
-  return out.length ? out : TAB10_PALETTE;
+  return out.length ? out : shared;
 }
 
 /** A theme carrying the resolved brand — `MantineTheme`, structurally. */
@@ -91,23 +113,38 @@ interface BrandCarryingTheme {
  * nested provider — a dashboard overriding the instance — is picked up for
  * free, and the client never re-derives what the server already computed.
  */
-export function brandColorway(theme?: BrandCarryingTheme | null): string[] | null {
-  const brand = theme?.other?.brand as { plots?: { colorway?: string[] | null } } | null | undefined;
-  const colorway = brand?.plots?.colorway;
+export function brandColorway(theme?: BrandCarryingTheme | null, isDark = false): string[] | null {
+  const brand = theme?.other?.brand as
+    | { plots?: { colorway?: string[] | null; colorway_dark?: string[] | null } }
+    | null
+    | undefined;
+  const dark = isDark ? brand?.plots?.colorway_dark : null;
+  const colorway = dark && dark.length ? dark : brand?.plots?.colorway;
   return colorway && colorway.length ? colorway : null;
 }
 
+/** The brand's overflow mode (`plots.overflow`), else the shared default. */
+export function plotOverflow(theme?: BrandCarryingTheme | null): OverflowMode {
+  const brand = theme?.other?.brand as { plots?: { overflow?: string | null } } | null | undefined;
+  return overflowMode(brand?.plots?.overflow);
+}
+
 /**
- * The categorical palette a renderer should map values through: the brand's
- * when there is one, so a client-rendered viz uses the same hues as the
- * server-rendered figures beside it, and otherwise the palette the renderer
- * has always used.
+ * The categorical palette a renderer should map values through, by precedence:
+ * the brand's colorway (the scheme's own when it states a dark one), then the
+ * renderer's `fallback`, then depictio's shared palette for the scheme. The
+ * deprecated `TAB10_PALETTE` as a fallback means "no palette of my own" and is
+ * read as the shared palette, so it follows `isDark`.
  */
 export function resolveCategoricalPalette(
   theme?: BrandCarryingTheme | null,
-  fallback: readonly string[] = TAB10_PALETTE,
+  fallback?: readonly string[] | null,
+  isDark = false,
 ): readonly string[] {
-  return brandColorway(theme) ?? fallback;
+  const brand = brandColorway(theme, isDark);
+  if (brand) return brand;
+  if (!fallback || fallback === TAB10_PALETTE) return defaultCategorical(isDark);
+  return fallback;
 }
 
 function hashString(s: string): number {
@@ -131,14 +168,21 @@ export interface StableColorMap {
 /**
  * Build a stable value→colour map from the universe of distinct values.
  *
- * Sort is locale-aware case-insensitive so capitalisation differences don't
- * flip ordering. Empty / nullish entries are skipped.
+ * Colours follow the shared rule (`assignColors`): an override wins, a reserved
+ * remainder value (Other, Unclassified, NA...) takes its semantic grey, and the
+ * rest are ranked case-insensitively over the universe onto the palette slots
+ * no override uses. Empty / nullish entries are skipped. `scheme` picks the
+ * greys and the default palette; `overflow` (`plotOverflow(theme)`) what the
+ * values past the last slot get.
  */
 export function stableColorMap(
   allValues: readonly (string | null | undefined)[],
-  palette: readonly string[] = TAB10_PALETTE,
+  palette?: readonly string[] | null,
   overrides?: Record<string, string> | null,
+  scheme: ColorScheme = 'light',
+  overflow?: OverflowMode | null,
 ): StableColorMap {
+  const colours = palette && palette.length ? palette : categoricalPalette(null, scheme);
   const cleaned = Array.from(
     new Set(
       allValues
@@ -146,29 +190,22 @@ export function stableColorMap(
         .map((v) => String(v)),
     ),
   );
-  const sorted = [...cleaned].sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: 'base' }),
-  );
-  const lookup = new Map<string, string>();
-  sorted.forEach((v, i) => lookup.set(v, palette[i % palette.length]));
-  // Apply explicit overrides last so they win over palette-index assignments.
-  // This is the channel through which dashboards pin domain-specific colours
-  // (habitat → Set1 mapping, lineage → Pango palette, etc.) without forking
-  // the renderer per project.
-  if (overrides) {
-    for (const [key, colour] of Object.entries(overrides)) {
-      if (key && colour) lookup.set(key, colour);
-    }
-  }
+  const sorted = [...cleaned].sort(compareValues);
+  // Dashboards pin domain-specific colours (habitat → Set1 mapping, lineage →
+  // Pango palette, etc.) through `overrides` without forking the renderer.
+  const lookup = assignColors(sorted, { pinned: overrides, palette: colours, scheme, overflow });
 
   return {
     get(value: string): string {
       const key = String(value);
       const hit = lookup.get(key);
       if (hit) return hit;
-      // Fallback for values not in the supplied universe: deterministic hash
-      // so a "leaked" value still gets a stable colour across re-renders.
-      return palette[hashString(key) % palette.length];
+      // Values outside the supplied universe: reserved values keep their grey,
+      // the rest a deterministic hash, so a "leaked" value still gets a stable
+      // colour across re-renders.
+      const kind = reservedKind(key);
+      if (kind && key !== '') return semanticColor(kind, scheme);
+      return colours[hashString(key) % colours.length];
     },
     universe: sorted,
   };

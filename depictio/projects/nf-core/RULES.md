@@ -334,6 +334,12 @@ A KPI strip is four different readings, not four numbers in one style:
   data column (a single series, a sorted bar, a histogram) draw in that hue. Data colours
   (`category_colors`, `color_scale`, verdict colours such as pass/fail) are never replaced by
   the tab hue: a sample or a model class keeps its colour on every tab.
+- A figure with one reference line on its value axis (`reference_lines`, a scatter_xy
+  `reference_line`) whose colour would only name each bar or point (`color` equal to the
+  axis, one row per colour, or no colour) is coloured by its side of the line: the hue above,
+  its tint at or below, with a two-entry legend. The default style does it; do not add
+  `color: sample` to a per-sample bar to get colour. A median is no verdict, so neither side
+  is called good; a group colour or `category_colors` wins over it.
 - A distribution drawn per library or per sample (a box, a violin, a bar per library) colours
   by the group (`{GROUP_COL}`, or the hub's design column such as `antibody` or `condition`),
   not by the tab hue: the reader compares groups, and one colour hides them. The tab hue is for
@@ -350,6 +356,11 @@ A KPI strip is four different readings, not four numbers in one style:
     `"*": "auto:<abundance column>"`: the import ranks the values by that column's sum and
     gives the 8 largest the palette, largest first. Plain `auto` colours none of them past 8.
     Pin `Other` and `Unclassified` grey beside it.
+  - Auto columns resolve in the order they are declared. Each avoids the colours of the
+    columns a component of the family draws beside it (pins, and what earlier auto columns
+    took), taking the palette's darker twins when the palette runs out; columns that never
+    meet keep the whole palette. Declare the column whose values matter most first: taxa
+    before the group column, so a composition bar never draws a group and a phylum alike.
 - No per-figure colour map (`color_discrete_map`, `set_colors`, `col_annotation_colors`) for a
   column `category_colors` already covers. UI figures, advanced viz, maps and filter chips all
   read it.

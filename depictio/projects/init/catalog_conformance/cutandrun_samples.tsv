@@ -1,7 +1,14 @@
 sample_id	target	replicate	replicate_label	role	is_control	control_target	n_libraries	library_ids	single_end
 h3k27me3_R1	h3k27me3	1	R1	target	false	igg_ctrl	1	h3k27me3_R1_T1	false
 h3k27me3_R2	h3k27me3	2	R2	target	false	igg_ctrl	1	h3k27me3_R2_T1	false
+h3k27me3_R3	h3k27me3	3	R3	target	false	igg_ctrl	1	h3k27me3_R3_T1	false
 h3k4me3_R1	h3k4me3	1	R1	target	false	igg_ctrl	1	h3k4me3_R1_T1	false
 h3k4me3_R2	h3k4me3	2	R2	target	false	igg_ctrl	1	h3k4me3_R2_T1	false
+h3k4me3_R3	h3k4me3	3	R3	target	false	igg_ctrl	1	h3k4me3_R3_T1	false
+h3k27ac_R1	h3k27ac	1	R1	target	false	igg_ctrl	2	h3k27ac_R1_T1,h3k27ac_R1_T2	false
+h3k27ac_R2	h3k27ac	2	R2	target	false	igg_ctrl	1	h3k27ac_R2_T1	false
+h3k27ac_R3	h3k27ac	3	R3	target	false	igg_ctrl	1	h3k27ac_R3_T1	false
+h3k9me3_R1	h3k9me3	1	R1	target	false	igg_ctrl	1	h3k9me3_R1_T1	false
+h3k9me3_R2	h3k9me3	2	R2	target	false	igg_ctrl	1	h3k9me3_R2_T1	false
 igg_ctrl_R1	igg_ctrl	1	R1	IgG control	true		1	igg_ctrl_R1_T1	false
 igg_ctrl_R2	igg_ctrl	2	R2	IgG control	true		1	igg_ctrl_R2_T1	false

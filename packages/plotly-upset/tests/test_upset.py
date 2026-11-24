@@ -75,6 +75,16 @@ class TestUpSetPlotBasic:
         assert layout.row_heights[-1] >= 0.22
         assert plot.dot_size == 18
 
+    def test_two_categorical_strips_leave_room_for_bars_and_matrix(self) -> None:
+        from plotly_upset.layout import compute_upset_layout
+
+        layout = compute_upset_layout(n_annotation_tracks=2, track_sizes=[0.2, 0.2], n_sets=5)
+        strips, bars, matrix = layout.row_heights[:2], layout.row_heights[2], layout.row_heights[3]
+        total = sum(layout.row_heights)
+        assert bars / total >= 0.2
+        assert matrix / total >= 0.2
+        assert all(s / total >= 0.15 for s in strips)
+
     def test_dot_size_shrinks_with_many_sets_and_honours_an_explicit_value(self) -> None:
         assert UpSetPlot._default_dot_size(3) == 18
         assert UpSetPlot._default_dot_size(4) == 18

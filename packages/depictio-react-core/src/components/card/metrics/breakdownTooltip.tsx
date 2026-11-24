@@ -1,7 +1,8 @@
 import React from 'react';
 import { Stack } from '@mantine/core';
 
-import { percent, rankTint } from './format';
+import { percent } from './format';
+import { useBreakdownColour } from './useBreakdownColour';
 import { TooltipDivider, TooltipNote, TooltipStat } from './tokens';
 import type { BreakdownPayload } from './types';
 
@@ -36,6 +37,7 @@ export const BreakdownTooltip: React.FC<{
    *  Off for `concentration`, which draws no segments to match. */
   swatches?: boolean;
 }> = ({ payload, color, swatches = true }) => {
+  const colourOf = useBreakdownColour(payload, color);
   const tailRows = Math.max(0, payload.unique_values - payload.top.length);
   const tailShare = Math.max(0, 1 - payload.top_share);
   const evenness = typeof payload.evenness === 'number' ? payload.evenness : null;
@@ -50,7 +52,7 @@ export const BreakdownTooltip: React.FC<{
         <TooltipStat
           key={row.name}
           label={row.name}
-          swatch={swatches ? rankTint(color, idx) : undefined}
+          swatch={swatches ? colourOf(row.name, idx) : undefined}
           value={`${row.count.toLocaleString()} (${percent(row.percent)})`}
         />
       ))}

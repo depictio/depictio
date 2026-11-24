@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "3.0.1",
-      "content_hash": "05d27ae32eb71d891261240e038f788edba4b41e0bea5eda6d24e0c1babf2aae",
+      "version": "3.0.5",
+      "content_hash": "8704ff93a094cbfdba2859c6c003fac6d07005345a2298a496ca2c49acb5782e",
       "catalog": {
         "adapterremoval": "1.1.0",
         "agat": "1.1.1",
@@ -27,7 +27,7 @@
         "bowtie2": "1.1.0",
         "busco": "2.1.1",
         "cellbender": "1.1.1",
-        "cellranger": "1.2.1",
+        "cellranger": "1.2.2",
         "checkm2": "1.2.1",
         "checkv": "1.1.1",
         "cmaple": "1.1.1",
@@ -42,8 +42,8 @@
         "cutandrun": "1.1.1",
         "damageprofiler": "1.1.0",
         "dbcan": "1.1.1",
-        "deeptools": "1.1.1",
-        "deseq2": "1.1.0",
+        "deeptools": "1.2.0",
+        "deseq2": "1.1.1",
         "dexseq": "1.2.0",
         "edger": "1.1.0",
         "enchantr": "1.1.0",
@@ -57,7 +57,7 @@
         "fusioninspector": "1.1.0",
         "fusionreport": "1.1.0",
         "genomescope": "1.1.1",
-        "gsea": "1.1.0",
+        "gsea": "1.1.1",
         "gtdbtk": "1.1.0",
         "gtf": "1.1.1",
         "hamronization": "1.1.1",
@@ -84,7 +84,7 @@
         "metaphlan": "1.1.0",
         "mhcquant": "1.1.0",
         "mirdeep2": "1.1.0",
-        "mirtop": "1.1.1",
+        "mirtop": "1.2.0",
         "mosdepth": "1.2.0",
         "multiqc": "1.1.0",
         "nanoplot": "1.1.0",
@@ -104,7 +104,7 @@
         "proteinfold": "1.1.1",
         "purple": "1.1.0",
         "qcatch": "1.1.1",
-        "qiime2": "2.1.0",
+        "qiime2": "2.1.1",
         "qsee": "1.1.0",
         "qualimap": "1.1.0",
         "quast": "1.1.1",
@@ -116,7 +116,7 @@
         "rseqc": "1.1.0",
         "rtgtools": "1.1.0",
         "s4pred": "1.1.1",
-        "salmon": "1.1.0",
+        "salmon": "1.1.1",
         "samtools": "1.2.0",
         "seacr": "1.1.1",
         "seqfu": "1.1.0",
@@ -135,7 +135,7 @@
         "svanalyzer": "1.1.0",
         "sylph": "1.1.0",
         "tama": "1.1.1",
-        "taxpasta": "1.1.0",
+        "taxpasta": "1.1.1",
         "tiara": "1.1.1",
         "tidk": "1.1.1",
         "truvari": "1.1.0",
@@ -171,49 +171,49 @@
       }
     },
     "nf-core/ampliseq/2.14.0": {
-      "version": "1.3.0",
-      "content_hash": "1ad8b51312f1054ac3ed2ec3502b41f40a3c3c9d651f2588ca2bea78c264ed7a",
+      "version": "1.4.0",
+      "content_hash": "d3ddd7bb74104e0aff49015e7b3128bd88c6717138a38038dd8aa1c8aed40ae4",
       "catalog": {
-        "qiime2": "2.1.0"
+        "qiime2": "2.1.1"
       }
     },
     "nf-core/ampliseq/2.16.0": {
-      "version": "1.4.0",
-      "content_hash": "898c9eccdbeefdc11acfbc872d45db0c7f5556e774d8347fb350ef915dfb0045",
+      "version": "1.5.0",
+      "content_hash": "49387d956b60d4cc0813d2e439a7a7e932eb493feb8143be9336bbb973e01162",
       "catalog": {
         "multiqc": "1.1.0",
-        "qiime2": "2.1.0",
+        "qiime2": "2.1.1",
         "sidle": "1.1.0",
         "vsearch": "1.1.0"
       }
     },
     "nf-core/ampliseq/2.18.0": {
-      "version": "1.5.0",
-      "content_hash": "8cacdaa94c61cc6e24ee11d6600e41b3988db12d78921ea4f73cfd9017bf1922",
+      "version": "1.7.0",
+      "content_hash": "a15917504bb1d753941ffcfbf944f0a10993176f795dd0ec634713f797239ddd",
       "catalog": {
         "multiqc": "1.1.0",
-        "qiime2": "2.1.0",
+        "qiime2": "2.1.1",
         "sidle": "1.1.0",
         "vsearch": "1.1.0"
       }
     },
     "nf-core/ampliseq/3.1.0": {
-      "version": "3.1.0",
-      "content_hash": "fa40da8eef025e2909a46aedd9b6d79316671e13ae3d56d7bb37443ecf319436",
+      "version": "3.3.0",
+      "content_hash": "fb2c3158e06a5fb14ece5eec0510d89fe2740ad8b57a8c26f5fad2c3eb50a8b8",
       "catalog": {
         "multiqc": "1.1.0",
-        "qiime2": "2.1.0",
+        "qiime2": "2.1.1",
         "sidle": "1.1.0",
         "vsearch": "1.1.0"
       }
     },
     "nf-core/atacseq/1.2.2": {
-      "version": "3.1.1",
-      "content_hash": "5f10d67d41137b8b88116998bd388992e87e96eb28177f13129c3ab53ee3c04c",
+      "version": "3.1.3",
+      "content_hash": "4efa4ad9b16771f91d4081439ac9069919ab2152d6aa3f789c315af993e82dce",
       "catalog": {
         "ataqv": "1.2.1",
-        "deeptools": "1.1.1",
-        "deseq2": "1.1.0",
+        "deeptools": "1.2.0",
+        "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
@@ -221,12 +221,12 @@
       }
     },
     "nf-core/atacseq/2.1.2": {
-      "version": "5.0.1",
-      "content_hash": "0424b8cb2feb88de8785ede7d9aa1cb55e13c1fd1ea6504bbbede4c7721af0ef",
+      "version": "5.0.3",
+      "content_hash": "46db2e40f3e28b833bcb32b70bb48d87113d982731c3f62e4a00adeb35051e3c",
       "catalog": {
         "ataqv": "1.2.1",
-        "deeptools": "1.1.1",
-        "deseq2": "1.1.0",
+        "deeptools": "1.2.0",
+        "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
@@ -235,11 +235,11 @@
       }
     },
     "nf-core/chipseq/1.2.0": {
-      "version": "2.2.1",
-      "content_hash": "420b08d5a65d7b6aa4e150f6386217396d156149085c2911032ab60795077596",
+      "version": "2.2.3",
+      "content_hash": "3d9af4a4b2fca41d10debfcaf20c7b3800b4dd897212568bb7a571f6c27c0b7a",
       "catalog": {
-        "deeptools": "1.1.1",
-        "deseq2": "1.1.0",
+        "deeptools": "1.2.0",
+        "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
@@ -247,11 +247,11 @@
       }
     },
     "nf-core/chipseq/2.1.0": {
-      "version": "5.0.1",
-      "content_hash": "a56c556850a718ad68cfe969bd34d4e858f1436491c44239a4ad87bcbeeb1739",
+      "version": "5.0.3",
+      "content_hash": "f9fdedc07d1be1edaf100fa4ac8ffbb1352aa8f450ac2a2cef5497b7b9c303a1",
       "catalog": {
-        "deeptools": "1.1.1",
-        "deseq2": "1.1.0",
+        "deeptools": "1.2.0",
+        "deseq2": "1.1.1",
         "homer": "1.1.1",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
@@ -267,12 +267,12 @@
       }
     },
     "nf-core/cutandrun/3.1": {
-      "version": "3.0.1",
-      "content_hash": "504632b72a6a3c63f72d81d9628ea8a147e9405dd1ff3f7d9d5fd9df9b1d13eb",
+      "version": "3.0.2",
+      "content_hash": "715dbcb42cbf56b362e9f79b0853cf40eba44f93c58f6320ef6ed3c83d9dcde4",
       "catalog": {
         "bowtie2": "1.1.0",
         "cutandrun": "1.1.1",
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "samtools": "1.2.0",
@@ -280,12 +280,12 @@
       }
     },
     "nf-core/cutandrun/3.2.2": {
-      "version": "3.0.1",
-      "content_hash": "27b8fd44540f80f5408e4bc71533e77a2258a8bf888943b75be5ba29064e36b2",
+      "version": "3.0.2",
+      "content_hash": "37cb26e1fed88f3deee7266ca4508d38e73ace705c2fc3ea8aacb0f7065c0959",
       "catalog": {
         "bowtie2": "1.1.0",
         "cutandrun": "1.1.1",
-        "deeptools": "1.1.1",
+        "deeptools": "1.2.0",
         "macs2": "1.1.1",
         "multiqc": "1.1.0",
         "samtools": "1.2.0",
@@ -303,11 +303,11 @@
       }
     },
     "nf-core/differentialabundance/2.0.0": {
-      "version": "1.3.0",
-      "content_hash": "ae24d70b8bb5a866986613a987cfd6fbf5390c789af138bc2391904e87523f56",
+      "version": "1.3.2",
+      "content_hash": "7a75b7fdaa8fa17e92e9f91605fbafa6e4acbb7278c45eb356126141a764b988",
       "catalog": {
-        "deseq2": "1.1.0",
-        "gsea": "1.1.0"
+        "deseq2": "1.1.1",
+        "gsea": "1.1.1"
       }
     },
     "nf-core/drop/1.0.0": {
@@ -477,11 +477,11 @@
       }
     },
     "nf-core/nanoseq/3.0.0": {
-      "version": "3.1.1",
-      "content_hash": "06b144f80718fc8bb5f50f6c9565cf8b8f3afcd6c339086ea9b37d1ee6c90c6a",
+      "version": "3.1.2",
+      "content_hash": "fc44d6ccf10b192dd279d37bf5761f95f8900aaea9a1b4a0a635bb481fe2c036",
       "catalog": {
         "bambu": "1.1.0",
-        "deseq2": "1.1.0",
+        "deseq2": "1.1.1",
         "dexseq": "1.2.0",
         "gtf": "1.1.1",
         "multiqc": "1.1.0",
@@ -578,15 +578,15 @@
       }
     },
     "nf-core/riboseq/2.0.0": {
-      "version": "3.1.1",
-      "content_hash": "cfe68fb38f6ac7bd17efe969d7724f7e39e6aa36e00893c86f93b560512372e9",
+      "version": "3.1.2",
+      "content_hash": "fc4e67bc32d823ed4e4c7b769d67b05a2e6abb4d840b51970790436cee88fc8d",
       "catalog": {
         "anota2seq": "1.2.0",
         "multiqc": "1.1.0",
         "ribocode": "1.1.1",
         "ribotish": "1.1.1",
         "ribowaltz": "1.1.0",
-        "salmon": "1.1.0"
+        "salmon": "1.1.1"
       }
     },
     "nf-core/rnafusion/4.1.3": {
@@ -603,46 +603,46 @@
       }
     },
     "nf-core/rnaseq/3.26.0": {
-      "version": "2.5.0",
-      "content_hash": "f1e18863994d3ed41c52a48f123c70854084f5b97fabbd45a3491ba208f43988",
+      "version": "2.5.1",
+      "content_hash": "862d8b98d43a868306fe612b327d955ffcdfdef58b1b4c4952bbd819e6b93c61",
       "catalog": {
-        "deseq2": "1.1.0",
+        "deseq2": "1.1.1",
         "multiqc": "1.1.0",
         "rseqc": "1.1.0",
-        "salmon": "1.1.0"
+        "salmon": "1.1.1"
       }
     },
     "nf-core/rnaseq/3.28.0": {
-      "version": "2.5.0",
-      "content_hash": "117cbfff149566c5513f852bc8d5189ddc918ba89e9dd842a0b4a9d1721b10c3",
+      "version": "2.5.1",
+      "content_hash": "1d507bc437c448da77117e4cb904ddd9102914a29e33ffbb8957cbe23cef8410",
       "catalog": {
-        "deseq2": "1.1.0",
+        "deseq2": "1.1.1",
         "multiqc": "1.1.0",
         "rseqc": "1.1.0",
-        "salmon": "1.1.0"
+        "salmon": "1.1.1"
       }
     },
     "nf-core/rnasplice/1.0.4": {
-      "version": "3.1.0",
-      "content_hash": "4b4de310b16794598036b55a38c4b53d1ba4953f0da1cffded7d849581fb927e",
+      "version": "3.1.1",
+      "content_hash": "896423ec5ddec21ac98602d24f5ee6ea2a7996825315c4feb6e2b1c9c7308e71",
       "catalog": {
         "dexseq": "1.2.0",
         "edger": "1.1.0",
         "multiqc": "1.1.0",
         "rmats": "1.2.0",
-        "salmon": "1.1.0",
+        "salmon": "1.1.1",
         "suppa": "1.2.0"
       }
     },
     "nf-core/rnasplice/2.0.0": {
-      "version": "4.1.0",
-      "content_hash": "c2e4f129a0fb24c06034d245cb6f95bc44e57a984f8c5ccbe287f0fd7807b5c6",
+      "version": "4.1.1",
+      "content_hash": "e1021a3a7b2c4f55faa2bba0cfe06c289276f5ba0e0555772f91dec6af51b2dc",
       "catalog": {
         "dexseq": "1.2.0",
         "edger": "1.1.0",
         "multiqc": "1.1.0",
         "rmats": "1.2.0",
-        "salmon": "1.1.0",
+        "salmon": "1.1.1",
         "suppa": "1.2.0"
       }
     },
@@ -695,11 +695,11 @@
       }
     },
     "nf-core/scrnaseq/4.2.0": {
-      "version": "3.0.1",
-      "content_hash": "ee4df5db38d413f788bc7f6225d5866900b24103a0f037156d3d7624e27a6b3f",
+      "version": "3.0.2",
+      "content_hash": "f883864e76141c04521ddde8adfa04948409323bc9be4cb34d7c929b36e2e074",
       "catalog": {
         "cellbender": "1.1.1",
-        "cellranger": "1.2.1",
+        "cellranger": "1.2.2",
         "kallisto": "1.1.0",
         "multiqc": "1.1.0",
         "qcatch": "1.1.1",
@@ -707,11 +707,11 @@
       }
     },
     "nf-core/smrnaseq/2.4.1": {
-      "version": "2.0.1",
-      "content_hash": "265de198bfb390f5d48e4383918e07bcee7517fda3d4f0b8679de96e25960dfd",
+      "version": "2.0.2",
+      "content_hash": "da3ac63aafaa2b3f5e457583f8d9dc6b76b93349b8e232633ac1a02c0ecedfd7",
       "catalog": {
         "mirdeep2": "1.1.0",
-        "mirtop": "1.1.1",
+        "mirtop": "1.2.0",
         "multiqc": "1.1.0"
       }
     },
@@ -723,14 +723,14 @@
       }
     },
     "nf-core/taxprofiler/2.0.1": {
-      "version": "1.2.0",
-      "content_hash": "a662f75013c3e1aa3af79082073249253e657f430a1cb204a48f93a95170f4cb",
+      "version": "1.2.1",
+      "content_hash": "b1e2039acd79328b9a84fb2a8f55124d4c520dbd0e65dfb185617cc839145fa2",
       "catalog": {
         "melon": "1.1.0",
         "multiqc": "1.1.0",
         "nonpareil": "1.1.0",
         "sylph": "1.1.0",
-        "taxpasta": "1.1.0"
+        "taxpasta": "1.1.1"
       }
     },
     "nf-core/variantbenchmarking/1.4.0": {

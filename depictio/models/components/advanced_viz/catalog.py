@@ -32,7 +32,7 @@ from typing import Any, Literal, get_args
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-from depictio.models.components.lite import CardLiteComponent, ReferenceLine
+from depictio.models.components.lite import CardLiteComponent, FigureAnnotations, ReferenceLine
 from depictio.models.components.types import (
     AdvancedVizKind,
     AggregationFunction,
@@ -458,6 +458,10 @@ class Render(BaseModel):
     # the rows on show (`stat` + `column`, named "median of this table"; RULES
     # §17). Mirrors `FigureLiteComponent.reference_lines`.
     reference_lines: list[ReferenceLine] = Field(default_factory=list)
+    # UI mode: the automatic marks a figure draws on itself (bar labels, per-
+    # group counts...), each "automatic by figure type" unless turned on or
+    # off. Mirrors `FigureLiteComponent.annotations`.
+    annotations: FigureAnnotations | None = None
     # card (single- or multi-metric)
     column: str | None = None
     aggregation: AggregationFunction | None = None  # hero metric
@@ -583,10 +587,24 @@ class Render(BaseModel):
                 raise ValueError(
                     "renders_as figure requires 'visu_type' (UI) or 'code' (code mode)"
                 )
-        elif self.visu_type or self.dict_kwargs or self.code or self.reference_lines:
+        elif (
+            self.visu_type
+            or self.dict_kwargs
+            or self.code
+            or self.reference_lines
+            or self.annotations is not None
+        ):
             raise ValueError(f"figure fields are only valid for component=figure, not {c}")
         if self.reference_lines and not self.visu_type:
             raise ValueError("'reference_lines' are drawn on UI-mode figures (visu_type) only")
+        if any(line.value is not None and not line.source for line in self.reference_lines):
+            # RULES.md §17: a fixed threshold cites where it comes from, or is a `stat`.
+            raise ValueError(
+                "a reference line at a fixed 'value' needs a 'source' (a tool default, a "
+                "paper); use 'stat' for a data-defined line"
+            )
+        if self.annotations is not None and not self.visu_type:
+            raise ValueError("'annotations' are drawn on UI-mode figures (visu_type) only")
         forbidden = _FORBIDDEN_FIGURE_KWARGS & set(self.dict_kwargs)
         if forbidden:
             raise ValueError(

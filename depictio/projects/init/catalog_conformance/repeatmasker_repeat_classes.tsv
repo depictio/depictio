@@ -29,3 +29,153 @@ Apis_mellifera	Small RNA		Class	27	941	159860	0.07
 Apis_mellifera	Satellites		Class	28	1137	158513	0.07
 Apis_mellifera	Simple repeats		Class	29	188378	8525555	3.78
 Apis_mellifera	Low complexity		Class	30	39965	2038010	0.9
+Drosophila_melanogaster	Retroelements		Summary	1	72079	11008016	7.66
+Drosophila_melanogaster	SINEs	Retroelements	Class	2	29	3567	0.0
+Drosophila_melanogaster	Penelope	Retroelements	Class	3	294	15655	0.01
+Drosophila_melanogaster	LINEs	Retroelements	Class	4	20015	2231416	1.55
+Drosophila_melanogaster	CRE/SLACS	LINEs	Family	5	10	4831	0.0
+Drosophila_melanogaster	L2/CR1/Rex	LINEs	Family	6	4699	352311	0.25
+Drosophila_melanogaster	R1/LOA/Jockey	LINEs	Family	7	3304	467772	0.33
+Drosophila_melanogaster	R2/R4/NeSL	LINEs	Family	8	1133	214346	0.15
+Drosophila_melanogaster	RTE/Bov-B	LINEs	Family	9	2324	149549	0.1
+Drosophila_melanogaster	L1/CIN4	LINEs	Family	10	939	61656	0.04
+Drosophila_melanogaster	LTR elements	Retroelements	Class	11	53218	8840199	6.15
+Drosophila_melanogaster	BEL/Pao	LTR elements	Family	12	7779	2497323	1.74
+Drosophila_melanogaster	Ty1/Copia	LTR elements	Family	13	9103	2175940	1.51
+Drosophila_melanogaster	Gypsy/DIRS1	LTR elements	Family	14	31147	3783565	2.63
+Drosophila_melanogaster	Retroviral	Gypsy/DIRS1	Family	15	1721	169249	0.12
+Drosophila_melanogaster	DNA transposons		Class	16	17818	3208799	2.23
+Drosophila_melanogaster	hobo-Activator	DNA transposons	Family	17	1491	262166	0.18
+Drosophila_melanogaster	Tc1-IS630-Pogo	DNA transposons	Family	18	5666	1185179	0.82
+Drosophila_melanogaster	En-Spm	DNA transposons	Family	19	0	0	0.0
+Drosophila_melanogaster	MULE-MuDR	DNA transposons	Family	20	378	38045	0.03
+Drosophila_melanogaster	PiggyBac	DNA transposons	Family	21	852	178500	0.12
+Drosophila_melanogaster	Tourist/Harbinger	DNA transposons	Family	22	231	23574	0.02
+Drosophila_melanogaster	Other (Mirage, P-element, Transib)	DNA transposons	Family	23	144	10957	0.01
+Drosophila_melanogaster	Rolling-circles		Class	24	647	104566	0.07
+Drosophila_melanogaster	Unclassified		Class	25	50501	8917134	6.21
+Drosophila_melanogaster	Total interspersed repeats		Summary	26		22989321	16.0
+Drosophila_melanogaster	Small RNA		Class	27	747	134557	0.09
+Drosophila_melanogaster	Satellites		Class	28	2765	391412	0.27
+Drosophila_melanogaster	Simple repeats		Class	29	73129	3354318	2.33
+Drosophila_melanogaster	Low complexity		Class	30	9692	514571	0.36
+Bombus_terrestris	Retroelements		Summary	1	13107	1847732	0.74
+Bombus_terrestris	SINEs	Retroelements	Class	2	165	19347	0.01
+Bombus_terrestris	Penelope	Retroelements	Class	3	256	14151	0.01
+Bombus_terrestris	LINEs	Retroelements	Class	4	7584	813278	0.33
+Bombus_terrestris	CRE/SLACS	LINEs	Family	5	4	2401	0.0
+Bombus_terrestris	L2/CR1/Rex	LINEs	Family	6	4085	290611	0.12
+Bombus_terrestris	R1/LOA/Jockey	LINEs	Family	7	1937	307666	0.12
+Bombus_terrestris	R2/R4/NeSL	LINEs	Family	8	482	103163	0.04
+Bombus_terrestris	RTE/Bov-B	LINEs	Family	9	1100	71728	0.03
+Bombus_terrestris	L1/CIN4	LINEs	Family	10	496	37859	0.02
+Bombus_terrestris	LTR elements	Retroelements	Class	11	5371	1014858	0.41
+Bombus_terrestris	BEL/Pao	LTR elements	Family	12	1047	331637	0.13
+Bombus_terrestris	Ty1/Copia	LTR elements	Family	13	973	263786	0.11
+Bombus_terrestris	Gypsy/DIRS1	LTR elements	Family	14	4623	526192	0.21
+Bombus_terrestris	Retroviral	Gypsy/DIRS1	Family	15	157	14359	0.01
+Bombus_terrestris	DNA transposons		Class	16	63553	11032241	4.43
+Bombus_terrestris	hobo-Activator	DNA transposons	Family	17	7122	1256851	0.5
+Bombus_terrestris	Tc1-IS630-Pogo	DNA transposons	Family	18	29368	5828880	2.34
+Bombus_terrestris	En-Spm	DNA transposons	Family	19	0	0	0.0
+Bombus_terrestris	MULE-MuDR	DNA transposons	Family	20	1319	124031	0.05
+Bombus_terrestris	PiggyBac	DNA transposons	Family	21	3902	784649	0.32
+Bombus_terrestris	Tourist/Harbinger	DNA transposons	Family	22	1088	111756	0.04
+Bombus_terrestris	Other (Mirage, P-element, Transib)	DNA transposons	Family	23	405	27305	0.01
+Bombus_terrestris	Rolling-circles		Class	24	2443	336502	0.14
+Bombus_terrestris	Unclassified		Class	25	117714	19789763	7.95
+Bombus_terrestris	Total interspersed repeats		Summary	26		32550047	13.07
+Bombus_terrestris	Small RNA		Class	27	1245	201586	0.08
+Bombus_terrestris	Satellites		Class	28	910	115728	0.05
+Bombus_terrestris	Simple repeats		Class	29	230165	10326190	4.15
+Bombus_terrestris	Low complexity		Class	30	43892	2207107	0.89
+Nasonia_vitripennis	Retroelements		Summary	1	28616	4371092	1.48
+Nasonia_vitripennis	SINEs	Retroelements	Class	2	442	49432	0.02
+Nasonia_vitripennis	Penelope	Retroelements	Class	3	587	34950	0.01
+Nasonia_vitripennis	LINEs	Retroelements	Class	4	13288	1630783	0.55
+Nasonia_vitripennis	CRE/SLACS	LINEs	Family	5	7	4022	0.0
+Nasonia_vitripennis	L2/CR1/Rex	LINEs	Family	6	3740	257919	0.09
+Nasonia_vitripennis	R1/LOA/Jockey	LINEs	Family	7	2861	459187	0.16
+Nasonia_vitripennis	R2/R4/NeSL	LINEs	Family	8	785	184042	0.06
+Nasonia_vitripennis	RTE/Bov-B	LINEs	Family	9	1110	67564	0.02
+Nasonia_vitripennis	L1/CIN4	LINEs	Family	10	582	40497	0.01
+Nasonia_vitripennis	LTR elements	Retroelements	Class	11	14885	2688814	0.91
+Nasonia_vitripennis	BEL/Pao	LTR elements	Family	12	2101	676771	0.23
+Nasonia_vitripennis	Ty1/Copia	LTR elements	Family	13	2819	713888	0.24
+Nasonia_vitripennis	Gypsy/DIRS1	LTR elements	Family	14	9320	1092681	0.37
+Nasonia_vitripennis	Retroviral	Gypsy/DIRS1	Family	15	428	41407	0.01
+Nasonia_vitripennis	DNA transposons		Class	16	77936	13917093	4.72
+Nasonia_vitripennis	hobo-Activator	DNA transposons	Family	17	10165	1563915	0.53
+Nasonia_vitripennis	Tc1-IS630-Pogo	DNA transposons	Family	18	42701	9571932	3.24
+Nasonia_vitripennis	En-Spm	DNA transposons	Family	19	0	0	0.0
+Nasonia_vitripennis	MULE-MuDR	DNA transposons	Family	20	2158	214086	0.07
+Nasonia_vitripennis	PiggyBac	DNA transposons	Family	21	4725	946458	0.32
+Nasonia_vitripennis	Tourist/Harbinger	DNA transposons	Family	22	1549	169627	0.06
+Nasonia_vitripennis	Other (Mirage, P-element, Transib)	DNA transposons	Family	23	717	56022	0.02
+Nasonia_vitripennis	Rolling-circles		Class	24	4609	667054	0.23
+Nasonia_vitripennis	Unclassified		Class	25	214292	35192566	11.93
+Nasonia_vitripennis	Total interspersed repeats		Summary	26		53409346	18.1
+Nasonia_vitripennis	Small RNA		Class	27	760	131358	0.04
+Nasonia_vitripennis	Satellites		Class	28	1668	244267	0.08
+Nasonia_vitripennis	Simple repeats		Class	29	172631	7580119	2.57
+Nasonia_vitripennis	Low complexity		Class	30	37164	1923526	0.65
+Tribolium_castaneum	Retroelements		Summary	1	12689	1827444	1.11
+Tribolium_castaneum	SINEs	Retroelements	Class	2	307	35243	0.02
+Tribolium_castaneum	Penelope	Retroelements	Class	3	186	11142	0.01
+Tribolium_castaneum	LINEs	Retroelements	Class	4	6378	686460	0.42
+Tribolium_castaneum	CRE/SLACS	LINEs	Family	5	3	1507	0.0
+Tribolium_castaneum	L2/CR1/Rex	LINEs	Family	6	1563	105442	0.06
+Tribolium_castaneum	R1/LOA/Jockey	LINEs	Family	7	1695	264574	0.16
+Tribolium_castaneum	R2/R4/NeSL	LINEs	Family	8	385	82021	0.05
+Tribolium_castaneum	RTE/Bov-B	LINEs	Family	9	538	40118	0.02
+Tribolium_castaneum	L1/CIN4	LINEs	Family	10	238	15116	0.01
+Tribolium_castaneum	LTR elements	Retroelements	Class	11	6078	1108348	0.67
+Tribolium_castaneum	BEL/Pao	LTR elements	Family	12	1262	416315	0.25
+Tribolium_castaneum	Ty1/Copia	LTR elements	Family	13	1762	496553	0.3
+Tribolium_castaneum	Gypsy/DIRS1	LTR elements	Family	14	4508	596186	0.36
+Tribolium_castaneum	Retroviral	Gypsy/DIRS1	Family	15	256	23289	0.01
+Tribolium_castaneum	DNA transposons		Class	16	71378	11942156	7.24
+Tribolium_castaneum	hobo-Activator	DNA transposons	Family	17	6242	997669	0.6
+Tribolium_castaneum	Tc1-IS630-Pogo	DNA transposons	Family	18	36863	7846767	4.76
+Tribolium_castaneum	En-Spm	DNA transposons	Family	19	0	0	0.0
+Tribolium_castaneum	MULE-MuDR	DNA transposons	Family	20	1163	116152	0.07
+Tribolium_castaneum	PiggyBac	DNA transposons	Family	21	3030	622470	0.38
+Tribolium_castaneum	Tourist/Harbinger	DNA transposons	Family	22	943	94669	0.06
+Tribolium_castaneum	Other (Mirage, P-element, Transib)	DNA transposons	Family	23	421	33269	0.02
+Tribolium_castaneum	Rolling-circles		Class	24	1942	290712	0.18
+Tribolium_castaneum	Unclassified		Class	25	148403	24061115	14.58
+Tribolium_castaneum	Total interspersed repeats		Summary	26		37592263	22.78
+Tribolium_castaneum	Small RNA		Class	27	407	66049	0.04
+Tribolium_castaneum	Satellites		Class	28	2395	327649	0.2
+Tribolium_castaneum	Simple repeats		Class	29	92454	4127785	2.5
+Tribolium_castaneum	Low complexity		Class	30	27215	1386352	0.84
+Anopheles_gambiae	Retroelements		Summary	1	29493	4438787	1.68
+Anopheles_gambiae	SINEs	Retroelements	Class	2	178	20954	0.01
+Anopheles_gambiae	Penelope	Retroelements	Class	3	147	7821	0.0
+Anopheles_gambiae	LINEs	Retroelements	Class	4	15046	1790964	0.68
+Anopheles_gambiae	CRE/SLACS	LINEs	Family	5	7	3705	0.0
+Anopheles_gambiae	L2/CR1/Rex	LINEs	Family	6	3048	217690	0.08
+Anopheles_gambiae	R1/LOA/Jockey	LINEs	Family	7	3371	552121	0.21
+Anopheles_gambiae	R2/R4/NeSL	LINEs	Family	8	712	152064	0.06
+Anopheles_gambiae	RTE/Bov-B	LINEs	Family	9	1866	117515	0.04
+Anopheles_gambiae	L1/CIN4	LINEs	Family	10	626	46538	0.02
+Anopheles_gambiae	LTR elements	Retroelements	Class	11	14726	2652444	1.0
+Anopheles_gambiae	BEL/Pao	LTR elements	Family	12	2218	725743	0.27
+Anopheles_gambiae	Ty1/Copia	LTR elements	Family	13	3757	975622	0.37
+Anopheles_gambiae	Gypsy/DIRS1	LTR elements	Family	14	9381	1183502	0.45
+Anopheles_gambiae	Retroviral	Gypsy/DIRS1	Family	15	439	40168	0.02
+Anopheles_gambiae	DNA transposons		Class	16	104370	16809966	6.34
+Anopheles_gambiae	hobo-Activator	DNA transposons	Family	17	5912	1009731	0.38
+Anopheles_gambiae	Tc1-IS630-Pogo	DNA transposons	Family	18	29009	6823466	2.57
+Anopheles_gambiae	En-Spm	DNA transposons	Family	19	0	0	0.0
+Anopheles_gambiae	MULE-MuDR	DNA transposons	Family	20	1371	128767	0.05
+Anopheles_gambiae	PiggyBac	DNA transposons	Family	21	4198	912190	0.34
+Anopheles_gambiae	Tourist/Harbinger	DNA transposons	Family	22	1304	130791	0.05
+Anopheles_gambiae	Other (Mirage, P-element, Transib)	DNA transposons	Family	23	882	63908	0.02
+Anopheles_gambiae	Rolling-circles		Class	24	4903	736914	0.28
+Anopheles_gambiae	Unclassified		Class	25	134926	21345240	8.05
+Anopheles_gambiae	Total interspersed repeats		Summary	26		42746945	16.13
+Anopheles_gambiae	Small RNA		Class	27	1227	208122	0.08
+Anopheles_gambiae	Satellites		Class	28	2719	386485	0.15
+Anopheles_gambiae	Simple repeats		Class	29	168445	7726042	2.92
+Anopheles_gambiae	Low complexity		Class	30	35020	1624700	0.61

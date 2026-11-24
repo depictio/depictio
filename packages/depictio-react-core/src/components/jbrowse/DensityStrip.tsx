@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { SegmentedControl, Text, Tooltip, UnstyledButton, useMantineTheme } from '@mantine/core';
+import { SegmentedControl, Text, Tooltip, UnstyledButton, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
 import type { JBrowseCallDensity } from '../../api';
 import { paletteHex } from '../../paletteColor';
@@ -77,6 +77,7 @@ const DensityStrip: React.FC<DensityStripProps> = ({
   compact,
 }) => {
   const theme = useMantineTheme();
+  const isDarkScheme = useMantineColorScheme().colorScheme === 'dark';
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
 
@@ -108,9 +109,9 @@ const DensityStrip: React.FC<DensityStripProps> = ({
     () =>
       rows.map((r) => {
         const name = sources.find((s) => s.name === r.track.source)?.color;
-        return paletteHex(theme, name) || primary || 'currentColor';
+        return paletteHex(theme, name, undefined, isDarkScheme) || primary || 'currentColor';
       }),
-    [rows, sources, theme, primary],
+    [rows, sources, theme, primary, isDarkScheme],
   );
 
   // counts and pixel runs per row and slot, computed once per layout

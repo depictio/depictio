@@ -10,7 +10,7 @@ import {
 } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
-import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { mantineCategoricalPalette, resolveCategoricalPalette, plotOverflow, stableColorMap } from '../../colors';
 import { useHighlight, usePublishHighlight } from '../../highlight/bus';
 import { useSharedOpeningEntity } from '../../highlight/openingEntity';
 import { useZoomSyncHandle } from '../../highlight/zoomSync';
@@ -451,7 +451,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
   // ---- Colours --------------------------------------------------------------------
   const palette = useMemo(
-    () => resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark)),
+    () => resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark),
     [theme, isDark],
   );
   const neutral = isDark ? theme.colors.dark[3] : theme.colors.gray[4];
@@ -467,10 +467,14 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         valueLabel: config.value_col,
         categoryLabel: config.category_col,
         valueScale: colourScale,
+        overflow: plotOverflow(theme),
+        scheme: isDark ? 'dark' : 'light',
       }),
     [
       colourMode,
+      isDark,
       colourScale,
+      theme,
       residues,
       entityRows,
       palette,
@@ -569,8 +573,8 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // Colour universe = the whole fetched frame, so a consequence keeps its hue
   // when the entity changes.
   const markColours = useMemo(
-    () => stableColorMap(rows.map((r) => r.category), palette),
-    [rows, palette],
+    () => stableColorMap(rows.map((r) => r.category), palette, null, isDark ? 'dark' : 'light', plotOverflow(theme)),
+    [rows, palette, theme],
   );
   const markDefault = theme.colors.red[isDark ? 4 : 6];
   const marks = useMemo<MarkSpec[]>(() => {

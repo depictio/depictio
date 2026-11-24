@@ -1,3 +1,4 @@
+import { PLOT_FONT_FAMILY, categoricalPalette, plotChrome } from 'depictio-react-core';
 import type { ChromePlotlyLayout } from 'depictio-react-core';
 
 /** Plotly cannot read CSS variables: resolve Mantine's to concrete colours. */
@@ -15,10 +16,6 @@ function alpha(color: string, a: number): string {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-/** Glass's hues, after the instance's primary: distinct in hue and close in
- *  weight, so no series shouts. Shade 6 on light, 4 on dark. */
-const GLASS_HUES = ['teal', 'orange', 'grape', 'cyan', 'pink', 'lime', 'indigo', 'yellow', 'red'];
-
 /**
  * Glass: charts that sit in the tile rather than on a card of their own.
  *
@@ -35,13 +32,13 @@ const GLASS_HUES = ['teal', 'orange', 'grape', 'cyan', 'pink', 'lime', 'indigo',
  */
 export const glassPlotly: ChromePlotlyLayout = (scheme) => {
   const dark = scheme === 'dark';
-  const base = cssVar('--mantine-font-family') || 'sans-serif';
-  const sans = `'Inter Variable', Inter, ${base}`;
-  const ink = dark ? pick('dark-0') : pick('gray-9');
+  const chrome = plotChrome(scheme);
+  const sans = `'Inter Variable', ${PLOT_FONT_FAMILY}`;
+  const ink = chrome.text;
   const dimmed = dark ? pick('dark-1') : pick('gray-7');
-  const faint = dark ? pick('dark-2') : pick('gray-6');
+  const faint = chrome.muted;
   const line = dark ? pick('dark-0') : pick('gray-9');
-  const surface = dark ? pick('dark-6') : pick('white');
+  const surface = chrome.hover_bg;
   const axisPatch = {
     showline: false,
     zerolinecolor: alpha(line, dark ? 0.2 : 0.16),
@@ -63,7 +60,7 @@ export const glassPlotly: ChromePlotlyLayout = (scheme) => {
     hoverlabel: {
       bgcolor: surface,
       bordercolor: alpha(line, dark ? 0.18 : 0.12),
-      font: { family: sans, color: ink },
+      font: { family: sans, color: chrome.hover_text },
       align: 'left',
     },
     legend: {
@@ -97,8 +94,9 @@ const LEGEND_PLACEMENT = ['orientation', 'x', 'y', 'xanchor', 'yanchor', 'xref',
  *   top left of the figure, level with the tile title's edge; Plotly keeps
  *   the plot clear of it. It needs the figure's layout to know that, so it
  *   is only set when the caller passes the layout.
- * - The colorway, led by the instance's primary: a figure's own colorway
- *   and any trace's own colour win over it.
+ * - The colorway, from depictio's shared categorical palette for the scheme
+ *   (a brand colorway, applied after, wins): a figure's own colorway and any
+ *   trace's own colour win over it.
  */
 /** Whether a figure draws a title of its own (mirrored by ``theme.py`` ``has_title``). */
 export const hasTitle = (layout?: Record<string, unknown>): boolean => {
@@ -112,10 +110,7 @@ export const glassPlotlyDefaults = (
   scheme: 'light' | 'dark',
   layout?: Record<string, unknown>,
 ): Record<string, unknown> => {
-  const dark = scheme === 'dark';
-  const primary = cssVar('--mantine-primary-color-filled');
-  const colorway = GLASS_HUES.map((h) => pick(`${h}-${dark ? 4 : 6}`)).filter(Boolean);
-  if (/^#[0-9a-f]{6}$/i.test(primary) && !colorway.includes(primary)) colorway.unshift(primary);
+  const colorway = [...categoricalPalette(null, scheme)];
   const own = (layout?.legend ?? {}) as Record<string, unknown>;
   const placeLegend = layout !== undefined && !LEGEND_PLACEMENT.some((k) => own[k] !== undefined);
   // A titled figure keeps its title at the top left (the theme puts it there),

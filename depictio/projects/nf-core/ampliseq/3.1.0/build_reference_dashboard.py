@@ -43,16 +43,6 @@ BASE_YAML = HERE / "dashboards" / "base.yaml"
 TEMPLATE_YAML = HERE / "template.yaml"
 OUT_YAML = HERE / "dashboards" / "reference_extended.yaml"
 
-# Habitat palette, set as the family's `category_colors` so the map, every figure,
-# the advanced viz and the filter chips agree on what a colour means.
-HABITAT_COLORS = {
-    "Riverwater": "#348ABD",
-    "Groundwater": "#45B8AC",
-    "Sediment": "#8B5A2B",
-    "Soil": "#E24A33",
-}
-
-
 _VAR = re.compile(r"\{([A-Z_][A-Z0-9_]*)\}")
 
 BANNER = """\
@@ -271,11 +261,12 @@ def _group_colors(group_col: str) -> str:
 
 
 def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
-    """Two more persistent filter sections and the floating map, on the main tab."""
-    # The four habitats get their own colours rather than the generated ones:
-    # every tile, the map and the filter chips read this one map.
-    main.setdefault("category_colors", {})[group_col] = dict(HABITAT_COLORS)
+    """Two more persistent filter sections and the floating map, on the main tab.
 
+    The habitat column stays on base.yaml's `category_colors: auto`: the map,
+    every figure and the filter chips all read that one map, so the demo layer
+    has no colour of its own to add.
+    """
     main["filter_sections"].extend(
         [
             {
@@ -439,13 +430,13 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
             {
                 "name": "Where & when",
                 "icon": "mdi:map-marker-outline",
-                "color": "teal",
+                "color": "blue",
                 "description": "One marker per sample at its site; click one to filter every tab",
             },
             {
                 "name": "Sampling design",
                 "icon": "mdi:chart-donut",
-                "color": "violet",
+                "color": "blue",
                 "description": f"Samples per site by {group_display.lower()}; the design is unbalanced",
             },
             {
@@ -472,7 +463,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "count",
                 "Samples",
                 "mdi:flask-outline",
-                "blue",
+                "blue.4",
                 f"Samples in the campaign. The bar splits them by {group_display.lower()}.",
                 0,
                 4,
@@ -486,7 +477,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "nunique",
                 "Sites visited",
                 "mdi:map-marker-outline",
-                "teal",
+                "blue.6",
                 "Villages sampled. The bar splits the samples by site.",
                 4,
                 4,
@@ -584,17 +575,17 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
     hist = {"secondary_layout": "histogram"}
     shape = {"box_plot": "median, with its spread", "histogram": "median, with its distribution"}
     sonde = [
-        ("temperature", "ctd_temperature_c", "Temperature (°C)", "mdi:thermometer", "orange", box),
+        ("temperature", "ctd_temperature_c", "Temperature (°C)", "mdi:thermometer", "cyan.4", box),
         (
             "conductivity",
             "ctd_conductivity_us_cm",
             "Conductivity (µS/cm)",
             "mdi:flash",
-            "cyan",
+            "cyan.6",
             hist,
         ),
-        ("do", "ctd_do_mg_l", "Dissolved O₂ (mg/L)", "mdi:water-percent", "blue", box),
-        ("nitrate", "ctd_nitrate_mg_l", "Nitrate (mg/L)", "mdi:molecule", "grape", hist),
+        ("do", "ctd_do_mg_l", "Dissolved O₂ (mg/L)", "mdi:water-percent", "cyan.8", box),
+        ("nitrate", "ctd_nitrate_mg_l", "Nitrate (mg/L)", "mdi:molecule", "cyan.9", hist),
     ]
     return {
         "title": "Environment (CTD)",
@@ -623,7 +614,7 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
             {
                 "name": "Diversity under the current environment",
                 "icon": "mdi:chart-bell-curve",
-                "color": "orange",
+                "color": "cyan",
                 "description": "Shannon per sample; the sonde filters on the left narrow it too",
             },
         ],

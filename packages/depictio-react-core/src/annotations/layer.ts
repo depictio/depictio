@@ -8,12 +8,13 @@ import { OVERLAY_TRACE_PREFIX } from './toPlotly';
 import type {
   Annotation,
   AnnotationColor,
+  AnnotationColorName,
   AnnotationKind,
   AnnotationStyle,
   Geometry,
   RenderableAnnotation,
 } from './types';
-import { MAX_LABEL_CHARS } from './types';
+import { ANNOTATION_INK, MAX_LABEL_CHARS } from './types';
 import type { AnnotationStats } from './summary';
 import { decodeBdata, extractCustomdataIds, isPlotlyTypedArray } from '../plotlyData';
 
@@ -128,18 +129,13 @@ export function kindForGeometry(geometry: Geometry): AnnotationKind {
   }
 }
 
-/** Palette name a new annotation of this kind starts with. */
-export function defaultColorFor(kind: AnnotationKind): AnnotationColor {
-  switch (kind) {
-    case 'range':
-      return 'yellow';
-    case 'line':
-      return 'red';
-    case 'points':
-      return 'orange';
-    case 'note':
-      return 'blue';
-  }
+/**
+ * Colour a new annotation of this kind starts with: the neutral annotation ink
+ * for every kind, told apart from the data by its form. The author may pick a
+ * palette colour instead.
+ */
+export function defaultColorFor(_kind: AnnotationKind): AnnotationColorName {
+  return ANNOTATION_INK;
 }
 
 export const KIND_LABELS: Record<AnnotationKind, string> = {
@@ -408,7 +404,7 @@ export interface PublishedLike {
   kind: AnnotationKind;
   geometry: Geometry;
   label: string;
-  color: AnnotationColor;
+  color?: AnnotationColor | null;
   style: AnnotationStyle;
   variant?: string | null;
 }
@@ -427,7 +423,7 @@ export function publishedToRenderable(
         kind: p.kind,
         geometry: p.geometry,
         label: p.label,
-        color: p.color,
+        color: p.color ?? undefined,
         style: p.style,
         published: true,
         ...(p.variant ? { variant: p.variant } : {}),

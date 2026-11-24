@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Group, Stack } from '@mantine/core';
 
-import { percent, rankTint } from './format';
+import { percent } from './format';
+import { useBreakdownColour } from './useBreakdownColour';
 import { METRIC, MetricCaption, MetricStrip } from './tokens';
 import { BreakdownTooltip } from './breakdownTooltip';
 import type { BreakdownPayload } from './types';
@@ -60,9 +61,10 @@ const DonutMetric: React.FC<{
   payload: BreakdownPayload;
   color?: string | null;
 }> = ({ payload, color }) => {
+  const colourOf = useBreakdownColour(payload, color);
   if (!payload.top.length) return null;
 
-  const segments = payload.top.map((row, idx) => ({ ...row, fill: rankTint(color, idx) }));
+  const segments = payload.top.map((row, idx) => ({ ...row, fill: colourOf(row.name, idx) }));
   // Derived from top_share, which the server computed over the whole
   // distribution — summing the rounded segment percents would not close.
   const otherShare = Math.max(0, 1 - payload.top_share);

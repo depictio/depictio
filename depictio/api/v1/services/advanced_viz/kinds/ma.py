@@ -16,10 +16,8 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
+from depictio.api.v1.services.advanced_viz.palette import significance_colors
 
-_COLOR_UP = "#e64980"
-_COLOR_DN = "#1c7ed6"
-_COLOR_NS = "rgba(160,160,160,0.55)"
 _SIZE_NS = 5
 _SIZE_HIT = 7
 _THRESHOLD_LINE = {"dash": "dot", "color": "rgba(128,128,128,0.6)", "width": 1}
@@ -88,7 +86,8 @@ def build(
         else:
             tiers.append("NS")
 
-    colors = [_COLOR_UP if t == "UP" else _COLOR_DN if t == "DN" else _COLOR_NS for t in tiers]
+    up, down, ns = significance_colors(theme)
+    colors = [up if t == "UP" else down if t == "DN" else ns for t in tiers]
     sizes = [_SIZE_NS if t == "NS" else _SIZE_HIT for t in tiers]
 
     ranked: list[tuple[int, float]] = []

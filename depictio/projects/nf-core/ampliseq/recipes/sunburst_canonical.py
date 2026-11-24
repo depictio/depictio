@@ -12,7 +12,7 @@ the rank columns are specified per-tile via ``rank_cols`` in SunburstConfig.
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.lineage import CANONICAL_RANKS, UNCLASSIFIED, asv_table_to_ranks
+from depictio.recipes.lib.lineage import CANONICAL_RANKS, asv_table_to_ranks, rank_at
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -62,13 +62,6 @@ _METADATA_ID_COL = "sample"
 _RANKS_BY_POSITION = list(CANONICAL_RANKS)
 
 
-def _parse_rank_at(lineage: pl.Expr, position: int) -> pl.Expr:
-    """Take the ``position``-th ``;``-separated segment from a QIIME2 lineage
-    string. Returns 'Unclassified' for missing / empty segments."""
-    seg = lineage.str.split(";").list.get(position, null_on_oob=True).str.strip_chars()
-    return pl.when(seg.is_null() | (seg == "")).then(pl.lit(UNCLASSIFIED)).otherwise(seg)
-
-
 def _from_collapsed_table(wide: pl.DataFrame) -> pl.DataFrame:
     """Fallback: unpivot a collapsed ``rel-table-N`` and split its lineage.
 
@@ -84,8 +77,7 @@ def _from_collapsed_table(wide: pl.DataFrame) -> pl.DataFrame:
         value_name="abundance",
     )
     rank_exprs = [
-        _parse_rank_at(pl.col(lineage_col), i).alias(name)
-        for i, name in enumerate(_RANKS_BY_POSITION)
+        rank_at(pl.col(lineage_col), i).alias(name) for i, name in enumerate(_RANKS_BY_POSITION)
     ]
     return (
         long.with_columns(rank_exprs)

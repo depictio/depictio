@@ -22,13 +22,11 @@ main_dashboard:
   # Declared once here, read by every tab of the family: figures, advanced viz
   # and filter chips all colour a value the same way.
   category_colors:
-    '{GROUP_COL}': auto
     Kingdom:
       '*': auto
-      Bacteria: '#1098ad'
-      Archaea: '#7048e8'
-      Eukaryota: '#c2255c'
-      Unclassified: '#adb5bd'
+      Bacteria: '#925FC4'
+      Archaea: '#EBD244'
+      Eukaryota: '#E53935'
     # The eight most abundant phyla of the run take the palette, largest first,
     # so the composition bars, the stacked composition and the tree agree; those
     # figures show the same eight and fold the rest into Other, kept grey.
@@ -36,13 +34,17 @@ main_dashboard:
       '*': 'auto:rel_abundance'
       Other: '#adb5bd'
       Unclassified: '#868e96'
+    # After the taxa: auto columns resolve in this order, each avoiding the
+    # colours the earlier ones took, so the groups take the palette's darker
+    # twins and a composition bar never draws a group and a phylum alike.
+    '{GROUP_COL}': auto
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. Bound
   # to the metadata DC, the source of every sample link in template.yaml. A run
   # without --metadata prunes it, and each tab keeps its own filters.
   filter_sections:
   - name: Sample filters
     icon: mdi:filter-variant
-    color: teal
+    color: brandPrimary
     description: Applies to every tab
     persistent: true
     pin: top
@@ -832,7 +834,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: grape
+      icon_color: grape.4
       caption: median, with its spread
       decimals: 2
     section: Diversity at a glance
@@ -851,7 +853,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:counter
-      icon_color: violet
+      icon_color: grape.6
       caption: median, with its distribution
       decimals: 0
     section: Diversity at a glance
@@ -871,7 +873,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:source-branch
-      icon_color: indigo
+      icon_color: grape.8
       caption: median, with its spread
       decimals: 2
     section: Diversity at a glance
@@ -891,7 +893,7 @@ tabs:
     coverage_max: 1
     display:
       icon_name: mdi:scale-balance
-      icon_color: pink
+      icon_color: grape.9
       caption: median, 0 to 1
       decimals: 2
     section: Diversity at a glance
@@ -1076,7 +1078,7 @@ tabs:
     breakdown_col: '{GROUP_COL}'
     display:
       icon_name: mdi:flask-outline
-      icon_color: violet
+      icon_color: pink.4
       caption: one point each, by {GROUP_COL_DISPLAY}
     section: Ordination at a glance
     tag: am-ord-card-samples
@@ -1095,7 +1097,7 @@ tabs:
     coverage_max: 1
     display:
       icon_name: mdi:sigma
-      icon_color: pink
+      icon_color: pink.8
       caption: share of the Bray-Curtis variation
       format: percent
     section: Ordination at a glance
@@ -1345,7 +1347,7 @@ tabs:
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
-      icon_color: teal
+      icon_color: teal.4
       caption: split by kingdom
     section: Community at a glance
     tag: am-comm-card-phyla
@@ -1364,7 +1366,7 @@ tabs:
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
-      icon_color: teal
+      icon_color: teal.4
       caption: split by kingdom
     section: Community at a glance
     tag: am-comm-card-phyla-sintax
@@ -1387,7 +1389,7 @@ tabs:
     breakdown_col: sample_id
     display:
       icon_name: mdi:family-tree
-      icon_color: cyan
+      icon_color: teal.6
       caption: the richest samples
     section: Community at a glance
     tag: am-comm-card-classes
@@ -1406,7 +1408,7 @@ tabs:
     breakdown_col: '{GROUP_COL}'
     display:
       icon_name: mdi:sitemap
-      icon_color: blue
+      icon_color: teal.8
       caption: the richest, by {GROUP_COL_DISPLAY}
     section: Community at a glance
     tag: am-comm-card-orders
@@ -1425,7 +1427,7 @@ tabs:
     breakdown_col: Phylum
     display:
       icon_name: mdi:graph-outline
-      icon_color: indigo
+      icon_color: teal.9
       caption: the richest phyla
     section: Community at a glance
     tag: am-comm-card-families
@@ -1547,9 +1549,6 @@ tabs:
       - Kingdom
       - Phylum
       - Class
-      # tab10 over the tab20 default: three ranks deep, the wide palette pairs a
-      # light and a dark shade of one hue for neighbouring phyla.
-      palette: tab10
       # Every arc: the 0.5% default drops the rare taxa, and the long tail of an
       # amplicon run is a result, not noise.
       min_percent: 0
@@ -1587,8 +1586,9 @@ tabs:
       # the main tab's category_colors.
       color_intersections_by: set
       set_category_column: '{GROUP_COL}'
-      # Phylum, not the full lineage: one legend entry per phylum.
+      # Kingdom and Phylum, not the full lineage: two annotation tracks.
       default_annotation_cols:
+      - Kingdom
       - Phylum
     section: Set overlap
     tag: am-comm-upset
@@ -1601,7 +1601,7 @@ tabs:
 
       How to read: a tall bar for all groups together is the shared core, and tall single-group bars
       are phyla specific to one group. Few shared phyla means very different communities. An
-      annotation track under the bars breaks each combination down by phylum.
+      annotation track under the bars breaks each combination down by kingdom and phylum.
 
       Lines and annotations: no reference line is drawn. Bars are sorted by size, largest first, and
       every combination of at least one phylum is shown.
@@ -1611,7 +1611,7 @@ tabs:
       Note: a phylum counts as present in a group when its relative abundance is above 0.1% in at
       least one sample of that group. This presence level is set by the dashboard's recipe to drop
       noise and is not a published cut-off.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -1758,7 +1758,7 @@ tabs:
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
-      icon_color: cyan
+      icon_color: red.4
       caption: split by kingdom
     section: Calls at a glance
     tag: am-diff-card-tested
@@ -1778,7 +1778,7 @@ tabs:
     breakdown_col: contrast
     display:
       icon_name: mdi:check-decagram
-      icon_color: red
+      icon_color: red.6
       caption: q < 0.05, by contrast
     section: Calls at a glance
     tag: am-diff-card-significant
@@ -1798,7 +1798,7 @@ tabs:
     breakdown_col: contrast
     display:
       icon_name: mdi:arrow-up-bold-outline
-      icon_color: pink
+      icon_color: red.8
       caption: calls, by contrast
     section: Calls at a glance
     tag: am-diff-card-enriched
@@ -1818,7 +1818,7 @@ tabs:
     breakdown_col: contrast
     display:
       icon_name: mdi:arrow-down-bold-outline
-      icon_color: blue
+      icon_color: red.9
       caption: calls, by contrast
     section: Calls at a glance
     tag: am-diff-card-depleted
@@ -2050,7 +2050,7 @@ tabs:
     breakdown_col: Kingdom
     display:
       icon_name: mdi:dna
-      icon_color: lime
+      icon_color: lime.4
       caption: one tip each, by kingdom
     section: Tree at a glance
     tag: am-phylo-card-asvs
@@ -2068,7 +2068,7 @@ tabs:
     secondary_layout: completeness
     display:
       icon_name: mdi:check-circle-outline
-      icon_color: teal
+      icon_color: lime.6
       caption: ASVs assigned down to a genus
     section: Tree at a glance
     tag: am-phylo-card-classified
@@ -2088,7 +2088,7 @@ tabs:
     threshold_direction: min
     display:
       icon_name: mdi:target
-      icon_color: orange
+      icon_color: lime.8
       caption: median; at or above 0.7, the classifier's default
       decimals: 2
     section: Tree at a glance
@@ -2109,7 +2109,7 @@ tabs:
     breakdown_col: Phylum
     display:
       icon_name: mdi:tag-multiple-outline
-      icon_color: grape
+      icon_color: lime.9
       caption: the richest phyla
     section: Tree at a glance
     tag: am-phylo-card-genera
@@ -2271,7 +2271,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:dna
-      icon_color: indigo
+      icon_color: indigo.4
     section: Reconstruction at a glance
     tag: am-sidle-card-features
     index: sidle-card-features
@@ -2287,7 +2287,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:flask-outline
-      icon_color: violet
+      icon_color: indigo.6
     section: Reconstruction at a glance
     tag: am-sidle-card-samples
     index: sidle-card-samples
@@ -2305,7 +2305,7 @@ tabs:
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
-      icon_color: teal
+      icon_color: indigo.8
       caption: split by kingdom
     section: Reconstruction at a glance
     tag: am-sidle-card-phyla
@@ -2323,7 +2323,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:vector-link
-      icon_color: orange
+      icon_color: indigo.9
       decimals: 1
     section: Reconstruction at a glance
     tag: am-sidle-card-regions

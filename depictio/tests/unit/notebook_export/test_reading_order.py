@@ -163,7 +163,7 @@ def test_ampliseq_overview_reads_like_the_live_tab(ampliseq_tabs):
     overview = [
         u.text if isinstance(u, MarkdownUnit) else u.meta["index"] for u in units[:first_child]
     ]
-    assert overview[:5] == ["Overview", "ov-hero", "ov-about", "ov-run", "ov-steps"]
+    assert overview[:5] == ["Overview", "ov-hero", "ov-study", "ov-run", "ov-steps"]
     assert overview.index("Key figures") < overview.index("Findings")
     assert overview.index("Findings") < overview.index("How to read this dashboard")
     findings = overview[
@@ -176,8 +176,8 @@ def test_ampliseq_overview_reads_like_the_live_tab(ampliseq_tabs):
         "ov-hl-ordination",
         "ov-tree",
     ]
-    # Excluded from the Overview, so not in its part.
-    assert "Sample sheet" not in overview
+    # Pinned to the Overview too (nf-core RULES, #1306), last.
+    assert overview[-2:] == ["Sample sheet", "sample-sheet"]
 
 
 def test_undeclared_sections_follow_declared_ones():

@@ -162,6 +162,14 @@ class TestHeatmapAnnotation:
         reordered = ha.reorder(order)
         assert reordered.tracks[0].values == ["C", "A", "B"]
 
+    def test_row_categorical_strip_is_wider_than_a_column_strip(self) -> None:
+        row = HeatmapAnnotation(which="row", group=["A", "B"], typed={"values": ["A", "B"], "type": "categorical"})
+        col = HeatmapAnnotation(which="column", group=["A", "B"])
+        assert row.tracks[0].size > col.tracks[0].size
+        assert row.tracks[1].size == row.tracks[0].size
+        explicit = HeatmapAnnotation(which="row", g={"values": ["A", "B"], "type": "categorical", "size": 0.1})
+        assert explicit.tracks[0].size == 0.1
+
     def test_total_size(self) -> None:
         ha = HeatmapAnnotation(
             gap=0.01,

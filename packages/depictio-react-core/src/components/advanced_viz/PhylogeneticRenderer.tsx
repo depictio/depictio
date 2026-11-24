@@ -23,7 +23,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, type StableColorMap } from '../../colors';
+import { plotOverflow, resolveCategoricalPalette } from '../../colors';
 import { filtersExcludingOwn } from '../../selection';
 import { isZoomWheel } from '../zoomGate';
 import AdvancedVizFrame from './AdvancedVizFrame';
@@ -43,7 +43,7 @@ import { computeLayout, descendants, type Layout } from './phylo/layout';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { pruneToTips } from './phylo/prune';
 import { cladeExtent, collapseNodes } from './phylo/collapse';
-import { PHYLO_PALETTE, pinnedPalette } from './phylo/palette';
+import { PHYLO_PALETTE, phyloColorScale, pinnedPalette, type PhyloColorScale } from './phylo/palette';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import type { PhylogeneticConfig } from './phylo/config';
 import PhyloSummaryRenderer from './PhyloSummaryRenderer';
@@ -141,7 +141,7 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as PhylogeneticConfig;
   const isDark = colorScheme === 'dark';
 
@@ -392,25 +392,35 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
 
   const categorySource = useCategoryColorSource();
   const scaleForColumn = useMemo(() => {
-    const cache = new Map<string, StableColorMap>();
-    return (col: string): StableColorMap => {
+    const cache = new Map<string, PhyloColorScale>();
+    return (col: string): PhyloColorScale => {
       const hit = cache.get(col);
       if (hit) return hit;
-      const universe: string[] = [];
-      for (const leaf of tree?.leaves ?? []) {
-        const sv = valueAt(leaf.name ?? '', col);
-        if (!universe.includes(sv)) universe.push(sv);
-      }
-      universe.sort();
-      const built = stableColorMap(
-        col === colorCol && colorUniverse ? colorUniverse : universe,
+      // One value per tip: the scale ranks them by tip count, so the biggest
+      // lineages take the palette's slots and the tail is grey.
+      const tipValues: string[] = [];
+      for (const leaf of tree?.leaves ?? []) tipValues.push(valueAt(leaf.name ?? '', col));
+      const built = phyloColorScale(
+        tipValues,
+        col === colorCol ? colorUniverse : null,
         palette,
         pinnedPalette(categorySource, config.category_palettes, col),
+        isDark ? 'dark' : 'light',
+        plotOverflow(theme),
       );
       cache.set(col, built);
       return built;
     };
-  }, [tree, valueAt, colorCol, colorUniverse, palette, categorySource, config.category_palettes]);
+  }, [
+    tree,
+    valueAt,
+    colorCol,
+    colorUniverse,
+    palette,
+    categorySource,
+    config.category_palettes,
+    theme,
+  ]);
 
   const tipColors = useMemo<{ colorByTip: Map<string, string> }>(() => {
     const colorByTip = new Map<string, string>();

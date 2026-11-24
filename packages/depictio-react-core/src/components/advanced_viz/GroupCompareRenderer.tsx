@@ -22,7 +22,7 @@ import {
 } from '../../api';
 import type { GroupRenderState } from '../../selectionGroups';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
-import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
+import AdvancedVizFrame, { TIER_COLORS, tierColour } from './AdvancedVizFrame';
 import { VizControlGroup, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import {
   applyDataTheme,
@@ -329,7 +329,7 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
               `<br>mean ${result.group_b.label}: %{customdata[4]:.3f}` +
               '<extra></extra>',
             marker: {
-              color: points.map((p) => theme.colors[TIER_COLORS[p.tier] || 'gray'][6]),
+              color: points.map((p) => tierColour(p.tier, isDark ? 'dark' : 'light')),
               size: points.map((p) => (p.tier === 'NS' ? 5 : 8)),
               opacity: 0.85,
             },
@@ -638,7 +638,7 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
                           size="xs"
                           radius="sm"
                           variant="light"
-                          color={TIER_COLORS[p.tier] || 'gray'}
+                          color={TIER_COLORS[p.tier] ?? tierColour('NS')}
                         >
                           {p.tier}
                         </Badge>

@@ -71,8 +71,10 @@ def compute_upset_layout(
         row_heights.append(sz)
         anno_total += sz
 
-    # Intersection bars get the remaining space
-    bar_height = max(0.2, 1.0 - dot_matrix_height - anno_total)
+    # Intersection bars get the remaining space. The floor is what two readable
+    # categorical strips (0.2 each) and a 5-set matrix leave over; past it the
+    # relative heights are normalised by plotly, so the bars never vanish.
+    bar_height = max(0.25, 1.0 - dot_matrix_height - anno_total)
     row_heights.append(bar_height)
 
     # Dot matrix

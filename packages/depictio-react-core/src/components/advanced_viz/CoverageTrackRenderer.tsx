@@ -10,6 +10,7 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
+import { resolveCategoricalPalette, TAB10_PALETTE } from '../../colors';
 import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
@@ -24,6 +25,7 @@ import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { splitFigureByGroups } from './groupSplit';
+import { restrictToChromosomes } from './coverageTrackRows';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
@@ -389,28 +391,27 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     else setViewMode('aggregate');
   }, [data, viewMode]);
 
-  /** Mantine theme palette for categorical traces. */
+  /** depictio's shared categorical palette (the brand's colorway when it has one). */
   const palette = useMemo<string[]>(
-    () => [
-      theme.colors.blue[5],
-      theme.colors.orange[5],
-      theme.colors.green[5],
-      theme.colors.grape[5],
-      theme.colors.teal[5],
-      theme.colors.red[5],
-      theme.colors.violet[5],
-      theme.colors.yellow[7],
-      theme.colors.cyan[5],
-      theme.colors.pink[5],
-      theme.colors.lime[6],
-      theme.colors.indigo[5],
-    ],
-    [theme.colors],
+    () => [...resolveCategoricalPalette(theme, TAB10_PALETTE, isDark)],
+    [theme, isDark],
   );
   /** The dashboard's colours for a sample and for a region category: a value
    *  it pins is drawn in that colour, every other one takes the palette. */
   const samplePinned = usePinnedCategoryColors(config.sample_col);
   const categoryPinned = usePinnedCategoryColors(config.category_col);
+
+  // A track's x axis is one chromosome's positions. Rows from several
+  // chromosomes drawn on it overlap position for position, and a line joins the
+  // end of one chromosome to the start of the next. With no chromosome chosen,
+  // a table holding several opens on its first; the picker shows the others.
+  const defaultedChrom = useRef(false);
+  useEffect(() => {
+    if (defaultedChrom.current || !data || selectedChromosomes.length) return;
+    defaultedChrom.current = true;
+    const chroms = data.summary.chromosomes ?? [];
+    if (chroms.length > 1) setSelectedChromosomes([String(chroms[0])]);
+  }, [data, selectedChromosomes]);
 
   /** Resolve a genome annotation — explicit ``annotation_id`` in the config
    *  wins, otherwise fall back to chromosome-name auto-detection against the
@@ -447,6 +448,13 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     [selectedChromosomes, data],
   );
   const shownKey = shownChroms.join('\u0000');
+  // The rows drawn: a precomputed result (static catalog, offline report)
+  // still holds every chromosome after the picker narrowed the request.
+  const viewData = useMemo(
+    () => (data ? restrictToChromosomes(data, shownChroms) : data),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, shownKey],
+  );
   // The window a browser on the tab shows. When a region filter also names a
   // range, the one that changed last wins: panning a browser is not undone by
   // a region that was already there, and a region brushed afterwards is not
@@ -481,10 +489,10 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     max: number[];
   };
   const aggregate: Aggregate | null = useMemo(() => {
-    if (!data || viewMode !== 'aggregate') return null;
-    const cols = data.columns;
-    const positions = (data.rows[cols.position] as number[]) || [];
-    const values = (data.rows[cols.value] as number[]) || [];
+    if (!viewData || viewMode !== 'aggregate') return null;
+    const cols = viewData.columns;
+    const positions = (viewData.rows[cols.position] as number[]) || [];
+    const values = (viewData.rows[cols.value] as number[]) || [];
     if (!positions.length) return null;
     const byPos = new Map<number, number[]>();
     for (let i = 0; i < positions.length; i++) {
@@ -520,18 +528,19 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       out.max.push(arr[arr.length - 1]);
     }
     return out;
-  }, [data, viewMode]);
+  }, [viewData, viewMode]);
 
   const figureSpec = useMemo<{ data: unknown[]; layout: Record<string, unknown> } | null>(() => {
-    if (!data || !viewMode) return null;
-    const cols = data.columns;
-    const positions = (data.rows[cols.position] as number[]) || [];
-    const values = (data.rows[cols.value] as number[]) || [];
-    const samplesArr = cols.sample ? ((data.rows[cols.sample] as string[]) || []) : null;
-    const chromsArr = (data.rows[cols.chromosome] as unknown[]) || [];
-    const endsArr = cols.end ? ((data.rows[cols.end] as unknown[]) || []) : null;
+    if (!data || !viewData || !viewMode) return null;
+    const cols = viewData.columns;
+    const rows = viewData.rows;
+    const positions = (rows[cols.position] as number[]) || [];
+    const values = (rows[cols.value] as number[]) || [];
+    const samplesArr = cols.sample ? ((rows[cols.sample] as string[]) || []) : null;
+    const chromsArr = (rows[cols.chromosome] as unknown[]) || [];
+    const endsArr = cols.end ? ((rows[cols.end] as unknown[]) || []) : null;
     const categoriesArr = cols.category
-      ? ((data.rows[cols.category] as string[]) || [])
+      ? ((rows[cols.category] as string[]) || [])
       : null;
 
     const samples = data.summary.samples.length ? data.summary.samples : ['(all)'];
@@ -884,6 +893,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     return { data: traces, layout };
   }, [
     data,
+    viewData,
     config,
     palette,
     samplePinned,

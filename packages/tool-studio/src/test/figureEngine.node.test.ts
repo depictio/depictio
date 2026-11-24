@@ -137,7 +137,8 @@ describe.skipIf(!enabled || !modules || !figureModules)('exact figures (real run
       const template = (res.figure.layout as { template: { layout: Record<string, unknown> } }).template;
       const want = expected(`mantine_${theme}`);
       expect(JSON.parse(JSON.stringify(template.layout))).toEqual(want);
-      expect((template.layout.font as { color: string }).color).toBe(theme === 'dark' ? '#e9ecef' : '#343a40');
+      // The shared plot chrome's text (depictio_palettes.json writes hex in upper case).
+      expect((template.layout.font as { color: string }).color.toLowerCase()).toBe(theme === 'dark' ? '#e9ecef' : '#343a40');
     }
   }, 120_000);
 

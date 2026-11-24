@@ -17,7 +17,7 @@ import {
 import {
   mantineCategoricalPalette,
   resolveCategoricalPalette,
-  stableColorMap,
+  plotOverflow, stableColorMap,
 } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
@@ -847,8 +847,8 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   const figure = useMemo<{ data: unknown[]; layout: Record<string, unknown> } | null>(() => {
     if (!visible.length || !lanes.length) return null;
     const colors = plotlyThemeColors(isDark, theme);
-    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
-    const paletteColour = stableColorMap(annotationValues, palette, annotationPinned);
+    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark);
+    const paletteColour = stableColorMap(annotationValues, palette, annotationPinned, isDark ? 'dark' : 'light', plotOverflow(theme));
     // An override wins over the palette, per class, so two classes that the
     // stable map happened to give near neighbours can be pulled apart.
     const annotationColour = new Map(
@@ -1485,8 +1485,8 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   /** Default colour a class would get with no override, so the picker opens on
    *  what is actually drawn rather than on an empty field. */
   const paletteDefaults = useMemo(() => {
-    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
-    const map = stableColorMap(annotationValues, palette, annotationPinned);
+    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark);
+    const map = stableColorMap(annotationValues, palette, annotationPinned, isDark ? 'dark' : 'light', plotOverflow(theme));
     return { map, palette };
   }, [annotationValues, annotationPinned, theme, isDark]);
 
@@ -1587,8 +1587,8 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
 
   const gsColours = useMemo(() => {
     const themeColours = plotlyThemeColors(isDark, theme);
-    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
-    const stable = stableColorMap(annotationValues, palette, annotationPinned);
+    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark);
+    const stable = stableColorMap(annotationValues, palette, annotationPinned, isDark ? 'dark' : 'light', plotOverflow(theme));
     const base = arcColors[ARC_COLOR_ALL] || palette[0];
     const annotations = junctions.some((j) => !j.annotation)
       ? [...annotationValues, UNANNOTATED]

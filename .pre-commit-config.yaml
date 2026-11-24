@@ -93,6 +93,17 @@ repos:
         files: ^depictio/projects/(.+/)?(template\.yaml|dashboards/.+\.ya?ml|recipes/.+)$|^depictio/projects/template_versions\.lock\.json$|^depictio/catalog/[^_/][^/]*/.+\.(py|ya?ml)$|^depictio/catalog/catalog_versions\.lock\.json$|^scripts/update_template_lock\.py$
         pass_filenames: false
 
+# The TypeScript palettes are generated from depictio/models/palettes/depictio_palettes.json.
+-   repo: local
+    hooks:
+      - id: check-palette-ts
+        name: Palette TS fresh
+        description: 'Fail when palettes.generated.ts no longer matches the palette JSON'
+        entry: python3 scripts/gen_palette_ts.py --check
+        language: system
+        files: ^depictio/models/palettes/(depictio_palettes\.json|ui_hues\.py)$|^packages/depictio-react-core/src/palettes\.generated\.ts$|^scripts/gen_palette_ts\.py$
+        pass_filenames: false
+
 # Clean jupyter notebooks
 -   repo: https://github.com/kynan/nbstripout
     rev: 0.9.1

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from depictio.models.components.category_palette import (
     CATEGORY_PALETTE,
+    CATEGORY_SHADES,
     assign_category_colors,
     natural_sort_key,
 )
@@ -21,6 +22,7 @@ from depictio.models.models.dashboards import (
 )
 
 P = CATEGORY_PALETTE
+S = CATEGORY_SHADES
 
 
 class TestAssignCategoryColors:
@@ -52,11 +54,13 @@ class TestAssignCategoryColors:
             "z": "#000000",
         }
 
-    def test_previous_colours_are_carried_over_and_win_over_pins(self):
+    def test_previous_colours_are_carried_over_but_a_pin_wins(self):
+        # A changed template pin applies on a replacing re-import; the keep path
+        # layers the stored map over the result, so viewer edits survive there.
         colours = assign_category_colors(
             ["a", "b", "new"], pinned={"a": "#111111"}, previous={"a": P[3], "b": P[0]}
         )
-        assert colours["a"] == P[3]
+        assert colours["a"] == "#111111"
         assert colours["b"] == P[0]
         # The first slot neither the pin nor the previous colours use.
         assert colours["new"] == P[1]
@@ -100,6 +104,70 @@ class TestAssignCategoryColors:
         colours = assign_category_colors(values, pinned={"Unclassified": "#868e96"}, ranked=True)
         assert list(colours) == [*values[: len(P)], "Unclassified"]
         assert [colours[v] for v in values[: len(P)]] == list(P)
+
+    def test_a_reserved_value_takes_no_generated_slot(self):
+        # Other keeps its semantic grey at render: it must not eat a palette slot
+        # unless it is pinned or carried over.
+        colours = assign_category_colors(["control", "Other", "treated"])
+        assert "Other" not in colours
+        assert colours == {"control": P[0], "treated": P[1]}
+
+    def test_a_pinned_reserved_value_keeps_its_pin(self):
+        colours = assign_category_colors(["control", "Other"], pinned={"Other": "#868e96"})
+        assert colours == {"control": P[0], "Other": "#868e96"}
+
+
+class TestAvoidOtherColumnsPins:
+    """A colour another column pins goes last: Bacteria's violet is not the top phylum's."""
+
+    def test_slots_another_column_pins_come_last(self):
+        out = assign_category_colors(["a", "b"], avoid=[P[0], P[2]])
+        assert out == {"a": P[1], "b": P[3]}
+
+    def test_darker_twins_come_before_an_avoided_slot(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[P[0]], ranked=True)
+        assert list(out.values()) == [*P[1:], S[0]]
+
+    def test_an_avoided_slot_is_still_used_when_twins_run_out(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[*P[1:], *S], ranked=True)
+        assert list(out.values()) == [P[0], *P[1:]]
+
+    def test_a_ranked_column_colours_only_its_largest_values(self):
+        values = [f"v{i:02d}" for i in range(len(P) + 3)]
+        previous = {v: S[i] for i, v in enumerate(values[: len(P)])}
+        out = assign_category_colors(values, previous=previous, ranked=True)
+        assert set(out) == set(values[: len(P)])
+
+    def test_twins_do_not_raise_how_many_values_get_a_slot(self):
+        values = [f"v{i:02d}" for i in range(len(P) + 1)]
+        assert len(assign_category_colors(values, ranked=True)) == len(P)
+        assert assign_category_colors(values) == {}
+
+    def test_twins_of_other_columns_hues_come_first(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[P[2], P[5]], ranked=True)
+        assert list(out.values()) == [P[0], P[1], P[3], P[4], P[6], P[7], S[2], S[5]]
+
+    def test_twins_are_distinct_from_the_palette(self):
+        assert len(S) == len(P)
+        assert not {c.lower() for c in S} & {c.lower() for c in P}
+
+    def test_unranked_values_still_fit_a_slot_each(self):
+        values = [f"v{i}" for i in range(len(P))]
+        out = assign_category_colors(values, avoid=[P[0]])
+        assert sorted(out.values()) == sorted([*P[1:], S[0]])
+
+    def test_avoid_is_case_insensitive(self):
+        assert assign_category_colors(["a"], avoid=[P[0].lower()]) == {"a": P[1]}
+
+    def test_a_previous_colour_another_column_pins_is_given_up(self):
+        out = assign_category_colors(["a", "b"], previous={"a": P[0], "b": P[4]}, avoid=[P[0]])
+        assert out == {"a": P[1], "b": P[4]}
+
+    def test_an_own_pin_wins_over_avoid(self):
+        assert assign_category_colors(["a"], pinned={"a": P[0]}, avoid=[P[0]]) == {"a": P[0]}
 
 
 class TestLiteCategoryColorsAuto:

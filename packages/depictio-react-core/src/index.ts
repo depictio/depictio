@@ -108,6 +108,8 @@ export {
 export type { ParsedPalette } from './paletteColor';
 export { TabColorContext, tabHueHex, useTabHue } from './tabColor';
 export { tintSingleSeries } from './figureTint';
+export { applyMarksOff } from './figureMarks';
+export type { MarksOffPatch } from './figureMarks';
 export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
 export { GenomeBrowserTargetContext, useGenomeBrowserTarget } from './components/jbrowse/browserTarget';
@@ -868,6 +870,7 @@ export type {
   VizSuggestionsResponse,
   CatalogRender,
   FigureReferenceLine,
+  FigureAnnotations,
   CatalogOutputMatch,
   CatalogModule,
   CatalogComposeResponse,
@@ -1943,3 +1946,29 @@ export {
 } from './api';
 export type { UsageGranularity, UsagePoint, UsageQuery, UsageReport } from './api';
 export { CARD_FRAME, CARD_RULE } from './components/cardFrame';
+
+// Shared plot palettes and chrome tokens (one source with the Python side).
+export {
+  PLOT_FONT_FAMILY,
+} from './palettes.generated';
+export {
+  DEFAULT_PALETTE_ID,
+  PALETTE_IDS,
+  annotationInk,
+  assignColors,
+  categoricalPalette,
+  divergingPalette,
+  orderWithRemainderLast,
+  plotChrome,
+  reservedKind,
+  semanticColor,
+  sequentialPalette,
+  toColorscale,
+} from './palettes';
+export type { ChromeTokens, ColorScheme, PaletteId, ReservedKind } from './palettes';
+export {
+  brandColorway,
+  defaultCategorical,
+  resolveCategoricalPalette,
+  stableColorMap,
+} from './colors';

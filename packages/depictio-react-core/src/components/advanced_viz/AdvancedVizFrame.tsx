@@ -42,6 +42,8 @@ import {
 import { frameTiers } from './frameTiers';
 import type { OpenLocusReader } from '../jbrowse/locusForAction';
 import { usePlotSlotResize } from './plotSlotResize';
+import { categoricalPalette, semanticColor } from '../../palettes';
+import { DIRECTION_COLORS } from '../../palettes.generated';
 
 /**
  * Server-side downsampling state, mirroring the scatter-figure reduction badge
@@ -179,15 +181,30 @@ interface AdvancedVizFrameProps {
  *  Plotly markers with the same Mantine palette names — the chip, table
  *  tint, and dot colours all stay in sync without each renderer
  *  reinventing the mapping. */
-export const TIER_COLORS: Record<string, string> = {
-  UP: 'pink',
-  DN: 'blue',
-  HIT: 'teal',
-  ABOVE: 'teal',
-  BELOW: 'orange',
-  NS: 'gray',
-  MISS: 'gray',
-};
+/** A tier's colour from the shared palette: a direction keeps its red and
+ *  blue, a hit the palette's teal against an orange "below", the rest grey.
+ *  Mantine's own pink/blue/teal read as one more data colour beside it. */
+export function tierColour(tier: string, scheme: 'light' | 'dark' = 'light'): string {
+  const slots = categoricalPalette(null, scheme);
+  switch (tier) {
+    case 'UP':
+      return DIRECTION_COLORS.up[scheme];
+    case 'DN':
+      return DIRECTION_COLORS.down[scheme];
+    case 'HIT':
+    case 'ABOVE':
+      return slots[2];
+    case 'BELOW':
+      return slots[1];
+    default:
+      return semanticColor('other', scheme);
+  }
+}
+
+/** Light-scheme tier colours, for the count chips (Mantine shades them). */
+export const TIER_COLORS: Record<string, string> = Object.fromEntries(
+  ['UP', 'DN', 'HIT', 'ABOVE', 'BELOW', 'NS', 'MISS'].map((t) => [t, tierColour(t)]),
+);
 
 /** "10,000 / 5,000,000 pts" on a chart that sums its rows reads as a display
  *  cap. It isn't: the values themselves are off by the sampling stride, and
@@ -538,9 +555,9 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           const isSelected = respectSelection ? selected.includes(label) : true;
           const color = respectSelection
             ? isSelected
-              ? TIER_COLORS[label] ?? 'teal'
+              ? TIER_COLORS[label] ?? tierColour('HIT')
               : 'gray'
-            : TIER_COLORS[label] ?? 'gray';
+            : TIER_COLORS[label] ?? tierColour('NS');
           return (
             <Badge
               key={label}

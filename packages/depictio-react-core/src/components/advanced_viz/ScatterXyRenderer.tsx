@@ -13,7 +13,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -52,6 +52,8 @@ import {
 } from './referenceStats';
 import { extentFraction, labelPlacement } from './scatterLabels';
 import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
+import { referenceTint } from '../../figureTint';
+import { referenceGuide } from '../../palettes';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { applyHighlight, highlightLayout } from './highlight/highlightTraces';
 import { isAdditiveClick, selectionFromClick } from './highlight/highlightModel';
@@ -209,7 +211,7 @@ ScatterXyPlot.displayName = 'ScatterXyPlot';
 const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
-  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const palette = resolveCategoricalPalette(theme, PALETTE, colorScheme === 'dark');
   const config = (metadata.config || {}) as ScatterXyConfig;
   const isDark = colorScheme === 'dark';
   const themeColors = plotlyThemeColors(isDark, theme);
@@ -510,6 +512,17 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         : markerSize;
     };
     const highlightedCount = highlighted ? points.filter(highlighted).length : null;
+    // Which side of the reference each point is on, for the colour.
+    const sideOf = densityView ? null : highlightPredicate(refLine, refValue, 'above');
+    // A colour column with one value per point (a report id) names nothing the
+    // label and hover do not already say, unless the dashboard pins its values.
+    const colourValues = points.map((p) => String(p.colour ?? ''));
+    const identityOnly =
+      !!config.color_col &&
+      !numericColour &&
+      points.length > 1 &&
+      new Set(colourValues).size === points.length &&
+      !(pinnedColours && colourValues.every((v) => v in pinnedColours));
 
     const markerCommon = {
       opacity,
@@ -582,6 +595,34 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           });
         }
       }
+    } else if (sideOf && (!config.color_col || identityOnly)) {
+      // Colour that would only name each point (or no colour at all) is spent
+      // on the reference instead: the hue above the line, its tint at or
+      // below, as the overview look does on server figures. Neither side is
+      // called good: a median is no verdict.
+      const tint = referenceTint(palette[0]);
+      const sideName = (above: boolean) =>
+        `${above ? 'Above' : 'At or below'} ${refLabel ? (/^[a-z]+ of /.test(refLabel) ? `the ${refLabel}` : refLabel) : 'the reference'}`;
+      for (const above of [true, false]) {
+        const group = points.filter((p) => sideOf(p) === above);
+        if (group.length === 0) continue;
+        data.push({
+          type: 'scattergl' as const,
+          mode: 'markers' as const,
+          name: sideName(above),
+          x: group.map((p) => p.x),
+          y: group.map((p) => p.y),
+          text: group.map((p) => p.label),
+          customdata: group.map((p) => [p.key]),
+          marker: {
+            ...markerCommon,
+            opacity: pointOpacity(group),
+            color: above ? palette[0] : tint,
+            size: pointSize(group),
+          },
+          hovertemplate: `%{text}<br>${hoverTail}`,
+        });
+      }
     } else if (config.color_col && numericColour) {
       // `customdata` is one array per point: slot 0 is the selection key.
       // `extractScatterSelection` and `splitFigureByGroups` both index slot 0,
@@ -617,7 +658,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         else groups.set(k, [p]);
       }
       const names = Array.from(groups.keys()).sort();
-      const colourMap = stableColorMap(names, palette, pinnedColours);
+      const colourMap = stableColorMap(names, palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
       for (const name of names) {
         const group = groups.get(name) as typeof points;
         data.push({
@@ -723,12 +764,13 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     // Guide lines. The diagonal is drawn in paper-free data coordinates over
     // the shared range of both axes, so it stays the identity line under zoom.
     const shapes: Record<string, unknown>[] = [];
-    const guide = { color: themeColors.zeroLineColor, width: 1, dash: 'dash' as const };
+    const guideStyle = referenceGuide(isDark ? 'dark' : 'light');
+    const guide = guideStyle.line;
     // A guide line is named on the plot itself: it has no legend entry, and an
     // unnamed dashed line reads as data.
     const guideLabel = {
       showarrow: false,
-      font: { size: 10, color: themeColors.zeroLineColor },
+      font: guideStyle.font,
     };
     if (refLine === 'diagonal') {
       // One shared range drives both ends, so under either log axis the line

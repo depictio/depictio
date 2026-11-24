@@ -9,12 +9,12 @@ import {
   TOP_LABEL_ROW_PX,
   withAlpha,
 } from './toPlotly';
-import type { AnnotationColor, RenderableAnnotation } from './types';
+import type { AnnotationColorName, RenderableAnnotation } from './types';
 import { ANNOTATION_COLORS, numberBadge, PREVIEW_ANNOTATION_ID } from './types';
 
 // Fake resolver: a readable token, so tests can assert every colour went
 // through it and nothing was hard-coded.
-const resolveColor = (name: AnnotationColor, shade?: number) => `tok:${name}:${shade ?? 'd'}`;
+const resolveColor = (name: AnnotationColorName, shade?: number) => `tok:${name}:${shade ?? 'd'}`;
 
 const item = (
   id: string,
@@ -73,7 +73,7 @@ describe('annotationsToPlotly', () => {
       { resolveColor },
     );
     expect(out.shapes[0]).toMatchObject({ xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 10, y1: 3, opacity: 0.4 });
-    expect(out.shapes[0].fillcolor).toBe('tok:yellow:d'); // default colour
+    expect(out.shapes[0].fillcolor).toBe('tok:ink:d'); // default colour
     expect(out.annotations[0]).toMatchObject({ xref: 'paper', y: 10, text: '② Normal' });
   });
 
@@ -373,7 +373,7 @@ describe('annotationsToPlotly', () => {
   });
 
   it('draws an arrow note with pixel offsets and a translucent box', () => {
-    const colour = (name: AnnotationColor) => (name === 'teal' ? '#12b886' : 'x');
+    const colour = (name: AnnotationColorName) => (name === 'teal' ? '#12b886' : 'x');
     const out = annotationsToPlotly(
       [item('n', 3, { kind: 'note', geometry: { kind: 'arrow_note', x: 5, y: 6, ax: 20, ay: -30 }, label: 'Peak', color: 'teal' })],
       { resolveColor: colour, fontColor: 'fg' },

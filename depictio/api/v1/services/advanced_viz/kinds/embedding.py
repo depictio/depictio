@@ -29,9 +29,8 @@ from typing import Any
 
 from depictio.api.v1.services.advanced_viz.color_scale import plotly_colorscale
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-from depictio.api.v1.services.advanced_viz.palette import TAB10_PALETTE, stable_color_map
-
-_DEFAULT_COLOR = "#4C72B0"
+from depictio.api.v1.services.advanced_viz.palette import stable_color_map
+from depictio.models import palettes
 
 
 def _columns(config: dict[str, Any]) -> list[str | None]:
@@ -102,7 +101,7 @@ def build(
 
     if is_categorical and color_values:
         categories = sorted({str(v) for v in color_values})
-        colors = stable_color_map(color_values, TAB10_PALETTE, config.get("category_palette"))
+        colors = stable_color_map(color_values, None, config.get("category_palette"), mode=theme)
         for category in categories:
             indices = [i for i, v in enumerate(color_values) if str(v) == category]
             data.append(
@@ -133,7 +132,7 @@ def build(
                 }
             )
         else:
-            marker["color"] = _DEFAULT_COLOR
+            marker["color"] = palettes.categorical(None, theme)[0]
         data.append(
             {
                 "type": "scatter",

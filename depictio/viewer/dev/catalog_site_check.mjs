@@ -17,6 +17,7 @@ import {
 } from '../src/catalog-preview/siteTree';
 import { BUMP_COLOR, fetchJsonCached } from '../src/catalog-preview/siteData';
 import { diffLines, diffRenders, foldUnchanged } from '../src/catalog-preview/lineDiff';
+import { firstRender, groupRenders, renderButtonLabel } from '../src/catalog-preview/renderGroups';
 
 let failures = 0;
 function check(label, got, want) {
@@ -141,6 +142,24 @@ check('other file left alone', redirect('/catalog/latest/page.htm'), null);
 check('root', redirect('/'), null);
 check('prerelease slot without slash', redirect('/catalog/v1.22.0-rc.1'), '/catalog/v1.22.0-rc.1/');
 check('versioned slot, numeric tail', redirect('/catalog/v2.0'), '/catalog/v2.0/');
+
+console.log();
+console.log('N. Render switcher groups');
+{
+  const types = ['card', 'interactive', 'figure', 'table', 'advanced_viz', 'card', 'text'];
+  check(
+    'plots first, then cards, filters, tables, unknown kinds last',
+    groupRenders(types).map((g) => [g.key, g.indices]),
+    [['plots', [2, 4]], ['cards', [0, 5]], ['filters', [1]], ['tables', [3]], ['other', [6]]],
+  );
+  check('opens on the first plot', firstRender(types), 2);
+  check('no plot: opens on the first render', firstRender(['card', 'table']), 0);
+  check('no render', firstRender([]), 0);
+  check('a kind wears its first render\'s type', groupRenders(['card', 'advanced_viz', 'figure']).map((g) => g.type), ['advanced_viz', 'card']);
+  check('a render is named by its title', renderButtonLabel('Cells per cluster', 'bar'), 'Cells per cluster');
+  check('no title: the kind', renderButtonLabel('', 'median'), 'median');
+  check('a long title is cut', renderButtonLabel('x'.repeat(50), 'bar').length, 36);
+}
 
 console.log();
 if (failures) {

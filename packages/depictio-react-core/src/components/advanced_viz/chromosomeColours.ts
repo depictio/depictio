@@ -1,17 +1,10 @@
+import { DEFAULT_PALETTE_ID, PALETTES } from '../../palettes.generated';
+
 /**
  * The chromosome palette a Manhattan paints its blocks with, shared so another
  * genome-wide tile (a sashimi's arcs) gives a chromosome the same colour.
  */
-export const CHROMOSOME_PALETTE = [
-  '#1c7ed6',
-  '#e64980',
-  '#fab005',
-  '#37b24d',
-  '#7048e8',
-  '#f76707',
-  '#0ca678',
-  '#d6336c',
-];
+export const CHROMOSOME_PALETTE: readonly string[] = PALETTES[DEFAULT_PALETTE_ID].categorical.light;
 
 // Natural chromosome order: chr1..chr22, chrX, chrY, chrMT, then anything else
 // alphabetically. Returns 100 for unrecognised labels so they sort last.

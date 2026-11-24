@@ -433,7 +433,8 @@ class FilterSectionSpec(BaseModel):
     figure_style: FigureStyle | None = Field(
         default=None,
         description="The style every figure in this section is drawn in, unless the "
-        "figure sets its own `figure_style`: `minimal` gives a row of figures the "
+        "figure sets its own `figure_style`: `default` (overview look), `classic` (drawing "
+        "left as built) or `minimal`, which gives a row of figures the "
         "landing-page look (title and icon in the card header, faint grid, legend under "
         "the plot). Unset leaves each figure to its own style. Grid sections only.",
     )
@@ -1635,6 +1636,10 @@ class DashboardDataLite(BaseModel):
                 # Guide lines, fixed or computed from the data (RULES §17).
                 if comp.get("reference_lines"):
                     lite_comp["reference_lines"] = comp["reference_lines"]
+                # The figure's declared automatic marks. Written only when set,
+                # so a figure that follows its type's defaults exports no key.
+                if comp.get("annotations") is not None:
+                    lite_comp["annotations"] = comp["annotations"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -2134,6 +2139,10 @@ class DashboardDataLite(BaseModel):
                         full_comp[field] = comp_dict[field]
                 if comp_dict.get("reference_lines"):
                     full_comp["reference_lines"] = comp_dict["reference_lines"]
+                # The figure's declared automatic marks, read back as they were
+                # written (`None` stays absent, so the defaults apply).
+                if comp_dict.get("annotations") is not None:
+                    full_comp["annotations"] = comp_dict["annotations"]
 
             elif comp_type == "card":
                 full_comp.update(

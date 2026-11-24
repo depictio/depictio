@@ -21,6 +21,11 @@
 
 // Real api (importer === this file, so the shim plugin lets it through).
 export * from '../../../../packages/depictio-react-core/src/api';
+import {
+  applyMarksOff,
+  type MarksOffPatch,
+} from '../../../../packages/depictio-react-core/src/figureMarks';
+import { previewMarksOn } from './previewMarks';
 
 import type {
   DashboardSummary,
@@ -28,7 +33,7 @@ import type {
 } from '../../../../packages/depictio-react-core/src/api';
 
 export interface OfflineData {
-  figures: Record<string, { figure: unknown; metadata?: unknown }>;
+  figures: Record<string, { figure: unknown; metadata?: unknown; marks_off?: unknown }>;
   tables: Record<string, { columns: unknown[]; rows: Record<string, unknown>[]; total: number }>;
   maps: Record<string, { figure: unknown; metadata?: unknown }>;
   images: Record<string, unknown>;
@@ -99,10 +104,16 @@ function need<T>(map: Record<string, T>, key: string, kind: string): T {
 // ---- figure / map (keyed by component id) ---------------------------------
 
 export async function renderFigure(_dashboardId: string, componentId: string) {
-  return need(DATA().figures, componentId, 'figure') as {
+  const entry = need(DATA().figures, componentId, 'figure') as {
     figure: { data?: unknown[]; layout?: Record<string, unknown> };
     metadata: { visu_type?: string; filter_applied?: boolean };
+    marks_off?: MarksOffPatch;
   };
+  // The catalog preview's "Automatic marks" switch (previewMarks.ts).
+  if (entry.marks_off && !previewMarksOn()) {
+    return { ...entry, figure: applyMarksOff(entry.figure, entry.marks_off) };
+  }
+  return entry;
 }
 
 export async function renderMap(_dashboardId: string, componentId: string) {

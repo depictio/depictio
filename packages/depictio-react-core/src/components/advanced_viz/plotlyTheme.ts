@@ -7,11 +7,16 @@
  * subaxis, legend, annotation, coloraxis, and trace colorbar so we don't
  * depend on Plotly's (unreliable) template-vs-layout precedence rules.
  *
- * All colour values come from the Mantine theme — no hardcoded literals.
+ * Text, grid, zero-line and hover tokens, the font and the default colorway
+ * come from depictio's shared plot palette (`plotChrome` / `PLOT_FONT_FAMILY` /
+ * `categoricalPalette`); a brand colorway on the theme wins over the palette.
  */
 import type { MantineTheme } from '@mantine/core';
+import { withReadableTitle } from './axisTitle';
 
 import { brandColorway } from '../../colors';
+import { PLOT_FONT_FAMILY } from '../../palettes.generated';
+import { categoricalPalette, plotChrome } from '../../palettes';
 import { applyChromePlotly } from '../../chrome/plotlyPatch';
 
 export interface PlotlyThemeColors {
@@ -19,19 +24,25 @@ export interface PlotlyThemeColors {
   gridColor: string;
   zeroLineColor: string;
   bgColor: string;
-  /** The brand's categorical hues, or undefined on an unbranded instance —
-   *  where Plotly's own default cycle is the right answer. */
-  colorway?: string[];
+  hoverBg: string;
+  hoverBorder: string;
+  hoverText: string;
+  /** The brand's categorical hues, else depictio's shared palette for the scheme. */
+  colorway: string[];
 }
 
 export function plotlyThemeColors(isDark: boolean, theme: MantineTheme): PlotlyThemeColors {
-  const colorway = brandColorway(theme);
+  const scheme = isDark ? 'dark' : 'light';
+  const chrome = plotChrome(scheme);
   return {
-    textColor: isDark ? theme.colors.gray[2] : theme.colors.gray[8],
-    gridColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-    zeroLineColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
+    textColor: chrome.text,
+    gridColor: chrome.grid,
+    zeroLineColor: chrome.zero,
     bgColor: 'rgba(0,0,0,0)',
-    colorway: colorway ?? undefined,
+    hoverBg: chrome.hover_bg,
+    hoverBorder: chrome.hover_border,
+    hoverText: chrome.hover_text,
+    colorway: brandColorway(theme, isDark) ?? [...categoricalPalette(null, scheme)],
   };
 }
 
@@ -45,8 +56,8 @@ export function plotlyThemeFragment(isDark: boolean, theme: MantineTheme) {
     template: isDark ? 'plotly_dark' : 'plotly_white',
     plot_bgcolor: c.bgColor,
     paper_bgcolor: c.bgColor,
-    font: { color: c.textColor },
-    ...(c.colorway ? { colorway: c.colorway } : {}),
+    font: { family: PLOT_FONT_FAMILY, color: c.textColor },
+    colorway: c.colorway,
   };
 }
 
@@ -118,7 +129,7 @@ export function applyLayoutTheme(
       key.startsWith('yaxis') ||
       key.startsWith('zaxis')
     ) {
-      out[key] = retintAxis(out[key], c);
+      out[key] = withReadableTitle(retintAxis(out[key], c));
     } else if (key === 'scene' || key.startsWith('scene')) {
       const scene = { ...((out[key] || {}) as Record<string, unknown>) };
       for (const sk of ['xaxis', 'yaxis', 'zaxis']) {
@@ -127,7 +138,8 @@ export function applyLayoutTheme(
       scene.bgcolor = c.bgColor;
       out[key] = scene;
     } else if (key === 'coloraxis' && typeof out[key] === 'object' && out[key] != null) {
-      out[key] = retintColorbar(out[key] as Record<string, unknown>, c);
+      const axis = retintColorbar(out[key] as Record<string, unknown>, c);
+      out[key] = axis.colorbar ? { ...axis, colorbar: withReadableTitle(axis.colorbar) } : axis;
     } else if (key === 'annotations' && Array.isArray(out[key])) {
       out[key] = (out[key] as Array<Record<string, unknown>>).map((a) => {
         const font = (a.font || {}) as Record<string, unknown>;
@@ -165,10 +177,21 @@ export function applyLayoutTheme(
     template: isDark ? 'plotly_dark' : 'plotly_white',
     plot_bgcolor: c.bgColor,
     paper_bgcolor: c.bgColor,
-    font: { ...((out.font || {}) as Record<string, unknown>), color: c.textColor },
+    font: { family: PLOT_FONT_FAMILY, ...((out.font || {}) as Record<string, unknown>), color: c.textColor },
+    // A figure's own hover label keeps what it set; the rest is the palette's.
+    hoverlabel: {
+      bgcolor: c.hoverBg,
+      bordercolor: c.hoverBorder,
+      ...((out.hoverlabel || {}) as Record<string, unknown>),
+      font: {
+        color: c.hoverText,
+        ...(((out.hoverlabel || {}) as Record<string, unknown>).font as Record<string, unknown> | undefined),
+      },
+    },
     // Plotly only reaches for the colorway on traces that named no colour of
     // their own, so a figure that colours its traces explicitly is untouched.
-    ...(c.colorway ? { colorway: c.colorway } : {}),
+    // A brand wins; otherwise the figure's own colorway, then the shared palette.
+    colorway: brandColorway(theme, isDark) ?? out.colorway ?? c.colorway,
   }, isDark ? 'dark' : 'light');
 }
 
@@ -189,7 +212,7 @@ export function applyDataTheme(
       const retinted = retintColorbar({ colorbar: t.colorbar }, c) as {
         colorbar: Record<string, unknown>;
       };
-      t.colorbar = retinted.colorbar;
+      t.colorbar = withReadableTitle(retinted.colorbar);
     }
     if (t.marker != null && typeof t.marker === 'object') {
       const marker = { ...(t.marker as Record<string, unknown>) };
@@ -197,7 +220,7 @@ export function applyDataTheme(
         const retinted = retintColorbar({ colorbar: marker.colorbar }, c) as {
           colorbar: Record<string, unknown>;
         };
-        marker.colorbar = retinted.colorbar;
+        marker.colorbar = withReadableTitle(retinted.colorbar);
       }
       t.marker = marker;
     }

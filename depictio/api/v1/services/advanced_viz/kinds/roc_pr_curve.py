@@ -25,17 +25,7 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-
-#: seaborn deep — mirrors PALETTE in the TSX.
-_PALETTE: tuple[str, ...] = (
-    "#4C72B0",
-    "#DD8452",
-    "#55A467",
-    "#C44E52",
-    "#8172B3",
-    "#937860",
-    "#DA8BC3",
-)
+from depictio.models import palettes
 
 
 def _columns(config: dict[str, Any]) -> list[str | None]:
@@ -56,12 +46,24 @@ def _as_float(value: Any) -> float | None:
     return result if math.isfinite(result) else None
 
 
-def _auc(xs: list[float | None], ys: list[float | None]) -> float:
-    """Trapezoidal area under y(x), over finite points sorted by x."""
+# Share of the unit x axis a curve must sweep for its area to be an AUC
+# (MIN_AUC_SPAN in the viewer's prCurves.ts).
+MIN_AUC_SPAN = 0.5
+
+
+def _auc(xs: list[float | None], ys: list[float | None]) -> float | None:
+    """Trapezoidal area under y(x), over finite points sorted by x.
+
+    None when the points sweep less than ``MIN_AUC_SPAN`` of x: two hap.py
+    thresholds a few millionths of recall apart have an area of 0.000, which
+    reads as a useless caller rather than as a sweep too short to measure.
+    """
     points = sorted(
         ((x, y) for x, y in zip(xs, ys) if x is not None and y is not None),
         key=lambda p: p[0],
     )
+    if len(points) < 2 or points[-1][0] - points[0][0] < MIN_AUC_SPAN:
+        return None
     area = 0.0
     for (x0, y0), (x1, y1) in zip(points, points[1:]):
         area += (x1 - x0) * (y1 + y0) / 2
@@ -102,9 +104,10 @@ def build(
         key = str(groups_raw[i]) if groups_raw and i < len(groups_raw) else ""
         grouped.setdefault(key, []).append(i)
 
+    palette = palettes.categorical(None, theme)
     data: list[dict[str, Any]] = []
     for position, (key, indices) in enumerate(grouped.items()):
-        color = _PALETTE[position % len(_PALETTE)]
+        color = palette[position % len(palette)]
         prefix = f"{key} · " if key else ""
 
         if roc_mode and fpr:

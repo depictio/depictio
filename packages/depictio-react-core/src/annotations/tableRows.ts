@@ -4,16 +4,16 @@
  * marked row gets a coloured stripe + tint and a numbered badge. Pure helpers,
  * no React / AG Grid: TableRenderer maps the result onto row classes.
  */
-import type { AnnotationColor, MarkedPoints, RenderableAnnotation } from './types';
-import { ANNOTATION_COLORS, MAX_POINT_IDS, numberBadge } from './types';
+import type { AnnotationColor, AnnotationColorName, MarkedPoints, RenderableAnnotation } from './types';
+import { ANNOTATION_COLORS, ANNOTATION_INK, MAX_POINT_IDS, numberBadge } from './types';
 
-/** Colour the backend stores when an annotation has none. */
-export const DEFAULT_ROW_ANNOTATION_COLOR: AnnotationColor = 'yellow';
+/** What a marked row wears when its annotation has no chosen colour: the neutral ink. */
+export const DEFAULT_ROW_ANNOTATION_COLOR: AnnotationColorName = ANNOTATION_INK;
 
 export interface RowAnnotationMark {
   /** Thread id of the annotation that styles the row. */
   id: string;
-  color: AnnotationColor;
+  color: AnnotationColorName;
   number: number | null;
   /** The styling annotation is the one focused in the comments drawer. */
   highlighted: boolean;
@@ -33,7 +33,7 @@ export function isRowAnnotation(item: RenderableAnnotation, rowIdColumn: string)
   return g.kind === 'points' && g.column === rowIdColumn && Array.isArray(g.ids) && g.ids.length > 0;
 }
 
-function safeColor(c: AnnotationColor | undefined): AnnotationColor {
+function safeColor(c: AnnotationColor | undefined): AnnotationColorName {
   return c && (ANNOTATION_COLORS as readonly string[]).includes(c) ? c : DEFAULT_ROW_ANNOTATION_COLOR;
 }
 

@@ -8,7 +8,11 @@ import {
   formatNumber,
   formatSecondary,
   hexWithAlpha,
+  breakdownSegmentColor,
+  rankTint,
+  readableColumn,
 } from './format';
+import { semanticColor } from '../../../palettes';
 import { thresholdCaption } from './Threshold';
 import type { ThresholdPayload } from './types';
 import { breakdownHasShares } from './types';
@@ -187,5 +191,42 @@ describe('hexWithAlpha', () => {
   it('falls back to teal for anything else', () => {
     expect(hexWithAlpha('var(--x)', 1)).toBe('rgba(69,184,172,1)');
     expect(hexWithAlpha(null, 1)).toBe('rgba(69,184,172,1)');
+  });
+});
+
+describe('breakdownSegmentColor', () => {
+  const pins = { Bacteria: '#1c7ed6', Other: '#ff0000' };
+
+  it('uses the dashboard pin for the value', () => {
+    expect(breakdownSegmentColor('Bacteria', 3, '#228be6', pins)).toBe('#1c7ed6');
+  });
+
+  it('keeps the rank tint for an unpinned value, with or without pins', () => {
+    expect(breakdownSegmentColor('Archaea', 1, '#228be6', pins)).toBe(rankTint('#228be6', 1));
+    expect(breakdownSegmentColor('Archaea', 0, '#228be6', null)).toBe(rankTint('#228be6', 0));
+  });
+
+  it('uses a layout\'s own flat fill for an unpinned value, but still pins and greys', () => {
+    expect(breakdownSegmentColor('Archaea', 1, '#228be6', pins, 'light', 'rgba(1,2,3,0.75)')).toBe('rgba(1,2,3,0.75)');
+    expect(breakdownSegmentColor('Bacteria', 1, '#228be6', pins, 'light', 'rgba(1,2,3,0.75)')).toBe('#1c7ed6');
+    expect(breakdownSegmentColor('NA', 1, '#228be6', pins, 'light', 'rgba(1,2,3,0.75)')).toBe(semanticColor('na', 'light'));
+  });
+
+  it('gives a reserved value its semantic grey, unless the dashboard pins it', () => {
+    expect(breakdownSegmentColor('Unclassified', 2, '#228be6', pins)).toBe(semanticColor('unclassified', 'light'));
+    expect(breakdownSegmentColor('NA', 2, '#228be6', null, 'dark')).toBe(semanticColor('na', 'dark'));
+    expect(breakdownSegmentColor('Other', 2, '#228be6', pins)).toBe('#ff0000');
+  });
+});
+
+describe('readableColumn', () => {
+  it('spells a snake_case column as words', () => {
+    expect(readableColumn('total_read_pairs')).toBe('Total read pairs');
+    expect(readableColumn('reads-mapped')).toBe('Reads mapped');
+  });
+
+  it('leaves a name the author already wrote for readers', () => {
+    expect(readableColumn('Reads mapped')).toBe('Reads mapped');
+    expect(readableColumn('QC_pass')).toBe('QC_pass');
   });
 });

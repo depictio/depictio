@@ -184,7 +184,7 @@ class TestCategoricalTrackSize:
         indices, order = _get_test_context(annotated_df)
         anno = UpSetAnnotation(data=annotated_df, category="category")
         tracks = anno.materialize(indices, order)
-        assert tracks[0].size == 0.13
+        assert tracks[0].size == 0.2
 
 
 class TestFromDataframeAnnotationDefaults:
@@ -215,8 +215,6 @@ class TestFromDataframeAnnotationDefaults:
         from plotly_upset import UpSetPlot
 
         sets = ["SetA", "SetB", "SetC", "SetD"]
-        upset = UpSetPlot.from_dataframe(
-            annotated_df, set_columns=sets, annotations={"score": {"column": "score"}}
-        )
+        upset = UpSetPlot.from_dataframe(annotated_df, set_columns=sets, annotations={"score": {"column": "score"}})
         assert upset.annotation is not None
         assert {t.column for t in upset.annotation._track_specs} == {"score"}

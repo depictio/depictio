@@ -7,3 +7,13 @@ Bombus_impatiens	NW_024107322.1	1	4421	4421	EXCLUDE	prok:g-proteobacteria	prok	8
 Bombus_impatiens	NW_024107340.1	120	2610	2610	TRIM	prok:firmicutes	prok	58.0	Staphylococcus aureus	2491
 Apis_mellifera	NW_026440011.1	1	3295	3295	EXCLUDE	prok:CFB group bacteria	prok	93.0	Bacteroides ihuae	3295
 Apis_mellifera	NW_026440025.1	1	1520	1520	TRIM	prok:firmicutes	prok	61.0	Cutibacterium acnes	1520
+Apis_cerana	NW_020555101.1	1	3880	3880	EXCLUDE	prok:CFB group bacteria	prok	88.0	Bacteroides ihuae	3880
+Apis_cerana	NW_020555118.1	1	2415	2415	EXCLUDE	prok:firmicutes	prok	92.0	Staphylococcus aureus	2415
+Apis_cerana	NW_020555140.1	205	2930	3104	TRIM	fung:ascomycetes	fung	67.0	Penicillium rubens	2726
+Bombus_terrestris	NW_022116304.1	1	5120	5120	EXCLUDE	prok:firmicutes	prok	90.0	Cutibacterium acnes	5120
+Bombus_terrestris	NW_022116329.1	1	2760	2760	EXCLUDE	prok:CFB group bacteria	prok	85.0	Flavobacterium johnsoniae	2760
+Bombus_terrestris	NW_022116350.1	340	4710	4710	TRIM	prok:a-proteobacteria	prok	61.0	Wolbachia pipientis	4371
+Nasonia_vitripennis	NW_001814711.1	1	6920	6920	EXCLUDE	prok:a-proteobacteria	prok	94.0	Wolbachia pipientis	6920
+Nasonia_vitripennis	NW_001814735.1	1	1960	1960	EXCLUDE	prok:firmicutes	prok	86.0	Staphylococcus aureus	1960
+Nasonia_vitripennis	NW_001814752.1	80	3305	3305	TRIM	prok:CFB group bacteria	prok	59.0	Bacteroides ihuae	3226
+Vespa_velutina					none					0

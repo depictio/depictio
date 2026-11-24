@@ -73,6 +73,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "teal",
@@ -80,7 +81,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "1bba76a2-2824-46b9-bad2-0add3f6fc001",
+      "index": "9eae5ad5-a13f-5b30-88dd-cfa4e7e6db2a",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -120,7 +121,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "af0f58f4-221d-46a3-90c2-0cfa254324ee",
+      "index": "c083a3cb-d2f2-5293-8410-33a3826a2dc3",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -160,7 +161,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "f52d9b80-0052-4eee-97a7-47941169dbcb",
+      "index": "ea289d12-c526-556d-95c8-a2ee6bf9ea47",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -200,7 +201,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "1418b6f2-5b6f-4795-98a1-1b7d468791b2",
+      "index": "446efea5-c61a-5696-ad3f-2e98abb2b8c3",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -240,7 +241,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "6d8586f7-3e71-4ad7-a5e9-d96f6c708f12",
+      "index": "734359c1-4bd7-5b65-9fd8-a460e63efd9e",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -280,7 +281,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8b70142a-7652-4abb-b9a5-38b477bfcdb1",
+      "index": "5f6e6e9a-15b2-55c4-9ccd-c135db71a49d",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -320,7 +321,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "c342a038-5db7-4df3-8ec2-52d11d8a0ae4",
+      "index": "d79db274-ab2a-5ce6-8733-ee53811a6718",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -360,7 +361,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "ff3633c4-b4ff-4caa-9146-cea9ee5b1d95",
+      "index": "1514ff34-c8ed-5964-a439-da52b4415fcd",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -400,7 +401,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "bb5e3ae9-7937-4652-9200-04018de20139",
+      "index": "6f70bd35-a0b7-57e0-acc1-ea6ae6112c6d",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -440,7 +441,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "b7e84c41-21cf-4fcd-a5f5-2e313be4a1cb",
+      "index": "afbf27b5-8b6a-5937-a763-12479248b2fb",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -480,7 +481,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "7b49f0d5-6370-40c9-b77e-0e04957f26a6",
+      "index": "f63935b2-1d96-500e-b555-e117b55d5ffa",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -520,7 +521,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "5cc209a9-2719-4542-be82-503782f647fa",
+      "index": "91e7ce2f-721a-524d-857a-fdd996bdfb5a",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -560,7 +561,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9e128a7e-ae71-4f9b-8dc4-fefee8023b68",
+      "index": "f6589248-783b-5233-9ef0-0581ef5fd320",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -628,7 +629,7 @@
       ]
     },
     {
-      "i": "box-1bba76a2-2824-46b9-bad2-0add3f6fc001",
+      "i": "box-9eae5ad5-a13f-5b30-88dd-cfa4e7e6db2a",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -643,7 +644,7 @@
       ]
     },
     {
-      "i": "box-af0f58f4-221d-46a3-90c2-0cfa254324ee",
+      "i": "box-c083a3cb-d2f2-5293-8410-33a3826a2dc3",
       "x": 0,
       "y": 4,
       "w": 8,
@@ -658,7 +659,7 @@
       ]
     },
     {
-      "i": "box-f52d9b80-0052-4eee-97a7-47941169dbcb",
+      "i": "box-ea289d12-c526-556d-95c8-a2ee6bf9ea47",
       "x": 0,
       "y": 8,
       "w": 4,
@@ -673,7 +674,7 @@
       ]
     },
     {
-      "i": "box-1418b6f2-5b6f-4795-98a1-1b7d468791b2",
+      "i": "box-446efea5-c61a-5696-ad3f-2e98abb2b8c3",
       "x": 4,
       "y": 8,
       "w": 4,
@@ -688,7 +689,7 @@
       ]
     },
     {
-      "i": "box-6d8586f7-3e71-4ad7-a5e9-d96f6c708f12",
+      "i": "box-734359c1-4bd7-5b65-9fd8-a460e63efd9e",
       "x": 0,
       "y": 0,
       "w": 4,
@@ -703,7 +704,7 @@
       ]
     },
     {
-      "i": "box-8b70142a-7652-4abb-b9a5-38b477bfcdb1",
+      "i": "box-5f6e6e9a-15b2-55c4-9ccd-c135db71a49d",
       "x": 4,
       "y": 0,
       "w": 4,
@@ -718,7 +719,7 @@
       ]
     },
     {
-      "i": "box-c342a038-5db7-4df3-8ec2-52d11d8a0ae4",
+      "i": "box-d79db274-ab2a-5ce6-8733-ee53811a6718",
       "x": 0,
       "y": 4,
       "w": 4,
@@ -733,7 +734,7 @@
       ]
     },
     {
-      "i": "box-ff3633c4-b4ff-4caa-9146-cea9ee5b1d95",
+      "i": "box-1514ff34-c8ed-5964-a439-da52b4415fcd",
       "x": 4,
       "y": 4,
       "w": 4,
@@ -748,7 +749,7 @@
       ]
     },
     {
-      "i": "box-bb5e3ae9-7937-4652-9200-04018de20139",
+      "i": "box-6f70bd35-a0b7-57e0-acc1-ea6ae6112c6d",
       "x": 0,
       "y": 8,
       "w": 4,
@@ -763,7 +764,7 @@
       ]
     },
     {
-      "i": "box-b7e84c41-21cf-4fcd-a5f5-2e313be4a1cb",
+      "i": "box-afbf27b5-8b6a-5937-a763-12479248b2fb",
       "x": 4,
       "y": 8,
       "w": 4,
@@ -778,7 +779,7 @@
       ]
     },
     {
-      "i": "box-7b49f0d5-6370-40c9-b77e-0e04957f26a6",
+      "i": "box-f63935b2-1d96-500e-b555-e117b55d5ffa",
       "x": 0,
       "y": 12,
       "w": 4,
@@ -793,7 +794,7 @@
       ]
     },
     {
-      "i": "box-5cc209a9-2719-4542-be82-503782f647fa",
+      "i": "box-91e7ce2f-721a-524d-857a-fdd996bdfb5a",
       "x": 4,
       "y": 12,
       "w": 4,
@@ -808,7 +809,7 @@
       ]
     },
     {
-      "i": "box-9e128a7e-ae71-4f9b-8dc4-fefee8023b68",
+      "i": "box-f6589248-783b-5233-9ef0-0581ef5fd320",
       "x": 0,
       "y": 16,
       "w": 8,
@@ -880,8 +881,10 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
+  "shared_labels": [],
   "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
@@ -918,11 +921,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 12:18:23",
+  "creation_time": "2026-11-22 20:39:25",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -940,5 +946,7 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/ampliseq:dashboards/base.yaml#MultiQC"
+  "published_lock": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#MultiQC",
+  "template_origin": null
 }

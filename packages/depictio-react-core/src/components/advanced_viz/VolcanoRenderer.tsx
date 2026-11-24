@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { DEFAULT_PALETTE_ID, PALETTES, PLOT_CHROME } from '../../palettes.generated';
+import { referenceGuide } from '../../palettes';
 import {
   Badge,
   Box,
@@ -15,7 +17,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, plotOverflow, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { isStaleFetch } from '../../fetchQueue';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
@@ -33,6 +35,7 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { DE_TIER_COLOURS } from './deTierColours';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import {
   classifyTiers,
@@ -46,8 +49,11 @@ import {
   offeredDeViews,
   qqConfidenceBand,
   qqSeries,
+  hitsFirst,
   rankTopN,
   resolveDeView,
+  staggerLabelOffsets,
+  volcanoSignificance,
   significancePredicate,
   tierCounts,
   type DeTier,
@@ -132,11 +138,7 @@ interface Props {
 }
 
 /** Tier colours, kept out of the builders so all three views share one scheme. */
-const TIER_COLOURS: Record<DeTier, string> = {
-  UP: '#e64980',
-  DN: '#1c7ed6',
-  NS: 'rgba(160,160,160,0.55)',
-};
+const TIER_COLOURS: Record<DeTier, string> = DE_TIER_COLOURS;
 
 interface MarkerPlan {
   /** The shape of a point; undefined leaves the tier's own (triangles by direction). */
@@ -237,7 +239,12 @@ function tierMarker(
   };
 }
 
-const DOTTED_GUIDE = { dash: 'dot' as const, color: 'rgba(128,128,128,0.6)', width: 1 };
+/** The significance and effect cut-offs are reference lines: drawn as every
+ *  reference line is (`referenceGuide`), not as a faint grey dotted rule. */
+const guideLine = (isDark: boolean) => referenceGuide(isDark ? 'dark' : 'light').line;
+
+/** The plot area's usual height, to turn label offsets into data units. */
+const PLOT_HEIGHT_PX = 300;
 
 const VIEW_LABELS: Record<DeView, string> = { volcano: 'Volcano', ma: 'MA', qq: 'QQ' };
 
@@ -1120,9 +1127,7 @@ function buildVolcano(input: {
   glGranted: boolean;
 }): BuiltFigure {
   const { xs, sigRaw, ids, labels, hovers, isNegLog10 } = input;
-  const ys = isNegLog10
-    ? sigRaw
-    : sigRaw.map((p) => (p == null || p <= 0 ? null : -Math.log10(p)));
+  const { ys, capped } = volcanoSignificance(sigRaw, isNegLog10);
   // The threshold is always a raw p / padj cutoff (the control says so, and the
   // fetch's tail keeps rows past its -log10), whichever scale the column is on.
   const sigThresholdY = -Math.log10(input.sigThreshold);
@@ -1138,36 +1143,39 @@ function buildVolcano(input: {
 
   // Top-N label selection, by combined (|x| × y) so both axes matter.
   const topIdx = rankTopN(
-    xs.map((x, i) => (Math.abs(x) || 0) * (ys[i] ?? 0)),
+    hitsFirst(xs.map((x, i) => (Math.abs(x) || 0) * (ys[i] ?? 0)), tiers),
     input.topN,
   );
   const matchedIdx = matchSearch(ids, labels, input.search);
 
-  const annotations = input.showLabels
+  // Labelled rows, then a stagger so close neighbours do not overprint: a
+  // label is about a seventh of the x range wide.
+  const labelled = input.showLabels
     ? xs
-        .map((x, i) => {
-          const y = ys[i];
-          if (y == null) return null;
-          if (!(matchedIdx ? matchedIdx.has(i) : topIdx.has(i))) return null;
-          // Place each label slightly above its point with a thin connector
-          // arrow. This keeps the (x, y) anchor on the point while moving the
-          // text bounding box up by 16px, far cleaner when several top-N
-          // labels cluster near the same effect/significance corner.
-          return {
-            x,
-            y,
-            text: String(labels[i] ?? ids[i] ?? ''),
-            showarrow: true,
-            arrowhead: 0,
-            arrowwidth: 0.6,
-            arrowcolor: 'rgba(120,120,120,0.6)',
-            ax: 0,
-            ay: -16,
-            font: { size: LABEL_FONT_SIZE },
-          };
-        })
-        .filter(Boolean)
+        .map((x, i) => ({ x, y: ys[i], i }))
+        .filter(
+          (p): p is { x: number; y: number; i: number } =>
+            p.y != null && Number.isFinite(p.x) && (matchedIdx ? matchedIdx.has(p.i) : topIdx.has(p.i)),
+        )
     : [];
+  const finiteXs = xs.filter((v) => Number.isFinite(v));
+  const finiteYs = ys.filter((v): v is number => v != null);
+  const span = (v: number[]) => (v.length ? Math.max(...v) - Math.min(...v) : 1) || 1;
+  const offsets = staggerLabelOffsets(labelled, span(finiteXs) / 7, span(finiteYs) / PLOT_HEIGHT_PX);
+  const annotations = labelled.map(({ x, y, i }, k) => ({
+    // Each label sits above its point with a thin connector, so the anchor
+    // stays on the point while the text moves up out of the cluster.
+    x,
+    y,
+    text: String(labels[i] ?? ids[i] ?? ''),
+    showarrow: true,
+    arrowhead: 0,
+    arrowwidth: 0.6,
+    arrowcolor: 'rgba(120,120,120,0.6)',
+    ax: 0,
+    ay: offsets[k],
+    font: { size: LABEL_FONT_SIZE },
+  }));
 
   return {
     tiers,
@@ -1190,13 +1198,14 @@ function buildVolcano(input: {
             hovers ? String(hovers[i] ?? '') : '',
             // The feature id: what the highlight joins on (slot 0 is the label).
             String(ids[i] ?? ''),
+            capped[i] ? '<br><i>underflowed to 0: drawn at the top</i>' : '',
           ]),
           hovertemplate:
             `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
             (hovers ? `<br>%{customdata[3]}` : '') +
             `<br>${input.effectTitle}: %{x:.3f}` +
             `<br>${input.sigTitle}: %{customdata[1]:.2e}` +
-            `<br>-log10(sig): %{y:.2f}` +
+            `<br>-log10(sig): %{y:.2f}%{customdata[5]}` +
             `<extra></extra>`,
           marker: tierMarker(tiers, input.isDark, input.hitSymbol),
         },
@@ -1220,9 +1229,9 @@ function buildVolcano(input: {
         },
       },
       shapes: [
-        { type: 'line' as const, x0: -input.effectThreshold, x1: -input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: DOTTED_GUIDE },
-        { type: 'line' as const, x0: input.effectThreshold, x1: input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: DOTTED_GUIDE },
-        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: sigThresholdY, y1: sigThresholdY, line: DOTTED_GUIDE },
+        { type: 'line' as const, x0: -input.effectThreshold, x1: -input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: guideLine(input.isDark) },
+        { type: 'line' as const, x0: input.effectThreshold, x1: input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: guideLine(input.isDark) },
+        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: sigThresholdY, y1: sigThresholdY, line: guideLine(input.isDark) },
       ],
       annotations,
       showlegend: false,
@@ -1270,29 +1279,42 @@ function buildMa(input: {
   );
 
   // Top-N by |fold change| × -log10(sig) when available, else by |FC| alone.
+  const sigY = hasSig ? volcanoSignificance(sigRaw, input.isNegLog10).ys : null;
   const topIdx = rankTopN(
-    ys.map((fc, i) => {
-      const sig = hasSig && sigRaw[i] > 0 ? -Math.log10(sigRaw[i]) : 1;
-      return Math.abs(fc || 0) * sig;
-    }),
+    hitsFirst(
+      ys.map((fc, i) => Math.abs(fc || 0) * (sigY?.[i] ?? 1)),
+      tiers,
+    ),
     input.topN,
   );
   const matchedIdx = matchSearch(ids, labels, input.search);
 
-  const annotations = input.showLabels
+  // As the volcano: labels above their points, staggered between neighbours.
+  const labelled = input.showLabels
     ? xs
-        .map((x, i) => {
-          if (!(matchedIdx ? matchedIdx.has(i) : topIdx.has(i))) return null;
-          return {
-            x,
-            y: ys[i],
-            text: String(labels[i] ?? ids[i] ?? ''),
-            showarrow: false,
-            font: { size: LABEL_FONT_SIZE },
-          };
-        })
-        .filter(Boolean)
+        .map((x, i) => ({ x, y: ys[i], i }))
+        .filter(
+          (p) =>
+            Number.isFinite(p.x) && Number.isFinite(p.y) && (matchedIdx ? matchedIdx.has(p.i) : topIdx.has(p.i)),
+        )
     : [];
+  const span = (v: number[]) => {
+    const f = v.filter((n) => Number.isFinite(n));
+    return (f.length ? Math.max(...f) - Math.min(...f) : 1) || 1;
+  };
+  const offsets = staggerLabelOffsets(labelled, span(xs) / 7, span(ys) / PLOT_HEIGHT_PX);
+  const annotations = labelled.map(({ x, y, i }, k) => ({
+    x,
+    y,
+    text: String(labels[i] ?? ids[i] ?? ''),
+    showarrow: true,
+    arrowhead: 0,
+    arrowwidth: 0.6,
+    arrowcolor: 'rgba(120,120,120,0.6)',
+    ax: 0,
+    ay: offsets[k],
+    font: { size: LABEL_FONT_SIZE },
+  }));
 
   return {
     tiers,
@@ -1340,8 +1362,8 @@ function buildMa(input: {
         zeroline: true,
       },
       shapes: [
-        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: input.fcThreshold, y1: input.fcThreshold, line: DOTTED_GUIDE },
-        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: -input.fcThreshold, y1: -input.fcThreshold, line: DOTTED_GUIDE },
+        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: input.fcThreshold, y1: input.fcThreshold, line: guideLine(input.isDark) },
+        { type: 'line' as const, xref: 'paper', x0: 0, x1: 1, y0: -input.fcThreshold, y1: -input.fcThreshold, line: guideLine(input.isDark) },
       ],
       annotations,
       showlegend: false,
@@ -1435,8 +1457,10 @@ function buildQq(input: {
     const names = Array.from(new Set(cats.map(String))).sort();
     const colours = stableColorMap(
       names,
-      resolveCategoricalPalette(input.theme, TAB10_PALETTE),
+      resolveCategoricalPalette(input.theme, TAB10_PALETTE, input.isDark),
       input.catColours,
+      input.isDark ? 'dark' : 'light',
+      plotOverflow(input.theme),
     );
     const allPs: number[] = [];
     for (const name of names) {
@@ -1488,7 +1512,7 @@ function buildQq(input: {
           text: series.ids,
           ...(ids ? { customdata: series.ids.map((id) => [id]) } : {}),
           hovertemplate: hoverTemplate(Boolean(series.ids[0])),
-          marker: qqMarker(series.indices, '#4C72B0'),
+          marker: qqMarker(series.indices, PALETTES[DEFAULT_PALETTE_ID].categorical.light[0]),
         },
         input.glGranted,
       ),
@@ -1586,7 +1610,7 @@ function buildQq(input: {
               y0: 0,
               x1: diagonalUpper,
               y1: diagonalUpper,
-              line: { dash: 'dash', color: input.isDark ? '#ddd' : '#444', width: 1 },
+              line: { dash: 'dash', color: PLOT_CHROME[input.isDark ? 'dark' : 'light'].muted, width: 1 },
             },
           ]
         : [],

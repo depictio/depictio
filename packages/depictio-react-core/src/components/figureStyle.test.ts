@@ -16,7 +16,7 @@ const figure = (extra: Partial<StoredMetadata> = {}): StoredMetadata =>
 
 describe('normalizeFigureStyle', () => {
   it('keeps the known styles', () => {
-    expect(FIGURE_STYLES).toEqual(['default', 'minimal']);
+    expect(FIGURE_STYLES).toEqual(['default', 'minimal', 'classic']);
     for (const v of FIGURE_STYLES) expect(normalizeFigureStyle(v)).toBe(v);
   });
 

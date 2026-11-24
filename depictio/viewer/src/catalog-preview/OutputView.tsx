@@ -27,13 +27,16 @@ import {
   Paper,
   Popover,
   Stack,
+  Switch,
+  Tabs,
   Text,
   ThemeIcon,
   Title,
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
+import { CategoryColorsContext, ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
+import type { CategoryColorSource } from 'depictio-react-core';
 import type { CatalogRender, StoredMetadata } from 'depictio-react-core';
 import { buildTileSnippet } from '../catalog-shared/tileSnippet';
 import {
@@ -57,7 +60,19 @@ import ChunkErrorBoundary from './ChunkErrorBoundary';
 import { ModuleHistoryModal, useModuleHistory } from './ModuleVersions';
 import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 import CatalogHeader from './CatalogHeader';
+import { figureHasMarks, setPreviewMarks, usePreviewMarks } from '../offline/previewMarks';
 import VersionChip from './VersionChip';
+import { firstRender, groupRenders, renderButtonLabel } from './renderGroups';
+
+
+/** The colours the output's figures give a card's breakdown values (`_category_colors`,
+ *  from the payload), as the dashboard a card normally reads them from. */
+function cardColourSource(rec: Record<string, unknown>): CategoryColorSource | null {
+  const colours = rec._category_colors;
+  return colours && typeof colours === 'object'
+    ? { category_colors: colours as CategoryColorSource['category_colors'] }
+    : null;
+}
 
 const DASHBOARD_ID = 'catalog-preview';
 
@@ -288,9 +303,21 @@ const OutputView: React.FC<{
   const fixture = entry.fixturePreview;
   const renders = entry.renders as unknown as StoredMetadata[];
   const { paper, tone } = useCatalogPaper();
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  // Opens on the first plot, whatever the authored order put first.
+  const [selectedIdx, setSelectedIdx] = useState(() =>
+    firstRender(renders.map((m) => String(m.component_type))),
+  );
+  // The render last opened in each kind, so going back to a kind reopens it.
+  const [lastPick, setLastPick] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const g = groupRenders(renders.map((m) => String(m.component_type))).find((x) =>
+      x.indices.includes(selectedIdx),
+    );
+    if (g) setLastPick((prev) => (prev[g.key] === selectedIdx ? prev : { ...prev, [g.key]: selectedIdx }));
+  }, [renders, selectedIdx]);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
+  const marksOn = usePreviewMarks();
 
   useEffect(() => {
     bulkComputeCards(DASHBOARD_ID, []).then((r) => {
@@ -310,16 +337,19 @@ const OutputView: React.FC<{
       );
     }
     return (
-      <CellBoundary label={String(m.component_type)}>
+      // Keyed on the marks switch: the figure fetches again, with or without them.
+      <CellBoundary key={`${m.index}:${marksOn}`} label={String(m.component_type)}>
         <ChunkErrorBoundary>
-          <ComponentRenderer
-            metadata={m}
-            filters={[]}
-            dashboardId={DASHBOARD_ID}
-            cardValue={cardValues[m.index]}
-            cardSecondaryValues={cardSecondary[m.index]}
-            cardLoading={false}
-          />
+          <CategoryColorsContext.Provider value={cardColourSource(rec)}>
+            <ComponentRenderer
+              metadata={m}
+              filters={[]}
+              dashboardId={DASHBOARD_ID}
+              cardValue={cardValues[m.index]}
+              cardSecondaryValues={cardSecondary[m.index]}
+              cardLoading={false}
+            />
+          </CategoryColorsContext.Provider>
         </ChunkErrorBoundary>
       </CellBoundary>
     );
@@ -360,6 +390,8 @@ const OutputView: React.FC<{
   // "Pick from catalog" panel. The two surfaces render the SAME bundle (the
   // picker iframes this document with `#render_id=`), so showing every render
   // stacked here and one at a time there made one catalog look like two.
+  const groups = groupRenders(renders.map((m) => String(m.component_type)));
+  const activeGroup = groups.find((g) => g.indices.includes(selectedIdx)) ?? groups[0];
   const active = renders[selectedIdx] ?? renders[0];
   const activeHeight =
     ((active as Record<string, unknown> | undefined)?._preview_height as number) ||
@@ -455,6 +487,21 @@ const OutputView: React.FC<{
         </Group>
 
         <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
+          {figureHasMarks(active?.index) ? (
+            <Tooltip
+              label="Bar values, group sizes, cell values and the note on what is not shown, drawn like a dashboard tile"
+              withArrow
+              multiline
+              w={260}
+            >
+              <Switch
+                size="xs"
+                label="Automatic marks"
+                checked={marksOn}
+                onChange={(e) => setPreviewMarks(e.currentTarget.checked)}
+              />
+            </Tooltip>
+          ) : null}
           <Popover position="bottom-end" withArrow shadow="md" width={400}>
             <Popover.Target>
               <Tooltip label="Details" withArrow>
@@ -531,48 +578,91 @@ const OutputView: React.FC<{
         </Group>
       </Group>
 
-      {/* Render switcher */}
-      <Group
+      {/* Render switcher, two levels: the kinds (one light icon each), then the
+          chosen kind's renders, named by their title. */}
+      <Box
         px={pane ? 'md' : 'lg'}
-        py={6}
-        gap={4}
-        wrap="wrap"
         className="cp-switch"
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
-        {renders.map((m, i) => {
-          const meta = metaFor(m.component_type);
-          const rec = m as Record<string, unknown>;
-          const variantLabel = (rec._variant as string) || meta.name;
-          const isActive = i === selectedIdx;
-          return (
-            <Button
-              key={m.index}
-              size="xs"
-              variant={isActive ? 'light' : 'subtle'}
-              // Paper: one neutral row of pills, the open render lit with the
-              // accent; the type keeps its hue on its icon only.
-              color={paper ? (isActive ? tone : 'gray') : meta.color}
-              radius={paper ? 'xl' : undefined}
-              data-active={isActive || undefined}
-              leftSection={
-                <Icon
-                  icon={meta.icon}
-                  width={13}
-                  color={paper ? `var(--mantine-color-${meta.color}-6)` : undefined}
-                />
-              }
-              onClick={() => setSelectedIdx(i)}
-              styles={{
-                root: { fontWeight: isActive ? 600 : 400, flexShrink: 0 },
-                label: { lineHeight: 1.5, overflow: 'visible' },
-              }}
-            >
-              {variantLabel}
-            </Button>
-          );
-        })}
-      </Group>
+        <Tabs
+          value={activeGroup?.key ?? null}
+          onChange={(key) => {
+            const g = groups.find((x) => x.key === key);
+            if (g) setSelectedIdx(lastPick[g.key] ?? g.indices[0]);
+          }}
+          variant="default"
+          color={paper ? tone : CATALOG_ACCENT}
+          className="cp-kinds"
+        >
+          <Tabs.List style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
+            {groups.map((g) => (
+              <Tabs.Tab
+                key={g.key}
+                value={g.key}
+                // depictio's own visual for the type (icon and colour of the
+                // "new component" grid), once per kind rather than per render.
+                color={metaFor(g.type).color}
+                leftSection={
+                  <Icon icon={metaFor(g.type).icon} width={16} color={metaFor(g.type).color} />
+                }
+                // A kind with one render opens it directly: no second row to pick from.
+                data-render-index={g.indices.length === 1 ? g.indices[0] : undefined}
+                data-render-kind={
+                  g.indices.length === 1
+                    ? ((renders[g.indices[0]] as Record<string, unknown>)._variant as string) ||
+                      metaFor(renders[g.indices[0]].component_type).name
+                    : undefined
+                }
+                rightSection={
+                  <Text component="span" fz="xs" c="dimmed">
+                    {g.indices.length}
+                  </Text>
+                }
+              >
+                {g.label}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs>
+        {activeGroup && activeGroup.indices.length > 1 ? (
+          <Group gap={6} wrap="wrap" py={8} className="cp-renders">
+            {activeGroup.indices.map((i) => {
+              const m = renders[i];
+              const rec = m as Record<string, unknown>;
+              const kind = (rec._variant as string) || metaFor(m.component_type).name;
+              const title = typeof rec.title === 'string' ? rec.title : '';
+              const label = renderButtonLabel(title, kind);
+              const isActive = i === selectedIdx;
+              return (
+                <Tooltip
+                  key={m.index}
+                  label={title ? `${title} (${kind})` : kind}
+                  openDelay={400}
+                  withArrow
+                >
+                  <Button
+                    size="xs"
+                    radius="xl"
+                    variant={isActive ? 'light' : 'subtle'}
+                    color={isActive ? metaFor(m.component_type).color : 'gray'}
+                    data-active={isActive || undefined}
+                    data-render-index={i}
+                    data-render-kind={kind}
+                    onClick={() => setSelectedIdx(i)}
+                    styles={{
+                      root: { fontWeight: isActive ? 600 : 450, flexShrink: 0 },
+                      label: { lineHeight: 1.5, overflow: 'visible' },
+                    }}
+                  >
+                    {label}
+                  </Button>
+                </Tooltip>
+              );
+            })}
+          </Group>
+        ) : null}
+      </Box>
 
       {/* Preview */}
       <Box
@@ -586,7 +676,11 @@ const OutputView: React.FC<{
                 its edge: at a third of the width, hugging the left reads as a
                 component that failed to fill its box. */}
             <Box
-              h={activeHeight}
+              // A card is as tall as what it holds: a multi-metric card (hero,
+              // strip, median and max) outgrows the bare KPI's height and was
+              // cut at both ends. Other types keep a fixed stage.
+              h={active.component_type === 'card' ? undefined : activeHeight}
+              mih={active.component_type === 'card' ? activeHeight : undefined}
               maw={PREVIEW_MAX_WIDTH[active.component_type]}
               mx={PREVIEW_MAX_WIDTH[active.component_type] ? 'auto' : undefined}
               className="cp-frame"

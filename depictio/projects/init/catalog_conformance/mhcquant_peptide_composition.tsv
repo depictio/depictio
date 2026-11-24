@@ -17,3 +17,39 @@ PBMC009_A	Peptide length	11-mer	340
 PBMC009_A	Peptide length	12-mer	78
 PBMC009_A	Precursor charge	2+	5204
 PBMC009_A	Precursor charge	3+	448
+PBMC010_B	Modification	Unmodified	3966
+PBMC010_B	Modification	Modified	244
+PBMC010_B	Peptide length	9-mer	2717
+PBMC010_B	Peptide length	8-mer	602
+PBMC010_B	Peptide length	10-mer	575
+PBMC010_B	Peptide length	11-mer	277
+PBMC010_B	Peptide length	12-mer	39
+PBMC010_B	Precursor charge	2+	3915
+PBMC010_B	Precursor charge	3+	295
+PBMC011_A	Modification	Unmodified	6048
+PBMC011_A	Modification	Modified	272
+PBMC011_A	Peptide length	9-mer	4549
+PBMC011_A	Peptide length	8-mer	685
+PBMC011_A	Peptide length	10-mer	631
+PBMC011_A	Peptide length	11-mer	375
+PBMC011_A	Peptide length	12-mer	80
+PBMC011_A	Precursor charge	2+	5562
+PBMC011_A	Precursor charge	3+	758
+PBMC012_B	Modification	Unmodified	2673
+PBMC012_B	Modification	Modified	277
+PBMC012_B	Peptide length	9-mer	1884
+PBMC012_B	Peptide length	8-mer	508
+PBMC012_B	Peptide length	10-mer	303
+PBMC012_B	Peptide length	11-mer	224
+PBMC012_B	Peptide length	12-mer	31
+PBMC012_B	Precursor charge	2+	2802
+PBMC012_B	Precursor charge	3+	148
+PBMC013_A	Modification	Unmodified	4558
+PBMC013_A	Modification	Modified	322
+PBMC013_A	Peptide length	9-mer	3394
+PBMC013_A	Peptide length	8-mer	618
+PBMC013_A	Peptide length	10-mer	531
+PBMC013_A	Peptide length	11-mer	269
+PBMC013_A	Peptide length	12-mer	68
+PBMC013_A	Precursor charge	2+	4441
+PBMC013_A	Precursor charge	3+	439

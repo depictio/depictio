@@ -31,6 +31,8 @@ from functools import lru_cache
 from importlib import resources
 from typing import Any
 
+from depictio.models import palettes
+
 # Mantine 7's default palette, the shades the Paper chrome reads
 # (``--mantine-color-<name>-<shade>``). Light scheme only: a report is a page.
 GRAY = {
@@ -69,8 +71,6 @@ MANTINE_SHADES: dict[str, tuple[str, str]] = {
 # An unbranded instance's primary: Mantine's blue (``buildDepictioTheme``).
 DEFAULT_PRIMARY = "#228be6"
 
-# ``GLASS_HUES``: Paper's series hues after the instance's primary, at shade 6.
-GLASS_HUES = ("teal", "orange", "grape", "cyan", "pink", "lime", "indigo", "yellow", "red")
 
 # The app's UI stack (``brandTheme.ts`` ``DEFAULT_FONT_FAMILY``), which Paper
 # puts Inter in front of.
@@ -230,10 +230,14 @@ LEGEND_PLACEMENT = ("orientation", "x", "y", "xanchor", "yanchor", "xref", "yref
 
 
 def paper_colorway(primary: str | None = None) -> list[str]:
-    """Paper's colorway: the instance's primary, then ``GLASS_HUES`` at shade 6."""
-    first, _ = resolve_primary(primary)
-    hues = [MANTINE_SHADES[h][0] for h in GLASS_HUES]
-    return hues if first in hues else [first, *hues]
+    """Paper's colorway: depictio's shared categorical palette (light).
+
+    Mirrors ``glassPlotlyDefaults`` in ``chrome/variants/glass/plotly.ts``. A
+    brand colorway, applied after, wins over it; ``primary`` no longer leads
+    the series and is kept for callers only.
+    """
+    del primary
+    return palettes.categorical(None, "light")
 
 
 def paper_defaults(

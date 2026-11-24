@@ -4,6 +4,7 @@ import Plot from './LegendAwarePlot';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
+import { DEFAULT_PALETTE_ID, DIRECTION_COLORS, PALETTES, PLOT_CHROME } from '../../palettes.generated';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   VizControlGroup,
@@ -130,26 +131,40 @@ function binTints(isDark: boolean, theme: Theme): [string, string] {
     : [theme.colors.gray[7], theme.colors.gray[5]];
 }
 
-/** Gain / neutral / loss, from the Mantine palette rather than literals. */
-function classColours(isDark: boolean, theme: Theme): Record<CnvClass, string> {
+const scheme = (isDark: boolean) => (isDark ? 'dark' : 'light') as 'dark' | 'light';
+
+/** Gain / neutral / loss: the shared direction colours (a gain is "up", the
+ *  same red as an up-regulated gene) and the plot's muted ink. */
+function classColours(isDark: boolean, _theme?: Theme): Record<CnvClass, string> {
   return {
-    gain: theme.colors.red[isDark ? 5 : 7],
-    neutral: theme.colors.gray[isDark ? 5 : 6],
-    loss: theme.colors.blue[isDark ? 4 : 7],
+    gain: DIRECTION_COLORS.up[scheme(isDark)],
+    neutral: PLOT_CHROME[scheme(isDark)].muted,
+    loss: DIRECTION_COLORS.down[scheme(isDark)],
   };
 }
 
-/** Five-level copy-number ramp: homozygous loss, loss, neutral, gain, high
- *  amplification. Indexed by `copyNumberBucket`. */
-function copyNumberRamp(isDark: boolean, theme: Theme): string[] {
-  return [
-    theme.colors.indigo[isDark ? 6 : 9],
-    theme.colors.blue[isDark ? 4 : 7],
-    theme.colors.gray[isDark ? 5 : 6],
-    theme.colors.orange[isDark ? 4 : 7],
-    theme.colors.red[isDark ? 5 : 8],
-  ];
+/** `hex` pushed `amount` of the way toward the scheme's ink (black on light,
+ *  white on dark): the deeper end of a direction. */
+function deepen(hex: string, amount: number, isDark: boolean): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const target = isDark ? 255 : 0;
+  const mix = (c: number) => Math.round(c + (target - c) * amount);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(mix);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
 }
+
+/** Five-level copy-number ramp: homozygous loss, loss, neutral, gain, high
+ *  amplification. Indexed by `copyNumberBucket`. The two directions are the
+ *  shared up / down colours, each with a deeper twin for its extreme. */
+function copyNumberRamp(isDark: boolean, _theme?: Theme): string[] {
+  const c = classColours(isDark);
+  return [deepen(c.loss, 0.35, isDark), c.loss, c.neutral, c.gain, deepen(c.gain, 0.35, isDark)];
+}
+
+/** The shared categorical palette of the scheme, for the non-directional tracks. */
+const sharedSlots = (isDark: boolean) => PALETTES[DEFAULT_PALETTE_ID].categorical[scheme(isDark)];
 
 const CNV_CLASS_ORDER: CnvClass[] = ['loss', 'neutral', 'gain'];
 const CNV_CLASS_LABEL: Record<CnvClass, string> = {
@@ -475,7 +490,7 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
             x: bafX,
             y: bafY,
             name: 'BAF',
-            marker: { color: theme.colors.teal[isDark ? 4 : 7], size: pointSize, opacity: 0.7 },
+            marker: { color: sharedSlots(isDark)[2], size: pointSize, opacity: 0.7 },
             text: bafHover,
             hovertemplate: '%{text}<extra></extra>',
             yaxis: 'y2',
@@ -635,11 +650,11 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       textColor,
       gridColor,
       bin: binTints(isDark, theme)[0],
-      baf: theme.colors.teal[isDark ? 4 : 7],
+      baf: sharedSlots(isDark)[2],
       segment: classColours(isDark, theme),
-      major: theme.colors.red[isDark ? 4 : 6],
-      minor: theme.colors.green[isDark ? 4 : 6],
-      gene: theme.colors.indigo[isDark ? 4 : 6],
+      major: sharedSlots(isDark)[1],
+      minor: sharedSlots(isDark)[0],
+      gene: sharedSlots(isDark)[4],
     };
   }, [isDark, theme]);
 

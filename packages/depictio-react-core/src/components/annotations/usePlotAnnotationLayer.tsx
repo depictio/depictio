@@ -1,3 +1,4 @@
+import { ANNOTATION_INK } from '../../annotations/types';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Tooltip, useComputedColorScheme } from '@mantine/core';
 // Same prebuilt bundle react-plotly.js uses (see FigureRenderer).
@@ -277,7 +278,7 @@ export function usePlotAnnotationLayer({
           kind: pendingHere.kind,
           geometry: pendingDraft.geometry,
           label: pendingDraft.label || KIND_LABELS[pendingHere.kind],
-          color: pendingDraft.color,
+          ...(pendingDraft.color !== ANNOTATION_INK ? { color: pendingDraft.color } : {}),
           style: pendingDraft.style,
         },
       },

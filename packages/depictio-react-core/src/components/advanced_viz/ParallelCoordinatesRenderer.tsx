@@ -16,7 +16,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { mantineCategoricalPalette, resolveCategoricalPalette, plotOverflow, stableColorMap } from '../../colors';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { COLOUR_SCALES, looksContinuous } from './colourScales';
@@ -161,7 +161,7 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const themeColors = plotlyThemeColors(isDark, theme);
-  const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
+  const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark), isDark);
 
   const config = (metadata.config || {}) as ParallelCoordinatesConfig;
   const sampleCol = config.sample_col || 'sample';
@@ -464,7 +464,7 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
       };
     } else if (colourValues) {
       const categories = distinctCategories(colourValues);
-      const colourMap = stableColorMap(categories, palette, pinnedColours);
+      const colourMap = stableColorMap(categories, palette, pinnedColours, isDark ? 'dark' : 'light', plotOverflow(theme));
       const stepped = steppedColourScale(
         categories.map((category) => withAlpha(colourMap.get(category), lineOpacity)),
       );

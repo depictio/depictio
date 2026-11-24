@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
+import { plotOverflow } from '../../colors';
 import { useHighlight, usePublishHighlight } from '../../highlight/bus';
 import {
   residueEntityFromFilters,
@@ -313,8 +314,10 @@ const RamachandranRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       neutral: rgbCss(colours.neutral),
       categorical: colours.categorical,
       valueScale: 'Viridis',
+      overflow: plotOverflow(theme),
+      scheme: colorScheme === 'dark' ? 'dark' : 'light',
     }),
-    [colours, plotColours],
+    [colours, plotColours, theme, colorScheme],
   );
 
   const built = useMemo(

@@ -214,7 +214,12 @@ def main() -> None:
                         "description": "Penguin species",
                         "distinct": 2,
                     },
-                    {"name": "bill_length_mm", "type": "float64", "description": None, "distinct": 3},
+                    {
+                        "name": "bill_length_mm",
+                        "type": "float64",
+                        "description": None,
+                        "distinct": 3,
+                    },
                     {"name": "island", "type": "string", "description": None, "distinct": 2},
                 ],
             },

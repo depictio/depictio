@@ -18,11 +18,13 @@ from __future__ import annotations
 import json
 import math
 import re
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from depictio.models import palettes
 from depictio.models.components.advanced_viz.catalog import (
     CATALOG_DIR,
     _config_columns,
@@ -36,18 +38,7 @@ TEMPLATE_PATH = CATALOG_DIR.parent / "viewer" / "dist-catalog-preview" / "catalo
 # `depictio catalog export-site` copies next to the per-output JSON it writes.
 SITE_BUNDLE_DIR = CATALOG_DIR.parent / "viewer" / "dist-catalog-site"
 
-# depictio brand colourway (from depictio/dash/colors.py — inlined to stay Dash-free).
-_DEPICTIO_COLORWAY = [
-    "#9966CC",
-    "#6495ED",
-    "#45B8AC",
-    "#8BC34A",
-    "#F9CB40",
-    "#F68B33",
-    "#E6779F",
-    "#7A5DC7",
-]
-_CARD_ACCENTS = ["#45B8AC", "#7A5DC7", "#6495ED", "#8BC34A", "#F68B33", "#E6779F"]
+_CARD_ACCENTS = palettes.categorical()
 # Card fields that configure the secondary strip rather than the hero number.
 # Copied verbatim onto the preview metadata — `SecondaryMetrics` reads them
 # from there, exactly as it does for a saved card.
@@ -94,16 +85,67 @@ def _load_fixture_df(output: Any):  # -> pl.DataFrame
 # ---------------------------------------------------------------------------
 
 
-def _apply_template(fig) -> None:
+def _apply_template(fig, theme: str = "light") -> None:
+    """Plot chrome (template, font, text, grid) and default colourway from the shared palette."""
+    mode = _normalise_theme(theme)
+    chrome = palettes.chrome(mode)
     fig.update_layout(
-        template="plotly_white",
-        colorway=_DEPICTIO_COLORWAY,
+        template="plotly_dark" if mode == "dark" else "plotly_white",
+        colorway=palettes.categorical(None, mode),
+        font={"family": palettes.font_family(), "color": chrome["text"]},
         margin={"l": 50, "r": 20, "t": 40, "b": 50},
         autosize=True,
     )
+    fig.update_xaxes(
+        gridcolor=chrome["grid"], linecolor=chrome["axis_line"], zerolinecolor=chrome["zero"]
+    )
+    fig.update_yaxes(
+        gridcolor=chrome["grid"], linecolor=chrome["axis_line"], zerolinecolor=chrome["zero"]
+    )
 
 
-def _figure_payload(df, render) -> dict[str, Any]:
+@contextmanager
+def _palette_defaults(theme: str = "light"):
+    """Shared palette as plotly-express' default colours while a figure is built.
+
+    ``layout.colorway`` alone does nothing for a px figure: px assigns its colours
+    at build time, from ``px.defaults`` when set, and only then from the template.
+    Explicit ``color_discrete_sequence`` / ``color_continuous_scale`` in a render's
+    kwargs or code still win; only the unset ones take the shared palette.
+    """
+    import plotly.express as px
+
+    mode = _normalise_theme(theme)
+    saved = (px.defaults.color_discrete_sequence, px.defaults.color_continuous_scale)
+    px.defaults.color_discrete_sequence = palettes.categorical(None, mode)
+    px.defaults.color_continuous_scale = palettes.sequential(None, mode)
+    try:
+        yield
+    finally:
+        px.defaults.color_discrete_sequence, px.defaults.color_continuous_scale = saved
+
+
+def _aggregated_figure(df, render, theme: str):
+    """The figure a dashboard tile draws for this render, when it reduces the rows.
+
+    A dashboard reduces a bar, box, histogram or density before plotting (one bar
+    per group, not one stacked segment per row), through ``plan_aggregation``. A
+    preview that handed the raw fixture to px drew each bar as a stack of thin
+    segments split by white lines, a chart no dashboard shows. ``None`` when the
+    render is not one the dashboard reduces, as there.
+    """
+    from depictio.api.v1.services.figure.aggregate import (
+        build_aggregated_figure,
+        plan_aggregation,
+    )
+
+    plan = plan_aggregation(render.visu_type or "", render.dict_kwargs or {})
+    if plan is None:
+        return None
+    return build_aggregated_figure(df.lazy(), plan, _normalise_theme(theme))
+
+
+def _figure_payload(df, render, theme: str = "light") -> dict[str, Any]:
     import plotly.express as px
     import plotly.graph_objects as go  # noqa: F401 — exposed to catalog code
 
@@ -121,7 +163,8 @@ def _figure_payload(df, render) -> dict[str, Any]:
         # before anyone has saved a group.
         ns.update(code_group_globals())
         try:
-            exec(render.code, ns)  # noqa: S102 — trusted, repo-authored catalog snippet
+            with _palette_defaults(theme):
+                exec(render.code, ns)  # noqa: S102 — trusted, repo-authored catalog snippet
         except Exception as exc:
             raise CatalogPayloadError(f"figure code failed: {exc}") from exc
         fig = ns.get("fig")
@@ -131,7 +174,8 @@ def _figure_payload(df, render) -> dict[str, Any]:
         fn = getattr(px, render.visu_type or "", None)
         if fn is None:
             raise CatalogPayloadError(f"unknown plotly-express visu_type {render.visu_type!r}")
-        fig = fn(df.to_pandas(), **render.dict_kwargs)
+        with _palette_defaults(theme):
+            fig = _aggregated_figure(df, render, theme) or fn(df.to_pandas(), **render.dict_kwargs)
         if render.reference_lines:
             # The server builder's own helpers: a `stat` line is placed on the
             # whole fixture, the preview's rows on show, and named as such.
@@ -142,13 +186,43 @@ def _figure_payload(df, render) -> dict[str, Any]:
             )
 
             lines = normalise_reference_lines(render.reference_lines)
-            apply_reference_lines(fig, resolve_reference_lines(lines, df))
+            apply_reference_lines(
+                fig, resolve_reference_lines(lines, df), theme=_normalise_theme(theme)
+            )
 
-    _apply_template(fig)
-    return {
-        "figure": fig.to_plotly_json(),
+    _apply_template(fig, theme)
+    # The preview draws like a dashboard tile does: the default (overview) style,
+    # on the serialised figure, after the template.
+    figure = json.loads(fig.to_json())
+    try:
+        from depictio.api.v1.services.figure.style_presets import apply_figure_style
+
+        figure = apply_figure_style(figure, "default", theme=_normalise_theme(theme))
+    except Exception:  # noqa: BLE001 -- a style never costs the preview its figure
+        figure = fig.to_plotly_json()
+    # The automatic marks (``annotations``), declared or by figure type, like a
+    # dashboard tile draws them. A code render cannot declare them and gets
+    # none, as in the API worker.
+    marks_off = None
+    if not render.code:
+        from depictio.api.v1.services.figure.annotations import apply_annotations, marks_off_patch
+
+        try:
+            plain = figure
+            figure = apply_annotations(
+                plain, render.annotations, figure_style="default", theme=_normalise_theme(theme)
+            )
+            # What the preview's "Automatic marks" switch takes off again.
+            marks_off = marks_off_patch(figure, plain)
+        except Exception:  # noqa: BLE001 -- a mark never costs the preview its figure
+            pass
+    payload: dict[str, Any] = {
+        "figure": figure,
         "metadata": {"visu_type": render.visu_type or "code", "filter_applied": False},
     }
+    if marks_off is not None:
+        payload["marks_off"] = marks_off
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +465,9 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
             )
     sample_col = "sample" if "sample" in df.columns else None
     end_col = "end" if "end" in df.columns else None
+    # The region class a track colours by (`color_by: category`): A/B
+    # compartments, a CNV call. Dropping it drew every track in one hue.
+    category_col = roles.get("category") if roles.get("category") in df.columns else None
 
     config: dict[str, Any] = {
         "viz_kind": "coverage_track",
@@ -402,9 +479,11 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
         config["sample_col"] = sample_col
     if end_col:
         config["end_col"] = end_col
+    if category_col:
+        config["category_col"] = category_col
     config.update(getattr(render, "config", None) or {})
 
-    proj = [c for c in dict.fromkeys([chrom, pos, val, end_col, sample_col]) if c]
+    proj = [c for c in dict.fromkeys([chrom, pos, val, end_col, sample_col, category_col]) if c]
     result = {
         "rows": {c: df[c].to_list() for c in proj},
         "columns": {
@@ -413,7 +492,7 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
             "value": val,
             "end": end_col,
             "sample": sample_col,
-            "category": None,
+            "category": category_col,
         },
         "summary": {
             "row_count": df.height,
@@ -452,7 +531,7 @@ def multiqc_module(anchor: str) -> str:
     return re.split(r"[-_]", anchor or "")[0]
 
 
-def _multiqc_payload(df, render) -> list[dict[str, Any]]:
+def _multiqc_payload(df, render, theme: str = "light") -> list[dict[str, Any]]:
     """Pre-compute Plotly figures for a multiqc render from the parquet fixture.
 
     Returns a list of ``{"figure": <plotly_json>, "anchor": str}`` dicts —
@@ -489,11 +568,8 @@ def _multiqc_payload(df, render) -> list[dict[str, Any]]:
             if plot is None or isinstance(plot, str) or not hasattr(plot, "get_figure"):
                 continue  # not a renderable Plot (table/raw section)
             fig = plot.get_figure(0)
-            fig.update_layout(
-                template="plotly_white",
-                margin={"l": 50, "r": 20, "t": 50, "b": 50},
-                autosize=True,
-            )
+            _apply_template(fig, theme)
+            fig.update_layout(margin={"l": 50, "r": 20, "t": 50, "b": 50})
             results.append({"figure": fig.to_plotly_json(), "anchor": row["anchor"]})
         except Exception:  # noqa: BLE001 — skip unrenderable plots gracefully
             continue
@@ -505,7 +581,7 @@ def _multiqc_payload(df, render) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _complex_heatmap_payload(df, render) -> dict[str, Any]:
+def _complex_heatmap_payload(df, render, theme: str = "light") -> dict[str, Any]:
     """Pre-compute a ComplexHeatmap figure from the fixture.
 
     Returns a ``ComplexHeatmapResult``-shaped dict that the mockApi's
@@ -612,7 +688,7 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
         normalize={"row_z": "row", "col_z": "column"}.get(normalize, "none"),
     )
     fig = hm.to_plotly()
-    _apply_template(fig)
+    _apply_template(fig, theme)
     # Shape mirrors ComplexHeatmapResult (row_count/col_count/compute_ms expected by renderer)
     return {
         "figure": fig.to_plotly_json(),
@@ -1124,7 +1200,7 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
         comp = render.component
         try:
             if comp == "multiqc":
-                plots = _multiqc_payload(df, render) if df is not None else []
+                plots = _multiqc_payload(df, render, theme) if df is not None else []
                 if plots:
                     meta["_preview_height"] = 460
                     # mockApi.renderMultiQC looks up DATA().multiqc[metadata.index]
@@ -1148,7 +1224,7 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 if render.code:
                     meta["mode"] = "code"  # code shown via the _yaml block
                 meta["_preview_height"] = _FIGURE_PREVIEW_HEIGHT
-                data["figures"][index] = _figure_payload(df, render)
+                data["figures"][index] = _figure_payload(df, render, theme)
             elif comp == "interactive":
                 meta.update(_interactive_meta(df, render))
                 _interactive_data(df, render, dc_id, data)
@@ -1201,7 +1277,7 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 meta["viz_kind"] = "complex_heatmap"
                 meta["config"] = _render_viz_config(render)
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("complex_heatmap", 680)
-                data["compute"][dc_id] = _complex_heatmap_payload(df, render)
+                data["compute"][dc_id] = _complex_heatmap_payload(df, render, theme)
             elif comp == "advanced_viz" and render.kind in _UPSET_KINDS:
                 # mockApi.dispatchUpset → finishedJob(dc_id) → DATA().compute[dc_id]
                 meta["viz_kind"] = render.kind
@@ -1247,6 +1323,7 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
             meta["_error"] = str(exc)
         renders.append(meta)
 
+    _share_figure_colours(output, renders, data)
     return {
         "output": _output_info(output, tool, df),
         "fixturePreview": _fixture_preview(df) if df is not None else None,
@@ -1254,6 +1331,40 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
         "renders": renders,
         "data": data,
     }
+
+
+def _share_figure_colours(output: Any, renders: list[dict[str, Any]], data: dict[str, Any]) -> None:
+    """Give a card's breakdown the colours the output's figures draw its values in.
+
+    A dashboard pins a column's colours once (``category_colors``) and every
+    tile reads them, so a sample is one colour on the histogram and on the
+    card's top-N strip. A catalog output has no dashboard: its card would draw
+    every row in its own accent beside a figure that colours them. The colours
+    a UI figure gave its traces, by the column it colours by, travel on the
+    card's metadata (``_category_colors``) instead.
+    """
+    by_column: dict[str, dict[str, str]] = {}
+    for render, meta in zip(output.renders_as, renders, strict=False):
+        column = (getattr(render, "dict_kwargs", None) or {}).get("color")
+        figure = (data.get("figures") or {}).get(meta.get("index"), {}).get("figure")
+        if render.component != "figure" or not isinstance(column, str) or not figure:
+            continue
+        colours = by_column.setdefault(column, {})
+        for trace in figure.get("data") or []:
+            name = trace.get("name")
+            colour = (trace.get("marker") or {}).get("color")
+            legendgroup = str(trace.get("legendgroup") or "")
+            # Folded traces share the "Other" grey: a colour of the fold, not of the value.
+            if (
+                isinstance(name, str)
+                and isinstance(colour, str)
+                and not legendgroup.startswith("__")
+            ):
+                colours.setdefault(name, colour)
+    for meta in renders:
+        column = meta.get("breakdown_col")
+        if meta.get("component_type") == "card" and by_column.get(column):
+            meta["_category_colors"] = {column: by_column[column]}
 
 
 # ---------------------------------------------------------------------------

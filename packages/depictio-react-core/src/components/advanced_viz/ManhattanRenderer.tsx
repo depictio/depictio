@@ -29,7 +29,7 @@ import {
   type GenomicPoints,
 } from '../../highlight/genomicHover';
 import { useViewWindow } from '../../highlight/viewWindow';
-import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
+import AdvancedVizFrame, { tierColour } from './AdvancedVizFrame';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -72,6 +72,7 @@ import { useGestureGuardedSelection, useSelectionRevision } from './selectionGes
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { categoricalPalette, referenceGuide } from '../../palettes';
 
 type Highlight = 'above' | 'below' | 'none';
 
@@ -528,11 +529,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     //     what lets the user emphasise consensus vs subconsensus regardless
     //     of which Colour-by mode they picked.
     const dimColor = 'rgba(160,160,160,0.45)';
-    const tierColorHex = (tier: 'ABOVE' | 'BELOW') => {
-      const name = TIER_COLORS[tier];
-      const swatch = (theme.colors as Record<string, readonly string[]>)[name];
-      return swatch?.[5] ?? colorByChr.values().next().value ?? '#777';
-    };
+    const tierColorHex = (tier: 'ABOVE' | 'BELOW') => tierColour(tier, isDark ? 'dark' : 'light');
 
     // Detect numeric vs categorical for an arbitrary colour-by column.
     const colorByValues =
@@ -719,14 +716,11 @@ const ManhattanRenderer: React.FC<Props> = ({
       });
     });
 
-    // 4) Threshold horizontal line. Solid + accent colour so it actually
-    //    catches the eye — the previous dotted rgba(128,128,128,0.6) was
-    //    invisible against the grey theme. Paired with the per-point recolour
-    //    above (hits in chromosome colour, misses dimmed), the line is now
-    //    informational rather than load-bearing.
+    // 4) Threshold horizontal line, drawn as every reference line is
+    //    (`referenceGuide`): neutral and dashed, told apart from data by its
+    //    form, so it never borrows a colour a hit could wear.
+    const guide = referenceGuide(isDark ? 'dark' : 'light');
     if (hasThreshold) {
-      const accent =
-        colorScheme === 'dark' ? 'rgba(232,62,140,0.85)' : 'rgba(214,51,108,0.85)';
       layoutShapes.push({
         type: 'line',
         xref: 'paper',
@@ -734,7 +728,7 @@ const ManhattanRenderer: React.FC<Props> = ({
         x1: 1,
         y0: scoreThreshold as number,
         y1: scoreThreshold as number,
-        line: { dash: 'solid', color: accent, width: 1.5 },
+        line: guide.line,
       });
     }
 
@@ -762,7 +756,7 @@ const ManhattanRenderer: React.FC<Props> = ({
         showarrow: false,
         xanchor: 'right',
         yanchor: 'bottom',
-        font: { size: 10, color: plotlyThemeColors(isDark, theme).textColor },
+        font: guide.font,
       });
     }
     if (topNLabels > 0) {
@@ -1266,7 +1260,9 @@ const ManhattanRenderer: React.FC<Props> = ({
   // position. Only this shape changes on a hover, so the data, the traces and
   // the fetch are untouched; a contig this plot does not draw draws nothing.
   const hovered = useHighlight(String(metadata.index));
-  const cursorColor = theme.colors[theme.primaryColor]?.[isDark ? 4 : 7] ?? theme.colors.blue[isDark ? 4 : 7];
+  // The shared palette's lead hue, as every other mark: a Mantine primary
+  // differed per page and read as one more data colour.
+  const cursorColor = categoricalPalette(null, isDark ? 'dark' : 'light')[0];
   // A hover that names a feature (a browser's `genomic`, a table's `record`, a
   // row key) rings the nearest drawn point instead; a plain cursor stays a line.
   // The pixel tolerance is read off the graph div at hover time, so a zoomed

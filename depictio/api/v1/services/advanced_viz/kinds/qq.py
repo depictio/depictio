@@ -20,12 +20,11 @@ import math
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-from depictio.api.v1.services.advanced_viz.palette import TAB10_PALETTE, stable_color_map
+from depictio.api.v1.services.advanced_viz.palette import stable_color_map
+from depictio.models import palettes
 
 #: Median of the chi-square distribution with 1 df — the λ denominator.
 _CHI2_MEDIAN_1DF = 0.4549
-
-_DEFAULT_POINT_COLOR = "#4C72B0"
 
 
 def _columns(config: dict[str, Any]) -> list[str | None]:
@@ -117,7 +116,7 @@ def build(
     ci_lines: dict[str, list[float]] | None = None
 
     if cats:
-        colour_by_cat = stable_color_map({str(c) for c in cats}, TAB10_PALETTE)
+        colour_by_cat = stable_color_map({str(c) for c in cats}, mode=theme)
         all_ps: list[float] = []
         for cat in sorted({str(c) for c in cats}):
             idxs = [i for i, c in enumerate(cats) if str(c) == cat]
@@ -164,7 +163,7 @@ def build(
                     + "expected: %{x:.3f}<br>observed: %{y:.3f}<extra></extra>"
                 ),
                 "marker": {
-                    "color": _DEFAULT_POINT_COLOR,
+                    "color": palettes.categorical(None, theme)[0],
                     "size": point_size,
                     "opacity": 0.85,
                 },

@@ -5,6 +5,8 @@
  */
 
 import { paletteVar, parsePaletteColor } from '../../../paletteColor';
+import { reservedKind, semanticColor } from '../../../palettes';
+import type { ColorScheme } from '../../../palettes';
 
 const NUMBER_FORMATS = new Map<number, Intl.NumberFormat>();
 
@@ -246,4 +248,36 @@ export function hexWithAlpha(hex: string | null | undefined, alpha: number): str
  *  from the neutral track behind it. */
 export function rankTint(color: string | null | undefined, rank: number): string {
   return hexWithAlpha(color, Math.max(0.3, 0.85 - rank * 0.16));
+}
+
+/**
+ * The colour of one breakdown segment: the dashboard's pin for that value of
+ * the breakdown column when it has one (so a Kingdom is the same colour as on
+ * every other tile), else the semantic grey of a reserved remainder value
+ * (Other, Unclassified, NA), else `fallback` when a layout keeps its own flat
+ * fill, else the accent's rank tint.
+ */
+export function breakdownSegmentColor(
+  name: unknown,
+  rank: number,
+  accent: string | null | undefined,
+  pins: Record<string, string> | null | undefined,
+  scheme: ColorScheme = 'light',
+  fallback?: string,
+): string {
+  const key = name == null ? '' : String(name);
+  const pinned = pins?.[key];
+  if (pinned) return pinned;
+  const kind = reservedKind(name);
+  if (kind) return semanticColor(kind, scheme);
+  return fallback ?? rankTint(accent, rank);
+}
+
+/** A column name as a reader would write it: `total_read_pairs` → `Total read
+ *  pairs`. Names already holding spaces or capitals are the author's own and
+ *  pass through unchanged. */
+export function readableColumn(name: string): string {
+  if (/\s|[A-Z]/.test(name)) return name;
+  const words = name.replace(/[_-]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : name;
 }

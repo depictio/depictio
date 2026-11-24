@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, ColorSwatch, Group, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
-import { stableColorMap } from '../../colors';
+import { plotOverflow, stableColorMap } from '../../colors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
 import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
@@ -542,7 +542,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     if (!isSS) for (const r of residues) if (r.category) universe.add(r.category);
     for (const v of variants) if (v.category) universe.add(v.category);
     for (const d of domains) if (d.label) universe.add(d.label);
-    const map = stableColorMap(Array.from(universe), colours.categorical);
+    const map = stableColorMap(Array.from(universe), colours.categorical, null, isDark ? 'dark' : 'light', plotOverflow(theme));
     const shown = new Set<string>();
     for (const v of variants) if (v.category) shown.add(v.category);
     if (!isSS) for (const r of residues) if (r.category) shown.add(r.category);
@@ -551,7 +551,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       .slice(0, 8)
       .forEach((c) => items.push({ label: c, colour: map.get(c) }));
     return items;
-  }, [plddt, isSS, residues, variants, domains, colours.categorical]);
+  }, [plddt, isSS, residues, variants, domains, colours.categorical, theme]);
 
   // ---- chrome ----------------------------------------------------------------
   const entityChoices = picker.entities && picker.entities.length > 1 ? picker.entities : null;

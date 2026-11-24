@@ -6,7 +6,7 @@
  * `save_*_to_dashboard()` helper in depictio/dash/modules/* writes today,
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
-import type { FigureReferenceLine, StoredMetadata } from 'depictio-react-core';
+import type { FigureAnnotations, FigureReferenceLine, StoredMetadata } from 'depictio-react-core';
 import {
   defaultInteractiveTitle,
   normalizeCardVariant,
@@ -225,6 +225,7 @@ function buildFigure(
     selection_column?: string;
     max_points?: number | null;
     reference_lines?: FigureReferenceLine[] | null;
+    annotations?: FigureAnnotations | null;
   }>(state.config);
   const maxPoints = typeof c.max_points === 'number' ? c.max_points : null;
   const display = figureDisplay(state.config);
@@ -233,6 +234,9 @@ function buildFigure(
   // ones the edited figure already had. A UI-mode field only.
   const referenceLines =
     c.reference_lines ?? (existing.reference_lines as FigureReferenceLine[] | undefined);
+  // Its automatic marks block, by the same rule. UI mode only: the model
+  // refuses it on a code figure.
+  const annotations = c.annotations ?? (existing.annotations as FigureAnnotations | undefined);
   if (state.figureMode === 'code') {
     return {
       ...existing,
@@ -244,6 +248,7 @@ function buildFigure(
       // dict_kwargs intentionally cleared in code mode
       dict_kwargs: {},
       reference_lines: undefined,
+      annotations: undefined,
       selection_enabled: Boolean(c.selection_enabled),
       selection_column: c.selection_column,
     };
@@ -258,6 +263,7 @@ function buildFigure(
     ...(Array.isArray(referenceLines) && referenceLines.length
       ? { reference_lines: referenceLines }
       : {}),
+    ...(annotations ? { annotations } : {}),
     code_content: null,
     selection_enabled: Boolean(c.selection_enabled),
     selection_column: c.selection_column,

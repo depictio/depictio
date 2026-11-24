@@ -73,6 +73,7 @@
       "group": "Taxonomy scope",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -116,6 +117,7 @@
       "group": "Taxonomy scope",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -176,7 +178,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:dna",
-      "icon_color": "lime",
+      "icon_color": "lime.4",
       "caption": "one tip each, by kingdom",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -234,7 +236,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:check-circle-outline",
-      "icon_color": "teal",
+      "icon_color": "lime.6",
       "caption": "ASVs assigned down to a genus",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -292,7 +294,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:target",
-      "icon_color": "orange",
+      "icon_color": "lime.8",
       "caption": "median; at or above 0.7, the classifier's default",
       "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
@@ -351,7 +353,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:tag-multiple-outline",
-      "icon_color": "grape",
+      "icon_color": "lime.9",
       "caption": "the richest phyla",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -380,6 +382,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "How are the ASVs related, and where do the phyla sit on the tree? Each tip is an ASV, coloured by phylum, and branches join related sequences. The tile opens on a summary with one tip per phylum, and the View switch draws every ASV.\nHow to read: tips of one colour that sit together in one clade are a coherent phylum, while a colour scattered over the tree means taxonomy and tree disagree for those ASVs. Check such ASVs against the classifier confidence in the table below. In the full view, the Search tip control finds an ASV by name.\nLines and annotations: the full view is ladderised (clades ordered by size) and drawn in a circular layout. Branch lengths are hidden at first, and the controls add a scale bar, branch-length labels and support values. No cut-off is drawn.\nSource: nf-core/ampliseq output documentation, phylogenetic tree, https://nf-co.re/ampliseq/2.18.0/docs/output\nNote: with more than 3,000 ASVs, the tree keeps only the 3,000 most abundant, a readability cap of this dashboard.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Tree",
@@ -465,6 +468,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "How deeply is each ASV classified? One row per tree tip with its lineage by rank, the classifier confidence and its display label.\nHow to read: sort on confidence to find the ASVs with the least certain assignment. An empty genus cell means the ASV was not assigned that deep.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/tree_metadata",
@@ -483,6 +487,7 @@
       "compact": false,
       "row_selection_enabled": true,
       "row_selection_column": "taxon",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/ampliseq"
     }
   ],
@@ -657,8 +662,10 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
+  "shared_labels": [],
   "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
@@ -695,11 +702,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 12:18:23",
+  "creation_time": "2026-11-22 20:39:26",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -717,5 +727,7 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Phylogeny"
+  "published_lock": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Phylogeny",
+  "template_origin": null
 }

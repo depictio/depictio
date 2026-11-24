@@ -100,10 +100,18 @@ def _xy(**extra: Any) -> dict[str, Any]:
 # (name, frame, dict_kwargs)
 CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("ols", "noisy", _xy(trendline="ols")),
-    ("ols through the origin", "noisy", _xy(trendline="ols", trendline_options={"add_constant": False})),
+    (
+        "ols through the origin",
+        "noisy",
+        _xy(trendline="ols", trendline_options={"add_constant": False}),
+    ),
     ("ols log_x", "positive", _xy(trendline="ols", trendline_options={"log_x": True})),
     ("ols log_y", "positive", _xy(trendline="ols", trendline_options={"log_y": True})),
-    ("ols log-log", "positive", _xy(trendline="ols", trendline_options={"log_x": True, "log_y": True})),
+    (
+        "ols log-log",
+        "positive",
+        _xy(trendline="ols", trendline_options={"log_x": True, "log_y": True}),
+    ),
     ("ols over dates", "dates", _xy(trendline="ols")),
     ("lowess", "noisy", _xy(trendline="lowess")),
     ("lowess frac 0.25", "noisy", _xy(trendline="lowess", trendline_options={"frac": 0.25})),
@@ -119,29 +127,55 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
     (
         "rolling sum, closed both",
         "noisy",
-        _xy(trendline="rolling", trendline_options={"window": 4, "closed": "both", "function": "sum"}),
+        _xy(
+            trendline="rolling",
+            trendline_options={"window": 4, "closed": "both", "function": "sum"},
+        ),
     ),
     (
         "rolling median",
         "noisy",
-        _xy(trendline="rolling", trendline_options={"window": 6, "min_periods": 2, "function": "median"}),
+        _xy(
+            trendline="rolling",
+            trendline_options={"window": 6, "min_periods": 2, "function": "median"},
+        ),
     ),
     (
         "rolling std ddof 0",
         "noisy",
         _xy(
             trendline="rolling",
-            trendline_options={"window": 5, "min_periods": 2, "function": "std", "function_args": {"ddof": 0}},
+            trendline_options={
+                "window": 5,
+                "min_periods": 2,
+                "function": "std",
+                "function_args": {"ddof": 0},
+            },
         ),
     ),
-    ("rolling var", "noisy", _xy(trendline="rolling", trendline_options={"window": 5, "function": "var"})),
+    (
+        "rolling var",
+        "noisy",
+        _xy(trendline="rolling", trendline_options={"window": 5, "function": "var"}),
+    ),
     (
         "rolling min",
         "noisy",
-        _xy(trendline="rolling", trendline_options={"window": 5, "min_periods": 1, "function": "min"}),
+        _xy(
+            trendline="rolling",
+            trendline_options={"window": 5, "min_periods": 1, "function": "min"},
+        ),
     ),
-    ("rolling max", "noisy", _xy(trendline="rolling", trendline_options={"window": 3, "function": "max"})),
-    ("rolling count", "noisy", _xy(trendline="rolling", trendline_options={"window": 4, "function": "count"})),
+    (
+        "rolling max",
+        "noisy",
+        _xy(trendline="rolling", trendline_options={"window": 3, "function": "max"}),
+    ),
+    (
+        "rolling count",
+        "noisy",
+        _xy(trendline="rolling", trendline_options={"window": 4, "function": "count"}),
+    ),
     ("rolling over dates", "dates", _xy(trendline="rolling", trendline_options={"window": 7})),
     ("expanding mean", "noisy", _xy(trendline="expanding")),
     (
@@ -150,10 +184,22 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
         _xy(trendline="expanding", trendline_options={"min_periods": 3, "function": "std"}),
     ),
     ("expanding max", "noisy", _xy(trendline="expanding", trendline_options={"function": "max"})),
-    ("expanding median", "noisy", _xy(trendline="expanding", trendline_options={"function": "median"})),
+    (
+        "expanding median",
+        "noisy",
+        _xy(trendline="expanding", trendline_options={"function": "median"}),
+    ),
     ("ewm alpha", "noisy", _xy(trendline="ewm", trendline_options={"alpha": 0.3})),
-    ("ewm span, adjust off", "noisy", _xy(trendline="ewm", trendline_options={"span": 5, "adjust": False})),
-    ("ewm com 1, adjust off", "noisy", _xy(trendline="ewm", trendline_options={"com": 1, "adjust": False})),
+    (
+        "ewm span, adjust off",
+        "noisy",
+        _xy(trendline="ewm", trendline_options={"span": 5, "adjust": False}),
+    ),
+    (
+        "ewm com 1, adjust off",
+        "noisy",
+        _xy(trendline="ewm", trendline_options={"com": 1, "adjust": False}),
+    ),
     (
         "ewm halflife, ignore_na",
         "noisy",
@@ -169,7 +215,11 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
             trendline_options={"halflife": 3, "function": "var", "function_args": {"bias": True}},
         ),
     ),
-    ("ewm over dates, min_periods", "dates", _xy(trendline="ewm", trendline_options={"span": 4, "min_periods": 3})),
+    (
+        "ewm over dates, min_periods",
+        "dates",
+        _xy(trendline="ewm", trendline_options={"span": 4, "min_periods": 3}),
+    ),
 ]
 
 FRAMES = {

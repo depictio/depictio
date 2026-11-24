@@ -18,10 +18,10 @@ import { annotateHint, annotateInteraction, DEFAULT_ANNOTATE_OPTIONS, kindForGeo
 import { annotationIdFromClick, componentSupportsAnnotation, mapSupportsAnnotation } from './plotDecorate';
 import { annotationSummary } from './summary';
 import { OVERLAY_TRACE_PREFIX, PREVIEW_OPACITY_FACTOR } from './toPlotly';
-import type { AnnotationColor, RenderableAnnotation } from './types';
+import type { AnnotationColorName, RenderableAnnotation } from './types';
 import { MAX_POINT_IDS, MAX_REGION_VERTICES, PREVIEW_ANNOTATION_ID } from './types';
 
-const resolveColor = (name: AnnotationColor, shade?: number) => `tok:${name}:${shade ?? 'd'}`;
+const resolveColor = (name: AnnotationColorName, shade?: number) => `tok:${name}:${shade ?? 'd'}`;
 
 const item = (
   id: string,
@@ -251,7 +251,7 @@ describe('geoAnnotationsToPlotly', () => {
       fill: 'toself',
       lon: [0, 10, 10, 0, 0],
       lat: [0, 0, 20, 20, 0],
-      fillcolor: 'tok:yellow:d',
+      fillcolor: 'tok:ink:d',
       hoverinfo: 'skip',
     });
     expect(halo).toMatchObject({ lon: [5], lat: [6] });
