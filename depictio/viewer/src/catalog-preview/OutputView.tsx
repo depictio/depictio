@@ -600,7 +600,12 @@ const OutputView: React.FC<{
               <Tabs.Tab
                 key={g.key}
                 value={g.key}
-                leftSection={<Icon icon={g.icon} width={15} />}
+                // depictio's own visual for the type (icon and colour of the
+                // "new component" grid), once per kind rather than per render.
+                color={metaFor(g.type).color}
+                leftSection={
+                  <Icon icon={metaFor(g.type).icon} width={16} color={metaFor(g.type).color} />
+                }
                 // A kind with one render opens it directly: no second row to pick from.
                 data-render-index={g.indices.length === 1 ? g.indices[0] : undefined}
                 data-render-kind={
@@ -640,7 +645,7 @@ const OutputView: React.FC<{
                     size="xs"
                     radius="xl"
                     variant={isActive ? 'light' : 'subtle'}
-                    color={isActive ? (paper ? tone : CATALOG_ACCENT) : 'gray'}
+                    color={isActive ? metaFor(m.component_type).color : 'gray'}
                     data-active={isActive || undefined}
                     data-render-index={i}
                     data-render-kind={kind}

@@ -155,7 +155,7 @@ console.log('N. Render switcher groups');
   check('opens on the first plot', firstRender(types), 2);
   check('no plot: opens on the first render', firstRender(['card', 'table']), 0);
   check('no render', firstRender([]), 0);
-  check('one icon per kind', groupRenders(['figure', 'card']).map((g) => g.icon), ['tabler:chart-bar', 'tabler:number']);
+  check('a kind wears its first render\'s type', groupRenders(['card', 'advanced_viz', 'figure']).map((g) => g.type), ['advanced_viz', 'card']);
   check('a render is named by its title', renderButtonLabel('Cells per cluster', 'bar'), 'Cells per cluster');
   check('no title: the kind', renderButtonLabel('', 'median'), 'median');
   check('a long title is cut', renderButtonLabel('x'.repeat(50), 'bar').length, 36);

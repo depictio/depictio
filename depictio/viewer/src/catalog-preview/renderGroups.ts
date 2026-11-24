@@ -11,31 +11,34 @@
 export interface RenderGroup {
   key: string;
   label: string;
-  /** One light icon for the whole kind, instead of one per render. */
-  icon: string;
+  /** The component type whose depictio visual (icon, colour) stands for the
+   *  kind: the same as in the "new component" grid, once per kind. */
+  type: string;
   /** Indices into the output's `renders`, in their authored order. */
   indices: number[];
 }
 
-const GROUPS: ReadonlyArray<{ key: string; label: string; icon: string; types: readonly string[] }> = [
+const GROUPS: ReadonlyArray<{ key: string; label: string; types: readonly string[] }> = [
   {
     key: 'plots',
     label: 'Plots',
-    icon: 'tabler:chart-bar',
     types: ['figure', 'advanced_viz', 'multiqc', 'image', 'jbrowse', 'map', 'geojson', 'phylogeny'],
   },
-  { key: 'cards', label: 'Cards', icon: 'tabler:number', types: ['card'] },
-  { key: 'filters', label: 'Filters', icon: 'tabler:adjustments-horizontal', types: ['interactive'] },
-  { key: 'tables', label: 'Tables', icon: 'tabler:table', types: ['table'] },
+  { key: 'cards', label: 'Cards', types: ['card'] },
+  { key: 'filters', label: 'Filters', types: ['interactive'] },
+  { key: 'tables', label: 'Tables', types: ['table'] },
 ];
-const OTHER = { key: 'other', label: 'Other', icon: 'tabler:puzzle' };
 
 export function groupRenders(types: readonly string[]): RenderGroup[] {
-  const out: RenderGroup[] = GROUPS.map((g) => ({ key: g.key, label: g.label, icon: g.icon, indices: [] }));
-  const other: RenderGroup = { ...OTHER, indices: [] };
+  const out: RenderGroup[] = GROUPS.map((g) => ({ key: g.key, label: g.label, type: '', indices: [] }));
+  const other: RenderGroup = { key: 'other', label: 'Other', type: '', indices: [] };
   types.forEach((type, i) => {
     const at = GROUPS.findIndex((g) => g.types.includes(type));
-    (at >= 0 ? out[at] : other).indices.push(i);
+    const group = at >= 0 ? out[at] : other;
+    group.indices.push(i);
+    // A kind wears its first render's type: a plots tab of advanced viz only
+    // shows the advanced-viz visual, a mixed one the first of them.
+    if (!group.type) group.type = type;
   });
   return [...out, other].filter((g) => g.indices.length > 0);
 }
