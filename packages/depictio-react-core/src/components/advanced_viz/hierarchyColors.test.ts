@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import { assignColors, semanticColor } from '../../palettes';
-import { abundanceRanked, isUnassigned, lineageShade, mixHex, remainderColour, ringColour, unassignedGrey } from './hierarchyColors';
+import {
+  abundanceRanked,
+  isLossLabel,
+  isUnassigned,
+  lineageIsOneHue,
+  lineageShade,
+  mixHex,
+  remainderColour,
+  ringColour,
+  unassignedGrey,
+} from './hierarchyColors';
 
 describe('mixHex', () => {
   it('moves a colour toward another, and leaves a non-hex one alone', () => {
@@ -113,5 +123,18 @@ describe('ringColour', () => {
 
   it('keeps a remainder grey', () => {
     expect(ringColour({ label: 'Unclassified', depth: 1, colourKey: 'Unclassified', unassigned: true }, 0, opts)).toBe('#adb5bd');
+  });
+});
+
+describe('sankey loss and single-root colouring', () => {
+  it('names a dead end', () => {
+    expect(isLossLabel('Lost')).toBe(true);
+    expect(isLossLabel(' filtered out ')).toBe(true);
+    expect(isLossLabel('Quality filtered')).toBe(false);
+  });
+  it('one first-step value makes lineage one hue', () => {
+    expect(lineageIsOneHue(['Input reads'])).toBe(true);
+    expect(lineageIsOneHue(['Input reads', 'Lost', 'Unclassified'])).toBe(true);
+    expect(lineageIsOneHue(['Bacteria', 'Archaea'])).toBe(false);
   });
 });

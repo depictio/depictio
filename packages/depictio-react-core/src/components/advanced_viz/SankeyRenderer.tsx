@@ -26,7 +26,14 @@ import {
 import { plotOverflow, resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import { useCategoryColorSource, useCategoryPalette } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
-import { isUnassigned, lineageShade, remainderColour } from './hierarchyColors';
+import {
+  isLossLabel,
+  isUnassigned,
+  lineageIsOneHue,
+  lineageShade,
+  remainderColour,
+  unassignedGrey,
+} from './hierarchyColors';
 import { pinnedPalette } from './phylo/palette';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -338,12 +345,23 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       if (!root || isUnassigned(root.label)) return remainderColour(root?.label, isDark);
       return lineageShade(rootColours.get(root.label), n.step_index, placeInStep.get(i) ?? 0, isDark);
     });
-    const nodeColors = nodes.map((n, i) =>
-      colorMode === 'step' ? (stepHues[n.step_index] ?? palette[0]) : lineageColour[i],
-    );
+    // One root gives every node its hue: the steps then tell the flows apart.
+    const byStep = colorMode === 'step' || lineageIsOneHue(rootValues);
+    // A dead end (reads "Lost" at a step) is grey, and so is every flow into
+    // it, so what a step drops reads apart from what it keeps.
+    const lossGrey = unassignedGrey(isDark);
+    const isLoss = nodes.map((n) => isLossLabel(n.label));
+    const nodeColors = nodes.map((n, i) => {
+      if (isLoss[i]) return lossGrey;
+      return byStep ? (stepHues[n.step_index] ?? palette[0]) : lineageColour[i];
+    });
 
     function baseColorFor(src: number, tgt: number): string {
-      if (colorMode === 'step') return stepHues[nodes[src]?.step_index ?? 0] ?? palette[0];
+      if (isLoss[tgt] || isLoss[src]) return lossGrey;
+      if (byStep) {
+        const node = colorMode === 'target' ? tgt : src;
+        return stepHues[nodes[node]?.step_index ?? 0] ?? palette[0];
+      }
       return lineageColour[colorMode === 'target' ? tgt : src];
     }
 

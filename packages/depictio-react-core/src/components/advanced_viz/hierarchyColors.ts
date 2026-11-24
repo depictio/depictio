@@ -142,3 +142,18 @@ export function ringColour(
     opts.isDark,
   );
 }
+
+/** A flow's dead end: reads lost at a step, records filtered out. A sankey of a
+ *  pipeline's attrition names it at every step after the one that dropped it. */
+const LOSS_LABEL = /^(lost|dropped|discarded|removed|rejected|failed|filtered( out)?|excluded)$/i;
+
+export function isLossLabel(label: string | null | undefined): boolean {
+  return LOSS_LABEL.test(String(label ?? '').trim());
+}
+
+/** Whether lineage colouring has anything to tell apart: with one first-step
+ *  value (every read starts as "Input reads") every node inherits its hue and
+ *  the whole diagram is one colour, so a sankey colours by step instead. */
+export function lineageIsOneHue(rootLabels: readonly string[]): boolean {
+  return new Set(rootLabels.filter((l) => !isUnassigned(l) && !isLossLabel(l))).size <= 1;
+}
