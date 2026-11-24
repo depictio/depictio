@@ -90,6 +90,9 @@ class ReportTile(BaseModel):
     # in its own.
     section: str | None = None
     page_break_before: bool = False
+    # The whole width of the page, out of the dashboard row it shares with
+    # other tiles; the rest of that row keeps sharing it. Cards keep their strip.
+    full_width: bool = False
 
 
 class ReportTab(BaseModel):
@@ -186,6 +189,7 @@ class ReportOutlineEntry(BaseModel):
     orientation: ReportOrientation = "auto"
     section: str | None = None
     page_break_before: bool = False
+    full_width: bool = False
     order: int | None = None
     # A section's own look, as the dashboard draws its header: an Iconify id,
     # a Mantine palette name and the line under its title. Sections only.

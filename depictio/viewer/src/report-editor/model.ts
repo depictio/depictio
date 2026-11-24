@@ -30,6 +30,8 @@ export interface TileView {
   inPdf: boolean;
   orientation: ReportOrientation;
   pageBreakBefore: boolean;
+  /** Across the whole page, out of the dashboard row it shares. */
+  fullWidth: boolean;
   /** The caption override ('' when the tile keeps its own). */
   caption: string;
   /** The section override ('' when the tile stays in its own section). */
@@ -76,6 +78,7 @@ function tileView(entry: ReportOutlineEntry, layer: ReportLayer): TileView {
     inPdf: tile ? tile.in_pdf : entry.in_pdf,
     orientation: tile ? tile.orientation : entry.orientation,
     pageBreakBefore: tile ? tile.page_break_before : entry.page_break_before,
+    fullWidth: Boolean(tile ? tile.full_width : entry.full_width),
     caption: tile?.caption ?? '',
     sectionOverride,
     section: sectionOverride || entry.section,
@@ -135,6 +138,7 @@ function baseTile(entry: ReportOutlineEntry): ReportTile {
     orientation: entry.orientation,
     section: null,
     page_break_before: entry.page_break_before,
+    full_width: Boolean(entry.full_width),
   };
 }
 

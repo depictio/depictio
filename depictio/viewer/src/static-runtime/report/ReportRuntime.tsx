@@ -31,6 +31,7 @@ import {
   groupsRenderPayload,
   groupsToFilters,
   hasLiveValues,
+  isControlsPlacement,
   mergeFiltersBySource,
   resolveGroupRender,
   useCategoricalColumns,
@@ -63,18 +64,36 @@ const FILTER_DEBOUNCE_MS = 250;
 
 /** A tile's height in the document. The dashboard sizes tiles by its grid;
  *  a document stacks them full width, so plots get the height of a figure
- *  and cards and controls their own. An advanced viz is taller: at full width
- *  its controls open above the plot (thresholds, labels, search), and at
- *  480 px they left a volcano ~150 px to draw in. */
+ *  and cards and controls their own. An advanced viz is a little taller: its
+ *  controls sit behind the settings icon (see `withReportControls`), so the
+ *  whole box is the plot's. */
 const TILE_HEIGHT: Record<string, number> = {
   figure: 440,
-  advanced_viz: 680,
+  advanced_viz: 560,
   table: 460,
   multiqc: 460,
   map: 460,
   image: 420,
   jbrowse: 420,
 };
+
+const placed = new WeakMap<object, StoredMetadata>();
+
+/** An advanced viz in a report keeps its controls closed, behind the settings
+ *  icon, unless its author placed them (on the tile, or for the dashboard):
+ *  a reader opens them when they want them, and docked controls took the
+ *  room of the plot. The same object comes back for the same tile, so a
+ *  render does not hand the renderer new metadata. */
+function withReportControls(m: StoredMetadata, dashboardDefault: unknown): StoredMetadata {
+  if (m.component_type !== 'advanced_viz' || isControlsPlacement(m.controls_placement)) return m;
+  let out = placed.get(m);
+  if (!out) {
+    const placement = isControlsPlacement(dashboardDefault) ? dashboardDefault : 'popover';
+    out = { ...m, controls_placement: placement } as StoredMetadata;
+    placed.set(m, out);
+  }
+  return out;
+}
 
 export interface ReportTile {
   /** The placeholder the export wrote. */
@@ -350,8 +369,13 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
   const [funnelViewOpen, setFunnelViewOpen] = useState(false);
 
   const renderComponent = (ref: TileRef) => {
-    const m = componentFor(manifest, ref) as unknown as StoredMetadata | null;
-    if (!m) return null;
+    const own = componentFor(manifest, ref) as unknown as StoredMetadata | null;
+    if (!own) return null;
+    const m = withReportControls(
+      own,
+      (tabDoc(manifest, ref.tabId) as { advanced_viz_controls?: unknown } | null)
+        ?.advanced_viz_controls,
+    );
     const type = String(m.component_type ?? '');
     const height = TILE_HEIGHT[type];
     return (
@@ -359,7 +383,9 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
         key={ref.index}
         className="depictio-report-tile-body"
         data-component-type={type}
-        style={height ? { height } : undefined}
+        // A renderer taller than its box (a gallery's grid) scrolls inside
+        // it instead of running over the caption below.
+        style={height ? { height, overflow: 'auto' } : undefined}
       >
         <ComponentRenderer
           metadata={m}

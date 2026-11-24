@@ -66,6 +66,7 @@ export interface PreviewPatch {
     order: number | null;
     section: string | null;
     page_break_before: boolean;
+    full_width: boolean;
   }[];
   focus: TileFocus | null;
 }
@@ -104,6 +105,7 @@ export function buildPatch(
         order: i,
         section: view.sectionOverride || null,
         page_break_before: view.pageBreakBefore,
+        full_width: view.fullWidth,
       })),
     ),
     focus,

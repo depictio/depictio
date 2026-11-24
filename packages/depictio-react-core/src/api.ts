@@ -1543,6 +1543,8 @@ export interface ReportTile {
   orientation: ReportOrientation;
   section: string | null;
   page_break_before: boolean;
+  /** Across the whole page, out of the dashboard row it shares. */
+  full_width?: boolean;
 }
 
 export interface ReportTab {
@@ -1581,6 +1583,7 @@ export interface ReportOutlineEntry {
   orientation: ReportOrientation;
   section: string | null;
   page_break_before: boolean;
+  full_width?: boolean;
   order: number | null;
   /** A section's own look, as the dashboard draws its header: an Iconify id,
    *  a Mantine palette name and the line under its title. Sections only. */

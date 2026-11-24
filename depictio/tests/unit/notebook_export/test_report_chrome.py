@@ -18,6 +18,7 @@ from depictio.api.v1.services.notebook_export.report_chrome import (
     stepper_markdown,
 )
 from depictio.models.models.analysis_state import AnalysisState
+from depictio.models.models.report_layer import ReportLayer
 
 LOGO = "data:image/png;base64,iVBORw0KGgo="
 MARK = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
@@ -52,6 +53,33 @@ def _plan(tabs, **extra) -> ExportPlan:
 
 
 # ── Overview layout ─────────────────────────────────────────────────────────
+
+
+def test_a_full_width_tile_leaves_its_row(ampliseq_tabs):
+    """The layer's ``full_width`` takes a tile out of the dashboard row it
+    shares: the 5:3 row splits into two tiles of their own, each the page's
+    width, in the same order."""
+    main, run = next(
+        (t, m) for t in ampliseq_tabs for m in t["stored_metadata"] if m.get("index") == "ov-run"
+    )
+    layer = ReportLayer.model_validate(
+        {
+            "tiles": [
+                {
+                    "tab_id": str(main["dashboard_id"]),
+                    "component_id": str(run["index"]),
+                    "full_width": True,
+                }
+            ]
+        }
+    )
+    before = _body(generate_qmd(_plan(ampliseq_tabs)))
+    src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=layer)))
+    # That row is gone (other tabs keep their own 5:3 rows), its tiles stay.
+    assert src.count('layout="[5,3]"') == before.count('layout="[5,3]"') - 1
+    about, own = src.index("About this dashboard"), src.index("'ov-run'")
+    assert about < own
+    assert 'layout="[5,3]"' not in src[about:own]
 
 
 def test_the_overview_keeps_its_grid_rows(ampliseq_tabs):

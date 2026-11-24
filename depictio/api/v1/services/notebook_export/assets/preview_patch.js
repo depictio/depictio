@@ -194,7 +194,8 @@
     });
     forEach(hiddenEls, function (el, i) { el.style.display = hiddenWas[i]; });
     forEach(renumbered, function (r) { r[0].nodeValue = r[1]; });
-    hiddenEls = []; hiddenWas = []; hiddenHosts = []; renumbered = [];
+    for (var r = restyled.length - 1; r >= 0; r--) restyled[r][0].style[restyled[r][1]] = restyled[r][2];
+    hiddenEls = []; hiddenWas = []; hiddenHosts = []; renumbered = []; restyled = [];
     forEach(document.querySelectorAll('[' + STRIP_ATTR + ']'), function (h) { h.removeAttribute(STRIP_ATTR); });
     if (stripStyle) stripStyle.textContent = '';
     if (focusBlock) { focusBlock.style.outline = ''; focusBlock.style.outlineOffset = ''; focusBlock = null; }
@@ -290,7 +291,7 @@
   // its PDF marks; its caption rewritten when the layer sets one; moved to
   // another section of the same tab when one is named.
   function applyTiles(entries) {
-    var byRef = {};
+    var byRef = {}, fullHosts = [];
     forEach(entries, function (t) {
       if (t && t.tab_id != null && t.component_id != null) byRef[String(t.tab_id) + ':' + String(t.component_id)] = t;
     });
@@ -298,6 +299,10 @@
       var refs = refsOf(host);
       if (!refs.length) return;
       var cfgs = [], out = [];
+      if (refs.length === 1 && !host.querySelector('.dpx-cards')) {
+        var own = byRef[refs[0].tab_id + ':' + refs[0].component_id];
+        if (own && own.full_width) fullHosts.push(host);
+      }
       forEach(refs, function (ref, i) {
         var c = byRef[ref.tab_id + ':' + ref.component_id];
         if (c) cfgs.push(c);
@@ -320,7 +325,41 @@
     });
     reorderTiles(byRef);
     hideEmptySections();
+    layoutRows(fullHosts);
     renumberFloats();
+  }
+
+  // A dashboard row is a flex row of cells, each as wide as its grid share.
+  // A full-width tile takes a line of its own, and the cells left beside it
+  // (those still in the report) share the row's width again, as the export
+  // lays them out: a tile left alone in its row is as wide as the page.
+  var restyled = [];
+  function setStyle(el, prop, value) {
+    restyled.push([el, prop, el.style[prop]]);
+    el.style[prop] = value;
+  }
+  function basisOf(cell) {
+    var m = /([\d.]+)%/.exec(cell.style.flexBasis || '');
+    return m ? parseFloat(m[1]) : 0;
+  }
+  function layoutRows(fullHosts) {
+    forEach(document.querySelectorAll('.quarto-layout-row'), function (row) {
+      var cells = [], changed = false, shared = 0;
+      forEach(row.children, function (cell) {
+        if (!cell.classList || !cell.classList.contains('quarto-layout-cell')) return;
+        var full = false, hidden = isHidden(cell);
+        forEach(fullHosts, function (h) { if (cell.contains(h)) full = true; });
+        if (full || hidden) changed = true;
+        if (!full && !hidden) shared += basisOf(cell);
+        cells.push({ cell: cell, full: full, hidden: hidden });
+      });
+      if (!changed || cells.length < 2) return;
+      setStyle(row, 'flexWrap', 'wrap');
+      forEach(cells, function (c) {
+        if (c.hidden) return;
+        setStyle(c.cell, 'flexBasis', c.full || !shared ? '100%' : (basisOf(c.cell) / shared * 100) + '%');
+      });
+    });
   }
 
   // Elements the patch hid, shown again by `restore`.
@@ -567,11 +606,16 @@
   }
 
   // A click on a tile tells the editor: the reader is looking at this one.
+  // The focus the editor sends back must not scroll: the reader is already
+  // there, and a click on a tile's own controls (a settings icon, a tab of a
+  // viz) used to recentre the tile under the pointer.
   document.addEventListener('click', function (event) {
     var target = event.target;
     if (!target || typeof target.closest !== 'function') return;
     var host = target.closest(TILE_SEL), refs = host ? refsOf(host) : [];
-    if (refs.length) post({ type: SELECT, tab_id: refs[0].tab_id, component_id: refs[0].component_id });
+    if (!refs.length) return;
+    scrolledTo = refs[0].tab_id + ':' + refs[0].component_id;
+    post({ type: SELECT, tab_id: refs[0].tab_id, component_id: refs[0].component_id });
   });
 
   // A Plotly tile gets a PNG, as asked (§3); every other tile and prose block

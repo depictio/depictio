@@ -24,7 +24,6 @@ import {
   Button,
   Center,
   Group,
-  Loader,
   Stack,
   Text,
   Title,
@@ -52,6 +51,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 
+import DepictioRose from '../components/rose/DepictioRose';
 import { usePageTitle } from '../branding';
 import { STROKE } from '../chrome/variants/glass/icons';
 import { useChromeVariant } from '../chrome/variants';
@@ -91,7 +91,7 @@ interface StatusView {
 function statusLabel(status: ReportSaveStatus, error: string | null): StatusView {
   switch (status) {
     case 'saving':
-      return { text: 'Saving…', color: 'gray', icon: <Loader size={11} color="gray" /> };
+      return { text: 'Saving…', color: 'gray', icon: <DepictioRose mode="loading" size={12} label="" /> };
     case 'saved':
       return {
         text: 'Saved',
@@ -162,17 +162,24 @@ const ReportEditorApp: React.FC = () => {
   const stateKey = useMemo(() => JSON.stringify(layer?.state ?? null), [layer?.state]);
   const job = usePreviewJob(dashboardId, ready, stateKey, api.flush);
 
-  const onFrameSelect = useCallback((tabId: string, componentId: string) => {
-    setSelected({ tabId, componentId });
-    setRevealToken((t) => t + 1);
-  }, []);
   // Scroll sync: the bridge hands the frame's "visible" tile to the column
   // (through a ref: the hook that scrolls it needs the bridge's sender).
   const [syncScroll, setSyncScroll] = useState(true);
+  const syncScrollRef = useRef(syncScroll);
+  syncScrollRef.current = syncScroll;
   const editColumnRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const split = useSplitPane(bodyRef);
   const followFrameRef = useRef<((tabId: string, componentId: string) => void) | null>(null);
+  const onFrameSelect = useCallback((tabId: string, componentId: string) => {
+    setSelected({ tabId, componentId });
+    // With scroll sync on, the column goes to the card through the sync's own
+    // guard: a plain reveal scrolled the column unannounced, the sync took it
+    // for the author's scroll and sent the preview to the card then at the
+    // column's top, away from the tile just clicked.
+    if (syncScrollRef.current && followFrameRef.current) followFrameRef.current(tabId, componentId);
+    else setRevealToken((t) => t + 1);
+  }, []);
   const onFrameVisible = useCallback(
     (tabId: string, componentId: string) => followFrameRef.current?.(tabId, componentId),
     [],
@@ -258,9 +265,15 @@ const ReportEditorApp: React.FC = () => {
             <Button
               size="sm"
               variant="default"
-              leftSection={<FileDown size={17} strokeWidth={STROKE} />}
-              loading={pdf.busy}
-              disabled={!layer || conflict || Boolean(unavailable)}
+              leftSection={
+                pdf.busy ? (
+                  <DepictioRose mode="loading" size={17} label="" />
+                ) : (
+                  <FileDown size={17} strokeWidth={STROKE} />
+                )
+              }
+              aria-busy={pdf.busy || undefined}
+              disabled={pdf.busy || !layer || conflict || Boolean(unavailable)}
               onClick={pdf.run}
               data-testid="report-exact-pdf"
             >
@@ -298,7 +311,7 @@ const ReportEditorApp: React.FC = () => {
     if (!dashboardId) {
       return <Alert color="red" m="md">This address names no dashboard.</Alert>;
     }
-    if (serverInfoLoading && !enabled) return centered(<Loader />);
+    if (serverInfoLoading && !enabled) return centered(<DepictioRose mode="loading" size={64} />);
     if (!enabled) {
       return centered(
         <Stack align="center" gap="sm" maw={420} ta="center">
@@ -311,7 +324,7 @@ const ReportEditorApp: React.FC = () => {
         </Stack>,
       );
     }
-    if (api.loading && !layer) return centered(<Loader />);
+    if (api.loading && !layer) return centered(<DepictioRose mode="loading" size={64} />);
     if (api.loadError || !layer || !outline) {
       return centered(
         <Stack align="center" gap="sm" maw={460} ta="center">

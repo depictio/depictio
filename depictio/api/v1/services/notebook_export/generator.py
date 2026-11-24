@@ -2445,14 +2445,15 @@ def card_row(cards):
 
         A row is a run of tiles at the same ``y`` whose widths fit the grid;
         a tile with no position stands alone, except a run of cards, which
-        the dashboard draws as a strip.
+        the dashboard draws as a strip. A tile the layer puts at full width
+        stands alone too, and the rest of its row keeps sharing it.
         """
         rows: list[list[ComponentEntry]] = []
         for entry in entries:
             lay = self._layout_of(entry)
             y, w = lay.get("y"), lay.get("w")
             last = rows[-1] if rows else None
-            if last:
+            if last and not (self._full_width(entry) or self._full_width(last[-1])):
                 prev = self._layout_of(last[-1])
                 if y is not None and prev.get("y") == y and isinstance(w, (int, float)):
                     used = sum(int(self._layout_of(e).get("w") or cols) for e in last)
@@ -2469,6 +2470,12 @@ def card_row(cards):
                     continue
             rows.append([entry])
         return rows
+
+    def _full_width(self, entry: ComponentEntry) -> bool:
+        """The layer asks for this tile across the whole page (cards excepted:
+        a card stays in its strip)."""
+        cfg = self._layer_tile(entry)
+        return bool(cfg is not None and cfg.full_width and not self._is_card(entry))
 
     @staticmethod
     def _is_card(entry: ComponentEntry) -> bool:

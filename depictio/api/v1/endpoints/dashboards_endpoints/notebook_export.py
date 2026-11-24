@@ -1347,6 +1347,7 @@ def notebook_export_outline(
                 # The layer's override, else the section the tile sits under.
                 section=(tile.section if tile is not None and tile.section else current_section),
                 page_break_before=bool(tile.page_break_before) if tile is not None else False,
+                full_width=bool(tile.full_width) if tile is not None else False,
                 order=tile.order if tile is not None else None,
             )
         )

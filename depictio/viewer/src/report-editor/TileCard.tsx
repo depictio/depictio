@@ -31,6 +31,7 @@ function summaryBadges(view: TileView): string[] {
   if (view.orientation === 'landscape') out.push('Landscape');
   if (view.orientation === 'portrait') out.push('Portrait');
   if (view.pageBreakBefore) out.push('Page break');
+  if (view.fullWidth) out.push('Full width');
   if (view.caption) out.push('Own caption');
   return out;
 }

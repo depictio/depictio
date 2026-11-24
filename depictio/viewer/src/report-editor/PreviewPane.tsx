@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActionIcon, Alert, Badge, Button, Code, Group, Loader, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Badge, Button, Code, Group, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
 import { CircleAlert, Eye, Info, Link2, Link2Off, Moon, RefreshCw, Sun } from 'lucide-react';
 
+import DepictioRose from '../components/rose/DepictioRose';
 import { STROKE } from '../chrome/variants/glass/icons';
 import type { PreviewScheme } from './previewProtocol';
 import type { FrameBridge } from './useFrameBridge';
@@ -74,7 +75,7 @@ const StatusChip: React.FC<ChipProps & { unavailable?: string | null }> = ({ job
   }
   if (job.rerendering) {
     return (
-      <Badge color="yellow" variant="light" leftSection={<Loader size={10} />}>
+      <Badge color="yellow" variant="light" leftSection={<DepictioRose mode="loading" size={12} label="" />}>
         Re-rendering (filters changed)…
       </Badge>
     );
@@ -89,7 +90,7 @@ const StatusChip: React.FC<ChipProps & { unavailable?: string | null }> = ({ job
   }
   if (!bridge.frameReady) {
     return (
-      <Badge color="gray" variant="light" leftSection={<Loader size={10} />}>
+      <Badge color="gray" variant="light" leftSection={<DepictioRose mode="loading" size={12} label="" />}>
         Connecting…
       </Badge>
     );
@@ -167,7 +168,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({ job, bridge, scheme, syncScro
         <div className="re-pv-page re-pv-wait">
           <Stack gap="sm" data-testid="report-preview-running">
             <Group gap="xs">
-              <Loader size="xs" />
+              <DepictioRose mode="loading" size={20} label="" />
               <Text size="sm">
                 {job.phase} · {elapsedLabel(job.elapsed)}
               </Text>

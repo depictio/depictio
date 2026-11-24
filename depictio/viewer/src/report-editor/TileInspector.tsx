@@ -24,6 +24,12 @@ interface TileInspectorProps {
   onMove: (direction: -1 | 1) => void;
 }
 
+/** A tile's width: its dashboard row, or the whole page. */
+const WIDTHS = [
+  { value: 'row', label: 'As in the dashboard' },
+  { value: 'full', label: 'Full width' },
+];
+
 /** The settings of the selected tile: its caption and how it sits in the PDF. */
 const TileInspector: React.FC<TileInspectorProps> = ({
   view,
@@ -61,6 +67,26 @@ const TileInspector: React.FC<TileInspectorProps> = ({
           placeholder={entry.caption ?? 'The tile keeps its own caption'}
           onChange={(e) => onPatch({ caption: e.currentTarget.value || null })}
         />
+        {entry.component_type !== 'card' ? (
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>
+              Width in the report
+            </Text>
+            <SegmentedControl
+              size="xs"
+              fullWidth
+              data={WIDTHS}
+              value={view.fullWidth ? 'full' : 'row'}
+              onChange={(v) => onPatch({ full_width: v === 'full' })}
+              data-testid="report-tile-width"
+            />
+            <Text size="xs" c="dimmed">
+              {view.fullWidth
+                ? 'Takes the whole page width; the rest of its dashboard row keeps sharing it.'
+                : 'Shares its row with the tiles beside it in the dashboard.'}
+            </Text>
+          </Stack>
+        ) : null}
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <Switch
             label="Include in PDF"
