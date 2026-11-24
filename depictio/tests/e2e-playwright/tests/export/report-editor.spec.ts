@@ -218,6 +218,49 @@ test.describe("Report editor", () => {
     }
   });
 
+  test("a section's box takes the whole section out of the preview and back", async ({
+    loginAsAdmin,
+    page,
+    request,
+  }) => {
+    test.setTimeout(360_000);
+    await loginAsAdmin();
+    await openEditor(page);
+    const frame = await livePreview(page);
+
+    // The structure groups the tiles under their dashboard sections.
+    const headings = page.locator("[data-testid='report-section-heading']");
+    await expect(headings).not.toHaveCount(0);
+    const toggle = page.locator(
+      `[data-testid='report-section-toggle-${IRIS_DASHBOARD_ID}:Distributions']`,
+    );
+    await expect(toggle).toBeChecked();
+    const section = frame.locator('[data-depictio-section$=":Distributions"]');
+    await expect(section).toBeVisible();
+
+    const { access_token } = await apiOnlyToken(request, "adminUser");
+    /** How many tiles the stored layer keeps out of the report. */
+    const excluded = async (): Promise<number> => {
+      const res = await request.get(
+        `${API_URL}${API_PREFIX}/dashboards/report_layer/${IRIS_DASHBOARD_ID}`,
+        { headers: { Authorization: `Bearer ${access_token}` } },
+      );
+      if (!res.ok()) return -1;
+      const layer = (await res.json()) as { tiles?: { in_report: boolean }[] };
+      return (layer.tiles ?? []).filter((t) => !t.in_report).length;
+    };
+    const before = await excluded();
+    try {
+      await toggle.click();
+      // The section goes, heading and all, as it does from the export.
+      await expect(section).toBeHidden({ timeout: 30_000 });
+    } finally {
+      if (!(await toggle.isChecked())) await toggle.click();
+      await expect(section).toBeVisible({ timeout: 30_000 });
+      await expect.poll(excluded, { timeout: 30_000 }).toBe(before);
+    }
+  });
+
   test("the splitter resizes the panes", async ({ loginAsAdmin, page }) => {
     await loginAsAdmin();
     await openEditor(page);

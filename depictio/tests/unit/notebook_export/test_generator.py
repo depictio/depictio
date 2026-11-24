@@ -951,3 +951,43 @@ def test_a_layer_code_block_keeps_its_lines_and_its_fence_beats_its_backticks():
         _prose_doc({"type": "codeBlock", "content": [{"type": "text", "text": "x ``` y"}]})
     )
     assert "````\nx ``` y\n````" in ticked
+
+
+def test_a_section_the_layer_empties_leaves_the_report(ampliseq_tabs):
+    """Unticking every tile of a section takes its heading out too; a section
+    that keeps one tile, and the other sections, stay."""
+    tabs = ampliseq_tabs
+    main = str(tabs[0]["dashboard_id"])
+    state = AnalysisState.model_validate({"context": {"dashboard_id": main}})
+
+    def plan(layer=None):
+        return ExportPlan(
+            tabs=tabs, project=None, state=state, dcs=[], stages=[], title="x", report_layer=layer
+        )
+
+    def sections(entries):
+        """Section title -> the layer keys of the tiles under it, in order."""
+        out: dict[str, list[tuple[str, str]]] = {}
+        current = None
+        for e, _ in entries:
+            if isinstance(e, MarkdownUnit):
+                current = e.text if e.kind == "section" else None
+                if current is not None:
+                    out.setdefault(current, [])
+            elif current is not None:
+                out[current].append(e.layer_key)
+        return out
+
+    full = sections(NotebookBuilder(plan()).entries())
+    names = [n for n, keys in full.items() if len(keys) >= 2]
+    assert len(names) >= 2, "the fixture needs two sections of several tiles"
+    emptied, trimmed = names[0], names[1]
+
+    out = [{"tab_id": t, "component_id": c, "in_report": False} for t, c in full[emptied]]
+    t, c = full[trimmed][0]
+    out.append({"tab_id": t, "component_id": c, "in_report": False})
+    left = sections(NotebookBuilder(plan({"tiles": out})).entries())
+
+    assert emptied not in left
+    assert left[trimmed] == full[trimmed][1:]
+    assert set(left) == set(full) - {emptied}

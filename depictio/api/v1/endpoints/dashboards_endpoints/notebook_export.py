@@ -1280,6 +1280,9 @@ def notebook_export_outline(
     builder = NotebookBuilder(plan)
     outline_tabs: list[ReportOutlineTab] = []
     current: ReportOutlineTab | None = None
+    # The section the next components sit under: every component carries it,
+    # or the editor has nothing to group them by.
+    current_section: str | None = None
     for entry, _tab_name in builder.entries():
         if isinstance(entry, MarkdownUnit):
             if entry.kind == "tab":
@@ -1300,7 +1303,9 @@ def notebook_export_outline(
                     entries=[],
                 )
                 outline_tabs.append(current)
+                current_section = None
             elif current is not None:
+                current_section = entry.text
                 current.entries.append(
                     ReportOutlineEntry(
                         kind="section",
@@ -1336,7 +1341,8 @@ def notebook_export_outline(
                 in_report=bool(tile.in_report) if tile is not None else True,
                 in_pdf=bool(tile.in_pdf) if tile is not None else True,
                 orientation=tile.orientation if tile is not None else "auto",
-                section=tile.section if tile is not None else None,
+                # The layer's override, else the section the tile sits under.
+                section=(tile.section if tile is not None and tile.section else current_section),
                 page_break_before=bool(tile.page_break_before) if tile is not None else False,
                 order=tile.order if tile is not None else None,
             )

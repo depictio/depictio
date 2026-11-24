@@ -556,6 +556,31 @@ def _exported_stamp(exported_at: datetime, *, date_only: bool = False) -> str:
     return f"{exported_at:%Y-%m-%d %H:%M} UTC"
 
 
+def _without_emptied_sections(
+    out: list[tuple[MarkdownUnit | ComponentEntry, str | None]], emptied: set[int]
+) -> list[tuple[MarkdownUnit | ComponentEntry, str | None]]:
+    """``out`` without the sections the layer took every tile out of.
+
+    ``emptied`` holds the positions of sections that lost a tile to the layer.
+    One of them goes when no tile is left before the next section or tab: the
+    report never prints a heading over nothing. A section the dashboard itself
+    left empty stays as it is.
+    """
+    kept = []
+    for i, item in enumerate(out):
+        if i in emptied:
+            j = i + 1
+            while j < len(out):
+                nxt = out[j][0]
+                if isinstance(nxt, ComponentEntry) or nxt.kind in ("section", "tab"):
+                    break
+                j += 1
+            if j >= len(out) or not isinstance(out[j][0], ComponentEntry):
+                continue
+        kept.append(item)
+    return kept
+
+
 class NotebookBuilder:
     def __init__(self, plan: ExportPlan) -> None:
         self.plan = plan
@@ -816,10 +841,16 @@ class NotebookBuilder:
             return self._entries
         out: list[tuple[MarkdownUnit | ComponentEntry, str | None]] = []
         current_tab: str | None = None
+        # Sections the layer took a tile out of, by their place in `out`.
+        section_at: int | None = None
+        emptied: set[int] = set()
         for unit in ordered_units(self.plan.tabs):
             if isinstance(unit, MarkdownUnit):
                 if unit.kind == "tab":
                     current_tab = unit.text
+                    section_at = None
+                elif unit.kind == "section":
+                    section_at = len(out)
                 out.append((unit, current_tab))
                 continue
             highlight: dict[str, Any] | None = None
@@ -864,6 +895,8 @@ class NotebookBuilder:
                 # The layer left the tile out of the report: it goes from the
                 # reading order entirely, so the preflight lists what the
                 # export will contain, and nothing else does.
+                if section_at is not None:
+                    emptied.add(section_at)
                 continue
             out.append(
                 (
@@ -873,8 +906,8 @@ class NotebookBuilder:
                     current_tab,
                 )
             )
-        self._entries = out
-        return out
+        self._entries = _without_emptied_sections(out, emptied)
+        return self._entries
 
     def _highlight_source(self, meta: dict[str, Any]) -> ComponentUnit | None:
         """The figure a highlight shows, on the tab it lives on (``highlightTile.ts``).

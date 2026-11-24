@@ -83,21 +83,35 @@
   // A tile's caption: the marked span in the tile's float, never one nested
   // in another tile (a card strip has no caption of its own).
   function captionOf(host) {
-    var parent = host.parentNode;
-    if (!parent || !parent.querySelector) return null;
-    var cap = parent.querySelector(CAPTION_SEL);
+    // The tile's own float only: a prose tile or a bare figure has none, and
+    // a caption found next to it belongs to another tile.
+    var fl = floatOf(host);
+    var cap = fl ? fl.querySelector(CAPTION_SEL) : null;
     return cap && !cap.closest(TILE_SEL) ? cap : null;
   }
 
-  // The element to move or hide for a tile: its float (the figure/table div
-  // holding the caption), the grid cell when it has no caption, the host
-  // itself otherwise (a card strip, a bare tile).
+  // The outermost Quarto float (`div.quarto-float` > `figure.quarto-float`)
+  // around a tile, or null.
+  function floatOf(host) {
+    var fl = host.closest('.quarto-float');
+    while (fl && fl.parentElement && fl.parentElement.classList.contains('quarto-float')) {
+      fl = fl.parentElement;
+    }
+    return fl;
+  }
+
+  // The element to move or hide for a tile: its float (figure or table,
+  // caption included), or the tile itself; the grid cell around either when
+  // the cell holds that tile alone.
   function blockOf(host) {
-    var cap = captionOf(host);
-    if (!cap) return host.closest('.quarto-layout-cell') || host;
-    var el = host.parentNode;
-    while (el && !el.contains(cap)) el = el.parentNode;
-    return el || host;
+    var block = floatOf(host) || host;
+    var cell = block.closest('.quarto-layout-cell');
+    if (!cell) return block;
+    var others = cell.querySelectorAll(TILE_SEL);
+    for (var i = 0; i < others.length; i++) {
+      if (others[i] !== host && !host.contains(others[i]) && !others[i].contains(host)) return block;
+    }
+    return cell;
   }
 
   // The "About this component" callout that follows a tile, if any: Quarto
@@ -178,7 +192,9 @@
     homes.forEach(function (kids, container) {
       forEach(kids, function (child) { if (child.isConnected) container.appendChild(child); });
     });
-    forEach(document.querySelectorAll(TILE_SEL), function (host) { blockOf(host).style.display = ''; });
+    forEach(hiddenEls, function (el, i) { el.style.display = hiddenWas[i]; });
+    forEach(renumbered, function (r) { r[0].nodeValue = r[1]; });
+    hiddenEls = []; hiddenWas = []; hiddenHosts = []; renumbered = [];
     forEach(document.querySelectorAll('[' + STRIP_ATTR + ']'), function (h) { h.removeAttribute(STRIP_ATTR); });
     if (stripStyle) stripStyle.textContent = '';
     if (focusBlock) { focusBlock.style.outline = ''; focusBlock.style.outlineOffset = ''; focusBlock = null; }
@@ -287,8 +303,12 @@
         if (c) cfgs.push(c);
         if (c && c.in_report === false) out.push(i);
       });
-      if (out.length === refs.length) blockOf(host).style.display = 'none';
-      else if (out.length) hideCards(host, out);
+      if (out.length === refs.length) {
+        var block = blockOf(host);
+        hide(block);
+        hide(companionOf(block));
+        hiddenHosts.push(host);
+      } else if (out.length) hideCards(host, out);
       decorate(host, cfgs);
       setCaption(host, cfgs);
       var target = sectionTarget(host, cfgs[0]), moved = target ? blockOf(host) : null;
@@ -299,6 +319,69 @@
       }
     });
     reorderTiles(byRef);
+    hideEmptySections();
+    renumberFloats();
+  }
+
+  // Elements the patch hid, shown again by `restore`.
+  var hiddenEls = [], hiddenWas = [], hiddenHosts = [], renumbered = [];
+  function hide(el) {
+    if (!el || hiddenEls.indexOf(el) >= 0) return;
+    hiddenEls.push(el);
+    hiddenWas.push(el.style.display);
+    el.style.display = 'none';
+  }
+
+  // A section every tile of which is out of the report goes with them,
+  // heading included, as in the export. Decided on the patch's own record,
+  // not on layout: a folded tab lays nothing out.
+  function hideEmptySections() {
+    forEach(document.querySelectorAll(SECTION_SEL), function (sec) {
+      var hosts = sec.querySelectorAll(TILE_SEL);
+      if (!hosts.length) return;
+      for (var i = 0; i < hosts.length; i++) {
+        if (hiddenHosts.indexOf(hosts[i]) < 0) return;
+      }
+      hide(sec);
+    });
+  }
+
+  // Hidden by the patch, not folded: a folded tab is still in the report.
+  function isHidden(el) {
+    for (var x = el; x && x !== document.body; x = x.parentElement) {
+      if (hiddenEls.indexOf(x) >= 0) return true;
+    }
+    return false;
+  }
+
+  // Figures and tables numbered again over what the report still holds, as
+  // the export numbers them, and the text's references to them with them.
+  var FLOAT_NUMBER = /^(\s*(?:Figure|Table)[\s\u00a0]+)(\d+)/;
+  function renumberFloats() {
+    var counts = {}, byId = {};
+    forEach(document.querySelectorAll('figcaption'), function (cap) {
+      var node = cap.firstChild;
+      while (node && node.nodeType !== 3) node = node.firstChild;
+      if (!node || !FLOAT_NUMBER.test(node.nodeValue)) return;
+      if (isHidden(cap)) return;
+      var kind = /Table/.test(node.nodeValue) ? 'tbl' : 'fig';
+      counts[kind] = (counts[kind] || 0) + 1;
+      var n = String(counts[kind]), m = node.nodeValue.match(FLOAT_NUMBER);
+      var fl = cap.closest('.quarto-float[id]') || floatOf(cap);
+      if (fl && fl.id) byId[fl.id] = n;
+      if (m[2] === n) return;
+      renumbered.push([node, node.nodeValue]);
+      node.nodeValue = m[1] + n + node.nodeValue.slice(m[0].length);
+    });
+    forEach(document.querySelectorAll('a.quarto-xref[href^="#"]'), function (a) {
+      var n = byId[a.getAttribute('href').slice(1)], node = a.lastChild;
+      while (node && node.nodeType !== 3) node = node.lastChild;
+      if (!n || !node || !/\d+\s*$/.test(node.nodeValue)) return;
+      var value = node.nodeValue.replace(/\d+(\s*)$/, n + '$1');
+      if (value === node.nodeValue) return;
+      renumbered.push([node, node.nodeValue]);
+      node.nodeValue = value;
+    });
   }
 
   function decorate(host, cfgs) {

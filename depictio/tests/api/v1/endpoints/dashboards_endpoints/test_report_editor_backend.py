@@ -293,6 +293,8 @@ def test_the_outline_lists_an_excluded_tile_with_its_real_settings(ctx) -> None:
     assert fig1.caption == "The tiles' own caption."
     assert fig1.component_type == "figure"
     assert fig2.orientation == "auto" and fig2.order is None
+    # Each tile names the section it sits under, so the editor can group them.
+    assert fig1.section == fig2.section == "Overview"
 
 
 def test_cover_defaults_are_the_dashboard_and_project_ones(ctx) -> None:
