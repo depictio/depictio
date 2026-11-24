@@ -528,3 +528,8 @@ button.cp-type-tag[data-active] b { color: var(--mantine-color-text); }
 .cp-facets .mantine-MultiSelect-pillsList { flex: 1; }
 /* Mantine colours an option's svgs (its check mark); a tag keeps its own ink. */
 .mantine-MultiSelect-option .cp-type-tag svg { color: var(--tag-ink) !important; width: 13px !important; height: 13px !important; display: block !important; opacity: 1 !important; position: static !important; transform: none !important; margin: 0 !important; }
+/* The switch's kinds: one framed block each, on Paper the hairline and well. */
+:root[data-chrome='glass'] .cp-out .cp-switch .cp-switch-group {
+  border-color: var(--gl-hair) !important;
+  background: var(--gl-well);
+}

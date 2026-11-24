@@ -570,27 +570,45 @@ const OutputView: React.FC<{
       {/* Render switcher */}
       <Group
         px={pane ? 'md' : 'lg'}
-        py={6}
-        gap={4}
+        py={8}
+        gap="sm"
         wrap="wrap"
+        align="stretch"
         className="cp-switch"
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
-        {groupRenders(renders.map((m) => String(m.component_type))).map((group, gi, groups) => (
-          <React.Fragment key={group.key}>
-            {groups.length > 1 ? (
-              <Text
-                component="span"
-                size="xs"
-                c="dimmed"
-                fw={500}
-                className="cp-switch-group"
-                ml={gi === 0 ? 0 : 'xs'}
-                mr={2}
-              >
-                {group.label}
+        {groupRenders(renders.map((m) => String(m.component_type))).map((group) => (
+          // One framed block per kind, its name above its pills: plots, cards,
+          // filters and tables read as separate families, not one long row.
+          <Stack
+            key={group.key}
+            gap={2}
+            px={6}
+            pt={2}
+            pb={4}
+            className="cp-switch-group"
+            data-group={group.key}
+            style={{
+              border: '1px solid var(--mantine-color-default-border)',
+              borderRadius: 'var(--mantine-radius-md)',
+            }}
+          >
+            <Text
+              component="span"
+              fz={10}
+              fw={700}
+              tt="uppercase"
+              c="dimmed"
+              px={4}
+              className="cp-switch-group-label"
+              style={{ letterSpacing: '0.06em' }}
+            >
+              {group.label}
+              <Text component="span" fz={10} fw={500} c="dimmed" ml={4}>
+                {group.indices.length}
               </Text>
-            ) : null}
+            </Text>
+            <Group gap={4} wrap="wrap">
             {group.indices.map((i) => {
               const m = renders[i];
               const meta = metaFor(m.component_type);
@@ -625,7 +643,8 @@ const OutputView: React.FC<{
                 </Button>
               );
             })}
-          </React.Fragment>
+            </Group>
+          </Stack>
         ))}
       </Group>
 
