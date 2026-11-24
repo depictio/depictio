@@ -17,7 +17,7 @@ import {
 } from '../src/catalog-preview/siteTree';
 import { BUMP_COLOR, fetchJsonCached } from '../src/catalog-preview/siteData';
 import { diffLines, diffRenders, foldUnchanged } from '../src/catalog-preview/lineDiff';
-import { firstRender, groupRenders } from '../src/catalog-preview/renderGroups';
+import { firstRender, groupRenders, renderButtonLabel } from '../src/catalog-preview/renderGroups';
 
 let failures = 0;
 function check(label, got, want) {
@@ -155,6 +155,10 @@ console.log('N. Render switcher groups');
   check('opens on the first plot', firstRender(types), 2);
   check('no plot: opens on the first render', firstRender(['card', 'table']), 0);
   check('no render', firstRender([]), 0);
+  check('one icon per kind', groupRenders(['figure', 'card']).map((g) => g.icon), ['tabler:chart-bar', 'tabler:number']);
+  check('a render is named by its title', renderButtonLabel('Cells per cluster', 'bar'), 'Cells per cluster');
+  check('no title: the kind', renderButtonLabel('', 'median'), 'median');
+  check('a long title is cut', renderButtonLabel('x'.repeat(50), 'bar').length, 36);
 }
 
 console.log();

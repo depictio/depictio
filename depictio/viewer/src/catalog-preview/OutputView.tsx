@@ -28,6 +28,7 @@ import {
   Popover,
   Stack,
   Switch,
+  Tabs,
   Text,
   ThemeIcon,
   Title,
@@ -61,7 +62,7 @@ import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 import CatalogHeader from './CatalogHeader';
 import { figureHasMarks, setPreviewMarks, usePreviewMarks } from '../offline/previewMarks';
 import VersionChip from './VersionChip';
-import { firstRender, groupRenders } from './renderGroups';
+import { firstRender, groupRenders, renderButtonLabel } from './renderGroups';
 
 
 /** The colours the output's figures give a card's breakdown values (`_category_colors`,
@@ -306,6 +307,14 @@ const OutputView: React.FC<{
   const [selectedIdx, setSelectedIdx] = useState(() =>
     firstRender(renders.map((m) => String(m.component_type))),
   );
+  // The render last opened in each kind, so going back to a kind reopens it.
+  const [lastPick, setLastPick] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const g = groupRenders(renders.map((m) => String(m.component_type))).find((x) =>
+      x.indices.includes(selectedIdx),
+    );
+    if (g) setLastPick((prev) => (prev[g.key] === selectedIdx ? prev : { ...prev, [g.key]: selectedIdx }));
+  }, [renders, selectedIdx]);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
   const marksOn = usePreviewMarks();
@@ -381,6 +390,8 @@ const OutputView: React.FC<{
   // "Pick from catalog" panel. The two surfaces render the SAME bundle (the
   // picker iframes this document with `#render_id=`), so showing every render
   // stacked here and one at a time there made one catalog look like two.
+  const groups = groupRenders(renders.map((m) => String(m.component_type)));
+  const activeGroup = groups.find((g) => g.indices.includes(selectedIdx)) ?? groups[0];
   const active = renders[selectedIdx] ?? renders[0];
   const activeHeight =
     ((active as Record<string, unknown> | undefined)?._preview_height as number) ||
@@ -567,86 +578,86 @@ const OutputView: React.FC<{
         </Group>
       </Group>
 
-      {/* Render switcher */}
-      <Group
+      {/* Render switcher, two levels: the kinds (one light icon each), then the
+          chosen kind's renders, named by their title. */}
+      <Box
         px={pane ? 'md' : 'lg'}
-        py={8}
-        gap="sm"
-        wrap="wrap"
-        align="stretch"
         className="cp-switch"
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
-        {groupRenders(renders.map((m) => String(m.component_type))).map((group) => (
-          // One framed block per kind, its name above its pills: plots, cards,
-          // filters and tables read as separate families, not one long row.
-          <Stack
-            key={group.key}
-            gap={2}
-            px={6}
-            pt={2}
-            pb={4}
-            className="cp-switch-group"
-            data-group={group.key}
-            style={{
-              border: '1px solid var(--mantine-color-default-border)',
-              borderRadius: 'var(--mantine-radius-md)',
-            }}
-          >
-            <Text
-              component="span"
-              fz={10}
-              fw={700}
-              tt="uppercase"
-              c="dimmed"
-              px={4}
-              className="cp-switch-group-label"
-              style={{ letterSpacing: '0.06em' }}
-            >
-              {group.label}
-              <Text component="span" fz={10} fw={500} c="dimmed" ml={4}>
-                {group.indices.length}
-              </Text>
-            </Text>
-            <Group gap={4} wrap="wrap">
-            {group.indices.map((i) => {
+        <Tabs
+          value={activeGroup?.key ?? null}
+          onChange={(key) => {
+            const g = groups.find((x) => x.key === key);
+            if (g) setSelectedIdx(lastPick[g.key] ?? g.indices[0]);
+          }}
+          variant="default"
+          color={paper ? tone : CATALOG_ACCENT}
+          className="cp-kinds"
+        >
+          <Tabs.List style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
+            {groups.map((g) => (
+              <Tabs.Tab
+                key={g.key}
+                value={g.key}
+                leftSection={<Icon icon={g.icon} width={15} />}
+                // A kind with one render opens it directly: no second row to pick from.
+                data-render-index={g.indices.length === 1 ? g.indices[0] : undefined}
+                data-render-kind={
+                  g.indices.length === 1
+                    ? ((renders[g.indices[0]] as Record<string, unknown>)._variant as string) ||
+                      metaFor(renders[g.indices[0]].component_type).name
+                    : undefined
+                }
+                rightSection={
+                  <Text component="span" fz="xs" c="dimmed">
+                    {g.indices.length}
+                  </Text>
+                }
+              >
+                {g.label}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs>
+        {activeGroup && activeGroup.indices.length > 1 ? (
+          <Group gap={6} wrap="wrap" py={8} className="cp-renders">
+            {activeGroup.indices.map((i) => {
               const m = renders[i];
-              const meta = metaFor(m.component_type);
               const rec = m as Record<string, unknown>;
-              const variantLabel = (rec._variant as string) || meta.name;
+              const kind = (rec._variant as string) || metaFor(m.component_type).name;
+              const title = typeof rec.title === 'string' ? rec.title : '';
+              const label = renderButtonLabel(title, kind);
               const isActive = i === selectedIdx;
               return (
-                <Button
+                <Tooltip
                   key={m.index}
-                  size="xs"
-                  variant={isActive ? 'light' : 'subtle'}
-                  // Paper: one neutral row of pills, the open render lit with the
-                  // accent; the type keeps its hue on its icon only.
-                  color={paper ? (isActive ? tone : 'gray') : meta.color}
-                  radius={paper ? 'xl' : undefined}
-                  data-active={isActive || undefined}
-                  data-render-index={i}
-                  leftSection={
-                    <Icon
-                      icon={meta.icon}
-                      width={13}
-                      color={paper ? `var(--mantine-color-${meta.color}-6)` : undefined}
-                    />
-                  }
-                  onClick={() => setSelectedIdx(i)}
-                  styles={{
-                    root: { fontWeight: isActive ? 600 : 400, flexShrink: 0 },
-                    label: { lineHeight: 1.5, overflow: 'visible' },
-                  }}
+                  label={title ? `${title} (${kind})` : kind}
+                  openDelay={400}
+                  withArrow
                 >
-                  {variantLabel}
-                </Button>
+                  <Button
+                    size="xs"
+                    radius="xl"
+                    variant={isActive ? 'light' : 'subtle'}
+                    color={isActive ? (paper ? tone : CATALOG_ACCENT) : 'gray'}
+                    data-active={isActive || undefined}
+                    data-render-index={i}
+                    data-render-kind={kind}
+                    onClick={() => setSelectedIdx(i)}
+                    styles={{
+                      root: { fontWeight: isActive ? 600 : 450, flexShrink: 0 },
+                      label: { lineHeight: 1.5, overflow: 'visible' },
+                    }}
+                  >
+                    {label}
+                  </Button>
+                </Tooltip>
               );
             })}
-            </Group>
-          </Stack>
-        ))}
-      </Group>
+          </Group>
+        ) : null}
+      </Box>
 
       {/* Preview */}
       <Box

@@ -195,7 +195,7 @@
 /* The render switch: one row of pills. */
 :root[data-chrome='glass'] .cp-out .cp-switch {
   gap: 6px !important;
-  padding: 10px 16px !important;
+  padding: 2px 16px 0 !important;
   border-color: var(--gl-hair) !important;
 }
 :root[data-chrome='glass'] .cp-out .cp-switch .mantine-Button-root {
@@ -528,8 +528,14 @@ button.cp-type-tag[data-active] b { color: var(--mantine-color-text); }
 .cp-facets .mantine-MultiSelect-pillsList { flex: 1; }
 /* Mantine colours an option's svgs (its check mark); a tag keeps its own ink. */
 .mantine-MultiSelect-option .cp-type-tag svg { color: var(--tag-ink) !important; width: 13px !important; height: 13px !important; display: block !important; opacity: 1 !important; position: static !important; transform: none !important; margin: 0 !important; }
-/* The switch's kinds: one framed block each, on Paper the hairline and well. */
-:root[data-chrome='glass'] .cp-out .cp-switch .cp-switch-group {
-  border-color: var(--gl-hair) !important;
-  background: var(--gl-well);
+/* The switch's kinds: an underlined tab row on the hairline. */
+:root[data-chrome='glass'] .cp-out .cp-switch .cp-kinds .mantine-Tabs-list::before {
+  border-color: var(--gl-hair);
+}
+:root[data-chrome='glass'] .cp-out .cp-switch .cp-kinds .mantine-Tabs-tab {
+  color: var(--gl-muted);
+  font-weight: 550;
+}
+:root[data-chrome='glass'] .cp-out .cp-switch .cp-kinds .mantine-Tabs-tab[data-active] {
+  color: var(--gl-accent-fg);
 }
