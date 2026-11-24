@@ -478,3 +478,39 @@ def test_a_marked_figure_ships_the_patch_that_takes_its_marks_off() -> None:
     assert marked, "no figure of this output carries marks"
     for f in marked:
         assert f["marks_off"]["data"] or f["marks_off"]["layout"]
+
+
+def test_a_bar_preview_draws_one_bar_per_group_as_a_dashboard_does() -> None:
+    """px.bar stacks one segment per row; a dashboard tile sums per group first.
+
+    The preview handed raw fixture rows to px, so a bar per cluster over six
+    samples' rows drew fourteen white-ruled slivers per bar, a chart no
+    dashboard shows. Every bar render now goes through the dashboard's
+    aggregation: within a trace, no category appears twice.
+    """
+    from depictio.catalog.payload import _figure_payload, _load_fixture_df
+
+    checked = 0
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            for render in output.renders_as:
+                if render.component != "figure" or render.visu_type != "bar" or render.code:
+                    continue
+                figure = _figure_payload(_load_fixture_df(output), render)["figure"]
+                for trace in figure["data"]:
+                    horizontal = trace.get("orientation") == "h"
+                    cats = trace.get("y" if horizontal else "x")
+                    if isinstance(cats, list):
+                        assert len(cats) == len(set(cats)), (output.id, trace.get("name"))
+                checked += 1
+    assert checked > 30
+
+
+def test_a_coverage_track_gets_the_category_it_colours_by() -> None:
+    """`color_by: category` over A/B compartments drew one hue: the payload
+    dropped the category role, so the renderer had nothing to colour by."""
+    output = _get_output("cooltools_eigenvector")
+    payload = build_payload(output, "light")
+    [result] = [v for v in payload["data"]["compute"].values() if "summary" in v]
+    assert result["columns"]["category"] == "compartment"
+    assert set(result["rows"]["compartment"]) - {None} == {"A", "B"}

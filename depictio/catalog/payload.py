@@ -125,6 +125,26 @@ def _palette_defaults(theme: str = "light"):
         px.defaults.color_discrete_sequence, px.defaults.color_continuous_scale = saved
 
 
+def _aggregated_figure(df, render, theme: str):
+    """The figure a dashboard tile draws for this render, when it reduces the rows.
+
+    A dashboard reduces a bar, box, histogram or density before plotting (one bar
+    per group, not one stacked segment per row), through ``plan_aggregation``. A
+    preview that handed the raw fixture to px drew each bar as a stack of thin
+    segments split by white lines, a chart no dashboard shows. ``None`` when the
+    render is not one the dashboard reduces, as there.
+    """
+    from depictio.api.v1.services.figure.aggregate import (
+        build_aggregated_figure,
+        plan_aggregation,
+    )
+
+    plan = plan_aggregation(render.visu_type or "", render.dict_kwargs or {})
+    if plan is None:
+        return None
+    return build_aggregated_figure(df.lazy(), plan, _normalise_theme(theme))
+
+
 def _figure_payload(df, render, theme: str = "light") -> dict[str, Any]:
     import plotly.express as px
     import plotly.graph_objects as go  # noqa: F401 — exposed to catalog code
@@ -155,7 +175,7 @@ def _figure_payload(df, render, theme: str = "light") -> dict[str, Any]:
         if fn is None:
             raise CatalogPayloadError(f"unknown plotly-express visu_type {render.visu_type!r}")
         with _palette_defaults(theme):
-            fig = fn(df.to_pandas(), **render.dict_kwargs)
+            fig = _aggregated_figure(df, render, theme) or fn(df.to_pandas(), **render.dict_kwargs)
         if render.reference_lines:
             # The server builder's own helpers: a `stat` line is placed on the
             # whole fixture, the preview's rows on show, and named as such.
@@ -445,6 +465,9 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
             )
     sample_col = "sample" if "sample" in df.columns else None
     end_col = "end" if "end" in df.columns else None
+    # The region class a track colours by (`color_by: category`): A/B
+    # compartments, a CNV call. Dropping it drew every track in one hue.
+    category_col = roles.get("category") if roles.get("category") in df.columns else None
 
     config: dict[str, Any] = {
         "viz_kind": "coverage_track",
@@ -456,9 +479,11 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
         config["sample_col"] = sample_col
     if end_col:
         config["end_col"] = end_col
+    if category_col:
+        config["category_col"] = category_col
     config.update(getattr(render, "config", None) or {})
 
-    proj = [c for c in dict.fromkeys([chrom, pos, val, end_col, sample_col]) if c]
+    proj = [c for c in dict.fromkeys([chrom, pos, val, end_col, sample_col, category_col]) if c]
     result = {
         "rows": {c: df[c].to_list() for c in proj},
         "columns": {
@@ -467,7 +492,7 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
             "value": val,
             "end": end_col,
             "sample": sample_col,
-            "category": None,
+            "category": category_col,
         },
         "summary": {
             "row_count": df.height,

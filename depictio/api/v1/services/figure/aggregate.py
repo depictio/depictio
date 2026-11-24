@@ -122,6 +122,8 @@ _JSON_STYLE_KEYS = frozenset(
 # Default bin counts when the user didn't pick one. px lets Plotly choose in the
 # browser; we must choose server-side because we're the one binning.
 _DEFAULT_NBINS = 40
+#: Fewest bins an automatic histogram of a small table gets.
+_MIN_AUTO_NBINS = 5
 _DEFAULT_NBINS_2D = 60
 
 # Upper bound on distinct groups an exact reduction may produce. A group-by on an
@@ -581,7 +583,9 @@ def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> 
         pl.len().alias("_n"),
     ]
     base = (
-        scan.group_by(keys).agg(base_exprs).collect() if keys else scan.select(base_exprs).collect()
+        scan.group_by(keys, maintain_order=True).agg(base_exprs).collect()
+        if keys
+        else scan.select(base_exprs).collect()
     )
     if base.height == 0:
         return None
@@ -616,7 +620,7 @@ def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> 
 
     if quartiles is None:
         quartiles = (
-            scan.group_by(keys).agg(quartile_exprs).collect()
+            scan.group_by(keys, maintain_order=True).agg(quartile_exprs).collect()
             if keys
             else scan.select(quartile_exprs).collect()
         )
@@ -690,8 +694,8 @@ def _build_histogram(
     """
     x = plan.x
     assert x is not None
-    nbins = int(plan.style.get("nbins") or plan.style.get("nbinsx") or _DEFAULT_NBINS)
-    nbins = max(1, min(nbins, 1000))
+    chosen = plan.style.get("nbins") or plan.style.get("nbinsx")
+    nbins = max(1, min(int(chosen or _DEFAULT_NBINS), 1000))
     log_x = bool(plan.style.get("log_x"))
 
     if log_x:
@@ -704,6 +708,11 @@ def _build_histogram(
     lo, hi, total = bounds["lo"][0], bounds["hi"][0], bounds["n"][0]
     if lo is None or hi is None or total == 0:
         return None
+    if not chosen:
+        # Forty bins over fifteen values is a comb of one-count spikes with gaps
+        # between them, not a distribution: a small table gets about sqrt(n)
+        # bins, at least five, as Plotly's own automatic binning would give it.
+        nbins = min(_DEFAULT_NBINS, max(_MIN_AUTO_NBINS, math.ceil(math.sqrt(total))))
     if hi == lo:
         # Degenerate: a single value. One bin, width 1, centred on it.
         lo, hi = lo - 0.5, hi + 0.5
@@ -714,10 +723,10 @@ def _build_histogram(
         scan.with_columns(
             ((binned - lo) / width).floor().cast(pl.Int64).clip(0, nbins - 1).alias("_bin")
         )
-        .group_by(keys)
+        .group_by(keys, maintain_order=True)
         .agg(pl.len().alias("_count"))
         .collect()
-        .sort("_bin")
+        .sort("_bin", maintain_order=True)
     )
     if counts.height == 0:
         return None
@@ -848,8 +857,14 @@ def _build_groupby(
     keys = plan.group_keys
     if not keys:
         return None
+    if plan.y and plan.y in keys:
+        # Bars coloured by their own value (``color=y``): there is no sum to take
+        # over a key, so px draws the rows as they are.
+        return None
     agg = pl.col(plan.y).sum().alias(plan.y) if plan.y else pl.len().alias("count")
-    frame = scan.group_by(keys).agg(agg).collect()
+    # In first-seen order, as px orders the raw rows: a hash group-by hands the
+    # groups back in a different order on every run, and with them the traces.
+    frame = scan.group_by(keys, maintain_order=True).agg(agg).collect()
     if frame.height == 0:
         return None
     if frame.height > _MAX_GROUPS:
