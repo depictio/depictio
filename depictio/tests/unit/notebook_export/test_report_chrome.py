@@ -92,19 +92,19 @@ def test_a_full_width_tile_leaves_its_row(ampliseq_tabs):
     src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=layer)))
     # That row is gone (other tabs keep their own 5:3 rows), its tiles stay.
     assert src.count('layout="[5,3]"') == before.count('layout="[5,3]"') - 1
-    about, own = src.index("About this dashboard"), src.index("'ov-run'")
-    assert about < own
-    assert 'layout="[5,3]"' not in src[about:own]
+    study, own = src.index("The study"), src.index("'ov-run'")
+    assert study < own
+    assert 'layout="[5,3]"' not in src[study:own]
 
 
 def test_the_overview_keeps_its_grid_rows(ampliseq_tabs):
-    """About + The run share a row 5:3 as on the dashboard (the report in the
-    dashboard's rows); the steps are a stepper."""
+    """The study + The run share a row 5:3 as on the dashboard (the report in
+    the dashboard's rows); the steps are a stepper."""
     src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=ReportLayer.model_validate(_ROWS))))
     # Quarto's own layout: a flex row on the page, a typst grid in the PDF.
     assert '::: {.dpx-grid layout="[5,3]"}' in src
     grid = src.index('layout="[5,3]"')
-    assert src.index("About this dashboard") > grid
+    assert src.index("The study") > grid
     assert src.index("'ov-run'") > grid
     # Both are card surfaces, as `surface: card` draws them.
     assert src.count("{.dpx-cell .dpx-surface-card") >= 3
@@ -1002,11 +1002,7 @@ def test_a_tile_can_keep_its_dashboard_row(ampliseq_tabs):
     main = next(
         t for t in ampliseq_tabs for m in t["stored_metadata"] if m.get("index") == "ov-run"
     )
-    row = [
-        m["index"]
-        for m in main["stored_metadata"]
-        if m.get("index") in ("ov-run", "ov-about") or m.get("title") == "About this dashboard"
-    ]
+    row = [m["index"] for m in main["stored_metadata"] if m.get("index") in ("ov-run", "ov-study")]
     layer = ReportLayer.model_validate(
         {
             "tiles": [
