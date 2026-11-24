@@ -37,6 +37,13 @@ body table:not(.dpx-plain) td { border-bottom: 1px solid #f1f3f5; }
 }
 .dpx-folded > .dpx-chev, .dpx-folded > a > .dpx-chev { transform: rotate(-90deg); }
 #TOC .dpx-chev { cursor: pointer; }
+/* The contents' fold control: a chevron with room to be clicked. */
+#TOC .dpx-toc-chev {
+  display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px;
+  margin-inline-end: .3em; vertical-align: -2px; font-size: inherit; opacity: .6;
+  border-radius: 4px; transition: transform .15s ease, opacity .12s ease, background-color .12s ease;
+}
+#TOC .dpx-toc-chev:not(.dpx-gap):hover { opacity: 1; background: var(--gl-well, #f1f3f5); }
 /* A branch with nothing under it keeps the slot, so titles stay aligned. */
 #TOC .dpx-gap { visibility: hidden; cursor: default; }
 /* Fold the whole report at once. It rides on the results heading rather than

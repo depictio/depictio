@@ -106,6 +106,19 @@ test.describe("Report editor", () => {
     await expect(page.locator("[data-tile-key]")).not.toHaveCount(0);
     await expect(page.locator("[data-testid^='report-live-']")).not.toHaveCount(0);
 
+    // Each tile leads back to its component: shown in the dashboard, or
+    // opened in the dashboard editor.
+    const card = page.locator("[data-tile-key]").first();
+    const [tabId, componentId] = ((await card.getAttribute("data-tile-key")) ?? "").split(":");
+    await expect(card.locator("[data-testid='report-tile-open']")).toHaveAttribute(
+      "href",
+      `/dashboard/${tabId}?focus=${encodeURIComponent(componentId)}`,
+    );
+    await expect(card.locator("[data-testid='report-tile-edit']")).toHaveAttribute(
+      "href",
+      `/dashboard-edit/${tabId}/component/edit/${encodeURIComponent(componentId)}`,
+    );
+
     // The preview is the rendered report, tiles and all.
     const frame = await livePreview(page);
     await expect(frame.locator(VISIBLE_TILES)).not.toHaveCount(0);

@@ -1,3 +1,5 @@
+import React from 'react';
+
 /**
  * Scroll a dashboard component into view and pulse a highlight on it.
  *
@@ -30,4 +32,30 @@ export function focusComponent(
   if (defer) requestAnimationFrame(() => requestAnimationFrame(run));
   else run();
   return true;
+}
+
+/** The component a link asks the page to show (`?focus=<component id>`, the
+ *  report editor's "Show in the dashboard"): scrolled to and pulsed once it
+ *  is on the page, then dropped from the address so a reload does not repeat
+ *  it. Gives up after `timeoutMs` (a component of another tab, or removed). */
+export function useFocusFromUrl(ready: boolean, timeoutMs = 15000): void {
+  React.useEffect(() => {
+    if (!ready) return;
+    const url = new URL(window.location.href);
+    const target = url.searchParams.get('focus');
+    if (!target) return;
+    const started = Date.now();
+    let timer = 0;
+    const done = () => {
+      url.searchParams.delete('focus');
+      window.history.replaceState(window.history.state, '', url.toString());
+    };
+    const attempt = () => {
+      if (focusComponent(target, { durationMs: 2400 })) return done();
+      if (Date.now() - started > timeoutMs) return done();
+      timer = window.setTimeout(attempt, 300);
+    };
+    attempt();
+    return () => window.clearTimeout(timer);
+  }, [ready]);
 }

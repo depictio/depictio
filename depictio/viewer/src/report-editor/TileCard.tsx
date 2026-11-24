@@ -1,7 +1,9 @@
 import React from 'react';
 import { ActionIcon, Badge, Box, Checkbox, Group, Paper, Popover, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { ExternalLink, Pencil, SlidersHorizontal } from 'lucide-react';
 
+import { STROKE } from '../chrome/variants/glass/icons';
 import type { TileView } from './model';
 import TileThumbnail from './TileThumbnail';
 import { typeVisual } from './visuals';
@@ -35,7 +37,8 @@ function summaryBadges(view: TileView): string[] {
   if (view.orientation === 'landscape') out.push('Landscape');
   if (view.orientation === 'portrait') out.push('Portrait');
   if (view.pageBreakBefore) out.push('Page break');
-  if (view.fullWidth) out.push('Full width');
+  // Full width is the report's default: only a tile kept in its row says so.
+  if (!view.fullWidth && view.entry.component_type !== 'card') out.push('Dashboard row');
   if (view.caption) out.push('Own caption');
   return out;
 }
@@ -142,6 +145,42 @@ const TileCard: React.FC<TileCardProps> = ({
             {b}
           </Badge>
         ))}
+        {/* Where the component lives: shown in the dashboard, or opened in
+            the dashboard editor. A new tab, so the report stays open. */}
+        <Tooltip label="Show in the dashboard" withArrow openDelay={300}>
+          <ActionIcon
+            component="a"
+            href={`/dashboard/${view.tabId}?focus=${encodeURIComponent(view.componentId)}`}
+            target="_blank"
+            rel="noopener"
+            size="sm"
+            variant="subtle"
+            color="gray"
+            style={{ flex: 'none' }}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            aria-label={`Show ${view.entry.title} in the dashboard`}
+            data-testid="report-tile-open"
+          >
+            <ExternalLink size={14} strokeWidth={STROKE} />
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label="Edit the component" withArrow openDelay={300}>
+          <ActionIcon
+            component="a"
+            href={`/dashboard-edit/${view.tabId}/component/edit/${encodeURIComponent(view.componentId)}`}
+            target="_blank"
+            rel="noopener"
+            size="sm"
+            variant="subtle"
+            color="gray"
+            style={{ flex: 'none' }}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            aria-label={`Edit ${view.entry.title}`}
+            data-testid="report-tile-edit"
+          >
+            <Pencil size={14} strokeWidth={STROKE} />
+          </ActionIcon>
+        </Tooltip>
         <Popover
           opened={settingsOpen}
           onChange={onSettingsChange}
@@ -168,7 +207,7 @@ const TileCard: React.FC<TileCardProps> = ({
                 aria-expanded={settingsOpen}
                 data-testid="report-tile-settings"
               >
-                <Icon icon="mdi:tune-variant" width={15} />
+                <SlidersHorizontal size={14} strokeWidth={STROKE} />
               </ActionIcon>
             </Tooltip>
           </Popover.Target>

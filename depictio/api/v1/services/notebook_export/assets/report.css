@@ -61,10 +61,13 @@ body.quarto-dark .dpx-light-only { display: none !important; }
 .dpx-surface-card ul > li > span:first-child { color: var(--gl-muted, #868e96); }
 /* The text tile's header logo, in place of its title. */
 .dpx-hero-logo { height: 72px; width: auto; max-width: 100%; margin: .25rem 0 .5rem; }
-/* The stepper (`::: steps`). */
+/* The stepper (`::: steps`), as the dashboard draws it: one row of equal
+   columns, every step across the tile (a wrapped grid left a row of five
+   over a row of two); down the tile, on a rail, when it is too narrow. */
+.dpx-steps { container: dpx-steps / inline-size; }
 .dpx-steps > ol {
   list-style: none; padding: 0; margin: 1rem 0 .5rem; display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 18px 16px;
+  grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 18px 16px;
 }
 .dpx-steps > ol > li { position: relative; padding: 0; margin: 0; line-height: 1.4; }
 .dpx-step-mark {
@@ -86,6 +89,18 @@ body.quarto-dark .dpx-light-only { display: none !important; }
 .dpx-step-links { font-size: .75rem; white-space: normal; }
 .dpx-step-links a { margin-inline-end: .5em; }
 .dpx-step-text { display: block; font-weight: 600; margin-top: 2px; }
+@container dpx-steps (max-width: 599.98px) {
+  .dpx-steps > ol { grid-auto-flow: row; grid-template-columns: 1fr; gap: 0; }
+  .dpx-steps > ol > li { padding: 0 0 16px 48px; min-height: 34px; }
+  .dpx-steps > ol > li:last-child { padding-bottom: 0; }
+  .dpx-step-mark { position: absolute; left: 0; top: 0; margin: 0; }
+  .dpx-steps > ol > li:not(:last-child) > .dpx-step-mark::after,
+  .dpx-steps > ol > li:not(:last-child) > p > .dpx-step-mark::after { content: none; }
+  .dpx-steps > ol > li:not(:last-child)::before {
+    content: ""; position: absolute; left: 16px; top: 40px; bottom: 6px; width: 2px;
+    background: color-mix(in srgb, var(--dpx-accent, #228be6) 45%, transparent);
+  }
+}
 /* A section's filter bar, as the export saw it. */
 .dpx-filterbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .dpx-filterchip {

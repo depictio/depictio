@@ -209,17 +209,19 @@ body.quarto-dark .dpx-scheme-toggle .dpx-icon-moon {{ display: none; }}
 @media (min-width: 768px) {{
   body #quarto-margin-sidebar {{ top: 64px; max-height: calc(100vh - 72px); }}
 }}
-/* The contents' own control: collapse the list to its title, and back. Wide
-   screens only: under 992px Quarto lays the contents out its own way. */
+/* The contents' own control: collapse the list to its title, and back.
+   Wherever the contents sit in the margin (768px and up, the report
+   editor's preview included); narrower, Quarto folds them into its own
+   menu. */
 #TOC > #toc-title {{ display: flex; align-items: center; gap: 6px; }}
 .dpx-toc-toggle {{ margin-inline-start: auto; width: 26px; height: 26px; border-radius: 8px; }}
 .dpx-toc-toggle svg {{ width: 16px; height: 16px; transition: transform .15s ease; }}
 #TOC.dpx-toc-collapsed .dpx-toc-toggle svg {{ transform: rotate(180deg); }}
-@media (min-width: 992px) {{
+@media (min-width: 768px) {{
   #TOC.dpx-toc-collapsed > ul {{ display: none; }}
   #TOC.dpx-toc-collapsed > #toc-title {{ cursor: pointer; }}
 }}
-@media (max-width: 991.98px) {{ .dpx-toc-toggle {{ display: none; }} }}
+@media (max-width: 767.98px) {{ .dpx-toc-toggle {{ display: none; }} }}
 /* Heading anchors (anchorjs): right after the heading's text, before its
    aside and before the heading's own actions ("Collapse all"), which keep the
    far end of the line. */

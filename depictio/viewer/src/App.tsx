@@ -191,6 +191,7 @@ import ChangesHeaderButton from './changes/ChangesHeaderButton';
 import type { NewsSplit } from './changes/newsSplit';
 import type { BulkComputeOptions } from 'depictio-react-core';
 import { panelsFromGroups } from 'depictio-react-core';
+import { useFocusFromUrl } from './lib/focusComponent';
 
 /**
  * Top-level SPA. Layout:
@@ -217,6 +218,8 @@ const App: React.FC = () => {
   // Bumped by "Try again": the load effect depends on it.
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
+  // `?focus=<component id>`: the report editor's "Show in the dashboard".
+  useFocusFromUrl(!loading && dashboard !== null);
   // Seed synchronously from three sources merged per (index, source) key, in
   // ascending priority: this dashboard's remembered filters (localStorage, when
   // "Remember my filters" is on) -> the cross-tab selection (floating map,

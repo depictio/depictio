@@ -381,6 +381,9 @@
   // The contents list mirrors the document, so it folds the same way. Quarto
   // builds it as plain nested lists; the other two formats have no #TOC and
   // this does nothing there.
+  // A chevron as the app draws one (Lucide's chevron-down), not a glyph: a
+  // "▾" at the contents' small size was too faint to be seen as a control.
+  var TOC_CHEVRON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   function tocFold() {
     var toc = document.getElementById('TOC');
     if (!toc) return;
@@ -392,9 +395,11 @@
       if (!link) continue;
       var sub = li.querySelector(':scope > ul');
       var chev = document.createElement('span');
-      chev.className = sub ? 'dpx-chev' : 'dpx-chev dpx-gap';
-      chev.textContent = '\u25BE';
+      chev.className = sub ? 'dpx-chev dpx-toc-chev' : 'dpx-chev dpx-toc-chev dpx-gap';
+      chev.innerHTML = TOC_CHEVRON;
       if (sub) {
+        chev.setAttribute('role', 'button');
+        chev.setAttribute('aria-label', 'Fold or unfold this part of the contents');
         chev.addEventListener('click', function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
