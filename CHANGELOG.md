@@ -3,6 +3,47 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.23.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.23.1</summary>
+
+### Changes 📜
+
+#### Bug Fixes 🐛
+
+* fix: close the gaps the review of #1418 found [6ca3452f7]
+
+#### Other Changes 📝
+
+* Bump version: 1.23.0 → 1.23.1 [0f1fa45b0]
+* fix(viewer): a funnel set cut at its limit narrows nothing ([#1418](https://github.com/depictio/depictio/pull/1418)) [86f76d3ee]
+* fix(protein): judge a tile pick against the filters its fetch keeps ([#1418](https://github.com/depictio/depictio/pull/1418)) [d76e22cdc]
+* fix(api): a search past the limit keeps the closest matches ([#1418](https://github.com/depictio/depictio/pull/1418)) [a3fab8958]
+* fix(viewer): find any value of a cut option list, keep picks in scope ([#1418](https://github.com/depictio/depictio/pull/1418)) [6fcb17ede]
+* feat(api): search a column's distinct values on the server ([#1418](https://github.com/depictio/depictio/pull/1418)) [43f155593]
+* fix(cli): leave the dashboards to an ingest of every collection ([#1418](https://github.com/depictio/depictio/pull/1418)) [8278d7516]
+* fix(cli): a tag-scoped ingest no longer records runs in the scan state ([#1418](https://github.com/depictio/depictio/pull/1418)) [43299c454]
+* fix(protein): open the logo on the picked family past 1,000 families ([#1418](https://github.com/depictio/depictio/pull/1418)) [b18a37834]
+* fix(delta): read commit info from deltalake 1.7's history generator ([#1467](https://github.com/depictio/depictio/pull/1467)) [ecb46a142]
+* feat(usage): self-hosted usage statistics replace the legacy analytics ([#1466](https://github.com/depictio/depictio/pull/1466)) [b3ed41785]
+* Update CHANGELOG.md for v1.23.0 [bc3c11de6]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.23.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
