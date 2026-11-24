@@ -61,15 +61,22 @@ class ColumnResolver(Protocol):
 
 _BUILDERS: dict[str, FigureBuilder] = {}
 _COLUMNS: dict[str, ColumnResolver] = {}
+# Kinds whose builder also takes the dashboard's ``category_colors``.
+_WANTS_CATEGORY_COLORS: set[str] = set()
 _BUILDERS_LOADED = False
 
 
-def register(kind: str, *, columns: ColumnResolver) -> Callable[[FigureBuilder], FigureBuilder]:
+def register(
+    kind: str, *, columns: ColumnResolver, category_colors: bool = False
+) -> Callable[[FigureBuilder], FigureBuilder]:
     """Register a builder for ``kind``.
 
     Args:
         kind: Canonical ``viz_kind`` (aliases are resolved before lookup).
         columns: Callable mapping the component config to the DC columns to project.
+        category_colors: The builder takes a ``category_colors`` keyword, the
+            dashboard's ``{column: {value: colour}}``, so a category wears the
+            colour every other tile draws it in (see ``wants_category_colors``).
     """
 
     def decorator(fn: FigureBuilder) -> FigureBuilder:
@@ -77,6 +84,8 @@ def register(kind: str, *, columns: ColumnResolver) -> Callable[[FigureBuilder],
             raise RuntimeError(f"advanced_viz builder for {kind!r} is already registered")
         _BUILDERS[kind] = fn
         _COLUMNS[kind] = columns
+        if category_colors:
+            _WANTS_CATEGORY_COLORS.add(kind)
         return fn
 
     return decorator
@@ -104,6 +113,12 @@ def supported_kinds() -> frozenset[str]:
     return frozenset(_BUILDERS)
 
 
+def wants_category_colors(kind: str) -> bool:
+    """Whether ``kind``'s builder draws in the dashboard's category colours."""
+    _ensure_loaded()
+    return kind in _WANTS_CATEGORY_COLORS
+
+
 def required_columns(kind: str, config: dict[str, Any]) -> list[str]:
     """Columns this kind needs projected from its data collection."""
     _ensure_loaded()
@@ -121,6 +136,7 @@ def build(
     rows: dict[str, list[Any]],
     theme: str = "light",
     controls: dict[str, Any] | None = None,
+    category_colors: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Build a themed ``{data, layout}`` spec for ``kind``.
 
@@ -133,7 +149,10 @@ def build(
         raise HTTPException(status_code=501, detail=f"No Python builder for {kind!r}.")
 
     try:
-        spec = builder(rows=rows, config=config, controls=controls or {}, theme=theme)
+        extra: dict[str, Any] = (
+            {"category_colors": category_colors or {}} if kind in _WANTS_CATEGORY_COLORS else {}
+        )
+        spec = builder(rows=rows, config=config, controls=controls or {}, theme=theme, **extra)
     except HTTPException:
         raise
     except Exception as exc:

@@ -129,3 +129,9 @@ def test_the_bar_table_compiles(tmp_path):
         timeout=120,
     )
     assert run.returncode == 0, run.stderr[-800:]
+
+
+def test_a_static_tile_has_no_space_before_its_punctuation():
+    assert components.html_text('<p>Open the <a href="x">live dashboard</a>.</p>') == (
+        "Open the live dashboard."
+    )

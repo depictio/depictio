@@ -36,6 +36,10 @@ LANDSCAPE_TABLE_COLS = 14
 #: Data columns per block of a split table (the id column comes on top, so a
 #: block is this wide plus one).
 SPLIT_TABLE_COLS = 13
+# Rows a landscape page holds under the table's caption, chips and the note
+# included: a column block is not split across pages, so a taller one left its
+# caption alone on a page and then ran past the foot of the next.
+LANDSCAPE_TABLE_ROWS = 22
 # A token longer than this gets break opportunities, so a sample id or a path
 # wraps inside its column instead of running off the page.
 _LONG_TOKEN = 18
@@ -208,6 +212,7 @@ def table(
                 bars=bars,
             )
         )
+    rows = min(rows, LANDSCAPE_TABLE_ROWS)
     if total_cols <= LANDSCAPE_TABLE_COLS:
         body = _dpx_table(df, rows=rows, chips=chips, text=text, bars=bars)
     else:

@@ -8,6 +8,7 @@ produces the preflight the export modal shows.
 
 from __future__ import annotations
 
+import html as _html
 import pprint
 import re
 from dataclasses import dataclass, field, replace
@@ -97,6 +98,10 @@ _TARGET = r"((?:[^()\n]|\([^()\n]*\))+)"
 _TAB_LINK_RE = re.compile(r"\[([^\]]+)\]\(tab:" + _TARGET + r"\)")
 _PARAMS_LINK_RE = re.compile(r"\[([^\]]+)\]\(params:[^)]*\)")
 _SECTION_LINK_RE = re.compile(r"\[([^\]]+)\]\(section:" + _TARGET + r"\)")
+# A tab map (lists of tab tiles) of up to this many groups is kept on one PDF page.
+TAB_TILE_GROUPS_ON_A_PAGE = 4
+# Any markdown link, read as its label (a section's description in the PDF).
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 _LEGEND_RE = re.compile(r"\{\{legend:([A-Za-z0-9_.-]+)\}\}")
 # A text tile's inline icon, `![](icon:mdi:flask-outline)` (TextRenderer draws it).
 INLINE_ICON_RE = re.compile(r"!\[[^\]]*\]\(icon:([a-z0-9-]+:[a-z0-9-]+)\)")
@@ -3128,11 +3133,14 @@ def card_row(cards):
             # and the two sentences would run into each other there.
             text = "\\\n".join(lines)
             if self.plan.pdf:
-                # The heading is sticky already; its description must be too,
-                # or the two stay alone at the foot of a page the section's
-                # first tile leaves.
+                # The PDF draws it through `dpx-lead` (definitions.typ): kept
+                # with what follows, and moved with its heading onto the
+                # landscape page of a wide first tile.
+                plain = [_MD_LINK_RE.sub(r"\1", line.strip("*")) for line in lines]
+                args = ", ".join(_typst_str(_html.unescape(x)) for x in plain)
                 text = (
-                    f"```{{=typst}}\n#block(sticky: true)[\n```\n\n{text}\n\n```{{=typst}}\n]\n```"
+                    f'::: {{.content-visible when-format="html"}}\n{text}\n:::\n\n'
+                    f"```{{=typst}}\n#dpx-lead(({args},).join(linebreak()))\n```"
                 )
             parts.append(text)
         bar = self._section_filter_bar(unit, tab)
@@ -3373,6 +3381,12 @@ def card_row(cards):
         text = findings_markdown(text, tab_link=self._tab_link, icon_html=self._icon_html)
         text = tab_tiles_markdown(text, tab_link=self._tab_link, icon_html=self._icon_html)
         text = self._inline_icons(self._rewrite_links(text))
+        if self.plan.pdf and 0 < text.count("#dpx-tab-tiles(") <= TAB_TILE_GROUPS_ON_A_PAGE:
+            # A map of the tabs reads whole: its groups are not split between
+            # pages, the last one left alone on the next.
+            text = (
+                "```{=typst}\n#block(breakable: false)[\n```\n\n" + text + "\n\n```{=typst}\n]\n```"
+            )
         legends = {
             f"legend:{c}": self._legend_html(c) for c in dict.fromkeys(_LEGEND_RE.findall(text))
         }

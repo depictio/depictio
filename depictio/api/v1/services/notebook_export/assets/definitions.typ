@@ -92,7 +92,9 @@
 // so the contents still list it), and drawn again above the float as plain
 // styled text: a copy that is not a heading takes no tab page
 // break and no sticky block, either of which would leave a blank page.
-#let dpx-flow = selector(heading).or(figure).or(par).or(table).or(image)
+// No `image`: a heading's own icon is one, placed after the heading, and would
+// read as what follows it (a standalone image is in a par or a figure anyway).
+#let dpx-flow = selector(heading).or(figure).or(par).or(table)
 #let dpx-next(loc) = query(dpx-flow.after(loc)).find(e => e.location() != loc)
 #let dpx-prev(loc) = query(dpx-flow.before(loc)).filter(e => e.location() != loc).last(default: none)
 #let dpx-heading-size = (18pt, 15pt, 12pt, 10.5pt, 9.5pt)
@@ -110,12 +112,32 @@
 // Whether a wide figure did turn its page: the heading before it moves onto
 // that page only then.
 #let dpx-flips(it) = query(<dpx-flip>).any(m => m.value == it.location())
+// A section's description, under its heading. Not a paragraph (a block of
+// inline text with no paragraph break), so the heading's next element is still
+// the section's first tile: when that tile is a wide float, the heading and its
+// description both move onto its landscape page, drawn as nothing here and
+// again above the float. Sticky otherwise, so it keeps with what follows.
+#let dpx-lead-style(body) = text(style: "italic", fill: dpx-ink)[#body]
+#let dpx-lead(body) = {
+  [#metadata(body) <dpx-lead>]
+  context {
+    let next = dpx-next(here())
+    if next != none and dpx-flips(next) { [] } else {
+      block(sticky: true, above: 0.4em, below: 0.9em, dpx-lead-style(body))
+    }
+  }
+}
 #show figure: it => context {
   if not dpx-is-wide(it) or highlight.extent != 0pt { return it }
   let prev = dpx-prev(it.location())
+  let moved = prev != none and prev.func() == heading
+  let lead = if moved {
+    query(selector(<dpx-lead>).after(prev.location()).before(it.location())).last(default: none)
+  }
   page(flipped: true)[
     #metadata(it.location()) <dpx-flip>
-    #if prev != none and prev.func() == heading { dpx-heading-copy(prev) }
+    #if moved { dpx-heading-copy(prev) }
+    #if lead != none { align(left, block(below: 0.9em, dpx-lead-style(lead.value))) }
     #it
   ]
 }

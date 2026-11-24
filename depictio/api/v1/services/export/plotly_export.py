@@ -381,6 +381,7 @@ def _python_advanced_viz_spec(
     access_token: str | None,
     controls: dict[str, Any] | None = None,
     theme: str = "light",
+    category_colors: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Build an advanced-viz figure from its registered Python builder(s).
 
@@ -392,6 +393,9 @@ def _python_advanced_viz_spec(
     The view decides the builder (``services/advanced_viz/views.py``): a
     ``volcano`` on its MA view is drawn by the MA builder, and a ``pr_benchmark``
     on ``both`` by two builders whose traces are overlaid.
+
+    ``category_colors`` is the dashboard's ``{column: {value: colour}}``; only a
+    builder registered for it (a stacked taxonomy) is handed it.
     """
     from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
     from depictio.api.v1.services.advanced_viz.figure_registry import build, required_columns
@@ -431,6 +435,7 @@ def _python_advanced_viz_spec(
             rows=tidy["rows"],
             theme=theme,
             controls=plan.controls.get(name, {}),
+            category_colors=category_colors,
         )
         spec["data"].extend(part.get("data") or [])
         if position == 0:
@@ -516,7 +521,14 @@ async def build_plotly_export(
                 spec = _with_upset_set_colors(colors or {}, component, spec)
         else:
             spec = _python_advanced_viz_spec(
-                component, filter_metadata, current_user, access_token, controls, theme
+                component,
+                filter_metadata,
+                current_user,
+                access_token,
+                controls,
+                theme,
+                # The dashboard's colours reach the builders that draw in them.
+                category_colors=_dashboard_category_colors(dashboard_id),
             )
     else:  # pragma: no cover - guarded by the formats_for check above
         raise ExportUnsupported(

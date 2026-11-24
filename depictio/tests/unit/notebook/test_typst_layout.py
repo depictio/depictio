@@ -17,6 +17,7 @@ import polars as pl
 
 from depictio.notebook.typst import (
     LANDSCAPE_TABLE_COLS,
+    LANDSCAPE_TABLE_ROWS,
     SPLIT_TABLE_COLS,
     TABLE_COLS,
     figure,
@@ -24,6 +25,8 @@ from depictio.notebook.typst import (
 )
 
 _ROWS_NOTE = "Showing 30 of 40 rows; the HTML report has the whole table."
+# A landscape page holds fewer rows (a column block is never split across pages).
+_LANDSCAPE_NOTE = f"Showing {LANDSCAPE_TABLE_ROWS} of 40 rows; the HTML report has the whole table."
 
 
 def _inner(raw_block: str) -> str:
@@ -96,9 +99,9 @@ def test_ten_columns_take_one_landscape_block():
     assert out.count("#dpx-table(") == 1
     # All ten columns are on the page: the last number and text column's
     # values (a header breaks at its separators, so a cell value reads cleaner).
-    assert '"3,029"' in out and '"v4"' in out
+    assert f'"{3000 + LANDSCAPE_TABLE_ROWS - 1:,}"' in out and '"v4"' in out
     assert "Columns " not in out
-    assert f'"{_ROWS_NOTE}"' in out
+    assert f'"{_LANDSCAPE_NOTE}"' in out
 
 
 def test_twenty_eight_columns_split_with_the_id_column_repeated():
@@ -110,9 +113,11 @@ def test_twenty_eight_columns_split_with_the_id_column_repeated():
     # Every block carries the id column: its own in the first, repeated after.
     assert out.count('"id"') == blocks
     # Each block says which of the 28 columns it holds, then the row count.
-    assert f'"Columns 1-{SPLIT_TABLE_COLS} of 28 · {_ROWS_NOTE}"' in out
-    assert f'"Columns {SPLIT_TABLE_COLS + 1}-{2 * SPLIT_TABLE_COLS} of 28 · {_ROWS_NOTE}"' in out
-    assert f'"Columns 27-28 of 28 · {_ROWS_NOTE}"' in out
+    assert f'"Columns 1-{SPLIT_TABLE_COLS} of 28 · {_LANDSCAPE_NOTE}"' in out
+    assert (
+        f'"Columns {SPLIT_TABLE_COLS + 1}-{2 * SPLIT_TABLE_COLS} of 28 · {_LANDSCAPE_NOTE}"' in out
+    )
+    assert f'"Columns 27-28 of 28 · {_LANDSCAPE_NOTE}"' in out
 
 
 def test_fifteen_columns_split_into_two_blocks():

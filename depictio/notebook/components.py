@@ -334,7 +334,12 @@ _TAG_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.S | re.I)
 def html_text(markup: str) -> str:
     """Markup as one line of its text: what a static page keeps of an HTML-only tile."""
     text = _html.unescape(_TAG_RE.sub(" ", markup or ""))
-    return " ".join(text.split())
+    # A closing tag before punctuation ("<a>live dashboard</a>.") leaves no
+    # space before it in the text.
+    return _SPACE_BEFORE_PUNCT_RE.sub(r"\1", " ".join(text.split()))
+
+
+_SPACE_BEFORE_PUNCT_RE = re.compile(r" ([.,;:!?)])")
 
 
 def table_markdown(df: pl.DataFrame, limit: int = STATIC_TABLE_ROWS) -> str:

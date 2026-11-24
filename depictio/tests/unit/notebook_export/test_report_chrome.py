@@ -27,6 +27,7 @@ from depictio.api.v1.services.notebook_export.report_chrome import (
 )
 from depictio.models.models.analysis_state import AnalysisState
 from depictio.models.models.report_layer import ReportLayer
+from depictio.notebook.typst import LANDSCAPE_TABLE_ROWS
 
 LOGO = "data:image/png;base64,iVBORw0KGgo="
 MARK = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
@@ -769,7 +770,7 @@ def test_the_table_builder():
     # 12 columns: more than a portrait page holds, all of them on a
     # landscape one (the mark the preamble's show rule reads).
     assert "#dpx-wide[" in out
-    assert "Showing 30 of 40 rows; the HTML report has the whole table." in out
+    assert f"Showing {LANDSCAPE_TABLE_ROWS} of 40 rows; the HTML report has the whole table." in out
 
 
 def test_a_tile_that_cannot_be_drawn_is_named_not_numbered():
@@ -1050,13 +1051,24 @@ def test_a_highlight_keeps_its_lead_and_title_with_its_figure_in_the_pdf(amplise
 
 def test_a_section_description_keeps_with_what_follows_in_the_pdf(ampliseq_tabs):
     # "Key figures" and its line were left at the foot of a page whose cards
-    # moved on: the description rides a sticky block, as the heading does.
+    # moved on; a section opening on a wide table left both on a portrait page
+    # before its landscape one. The PDF draws the line through `dpx-lead`,
+    # which keeps with the tile and moves with its heading.
     src = _with_settings(ampliseq_tabs)
-    at = src.index("*The run in four numbers")
-    opened = src.rindex("#block(sticky: true)[", 0, at)
-    assert "Key figures" in src[src.rindex("####", 0, opened) : opened]
-    assert src.index("```{=typst}\n]\n```", at) > at
-    assert "#block(sticky: true)[" not in generate_qmd(_plan(ampliseq_tabs))
+    heading = src.index("Key figures</span>")
+    lead = src.index("#dpx-lead((", heading)
+    assert '"The run in four numbers.' in src[lead : src.index("\n", lead)]
+    assert src.rindex('{.content-visible when-format="html"}', heading, lead) > heading
+    html = generate_qmd(_plan(ampliseq_tabs))
+    assert "#dpx-lead(" not in html and "*The run in four numbers" in html
+
+
+def test_a_tab_map_is_kept_on_one_pdf_page(ampliseq_tabs):
+    src = _with_settings(ampliseq_tabs)
+    tiles = src.index("#dpx-tab-tiles(")
+    opened = src.rindex("#block(breakable: false)[", 0, tiles)
+    assert "```{=typst}\n]\n```" in src[tiles:]
+    assert src.count("#dpx-tab-tiles(", opened, src.index("```{=typst}\n]\n```", tiles)) >= 2
 
 
 def test_tables_wear_the_dashboard_colours(ampliseq_tabs):
