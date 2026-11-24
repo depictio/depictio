@@ -20,6 +20,7 @@ import copy
 import re
 from typing import Any
 
+from depictio.api.v1.services.figure.overview_style import short_tick_label
 from depictio.models import palettes
 from depictio.models.palettes.cvd import contrast_ratio
 
@@ -243,16 +244,21 @@ def _draw_group_n(traces: list[dict], layout: dict) -> None:
         for cat, n in counts.items():
             seen[cat] = seen.get(cat, 0) + n
             values.setdefault(cat, cat)
+    meta = layout.get("meta")
+    # Ticks the overview style cut short are not the author's: they take the count too.
+    shortened = isinstance(meta, dict) and meta.get("depictio_short_ticks") is True
     for axis_key, counts in by_axis.items():
         axis = layout.get(axis_key)
-        if isinstance(axis, dict) and (
-            axis.get("tickvals") is not None or axis.get("ticktext") is not None
+        if (
+            not shortened
+            and isinstance(axis, dict)
+            and (axis.get("tickvals") is not None or axis.get("ticktext") is not None)
         ):
             continue  # the author labels their own ticks
         axis = _sub(layout, axis_key)
         order = list(counts)
         axis["tickvals"] = [first_seen[axis_key][cat] for cat in order]
-        axis["ticktext"] = [f"{cat} (n={counts[cat]})" for cat in order]
+        axis["ticktext"] = [f"{short_tick_label(cat)} (n={counts[cat]})" for cat in order]
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +372,10 @@ def _draw_hidden_note(layout: dict, mode: str) -> None:
         "text": f"{folded} more not shown",
         "xref": "paper",
         "yref": "paper",
+        # Above the plot's top right corner, outside the bars: at its bottom
+        # corner it sat on the last bars of a chart sorted largest first.
         "x": 1,
-        "y": 0,
+        "y": 1,
         "xanchor": "right",
         "yanchor": "bottom",
         "showarrow": False,

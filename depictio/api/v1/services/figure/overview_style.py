@@ -341,7 +341,8 @@ def _reference_tint(hue: str, mode: str) -> str:
 
 def _side_name(label: Any, above: bool) -> str:
     text = str(label or "the reference")
-    if re.match(r"^[a-z]+ of ", text):  # "median of this table"
+    # A computed reference reads as one: "the median of this table", "the median depth".
+    if re.match(r"^(median|mean|\d+th percentile)\b", text):
         text = f"the {text}"
     return f"{'Above' if above else 'At or below'} {text}"
 
@@ -600,6 +601,55 @@ def _fold_tail(traces: list[dict], layout: dict, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# c2. long category names
+
+
+#: Characters a category tick shows before it is cut with an ellipsis. A bar
+#: chart over long names ("Fuzhuan brick tea polysaccharide-3 (FBTPS-3) ...")
+#: rotated its ticks and spent most of the tile's height on them, leaving a
+#: plot a few pixels tall. The full name stays in the hover.
+TICK_LABEL_MAX = 28
+
+
+def short_tick_label(value: Any, limit: int = TICK_LABEL_MAX) -> str:
+    """``value`` as a tick shows it: cut to ``limit`` characters with an ellipsis."""
+    text = str(value)
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "\u2026"
+
+
+def _shorten_category_ticks(traces: list[dict], layout: dict) -> None:
+    """Cut long category names on a bar or box chart's category axis."""
+    orientation = _axis_orientation(traces)
+    if orientation is None:
+        return
+    letter = "y" if orientation == "h" else "x"
+    by_axis: dict[str, list[Any]] = {}
+    for trace in traces:
+        if _kind(trace) not in _BAR_LIKE or _is_key(trace):
+            continue
+        values = _values(trace.get(letter))
+        if values is None or not _is_category_strings(values):
+            continue
+        seen = by_axis.setdefault(_axis_key(letter, trace), [])
+        for value in values:
+            if value not in seen:
+                seen.append(value)
+    for axis_key, categories in by_axis.items():
+        if not any(len(str(c)) > TICK_LABEL_MAX for c in categories):
+            continue
+        axis = layout.get(axis_key)
+        if isinstance(axis, dict) and (
+            axis.get("tickvals") is not None or axis.get("ticktext") is not None
+        ):
+            continue  # the author labels their own ticks
+        axis = _sub(layout, axis_key)
+        axis["tickvals"] = list(categories)
+        axis["ticktext"] = [short_tick_label(c) for c in categories]
+        meta = layout.get("meta") if isinstance(layout.get("meta"), dict) else {}
+        layout["meta"] = {**meta, "depictio_short_ticks": True}
+
+
+# ---------------------------------------------------------------------------
 # d. light chrome
 
 
@@ -762,6 +812,7 @@ def apply_overview(
     _sort_bars(traces, layout)
     traces = _remainder_last(traces, mode)
     _fold_tail(traces, layout, mode)
+    _shorten_category_ticks(traces, layout)
     _light_chrome(traces, layout, chrome, set_font=set_font)
     if any(_kind(t) == "bar" for t in traces):
         layout.setdefault("barcornerradius", palettes.style()["bar_corner_radius"])

@@ -40,9 +40,18 @@ REFERENCE_STAT_NAMES: dict[str, str] = {
 _QUANTILES: dict[str, float] = {"p75": 0.75, "p90": 0.90, "p95": 0.95, "p99": 0.99}
 
 
-def reference_label(stat: str) -> str:
-    """The words a computed reference is drawn with: ``median of this table``."""
-    return f"{REFERENCE_STAT_NAMES.get(stat, stat)} of this table"
+def reference_label(stat: str, column: str | None = None) -> str:
+    """The words a computed reference is drawn with.
+
+    With the column it is computed over: ``median completeness``, which says what
+    the line is without the reader decoding "of this table". Without one (a
+    kind's threshold, whose axis already names the measure): ``median of this
+    table``. Either way the name is a statistic, never a cut-off (RULES.md §17).
+    """
+    name = REFERENCE_STAT_NAMES.get(stat, stat)
+    if column:
+        return f"{name} {column.replace('_', ' ')}"
+    return f"{name} of this table"
 
 
 def stat_expr(column: str, stat: str) -> pl.Expr:

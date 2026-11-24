@@ -3,7 +3,7 @@
 ``FigureLiteComponent.reference_lines`` (and the catalog ``Render`` field of the
 same name) is a list of ``{axis, value | stat + column, label}``. A ``stat``
 line is placed at the median (mean, p75..p99) of its column over the filtered
-rows and named as such ("median of this table"), which is what RULES.md §17
+rows and named as such ("median completeness"), which is what RULES.md §17
 asks of a reference defined by the data rather than by the tool.
 
 The statistic is computed by the caller on the filtered frame *before* any
@@ -68,7 +68,7 @@ def resolve_reference_lines(lines: list[dict[str, Any]], frame: Any) -> list[dic
             value = values.get(str(i))
             if value is None:
                 continue
-            label = label or reference_label(str(line["stat"]))
+            label = label or reference_label(str(line["stat"]), str(line["column"]))
         else:
             label = label or f"{line['axis']} = {float(value):g}"
         if line.get("source"):

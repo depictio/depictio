@@ -272,3 +272,20 @@ def test_no_marks_no_patch():
 
     plain = _styled(px.scatter(pd.DataFrame({"x": [1, 2], "y": [3, 4]}), x="x", y="y"))
     assert marks_off_patch(plain, copy.deepcopy(plain)) is None
+
+
+def test_group_n_keeps_a_long_category_cut_short():
+    long = "Fuzhuan brick tea polysaccharide-3 (FBTPS-3) complex"
+    df = pd.DataFrame({"cat": [long] * 3 + ["b"] * 2, "v": [1, 2, 3, 4, 5]})
+    out = apply_annotations(
+        _styled(px.box(df, x="cat", y="v")), None, figure_style="default", theme="light"
+    )
+    ticks = out["layout"]["xaxis"]["ticktext"]
+    assert ticks[0].endswith("… (n=3)") and len(ticks[0]) < len(long)
+    assert ticks[1] == "b (n=2)"
+
+
+def test_the_fold_note_sits_above_the_plot_not_on_its_bars():
+    out = apply_annotations(_styled(_fold_figure()), None, figure_style="default", theme="light")
+    note = next(a for a in out["layout"]["annotations"] if "more not shown" in a["text"])
+    assert (note["y"], note["yanchor"]) == (1, "bottom")

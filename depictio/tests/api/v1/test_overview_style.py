@@ -701,3 +701,25 @@ def test_a_px_series_without_a_colour_column_is_not_a_missing_value():
     }
     out = apply_overview(fig)
     assert out["data"][0].get("marker", {}).get("color") != palettes.semantic("na", "light")
+
+
+def test_long_category_ticks_are_cut_and_the_hover_keeps_the_name():
+    long = "Fuzhuan brick tea polysaccharide-3 (FBTPS-3) complex"
+    fig = {"data": [{"type": "bar", "x": [long, "xylan"], "y": [3, 1]}], "layout": {}}
+    out = apply_overview(fig)
+    axis = out["layout"]["xaxis"]
+    assert axis["tickvals"] == [long, "xylan"]
+    assert axis["ticktext"][0].endswith("…") and len(axis["ticktext"][0]) <= 28
+    assert axis["ticktext"][1] == "xylan"
+    assert out["data"][0]["x"] == [long, "xylan"]
+
+
+def test_short_category_ticks_and_authored_ticks_are_left_alone():
+    fig = {"data": [{"type": "bar", "x": ["a", "b"], "y": [1, 2]}], "layout": {}}
+    assert "tickvals" not in apply_overview(fig)["layout"].get("xaxis", {})
+    long = "x" * 40
+    fig = {
+        "data": [{"type": "bar", "x": [long], "y": [1]}],
+        "layout": {"xaxis": {"tickvals": [long], "ticktext": ["mine"]}},
+    }
+    assert apply_overview(fig)["layout"]["xaxis"]["ticktext"] == ["mine"]

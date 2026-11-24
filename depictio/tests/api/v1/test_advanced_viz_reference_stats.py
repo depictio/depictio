@@ -63,6 +63,7 @@ def test_unknown_stat_is_refused() -> None:
 def test_labels_name_the_statistic() -> None:
     assert reference_label("median") == "median of this table"
     assert reference_label("p95") == "95th percentile of this table"
+    assert reference_label("median", "pct_mapped") == "median pct mapped"
 
 
 def test_malformed_requests_are_dropped_not_raised() -> None:
@@ -375,7 +376,7 @@ def test_figure_reference_lines_are_drawn_and_named() -> None:
     )
     resolved = resolve_reference_lines(lines, frame)
     assert resolved == [
-        {"axis": "y", "value": 3.0, "label": "median of this table"},
+        {"axis": "y", "value": 3.0, "label": "median v"},
         {"axis": "x", "value": 0.5, "label": "cut-off"},
     ]
     fig = apply_reference_lines(go.Figure(go.Box(x=frame["g"], y=frame["v"])), resolved)
@@ -383,7 +384,7 @@ def test_figure_reference_lines_are_drawn_and_named() -> None:
     assert len(shapes) == 2
     assert shapes[0].y0 == 3.0 and shapes[0].line.dash == "dash"
     texts = {a.text for a in fig.layout.annotations}
-    assert {"median of this table", "cut-off"} <= texts
+    assert {"median v", "cut-off"} <= texts
 
 
 def test_a_line_source_is_named_in_its_label() -> None:
@@ -426,7 +427,7 @@ def test_catalog_figure_preview_draws_reference_lines(tmp_path) -> None:
     fig = _figure_payload(df, render)["figure"]
     shapes = fig["layout"]["shapes"]
     assert any(math.isclose(s["y0"], 25.0) for s in shapes)
-    assert any(a["text"] == "median of this table" for a in fig["layout"]["annotations"])
+    assert any(a["text"] == "median depth" for a in fig["layout"]["annotations"])
     # The overview look colours each bar by its side of the lone line.
     bar = next(t for t in fig["data"] if t["type"] == "bar")
     sides = fig["layout"]["meta"]["depictio_reference_sides"]
@@ -568,4 +569,4 @@ def test_worker_figure_builder_draws_a_median_of_the_filtered_rows(monkeypatch) 
     )
     layout = result["figure"]["layout"]
     assert any(s.get("y0") == 3.0 and s["line"]["dash"] == "dash" for s in layout["shapes"])
-    assert any(a.get("text") == "median of this table" for a in layout["annotations"])
+    assert any(a.get("text") == "median depth" for a in layout["annotations"])
