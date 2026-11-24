@@ -1,19 +1,208 @@
 family	sample	draw_order	x	y	node	is_tip	n_tips
-mgnifams_create_1	mgnifams_create	0	0.0	7.548828125	""	false	20
-mgnifams_create_1	mgnifams_create	1	0.0	18.5	""	false	20
-mgnifams_create_1	mgnifams_create	2			""	false	20
-mgnifams_create_1	mgnifams_create	3	0.0	7.548828125	""	false	20
-mgnifams_create_1	mgnifams_create	4	0.10000000149	7.548828125	""	false	20
-mgnifams_create_1	mgnifams_create	5			""	false	20
-mgnifams_create_1	mgnifams_create	6	0.0	18.5	""	false	20
-mgnifams_create_1	mgnifams_create	7	0.10000000149	18.5	""	false	20
-mgnifams_create_1	mgnifams_create	8			""	false	20
-mgnifams_create_1	mgnifams_create	9	0.10000000149	18.0	""	false	20
-mgnifams_create_1	mgnifams_create	10	0.10000000149	19.0	""	false	20
-mgnifams_create_1	mgnifams_create	11			""	false	20
-mgnifams_create_1	mgnifams_create	12	0.10000000149	18.0	""	false	20
-mgnifams_create_1	mgnifams_create	13	0.20000000298	18.0	1336010185_126_255/11-123	true	20
-mgnifams_create_1	mgnifams_create	14			""	false	20
-mgnifams_create_1	mgnifams_create	15	0.10000000149	19.0	""	false	20
-mgnifams_create_1	mgnifams_create	16	0.20000000298	19.0	1015154437_431_579/10-126	true	20
-mgnifams_create_1	mgnifams_create	17			""	false	20
+mgnifams_create_1	mgnifams_create	0	0.0	0.0	""	false	11
+mgnifams_create_1	mgnifams_create	1	0.0	5.734375	84	false	11
+mgnifams_create_1	mgnifams_create	2			""	false	11
+mgnifams_create_1	mgnifams_create	3	0.0	0.0	""	false	11
+mgnifams_create_1	mgnifams_create	4	0.1583	0.0	1118692402_57_289/5-218	true	11
+mgnifams_create_1	mgnifams_create	5			""	false	11
+mgnifams_create_1	mgnifams_create	6	0.0	5.734375	""	false	11
+mgnifams_create_1	mgnifams_create	7	0.2483	5.734375	96	false	11
+mgnifams_create_1	mgnifams_create	8			""	false	11
+mgnifams_create_1	mgnifams_create	9	0.2483	2.71875	""	false	11
+mgnifams_create_1	mgnifams_create	10	0.2483	8.75	96	false	11
+mgnifams_create_1	mgnifams_create	11			""	false	11
+mgnifams_create_1	mgnifams_create	12	0.2483	2.71875	""	false	11
+mgnifams_create_1	mgnifams_create	13	0.4599	2.71875	64	false	11
+mgnifams_create_1	mgnifams_create	14			""	false	11
+mgnifams_create_1	mgnifams_create	15	0.2483	8.75	""	false	11
+mgnifams_create_1	mgnifams_create	16	0.2729	8.75	64	false	11
+mgnifams_create_1	mgnifams_create	17			""	false	11
+mgnifams_create_1	mgnifams_create	18	0.2729	8.0	""	false	11
+mgnifams_create_1	mgnifams_create	19	0.2729	9.5	64	false	11
+mgnifams_create_1	mgnifams_create	20			""	false	11
+mgnifams_create_1	mgnifams_create	21	0.2729	8.0	""	false	11
+mgnifams_create_1	mgnifams_create	22	0.5622	8.0	1290278525_130_366/10-219	true	11
+mgnifams_create_1	mgnifams_create	23			""	false	11
+mgnifams_create_1	mgnifams_create	24	0.2729	9.5	""	false	11
+mgnifams_create_1	mgnifams_create	25	0.355	9.5	96	false	11
+mgnifams_create_1	mgnifams_create	26			""	false	11
+mgnifams_create_1	mgnifams_create	27	0.355	9.0	""	false	11
+mgnifams_create_1	mgnifams_create	28	0.355	10.0	96	false	11
+mgnifams_create_1	mgnifams_create	29			""	false	11
+mgnifams_create_1	mgnifams_create	30	0.355	9.0	""	false	11
+mgnifams_create_1	mgnifams_create	31	0.5425	9.0	1050535682_384_623/2-202	true	11
+mgnifams_create_1	mgnifams_create	32			""	false	11
+mgnifams_create_1	mgnifams_create	33	0.355	10.0	""	false	11
+mgnifams_create_1	mgnifams_create	34	0.6877	10.0	1295841241_444_549/19-111	true	11
+mgnifams_create_1	mgnifams_create	35			""	false	11
+mgnifams_create_1	mgnifams_create	36	0.4599	1.5	""	false	11
+mgnifams_create_1	mgnifams_create	37	0.4599	3.9375	64	false	11
+mgnifams_create_1	mgnifams_create	38			""	false	11
+mgnifams_create_1	mgnifams_create	39	0.4599	1.5	""	false	11
+mgnifams_create_1	mgnifams_create	40	0.5710999999999999	1.5	91	false	11
+mgnifams_create_1	mgnifams_create	41			""	false	11
+mgnifams_create_1	mgnifams_create	42	0.4599	3.9375	""	false	11
+mgnifams_create_1	mgnifams_create	43	0.6125	3.9375	82	false	11
+mgnifams_create_1	mgnifams_create	44			""	false	11
+mgnifams_create_1	mgnifams_create	45	0.6125	3.0	""	false	11
+mgnifams_create_1	mgnifams_create	46	0.6125	4.875	82	false	11
+mgnifams_create_1	mgnifams_create	47			""	false	11
+mgnifams_create_1	mgnifams_create	48	0.6125	3.0	""	false	11
+mgnifams_create_1	mgnifams_create	49	0.8368	3.0	1052307642_570_676/19-114	true	11
+mgnifams_create_1	mgnifams_create	50			""	false	11
+mgnifams_create_1	mgnifams_create	51	0.6125	4.875	""	false	11
+mgnifams_create_1	mgnifams_create	52	0.76	4.875	95	false	11
+mgnifams_create_1	mgnifams_create	53			""	false	11
+mgnifams_create_1	mgnifams_create	54	0.76	4.0	""	false	11
+mgnifams_create_1	mgnifams_create	55	0.76	5.75	95	false	11
+mgnifams_create_1	mgnifams_create	56			""	false	11
+mgnifams_create_1	mgnifams_create	57	0.76	4.0	""	false	11
+mgnifams_create_1	mgnifams_create	58	1.051	4.0	1173856391_164_355/2-181	true	11
+mgnifams_create_1	mgnifams_create	59			""	false	11
+mgnifams_create_1	mgnifams_create	60	0.76	5.75	""	false	11
+mgnifams_create_1	mgnifams_create	61	0.8703	5.75	92	false	11
+mgnifams_create_1	mgnifams_create	62			""	false	11
+mgnifams_create_1	mgnifams_create	63	0.8703	5.0	""	false	11
+mgnifams_create_1	mgnifams_create	64	0.8703	6.5	92	false	11
+mgnifams_create_1	mgnifams_create	65			""	false	11
+mgnifams_create_1	mgnifams_create	66	0.8703	5.0	""	false	11
+mgnifams_create_1	mgnifams_create	67	0.9697	5.0	1020130331_98_299/14-203	true	11
+mgnifams_create_1	mgnifams_create	68			""	false	11
+mgnifams_create_1	mgnifams_create	69	0.8703	6.5	""	false	11
+mgnifams_create_1	mgnifams_create	70	0.9494	6.5	88	false	11
+mgnifams_create_1	mgnifams_create	71			""	false	11
+mgnifams_create_1	mgnifams_create	72	0.9494	6.0	""	false	11
+mgnifams_create_1	mgnifams_create	73	0.9494	7.0	88	false	11
+mgnifams_create_1	mgnifams_create	74			""	false	11
+mgnifams_create_1	mgnifams_create	75	0.9494	6.0	""	false	11
+mgnifams_create_1	mgnifams_create	76	1.0314	6.0	1097026737_115_353/19-227	true	11
+mgnifams_create_1	mgnifams_create	77			""	false	11
+mgnifams_create_1	mgnifams_create	78	0.9494	7.0	""	false	11
+mgnifams_create_1	mgnifams_create	79	1.1626	7.0	1266510500_554_753/11-186	true	11
+mgnifams_create_1	mgnifams_create	80			""	false	11
+mgnifams_create_1	mgnifams_create	81	0.5710999999999999	1.0	""	false	11
+mgnifams_create_1	mgnifams_create	82	0.5710999999999999	2.0	91	false	11
+mgnifams_create_1	mgnifams_create	83			""	false	11
+mgnifams_create_1	mgnifams_create	84	0.5710999999999999	1.0	""	false	11
+mgnifams_create_1	mgnifams_create	85	0.6074999999999999	1.0	1338564711_73_310/19-234	true	11
+mgnifams_create_1	mgnifams_create	86			""	false	11
+mgnifams_create_1	mgnifams_create	87	0.5710999999999999	2.0	""	false	11
+mgnifams_create_1	mgnifams_create	88	0.6504	2.0	1243301510_380_546/8-139	true	11
+mgnifams_create_1	mgnifams_create	89			""	false	11
+mgnifams_create_2	mgnifams_create	90	0.0	12.5	""	false	8
+mgnifams_create_2	mgnifams_create	91	0.0	14.96875	99	false	8
+mgnifams_create_2	mgnifams_create	92			""	false	8
+mgnifams_create_2	mgnifams_create	93	0.0	12.5	""	false	8
+mgnifams_create_2	mgnifams_create	94	0.0262	12.5	72	false	8
+mgnifams_create_2	mgnifams_create	95			""	false	8
+mgnifams_create_2	mgnifams_create	96	0.0	14.96875	""	false	8
+mgnifams_create_2	mgnifams_create	97	0.1573	14.96875	83	false	8
+mgnifams_create_2	mgnifams_create	98			""	false	8
+mgnifams_create_2	mgnifams_create	99	0.1573	14.0	""	false	8
+mgnifams_create_2	mgnifams_create	100	0.1573	15.9375	83	false	8
+mgnifams_create_2	mgnifams_create	101			""	false	8
+mgnifams_create_2	mgnifams_create	102	0.1573	14.0	""	false	8
+mgnifams_create_2	mgnifams_create	103	0.4918	14.0	1287006336_388_634/19-245	true	8
+mgnifams_create_2	mgnifams_create	104			""	false	8
+mgnifams_create_2	mgnifams_create	105	0.1573	15.9375	""	false	8
+mgnifams_create_2	mgnifams_create	106	0.3033	15.9375	60	false	8
+mgnifams_create_2	mgnifams_create	107			""	false	8
+mgnifams_create_2	mgnifams_create	108	0.3033	15.0	""	false	8
+mgnifams_create_2	mgnifams_create	109	0.3033	16.875	60	false	8
+mgnifams_create_2	mgnifams_create	110			""	false	8
+mgnifams_create_2	mgnifams_create	111	0.3033	15.0	""	false	8
+mgnifams_create_2	mgnifams_create	112	0.47150000000000003	15.0	1213619690_410_627/3-205	true	8
+mgnifams_create_2	mgnifams_create	113			""	false	8
+mgnifams_create_2	mgnifams_create	114	0.3033	16.875	""	false	8
+mgnifams_create_2	mgnifams_create	115	0.3397	16.875	70	false	8
+mgnifams_create_2	mgnifams_create	116			""	false	8
+mgnifams_create_2	mgnifams_create	117	0.3397	16.0	""	false	8
+mgnifams_create_2	mgnifams_create	118	0.3397	17.75	70	false	8
+mgnifams_create_2	mgnifams_create	119			""	false	8
+mgnifams_create_2	mgnifams_create	120	0.3397	16.0	""	false	8
+mgnifams_create_2	mgnifams_create	121	0.4358	16.0	1379243847_435_616/13-154	true	8
+mgnifams_create_2	mgnifams_create	122			""	false	8
+mgnifams_create_2	mgnifams_create	123	0.3397	17.75	""	false	8
+mgnifams_create_2	mgnifams_create	124	0.4653	17.75	66	false	8
+mgnifams_create_2	mgnifams_create	125			""	false	8
+mgnifams_create_2	mgnifams_create	126	0.4653	17.0	""	false	8
+mgnifams_create_2	mgnifams_create	127	0.4653	18.5	66	false	8
+mgnifams_create_2	mgnifams_create	128			""	false	8
+mgnifams_create_2	mgnifams_create	129	0.4653	17.0	""	false	8
+mgnifams_create_2	mgnifams_create	130	0.5623	17.0	1044552069_190_318/8-105	true	8
+mgnifams_create_2	mgnifams_create	131			""	false	8
+mgnifams_create_2	mgnifams_create	132	0.4653	18.5	""	false	8
+mgnifams_create_2	mgnifams_create	133	0.5695	18.5	95	false	8
+mgnifams_create_2	mgnifams_create	134			""	false	8
+mgnifams_create_2	mgnifams_create	135	0.5695	18.0	""	false	8
+mgnifams_create_2	mgnifams_create	136	0.5695	19.0	95	false	8
+mgnifams_create_2	mgnifams_create	137			""	false	8
+mgnifams_create_2	mgnifams_create	138	0.5695	18.0	""	false	8
+mgnifams_create_2	mgnifams_create	139	0.7911	18.0	1186297031_33_241/12-205	true	8
+mgnifams_create_2	mgnifams_create	140			""	false	8
+mgnifams_create_2	mgnifams_create	141	0.5695	19.0	""	false	8
+mgnifams_create_2	mgnifams_create	142	0.7711	19.0	1294978306_294_419/14-102	true	8
+mgnifams_create_2	mgnifams_create	143			""	false	8
+mgnifams_create_2	mgnifams_create	144	0.0262	12.0	""	false	8
+mgnifams_create_2	mgnifams_create	145	0.0262	13.0	72	false	8
+mgnifams_create_2	mgnifams_create	146			""	false	8
+mgnifams_create_2	mgnifams_create	147	0.0262	12.0	""	false	8
+mgnifams_create_2	mgnifams_create	148	0.2899	12.0	1265049409_70_215/10-141	true	8
+mgnifams_create_2	mgnifams_create	149			""	false	8
+mgnifams_create_2	mgnifams_create	150	0.0262	13.0	""	false	8
+mgnifams_create_2	mgnifams_create	151	0.0943	13.0	1260362383_196_353/10-157	true	8
+mgnifams_create_2	mgnifams_create	152			""	false	8
+mgnifams_create_3	mgnifams_create	153	0.0	21.9375	""	false	7
+mgnifams_create_3	mgnifams_create	154	0.0	26.5	65	false	7
+mgnifams_create_3	mgnifams_create	155			""	false	7
+mgnifams_create_3	mgnifams_create	156	0.0	21.9375	""	false	7
+mgnifams_create_3	mgnifams_create	157	0.1233	21.9375	77	false	7
+mgnifams_create_3	mgnifams_create	158			""	false	7
+mgnifams_create_3	mgnifams_create	159	0.0	26.5	""	false	7
+mgnifams_create_3	mgnifams_create	160	0.2041	26.5	88	false	7
+mgnifams_create_3	mgnifams_create	161			""	false	7
+mgnifams_create_3	mgnifams_create	162	0.2041	26.0	""	false	7
+mgnifams_create_3	mgnifams_create	163	0.2041	27.0	88	false	7
+mgnifams_create_3	mgnifams_create	164			""	false	7
+mgnifams_create_3	mgnifams_create	165	0.2041	26.0	""	false	7
+mgnifams_create_3	mgnifams_create	166	0.3984	26.0	1194214374_160_389/1-196	true	7
+mgnifams_create_3	mgnifams_create	167			""	false	7
+mgnifams_create_3	mgnifams_create	168	0.2041	27.0	""	false	7
+mgnifams_create_3	mgnifams_create	169	0.39	27.0	1190962925_238_464/18-210	true	7
+mgnifams_create_3	mgnifams_create	170			""	false	7
+mgnifams_create_3	mgnifams_create	171	0.1233	21.0	""	false	7
+mgnifams_create_3	mgnifams_create	172	0.1233	22.875	77	false	7
+mgnifams_create_3	mgnifams_create	173			""	false	7
+mgnifams_create_3	mgnifams_create	174	0.1233	21.0	""	false	7
+mgnifams_create_3	mgnifams_create	175	0.2998	21.0	1340596048_268_446/20-177	true	7
+mgnifams_create_3	mgnifams_create	176			""	false	7
+mgnifams_create_3	mgnifams_create	177	0.1233	22.875	""	false	7
+mgnifams_create_3	mgnifams_create	178	0.2516	22.875	93	false	7
+mgnifams_create_3	mgnifams_create	179			""	false	7
+mgnifams_create_3	mgnifams_create	180	0.2516	22.0	""	false	7
+mgnifams_create_3	mgnifams_create	181	0.2516	23.75	93	false	7
+mgnifams_create_3	mgnifams_create	182			""	false	7
+mgnifams_create_3	mgnifams_create	183	0.2516	22.0	""	false	7
+mgnifams_create_3	mgnifams_create	184	0.5858	22.0	1086671693_538_633/7-62	true	7
+mgnifams_create_3	mgnifams_create	185			""	false	7
+mgnifams_create_3	mgnifams_create	186	0.2516	23.75	""	false	7
+mgnifams_create_3	mgnifams_create	187	0.4392	23.75	85	false	7
+mgnifams_create_3	mgnifams_create	188			""	false	7
+mgnifams_create_3	mgnifams_create	189	0.4392	23.0	""	false	7
+mgnifams_create_3	mgnifams_create	190	0.4392	24.5	85	false	7
+mgnifams_create_3	mgnifams_create	191			""	false	7
+mgnifams_create_3	mgnifams_create	192	0.4392	23.0	""	false	7
+mgnifams_create_3	mgnifams_create	193	0.7326999999999999	23.0	1077372491_114_291/9-161	true	7
+mgnifams_create_3	mgnifams_create	194			""	false	7
+mgnifams_create_3	mgnifams_create	195	0.4392	24.5	""	false	7
+mgnifams_create_3	mgnifams_create	196	0.644	24.5	99	false	7
+mgnifams_create_3	mgnifams_create	197			""	false	7
+mgnifams_create_3	mgnifams_create	198	0.644	24.0	""	false	7
+mgnifams_create_3	mgnifams_create	199	0.644	25.0	99	false	7
+mgnifams_create_3	mgnifams_create	200			""	false	7
+mgnifams_create_3	mgnifams_create	201	0.644	24.0	""	false	7
+mgnifams_create_3	mgnifams_create	202	0.7669	24.0	1061929944_509_718/16-200	true	7
+mgnifams_create_3	mgnifams_create	203			""	false	7
+mgnifams_create_3	mgnifams_create	204	0.644	25.0	""	false	7
+mgnifams_create_3	mgnifams_create	205	0.9637	25.0	1345163476_103_259/17-152	true	7
+mgnifams_create_3	mgnifams_create	206			""	false	7

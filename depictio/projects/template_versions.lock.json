@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "3.0.3",
-      "content_hash": "95cc74eaa4a1c44d0c92fe550a36f6c67a175e0fc598f88a213cd8984f237273",
+      "version": "3.0.4",
+      "content_hash": "28eec6a4d0d4a9127a48c93fe301c76f33274544230aab2fb07e773e473267e3",
       "catalog": {
         "adapterremoval": "1.1.0",
         "agat": "1.1.1",
@@ -27,7 +27,7 @@
         "bowtie2": "1.1.0",
         "busco": "2.1.1",
         "cellbender": "1.1.1",
-        "cellranger": "1.2.1",
+        "cellranger": "1.2.2",
         "checkm2": "1.2.1",
         "checkv": "1.1.1",
         "cmaple": "1.1.1",
@@ -695,11 +695,11 @@
       }
     },
     "nf-core/scrnaseq/4.2.0": {
-      "version": "3.0.1",
-      "content_hash": "ee4df5db38d413f788bc7f6225d5866900b24103a0f037156d3d7624e27a6b3f",
+      "version": "3.0.2",
+      "content_hash": "f883864e76141c04521ddde8adfa04948409323bc9be4cb34d7c929b36e2e074",
       "catalog": {
         "cellbender": "1.1.1",
-        "cellranger": "1.2.1",
+        "cellranger": "1.2.2",
         "kallisto": "1.1.0",
         "multiqc": "1.1.0",
         "qcatch": "1.1.1",

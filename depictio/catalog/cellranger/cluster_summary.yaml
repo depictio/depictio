@@ -17,11 +17,12 @@ renders_as:
     dict_kwargs:
       x: cluster_label
       y: n_cells
-      color: cluster_label
-      labels: {cluster_label: Cluster, n_cells: Cells}
+      color: sample
+      labels: {cluster_label: Cluster, n_cells: Cells, sample: Sample}
     description: >-
-      Each bar is a graph-based cluster and its height is the number of cells in it. It
-      answers how the cells divide between clusters.
+      Each bar is a graph-based cluster and its height is the number of cells in it, split
+      by sample. It answers how the cells divide between clusters, and whether a cluster
+      comes from one sample only.
 
       How to read: a few large clusters with a tail of small ones is typical. A very small
       cluster can be a rare population or a quality artefact, so check its QC tile.

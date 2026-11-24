@@ -43,6 +43,11 @@ These parts are not derived from a real row and should not be read as real resul
   Hallmark sets with approximate sizes.
 - `crisprseq/substitutions.tsv`: the real rows hold no substitution; the added samples
   carry small synthetic substitution rates.
+- `cmaple/tree_layout.tsv`: the real fixture was an 18-row cut of one 20-tip tree (3 tips
+  drawn). It is now the recipe's own layout of three synthetic Newick trees of 11, 8 and 7
+  members, built with real-looking MGnify member ids.
+- `cooltools/eigenvector.tsv`: keeps the 250 kb resolution only. A track overlays every
+  row on one position axis, so two resolutions of the same bins drew each bin twice.
 
 ## Outputs left as they are, by design
 
@@ -75,8 +80,9 @@ These parts are not derived from a real row and should not be read as real resul
 | cnvkit_cnv_profile | `cnvkit/cnv_profile.tsv` | 18 | 103 |
 | combgc_region_track | `combgc/region_track.tsv` | 16 | 30 |
 | combgc_tool_overlap | `combgc/tool_overlap.tsv` | 25 | 28 |
+| cmaple_tree_layout | `cmaple/tree_layout.tsv` | 18 | 207 |
 | cooltools_domains | `cooltools/domains.tsv` | 54 | 234 |
-| cooltools_eigenvector | `cooltools/eigenvector.tsv` | 15 | 414 |
+| cooltools_eigenvector | `cooltools/eigenvector.tsv` | 15 | 276 |
 | crisprseq_edit_outcomes | `crisprseq/edit_outcomes.tsv` | 14 | 42 |
 | crisprseq_indel_sizes | `crisprseq/indel_sizes.tsv` | 13 | 53 |
 | crisprseq_substitutions | `crisprseq/substitutions.tsv` | 18 | 54 |

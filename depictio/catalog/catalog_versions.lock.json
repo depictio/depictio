@@ -71,8 +71,8 @@
       "content_hash": "752a577dd3b5008d9e0d06628c7f66771f5b45e67225b0194d3db40c3e015c50"
     },
     "cellranger": {
-      "version": "1.2.1",
-      "content_hash": "22c9c32cd5f01cab2f4b4adc2687030ac4d36dc88c39c6fe5fd6a7c516616643"
+      "version": "1.2.2",
+      "content_hash": "c24d50eee4fd499df32feb496eeca9b765e3a70dd2c3bde5aa54da485ccb1ed7"
     },
     "checkm2": {
       "version": "1.2.1",
