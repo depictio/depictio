@@ -281,6 +281,25 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
 - **Detail**: see `depictio/api/v1/endpoints/utils_endpoints/CLAUDE.md`
+- **Docs shots without Docker** (`dev/playwright_debug/docs_screenshots.py` against `depictio local up`):
+  1. Install the release in a venv **outside `~/.depictio`** (the local data policy denies that
+     folder, so the bundled iris/penguins seeds scan 0 files and stay empty):
+     `uv venv ~/.venvs/depictio-X.Y.Z && VIRTUAL_ENV=~/.venvs/depictio-X.Y.Z uv pip install "depictio[local]==X.Y.Z"`
+     (PyPI ships the built viewer; a clone needs pnpm to build it)
+  2. Own home and port, so other local servers are untouched:
+     `DEPICTIO_LOCAL_HOME=~/.depictio/local-<name> depictio local up --port <free port> --no-open`
+  3. Data: the bundled examples `local up` seeds (iris, penguins: the join shots use penguins) cover most
+     shots; no fixture in the repo. Anything else: `depictio ingest <dir> --server local` with the same
+     `DEPICTIO_LOCAL_HOME` (`--server local` is needed when `~/.depictio/CLI.yaml` exists)
+  4. Shots, run with the venv's python from the repo root:
+     `python dev/playwright_debug/docs_screenshots.py run --local-home ~/.depictio/local-<name> --project-id <id> --theme light|dark --scale 2 --output-root <dir> --shot <name>`.
+     `--local-home` sets the viewer URL to `http://127.0.0.1:<api port in ports.json>` (API and viewer
+     share it, no Vite) and seeds `<home>/cli/admin_config.yaml`. The server is single-user, so
+     `--no-seed-auth` works too. The script sets `DEPICTIO_CONTEXT=cli` itself (else the settings import
+     demands server secrets) and writes JWT keys to the gitignored `depictio/keys/`
+  5. PNG to docs: `cwebp -q 82`; a `*_video` shot writes a `.webm`: `ffmpeg -ss 0.9 -i x.webm -an -c:v libx264
+     -crf 26 -pix_fmt yuv420p -vf scale=1280:-2 -movflags +faststart x.mp4` (docs hook: under 30 s, 1.5 MB)
+  6. `depictio local down` (same `DEPICTIO_LOCAL_HOME`) when done
 
 ### Dashboard YAML ↔ JSON Seeds
 - Fresh deployments load from `.db_seeds/*.json` (via `db_init.py`), **not** from YAML

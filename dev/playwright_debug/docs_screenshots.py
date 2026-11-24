@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
 """Capture documentation screenshots via Playwright against the React (Beta) viewer.
 
-Prerequisites:
-    - Dev stack running: `docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up`
-    - Vite dev server up on http://localhost:5173 (`pnpm -C depictio/viewer dev`)
-    - depictio/.depictio/admin_config.yaml present (created on first stack boot)
+Prerequisites, either:
+    - `depictio local up` (no Docker): pass --local-home <its DEPICTIO_LOCAL_HOME>, which
+      points the run at http://127.0.0.1:<api port in ports.json> (API and built viewer on one
+      port) and seeds the token of <home>/cli/admin_config.yaml. Install depictio[local] in a
+      venv outside ~/.depictio, or the bundled examples load no data. Full steps: CLAUDE.md,
+      "Screenshot System".
+    - or the Docker dev stack: `docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up`,
+      the Vite dev server on http://localhost:5173 (`pnpm -C depictio/viewer dev`) and
+      depictio/.depictio/admin_config.yaml present (created on first stack boot)
 
 Usage:
+    # against `depictio local up`: the join shots, on the bundled penguins project
+    DEPICTIO_LOCAL_HOME=~/.depictio/local-shots depictio local up --port 8341 --no-open
+    python dev/playwright_debug/docs_screenshots.py run \\
+        --local-home ~/.depictio/local-shots --project-id <id> --scale 2 \\
+        --viewport-height 1300 --theme dark --shot join_create_modal
+
     python dev/playwright_debug/docs_screenshots.py list
     python dev/playwright_debug/docs_screenshots.py run \\
         --project-id 646b0f3c1e4a2d7f8e5b8c9a \\
@@ -29,6 +40,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import uuid
 from dataclasses import dataclass
@@ -42,6 +54,10 @@ from playwright.async_api import Locator, Page, async_playwright
 # Repo-rooted import so the script runs from anywhere (e.g. via `python
 # dev/playwright_debug/docs_screenshots.py ...`) without a packaged install.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# A client of the server, not the server: without this, importing the settings
+# below demands the server's S3/admin secrets (set in the Docker stack's .env,
+# absent next to `depictio local up`).
+os.environ.setdefault("DEPICTIO_CONTEXT", "cli")
 
 from depictio.api.v1.services.screenshot_helpers import (  # noqa: E402
     build_localstorage_init_script,
@@ -80,17 +96,17 @@ def register(name: str) -> Callable[[ShotFn], ShotFn]:
     return deco
 
 
-def _load_token_payload() -> str:
+def _load_token_payload(admin_config: Path = ADMIN_CONFIG_PATH) -> str:
     """Read admin_config.yaml and emit the JSON string the SPA expects in
     localStorage['local-store']. Mirrors the structure produced by
     `_get_admin_token_localstorage_payload()` in the API codebase.
     """
-    if not ADMIN_CONFIG_PATH.exists():
+    if not admin_config.exists():
         raise FileNotFoundError(
-            f"admin_config.yaml not found at {ADMIN_CONFIG_PATH}. "
+            f"admin_config.yaml not found at {admin_config}. "
             "Boot the dev stack at least once to generate it."
         )
-    with open(ADMIN_CONFIG_PATH) as fh:
+    with open(admin_config) as fh:
         config = yaml.safe_load(fh)
     token_info = config.get("user", {}).get("token", {})
     payload = {
@@ -1194,6 +1210,164 @@ async def _funnel_overview_reordered(ctx: ShotContext) -> None:
     await _shot(ctx, ".mantine-Modal-content", _rb("funnel_overview_reordered"))
 
 
+# ---- Table joins (v1.23.0+) -------------------------------------------------
+# Drive the bundled penguins example, which `depictio local up` seeds: two tables
+# sharing `individual_id`. It already declares penguins_complete (inner); the
+# shots add a second join of the same tables under another name.
+
+JOIN_DEMO = {
+    "name": "penguins_measured",
+    "left": "physical_features",
+    "right": "demographic_data",
+    "how": "Left",
+}
+
+
+async def _pick_select(page: Page, test_id: str, value: str) -> None:
+    """Choose `value` in the Mantine Select carrying data-testid `test_id`."""
+    field = page.get_by_test_id(test_id)
+    if await field.input_value() == value:
+        return
+    await field.click()
+    await page.get_by_role("option", name=value, exact=True).first.click()
+
+
+async def _open_join_modal(ctx: ShotContext, pause_ms: int = 0) -> Locator:
+    """Open Add join on the project page and fill it with JOIN_DEMO; returns the
+    modal once the preview for those inputs has landed. `pause_ms` slows each
+    step down for the recording."""
+    page = ctx.page
+    await page.goto(f"{ctx.viewer_url}/projects/{ctx.project_id}")
+    await wait_for_theme_applied(page, ctx.theme)
+    button = page.get_by_test_id("add-join-btn")
+    await button.wait_for(state="visible", timeout=20_000)
+    await button.scroll_into_view_if_needed()
+    await page.wait_for_timeout(pause_ms)
+    await button.click()
+    modal = page.locator(".mantine-Modal-content").filter(
+        has=page.get_by_test_id("join-create-modal")
+    )
+    await modal.wait_for(state="visible", timeout=10_000)
+    await page.wait_for_timeout(pause_ms)
+    await _pick_select(page, "join-left", JOIN_DEMO["left"])
+    await page.wait_for_timeout(pause_ms)
+    await _pick_select(page, "join-right", JOIN_DEMO["right"])
+    await page.wait_for_timeout(pause_ms)
+    name = page.get_by_test_id("join-name")
+    await name.fill("")
+    await name.press_sequentially(JOIN_DEMO["name"], delay=60 if pause_ms else 0)
+    await page.wait_for_timeout(pause_ms)
+    await page.get_by_test_id("join-type").get_by_text(JOIN_DEMO["how"], exact=True).click()
+    # The preview is debounced and recomputed on every change: wait for the
+    # summary, then for the loader to go.
+    await page.get_by_test_id("join-preview-summary").wait_for(state="visible", timeout=30_000)
+    await page.locator('[data-testid="join-preview"] .mantine-Loader').wait_for(
+        state="detached", timeout=30_000
+    )
+    await page.wait_for_timeout(600 + pause_ms)
+    return modal
+
+
+async def _join_rows(page: Page) -> Locator:
+    await page.get_by_test_id("add-join-btn").wait_for(state="visible", timeout=20_000)
+    # The joins arrive with the project's links, after the section renders.
+    await page.wait_for_timeout(1_500)
+    return page.get_by_test_id("join-row").filter(has_text=JOIN_DEMO["name"])
+
+
+async def _delete_demo_join(ctx: ShotContext) -> None:
+    """Delete the JOIN_DEMO join if the project has it, so its name is free."""
+    await ctx.page.goto(f"{ctx.viewer_url}/projects/{ctx.project_id}")
+    rows = await _join_rows(ctx.page)
+    if await rows.count():
+        await rows.first.get_by_test_id("delete-join-btn").click()
+        await (
+            ctx.page.get_by_test_id("delete-join-modal")
+            .get_by_role("button", name="Delete join")
+            .click()
+        )
+        await rows.first.wait_for(state="detached", timeout=30_000)
+
+
+@register("join_create_modal")
+async def _join_create_modal(ctx: ShotContext) -> None:
+    """Create table join modal, filled in, with its preview (counts, unmatched
+    rows, sample rows). Needs a viewport tall enough for the whole modal
+    (--viewport-height 1300). Deletes the JOIN_DEMO join first, if any."""
+    await _delete_demo_join(ctx)
+    await _open_join_modal(ctx)
+    # Hide the page behind the modal (everything but Mantine's portal), so its
+    # teal header buttons do not show through the rounded corners or a
+    # sub-pixel edge of the shot.
+    await ctx.page.add_style_tag(
+        content="body > *:not([data-portal]) { visibility: hidden !important; }"
+        " .mantine-Modal-overlay { display: none !important; }"
+    )
+    await _shot(ctx, ".mantine-Modal-content", f"join_create_modal_{ctx.theme}")
+
+
+@register("join_list")
+async def _join_list(ctx: ShotContext) -> None:
+    """Cross-DC links section with the Joins table (creates the JOIN_DEMO join
+    first when missing)."""
+    await ctx.page.goto(f"{ctx.viewer_url}/projects/{ctx.project_id}")
+    rows = await _join_rows(ctx.page)
+    if not await rows.count():
+        await _open_join_modal(ctx)
+        await ctx.page.get_by_test_id("join-create-btn").click()
+        await rows.first.wait_for(state="visible", timeout=60_000)
+        await ctx.page.reload()
+    await wait_for_theme_applied(ctx.page, ctx.theme)
+    section = ctx.page.get_by_test_id("links-section")
+    await section.get_by_test_id("joins-list").wait_for(state="visible", timeout=20_000)
+    await section.scroll_into_view_if_needed()
+    await dismiss_notifications(ctx.page)
+    await _shot(ctx, '[data-testid="links-section"]', f"join_list_{ctx.theme}")
+
+
+@register("join_create_video")
+async def _join_create_video(ctx: ShotContext) -> None:
+    """Recording of creating the JOIN_DEMO join, ending on the Joins table.
+    Deletes an existing join of that name first. Writes join_create_<theme>.webm;
+    convert it to an H.264 mp4 for the docs (see CLAUDE.md, Screenshot System)."""
+    await _delete_demo_join(ctx)
+    browser = ctx.page.context.browser
+    assert browser is not None
+    size = ctx.page.viewport_size or {"width": 1440, "height": 900}
+    context = await browser.new_context(
+        viewport=size,
+        record_video_dir=str(ctx.output_dir / "_video_tmp"),
+        record_video_size=size,
+    )
+    await context.add_init_script(
+        f"localStorage.setItem('theme-store', {json.dumps(json.dumps({'colorScheme': ctx.theme}))});"
+    )
+    page = await context.new_page()
+    rec = ShotContext(
+        page=page,
+        viewer_url=ctx.viewer_url,
+        project_id=ctx.project_id,
+        dashboard_id=ctx.dashboard_id,
+        output_dir=ctx.output_dir,
+        theme=ctx.theme,
+    )
+    await _open_join_modal(rec, pause_ms=700)
+    await page.wait_for_timeout(1_500)
+    await page.get_by_test_id("join-create-btn").click()
+    joined = page.get_by_test_id("join-row").filter(has_text=JOIN_DEMO["name"])
+    await joined.first.wait_for(state="visible", timeout=60_000)
+    await page.get_by_test_id("joins-list").scroll_into_view_if_needed()
+    await page.wait_for_timeout(2_500)
+    video = page.video
+    await context.close()
+    if video is None:
+        raise RuntimeError("Playwright recorded no video")
+    target = ctx.output_dir / f"join_create_{ctx.theme}.webm"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    await video.save_as(str(target))
+    typer.echo(f"  → {_rel(target)}")
+
+
 # ---- CLI ------------------------------------------------------------------
 
 
@@ -1258,11 +1432,32 @@ def run(
         help="Seed the local admin token into localStorage. Disable when driving "
         "an instance in unauthenticated mode that the local token doesn't belong to.",
     ),
+    local_home: Path = typer.Option(
+        None,
+        "--local-home",
+        help="Drive a `depictio local up` server instead of the Docker dev stack: "
+        "its home (DEPICTIO_LOCAL_HOME, default ~/.depictio/local). The viewer URL "
+        "becomes http://127.0.0.1:<api port of ports.json> and the token is read "
+        "from <home>/cli/admin_config.yaml.",
+    ),
+    scale: float = typer.Option(
+        1.0,
+        "--scale",
+        help="Device scale factor; 2 gives the retina-sized element shots the docs use.",
+    ),
     viewport_width: int = typer.Option(1440, "--viewport-width"),
     viewport_height: int = typer.Option(900, "--viewport-height"),
     headless: bool = typer.Option(True, "--headless/--headed"),
 ) -> None:
     """Capture one or more named shots into <output-root>/<version>/."""
+    admin_config = ADMIN_CONFIG_PATH
+    if local_home is not None:
+        local_home = local_home.expanduser()
+        ports_file = local_home / "ports.json"
+        if not ports_file.exists():
+            raise typer.BadParameter(f"{ports_file} not found: run `depictio local up` first.")
+        viewer_url = f"http://127.0.0.1:{json.loads(ports_file.read_text())['api']}"
+        admin_config = local_home / "cli" / "admin_config.yaml"
     if theme not in ("light", "dark"):
         raise typer.BadParameter(f"--theme must be 'light' or 'dark', got {theme!r}.")
     if journal is not None and not journal.exists():
@@ -1288,6 +1483,8 @@ def run(
             journal,
             seed_auth,
             watch_project_name,
+            admin_config,
+            scale,
         )
     )
 
@@ -1305,16 +1502,20 @@ async def _run(
     journal: Path | None = None,
     seed_auth: bool = True,
     watch_project_name: str = "Watcher Demo",
+    admin_config: Path = ADMIN_CONFIG_PATH,
+    scale: float = 1.0,
 ) -> None:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
-        context = await browser.new_context(viewport={"width": vw, "height": vh})
+        context = await browser.new_context(
+            viewport={"width": vw, "height": vh}, device_scale_factor=scale
+        )
         # Seed auth + theme in localStorage via init script so they are present
         # BEFORE any page script runs — early API calls (listProjectLinks,
         # listChildTabs) and the SPA's readInitialColorScheme both fire on first
         # paint, so a post-navigation setItem is too late.
         if seed_auth:
-            init_script = build_localstorage_init_script(_load_token_payload(), theme)
+            init_script = build_localstorage_init_script(_load_token_payload(admin_config), theme)
         else:
             # Theme only — writing an empty `local-store` would look like a
             # broken session rather than no session at all.
