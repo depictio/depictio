@@ -1544,7 +1544,8 @@ export interface ReportTile {
   section: string | null;
   page_break_before: boolean;
   /** Across the whole page, out of the dashboard row it shares. */
-  full_width?: boolean;
+  /** True: the page's width; false: its dashboard row; null: the report's settings. */
+  full_width?: boolean | null;
 }
 
 export interface ReportTab {
@@ -1559,6 +1560,7 @@ export interface ReportTab {
 export interface ReportSettings {
   paper: 'a4' | 'letter';
   landscape: boolean;
+  table_page_break: boolean;
   tile_width: 'row' | 'full';
   viz_controls: 'popover' | 'rail' | 'header';
   toc: boolean;
@@ -1600,7 +1602,8 @@ export interface ReportOutlineEntry {
   orientation: ReportOrientation;
   section: string | null;
   page_break_before: boolean;
-  full_width?: boolean;
+  /** True: the page's width; false: its dashboard row; null: the report's settings. */
+  full_width?: boolean | null;
   order: number | null;
   /** A section's own look, as the dashboard draws its header: an Iconify id,
    *  a Mantine palette name and the line under its title. Sections only. */

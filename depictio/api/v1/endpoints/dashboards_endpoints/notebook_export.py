@@ -61,7 +61,7 @@ from depictio.models.models.report_layer import (
     ReportOutlineEntry,
     ReportOutlineTab,
     ReportPreviewRequest,
-    ReportSettings,
+    ReportTile,
 )
 from depictio.models.models.users import User
 from depictio.notebook.theme import palette_hex
@@ -1349,7 +1349,7 @@ def notebook_export_outline(
                 # The layer's override, else the section the tile sits under.
                 section=(tile.section if tile is not None and tile.section else current_section),
                 page_break_before=bool(tile.page_break_before) if tile is not None else False,
-                full_width=bool(tile.full_width) if tile is not None else False,
+                full_width=tile.full_width if tile is not None else None,
                 order=tile.order if tile is not None else None,
             )
         )
@@ -1404,23 +1404,38 @@ def _report_data_identity(plan: Any) -> str:
     return hashlib.sha256("\n".join(tokens).encode()).hexdigest()
 
 
-def _stored_settings(raw: dict[str, Any] | None) -> ReportSettings:
-    """The stored layer's report settings, or the defaults when it has none
-    (or none that validate: the export falls back the same way)."""
+def _preview_layer(raw: dict[str, Any] | None) -> ReportLayer:
+    """The neutral layer a preview renders on, with what shapes the whole
+    document kept from the stored one: the report's settings, and each tile's
+    own width (a row the frame cannot re-join once the render split it).
+    Defaults when the stored layer does not validate (the export falls back
+    the same way)."""
     try:
-        return ReportSettings.model_validate((raw or {}).get("settings") or {})
+        stored = ReportLayer.model_validate(raw or {})
     except ValidationError:
-        return ReportSettings()
+        return ReportLayer()
+    return ReportLayer(
+        settings=stored.settings,
+        tiles=[
+            ReportTile(tab_id=t.tab_id, component_id=t.component_id, full_width=t.full_width)
+            for t in stored.tiles
+            if t.full_width is not None
+        ],
+    )
 
 
 def _preview_cache_key(qmd: bytes, embed_runtime: bool, data_identity: str = "") -> str:
     """What makes one preview equal to another: the document, the runtime
-    embedded in it, and the data it reads (``_report_data_identity``). The
-    document carries everything else that changes it: the state, the layer,
-    the filters."""
+    embedded in it (whether, and which build), and the data it reads
+    (``_report_data_identity``). The document carries everything else that
+    changes it: the state, the layer, the filters."""
+    from depictio.serverless.combined import runtime_identity
+
     digest = hashlib.sha256()
     digest.update(qmd)
     digest.update(b"\x00embed=" + (b"1" if embed_runtime else b"0"))
+    if embed_runtime:
+        digest.update(b"\x00runtime=" + runtime_identity().encode())
     digest.update(b"\x00data=" + data_identity.encode())
     return digest.hexdigest()
 
@@ -1693,12 +1708,11 @@ def notebook_export_preview(
     # edit changes: the same report previewed after one is served from the
     # finished job instead of run again. The layer's own state stays in
     # charge (``_resolved_request_state`` above), and the real layer still
-    # drives every download. The layer's settings stay too: they shape the
-    # whole document (its contents, its parts, its rows), which no patch of
-    # the finished report can do, so a change of them is a new render.
-    plan.report_layer = ReportLayer(settings=_stored_settings(plan.report_layer)).model_dump(
-        mode="json"
-    )
+    # drives every download. The layer's settings and tile widths stay too:
+    # they shape the whole document (its contents, its parts, its rows),
+    # which no patch of the finished report can do, so a change of them is a
+    # new render.
+    plan.report_layer = _preview_layer(plan.report_layer).model_dump(mode="json")
     # The preview's provenance carries the day, not the minute (a cache key
     # must not move with the clock), and Quarto renders it with
     # ``embed-resources: false`` — the editor's iframe loads the report and

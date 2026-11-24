@@ -555,24 +555,81 @@ def init_tables() -> bool:
     return True
 
 
-def data_html(df: pl.DataFrame) -> str:
+_HEX_COLOUR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def chip_columns(
+    df: pl.DataFrame, colors: dict[str, dict[str, str]] | None
+) -> dict[str, dict[str, str]]:
+    """``{column: {value: colour}}`` for the columns of ``df`` the dashboard
+    colours: pinned colours only (``#rrggbb``), as the dashboard's table and
+    filters wear them. A value it lists no colour for stays plain text."""
+    out: dict[str, dict[str, str]] = {}
+    for column, values in (colors or {}).items():
+        if column not in df.columns or not isinstance(values, dict):
+            continue
+        if df.schema[column].is_numeric():
+            continue
+        pinned = {
+            str(k): str(v)
+            for k, v in values.items()
+            if k != "*" and isinstance(v, str) and _HEX_COLOUR.match(v)
+        }
+        if pinned:
+            out[column] = pinned
+    return out
+
+
+def chip_html(value: Any, colour: str | None) -> str:
+    """One value as the report's chip: tinted with its colour, a dot before it."""
+    text = _esc(value)
+    if not colour:
+        return text
+    return f'<span class="dpx-chip" style="--dpx-chip:{colour}">{text}</span>'
+
+
+def _chipped(df: pl.DataFrame, chips: dict[str, dict[str, str]]) -> pl.DataFrame:
+    """``df`` with its text as HTML: the coloured columns as chips, every
+    other text escaped (the table is read as HTML once any cell is)."""
+    exprs = []
+    for column in df.columns:
+        if column in chips:
+            colours = chips[column]
+            exprs.append(
+                pl.col(column)
+                .cast(pl.Utf8)
+                .map_elements(lambda v, c=colours: chip_html(v, c.get(v)), return_dtype=pl.Utf8)
+                .alias(column)
+            )
+        elif df.schema[column] == pl.Utf8:
+            exprs.append(
+                pl.col(column).map_elements(lambda v: _esc(v), return_dtype=pl.Utf8).alias(column)
+            )
+    return df.with_columns(exprs) if exprs else df
+
+
+def data_html(df: pl.DataFrame, colors: dict[str, dict[str, str]] | None = None) -> str:
     """A DataFrame as HTML with every row it holds (not Polars' 10-row head/tail).
 
     An interactive table when ``init_tables`` turned itables on; the frame
     is never downsampled (``maxBytes=0``): the cell already holds the rows the
-    tile asked for.
+    tile asked for. A column the dashboard colours (``colors``, its
+    ``category_colors``) shows its values as chips; DataTables sorts and
+    searches them by their text.
     """
     if _TABLES["interactive"]:
         try:
             from itables import to_html_datatable
 
+            chips = chip_columns(df, colors)
             return to_html_datatable(
-                df,
+                _chipped(df, chips) if chips else df,
                 connected=False,
                 pageLength=TABLE_PAGE_LENGTH,
                 lengthMenu=[10, 25, 50, 100],
                 maxBytes=0,
                 classes="display compact",
+                **({"allow_html": True} if chips else {}),
             )
         except Exception:  # noqa: BLE001 - fall through to plain HTML
             pass
@@ -607,26 +664,42 @@ def public_reason(text: str, limit: int = 300) -> str:
 class TableView:
     """A DataFrame displayed whole: what a table tile shows (``show_table``)."""
 
-    def __init__(self, df: pl.DataFrame, title: str | None = None) -> None:
+    def __init__(
+        self,
+        df: pl.DataFrame,
+        title: str | None = None,
+        colors: dict[str, dict[str, str]] | None = None,
+    ) -> None:
         self.df = df
         self.title = title
+        self.colors = colors
 
     def _repr_html_(self) -> str:
-        return data_html(self.df)
+        return data_html(self.df, self.colors)
 
     def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
         bundle = {HTML_MIME: self._repr_html_(), PLAIN_MIME: repr(self.df)}
         if static_figures():
-            bundle[MARKDOWN_MIME] = _typst.table(self.df, orientation=page_orientation())
+            bundle[MARKDOWN_MIME] = _typst.table(
+                self.df,
+                orientation=page_orientation(),
+                chips=chip_columns(self.df, self.colors),
+            )
         return bundle
 
     def __repr__(self) -> str:
         return repr(self.df)
 
 
-def show_table(df: pl.DataFrame, title: str | None = None) -> TableView:
-    """Display ``df`` with every row, as an interactive table when available."""
-    return TableView(df, title)
+def show_table(
+    df: pl.DataFrame,
+    title: str | None = None,
+    colors: dict[str, dict[str, str]] | None = None,
+) -> TableView:
+    """Display ``df`` with every row, as an interactive table when available.
+    ``colors`` (``{column: {value: colour}}``, the dashboard's category
+    colours) shows those columns' values as coloured chips."""
+    return TableView(df, title, colors)
 
 
 def figure_bundle(fig) -> dict[str, Any]:

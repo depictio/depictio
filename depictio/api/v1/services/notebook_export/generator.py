@@ -134,6 +134,12 @@ def _appendix_letter(n: int) -> str:
 HTML_ONLY_OPEN = '::: {.content-visible when-format="html"}'
 #: The same fold the other way round: only the PDF (typst) shows the content.
 TYPST_ONLY_OPEN = '::: {.content-visible when-format="typst"}'
+#: A page break in the PDF only: a large table's own page.
+TYPST_PAGE_BREAK_MD = "`#pagebreak(weak: true)`{=typst}"
+
+#: Rows from which a table starts a new PDF page: about a third of a page.
+TABLE_PAGE_ROWS = 12
+
 PAGE_BREAK_MD = (
     # The page break the layer asks for before a tile: a typst one in the PDF,
     # a CSS one in the HTML (Quarto's typst writer reads only the raw block).
@@ -2511,10 +2517,10 @@ def card_row(cards):
         a card stays in its strip)."""
         if self._is_card(entry):
             return False
-        if self.settings.tile_width == "full":
-            return True
         cfg = self._layer_tile(entry)
-        return bool(cfg is not None and cfg.full_width)
+        if cfg is not None and cfg.full_width is not None:
+            return cfg.full_width
+        return self.settings.tile_width == "full"
 
     @staticmethod
     def _is_card(entry: ComponentEntry) -> bool:
@@ -2619,6 +2625,33 @@ def card_row(cards):
         text = self._data_badge_text(meta)
         return f'<span class="dpx-asof">{_esc(text)}</span>' if text else ""
 
+    def _dc_rows(self, meta: dict[str, Any]) -> int | None:
+        """The rows the tile's collection holds in the exported state."""
+        dc = self.dc_by_id.get(str(meta.get("dc_id") or ""))
+        if dc is None:
+            return None
+        rows = dc.initial_rows
+        for stage in self.plan.stages:
+            got = stage.rows_by_dc.get(dc.dc_id)
+            if got is not None:
+                rows = got
+        return rows
+
+    def _starts_a_pdf_page(self, entry: ComponentEntry) -> bool:
+        """A table the PDF prints long (``TABLE_PAGE_ROWS`` rows or more, of
+        the page size it shows) opens a page of its own, so it is not cut
+        after a few lines at the foot of one."""
+        meta = entry.unit.meta
+        if not (self.plan.pdf and self.settings.table_page_break):
+            return False
+        if str(meta.get("component_type") or "") != "table":
+            return False
+        rows = self._dc_rows(meta)
+        if rows is None:
+            return False
+        page = int(meta.get("page_size") or 100)
+        return min(rows, page) >= TABLE_PAGE_ROWS
+
     def _data_badge_text(self, meta: dict[str, Any]) -> str:
         dc = self.dc_by_id.get(str(meta.get("dc_id") or ""))
         tag = dc.tag if dc else str(meta.get("data_collection_tag") or "")
@@ -2626,11 +2659,7 @@ def card_row(cards):
             return ""
         bits = [f"Data: {tag}"]
         if dc is not None:
-            rows = dc.initial_rows
-            for stage in self.plan.stages:
-                got = stage.rows_by_dc.get(dc.dc_id)
-                if got is not None:
-                    rows = got
+            rows = self._dc_rows(meta)
             if rows is not None:
                 bits.append(f"{rows:,} rows")
             if dc.version is not None:
@@ -2649,6 +2678,9 @@ def card_row(cards):
             # The layer asks for a fresh page before this tile: a typst page
             # break in the PDF, a CSS one in the HTML.
             out.append(md_cell(PAGE_BREAK_MD))
+        elif not in_row and self._starts_a_pdf_page(entry):
+            # A large table opens its own PDF page (the report's settings).
+            out.append(md_cell(TYPST_PAGE_BREAK_MD))
         if entry.highlight is not None:
             out.append(self._highlight_note(entry))
         tile: Cell | list[Cell] = self._tile_cell(entry)  # type: ignore[assignment]
@@ -3110,7 +3142,10 @@ def card_row(cards):
                 _comment(f'Table "{title}": the first {page} filtered rows, all of them shown'),
                 *prelude,
                 f"{name} = {source}{select}.head({page})",
-                f"show_table({name})",
+                # The dashboard's colours for a column's values, as chips.
+                f"show_table({name}, colors=depictio_category_colors)"
+                if self._category_colors()
+                else f"show_table({name})",
             ]
             return Cell("\n".join(body))
         if ctype == "figure":

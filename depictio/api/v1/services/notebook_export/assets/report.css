@@ -108,6 +108,17 @@ body.quarto-dark .dpx-light-only { display: none !important; }
   background: var(--gl-well, #f1f3f5); font-size: .75rem; color: var(--gl-muted, #868e96);
   white-space: nowrap;
 }
+/* A value the dashboard colours (its category colours), in a table: a chip
+   tinted with the colour, its dot first, as the dashboard's filters show it. */
+.dpx-chip {
+  display: inline-flex; align-items: center; gap: .4em; padding: 0 .6em; border-radius: 999px;
+  font-size: .75rem; font-weight: 500; line-height: 1.7; white-space: nowrap;
+  background: color-mix(in srgb, var(--dpx-chip) 14%, transparent);
+  color: color-mix(in srgb, var(--dpx-chip) 72%, var(--gl-fg, #212529));
+}
+.dpx-chip::before {
+  content: ""; flex: none; width: .5em; height: .5em; border-radius: 50%; background: var(--dpx-chip);
+}
 /* The exported state, under the title. */
 .dpx-state-line { font-size: .875rem; color: var(--gl-muted, #868e96); margin: 0 0 1rem; }
 .dpx-state-line b { color: var(--gl-fg, #212529); font-weight: 600; }

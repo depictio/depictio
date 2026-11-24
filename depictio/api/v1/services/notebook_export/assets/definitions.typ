@@ -46,6 +46,10 @@
 #let dpx-range(lo, mid, hi) = grid(columns: (1fr, auto, 1fr),
   align: (left, center, right), text(size: 7pt, fill: dpx-muted)[#lo],
   text(size: 7pt, weight: "semibold")[median #mid], text(size: 7pt, fill: dpx-muted)[#hi])
+// A value the dashboard colours: tinted with its colour, as in the report's
+// HTML tables and the dashboard's filters.
+#let dpx-chip(t, c) = box(fill: c.lighten(85%), inset: (x: 3.6pt, y: 1.3pt), outset: (y: 0.4pt),
+  radius: 5pt)[#text(fill: c.darken(32%), weight: "medium")[#t]]
 // A table read like a spreadsheet: a bold header row on a darker band, rows
 // alternating grey and white, a rule around every cell.
 #let dpx-table(columns: (), align: (), header: (), rows: (), note: none) = {
@@ -56,7 +60,7 @@
     fill: (x, y) => if y == 0 { dpx-table-head } else if calc.even(y) { dpx-zebra } else { white },
     table.header(..header.map(h => text(weight: "bold", fill: dpx-ink)[#h])),
     table.hline(y: 1, stroke: 1pt + dpx-muted),
-    ..rows.flatten().map(c => [#c]))
+    ..rows.flatten().map(c => if type(c) == dictionary { dpx-chip(c.chip, rgb(c.color)) } else [#c]))
   if note != none { v(-4pt); text(size: 6.8pt, fill: dpx-muted, style: "italic")[#note] }
 }
 // A wide tile (a table with more columns than a portrait page holds, a figure

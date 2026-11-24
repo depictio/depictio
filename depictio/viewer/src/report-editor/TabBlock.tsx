@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { ActionIcon, Badge, Box, Collapse, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Box, Collapse, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { ArrowDown, ArrowUp, ChevronRight, GripVertical, Pin } from 'lucide-react';
-import type { ReportLayer, ReportTabPlacement } from 'depictio-react-core';
+import {
+  ArrowDown,
+  ArrowUp,
+  BookOpen,
+  ChevronRight,
+  GripVertical,
+  Paperclip,
+  Pin,
+} from 'lucide-react';
+import type { ReportLayer } from 'depictio-react-core';
 
 import { STROKE } from '../chrome/variants/glass/icons';
-import { patchTile, relocateTile, setTabPlacement } from './model';
+import { patchTile, relocateTile } from './model';
 import type { TabView, TileView } from './model';
 import SectionBlock from './SectionBlock';
 import TileCard from './TileCard';
@@ -28,9 +36,9 @@ interface TabBlockProps {
   tab: TabView;
   icon: string | null | undefined;
   color: string | null | undefined;
-  /** Position among the report's tabs: 0 is the main tab, fixed in place. */
-  index: number;
-  count: number;
+  /** The tab can move up / down without leaving its part. */
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   /** `tab_id:component_id` of the selected tile, or null. */
   selectedKey: string | null;
   thumbs: Record<string, string>;
@@ -39,6 +47,8 @@ interface TabBlockProps {
   tabDrag: TabDragProps;
   onEdit: (change: (layer: ReportLayer) => ReportLayer) => void;
   onMoveTab: (direction: -1 | 1) => void;
+  /** Into the other part: the appendices, or back to the main report. */
+  onSwitchPart: () => void;
   onSelect: (tabId: string, componentId: string | null) => void;
 }
 
@@ -67,18 +77,19 @@ const TabBlock: React.FC<TabBlockProps> = ({
   tab,
   icon,
   color,
-  index,
-  count,
+  canMoveUp,
+  canMoveDown,
   selectedKey,
   thumbs,
   fold,
   tabDrag,
   onEdit,
   onMoveTab,
+  onSwitchPart,
   onSelect,
 }) => {
   // The main tab starts open, the others closed; every section starts open.
-  const [open, setOpen] = useState(index === 0);
+  const [open, setOpen] = useState(tab.isMain);
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [sectionDefault, setSectionDefault] = useState(true);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -141,7 +152,6 @@ const TabBlock: React.FC<TabBlockProps> = ({
             <TileInspector
               view={view}
               sections={tab.sections}
-              widthLocked={tab.allFullWidth}
               canMoveUp={i > 0}
               canMoveDown={i < tab.tiles.length - 1}
               onPatch={(patch) => onEdit((l) => patchTile(l, view.entry, patch))}
@@ -258,42 +268,57 @@ const TabBlock: React.FC<TabBlockProps> = ({
           </Badge>
         </div>
         <div className="re-tabhead-tools">
-          <div style={{ display: 'flex' }}>
-            <Tooltip label={tab.isMain ? 'The main tab stays first' : 'Move the tab up'} withArrow>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size="sm"
-                disabled={tab.isMain || index <= 1}
-                onClick={() => onMoveTab(-1)}
-                aria-label="Move tab up"
-              >
-                <ArrowUp size={16} strokeWidth={STROKE} />
-              </ActionIcon>
-            </Tooltip>
+          <Tooltip label={tab.isMain ? 'The main tab stays first' : 'Move the tab up'} withArrow>
             <ActionIcon
               variant="subtle"
               color="gray"
               size="sm"
-              disabled={tab.isMain || index >= count - 1}
+              disabled={!canMoveUp}
+              onClick={() => onMoveTab(-1)}
+              aria-label="Move tab up"
+            >
+              <ArrowUp size={16} strokeWidth={STROKE} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={tab.isMain ? 'The main tab stays first' : 'Move the tab down'} withArrow>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              disabled={!canMoveDown}
               onClick={() => onMoveTab(1)}
               aria-label="Move tab down"
             >
               <ArrowDown size={16} strokeWidth={STROKE} />
             </ActionIcon>
-          </div>
-          <SegmentedControl
-            size="xs"
-            value={tab.placement}
-            disabled={tab.isMain}
-            onChange={(v) =>
-              onEdit((l) => setTabPlacement(l, tab.tabId, v as ReportTabPlacement, index))
-            }
-            data={[
-              { label: 'Body', value: 'body' },
-              { label: 'Appendix', value: 'appendix' },
-            ]}
-          />
+          </Tooltip>
+          {!tab.isMain && (
+            <Tooltip
+              label={
+                tab.placement === 'appendix'
+                  ? 'Back to the main report'
+                  : 'To the appendices, after the closing'
+              }
+              withArrow
+            >
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                onClick={onSwitchPart}
+                aria-label={
+                  tab.placement === 'appendix' ? 'Move to the main report' : 'Move to the appendices'
+                }
+                data-testid="report-tab-part"
+              >
+                {tab.placement === 'appendix' ? (
+                  <BookOpen size={16} strokeWidth={STROKE} />
+                ) : (
+                  <Paperclip size={16} strokeWidth={STROKE} />
+                )}
+              </ActionIcon>
+            </Tooltip>
+          )}
         </div>
       </div>
 

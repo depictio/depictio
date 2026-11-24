@@ -458,3 +458,70 @@
 .re-tabhead {
   flex-wrap: wrap;
 }
+
+/* A segmented option: its light icon, then its label, on one line. */
+.re-seg-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.re-seg-option svg {
+  flex: none;
+  opacity: 0.75;
+}
+
+/* The two parts of the structure: the main report, then the appendices. */
+.re-parthead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 0;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+}
+.re-parthead-title {
+  color: var(--mantine-color-text);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.re-parthead-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--mantine-color-default-hover);
+  font-weight: 500;
+}
+.re-parthead-hint {
+  margin-inline-start: auto;
+}
+.re-partdrop {
+  padding: 10px 12px;
+  border: 1px dashed var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+  text-align: center;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.re-partdrop:not([data-empty]) {
+  padding: 6px 12px;
+}
+.re-partdrop[data-over] {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--mantine-primary-color-light);
+  color: var(--mantine-primary-color-light-color);
+}
+
+/* A settings group's icon: a soft square in the primary tint. */
+.re-settings-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-primary-color-light);
+  color: var(--mantine-primary-color-light-color);
+}

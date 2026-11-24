@@ -88,7 +88,21 @@ def _cell(value: Any) -> str:
     return _breakable(str(value).replace("\n", " ")[:160])
 
 
-def _dpx_table(df: pl.DataFrame, *, rows: int, column_note: str = "") -> str:
+def _dpx_cell(text: str, colour: str | None) -> str:
+    """A cell as typst: a string, or a chip (``dpx-table`` draws a dictionary
+    as one) when the value has its colour."""
+    if colour:
+        return f"(chip: {tstr(text)}, color: {tstr(colour)})"
+    return tstr(text)
+
+
+def _dpx_table(
+    df: pl.DataFrame,
+    *,
+    rows: int,
+    column_note: str = "",
+    chips: dict[str, dict[str, str]] | None = None,
+) -> str:
     """One ``dpx-table`` call: the first ``rows`` rows of ``df``, all of its
     columns shown, widths from what they hold. ``column_note`` leads the note
     ("Columns 2-14 of 28") when part of the table is elsewhere."""
@@ -107,7 +121,23 @@ def _dpx_table(df: pl.DataFrame, *, rows: int, column_note: str = "") -> str:
     # A header always breaks at its separators: `bill_length_mm` over a column
     # of three-digit numbers would otherwise run into its neighbour.
     header = "(" + ", ".join(tstr(_breakable(str(c), 0)) for c in view.columns) + ",)"
-    cells = "(" + ", ".join("(" + ", ".join(tstr(v) for v in r) + ",)" for r in body) + ",)"
+    colours = [(chips or {}).get(c) for c in view.columns]
+    raw_rows = list(view.iter_rows())
+    cells = (
+        "("
+        + ", ".join(
+            "("
+            + ", ".join(
+                _dpx_cell(
+                    v, colours[i].get(str(raw[i])) if colours[i] and raw[i] is not None else None
+                )
+                for i, v in enumerate(r)
+            )
+            + ",)"
+            for r, raw in zip(body, raw_rows, strict=True)
+        )
+        + ",)"
+    )
     shown = []
     if column_note:
         shown.append(column_note)
@@ -122,7 +152,13 @@ def _dpx_table(df: pl.DataFrame, *, rows: int, column_note: str = "") -> str:
     )
 
 
-def table(df: pl.DataFrame, *, rows: int = TABLE_ROWS, orientation: str = "auto") -> str:
+def table(
+    df: pl.DataFrame,
+    *,
+    rows: int = TABLE_ROWS,
+    orientation: str = "auto",
+    chips: dict[str, dict[str, str]] | None = None,
+) -> str:
     """``df`` as a typst table: a styled header row, zebra rows, numbers right
     aligned and formatted, columns as wide as what they hold, and a note when
     rows or columns were left out.
@@ -141,9 +177,11 @@ def table(df: pl.DataFrame, *, rows: int = TABLE_ROWS, orientation: str = "auto"
     if orientation == "portrait":
         dropped = total_cols - TABLE_COLS
         note = f"Columns 1-{TABLE_COLS} of {total_cols}" if dropped > 0 else ""
-        return raw(_dpx_table(df.select(df.columns[:TABLE_COLS]), rows=rows, column_note=note))
+        return raw(
+            _dpx_table(df.select(df.columns[:TABLE_COLS]), rows=rows, column_note=note, chips=chips)
+        )
     if total_cols <= LANDSCAPE_TABLE_COLS:
-        body = _dpx_table(df, rows=rows)
+        body = _dpx_table(df, rows=rows, chips=chips)
     else:
         blocks = []
         for start in range(0, total_cols, SPLIT_TABLE_COLS):
@@ -153,7 +191,7 @@ def table(df: pl.DataFrame, *, rows: int = TABLE_ROWS, orientation: str = "auto"
             note = (
                 f"Columns {start + 1}-{min(start + SPLIT_TABLE_COLS, total_cols)} of {total_cols}"
             )
-            block = _dpx_table(df.select(names), rows=rows, column_note=note)
+            block = _dpx_table(df.select(names), rows=rows, column_note=note, chips=chips)
             # Non-breakable, so a block a landscape page cannot hold moves
             # whole onto the next one instead of splitting mid-table.
             blocks.append(f"#block(breakable: false)[\n{block}\n]")

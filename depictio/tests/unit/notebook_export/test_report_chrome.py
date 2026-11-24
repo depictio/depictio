@@ -55,6 +55,10 @@ def _plan(tabs, **extra) -> ExportPlan:
 # ── Overview layout ─────────────────────────────────────────────────────────
 
 
+#: The report laid out in the dashboard's rows (its settings' other width).
+_ROWS = {"settings": {"tile_width": "row"}}
+
+
 def test_a_full_width_tile_leaves_its_row(ampliseq_tabs):
     """The layer's ``full_width`` takes a tile out of the dashboard row it
     shares: the 5:3 row splits into two tiles of their own, each the page's
@@ -64,16 +68,19 @@ def test_a_full_width_tile_leaves_its_row(ampliseq_tabs):
     )
     layer = ReportLayer.model_validate(
         {
+            **_ROWS,
             "tiles": [
                 {
                     "tab_id": str(main["dashboard_id"]),
                     "component_id": str(run["index"]),
                     "full_width": True,
                 }
-            ]
+            ],
         }
     )
-    before = _body(generate_qmd(_plan(ampliseq_tabs)))
+    before = _body(
+        generate_qmd(_plan(ampliseq_tabs, report_layer=ReportLayer.model_validate(_ROWS)))
+    )
     src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=layer)))
     # That row is gone (other tabs keep their own 5:3 rows), its tiles stay.
     assert src.count('layout="[5,3]"') == before.count('layout="[5,3]"') - 1
@@ -83,8 +90,9 @@ def test_a_full_width_tile_leaves_its_row(ampliseq_tabs):
 
 
 def test_the_overview_keeps_its_grid_rows(ampliseq_tabs):
-    """About + The run share a row 5:3 as on the dashboard; the steps are a stepper."""
-    src = _body(generate_qmd(_plan(ampliseq_tabs)))
+    """About + The run share a row 5:3 as on the dashboard (the report in the
+    dashboard's rows); the steps are a stepper."""
+    src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=ReportLayer.model_validate(_ROWS))))
     # Quarto's own layout: a flex row on the page, a typst grid in the PDF.
     assert '::: {.dpx-grid layout="[5,3]"}' in src
     grid = src.index('layout="[5,3]"')
@@ -823,10 +831,45 @@ def test_report_settings_shape_the_pdf_and_the_captions(ampliseq_tabs):
     assert 'data-viz-controls="rail"' in front["format"]["html"]["include-before-body"]["text"]
 
 
-def test_every_tile_full_width_breaks_every_row(ampliseq_tabs):
-    before = _body(generate_qmd(_plan(ampliseq_tabs)))
+def test_every_tile_is_full_width_by_default(ampliseq_tabs):
+    """A report reads top to bottom: no dashboard row unless asked for."""
+    before = _body(_with_settings(ampliseq_tabs, tile_width="row"))
     assert 'layout="[5,3]"' in before
-    src = _body(_with_settings(ampliseq_tabs, tile_width="full"))
+    src = _body(generate_qmd(_plan(ampliseq_tabs)))
     assert 'layout="[5,3]"' not in src
     # Cards keep their strip.
     assert "card_row([viz_samples, viz_phyla, viz_shannon_diversity, viz_reads_kept])" in src
+
+
+def test_a_tile_can_keep_its_dashboard_row(ampliseq_tabs):
+    """Under the full-width default, two tiles both set to their row share it."""
+    main = next(
+        t for t in ampliseq_tabs for m in t["stored_metadata"] if m.get("index") == "ov-run"
+    )
+    row = [
+        m["index"]
+        for m in main["stored_metadata"]
+        if m.get("index") in ("ov-run", "ov-about") or m.get("title") == "About this dashboard"
+    ]
+    layer = ReportLayer.model_validate(
+        {
+            "tiles": [
+                {"tab_id": str(main["dashboard_id"]), "component_id": str(i), "full_width": False}
+                for i in row
+            ]
+        }
+    )
+    src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=layer)))
+    assert src.count('layout="[5,3]"') == 1
+
+
+def test_a_large_table_opens_a_pdf_page(ampliseq_tabs):
+    on = _with_settings(ampliseq_tabs)
+    off = _with_settings(ampliseq_tabs, table_page_break=False)
+    assert "`#pagebreak(weak: true)`{=typst}" in on
+    assert "`#pagebreak(weak: true)`{=typst}" not in off
+
+
+def test_tables_wear_the_dashboard_colours(ampliseq_tabs):
+    src = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert "colors=depictio_category_colors)" in src

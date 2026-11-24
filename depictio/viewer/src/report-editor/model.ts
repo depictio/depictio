@@ -51,8 +51,6 @@ export interface TabView {
   sections: string[];
   /** Each section's own look, by title, as the dashboard draws its header. */
   sectionLooks: Record<string, SectionLook>;
-  /** The report's settings put every tile across the page. */
-  allFullWidth: boolean;
   tiles: TileView[];
 }
 
@@ -80,7 +78,7 @@ function tileView(entry: ReportOutlineEntry, layer: ReportLayer): TileView {
     inPdf: tile ? tile.in_pdf : entry.in_pdf,
     orientation: tile ? tile.orientation : entry.orientation,
     pageBreakBefore: tile ? tile.page_break_before : entry.page_break_before,
-    fullWidth: Boolean(tile ? tile.full_width : entry.full_width),
+    fullWidth: tile?.full_width ?? entry.full_width ?? (layer.settings?.tile_width ?? 'full') === 'full',
     caption: tile?.caption ?? '',
     sectionOverride,
     section: sectionOverride || entry.section,
@@ -117,14 +115,19 @@ export function buildTabViews(tabs: ReportOutlineTab[], layer: ReportLayer): Tab
         isMain: tabIdx === 0,
         sections,
         sectionLooks,
-        allFullWidth: layer.settings?.tile_width === 'full',
         tiles: rows.map((r) => r.view),
       } satisfies TabView,
     };
   });
-  // The main tab stays first; the others follow by their order, then as listed.
+  // The main tab stays first; the others follow by their part (the main
+  // report, then the appendices, as the report prints them), their order,
+  // then as listed.
   const [main, ...rest] = views;
-  rest.sort((a, b) => (a.order ?? a.tabIdx) - (b.order ?? b.tabIdx) || a.tabIdx - b.tabIdx);
+  const part = (v: (typeof views)[number]) => (v.view.placement === 'appendix' ? 1 : 0);
+  rest.sort(
+    (a, b) =>
+      part(a) - part(b) || (a.order ?? a.tabIdx) - (b.order ?? b.tabIdx) || a.tabIdx - b.tabIdx,
+  );
   return [main, ...rest].filter(Boolean).map((v) => v.view);
 }
 
@@ -141,7 +144,7 @@ function baseTile(entry: ReportOutlineEntry): ReportTile {
     orientation: entry.orientation,
     section: null,
     page_break_before: entry.page_break_before,
-    full_width: Boolean(entry.full_width),
+    full_width: entry.full_width ?? null,
   };
 }
 
@@ -188,18 +191,29 @@ export function setTabPlacement(
   };
 }
 
-/** Swap a non-main tab with its neighbour and write every tab's order as
- *  consecutive integers (the main tab keeps 0). */
-export function moveTab(layer: ReportLayer, tabs: TabView[], from: number, to: number): ReportLayer {
+/** Move a non-main tab to position `to`, in the part `placement` when given
+ *  (the main report or the appendices; its own part otherwise), and write
+ *  every tab's order as consecutive integers (the main tab keeps 0). */
+export function moveTab(
+  layer: ReportLayer,
+  tabs: TabView[],
+  from: number,
+  to: number,
+  placement?: ReportTabPlacement,
+): ReportLayer {
   // The main tab is first and fixed.
-  if (from < 1 || to < 1 || to >= tabs.length || from === to) return layer;
+  if (from < 1 || to < 1 || to >= tabs.length) return layer;
+  if (from === to && (!placement || placement === tabs[from].placement)) return layer;
   const ordered = [...tabs];
   const [moved] = ordered.splice(from, 1);
   ordered.splice(to, 0, moved);
   const stored = new Map(layer.tabs.map((t) => [t.tab_id, t]));
   const next: ReportTab[] = ordered.map((view, i) => ({
     tab_id: view.tabId,
-    placement: stored.get(view.tabId)?.placement ?? view.placement,
+    placement:
+      view.tabId === moved.tabId && placement
+        ? placement
+        : (stored.get(view.tabId)?.placement ?? view.placement),
     order: i,
   }));
   return { ...layer, tabs: next };

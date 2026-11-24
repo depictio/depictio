@@ -1,13 +1,34 @@
 import React from 'react';
-import { Divider, Modal, SegmentedControl, SimpleGrid, Stack, Switch, Text } from '@mantine/core';
+import { Divider, Group, Modal, SimpleGrid, Stack, Switch, Text } from '@mantine/core';
+import {
+  Captions,
+  Columns2,
+  Contrast,
+  Files,
+  LayoutTemplate,
+  FileText,
+  Palette,
+  PanelRight,
+  PanelTop,
+  RectangleHorizontal,
+  RectangleVertical,
+  Settings2,
+  StretchHorizontal,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ReportLayer, ReportSettings } from 'depictio-react-core';
 
-/** The report as it was before these settings existed: what a layer without
- *  them exports (the model's own defaults, `ReportSettings`). */
+import { STROKE } from '../chrome/variants/glass/icons';
+import { IconSegmented } from './controls';
+import type { SegmentOption } from './controls';
+
+/** What a layer without settings exports (the model's own defaults,
+ *  `ReportSettings`): a report read top to bottom. */
 export const DEFAULT_SETTINGS: ReportSettings = {
   paper: 'a4',
   landscape: false,
-  tile_width: 'row',
+  table_page_break: true,
+  tile_width: 'full',
   viz_controls: 'popover',
   toc: true,
   export_details: true,
@@ -22,6 +43,28 @@ export function settingsOf(layer: ReportLayer | null | undefined): ReportSetting
   return { ...DEFAULT_SETTINGS, ...(layer?.settings ?? {}) };
 }
 
+const STYLES: SegmentOption<'colour' | 'mono'>[] = [
+  { value: 'colour', label: 'Colour', icon: Palette },
+  { value: 'mono', label: 'Mono', icon: Contrast },
+];
+const PAPERS: SegmentOption<ReportSettings['paper']>[] = [
+  { value: 'a4', label: 'A4', icon: FileText },
+  { value: 'letter', label: 'Letter', icon: FileText },
+];
+const PAGES: SegmentOption<'portrait' | 'landscape'>[] = [
+  { value: 'portrait', label: 'Portrait', icon: RectangleVertical },
+  { value: 'landscape', label: 'Landscape', icon: RectangleHorizontal },
+];
+const WIDTHS: SegmentOption<ReportSettings['tile_width']>[] = [
+  { value: 'full', label: 'Full width', icon: StretchHorizontal },
+  { value: 'row', label: 'Dashboard rows', icon: Columns2 },
+];
+const VIZ_CONTROLS: SegmentOption<ReportSettings['viz_controls']>[] = [
+  { value: 'popover', label: 'Behind an icon', icon: Settings2 },
+  { value: 'rail', label: 'Beside the plot', icon: PanelRight },
+  { value: 'header', label: 'Under the title', icon: PanelTop },
+];
+
 interface ReportSettingsModalProps {
   opened: boolean;
   onClose: () => void;
@@ -29,36 +72,28 @@ interface ReportSettingsModalProps {
   onEdit: (change: (layer: ReportLayer) => ReportLayer) => void;
 }
 
-const SettingsGroup: React.FC<{ title: string; hint: string; children: React.ReactNode }> = ({
-  title,
-  hint,
-  children,
-}) => (
-  <Stack gap="xs">
-    <div>
-      <Text fw={600} size="sm">
-        {title}
-      </Text>
-      <Text size="xs" c="dimmed">
-        {hint}
-      </Text>
-    </div>
+/** A group of settings: its icon and name, the line saying what it covers. */
+const SettingsGroup: React.FC<{
+  icon: LucideIcon;
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}> = ({ icon: I, title, hint, children }) => (
+  <Stack gap="sm">
+    <Group gap={8} wrap="nowrap" align="flex-start">
+      <span className="re-settings-icon" aria-hidden>
+        <I size={16} strokeWidth={STROKE} />
+      </span>
+      <div>
+        <Text fw={600} size="sm">
+          {title}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {hint}
+        </Text>
+      </div>
+    </Group>
     {children}
-  </Stack>
-);
-
-const Choice: React.FC<{
-  label: string;
-  value: string;
-  data: { value: string; label: string }[];
-  onChange: (value: string) => void;
-  testId: string;
-}> = ({ label, value, data, onChange, testId }) => (
-  <Stack gap={4}>
-    <Text size="xs" fw={500}>
-      {label}
-    </Text>
-    <SegmentedControl size="xs" fullWidth data={data} value={value} onChange={onChange} data-testid={testId} />
   </Stack>
 );
 
@@ -73,6 +108,7 @@ const ReportSettingsModal: React.FC<ReportSettingsModalProps> = ({ opened, onClo
   const toggle = (key: keyof ReportSettings, label: string, description: string) => (
     <Switch
       key={key}
+      size="sm"
       label={label}
       description={description}
       checked={Boolean(s[key])}
@@ -90,74 +126,59 @@ const ReportSettingsModal: React.FC<ReportSettingsModalProps> = ({ opened, onClo
       data-testid="report-settings"
     >
       <Stack gap="lg">
-        <SettingsGroup title="PDF" hint="How the Exact PDF prints.">
+        <SettingsGroup icon={FileText} title="PDF" hint="How the Exact PDF prints.">
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-            <Choice
+            <IconSegmented
               label="Colour"
+              options={STYLES}
               value={layer.style ?? 'colour'}
-              data={[
-                { value: 'colour', label: 'Colour' },
-                { value: 'mono', label: 'Mono' },
-              ]}
-              onChange={(v) => onEdit((l) => ({ ...l, style: v as ReportLayer['style'] }))}
-              testId="report-setting-style"
+              onChange={(v) => onEdit((l) => ({ ...l, style: v }))}
+              data-testid="report-setting-style"
             />
-            <Choice
+            <IconSegmented
               label="Paper"
+              options={PAPERS}
               value={s.paper}
-              data={[
-                { value: 'a4', label: 'A4' },
-                { value: 'letter', label: 'Letter' },
-              ]}
-              onChange={(v) => set({ paper: v as ReportSettings['paper'] })}
-              testId="report-setting-paper"
+              onChange={(v) => set({ paper: v })}
+              data-testid="report-setting-paper"
             />
-            <Choice
+            <IconSegmented
               label="Pages"
+              options={PAGES}
               value={s.landscape ? 'landscape' : 'portrait'}
-              data={[
-                { value: 'portrait', label: 'Portrait' },
-                { value: 'landscape', label: 'Landscape' },
-              ]}
               onChange={(v) => set({ landscape: v === 'landscape' })}
-              testId="report-setting-landscape"
+              data-testid="report-setting-landscape"
             />
           </SimpleGrid>
-          <Text size="xs" c="dimmed">
-            A tile&apos;s own PDF orientation still turns its page.
-          </Text>
+          {toggle(
+            'table_page_break',
+            'Large tables on a new page',
+            'A table of a dozen rows or more starts a page, so it is not cut after its first lines. A tile’s own page settings still apply.',
+          )}
         </SettingsGroup>
 
         <Divider />
-        <SettingsGroup title="Layout" hint="The defaults every tile starts from.">
-          <Choice
+        <SettingsGroup icon={LayoutTemplate} title="Layout" hint="The defaults every tile starts from.">
+          <IconSegmented
             label="Tile width"
+            options={WIDTHS}
             value={s.tile_width}
-            data={[
-              { value: 'row', label: 'As in the dashboard' },
-              { value: 'full', label: 'Every tile full width' },
-            ]}
-            onChange={(v) => set({ tile_width: v as ReportSettings['tile_width'] })}
-            testId="report-setting-tile_width"
+            onChange={(v) => set({ tile_width: v })}
+            data-testid="report-setting-tile_width"
+            hint="A tile’s own width, set in its settings, wins. Cards keep their strip."
           />
-          <Choice
+          <IconSegmented
             label="Advanced visualisation controls"
+            options={VIZ_CONTROLS}
             value={s.viz_controls}
-            data={[
-              { value: 'popover', label: 'Behind the settings icon' },
-              { value: 'rail', label: 'Beside the plot' },
-              { value: 'header', label: 'Under the title' },
-            ]}
-            onChange={(v) => set({ viz_controls: v as ReportSettings['viz_controls'] })}
-            testId="report-setting-viz_controls"
+            onChange={(v) => set({ viz_controls: v })}
+            data-testid="report-setting-viz_controls"
+            hint="Applies to every visualisation in the report, whatever the dashboard shows."
           />
-          <Text size="xs" c="dimmed">
-            A visualisation whose controls were placed in the dashboard keeps that placement.
-          </Text>
         </SettingsGroup>
 
         <Divider />
-        <SettingsGroup title="Document" hint="The parts around the results.">
+        <SettingsGroup icon={Files} title="Document" hint="The parts around the results.">
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
             {toggle('toc', 'Table of contents', 'The side contents, and the contents page of the PDF')}
             {toggle('export_details', 'Export details', 'Who exported it, when, from where')}
@@ -168,7 +189,7 @@ const ReportSettingsModal: React.FC<ReportSettingsModalProps> = ({ opened, onClo
         </SettingsGroup>
 
         <Divider />
-        <SettingsGroup title="Captions" hint="What sits under each figure and table.">
+        <SettingsGroup icon={Captions} title="Captions" hint="What sits under each figure and table.">
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
             {toggle('numbering', 'Numbers', '“Figure 3”, “Table 1” before each caption')}
             {toggle('provenance', 'Data line', 'The collection, its rows and its date')}

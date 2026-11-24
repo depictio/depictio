@@ -20,6 +20,7 @@ import { Badge, Button, Group, Text } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import {
   AvailableFilterValuesProvider,
+  CategoryCellStyleContext,
   CategoryColorsContext,
   ComponentRenderer,
   FilterPanel,
@@ -87,13 +88,17 @@ function reportVizControls(): unknown {
   return document.getElementById('depictio-report-settings')?.dataset.vizControls;
 }
 
-/** An advanced viz in a report keeps its controls closed, behind the settings
- *  icon, unless something placed them: the tile itself, then the report's
- *  settings, then the dashboard. Docked controls took the room of the plot.
- *  The same object comes back for the same tile, so a render does not hand
- *  the renderer new metadata. */
+/** Where an advanced viz draws its controls in a report: the report's
+ *  settings decide for every visualisation (a reader opens a report to read
+ *  it, and controls the dashboard keeps open took the room of the plot),
+ *  then the dashboard's default for reports exported without settings, then
+ *  behind the settings icon. Two fields carry it: `config.controls_placement`
+ *  (popover, rail or header) and, for the popover, `controls_placement` on the
+ *  component, the dock, set to `popover` so a full-width tile does not dock
+ *  the panel open beside the plot. The same object comes back for the same
+ *  tile, so a render does not hand the renderer new metadata. */
 function withReportControls(m: StoredMetadata, dashboardDefault: unknown): StoredMetadata {
-  if (m.component_type !== 'advanced_viz' || isControlsPlacement(m.controls_placement)) return m;
+  if (m.component_type !== 'advanced_viz') return m;
   let out = placed.get(m);
   if (!out) {
     const report = reportVizControls();
@@ -102,7 +107,13 @@ function withReportControls(m: StoredMetadata, dashboardDefault: unknown): Store
       : isControlsPlacement(dashboardDefault)
         ? dashboardDefault
         : 'popover';
-    out = { ...m, controls_placement: placement } as StoredMetadata;
+    const config = { ...((m.config as Record<string, unknown> | undefined) ?? {}) };
+    config.controls_placement = placement;
+    out = {
+      ...m,
+      config,
+      ...(placement === 'popover' ? { controls_placement: 'popover' } : {}),
+    } as StoredMetadata;
     placed.set(m, out);
   }
   return out;
@@ -428,6 +439,8 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
                   <CategoryColorsContext.Provider
                     value={colorSources.get(tile.refs[0]?.tabId ?? '') ?? null}
                   >
+                    {/* A report's tables show a coloured value as a chip. */}
+                    <CategoryCellStyleContext.Provider value="chip">
                     {/* `dashboard-content`: the Paper chrome styles a tile under
                         it (glass.css), as it does on the dashboard. */}
                     <div data-testid="dashboard-content" className="depictio-report-content">
@@ -437,6 +450,7 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
                         renderComponent(tile.refs[0])
                       )}
                     </div>
+                    </CategoryCellStyleContext.Provider>
                   </CategoryColorsContext.Provider>
                 </Mounted>
               </TileBoundary>,

@@ -145,7 +145,16 @@ const LiveTile: React.FC<LiveTileProps> = ({ tabId, metadata, state, onStatus })
   const drawn = useMemo<StoredMetadata>(
     () =>
       metadata.component_type === 'advanced_viz'
-        ? ({ ...metadata, controls_placement: 'popover' } as StoredMetadata)
+        ? ({
+            ...metadata,
+            // The dock, and the placement the dashboard may have set
+            // (a phylogeny's controls under its title).
+            controls_placement: 'popover',
+            config: {
+              ...((metadata.config as Record<string, unknown> | undefined) ?? {}),
+              controls_placement: 'popover',
+            },
+          } as StoredMetadata)
         : metadata,
     [metadata],
   );

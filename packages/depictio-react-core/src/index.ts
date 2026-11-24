@@ -1991,3 +1991,6 @@ export {
   resolveCategoricalPalette,
   stableColorMap,
 } from './colors';
+// How a table draws a coloured value: the dashboard's dot, or a report's chip.
+export { CategoryCellStyleContext } from './components/tableCategoryCell';
+export type { CategoryCellStyle } from './components/tableCategoryCell';

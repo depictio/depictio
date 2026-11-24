@@ -65,9 +65,9 @@ ReportVizControls = Literal["popover", "rail", "header"]
 
 
 class ReportSettings(BaseModel):
-    """The report's own options, for the whole document. Every default is the
-    report as it was before these existed, so a stored layer without them
-    exports unchanged."""
+    """The report's own options, for the whole document. A report reads top
+    to bottom: by default every tile has the page's width (cards keep their
+    strip) and a large table starts a new PDF page."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -75,8 +75,11 @@ class ReportSettings(BaseModel):
     paper: ReportPaper = "a4"
     # The PDF's page; a tile's own orientation still turns its page.
     landscape: bool = False
+    # A table with more rows than a third of a page starts a new page, so it
+    # is not cut after its first few lines.
+    table_page_break: bool = True
     # Layout
-    tile_width: ReportTileWidth = "row"
+    tile_width: ReportTileWidth = "full"
     viz_controls: ReportVizControls = "popover"
     # Parts of the document
     toc: bool = True
@@ -126,9 +129,10 @@ class ReportTile(BaseModel):
     # in its own.
     section: str | None = None
     page_break_before: bool = False
-    # The whole width of the page, out of the dashboard row it shares with
-    # other tiles; the rest of that row keeps sharing it. Cards keep their strip.
-    full_width: bool = False
+    # The whole width of the page (True), or the dashboard row it shares with
+    # other tiles (False); ``None`` follows the report's settings
+    # (``tile_width``). Cards keep their strip.
+    full_width: bool | None = None
 
 
 class ReportTab(BaseModel):
@@ -226,7 +230,8 @@ class ReportOutlineEntry(BaseModel):
     orientation: ReportOrientation = "auto"
     section: str | None = None
     page_break_before: bool = False
-    full_width: bool = False
+    # The tile's own width choice; ``None`` follows the report's settings.
+    full_width: bool | None = None
     order: int | None = None
     # A section's own look, as the dashboard draws its header: an Iconify id,
     # a Mantine palette name and the line under its title. Sections only.

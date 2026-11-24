@@ -1,42 +1,50 @@
 import React from 'react';
-import { Box, Button, Group, SegmentedControl, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
-import { ArrowDown, ArrowUp, SlidersHorizontal } from 'lucide-react';
+import { Box, Button, Group, Select, Stack, Switch, TextInput } from '@mantine/core';
+import {
+  ArrowDown,
+  ArrowUp,
+  Columns2,
+  RectangleHorizontal,
+  RectangleVertical,
+  SlidersHorizontal,
+  Sparkles,
+  StretchHorizontal,
+} from 'lucide-react';
 import type { ReportOrientation, ReportTile } from 'depictio-react-core';
 
 import { STROKE } from '../chrome/variants/glass/icons';
+import { IconSegmented } from './controls';
+import type { SegmentOption } from './controls';
 import type { TileView } from './model';
 
 const OWN_SECTION = '__own__';
 
-const ORIENTATIONS = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'portrait', label: 'Portrait' },
-  { value: 'landscape', label: 'Landscape' },
+const ORIENTATIONS: SegmentOption<ReportOrientation>[] = [
+  { value: 'auto', label: 'Auto', icon: Sparkles },
+  { value: 'portrait', label: 'Portrait', icon: RectangleVertical },
+  { value: 'landscape', label: 'Landscape', icon: RectangleHorizontal },
 ];
 
 interface TileInspectorProps {
   view: TileView;
   /** Section titles of the tile's tab. */
   sections: string[];
-  /** The report's settings put every tile across the page. */
-  widthLocked?: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onPatch: (patch: Partial<ReportTile>) => void;
   onMove: (direction: -1 | 1) => void;
 }
 
-/** A tile's width: its dashboard row, or the whole page. */
-const WIDTHS = [
-  { value: 'row', label: 'As in the dashboard' },
-  { value: 'full', label: 'Full width' },
+/** A tile's width: the whole page, or its dashboard row. */
+const WIDTHS: SegmentOption<'full' | 'row'>[] = [
+  { value: 'full', label: 'Full width', icon: StretchHorizontal },
+  { value: 'row', label: 'Dashboard row', icon: Columns2 },
 ];
 
 /** The settings of the selected tile: its caption and how it sits in the PDF. */
 const TileInspector: React.FC<TileInspectorProps> = ({
   view,
   sections,
-  widthLocked = false,
   canMoveUp,
   canMoveDown,
   onPatch,
@@ -71,55 +79,42 @@ const TileInspector: React.FC<TileInspectorProps> = ({
           onChange={(e) => onPatch({ caption: e.currentTarget.value || null })}
         />
         {entry.component_type !== 'card' ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Width in the report
-            </Text>
-            <SegmentedControl
-              size="xs"
-              fullWidth
-              data={WIDTHS}
-              value={widthLocked || view.fullWidth ? 'full' : 'row'}
-              disabled={widthLocked}
-              onChange={(v) => onPatch({ full_width: v === 'full' })}
-              data-testid="report-tile-width"
-            />
-            <Text size="xs" c="dimmed">
-              {widthLocked
-                ? 'Every tile is full width (Report settings).'
-                : view.fullWidth
-                ? 'Takes the whole page width; the rest of its dashboard row keeps sharing it.'
-                : 'Shares its row with the tiles beside it in the dashboard.'}
-            </Text>
-          </Stack>
+          <IconSegmented
+            label="Width"
+            options={WIDTHS}
+            value={view.fullWidth ? 'full' : 'row'}
+            onChange={(v) => onPatch({ full_width: v === 'full' })}
+            data-testid="report-tile-width"
+            hint={
+              view.fullWidth
+                ? 'Takes the whole page width.'
+                : 'Shares its row with the tiles beside it that do too.'
+            }
+          />
         ) : null}
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <Group grow align="flex-start" wrap="nowrap">
           <Switch
-            label="Include in PDF"
-            description="Off keeps it in the HTML report only"
+            size="sm"
+            label="In the PDF"
+            description="Off keeps it in the HTML only"
             checked={view.inReport && view.inPdf}
             disabled={!view.inReport}
             onChange={(e) => onPatch({ in_pdf: e.currentTarget.checked })}
           />
           <Switch
-            label="Page break before"
-            description="Starts a new PDF page"
+            size="sm"
+            label="New page"
+            description="Starts a PDF page"
             checked={view.pageBreakBefore}
             onChange={(e) => onPatch({ page_break_before: e.currentTarget.checked })}
           />
         </Group>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            PDF page orientation
-          </Text>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            data={ORIENTATIONS}
-            value={view.orientation}
-            onChange={(v) => onPatch({ orientation: v as ReportOrientation })}
-          />
-        </Stack>
+        <IconSegmented
+          label="PDF page"
+          options={ORIENTATIONS}
+          value={view.orientation}
+          onChange={(v) => onPatch({ orientation: v })}
+        />
         <Select
           label="Section"
           size="xs"
