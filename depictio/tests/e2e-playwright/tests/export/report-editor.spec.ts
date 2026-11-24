@@ -12,7 +12,7 @@
  * poll instead of waiting a fixed time.
  */
 
-import type { FrameLocator, Locator, Page } from "@playwright/test";
+import type { APIRequestContext, FrameLocator, Locator, Page } from "@playwright/test";
 
 import { API_PREFIX, API_URL, apiOnlyToken, expect, test } from "@fixtures/auth";
 import { IRIS_DASHBOARD_ID } from "@fixtures/projects";
@@ -22,6 +22,10 @@ const FRAME = "[data-testid='report-preview-frame']";
 const VISIBLE_TILES = "[data-depictio-tile]:visible";
 /** The seeded Iris report opens with every tile in the report, so the first
  *  toggle candidate is also the first card in practice. */
+/** The cards of a card row in the preview, in either of its two forms: the
+ *  rendered fallback's slots, or the live cards the runtime mounts once the
+ *  row scrolls into view (the fallback is then hidden). */
+const CARDS = ".dpx-cards > .dpx-card-slot, .depictio-report-row > *";
 const FULL_TILES = "[data-testid='report-structure'] .rpt-tile:not(.rpt-tile--half)";
 
 /** The editor page, opened directly. */
@@ -41,6 +45,30 @@ async function livePreview(page: Page): Promise<FrameLocator> {
     timeout: 60_000,
   });
   return frame;
+}
+
+/** True once the stored layer has `key` (`tab:component`) back in the
+ *  report: the page saves 800 ms after an edit, and closing it earlier would
+ *  abandon the save. */
+async function storedInReport(
+  request: APIRequestContext,
+  token: string,
+  key: string,
+): Promise<boolean> {
+  const at = key.indexOf(":");
+  const tabId = key.slice(0, at);
+  const componentId = key.slice(at + 1);
+  const res = await request.get(
+    `${API_URL}${API_PREFIX}/dashboards/report_layer/${IRIS_DASHBOARD_ID}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok()) return false;
+  const layer = (await res.json()) as {
+    tiles?: { tab_id: string; component_id: string; in_report: boolean }[];
+  };
+  return !(layer.tiles ?? []).some(
+    (t) => t.tab_id === tabId && t.component_id === componentId && !t.in_report,
+  );
 }
 
 test.describe("Report editor", () => {
@@ -114,24 +142,6 @@ test.describe("Report editor", () => {
     expect(tile, "no tile in the report with a visible preview tile").not.toBeNull();
 
     const { access_token } = await apiOnlyToken(request, "adminUser");
-    const at = key.indexOf(":");
-    const tabId = key.slice(0, at);
-    const componentId = key.slice(at + 1);
-    /** True once the stored layer has this tile back in the report: the page
-     *  saves 800 ms after an edit, and closing it earlier would abandon it. */
-    const storedInReport = async (): Promise<boolean> => {
-      const res = await request.get(
-        `${API_URL}${API_PREFIX}/dashboards/report_layer/${IRIS_DASHBOARD_ID}`,
-        { headers: { Authorization: `Bearer ${access_token}` } },
-      );
-      if (!res.ok()) return false;
-      const layer = (await res.json()) as {
-        tiles?: { tab_id: string; component_id: string; in_report: boolean }[];
-      };
-      return !(layer.tiles ?? []).some(
-        (t) => t.tab_id === tabId && t.component_id === componentId && !t.in_report,
-      );
-    };
 
     const toggle = tile!.locator("[data-testid='report-include-toggle']");
     const before = await tiles.count();
@@ -151,7 +161,60 @@ test.describe("Report editor", () => {
         await toggle.click();
       }
       await expect(tiles).toHaveCount(before, { timeout: 30_000 });
-      await expect.poll(storedInReport, { timeout: 30_000 }).toBe(true);
+      await expect
+        .poll(() => storedInReport(request, access_token, key), { timeout: 30_000 })
+        .toBe(true);
+    }
+  });
+
+  test("unticking one card of a card row hides that card alone", async ({
+    loginAsAdmin,
+    page,
+    request,
+  }) => {
+    test.setTimeout(360_000);
+    await loginAsAdmin();
+    await openEditor(page);
+    const frame = await livePreview(page);
+
+    // A ticked half-width card whose preview tile is a row of several cards:
+    // the row is one block in the report, each card one slot in it.
+    let card: Locator | null = null;
+    let key = "";
+    for (const candidate of await page
+      .locator("[data-testid='report-structure'] .rpt-tile--half")
+      .all()) {
+      const toggle = candidate.locator("[data-testid='report-include-toggle']");
+      if (!(await toggle.isChecked())) continue;
+      const cardKey = await candidate.getAttribute("data-tile-key");
+      if (!cardKey) continue;
+      const row = frame.locator(`[data-depictio-tile~="${cardKey}"]`).first();
+      if (!(await row.isVisible())) continue;
+      if ((await row.locator(CARDS).count()) < 2) continue;
+      card = candidate;
+      key = cardKey;
+      break;
+    }
+    expect(card, "no ticked card in a visible card row").not.toBeNull();
+
+    const row = frame.locator(`[data-depictio-tile~="${key}"]`).first();
+    const slots = row.locator(CARDS).filter({ visible: true });
+    const before = await slots.count();
+    const { access_token } = await apiOnlyToken(request, "adminUser");
+    const toggle = card!.locator("[data-testid='report-include-toggle']");
+    try {
+      await toggle.click();
+      // The card leaves the row; the row and its other cards stay.
+      await expect(slots).toHaveCount(before - 1, { timeout: 30_000 });
+      await expect(row).toBeVisible();
+    } finally {
+      if (card && !(await toggle.isChecked())) {
+        await toggle.click();
+      }
+      await expect(slots).toHaveCount(before, { timeout: 30_000 });
+      await expect
+        .poll(() => storedInReport(request, access_token, key), { timeout: 30_000 })
+        .toBe(true);
     }
   });
 

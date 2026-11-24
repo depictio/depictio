@@ -146,6 +146,28 @@
     forEach(document.querySelectorAll(CAPTION_SEL), function (el) { texts.set(el, el.innerHTML); });
   }
 
+  // The unticked cards of a card strip, hidden by a style rule rather than on
+  // the elements: the runtime mounts a tile's live cards when it scrolls into
+  // view, often after the patch, and the rule reaches them too. A strip shows
+  // its cards in its refs' order both ways: the fallback's `.dpx-card-slot`s
+  // and the live mount's `.depictio-report-row` children.
+  var STRIP_ATTR = 'data-depictio-preview-strip';
+  var stripStyle = null, stripCount = 0;
+  function hideCards(host, indices) {
+    if (!stripStyle) {
+      stripStyle = document.createElement('style');
+      stripStyle.setAttribute('data-depictio-preview-style', '');
+      document.head.appendChild(stripStyle);
+    }
+    var id = String(++stripCount), scope = '[' + STRIP_ATTR + '="' + id + '"] ';
+    host.setAttribute(STRIP_ATTR, id);
+    var rules = indices.map(function (i) {
+      var nth = ':nth-child(' + (i + 1) + ')';
+      return scope + '.dpx-cards > .dpx-card-slot' + nth + ',' + scope + '.depictio-report-row > ' + nth;
+    });
+    stripStyle.textContent += rules.join(',') + '{display:none !important}\n';
+  }
+
   function restore() {
     if (!homes) return;
     forEach(document.querySelectorAll('[data-depictio-preview-badge],[data-depictio-preview-break]'),
@@ -157,6 +179,8 @@
       forEach(kids, function (child) { if (child.isConnected) container.appendChild(child); });
     });
     forEach(document.querySelectorAll(TILE_SEL), function (host) { blockOf(host).style.display = ''; });
+    forEach(document.querySelectorAll('[' + STRIP_ATTR + ']'), function (h) { h.removeAttribute(STRIP_ATTR); });
+    if (stripStyle) stripStyle.textContent = '';
     if (focusBlock) { focusBlock.style.outline = ''; focusBlock.style.outlineOffset = ''; focusBlock = null; }
     if (createdHeader) {
       if (createdHeader.parentNode) createdHeader.parentNode.removeChild(createdHeader);
@@ -257,12 +281,14 @@
     forEach(document.querySelectorAll(TILE_SEL), function (host) {
       var refs = refsOf(host);
       if (!refs.length) return;
-      var cfgs = [], hidden = true;
-      forEach(refs, function (ref) {
+      var cfgs = [], out = [];
+      forEach(refs, function (ref, i) {
         var c = byRef[ref.tab_id + ':' + ref.component_id];
-        if (c) { cfgs.push(c); if (c.in_report !== false) hidden = false; } else hidden = false;
+        if (c) cfgs.push(c);
+        if (c && c.in_report === false) out.push(i);
       });
-      if (hidden) blockOf(host).style.display = 'none';
+      if (out.length === refs.length) blockOf(host).style.display = 'none';
+      else if (out.length) hideCards(host, out);
       decorate(host, cfgs);
       setCaption(host, cfgs);
       var target = sectionTarget(host, cfgs[0]), moved = target ? blockOf(host) : null;
