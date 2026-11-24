@@ -32,9 +32,9 @@ function phaseLabel(job: NotebookRenderStatus | null, starting: boolean): string
 /**
  * The preview job behind the right-hand frame.
  *
- * The report is rendered once, on a neutral layer: only the filter state (and
- * the data) change what the worker produces, so only a change of `stateKey`
- * starts another job. Everything else is applied to the finished report in the
+ * The report is rendered once, on a neutral layer: only the filter state, the
+ * report's settings (and the data) change what the worker produces, so only a
+ * change of `stateKey` starts another job. Everything else is applied to the finished report in the
  * browser. While a new job runs the previous preview stays on screen.
  */
 export function usePreviewJob(

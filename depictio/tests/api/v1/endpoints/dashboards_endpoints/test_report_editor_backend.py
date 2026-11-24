@@ -639,6 +639,26 @@ def test_the_preview_key_ignores_intro_and_caption_edits(ctx) -> None:
     assert queued and queued["kwargs"]["preview_cache"]  # type: ignore[index]
 
 
+def test_the_preview_follows_the_report_settings(ctx) -> None:
+    """The settings shape the whole document, which no patch of the finished
+    report can do: they reach the preview, and a change of them is a new key."""
+    from depictio.api.v1.services.notebook_export import jobs
+
+    staged, _queued, first = _staged_preview_qmd()
+    first_key = jobs.get(first.job_id)["preview_key"]  # type: ignore[index]
+    assert "toc: true" in next(iter(staged.values())).decode()
+
+    layer = ctx["dashboards"].find_one({"dashboard_id": ObjectId(DASHBOARD_ID)})["report_layer"]
+    layer["settings"] = {"toc": False}
+    ctx["dashboards"].update_one(
+        {"dashboard_id": ObjectId(DASHBOARD_ID)}, {"$set": {"report_layer": layer}}
+    )
+
+    staged2, _queued2, second = _staged_preview_qmd()
+    assert "toc: false" in next(iter(staged2.values())).decode()
+    assert jobs.get(second.job_id)["preview_key"] != first_key  # type: ignore[index]
+
+
 def test_a_ready_preview_status_carries_the_capability_url(ctx) -> None:
     from depictio.api.v1.services.notebook_export import jobs
 

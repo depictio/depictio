@@ -24,6 +24,7 @@ from uuid import uuid4
 
 from bson import ObjectId
 from fastapi import Depends, HTTPException, Response
+from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -60,6 +61,7 @@ from depictio.models.models.report_layer import (
     ReportOutlineEntry,
     ReportOutlineTab,
     ReportPreviewRequest,
+    ReportSettings,
 )
 from depictio.models.models.users import User
 from depictio.notebook.theme import palette_hex
@@ -1402,6 +1404,15 @@ def _report_data_identity(plan: Any) -> str:
     return hashlib.sha256("\n".join(tokens).encode()).hexdigest()
 
 
+def _stored_settings(raw: dict[str, Any] | None) -> ReportSettings:
+    """The stored layer's report settings, or the defaults when it has none
+    (or none that validate: the export falls back the same way)."""
+    try:
+        return ReportSettings.model_validate((raw or {}).get("settings") or {})
+    except ValidationError:
+        return ReportSettings()
+
+
 def _preview_cache_key(qmd: bytes, embed_runtime: bool, data_identity: str = "") -> str:
     """What makes one preview equal to another: the document, the runtime
     embedded in it, and the data it reads (``_report_data_identity``). The
@@ -1682,8 +1693,12 @@ def notebook_export_preview(
     # edit changes: the same report previewed after one is served from the
     # finished job instead of run again. The layer's own state stays in
     # charge (``_resolved_request_state`` above), and the real layer still
-    # drives every download.
-    plan.report_layer = ReportLayer().model_dump(mode="json")
+    # drives every download. The layer's settings stay too: they shape the
+    # whole document (its contents, its parts, its rows), which no patch of
+    # the finished report can do, so a change of them is a new render.
+    plan.report_layer = ReportLayer(settings=_stored_settings(plan.report_layer)).model_dump(
+        mode="json"
+    )
     # The preview's provenance carries the day, not the minute (a cache key
     # must not move with the clock), and Quarto renders it with
     # ``embed-resources: false`` — the editor's iframe loads the report and
