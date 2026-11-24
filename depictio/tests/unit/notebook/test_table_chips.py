@@ -2,6 +2,7 @@
 in the HTML (DataTables, read as HTML) and in the PDF (typst)."""
 
 import polars as pl
+import pytest
 
 from depictio.notebook import components
 from depictio.notebook import typst as _typst
@@ -29,6 +30,8 @@ def test_only_pinned_colours_of_text_columns_count():
 
 
 def test_the_html_table_draws_chips_and_escapes_the_rest(monkeypatch):
+    # DataTables draws the chips; without itables the table is Polars' own.
+    pytest.importorskip("itables")
     monkeypatch.setitem(components._TABLES, "interactive", True)
     html = components.data_html(_df(), COLOURS)
     assert 'class="dpx-chip" style="--dpx-chip:#1098ad"' in html

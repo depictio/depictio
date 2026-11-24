@@ -138,7 +138,7 @@ CHROME_CSS = f"""<style data-depictio-report-chrome="{CHROME_VERSION}; quarto {Q
    On Paper's tokens with the classic look's values as fallbacks, so they read
    the same with or without the brand. */
 .dpx-appbar-end {{ display: inline-flex; align-items: center; gap: 12px; }}
-.dpx-icon-btn, .dpx-scheme-toggle, .dpx-toc-toggle {{
+.dpx-icon-btn, .dpx-scheme-toggle, .dpx-toc-mode {{
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   padding: 0; margin: 0; border: 1px solid transparent; background: transparent; cursor: pointer;
   color: var(--gl-muted, #868e96); line-height: 1;
@@ -146,10 +146,10 @@ CHROME_CSS = f"""<style data-depictio-report-chrome="{CHROME_VERSION}; quarto {Q
 }}
 .dpx-scheme-toggle {{ width: 34px; height: 34px; border-radius: 10px; border-color: var(--gl-hair, #dee2e6); }}
 .dpx-scheme-toggle svg {{ width: 18px; height: 18px; }}
-.dpx-icon-btn:hover, .dpx-scheme-toggle:hover, .dpx-toc-toggle:hover {{
+.dpx-icon-btn:hover, .dpx-scheme-toggle:hover, .dpx-toc-mode:hover {{
   color: var(--gl-fg, #212529); background: var(--gl-well, #f1f3f5);
 }}
-.dpx-icon-btn:focus-visible, .dpx-scheme-toggle:focus-visible, .dpx-toc-toggle:focus-visible,
+.dpx-icon-btn:focus-visible, .dpx-scheme-toggle:focus-visible, .dpx-toc-mode:focus-visible,
 .dpx-tile-links button:focus-visible {{
   outline: 2px solid var(--gl-accent, var(--dpx-primary, #228be6)); outline-offset: 2px;
 }}
@@ -196,7 +196,7 @@ body.quarto-dark .dpx-scheme-toggle .dpx-icon-moon {{ display: none; }}
 .dpx-pop-body strong {{ color: var(--gl-fg, #212529); }}
 .dpx-pop-body:focus-visible {{ outline: 2px solid var(--gl-accent, #228be6); outline-offset: 2px; }}
 @media print {{
-  .dpx-scheme-toggle, .dpx-info, .dpx-pop, .dpx-toc-toggle {{ display: none !important; }}
+  .dpx-scheme-toggle, .dpx-info, .dpx-pop, .dpx-toc-modes {{ display: none !important; }}
   .dpx-appbar {{ position: static !important; box-shadow: none !important; }}
 }}
 
@@ -209,19 +209,30 @@ body.quarto-dark .dpx-scheme-toggle .dpx-icon-moon {{ display: none; }}
 @media (min-width: 768px) {{
   body #quarto-margin-sidebar {{ top: 64px; max-height: calc(100vh - 72px); }}
 }}
-/* The contents' own control: collapse the list to its title, and back.
-   Wherever the contents sit in the margin (768px and up, the report
-   editor's preview included); narrower, Quarto folds them into its own
-   menu. */
-#TOC > #toc-title {{ display: flex; align-items: center; gap: 6px; }}
-.dpx-toc-toggle {{ margin-inline-start: auto; width: 26px; height: 26px; border-radius: 8px; }}
-.dpx-toc-toggle svg {{ width: 16px; height: 16px; transition: transform .15s ease; }}
-#TOC.dpx-toc-collapsed .dpx-toc-toggle svg {{ transform: rotate(180deg); }}
-@media (min-width: 768px) {{
-  #TOC.dpx-toc-collapsed > ul {{ display: none; }}
-  #TOC.dpx-toc-collapsed > #toc-title {{ cursor: pointer; }}
+/* The contents, three ways (the bar's group): the outline, the tabs only, or
+   none, the report then taking the column's width. Wherever the contents sit
+   in the margin (768px and up, the report editor's preview included);
+   narrower, Quarto folds them into its own menu and the group steps aside. */
+.dpx-toc-modes {{
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+  border: 1px solid var(--gl-hair, #dee2e6); border-radius: 10px;
 }}
-@media (max-width: 767.98px) {{ .dpx-toc-toggle {{ display: none; }} }}
+.dpx-toc-mode {{ width: 28px; height: 28px; border-radius: 8px; }}
+.dpx-toc-mode svg {{ width: 16px; height: 16px; }}
+.dpx-toc-mode[aria-pressed="true"] {{
+  color: var(--gl-fg, #212529); background: var(--gl-well, #f1f3f5);
+}}
+@media (min-width: 768px) {{
+  /* Light: the tabs, one short line each, nothing under them. */
+  body[data-dpx-toc="light"] #TOC {{ font-size: .75rem; }}
+  body[data-dpx-toc="light"] #TOC ul ul ul {{ display: none !important; }}
+  body[data-dpx-toc="light"] #TOC li > a {{ padding-top: 1px; padding-bottom: 1px; }}
+  body[data-dpx-toc="light"] #TOC .dpx-toc-chev {{ visibility: hidden; }}
+  /* Hidden: the column goes, the report runs to the page's edge. */
+  body[data-dpx-toc="hidden"] #quarto-margin-sidebar {{ display: none !important; }}
+  body[data-dpx-toc="hidden"] #quarto-content > main.content {{ grid-column: body-content-start / page-end; }}
+}}
+@media (max-width: 767.98px) {{ .dpx-toc-modes {{ display: none; }} }}
 /* Heading anchors (anchorjs): right after the heading's text, before its
    aside and before the heading's own actions ("Collapse all"), which keep the
    far end of the line. */

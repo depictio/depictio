@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box } from '@mantine/core';
 
 import EnlargedTile from './tiles/EnlargedTile';
@@ -12,10 +12,14 @@ interface TileThumbnailProps {
   componentType: string | null | undefined;
   /** The frame's PNG of a Plotly figure, when it has sent one. */
   png: string | undefined;
+  /** Shown at full size: the card's enlarge button, or a double click. */
+  large: boolean;
+  onLargeChange: (open: boolean) => void;
 }
 
-/** A tile's render of its component (the real renderer, see `tiles/`), with a
- *  click that opens it at full size. */
+/** A tile's render of its component (the real renderer, see `tiles/`). A
+ *  click selects the tile, like a click anywhere on its card; a double click
+ *  opens it at full size. */
 const TileThumbnail: React.FC<TileThumbnailProps> = ({
   tileKey,
   tabId,
@@ -23,27 +27,17 @@ const TileThumbnail: React.FC<TileThumbnailProps> = ({
   title,
   componentType,
   png,
+  large,
+  onLargeChange,
 }) => {
-  const [large, setLarge] = useState(false);
   return (
     <>
       <Box
-        role="button"
-        tabIndex={0}
-        aria-label={`Enlarge ${title}`}
         data-testid={`report-thumbnail-${tileKey}`}
-        onClick={(e: React.MouseEvent) => {
+        onDoubleClick={(e: React.MouseEvent) => {
           e.stopPropagation();
-          setLarge(true);
+          onLargeChange(true);
         }}
-        onKeyDown={(e: React.KeyboardEvent) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            e.stopPropagation();
-            setLarge(true);
-          }
-        }}
-        style={{ cursor: 'zoom-in' }}
       >
         <TileRender
           tileKey={tileKey}
@@ -57,7 +51,7 @@ const TileThumbnail: React.FC<TileThumbnailProps> = ({
       {large && (
         <EnlargedTile
           opened={large}
-          onClose={() => setLarge(false)}
+          onClose={() => onLargeChange(false)}
           tileKey={tileKey}
           tabId={tabId}
           componentId={componentId}

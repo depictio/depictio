@@ -177,7 +177,7 @@ def test_the_chrome_in_a_browser(rendered):
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(rendered.as_uri())
-        page.wait_for_selector(".dpx-toc-toggle")
+        page.wait_for_selector(".dpx-toc-modes")
         # Quarto did not float a second switch: ours is the page's toggle.
         assert page.locator(".quarto-color-scheme-toggle").count() == 1
         toggle = page.locator(".dpx-scheme-toggle")
@@ -187,13 +187,23 @@ def test_the_chrome_in_a_browser(rendered):
         assert toggle.get_attribute("aria-label") == "Switch to light theme"
         toggle.click()
         assert "quarto-light" in (page.locator("body").get_attribute("class") or "")
-        # The contents fold to their title, and the choice is remembered.
-        page.locator(".dpx-toc-toggle").click()
-        assert not page.locator("#TOC > ul").is_visible()
+        # The contents three ways, from the bar: hidden gives the report the
+        # column's width, and the choice is remembered.
+        main = page.locator("#quarto-content > main.content")
+        width = main.bounding_box()["width"]
+        page.locator(".dpx-toc-mode[data-mode='hidden']").click()
+        assert not page.locator("#TOC").is_visible()
+        assert main.bounding_box()["width"] > width
         page.reload()
-        page.wait_for_selector(".dpx-toc-toggle")
-        assert not page.locator("#TOC > ul").is_visible()
-        page.locator(".dpx-toc-toggle").click()
+        page.wait_for_selector(".dpx-toc-modes")
+        assert not page.locator("#TOC").is_visible()
+        assert (
+            page.locator(".dpx-toc-mode[data-mode='hidden']").get_attribute("aria-pressed")
+            == "true"
+        )
+        page.locator(".dpx-toc-mode[data-mode='light']").click()
+        assert page.locator("#TOC > ul").is_visible()
+        page.locator(".dpx-toc-mode[data-mode='full']").click()
         assert page.locator("#TOC > ul").is_visible()
         # The figure's anchor sits in its caption, not over the tile.
         assert page.locator("#fig-demo .quarto-float-caption .anchorjs-link").count() == 1

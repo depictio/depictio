@@ -32,6 +32,9 @@ export function virtualBox(componentType: string | null | undefined): { width: n
   return { width: 760, height: 320 };
 }
 
+/** The tallest a text tile's thumbnail grows, in its own pixels. */
+const TEXT_MAX_VIRTUAL_HEIGHT = 720;
+
 /** The scale and the drawn height of a tile `width` pixels wide. */
 export function tileFit(componentType: string | null | undefined, width: number) {
   const box = virtualBox(componentType);
@@ -88,7 +91,25 @@ const TileRender: React.FC<TileRenderProps> = ({ tileKey, tabId, componentId, co
   const { snapshots, state } = useSnapshotSource();
   const { ref, seen } = useSeenOnce();
   const width = useWidth(ref);
-  const { virtualWidth, virtualHeight, scale, height } = tileFit(componentType, width);
+  const fit = tileFit(componentType, width);
+  const { virtualWidth, scale } = fit;
+  // A text tile is as tall as what it says: a fixed box cut a fact list or a
+  // stepper in half. Measured once drawn, capped so a long note stays a
+  // thumbnail (its enlarged view shows the rest).
+  const sized = componentType === 'text';
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [natural, setNatural] = useState<number | null>(null);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!sized || !el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      const h = Math.min(Math.max(el.scrollHeight, 48), TEXT_MAX_VIRTUAL_HEIGHT);
+      setNatural((prev) => (prev === h ? prev : h));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  });
+  const height = sized && natural != null ? Math.round(natural * scale) : fit.height;
   const visual = typeVisual(componentType);
 
   const { metadata, error } = useTabComponent(tabId, componentId, seen);
@@ -147,9 +168,10 @@ const TileRender: React.FC<TileRenderProps> = ({ tileKey, tabId, componentId, co
     >
       {live && granted && metadata && width > 0 && (
         <Box
+          ref={innerRef}
           style={{
             width: virtualWidth,
-            height: virtualHeight,
+            height: sized ? 'auto' : fit.virtualHeight,
             transform: `scale(${scale})`,
             transformOrigin: 'top left',
           }}

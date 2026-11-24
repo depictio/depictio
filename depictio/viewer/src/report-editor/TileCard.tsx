@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ActionIcon, Badge, Box, Checkbox, Group, Paper, Popover, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { ExternalLink, Pencil, SlidersHorizontal } from 'lucide-react';
+import { ExternalLink, Maximize2, Pencil, SlidersHorizontal } from 'lucide-react';
 
 import { STROKE } from '../chrome/variants/glass/icons';
 import type { TileView } from './model';
@@ -67,6 +67,7 @@ const TileCard: React.FC<TileCardProps> = ({
   // Side by side, a card is before or after its neighbour by the pointer's x.
   const half = view.entry.component_type === 'card';
   const key = `${view.tabId}:${view.componentId}`;
+  const [large, setLarge] = useState(false);
 
   return (
     <Paper
@@ -107,6 +108,8 @@ const TileCard: React.FC<TileCardProps> = ({
         title={view.entry.title}
         componentType={view.entry.component_type}
         png={thumbnail}
+        large={large}
+        onLargeChange={setLarge}
       />
       <Group gap={6} wrap="nowrap" mt={6} style={{ overflow: 'hidden' }}>
         <Box c="dimmed" style={{ cursor: 'grab', display: 'flex', flex: 'none' }} aria-label="Drag to reorder">
@@ -145,6 +148,22 @@ const TileCard: React.FC<TileCardProps> = ({
             {b}
           </Badge>
         ))}
+        <Tooltip label="Enlarge" withArrow openDelay={300}>
+          <ActionIcon
+            size="sm"
+            variant="subtle"
+            color="gray"
+            style={{ flex: 'none' }}
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              setLarge(true);
+            }}
+            aria-label={`Enlarge ${view.entry.title}`}
+            data-testid="report-tile-enlarge"
+          >
+            <Maximize2 size={14} strokeWidth={STROKE} />
+          </ActionIcon>
+        </Tooltip>
         {/* Where the component lives: shown in the dashboard, or opened in
             the dashboard editor. A new tab, so the report stays open. */}
         <Tooltip label="Show in the dashboard" withArrow openDelay={300}>

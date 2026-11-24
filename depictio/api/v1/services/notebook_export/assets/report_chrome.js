@@ -2,8 +2,7 @@
 (function () {
   'use strict';
   var INFO_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 9h2V7h-2m1 13c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8m0-18A10 10 0 0 0 2 12a10 10 0 0 0 10 10a10 10 0 0 0 10-10A10 10 0 0 0 12 2m-1 15h2v-6h-2z"/></svg>';
-  var TOC_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>';
-  var TOC_KEY = 'depictio-report:toc-collapsed';
+  var TOC_KEY = 'depictio-report:toc-mode';
   function store(key, value) {
     try {
       if (value === undefined) return window.localStorage.getItem(key);
@@ -33,39 +32,49 @@
   }
   new MutationObserver(schemeButtons).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
-  // ── The contents: one control to fold the list to its title, remembered.
-  function tocToggle() {
-    var toc = document.getElementById('TOC');
-    var title = toc && (document.getElementById('toc-title') || toc.querySelector(':scope > h2'));
-    if (!title || title.querySelector('.dpx-toc-toggle')) return;
-    var list = toc.querySelector(':scope > ul');
-    if (!list) return;
-    if (!list.id) list.id = 'dpx-toc-list';
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'dpx-toc-toggle';
-    btn.setAttribute('aria-controls', list.id);
-    btn.innerHTML = TOC_ICON;
-    function set(collapsed, remember) {
-      toc.classList.toggle('dpx-toc-collapsed', collapsed);
-      var label = collapsed ? 'Expand the contents' : 'Collapse the contents';
-      btn.setAttribute('aria-expanded', String(!collapsed));
-      btn.setAttribute('aria-label', label);
-      btn.title = label;
-      if (remember) store(TOC_KEY, collapsed ? '1' : '0');
+  // ── The contents: three ways to show them, chosen in the bar, remembered.
+  // Full (the outline), light (the tabs only, compact) or hidden (the column
+  // goes and the report takes its width). In the bar, not on the contents:
+  // hidden contents have nowhere to hold their own button.
+  var TOC_MODES = [
+    { id: 'full', label: 'Full contents', icon: '<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>' },
+    { id: 'light', label: 'Tabs only', icon: '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>' },
+    { id: 'hidden', label: 'Hide the contents', icon: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>' }
+  ];
+  function setTocMode(mode, remember) {
+    var known = TOC_MODES.some(function (m) { return m.id === mode; });
+    if (!known) mode = 'full';
+    document.body.setAttribute('data-dpx-toc', mode);
+    var btns = document.querySelectorAll('.dpx-toc-mode');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-pressed', String(btns[i].getAttribute('data-mode') === mode));
     }
-    btn.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      set(!toc.classList.contains('dpx-toc-collapsed'), true);
+    if (remember) store(TOC_KEY, mode);
+  }
+  function tocModes() {
+    if (!document.getElementById('TOC')) return;
+    var end = document.querySelector('.dpx-appbar-end');
+    if (!end || end.querySelector('.dpx-toc-modes')) return;
+    var group = document.createElement('span');
+    group.className = 'dpx-toc-modes';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'Contents');
+    TOC_MODES.forEach(function (m) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dpx-toc-mode';
+      btn.setAttribute('data-mode', m.id);
+      btn.setAttribute('aria-label', m.label);
+      btn.title = m.label;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + m.icon + '</svg>';
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        setTocMode(m.id, true);
+      });
+      group.appendChild(btn);
     });
-    // The title itself opens a folded list: the one thing left to click.
-    title.addEventListener('click', function () {
-      if (toc.classList.contains('dpx-toc-collapsed')) set(false, true);
-    });
-    title.id = title.id || 'toc-title';
-    title.appendChild(btn);
-    set(store(TOC_KEY) === '1', false);
+    end.insertBefore(group, end.firstChild);
+    setTocMode(store(TOC_KEY), false);
   }
 
   // ── Anchors of figures and tables: after the caption, away from the tile's actions.
@@ -233,7 +242,7 @@
 
   function pass() {
     try { schemeButtons(); } catch (e) { /* keep the rest */ }
-    try { tocToggle(); } catch (e) { /* keep the rest */ }
+    try { tocModes(); } catch (e) { /* keep the rest */ }
     try { floatAnchors(); } catch (e) { /* keep the rest */ }
     try { aboutNotes(); } catch (e) { /* keep the rest */ }
     scrolled();
