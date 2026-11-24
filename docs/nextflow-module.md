@@ -186,7 +186,8 @@ file, a site with a `-c` config.
 An explicit `depictio_vars` entry wins over what the run's params say. This
 was run end to end on nf-core/rnaseq 3.26.0 (`-profile test,docker`, and under
 Apptainer); CI also runs other nf-core pipelines through it, each at its
-template's release (`allinone-nfcore-templates` in `build-images.yaml`).
+template's release (`allinone-nfcore.yaml`: weekly, on releases, and on pull
+requests that change the module or one of those templates).
 
 The results directory is read as published, so it relies on the outputs having
 been copied by the time the subworkflow starts. Publishing is asynchronous; a
