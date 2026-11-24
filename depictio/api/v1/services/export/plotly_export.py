@@ -277,6 +277,92 @@ def _celery_advanced_viz_spec(
     return result["figure"]
 
 
+def _with_upset_set_colors(dashboard_id: Any, component: dict, spec: dict[str, Any]) -> dict:
+    """The UpSet spec with its sets in the dashboard's category colours.
+
+    Best effort: a dashboard that cannot be read, or one that pins no colour for
+    the sets, leaves the figure as the library drew it.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.db import dashboards_collection
+    from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+        effective_category_colors,
+    )
+    from depictio.api.v1.services.export.upset_colors import colour_upset_figure
+
+    try:
+        doc = dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(str(dashboard_id))},
+            {"category_colors": 1, "parent_dashboard_id": 1},
+        )
+        colors = effective_category_colors(doc or {})
+    except Exception as exc:  # noqa: BLE001 - the plain figure is the fallback
+        logger.info(f"export: upset set colours unavailable for {dashboard_id}: {exc}")
+        return spec
+    return _static_upset_legend(colour_upset_figure(spec, colors, component.get("config")))
+
+
+# A static UpSet's legend: past this many entries the dashboard's scrolling
+# box, top left over the empty corner, would run down over the dot matrix.
+UPSET_STATIC_LEGEND_MAX = 10
+
+
+def _static_upset_legend(spec: dict[str, Any]) -> dict[str, Any]:
+    """A long annotation legend (one entry per category of the track) laid
+    out under the figure, a few entries to a line, where a page has room for
+    it: on paper nothing scrolls."""
+    entries = sum(
+        1 for t in spec.get("data") or [] if t.get("name") and t.get("showlegend") is not False
+    )
+    layout = spec.get("layout")
+    if entries <= UPSET_STATIC_LEGEND_MAX or not isinstance(layout, dict):
+        return spec
+    legend = dict(layout.get("legend") or {})
+    font = dict(legend.get("font") or {})
+    font["size"] = min(int(font.get("size") or 10), 9)
+    legend.update(
+        orientation="h",
+        x=0,
+        xanchor="left",
+        y=-0.04,
+        yanchor="top",
+        entrywidth=0.2,
+        entrywidthmode="fraction",
+        tracegroupgap=0,
+        font=font,
+    )
+    # A horizontal legend still stacks a legend group in one column: the
+    # track's entries leave their group, whose title becomes the legend's.
+    titles = list(
+        dict.fromkeys(
+            str((t.get("legendgrouptitle") or {}).get("text") or "")
+            for t in spec.get("data") or []
+            if isinstance(t.get("legendgrouptitle"), dict)
+        )
+    )
+    titles = [t for t in titles if t]
+    if titles:
+        legend["title"] = {
+            **(legend.get("title") or {}),
+            "text": " · ".join(titles),
+            "side": "top left",
+        }
+    prefixes = tuple(f"{t}: " for t in titles)
+
+    def entry(t: dict[str, Any]) -> dict[str, Any]:
+        out = {k: v for k, v in t.items() if k not in ("legendgroup", "legendgrouptitle")}
+        name = out.get("name")
+        # "Phylum: Bacillota" under a legend titled Phylum reads "Bacillota".
+        for prefix in prefixes:
+            if isinstance(name, str) and name.startswith(prefix):
+                out["name"] = name[len(prefix) :]
+        return out
+
+    data = [entry(t) for t in spec.get("data") or []]
+    return {**spec, "data": data, "layout": {**layout, "legend": legend}}
+
+
 def _python_advanced_viz_spec(
     component: dict,
     filter_metadata: list[dict],
@@ -409,6 +495,10 @@ async def build_plotly_export(
             spec = _normalise_figure(
                 _celery_advanced_viz_spec(component, filter_metadata, str(viz_kind), access_token)
             )
+            if str(viz_kind) == "upset_plot":
+                # The dashboard recolours the plain figure in the browser; a
+                # figure that never reaches that renderer gets the same pass.
+                spec = _with_upset_set_colors(dashboard_id, component, spec)
         else:
             spec = _python_advanced_viz_spec(
                 component, filter_metadata, current_user, access_token, controls, theme

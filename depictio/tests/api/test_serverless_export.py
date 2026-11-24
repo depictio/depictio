@@ -1558,6 +1558,21 @@ def test_collection_refs_cover_companions_and_text_values():
     assert producer_a.foreign_collections(comp, project_dcs) == ["x" * 24]
 
 
+def test_an_unused_matrix_dc_id_is_not_a_collection_the_tile_reads():
+    """An UpSet seed carries the deprecated ``matrix_dc_id`` of the instance it
+    was written on. Counted as a reference it omitted the tile, and the report
+    drew the server's plain figure instead of the dashboard's."""
+    comp = {
+        "component_type": "advanced_viz",
+        "viz_kind": "upset_plot",
+        "wf_id": WF_OID,
+        "dc_id": AV_DC_OID,
+        "config": {"matrix_wf_id": "a" * 24, "matrix_dc_id": "b" * 24},
+    }
+    assert producer_a.collection_refs(comp) == [(str(WF_OID), str(AV_DC_OID))]
+    assert producer_a.foreign_collections(comp, {str(AV_DC_OID): str(WF_OID)}) == []
+
+
 def test_a_table_without_a_bundled_dc_is_downgraded_and_frozen(monkeypatch: pytest.MonkeyPatch):
     """The one case that overturns the planned live table: no Parquet to page
     through, so the build has to fall back to the server-rendered snapshot

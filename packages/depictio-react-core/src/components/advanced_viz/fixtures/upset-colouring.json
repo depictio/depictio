@@ -1,0 +1,3853 @@
+{
+ "figure": {
+  "data": [
+   {
+    "hovertemplate": "Size: %{y}<extra></extra>",
+    "marker": {
+     "color": [
+      "#7F7F7F",
+      "#72B7B2",
+      "#7F7F7F",
+      "#4C78A8",
+      "#7F7F7F",
+      "#FF9DA7",
+      "#7F7F7F",
+      "#E45756",
+      "#7F7F7F",
+      "#7F7F7F",
+      "#7F7F7F"
+     ],
+     "line": {
+      "color": "#555555",
+      "width": 0.5
+     }
+    },
+    "name": "Intersection Size",
+    "showlegend": false,
+    "x": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "y": [
+     14,
+     12,
+     4,
+     4,
+     3,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "type": "bar",
+    "xaxis": "x2",
+    "yaxis": "y2"
+   },
+   {
+    "hoverinfo": "skip",
+    "marker": {
+     "color": "#C2C2C2",
+     "size": 18,
+     "symbol": "circle"
+    },
+    "mode": "markers",
+    "showlegend": false,
+    "x": [
+     1,
+     1,
+     1,
+     2,
+     3,
+     3,
+     3,
+     4,
+     5,
+     5,
+     5,
+     6,
+     6,
+     7,
+     7,
+     7,
+     8,
+     9,
+     9,
+     10
+    ],
+    "y": [
+     0,
+     1,
+     3,
+     0,
+     1,
+     2,
+     3,
+     3,
+     0,
+     1,
+     2,
+     0,
+     1,
+     0,
+     2,
+     3,
+     1,
+     2,
+     3,
+     2
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "skip",
+    "line": {
+     "color": "#333333",
+     "width": 3
+    },
+    "mode": "lines",
+    "showlegend": false,
+    "x": [
+     0,
+     0
+    ],
+    "y": [
+     0,
+     3
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "skip",
+    "line": {
+     "color": "#333333",
+     "width": 3
+    },
+    "mode": "lines",
+    "showlegend": false,
+    "x": [
+     2,
+     2
+    ],
+    "y": [
+     1,
+     3
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "skip",
+    "line": {
+     "color": "#333333",
+     "width": 3
+    },
+    "mode": "lines",
+    "showlegend": false,
+    "x": [
+     4,
+     4
+    ],
+    "y": [
+     0,
+     2
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "skip",
+    "line": {
+     "color": "#333333",
+     "width": 3
+    },
+    "mode": "lines",
+    "showlegend": false,
+    "x": [
+     6,
+     6
+    ],
+    "y": [
+     2,
+     3
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "skip",
+    "line": {
+     "color": "#333333",
+     "width": 3
+    },
+    "mode": "lines",
+    "showlegend": false,
+    "x": [
+     8,
+     8
+    ],
+    "y": [
+     0,
+     3
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "skip",
+    "line": {
+     "color": "#333333",
+     "width": 3
+    },
+    "mode": "lines",
+    "showlegend": false,
+    "x": [
+     9,
+     9
+    ],
+    "y": [
+     0,
+     1
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "skip",
+    "line": {
+     "color": "#333333",
+     "width": 3
+    },
+    "mode": "lines",
+    "showlegend": false,
+    "x": [
+     10,
+     10
+    ],
+    "y": [
+     0,
+     3
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "hoverinfo": "text",
+    "hovertext": [
+     "Riverwater & Groundwater & Sediment & Soil",
+     "Riverwater & Groundwater & Sediment & Soil",
+     "Riverwater & Groundwater & Sediment & Soil",
+     "Riverwater & Groundwater & Sediment & Soil",
+     "Sediment",
+     "Groundwater & Sediment & Soil",
+     "Groundwater & Sediment & Soil",
+     "Groundwater & Sediment & Soil",
+     "Riverwater",
+     "Riverwater & Groundwater & Sediment",
+     "Riverwater & Groundwater & Sediment",
+     "Riverwater & Groundwater & Sediment",
+     "Soil",
+     "Sediment & Soil",
+     "Sediment & Soil",
+     "Groundwater",
+     "Riverwater & Sediment & Soil",
+     "Riverwater & Sediment & Soil",
+     "Riverwater & Sediment & Soil",
+     "Riverwater & Groundwater",
+     "Riverwater & Groundwater",
+     "Riverwater & Groundwater & Soil",
+     "Riverwater & Groundwater & Soil",
+     "Riverwater & Groundwater & Soil"
+    ],
+    "marker": {
+     "color": "#333333",
+     "size": 18,
+     "symbol": "circle"
+    },
+    "mode": "markers",
+    "showlegend": false,
+    "x": [
+     0,
+     0,
+     0,
+     0,
+     1,
+     2,
+     2,
+     2,
+     3,
+     4,
+     4,
+     4,
+     5,
+     6,
+     6,
+     7,
+     8,
+     8,
+     8,
+     9,
+     9,
+     10,
+     10,
+     10
+    ],
+    "y": [
+     0,
+     1,
+     2,
+     3,
+     2,
+     1,
+     2,
+     3,
+     0,
+     0,
+     1,
+     2,
+     3,
+     2,
+     3,
+     1,
+     0,
+     2,
+     3,
+     0,
+     1,
+     0,
+     1,
+     3
+    ],
+    "type": "scatter",
+    "xaxis": "x4",
+    "yaxis": "y4"
+   },
+   {
+    "customdata": [
+     "Riverwater",
+     "Groundwater",
+     "Sediment",
+     "Soil"
+    ],
+    "hovertemplate": "%{y}: %{x}<extra></extra>",
+    "marker": {
+     "color": "#333333",
+     "line": {
+      "color": "#555555",
+      "width": 0.5
+     }
+    },
+    "name": "Set Size",
+    "orientation": "h",
+    "showlegend": false,
+    "x": [
+     24,
+     24,
+     35,
+     22
+    ],
+    "y": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "type": "bar",
+    "xaxis": "x3",
+    "yaxis": "y3"
+   },
+   {
+    "hovertemplate": "4484-113: %{y:.0%}<extra></extra>",
+    "legendgroup": "Phylum",
+    "legendgrouptitle": {
+     "text": "Phylum"
+    },
+    "marker": {
+     "color": "#66c2a5",
+     "line": {
+      "color": "#333333",
+      "width": 0.3
+     }
+    },
+    "name": "Phylum: 4484-113",
+    "showlegend": true,
+    "x": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "y": [
+     0,
+     0.08333333333333333,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "type": "bar",
+    "xaxis": "x",
+    "yaxis": "y"
+   },
+   {
+    "hovertemplate": "Acidobacteriota: %{y:.0%}<extra></extra>",
+    "legendgroup": "Phylum",
+    "legendgrouptitle": {
+     "text": "Phylum"
+    },
+    "marker": {
+     "color": "#fc8d62",
+     "line": {
+      "color": "#333333",
+      "width": 0.3
+     }
+    },
+    "name": "Phylum: Acidobacteriota",
+    "showlegend": true,
+    "x": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "y": [
+     0.07142857142857142,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "type": "bar",
+    "xaxis": "x",
+    "yaxis": "y"
+   },
+   {
+    "hovertemplate": "Actinomycetota: %{y:.0%}<extra></extra>",
+    "legendgroup": "Phylum",
+    "legendgrouptitle": {
+     "text": "Phylum"
+    },
+    "marker": {
+     "color": "#8da0cb",
+     "line": {
+      "color": "#333333",
+      "width": 0.3
+     }
+    },
+    "name": "Phylum: Actinomycetota",
+    "showlegend": true,
+    "x": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "y": [
+     0.07142857142857142,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "type": "bar",
+    "xaxis": "x",
+    "yaxis": "y"
+   }
+  ],
+  "layout": {
+   "xaxis": {
+    "anchor": "y",
+    "domain": [
+     0.307,
+     1
+    ],
+    "matches": "x4",
+    "showticklabels": false,
+    "range": [
+     -0.5,
+     10.5
+    ],
+    "showgrid": false,
+    "zeroline": false
+   },
+   "yaxis": {
+    "anchor": "x",
+    "domain": [
+     0.8752,
+     1
+    ],
+    "title": {
+     "font": {
+      "size": 10,
+      "family": "Arial, Helvetica, sans-serif"
+     },
+     "text": "Phylum"
+    },
+    "showgrid": true,
+    "gridcolor": "rgba(0,0,0,0.08)"
+   },
+   "xaxis2": {
+    "anchor": "y2",
+    "domain": [
+     0.307,
+     1
+    ],
+    "matches": "x4",
+    "showticklabels": false,
+    "range": [
+     -0.5,
+     10.5
+    ],
+    "showgrid": false,
+    "zeroline": false
+   },
+   "yaxis2": {
+    "anchor": "x2",
+    "domain": [
+     0.28880000000000006,
+     0.8552
+    ],
+    "title": {
+     "font": {
+      "size": 11,
+      "family": "Arial, Helvetica, sans-serif"
+     },
+     "text": "Intersection Size"
+    },
+    "showgrid": true,
+    "gridcolor": "rgba(0,0,0,0.1)",
+    "zeroline": true,
+    "zerolinecolor": "rgba(0,0,0,0.2)"
+   },
+   "xaxis3": {
+    "anchor": "y3",
+    "domain": [
+     0,
+     0.297
+    ],
+    "title": {
+     "font": {
+      "size": 11,
+      "family": "Arial, Helvetica, sans-serif"
+     },
+     "text": "Set Size"
+    },
+    "autorange": "reversed",
+    "showgrid": true,
+    "gridcolor": "rgba(0,0,0,0.1)",
+    "automargin": true
+   },
+   "yaxis3": {
+    "anchor": "x3",
+    "domain": [
+     0,
+     0.26880000000000004
+    ],
+    "tickvals": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ticktext": [
+     "Riverwater",
+     "Groundwater",
+     "Sediment",
+     "Soil"
+    ],
+    "showgrid": false,
+    "zeroline": false,
+    "range": [
+     -0.5,
+     3.5
+    ],
+    "automargin": true
+   },
+   "xaxis4": {
+    "anchor": "y4",
+    "domain": [
+     0.307,
+     1
+    ],
+    "range": [
+     -0.5,
+     10.5
+    ],
+    "showticklabels": false,
+    "showgrid": false,
+    "zeroline": false
+   },
+   "yaxis4": {
+    "anchor": "x4",
+    "domain": [
+     0,
+     0.26880000000000004
+    ],
+    "matches": "y3",
+    "showticklabels": false,
+    "tickvals": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ticktext": [
+     "Riverwater",
+     "Groundwater",
+     "Sediment",
+     "Soil"
+    ],
+    "showgrid": false,
+    "zeroline": false,
+    "range": [
+     -0.5,
+     3.5
+    ],
+    "automargin": true
+   },
+   "shapes": [
+    {
+     "fillcolor": "rgba(0,0,0,0.03)",
+     "layer": "below",
+     "line": {
+      "width": 0
+     },
+     "type": "rect",
+     "x0": -0.5,
+     "x1": 10.5,
+     "xref": "x4",
+     "y0": -0.5,
+     "y1": 0.5,
+     "yref": "y4"
+    },
+    {
+     "fillcolor": "rgba(0,0,0,0.03)",
+     "layer": "below",
+     "line": {
+      "width": 0
+     },
+     "type": "rect",
+     "x0": -0.5,
+     "x1": 10.5,
+     "xref": "x4",
+     "y0": 1.5,
+     "y1": 2.5,
+     "yref": "y4"
+    }
+   ],
+   "margin": {
+    "l": 90,
+    "r": 10,
+    "t": 30,
+    "b": 20
+   },
+   "font": {
+    "family": "Arial, Helvetica, sans-serif",
+    "size": 11
+   },
+   "legend": {
+    "font": {
+     "size": 10,
+     "family": "Arial, Helvetica, sans-serif"
+    },
+    "x": 0,
+    "y": 1,
+    "xanchor": "left",
+    "yanchor": "top",
+    "tracegroupgap": 4,
+    "itemsizing": "constant"
+   },
+   "width": 900,
+   "height": 700,
+   "plot_bgcolor": "rgba(0,0,0,0)",
+   "paper_bgcolor": "white",
+   "barmode": "stack",
+   "showlegend": true
+  }
+ },
+ "cases": [
+  {
+   "name": "column named",
+   "category_colors": {
+    "habitat": {
+     "Groundwater": "#2a78d6",
+     "Riverwater": "#eb6834",
+     "Sediment": "#1baf7a",
+     "Soil": "#eda100"
+    },
+    "Kingdom": {
+     "Archaea": "#7048e8"
+    }
+   },
+   "column": "habitat",
+   "overrides": null,
+   "expected": {
+    "colors": {
+     "Riverwater": "#eb6834",
+     "Groundwater": "#2a78d6",
+     "Sediment": "#1baf7a",
+     "Soil": "#eda100"
+    },
+    "data": [
+     {
+      "hovertemplate": "Size: %{y}<extra></extra>",
+      "marker": {
+       "color": [
+        "#7F7F7F",
+        "#1baf7a",
+        "#7F7F7F",
+        "#eb6834",
+        "#7F7F7F",
+        "#eda100",
+        "#7F7F7F",
+        "#2a78d6",
+        "#7F7F7F",
+        "#7F7F7F",
+        "#7F7F7F"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Intersection Size",
+      "showlegend": false,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       14,
+       12,
+       4,
+       4,
+       3,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "type": "bar",
+      "xaxis": "x2",
+      "yaxis": "y2"
+     },
+     {
+      "hoverinfo": "skip",
+      "marker": {
+       "color": "#C2C2C2",
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       1,
+       1,
+       1,
+       2,
+       3,
+       3,
+       3,
+       4,
+       5,
+       5,
+       5,
+       6,
+       6,
+       7,
+       7,
+       7,
+       8,
+       9,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       3,
+       0,
+       1,
+       2,
+       3,
+       3,
+       0,
+       1,
+       2,
+       0,
+       1,
+       0,
+       2,
+       3,
+       1,
+       2,
+       3,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       0,
+       0
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       2,
+       2
+      ],
+      "y": [
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       4,
+       4
+      ],
+      "y": [
+       0,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       6,
+       6
+      ],
+      "y": [
+       2,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       8,
+       8
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       9,
+       9
+      ],
+      "y": [
+       0,
+       1
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       10,
+       10
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "text",
+      "hovertext": [
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Sediment",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Riverwater",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Soil",
+       "Sediment & Soil",
+       "Sediment & Soil",
+       "Groundwater",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil"
+      ],
+      "marker": {
+       "color": [
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100",
+        "#1baf7a",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100",
+        "#eb6834",
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100",
+        "#1baf7a",
+        "#eda100",
+        "#2a78d6",
+        "#eb6834",
+        "#1baf7a",
+        "#eda100",
+        "#eb6834",
+        "#2a78d6",
+        "#eb6834",
+        "#2a78d6",
+        "#eda100"
+       ],
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       0,
+       0,
+       0,
+       0,
+       1,
+       2,
+       2,
+       2,
+       3,
+       4,
+       4,
+       4,
+       5,
+       6,
+       6,
+       7,
+       8,
+       8,
+       8,
+       9,
+       9,
+       10,
+       10,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3,
+       2,
+       1,
+       2,
+       3,
+       0,
+       0,
+       1,
+       2,
+       3,
+       2,
+       3,
+       1,
+       0,
+       2,
+       3,
+       0,
+       1,
+       0,
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "customdata": [
+       "Riverwater",
+       "Groundwater",
+       "Sediment",
+       "Soil"
+      ],
+      "hovertemplate": "%{y}: %{x}<extra></extra>",
+      "marker": {
+       "color": [
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Set Size",
+      "orientation": "h",
+      "showlegend": false,
+      "x": [
+       24,
+       24,
+       35,
+       22
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "type": "bar",
+      "xaxis": "x3",
+      "yaxis": "y3"
+     },
+     {
+      "hovertemplate": "4484-113: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#66c2a5",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: 4484-113",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       0.08333333333333333,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Acidobacteriota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#fc8d62",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Acidobacteriota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Actinomycetota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#8da0cb",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Actinomycetota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     }
+    ],
+    "layout": {
+     "xaxis": {
+      "anchor": "y",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis": {
+      "anchor": "x",
+      "domain": [
+       0.8752,
+       1
+      ],
+      "title": {
+       "font": {
+        "size": 10,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Phylum"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.08)"
+     },
+     "xaxis2": {
+      "anchor": "y2",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis2": {
+      "anchor": "x2",
+      "domain": [
+       0.28880000000000006,
+       0.8552
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Intersection Size"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "zeroline": true,
+      "zerolinecolor": "rgba(0,0,0,0.2)"
+     },
+     "xaxis3": {
+      "anchor": "y3",
+      "domain": [
+       0,
+       0.297
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Set Size"
+      },
+      "autorange": "reversed",
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "automargin": true
+     },
+     "yaxis3": {
+      "anchor": "x3",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "<span style=\"color:#eb6834\">●</span> Riverwater",
+       "<span style=\"color:#2a78d6\">●</span> Groundwater",
+       "<span style=\"color:#1baf7a\">●</span> Sediment",
+       "<span style=\"color:#eda100\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "xaxis4": {
+      "anchor": "y4",
+      "domain": [
+       0.307,
+       1
+      ],
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showticklabels": false,
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis4": {
+      "anchor": "x4",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "matches": "y3",
+      "showticklabels": false,
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "<span style=\"color:#eb6834\">●</span> Riverwater",
+       "<span style=\"color:#2a78d6\">●</span> Groundwater",
+       "<span style=\"color:#1baf7a\">●</span> Sediment",
+       "<span style=\"color:#eda100\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "shapes": [
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": -0.5,
+       "y1": 0.5,
+       "yref": "y4"
+      },
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": 1.5,
+       "y1": 2.5,
+       "yref": "y4"
+      }
+     ],
+     "margin": {
+      "l": 90,
+      "r": 10,
+      "t": 30,
+      "b": 20
+     },
+     "font": {
+      "family": "Arial, Helvetica, sans-serif",
+      "size": 11
+     },
+     "legend": {
+      "font": {
+       "size": 10,
+       "family": "Arial, Helvetica, sans-serif"
+      },
+      "x": 0,
+      "y": 1,
+      "xanchor": "left",
+      "yanchor": "top",
+      "tracegroupgap": 4,
+      "itemsizing": "constant"
+     },
+     "width": 900,
+     "height": 700,
+     "plot_bgcolor": "rgba(0,0,0,0)",
+     "paper_bgcolor": "white",
+     "barmode": "stack",
+     "showlegend": true
+    }
+   }
+  },
+  {
+   "name": "column found by value",
+   "category_colors": {
+    "habitat": {
+     "Groundwater": "#2a78d6",
+     "Riverwater": "#eb6834",
+     "Sediment": "#1baf7a",
+     "Soil": "#eda100"
+    },
+    "Phylum": {
+     "Pseudomonadota": "#2a78d6"
+    }
+   },
+   "column": null,
+   "overrides": null,
+   "expected": {
+    "colors": {
+     "Riverwater": "#eb6834",
+     "Groundwater": "#2a78d6",
+     "Sediment": "#1baf7a",
+     "Soil": "#eda100"
+    },
+    "data": [
+     {
+      "hovertemplate": "Size: %{y}<extra></extra>",
+      "marker": {
+       "color": [
+        "#7F7F7F",
+        "#1baf7a",
+        "#7F7F7F",
+        "#eb6834",
+        "#7F7F7F",
+        "#eda100",
+        "#7F7F7F",
+        "#2a78d6",
+        "#7F7F7F",
+        "#7F7F7F",
+        "#7F7F7F"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Intersection Size",
+      "showlegend": false,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       14,
+       12,
+       4,
+       4,
+       3,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "type": "bar",
+      "xaxis": "x2",
+      "yaxis": "y2"
+     },
+     {
+      "hoverinfo": "skip",
+      "marker": {
+       "color": "#C2C2C2",
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       1,
+       1,
+       1,
+       2,
+       3,
+       3,
+       3,
+       4,
+       5,
+       5,
+       5,
+       6,
+       6,
+       7,
+       7,
+       7,
+       8,
+       9,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       3,
+       0,
+       1,
+       2,
+       3,
+       3,
+       0,
+       1,
+       2,
+       0,
+       1,
+       0,
+       2,
+       3,
+       1,
+       2,
+       3,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       0,
+       0
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       2,
+       2
+      ],
+      "y": [
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       4,
+       4
+      ],
+      "y": [
+       0,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       6,
+       6
+      ],
+      "y": [
+       2,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       8,
+       8
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       9,
+       9
+      ],
+      "y": [
+       0,
+       1
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       10,
+       10
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "text",
+      "hovertext": [
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Sediment",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Riverwater",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Soil",
+       "Sediment & Soil",
+       "Sediment & Soil",
+       "Groundwater",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil"
+      ],
+      "marker": {
+       "color": [
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100",
+        "#1baf7a",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100",
+        "#eb6834",
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100",
+        "#1baf7a",
+        "#eda100",
+        "#2a78d6",
+        "#eb6834",
+        "#1baf7a",
+        "#eda100",
+        "#eb6834",
+        "#2a78d6",
+        "#eb6834",
+        "#2a78d6",
+        "#eda100"
+       ],
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       0,
+       0,
+       0,
+       0,
+       1,
+       2,
+       2,
+       2,
+       3,
+       4,
+       4,
+       4,
+       5,
+       6,
+       6,
+       7,
+       8,
+       8,
+       8,
+       9,
+       9,
+       10,
+       10,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3,
+       2,
+       1,
+       2,
+       3,
+       0,
+       0,
+       1,
+       2,
+       3,
+       2,
+       3,
+       1,
+       0,
+       2,
+       3,
+       0,
+       1,
+       0,
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "customdata": [
+       "Riverwater",
+       "Groundwater",
+       "Sediment",
+       "Soil"
+      ],
+      "hovertemplate": "%{y}: %{x}<extra></extra>",
+      "marker": {
+       "color": [
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#eda100"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Set Size",
+      "orientation": "h",
+      "showlegend": false,
+      "x": [
+       24,
+       24,
+       35,
+       22
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "type": "bar",
+      "xaxis": "x3",
+      "yaxis": "y3"
+     },
+     {
+      "hovertemplate": "4484-113: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#66c2a5",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: 4484-113",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       0.08333333333333333,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Acidobacteriota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#fc8d62",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Acidobacteriota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Actinomycetota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#8da0cb",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Actinomycetota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     }
+    ],
+    "layout": {
+     "xaxis": {
+      "anchor": "y",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis": {
+      "anchor": "x",
+      "domain": [
+       0.8752,
+       1
+      ],
+      "title": {
+       "font": {
+        "size": 10,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Phylum"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.08)"
+     },
+     "xaxis2": {
+      "anchor": "y2",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis2": {
+      "anchor": "x2",
+      "domain": [
+       0.28880000000000006,
+       0.8552
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Intersection Size"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "zeroline": true,
+      "zerolinecolor": "rgba(0,0,0,0.2)"
+     },
+     "xaxis3": {
+      "anchor": "y3",
+      "domain": [
+       0,
+       0.297
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Set Size"
+      },
+      "autorange": "reversed",
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "automargin": true
+     },
+     "yaxis3": {
+      "anchor": "x3",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "<span style=\"color:#eb6834\">●</span> Riverwater",
+       "<span style=\"color:#2a78d6\">●</span> Groundwater",
+       "<span style=\"color:#1baf7a\">●</span> Sediment",
+       "<span style=\"color:#eda100\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "xaxis4": {
+      "anchor": "y4",
+      "domain": [
+       0.307,
+       1
+      ],
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showticklabels": false,
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis4": {
+      "anchor": "x4",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "matches": "y3",
+      "showticklabels": false,
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "<span style=\"color:#eb6834\">●</span> Riverwater",
+       "<span style=\"color:#2a78d6\">●</span> Groundwater",
+       "<span style=\"color:#1baf7a\">●</span> Sediment",
+       "<span style=\"color:#eda100\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "shapes": [
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": -0.5,
+       "y1": 0.5,
+       "yref": "y4"
+      },
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": 1.5,
+       "y1": 2.5,
+       "yref": "y4"
+      }
+     ],
+     "margin": {
+      "l": 90,
+      "r": 10,
+      "t": 30,
+      "b": 20
+     },
+     "font": {
+      "family": "Arial, Helvetica, sans-serif",
+      "size": 11
+     },
+     "legend": {
+      "font": {
+       "size": 10,
+       "family": "Arial, Helvetica, sans-serif"
+      },
+      "x": 0,
+      "y": 1,
+      "xanchor": "left",
+      "yanchor": "top",
+      "tracegroupgap": 4,
+      "itemsizing": "constant"
+     },
+     "width": 900,
+     "height": 700,
+     "plot_bgcolor": "rgba(0,0,0,0)",
+     "paper_bgcolor": "white",
+     "barmode": "stack",
+     "showlegend": true
+    }
+   }
+  },
+  {
+   "name": "component set_colors win per set",
+   "category_colors": {
+    "habitat": {
+     "Groundwater": "#2a78d6",
+     "Riverwater": "#eb6834",
+     "Sediment": "#1baf7a",
+     "Soil": "#eda100"
+    }
+   },
+   "column": "habitat",
+   "overrides": {
+    "Soil": "#123456"
+   },
+   "expected": {
+    "colors": {
+     "Riverwater": "#eb6834",
+     "Groundwater": "#2a78d6",
+     "Sediment": "#1baf7a",
+     "Soil": "#123456"
+    },
+    "data": [
+     {
+      "hovertemplate": "Size: %{y}<extra></extra>",
+      "marker": {
+       "color": [
+        "#7F7F7F",
+        "#1baf7a",
+        "#7F7F7F",
+        "#eb6834",
+        "#7F7F7F",
+        "#123456",
+        "#7F7F7F",
+        "#2a78d6",
+        "#7F7F7F",
+        "#7F7F7F",
+        "#7F7F7F"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Intersection Size",
+      "showlegend": false,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       14,
+       12,
+       4,
+       4,
+       3,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "type": "bar",
+      "xaxis": "x2",
+      "yaxis": "y2"
+     },
+     {
+      "hoverinfo": "skip",
+      "marker": {
+       "color": "#C2C2C2",
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       1,
+       1,
+       1,
+       2,
+       3,
+       3,
+       3,
+       4,
+       5,
+       5,
+       5,
+       6,
+       6,
+       7,
+       7,
+       7,
+       8,
+       9,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       3,
+       0,
+       1,
+       2,
+       3,
+       3,
+       0,
+       1,
+       2,
+       0,
+       1,
+       0,
+       2,
+       3,
+       1,
+       2,
+       3,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       0,
+       0
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       2,
+       2
+      ],
+      "y": [
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       4,
+       4
+      ],
+      "y": [
+       0,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       6,
+       6
+      ],
+      "y": [
+       2,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       8,
+       8
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       9,
+       9
+      ],
+      "y": [
+       0,
+       1
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       10,
+       10
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "text",
+      "hovertext": [
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Sediment",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Riverwater",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Soil",
+       "Sediment & Soil",
+       "Sediment & Soil",
+       "Groundwater",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil"
+      ],
+      "marker": {
+       "color": [
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#123456",
+        "#1baf7a",
+        "#2a78d6",
+        "#1baf7a",
+        "#123456",
+        "#eb6834",
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#123456",
+        "#1baf7a",
+        "#123456",
+        "#2a78d6",
+        "#eb6834",
+        "#1baf7a",
+        "#123456",
+        "#eb6834",
+        "#2a78d6",
+        "#eb6834",
+        "#2a78d6",
+        "#123456"
+       ],
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       0,
+       0,
+       0,
+       0,
+       1,
+       2,
+       2,
+       2,
+       3,
+       4,
+       4,
+       4,
+       5,
+       6,
+       6,
+       7,
+       8,
+       8,
+       8,
+       9,
+       9,
+       10,
+       10,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3,
+       2,
+       1,
+       2,
+       3,
+       0,
+       0,
+       1,
+       2,
+       3,
+       2,
+       3,
+       1,
+       0,
+       2,
+       3,
+       0,
+       1,
+       0,
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "customdata": [
+       "Riverwater",
+       "Groundwater",
+       "Sediment",
+       "Soil"
+      ],
+      "hovertemplate": "%{y}: %{x}<extra></extra>",
+      "marker": {
+       "color": [
+        "#eb6834",
+        "#2a78d6",
+        "#1baf7a",
+        "#123456"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Set Size",
+      "orientation": "h",
+      "showlegend": false,
+      "x": [
+       24,
+       24,
+       35,
+       22
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "type": "bar",
+      "xaxis": "x3",
+      "yaxis": "y3"
+     },
+     {
+      "hovertemplate": "4484-113: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#66c2a5",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: 4484-113",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       0.08333333333333333,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Acidobacteriota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#fc8d62",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Acidobacteriota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Actinomycetota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#8da0cb",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Actinomycetota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     }
+    ],
+    "layout": {
+     "xaxis": {
+      "anchor": "y",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis": {
+      "anchor": "x",
+      "domain": [
+       0.8752,
+       1
+      ],
+      "title": {
+       "font": {
+        "size": 10,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Phylum"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.08)"
+     },
+     "xaxis2": {
+      "anchor": "y2",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis2": {
+      "anchor": "x2",
+      "domain": [
+       0.28880000000000006,
+       0.8552
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Intersection Size"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "zeroline": true,
+      "zerolinecolor": "rgba(0,0,0,0.2)"
+     },
+     "xaxis3": {
+      "anchor": "y3",
+      "domain": [
+       0,
+       0.297
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Set Size"
+      },
+      "autorange": "reversed",
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "automargin": true
+     },
+     "yaxis3": {
+      "anchor": "x3",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "<span style=\"color:#eb6834\">●</span> Riverwater",
+       "<span style=\"color:#2a78d6\">●</span> Groundwater",
+       "<span style=\"color:#1baf7a\">●</span> Sediment",
+       "<span style=\"color:#123456\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "xaxis4": {
+      "anchor": "y4",
+      "domain": [
+       0.307,
+       1
+      ],
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showticklabels": false,
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis4": {
+      "anchor": "x4",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "matches": "y3",
+      "showticklabels": false,
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "<span style=\"color:#eb6834\">●</span> Riverwater",
+       "<span style=\"color:#2a78d6\">●</span> Groundwater",
+       "<span style=\"color:#1baf7a\">●</span> Sediment",
+       "<span style=\"color:#123456\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "shapes": [
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": -0.5,
+       "y1": 0.5,
+       "yref": "y4"
+      },
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": 1.5,
+       "y1": 2.5,
+       "yref": "y4"
+      }
+     ],
+     "margin": {
+      "l": 90,
+      "r": 10,
+      "t": 30,
+      "b": 20
+     },
+     "font": {
+      "family": "Arial, Helvetica, sans-serif",
+      "size": 11
+     },
+     "legend": {
+      "font": {
+       "size": 10,
+       "family": "Arial, Helvetica, sans-serif"
+      },
+      "x": 0,
+      "y": 1,
+      "xanchor": "left",
+      "yanchor": "top",
+      "tracegroupgap": 4,
+      "itemsizing": "constant"
+     },
+     "width": 900,
+     "height": 700,
+     "plot_bgcolor": "rgba(0,0,0,0)",
+     "paper_bgcolor": "white",
+     "barmode": "stack",
+     "showlegend": true
+    }
+   }
+  },
+  {
+   "name": "nothing pins the sets",
+   "category_colors": {
+    "Phylum": {
+     "Pseudomonadota": "#2a78d6"
+    }
+   },
+   "column": null,
+   "overrides": null,
+   "expected": null
+  },
+  {
+   "name": "two columns pin them differently",
+   "category_colors": {
+    "habitat": {
+     "Groundwater": "#2a78d6",
+     "Riverwater": "#eb6834",
+     "Sediment": "#1baf7a",
+     "Soil": "#eda100"
+    },
+    "site": {
+     "Groundwater": "#111111",
+     "Riverwater": "#222222",
+     "Sediment": "#333333",
+     "Soil": "#444444"
+    }
+   },
+   "column": null,
+   "overrides": null,
+   "expected": null
+  },
+  {
+   "name": "a column pins only some sets",
+   "category_colors": {
+    "habitat": {
+     "Soil": "#eda100"
+    }
+   },
+   "column": "habitat",
+   "overrides": null,
+   "expected": {
+    "colors": {
+     "Soil": "#eda100"
+    },
+    "data": [
+     {
+      "hovertemplate": "Size: %{y}<extra></extra>",
+      "marker": {
+       "color": [
+        "#7F7F7F",
+        "#72B7B2",
+        "#7F7F7F",
+        "#4C78A8",
+        "#7F7F7F",
+        "#eda100",
+        "#7F7F7F",
+        "#E45756",
+        "#7F7F7F",
+        "#7F7F7F",
+        "#7F7F7F"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Intersection Size",
+      "showlegend": false,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       14,
+       12,
+       4,
+       4,
+       3,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "type": "bar",
+      "xaxis": "x2",
+      "yaxis": "y2"
+     },
+     {
+      "hoverinfo": "skip",
+      "marker": {
+       "color": "#C2C2C2",
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       1,
+       1,
+       1,
+       2,
+       3,
+       3,
+       3,
+       4,
+       5,
+       5,
+       5,
+       6,
+       6,
+       7,
+       7,
+       7,
+       8,
+       9,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       3,
+       0,
+       1,
+       2,
+       3,
+       3,
+       0,
+       1,
+       2,
+       0,
+       1,
+       0,
+       2,
+       3,
+       1,
+       2,
+       3,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       0,
+       0
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       2,
+       2
+      ],
+      "y": [
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       4,
+       4
+      ],
+      "y": [
+       0,
+       2
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       6,
+       6
+      ],
+      "y": [
+       2,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       8,
+       8
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       9,
+       9
+      ],
+      "y": [
+       0,
+       1
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "skip",
+      "line": {
+       "color": "#333333",
+       "width": 3
+      },
+      "mode": "lines",
+      "showlegend": false,
+      "x": [
+       10,
+       10
+      ],
+      "y": [
+       0,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "hoverinfo": "text",
+      "hovertext": [
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Riverwater & Groundwater & Sediment & Soil",
+       "Sediment",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Groundwater & Sediment & Soil",
+       "Riverwater",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Riverwater & Groundwater & Sediment",
+       "Soil",
+       "Sediment & Soil",
+       "Sediment & Soil",
+       "Groundwater",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Sediment & Soil",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil",
+       "Riverwater & Groundwater & Soil"
+      ],
+      "marker": {
+       "color": [
+        "#333333",
+        "#333333",
+        "#333333",
+        "#eda100",
+        "#333333",
+        "#333333",
+        "#333333",
+        "#eda100",
+        "#333333",
+        "#333333",
+        "#333333",
+        "#333333",
+        "#eda100",
+        "#333333",
+        "#eda100",
+        "#333333",
+        "#333333",
+        "#333333",
+        "#eda100",
+        "#333333",
+        "#333333",
+        "#333333",
+        "#333333",
+        "#eda100"
+       ],
+       "size": 18,
+       "symbol": "circle"
+      },
+      "mode": "markers",
+      "showlegend": false,
+      "x": [
+       0,
+       0,
+       0,
+       0,
+       1,
+       2,
+       2,
+       2,
+       3,
+       4,
+       4,
+       4,
+       5,
+       6,
+       6,
+       7,
+       8,
+       8,
+       8,
+       9,
+       9,
+       10,
+       10,
+       10
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3,
+       2,
+       1,
+       2,
+       3,
+       0,
+       0,
+       1,
+       2,
+       3,
+       2,
+       3,
+       1,
+       0,
+       2,
+       3,
+       0,
+       1,
+       0,
+       1,
+       3
+      ],
+      "type": "scatter",
+      "xaxis": "x4",
+      "yaxis": "y4"
+     },
+     {
+      "customdata": [
+       "Riverwater",
+       "Groundwater",
+       "Sediment",
+       "Soil"
+      ],
+      "hovertemplate": "%{y}: %{x}<extra></extra>",
+      "marker": {
+       "color": [
+        "#333333",
+        "#333333",
+        "#333333",
+        "#eda100"
+       ],
+       "line": {
+        "color": "#555555",
+        "width": 0.5
+       }
+      },
+      "name": "Set Size",
+      "orientation": "h",
+      "showlegend": false,
+      "x": [
+       24,
+       24,
+       35,
+       22
+      ],
+      "y": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "type": "bar",
+      "xaxis": "x3",
+      "yaxis": "y3"
+     },
+     {
+      "hovertemplate": "4484-113: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#66c2a5",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: 4484-113",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0,
+       0.08333333333333333,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Acidobacteriota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#fc8d62",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Acidobacteriota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     {
+      "hovertemplate": "Actinomycetota: %{y:.0%}<extra></extra>",
+      "legendgroup": "Phylum",
+      "legendgrouptitle": {
+       "text": "Phylum"
+      },
+      "marker": {
+       "color": "#8da0cb",
+       "line": {
+        "color": "#333333",
+        "width": 0.3
+       }
+      },
+      "name": "Phylum: Actinomycetota",
+      "showlegend": true,
+      "x": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10
+      ],
+      "y": [
+       0.07142857142857142,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     }
+    ],
+    "layout": {
+     "xaxis": {
+      "anchor": "y",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis": {
+      "anchor": "x",
+      "domain": [
+       0.8752,
+       1
+      ],
+      "title": {
+       "font": {
+        "size": 10,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Phylum"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.08)"
+     },
+     "xaxis2": {
+      "anchor": "y2",
+      "domain": [
+       0.307,
+       1
+      ],
+      "matches": "x4",
+      "showticklabels": false,
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis2": {
+      "anchor": "x2",
+      "domain": [
+       0.28880000000000006,
+       0.8552
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Intersection Size"
+      },
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "zeroline": true,
+      "zerolinecolor": "rgba(0,0,0,0.2)"
+     },
+     "xaxis3": {
+      "anchor": "y3",
+      "domain": [
+       0,
+       0.297
+      ],
+      "title": {
+       "font": {
+        "size": 11,
+        "family": "Arial, Helvetica, sans-serif"
+       },
+       "text": "Set Size"
+      },
+      "autorange": "reversed",
+      "showgrid": true,
+      "gridcolor": "rgba(0,0,0,0.1)",
+      "automargin": true
+     },
+     "yaxis3": {
+      "anchor": "x3",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "Riverwater",
+       "Groundwater",
+       "Sediment",
+       "<span style=\"color:#eda100\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "xaxis4": {
+      "anchor": "y4",
+      "domain": [
+       0.307,
+       1
+      ],
+      "range": [
+       -0.5,
+       10.5
+      ],
+      "showticklabels": false,
+      "showgrid": false,
+      "zeroline": false
+     },
+     "yaxis4": {
+      "anchor": "x4",
+      "domain": [
+       0,
+       0.26880000000000004
+      ],
+      "matches": "y3",
+      "showticklabels": false,
+      "tickvals": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "ticktext": [
+       "Riverwater",
+       "Groundwater",
+       "Sediment",
+       "<span style=\"color:#eda100\">●</span> Soil"
+      ],
+      "showgrid": false,
+      "zeroline": false,
+      "range": [
+       -0.5,
+       3.5
+      ],
+      "automargin": true
+     },
+     "shapes": [
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": -0.5,
+       "y1": 0.5,
+       "yref": "y4"
+      },
+      {
+       "fillcolor": "rgba(0,0,0,0.03)",
+       "layer": "below",
+       "line": {
+        "width": 0
+       },
+       "type": "rect",
+       "x0": -0.5,
+       "x1": 10.5,
+       "xref": "x4",
+       "y0": 1.5,
+       "y1": 2.5,
+       "yref": "y4"
+      }
+     ],
+     "margin": {
+      "l": 90,
+      "r": 10,
+      "t": 30,
+      "b": 20
+     },
+     "font": {
+      "family": "Arial, Helvetica, sans-serif",
+      "size": 11
+     },
+     "legend": {
+      "font": {
+       "size": 10,
+       "family": "Arial, Helvetica, sans-serif"
+      },
+      "x": 0,
+      "y": 1,
+      "xanchor": "left",
+      "yanchor": "top",
+      "tracegroupgap": 4,
+      "itemsizing": "constant"
+     },
+     "width": 900,
+     "height": 700,
+     "plot_bgcolor": "rgba(0,0,0,0)",
+     "paper_bgcolor": "white",
+     "barmode": "stack",
+     "showlegend": true
+    }
+   }
+  }
+ ]
+}

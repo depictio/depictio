@@ -67,6 +67,26 @@ def _embedding_payload(config: dict, base: dict) -> dict:
     }
 
 
+def _upset_payload(config: dict, base: dict) -> dict:
+    """The payload UpsetRenderer dispatches, at the config's own settings.
+
+    The config names the annotation tracks ``default_annotation_cols``, which is
+    only what seeds the renderer's picker; the task reads ``annotation_cols``.
+    Spread as is, the config sent none and the figure came without its tracks.
+    The renderer's master annotations switch (``show_annotations``) gates the
+    tracks, the set-size bars and the count labels together.
+    """
+    annotated = config.get("show_annotations", True) is not False
+    tracks = list(config.get("default_annotation_cols") or []) if annotated else []
+    return {
+        **config,
+        **base,
+        "annotation_cols": tracks or None,
+        "show_set_sizes": annotated and bool(config.get("show_set_sizes", True)),
+        "show_values": annotated and bool(config.get("show_values", False)),
+    }
+
+
 def run_compute(
     kind: str,
     component: dict,
@@ -94,7 +114,12 @@ def run_compute(
         "dc_id": str(component.get("dc_id")),
         "filter_metadata": list(filter_metadata or []),
     }
-    payload = _embedding_payload(config, base) if kind == "embedding" else {**config, **base}
+    if kind == "embedding":
+        payload = _embedding_payload(config, base)
+    elif kind == "upset_plot":
+        payload = _upset_payload(config, base)
+    else:
+        payload = {**config, **base}
     _apply_link_filters_to_payload(payload, access_token, kind)
     if kind == "complex_heatmap":
         _resolve_annotation_join(payload)

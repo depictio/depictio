@@ -1028,6 +1028,14 @@ def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+#: ``<base>_dc_id`` keys no renderer reads (``matrix_dc_id`` of an UpSet and a
+#: complex heatmap: both load the component's own ``dc_id``). Old seeds carry an
+#: id of the instance they were written on, which is no collection of this
+#: project: counted as a reference, it omitted the whole tile from every bundle
+#: and report, and the report fell back to the server's plain figure.
+_UNUSED_DC_ID_KEYS = frozenset({"matrix_dc_id"})
+
+
 def collection_refs(comp: dict[str, Any]) -> list[tuple[str, str]]:
     """Every ``(wf_id, dc_id)`` a component reads, ``wf_id`` ``""`` when unnamed.
 
@@ -1043,7 +1051,12 @@ def collection_refs(comp: dict[str, Any]) -> list[tuple[str, str]]:
     config = comp.get("config")
     if isinstance(config, dict):
         for key, value in config.items():
-            if key.endswith("_dc_id") and isinstance(value, (str, ObjectId)) and str(value):
+            if (
+                key.endswith("_dc_id")
+                and key not in _UNUSED_DC_ID_KEYS
+                and isinstance(value, (str, ObjectId))
+                and str(value)
+            ):
                 wf_id = config.get(f"{key[: -len('_dc_id')]}_wf_id")
                 refs.append((str(wf_id or ""), str(value)))
     if comp.get("component_type") == "text" and comp.get("values"):
