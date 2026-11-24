@@ -945,6 +945,20 @@ def test_the_report_gets_a_storage_shim_before_any_script(ctx) -> None:
     assert first_script == -1 or shim < first_script
 
 
+def test_the_report_gets_a_worker_origin_shim_before_any_other_script(ctx) -> None:
+    """In the opaque origin a blob worker's ``location.origin`` is "null" while
+    the page keeps the URL's, and MapLibre drops every message across that
+    mismatch: maps stayed blank. The worker stand-in sits right after the
+    storage one, before the report's first own script."""
+    body = _served(_REPORT_TOKEN, "report.html").body.decode()
+    shims = nbx.PREVIEW_STORAGE_SHIM + nbx.PREVIEW_WORKER_SHIM
+    at = body.find(shims)
+    assert at != -1 and body.count(nbx.PREVIEW_WORKER_SHIM) == 1
+    first_script = body.find("<script", at + len(shims))
+    assert at < body.find("</head>")
+    assert first_script == -1 or at < first_script
+
+
 def test_the_patch_script_is_served_from_the_assets(ctx) -> None:
     from depictio.api.v1.services.notebook_export import resources
 

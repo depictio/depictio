@@ -1480,6 +1480,25 @@ PREVIEW_STORAGE_SHIM = (
     ".getItem('x')}catch(e){try{Object.defineProperty(window,n,{value:mem(),"
     "configurable:true})}catch(e2){}}})})();</script>"
 )
+#: Blob workers that report the page's origin, for the sandboxed frame. A
+#: worker made from a ``blob:`` URL there has ``location.origin == "null"``
+#: while the page keeps the URL's origin, and MapLibre's actor drops every
+#: message whose origin differs from its own (``Actor.receive``): its worker
+#: never answers, so every map in the preview stays blank, basemap and
+#: markers alike. Each classic blob worker is wrapped so its ``location``
+#: names the page's origin, then runs the original script. Only where the
+#: origin is opaque.
+PREVIEW_WORKER_SHIM = (
+    "<script>(function(){if(self.origin!=='null'||typeof Worker!=='function')return;"
+    "var W=Worker,o=location.origin;function S(u,opts){var s=String(u);"
+    "if(s.indexOf('blob:')===0&&!(opts&&opts.type==='module')){u=URL.createObjectURL("
+    'new Blob([\'(function(o){var L=self.location;try{Object.defineProperty(self,"location",'
+    "{configurable:true,get:function(){return{origin:o,href:L.href,protocol:L.protocol,"
+    "host:L.host,hostname:L.hostname,port:L.port,pathname:L.pathname,search:L.search,"
+    "hash:L.hash,toString:function(){return L.href}}}})}catch(e){}})('+JSON.stringify(o)"
+    "+');importScripts('+JSON.stringify(s)+');'],{type:'text/javascript'}))}"
+    "return new W(u,opts)}S.prototype=W.prototype;window.Worker=S})();</script>"
+)
 
 
 def preview_files_csp() -> str:
@@ -1532,7 +1551,7 @@ def _preview_relpath(token: str, path: str) -> str | None:
 
 def _inject_preview_patch(html: bytes) -> bytes:
     """The patch script tag before ``</body>``, once, in the served report, and
-    the storage stand-in at the top of ``<head>``.
+    the storage and worker stand-ins at the top of ``<head>``.
 
     The editor's edits reach the preview through it; the report's own files
     are served untouched.
@@ -1544,7 +1563,8 @@ def _inject_preview_patch(html: bytes) -> bytes:
     head = re.search(rb"<head[^>]*>", html)
     if head is None:
         return html
-    return html[: head.end()] + PREVIEW_STORAGE_SHIM.encode("utf-8") + html[head.end() :]
+    shims = (PREVIEW_STORAGE_SHIM + PREVIEW_WORKER_SHIM).encode("utf-8")
+    return html[: head.end()] + shims + html[head.end() :]
 
 
 def _preview_headers(*, immutable: bool = False) -> dict[str, str]:
