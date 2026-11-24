@@ -15,7 +15,7 @@
  * Only owners and editors of the project reach it (the API answers 404 to
  * anyone else, and while the feature is off).
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -43,6 +43,8 @@ import {
   FileX,
   Flag,
   ListTree,
+  PanelLeftClose,
+  PanelLeftOpen,
   Moon,
   RefreshCw,
   ScrollText,
@@ -52,10 +54,13 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 
+import { fetchAllDashboards } from 'depictio-react-core';
+import type { DashboardSummary } from 'depictio-react-core';
 import DepictioRose from '../components/rose/DepictioRose';
 import { usePageTitle } from '../branding';
 import { STROKE } from '../chrome/variants/glass/icons';
 import { useChromeVariant } from '../chrome/variants';
+import TabLinkProvider from '../chrome/TabLinkProvider';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 import { useServerInfo } from '../hooks/useServerInfo';
@@ -135,6 +140,31 @@ const ReportEditorApp: React.FC = () => {
   const api = useReportLayer(dashboardId);
   const { layer, outline } = api;
   const [selected, setSelected] = useState<Selection | null>(null);
+  // The report alone: the editing column folds away and the preview takes
+  // the page, to read the report as its readers will.
+  const [reportOnly, setReportOnly] = useState(false);
+  // The tab family, so a text tile's `[…](tab:Name)` links wear the tab's
+  // icon and colour as on the dashboard (a stepper's tab, the "how to read"
+  // tiles), instead of falling back to plain text.
+  const [family, setFamily] = useState<DashboardSummary[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchAllDashboards()
+      .then((all) => {
+        if (cancelled) return;
+        const main = all.find((d) => d.dashboard_id === dashboardId);
+        const parentId = main?.parent_dashboard_id || dashboardId;
+        setFamily(
+          all
+            .filter((d) => d.dashboard_id === parentId || d.parent_dashboard_id === parentId)
+            .sort((a, b) => (a.tab_order ?? 0) - (b.tab_order ?? 0)),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardId]);
   const [revealToken, setRevealToken] = useState(0);
   const [fold, setFold] = useState({ open: true, n: 0 });
   // The app's own scheme: the preview frame follows it, not the browser's.
@@ -268,6 +298,22 @@ const ReportEditorApp: React.FC = () => {
             Reload
           </Button>
         )}
+        <Tooltip label={reportOnly ? 'Show the editing panel' : 'The report only'} withArrow>
+          <ActionIcon
+            size="lg"
+            variant={reportOnly ? 'light' : 'default'}
+            onClick={() => setReportOnly((on) => !on)}
+            aria-label={reportOnly ? 'Show the editing panel' : 'Show the report only'}
+            aria-pressed={reportOnly}
+            data-testid="report-only-toggle"
+          >
+            {reportOnly ? (
+              <PanelLeftOpen size={17} strokeWidth={STROKE} />
+            ) : (
+              <PanelLeftClose size={17} strokeWidth={STROKE} />
+            )}
+          </ActionIcon>
+        </Tooltip>
         <Button
           size="sm"
           variant="default"
@@ -373,11 +419,13 @@ const ReportEditorApp: React.FC = () => {
     }
 
     return (
+      <TabLinkProvider tabs={family}>
       <SnapshotContext.Provider value={snapshotSource}>
         <div
           className="re-body"
           ref={bodyRef}
           data-testid="report-editor"
+          data-report-only={reportOnly || undefined}
           style={{ '--re-split': `${split.ratio}fr`, '--re-split-rest': `${1 - split.ratio}fr` } as React.CSSProperties}
         >
           <div className="re-edit" ref={editColumnRef} data-testid="report-edit-column">
@@ -535,6 +583,7 @@ const ReportEditorApp: React.FC = () => {
           </div>
         </div>
       </SnapshotContext.Provider>
+      </TabLinkProvider>
     );
   })();
 

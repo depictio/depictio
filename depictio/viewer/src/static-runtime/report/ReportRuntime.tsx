@@ -32,6 +32,7 @@ import {
   groupsRenderPayload,
   groupsToFilters,
   hasLiveValues,
+  highlightMetadata,
   isControlsPlacement,
   mergeFiltersBySource,
   resolveGroupRender,
@@ -49,6 +50,7 @@ import {
   compactPanelSections,
   componentFor,
   formatTileRef,
+  parseTileRefs,
   reportCategorySource,
   tabDoc,
   type BundleManifest,
@@ -392,9 +394,22 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
   const [funnelEnabled, setFunnelEnabled] = useState(funnelDefault);
   const [funnelViewOpen, setFunnelViewOpen] = useState(false);
 
-  const renderComponent = (ref: TileRef) => {
-    const own = componentFor(manifest, ref) as unknown as StoredMetadata | null;
-    if (!own) return null;
+  /** The highlight a host stands for (`data-depictio-ref`, its own tile on
+   *  another tab), or null when the host is the component itself. */
+  const highlightOf = (host: HTMLElement): StoredMetadata | null => {
+    const refs = parseTileRefs(host.getAttribute('data-depictio-ref'));
+    if (refs.length !== 1) return null;
+    const h = componentFor(manifest, refs[0]) as unknown as StoredMetadata | null;
+    return h && h.component_type === 'highlight' ? h : null;
+  };
+
+  const renderComponent = (ref: TileRef, host?: HTMLElement) => {
+    const source = componentFor(manifest, ref) as unknown as StoredMetadata | null;
+    if (!source) return null;
+    // A highlight draws its source as the dashboard does (highlightTile.ts):
+    // under its own title, in the minimal style, not the source tab's full tile.
+    const highlight = host ? highlightOf(host) : null;
+    const own = highlight ? highlightMetadata(highlight, source) : source;
     const m = withReportControls(
       own,
       (tabDoc(manifest, ref.tabId) as { advanced_viz_controls?: unknown } | null)
@@ -445,9 +460,9 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
                         it (glass.css), as it does on the dashboard. */}
                     <div data-testid="dashboard-content" className="depictio-report-content">
                       {tile.refs.length > 1 ? (
-                        <div className="depictio-report-row">{tile.refs.map(renderComponent)}</div>
+                        <div className="depictio-report-row">{tile.refs.map((ref) => renderComponent(ref, tile.host))}</div>
                       ) : (
-                        renderComponent(tile.refs[0])
+                        renderComponent(tile.refs[0], tile.host)
                       )}
                     </div>
                     </CategoryCellStyleContext.Provider>

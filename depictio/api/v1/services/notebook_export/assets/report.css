@@ -101,6 +101,80 @@ body.quarto-dark .dpx-light-only { display: none !important; }
     background: color-mix(in srgb, var(--dpx-accent, #228be6) 45%, transparent);
   }
 }
+/* A step's links, as the live stepper draws them: bare icons beside the
+   step's name (the tab's own colour, the run parameters dimmed), the name in
+   the tooltip. */
+.dpx-step-links { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+.dpx-step-links a.dpx-step-link {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; margin: 0;
+  border-radius: 4px; font-size: 15px; line-height: 1; text-decoration: none; opacity: .85;
+  color: var(--gl-muted, #868e96);
+}
+.dpx-step-link > span { margin: 0 !important; }
+.dpx-step-link:hover, .dpx-step-link:focus-visible {
+  opacity: 1; background: color-mix(in srgb, var(--dpx-accent, var(--gl-accent, #228be6)) 12%, transparent);
+}
+/* A findings list (a bold figure, a claim, a context, a link to a tab), as
+   the live renderer draws it: the figure large in its tab's colour, the claim in bold
+   over its dimmed context, the tab on the right, on one grid so the claims
+   share an edge. */
+.dpx-findings { margin: .5rem 0; }
+.dpx-finding > p {
+  display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) auto;
+  grid-template-areas: "stat claim link" "stat context link";
+  column-gap: 20px; align-items: center; margin: 0; padding: 12px 0;
+  border-top: 1px solid var(--gl-hair, #dee2e6);
+}
+.dpx-finding:first-child > p { border-top: 0; }
+.dpx-finding-stat {
+  grid-area: stat; font-size: 28px; font-weight: 800; line-height: 1.1;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.dpx-finding-claim { grid-area: claim; font-weight: 700; line-height: 1.35; }
+.dpx-finding-context { grid-area: context; color: var(--gl-muted, #868e96); line-height: 1.35; }
+.dpx-finding-link { grid-area: link; justify-self: end; }
+.dpx-finding-link a {
+  color: var(--dpx-link-color, inherit); text-decoration: none; font-weight: 600; font-size: .8125rem;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.dpx-finding-link a:hover { text-decoration: underline; }
+.dpx-finding-link { display: inline-flex; align-items: center; gap: 4px; color: var(--dpx-link-color, inherit); }
+.dpx-finding-link-icon { display: inline-flex; width: 14px; height: 14px; }
+.dpx-finding-link-icon svg { width: 14px; height: 14px; }
+@media (max-width: 480px) {
+  .dpx-finding > p { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "stat link" "claim claim" "context context"; }
+}
+/* A list of links to tabs, as tiles: the tab's icon resting faint on the
+   right, its name, and the question it answers. The whole tile is the name's
+   link. A numbered list leads each tile with its number, in the tab's colour. */
+.dpx-tab-tiles {
+  display: grid; gap: 12px; margin: .5rem 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+}
+.dpx-tab-tile {
+  position: relative; padding: 18px 20px; border-radius: var(--gl-tile-radius, 12px);
+  border: 1.5px solid var(--gl-hair, #dee2e6); box-shadow: var(--gl-tile-shadow, none);
+  background: var(--gl-paper, transparent); transition: background-color .12s ease-out, border-color .12s ease-out;
+}
+.dpx-tab-tile:hover, .dpx-tab-tile:focus-within {
+  border-color: var(--dpx-tile-color, var(--gl-accent, #228be6));
+  background: color-mix(in srgb, var(--dpx-tile-color, var(--gl-accent, #228be6)) 6%, var(--gl-paper, transparent));
+}
+.dpx-tab-tile > p {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name icon" "line icon";
+  column-gap: 14px; row-gap: 4px; margin: 0; align-items: center;
+}
+.dpx-tab-tile.dpx-numbered > p { grid-template-areas: "num icon" "name name" "line line"; row-gap: 8px; align-items: start; }
+.dpx-tab-tile-num {
+  grid-area: num; font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; color: var(--dpx-tile-color, inherit);
+}
+.dpx-tab-tile-icon { grid-area: icon; display: grid; font-size: 36px; opacity: .32; transition: opacity .12s ease-out; }
+.dpx-tab-tile-icon > span { margin: 0 !important; font-size: 1em !important; }
+.dpx-tab-tile:hover .dpx-tab-tile-icon { opacity: .85; }
+.dpx-tab-tile-name { grid-area: name; font-weight: 700; line-height: 1.3; text-decoration: none; color: inherit; }
+.dpx-tab-tile-name::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.dpx-tab-tile-line { grid-area: line; color: var(--gl-muted, #868e96); line-height: 1.4; font-size: .9em; }
 /* A section's filter bar, as the export saw it. */
 .dpx-filterbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .dpx-filterchip {
@@ -198,3 +272,16 @@ body.quarto-dark .dpx-light-only { display: none !important; }
   .callout.dpx-about .callout-collapse { display: block !important; height: auto !important; }
   .dpx-footer { break-inside: avoid; }
 }
+/* MultiQC's General Statistics, as the dashboard draws it: a row per sample,
+   each value with its unit over its data bar. */
+.dpx-gs-wrap { overflow-x: auto; margin: .5rem 0 1rem; }
+.dpx-gs { border-collapse: collapse; width: 100%; font-size: .8125rem; }
+.dpx-gs th {
+  text-align: left; font-weight: 600; padding: 6px 10px; white-space: nowrap;
+  border-bottom: 1px solid var(--gl-hair, #dee2e6);
+}
+.dpx-gs td {
+  padding: 5px 10px; white-space: nowrap; border-bottom: 1px solid var(--gl-hair, #e9ecef);
+  background-repeat: no-repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.dpx-gs td.dpx-gs-name { font-weight: 600; }

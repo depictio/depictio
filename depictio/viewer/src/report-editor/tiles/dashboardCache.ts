@@ -58,3 +58,23 @@ export function useTabComponent(tabId: string, componentId: string, enabled: boo
   }, [enabled, tabId, componentId]);
   return state;
 }
+
+/** A tab's whole dashboard, from the shared read; `null` until it is in. A
+ *  tile hands it to `CategoryColorsContext`, as the viewer does, so it draws
+ *  "Bacteria" in the colour its tab pins rather than the palette's next hue. */
+export function useTabDashboard(tabId: string): DashboardData | null {
+  const [doc, setDoc] = useState<DashboardData | null>(null);
+  useEffect(() => {
+    if (!tabId) return;
+    let cancelled = false;
+    loadTabDashboard(tabId)
+      .then((d) => {
+        if (!cancelled) setDoc(d);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [tabId]);
+  return doc;
+}

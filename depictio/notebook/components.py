@@ -1173,6 +1173,70 @@ class MultiQCComponent(FigureComponent):
             return _figure_from_dict(resp.json()["figure"])
 
 
+# ``MultiQCGeneralStats.tsx``: the first number of a Dash ``filter_query``
+# ("{col} >= 12 && {col} < 17") is a bin's floor, the second its ceiling.
+_GS_NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
+# A bar as the server draws it: one colour up to the value's share of the cell.
+_GS_BAR = re.compile(
+    r"^linear-gradient\(90deg, (#[0-9a-fA-F]{3,8}) 0%, \1 (\d+(?:\.\d+)?)%, "
+    r"transparent \2%, transparent 100%\)$"
+)
+
+
+def gs_bars(styles: list[dict[str, Any]]) -> dict[str, list[tuple[float, float, str, float]]]:
+    """The General Statistics data bars by column: (floor, ceiling, colour,
+    share in %) per bin, from the server's ``table_styles`` (the dashboard's
+    ``indexDataBars``). A style that is not a plain bar is skipped."""
+    out: dict[str, list[tuple[float, float, str, float]]] = {}
+    for style in styles or []:
+        cond = style.get("if") or {}
+        col = cond.get("column_id")
+        m = _GS_BAR.match(str(style.get("backgroundImage") or ""))
+        query = re.sub(r"\{[^}]*\}", "", str(cond.get("filter_query") or ""))
+        nums = _GS_NUMBER.findall(query)
+        if not col or not m or not nums:
+            continue
+        floor = float(nums[0])
+        ceiling = float(nums[1]) if len(nums) > 1 else float("inf")
+        out.setdefault(str(col), []).append((floor, ceiling, m.group(1), float(m.group(2))))
+    return out
+
+
+def gs_bar_for(
+    bins: list[tuple[float, float, str, float]] | None, value: Any
+) -> tuple[str, float] | None:
+    """The bar of ``value`` (colour, share in %), as ``findDataBar`` picks it:
+    the bin it falls in, else the last one (a value on the global maximum)."""
+    if not bins or value is None or value == "":
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if num != num:  # NaN
+        return None
+    for floor, ceiling, colour, share in bins:
+        if floor <= num < ceiling:
+            return colour, share
+    return bins[-1][2], bins[-1][3]
+
+
+def gs_format(value: Any, fmt: dict[str, Any] | None) -> str:
+    """A cell as the dashboard writes it (``formatCell``): the column's
+    precision, thousands grouping and unit (" bp", "%", " M")."""
+    if value is None or value == "":
+        return ""
+    if not fmt:
+        return str(value)
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    precision = int(fmt.get("precision") or 0)
+    text = f"{num:,.{precision}f}" if fmt.get("group") else f"{num:.{precision}f}"
+    return f"{text}{fmt.get('suffix') or ''}"
+
+
 class MultiQCGeneralStatsComponent(DepictioComponent):
     default_display = "data"
 
@@ -1182,22 +1246,65 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
             {"filters": self.filters, "theme": self.theme, **self.pins},
         )
 
-    def _fetch_data(self) -> pl.DataFrame:
-        payload = self._payload()
+    @staticmethod
+    def _mode(payload: dict[str, Any]) -> dict[str, Any]:
+        """The view the dashboard opens on: the mean of a sample's reads (one
+        row per sample), else whatever the server sent."""
         modes = payload.get("modes") or {}
-        mode = modes.get("all") or modes.get("mean") or next(iter(modes.values()), {})
-        return pl.DataFrame(mode.get("table_data") or [])
+        return modes.get("mean") or modes.get("all") or next(iter(modes.values()), {})
+
+    def _fetch_data(self) -> pl.DataFrame:
+        self._gs_mode = self._mode(self._payload())
+        return pl.DataFrame(self._gs_mode.get("table_data") or [])
 
     def _fetch_figure(self):
-        payload = self._payload()
-        modes = payload.get("modes") or {}
-        mode = modes.get("all") or modes.get("mean") or next(iter(modes.values()), {})
-        return _figure_from_dict(mode["violin_figure"])
+        return _figure_from_dict(self._mode(self._payload())["violin_figure"])
+
+    def _gs_cells(self, df: pl.DataFrame) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Per column: how its values are written, and its data bars."""
+        mode = getattr(self, "_gs_mode", None) or {}
+        formats = {
+            str(c.get("id")): c.get("format")
+            for c in mode.get("table_columns") or []
+            if isinstance(c, dict) and c.get("type") == "numeric"
+        }
+        bars = gs_bars(mode.get("table_styles") or [])
+        return formats, {c: bars[c] for c in df.columns if c in bars and c != "Sample Name"}
+
+    def _gs_html(self, df: pl.DataFrame) -> str:
+        """The table as the dashboard draws it: one row per sample, values with
+        their units, each over its bar."""
+        formats, bars = self._gs_cells(df)
+        head = "".join(f"<th>{_esc(str(c))}</th>" for c in df.columns)
+        rows = []
+        for row in df.iter_rows(named=True):
+            cells = []
+            for c in df.columns:
+                text = _esc(
+                    gs_format(row[c], formats.get(c)) if c in formats else str(row[c] or "")
+                )
+                bar = gs_bar_for(bars.get(c), row[c])
+                style = (
+                    f' style="background-image:linear-gradient(90deg,{bar[0]} 0%,{bar[0]} '
+                    f'{bar[1]:g}%,transparent {bar[1]:g}%)"'
+                    if bar
+                    else ""
+                )
+                cls = ' class="dpx-gs-name"' if c == "Sample Name" else ""
+                cells.append(f"<td{cls}{style}>{text}</td>")
+            rows.append("<tr>" + "".join(cells) + "</tr>")
+        return (
+            '<div class="dpx-gs-wrap"><table class="dpx-gs"><thead><tr>'
+            + head
+            + "</tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table></div>"
+        )
 
     def _bundle(self) -> dict[str, Any]:
         """The table the tile shows, then the violin summary drawn beside it."""
         df = self.data
-        html = data_html(df) if isinstance(df, pl.DataFrame) else ""
+        html = self._gs_html(df) if isinstance(df, pl.DataFrame) and df.height else ""
         bundle: dict[str, Any] = {PLAIN_MIME: repr(df)}
         try:
             fig = self.figure
@@ -1208,8 +1315,14 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
             html += fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
         bundle[HTML_MIME] = html
         if static_figures() and isinstance(df, pl.DataFrame):
-            # A page: the table as a table (the violins stay the HTML's).
-            bundle[MARKDOWN_MIME] = _typst.table(df)
+            # A page: the table as a table, its values and bars as on the
+            # dashboard (the violins stay the HTML's).
+            formats, bars = self._gs_cells(df)
+            bundle[MARKDOWN_MIME] = _typst.table(
+                df,
+                text={c: (lambda v, f=f: gs_format(v, f)) for c, f in formats.items()},
+                bars={c: (lambda v, b=b: gs_bar_for(b, v)) for c, b in bars.items()},
+            )
         return bundle
 
 

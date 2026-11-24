@@ -19,6 +19,7 @@ import datetime as _dt
 import math
 import re
 import struct
+from collections.abc import Callable
 from typing import Any
 
 import polars as pl
@@ -88,9 +89,13 @@ def _cell(value: Any) -> str:
     return _breakable(str(value).replace("\n", " ")[:160])
 
 
-def _dpx_cell(text: str, colour: str | None) -> str:
-    """A cell as typst: a string, or a chip (``dpx-table`` draws a dictionary
-    as one) when the value has its colour."""
+def _dpx_cell(text: str, colour: str | None, bar: tuple[str, float] | None = None) -> str:
+    """A cell as typst: a string, a chip (``dpx-table`` draws a dictionary
+    as one) when the value has its colour, or the value over its data bar
+    (colour, share of the cell in %), as MultiQC's General Statistics."""
+    if bar:
+        share = max(0.0, min(100.0, float(bar[1])))
+        return f"(bar: {share / 100:.4f}, color: {tstr(bar[0])}, text: {tstr(text)})"
     if colour:
         return f"(chip: {tstr(text)}, color: {tstr(colour)})"
     return tstr(text)
@@ -102,14 +107,25 @@ def _dpx_table(
     rows: int,
     column_note: str = "",
     chips: dict[str, dict[str, str]] | None = None,
+    text: dict[str, Callable[[Any], str]] | None = None,
+    bars: dict[str, Callable[[Any], tuple[str, float] | None]] | None = None,
 ) -> str:
     """One ``dpx-table`` call: the first ``rows`` rows of ``df``, all of its
     columns shown, widths from what they hold. ``column_note`` leads the note
-    ("Columns 2-14 of 28") when part of the table is elsewhere."""
+    ("Columns 2-14 of 28") when part of the table is elsewhere. ``text``
+    writes a column's values its own way (a unit); ``bars`` draws each value
+    over its data bar."""
     total_rows = df.height
     view = df.head(rows)
-    numeric = [view.schema[c].is_numeric() for c in view.columns]
-    body = [[_cell(v) for v in row] for row in view.iter_rows()]
+    text = text or {}
+    bars = bars or {}
+    # A barred column reads from the left, as the bar grows.
+    numeric = [view.schema[c].is_numeric() and c not in bars for c in view.columns]
+    writers = [text.get(c) for c in view.columns]
+    body = [
+        [w(v) if w is not None else _cell(v) for v, w in zip(row, writers, strict=True)]
+        for row in view.iter_rows()
+    ]
     weights = []
     for i, name in enumerate(view.columns):
         lengths = sorted(len(r[i]) for r in body) or [0]
@@ -122,6 +138,7 @@ def _dpx_table(
     # of three-digit numbers would otherwise run into its neighbour.
     header = "(" + ", ".join(tstr(_breakable(str(c), 0)) for c in view.columns) + ",)"
     colours = [(chips or {}).get(c) for c in view.columns]
+    barred = [bars.get(c) for c in view.columns]
     raw_rows = list(view.iter_rows())
     cells = (
         "("
@@ -129,7 +146,9 @@ def _dpx_table(
             "("
             + ", ".join(
                 _dpx_cell(
-                    v, colours[i].get(str(raw[i])) if colours[i] and raw[i] is not None else None
+                    v,
+                    colours[i].get(str(raw[i])) if colours[i] and raw[i] is not None else None,
+                    barred[i](raw[i]) if barred[i] is not None else None,
                 )
                 for i, v in enumerate(r)
             )
@@ -158,6 +177,8 @@ def table(
     rows: int = TABLE_ROWS,
     orientation: str = "auto",
     chips: dict[str, dict[str, str]] | None = None,
+    text: dict[str, Callable[[Any], str]] | None = None,
+    bars: dict[str, Callable[[Any], tuple[str, float] | None]] | None = None,
 ) -> str:
     """``df`` as a typst table: a styled header row, zebra rows, numbers right
     aligned and formatted, columns as wide as what they hold, and a note when
@@ -178,10 +199,17 @@ def table(
         dropped = total_cols - TABLE_COLS
         note = f"Columns 1-{TABLE_COLS} of {total_cols}" if dropped > 0 else ""
         return raw(
-            _dpx_table(df.select(df.columns[:TABLE_COLS]), rows=rows, column_note=note, chips=chips)
+            _dpx_table(
+                df.select(df.columns[:TABLE_COLS]),
+                rows=rows,
+                column_note=note,
+                chips=chips,
+                text=text,
+                bars=bars,
+            )
         )
     if total_cols <= LANDSCAPE_TABLE_COLS:
-        body = _dpx_table(df, rows=rows, chips=chips)
+        body = _dpx_table(df, rows=rows, chips=chips, text=text, bars=bars)
     else:
         blocks = []
         for start in range(0, total_cols, SPLIT_TABLE_COLS):
@@ -191,7 +219,9 @@ def table(
             note = (
                 f"Columns {start + 1}-{min(start + SPLIT_TABLE_COLS, total_cols)} of {total_cols}"
             )
-            block = _dpx_table(df.select(names), rows=rows, column_note=note, chips=chips)
+            block = _dpx_table(
+                df.select(names), rows=rows, column_note=note, chips=chips, text=text, bars=bars
+            )
             # Non-breakable, so a block a landscape page cannot hold moves
             # whole onto the next one instead of splitting mid-table.
             blocks.append(f"#block(breakable: false)[\n{block}\n]")

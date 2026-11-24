@@ -52,6 +52,12 @@
   radius: 5pt)[#text(fill: c.darken(32%), weight: "medium")[#t]]
 // A table read like a spreadsheet: a bold header row on a darker band, rows
 // alternating grey and white, a rule around every cell.
+// A value over its data bar (MultiQC's General Statistics): the bar runs the
+// cell's share, in the column's colour, the value on it.
+#let dpx-bar-cell(t, share, c) = box(width: 100%)[
+  #place(left + horizon, dx: -3pt, box(width: share * 100% + 3pt, height: 1.15em, fill: c, radius: 1pt))
+  #t
+]
 #let dpx-table(columns: (), align: (), header: (), rows: (), note: none) = {
   set text(size: 7.3pt)
   set par(justify: false, leading: 0.5em)
@@ -60,7 +66,9 @@
     fill: (x, y) => if y == 0 { dpx-table-head } else if calc.even(y) { dpx-zebra } else { white },
     table.header(..header.map(h => text(weight: "bold", fill: dpx-ink)[#h])),
     table.hline(y: 1, stroke: 1pt + dpx-muted),
-    ..rows.flatten().map(c => if type(c) == dictionary { dpx-chip(c.chip, rgb(c.color)) } else [#c]))
+    ..rows.flatten().map(c => if type(c) == dictionary {
+      if "bar" in c { dpx-bar-cell(c.text, c.bar, rgb(c.color)) } else { dpx-chip(c.chip, rgb(c.color)) }
+    } else [#c]))
   if note != none { v(-4pt); text(size: 6.8pt, fill: dpx-muted, style: "italic")[#note] }
 }
 // A wide tile (a table with more columns than a portrait page holds, a figure
@@ -128,22 +136,48 @@
 }
 #let dpx-tile-done = dpx-failed.update(false)
 // The stepper (`::: steps`): a disc with the step's icon, the line to the
-// next, the label over the step's text.
+// next, the label over the step's text. A step's links (the tab showing its
+// result, its run parameters) are small icons after its label, as live.
 #let dpx-steps(steps, color) = grid(columns: (1fr,) * steps.len(), column-gutter: 6pt,
-  ..steps.enumerate().map(((i, (icon, label, body))) => block[
-    #box(width: 100%, height: 22pt)[
-      #place(left + horizon, circle(radius: 11pt, fill: color, stroke: none,
-        if icon != none { align(center + horizon, image(bytes(icon), height: 11pt)) }))
-      #if i < steps.len() - 1 {
-        place(left + horizon, dx: 27pt, line(length: 100% - 30pt,
-          stroke: 1.2pt + color.lighten(55%)))
-      }
+  ..steps.enumerate().map(((i, step)) => {
+    let (icon, label, body, ..rest) = step
+    let links = rest.at(0, default: ())
+    block[
+      #box(width: 100%, height: 22pt)[
+        #place(left + horizon, circle(radius: 11pt, fill: color, stroke: none,
+          if icon != none { align(center + horizon, image(bytes(icon), height: 11pt)) }))
+        #if i < steps.len() - 1 {
+          place(left + horizon, dx: 27pt, line(length: 100% - 30pt,
+            stroke: 1.2pt + color.lighten(55%)))
+        }
+      ]
+      #v(2pt)
+      #text(size: 6.8pt, weight: "bold", fill: dpx-muted, tracking: 0.06em)[#upper(label)]#for l in links [#h(3pt)#box(image(bytes(l), height: 7.5pt), baseline: 1pt)]
+      #v(-3pt)
+      #text(size: 8.3pt, weight: "semibold")[#body]
     ]
-    #v(2pt)
-    #text(size: 6.8pt, weight: "bold", fill: dpx-muted, tracking: 0.06em)[#upper(label)]
-    #v(-3pt)
-    #text(size: 8.3pt, weight: "semibold")[#body]
-  ]))
+  }))
+// A findings list: the figure large in its tab's colour, the claim in bold
+// over its dimmed context, the tab on the right. Rows are (stat, claim,
+// context, link, colour); an empty context or link, or no colour, is left out.
+#let dpx-findings(rows) = grid(columns: (86pt, 1fr, auto),
+  stroke: (x, y) => if y > 0 { (top: 0.4pt + dpx-hair) },
+  inset: (x, y) => (y: 6pt, right: if x < 2 { 10pt } else { 0pt }), align: horizon,
+  ..rows.map(((stat, claim, ctx, link, color)) => (
+    text(size: 17pt, weight: "bold", tracking: -0.02em,
+      fill: if color == none { dpx-ink } else { color })[#stat],
+    [#text(size: 8.6pt, weight: "bold")[#claim]#if ctx != "" [ \ #text(size: 8pt, fill: dpx-muted)[#ctx]]],
+    if link != "" { text(size: 8pt, fill: dpx-accent)[#link] } else [])).flatten())
+// Tab tiles (a list of links to tabs): a framed card each, the tab's name and
+// the question it answers, its icon resting faint on the right. A numbered
+// list leads each tile with its number. Tiles are (icon, colour, name, line, num).
+#let dpx-tab-tiles(tiles) = grid(columns: (1fr,) * 3, column-gutter: 8pt, row-gutter: 8pt,
+  ..tiles.map(((icon, color, name, line, num)) => std.block(width: 100%, breakable: false,
+    stroke: 0.6pt + dpx-hair, radius: 6pt, inset: 9pt)[
+    #grid(columns: (1fr, auto), column-gutter: 6pt, align: (left + top, right + top),
+      [#if num != "" [#text(size: 14pt, weight: "bold", fill: color)[#num]#linebreak()]
+       #text(size: 9pt, weight: "bold")[#name]#if line != "" [#linebreak()#text(size: 8pt, fill: dpx-muted)[#line]]],
+      if icon != none { image(bytes(icon), height: 16pt) })]))
 // A fact list ("The run"): a muted icon and label, then the value.
 #let dpx-facts(rows) = grid(columns: (auto, auto, 1fr), column-gutter: 6pt,
   row-gutter: 0pt, align: left + top,

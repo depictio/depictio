@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CategoryColorsContext,
   ComponentRenderer,
   DashboardLoadingProvider,
   DataVersionProvider,
@@ -25,6 +26,7 @@ import { Box } from '@mantine/core';
 
 import { stateFilters } from '../model';
 import { computeCardValue } from './cardValues';
+import { useTabDashboard } from './dashboardCache';
 import type { CardValue } from './cardValues';
 
 /** State changes (a filter typed, a group edited) redraw once they settle. */
@@ -121,6 +123,10 @@ interface LiveTileProps {
 }
 
 const LiveTile: React.FC<LiveTileProps> = ({ tabId, metadata, state, onStatus }) => {
+  // The tab's own document, for the colours it pins (as the viewer and the
+  // report hand it to the renderers): without it a tree or a volcano took the
+  // palette's default hues and differed from the preview beside it.
+  const tabDoc = useTabDashboard(tabId);
   const filtersNow = useMemo(() => stateFilters(state), [state]);
   const stateKey = useMemo(() => JSON.stringify(state ?? null), [state]);
   const filters: InteractiveFilter[] = useDebounced(filtersNow, stateKey);
@@ -206,6 +212,7 @@ const LiveTile: React.FC<LiveTileProps> = ({ tabId, metadata, state, onStatus })
 
   if (failed) return null;
   return (
+    <CategoryColorsContext.Provider value={tabDoc}>
     <DataVersionProvider {...versions} dashboardId={tabId}>
       <DashboardLoadingProvider>
         {TRACKED_LOAD_TYPES.has(String(metadata.component_type)) && (
@@ -226,6 +233,7 @@ const LiveTile: React.FC<LiveTileProps> = ({ tabId, metadata, state, onStatus })
         </Box>
       </DashboardLoadingProvider>
     </DataVersionProvider>
+    </CategoryColorsContext.Provider>
   );
 };
 

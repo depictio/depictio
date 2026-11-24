@@ -29,6 +29,9 @@ export const RENDER_TIMEOUT_MS = 8000;
 export function virtualBox(componentType: string | null | undefined): { width: number; height: number } {
   if (componentType === 'card') return { width: 320, height: 200 };
   if (componentType === 'text') return { width: 520, height: 130 };
+  // An advanced visualisation stacks its own parts (an upset plot's bars over
+  // its matrix, a tree beside its strip): at 320 px they crushed into a line.
+  if (componentType === 'advanced_viz') return { width: 760, height: 500 };
   return { width: 760, height: 320 };
 }
 

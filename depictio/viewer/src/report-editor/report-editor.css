@@ -131,6 +131,14 @@
   grid-template-columns: minmax(0, var(--re-split, 1fr)) 10px minmax(0, var(--re-split-rest, 1fr));
   padding: 10px;
 }
+/* The report only: the editing column and the handle fold away. */
+.re-body[data-report-only] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.re-body[data-report-only] > .re-edit,
+.re-body[data-report-only] > .re-splitter {
+  display: none;
+}
 /* The handle between the panes: a hairline that thickens on hover/drag. */
 .re-splitter {
   position: relative;

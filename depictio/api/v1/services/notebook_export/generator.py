@@ -58,26 +58,31 @@ from .reading_order import (
     grid_columns,
     ordered_units,
     tab_display_name,
+    tab_icon_id,
     tab_link_key,
 )
 from .report_chrome import (
     DARK_CSS,
     DIV_CLOSE,
     ORPHAN,
+    PARAMS_ICON,
     REPORT_CSS,
     SURFACE_OPEN,
     TOC_SCOPE_JS,
+    TabLinkInfo,
     about_callout,
     about_callout_many,
     appbar_html,
     cell_open,
     drop_orphan_links,
+    findings_markdown,
     footer_html,
     grid_open,
     mark_css,
     methods,
     pdf_structures,
     stepper_markdown,
+    tab_tiles_markdown,
     title_logo_css,
 )
 from .report_theme import BRAND_DEFAULTS, CHROME_CSS, CHROME_JS, brand_rules
@@ -607,6 +612,8 @@ class NotebookBuilder:
         # The report's own options (Report settings in the editor); their
         # defaults are the report as it was without them.
         self.settings: ReportSettings = self.layer.settings if self.layer else ReportSettings()
+        # Tiles whose PDF page break their section's heading took (by ``id``).
+        self._moved_breaks: set[int] = set()
         self._tiles_by_ref: dict[tuple[str, str], ReportTile] = (
             {(t.tab_id, t.component_id): t for t in self.layer.tiles} if self.layer else {}
         )
@@ -806,6 +813,80 @@ class NotebookBuilder:
 
         return _TAB_LINK_RE.sub(sub, text)
 
+    def _has_params(self) -> bool:
+        """Whether the document holds the run's parameters (what ``params:`` links open)."""
+        return bool(((self.plan.project or {}).get("template_origin") or {}).get("run_provenance"))
+
+    def _tab_link(self, name: str) -> TabLinkInfo | None:
+        """What a link to the tab ``name`` shows of it, or ``None`` when the
+        document holds no such tab (``TabLinkTarget``: its icon and colour as
+        the sidebar shows them, its subtitle as the line a tile prints)."""
+        key = name.strip().lower()
+        anchor = self._anchor_by_tab_name.get(key)
+        if not anchor:
+            return None
+        tab = next(
+            (
+                t
+                for t in self.plan.tabs
+                if key
+                in {
+                    str(n).strip().lower()
+                    for n in (tab_display_name(t), t.get("title"), t.get("main_tab_name"))
+                    if n
+                }
+            ),
+            None,
+        )
+        if tab is None:
+            return None
+        color = palette_hex(
+            str(tab.get("tab_icon_color") or tab.get("icon_color") or "") or None, ""
+        )
+        return TabLinkInfo(
+            label=tab_display_name(tab),
+            anchor=anchor,
+            icon=tab_icon_id(tab),
+            color=color or palette_hex("gray", "#868e96"),
+            description=str(tab.get("subtitle") or "").strip() or None,
+        )
+
+    def _tile_accent(self, meta: dict[str, Any]) -> str:
+        """A text tile's accent as a colour: a palette name, a literal colour,
+        or ``tab:<name>`` for the colour that tab wears; ``""`` when unset or
+        unknown (``resolveAccent``, ``TextRenderer.tsx``)."""
+        raw = str(meta.get("accent") or "").strip()
+        if raw.startswith("tab:"):
+            info = self._tab_link(raw[4:])
+            return info.color if info else ""
+        return palette_hex(raw or None, "")
+
+    def _step_link(self, label: str, target: str) -> str | None:
+        """A stepper link as the live one: an icon alone, its name as the tooltip.
+
+        The tab's own icon in the tab's colour; the tune icon for the run's
+        parameters. ``""`` when the document lacks the target, ``None`` for
+        any other link (it stays a text link).
+        """
+        if target.startswith("tab:"):
+            info = self._tab_link(target[4:])
+            if info is None:
+                return ""
+            href, icon = info.anchor, self._icon_html(info.icon, info.color)
+        elif target.startswith("params:"):
+            if not self._has_params():
+                return ""
+            href, icon = PARAMS_ANCHOR, self._icon_html(PARAMS_ICON, "")
+        else:
+            return None
+        if not icon:
+            return None
+        name = _esc(label, quote=True)
+        return (
+            f'<a class="dpx-step-link" href="#{_esc(href, quote=True)}" title="{name}" '
+            f'aria-label="{name}">{icon}</a>'
+        )
+
     def _rewrite_links(self, text: str) -> str:
         """Every link a text tile can write, as a jump inside the document.
 
@@ -816,9 +897,7 @@ class NotebookBuilder:
         as stray text (``drop_orphan_links``).
         """
         text = self._mark_tab_links(text)
-        has_params = bool(
-            ((self.plan.project or {}).get("template_origin") or {}).get("run_provenance")
-        )
+        has_params = self._has_params()
 
         def params(m: re.Match[str]) -> str:
             return f"[{m.group(1)}](#{PARAMS_ANCHOR})" if has_params else ORPHAN
@@ -1533,8 +1612,7 @@ def card_row(cards):
 
     The column count is fixed by how many cards there are rather than left to
     `auto-fit`, which fits as many as the page happens to be wide enough for
-    and strands the remainder: up to four cards share one line, as the
-    dashboard's strip draws them; more run four (or three) to a line.
+    and strands the remainder: two cards share each line.
     `_repr_html_()` is the standard rich-display hook (IPython's HTML and Depictio's
     own components both implement it): calling it directly gets the actual
     card look, the same HTML each object would show if displayed bare —
@@ -1545,8 +1623,9 @@ def card_row(cards):
         from IPython.display import Markdown
 
         return Markdown(static_card_row(cards, mono=__MONO__))
-    n = len(cards)
-    cols = n if n <= 4 else (4 if n % 4 == 0 else 3)
+    # Two cards to a line: a report is read down a page, and four in one line
+    # squeezed each card's number and label into a quarter of it.
+    cols = min(len(cards), 2)
     # One slot per card, in the row's order: the report editor's preview
     # takes each card's thumbnail from its own slot.
     items = "".join(f'<div class="dpx-card-slot">{c._repr_html_()}</div>' for c in cards)
@@ -2327,6 +2406,10 @@ def card_row(cards):
         # heading, closed by the next heading of the same kind or the run's end.
         open_tab = False
         open_section = False
+        # A heading whose first tile is a large table takes that table's page
+        # break: the page turns before the heading, which would otherwise be
+        # left alone at the foot of the page above its table.
+        lead_breaks = self._lead_page_breaks(entries)
 
         def close_divs(*, tab: bool = False) -> None:
             nonlocal open_section, open_tab
@@ -2407,6 +2490,8 @@ def card_row(cards):
                     )
                 if entry.kind == "section":
                     close_divs()
+                    if id(entry) in lead_breaks:
+                        cells.append(md_cell(TYPST_PAGE_BREAK_MD))
                     cells.append(
                         md_cell(section_div(str(tab_doc.get("dashboard_id") or ""), entry.text))
                     )
@@ -2637,6 +2722,22 @@ def card_row(cards):
                 rows = got
         return rows
 
+    def _lead_page_breaks(
+        self, entries: list[tuple[MarkdownUnit | ComponentEntry, str | None]]
+    ) -> set[int]:
+        """The sections (by ``id``) whose first tile is a table that opens a
+        PDF page: the break goes before the section's heading, and that tile
+        drops its own (``self._moved_breaks``)."""
+        out: set[int] = set()
+        for i, (unit, _) in enumerate(entries):
+            if not (isinstance(unit, MarkdownUnit) and unit.kind == "section"):
+                continue
+            first = entries[i + 1][0] if i + 1 < len(entries) else None
+            if isinstance(first, ComponentEntry) and self._starts_a_pdf_page(first):
+                out.add(id(unit))
+                self._moved_breaks.add(id(first))
+        return out
+
     def _starts_a_pdf_page(self, entry: ComponentEntry) -> bool:
         """A table the PDF prints long (``TABLE_PAGE_ROWS`` rows or more, of
         the page size it shows) opens a page of its own, so it is not cut
@@ -2678,7 +2779,7 @@ def card_row(cards):
             # The layer asks for a fresh page before this tile: a typst page
             # break in the PDF, a CSS one in the HTML.
             out.append(md_cell(PAGE_BREAK_MD))
-        elif not in_row and self._starts_a_pdf_page(entry):
+        elif not in_row and id(entry) not in self._moved_breaks and self._starts_a_pdf_page(entry):
             # A large table opens its own PDF page (the report's settings).
             out.append(md_cell(TYPST_PAGE_BREAK_MD))
         if entry.highlight is not None:
@@ -3025,7 +3126,15 @@ def card_row(cards):
         if lines:
             # Markdown's hard break, not ``<br>``: a typst page drops raw HTML,
             # and the two sentences would run into each other there.
-            parts.append("\\\n".join(lines))
+            text = "\\\n".join(lines)
+            if self.plan.pdf:
+                # The heading is sticky already; its description must be too,
+                # or the two stay alone at the foot of a page the section's
+                # first tile leaves.
+                text = (
+                    f"```{{=typst}}\n#block(sticky: true)[\n```\n\n{text}\n\n```{{=typst}}\n]\n```"
+                )
+            parts.append(text)
         bar = self._section_filter_bar(unit, tab)
         if bar:
             parts.append(bar)
@@ -3170,7 +3279,25 @@ def card_row(cards):
         # definition, carries the source's.
         caption = self._rewrite_tab_links(_author_line((entry.highlight or {}).get("caption")))
         line = f"*From the {where} tab.*"
-        return md_cell(line + (f" {caption}" if caption else ""))
+        body = line + (f" {caption}" if caption else "")
+        if not self.plan.pdf:
+            return md_cell(body)
+        # In the PDF the line and the figure's title, above it as the
+        # dashboard's tile header draws it, keep with the figure: a sticky
+        # block never stays alone at the foot of a page the figure leaves.
+        title = one_line(str(entry.unit.meta.get("title") or "")).strip()
+        head = (
+            f'#block(below: 0.45em, text(weight: "semibold", {_typst_str(title)}))\n'
+            if title
+            else ""
+        )
+        return md_cell(
+            "```{=typst}\n#block(sticky: true)[\n"
+            + head
+            + "```\n\n"
+            + body
+            + "\n\n```{=typst}\n]\n```"
+        )
 
     def _highlight_cell(self, meta: dict[str, Any], title: str) -> Cell:
         source = str(meta.get("source_component") or "a figure")
@@ -3224,20 +3351,27 @@ def card_row(cards):
             # the tab around it, and listed itself among the tabs.
             parts.append(demote_headings(body, level + 1 if title else level))
         text = "\n\n".join(parts) or "*(empty text tile)*"
+        tile_accent = self._tile_accent(meta)
         if self.plan.pdf:
-            # The PDF draws the stepper and the fact lists itself.
-            accent = palette_hex(str(meta.get("accent") or "") or None, self._accent())
+            # The PDF draws the stepper, the fact lists, the findings and the
+            # tab tiles itself.
             text = pdf_structures(
                 text,
                 lambda icon: self.plan.icons.get(icon),
-                accent=accent,
+                accent=tile_accent or self._accent(),
                 mono=self.plan.pdf_style == "mono",
+                tab_link=self._tab_link,
+                has_params=self._has_params(),
             )
         text = stepper_markdown(
             text,
             lambda icon: self._inline_icons(f"![](icon:{icon})"),
             rewrite_link=self._rewrite_links,
+            accent=tile_accent or None,
+            step_link=self._step_link,
         )
+        text = findings_markdown(text, tab_link=self._tab_link, icon_html=self._icon_html)
+        text = tab_tiles_markdown(text, tab_link=self._tab_link, icon_html=self._icon_html)
         text = self._inline_icons(self._rewrite_links(text))
         legends = {
             f"legend:{c}": self._legend_html(c) for c in dict.fromkeys(_LEGEND_RE.findall(text))
